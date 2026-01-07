@@ -379,11 +379,11 @@ public struct InlineVideoPlayer: View {
 			
 		case .youtube:
 			let muted = isMuted ? "true" : "false"
-			youTubeWebView?.evaluateJavaScript("try{window.ponderSetMuted&&window.ponderSetMuted(\(muted));}catch(e){}", completionHandler: nil)
+			youTubeWebView?.evaluateJavaScript("try{window.forewordSetMuted&&window.forewordSetMuted(\(muted));}catch(e){}", completionHandler: nil)
 			
 		case .vimeo:
 			let muted = isMuted ? "true" : "false"
-			vimeoWebView?.evaluateJavaScript("try{window.ponderSetMuted&&window.ponderSetMuted(\(muted));}catch(e){}", completionHandler: nil)
+			vimeoWebView?.evaluateJavaScript("try{window.forewordSetMuted&&window.forewordSetMuted(\(muted));}catch(e){}", completionHandler: nil)
 			
 		case .externalLogin, .externalPaid:
 			break
@@ -483,14 +483,14 @@ public struct InlineVideoPlayer: View {
 		
 		switch provider {
 		case .youtube:
-			let jsMute = "try{window.ponderSetMuted&&window.ponderSetMuted(\(effectiveIsMuted(forAttemptForceMute: forceMute) ? "true" : "false"));}catch(e){}"
-			let jsPlay = "try{window.ponderPlay&&window.ponderPlay(\(forceMute ? "true" : "false"));}catch(e){}"
+			let jsMute = "try{window.forewordSetMuted&&window.forewordSetMuted(\(effectiveIsMuted(forAttemptForceMute: forceMute) ? "true" : "false"));}catch(e){}"
+			let jsPlay = "try{window.forewordPlay&&window.forewordPlay(\(forceMute ? "true" : "false"));}catch(e){}"
 			youTubeWebView?.evaluateJavaScript(jsMute, completionHandler: nil)
 			youTubeWebView?.evaluateJavaScript(jsPlay, completionHandler: nil)
 			
 		case .vimeo:
-			let jsMute = "try{window.ponderSetMuted&&window.ponderSetMuted(\(effectiveIsMuted(forAttemptForceMute: forceMute) ? "true" : "false"));}catch(e){}"
-			let jsPlay = "try{window.ponderPlay&&window.ponderPlay(\(forceMute ? "true" : "false"));}catch(e){}"
+			let jsMute = "try{window.forewordSetMuted&&window.forewordSetMuted(\(effectiveIsMuted(forAttemptForceMute: forceMute) ? "true" : "false"));}catch(e){}"
+			let jsPlay = "try{window.forewordPlay&&window.forewordPlay(\(forceMute ? "true" : "false"));}catch(e){}"
 			vimeoWebView?.evaluateJavaScript(jsMute, completionHandler: nil)
 			vimeoWebView?.evaluateJavaScript(jsPlay, completionHandler: nil)
 			
@@ -512,9 +512,9 @@ public struct InlineVideoPlayer: View {
 	private func triggerPause(provider: Provider) {
 		switch provider {
 		case .youtube:
-			youTubeWebView?.evaluateJavaScript("try{window.ponderPause&&window.ponderPause();}catch(e){}", completionHandler: nil)
+			youTubeWebView?.evaluateJavaScript("try{window.forewordPause&&window.forewordPause();}catch(e){}", completionHandler: nil)
 		case .vimeo:
-			vimeoWebView?.evaluateJavaScript("try{window.ponderPause&&window.ponderPause();}catch(e){}", completionHandler: nil)
+			vimeoWebView?.evaluateJavaScript("try{window.forewordPause&&window.forewordPause();}catch(e){}", completionHandler: nil)
 		case .stream:
 			player?.pause()
 		case .externalLogin, .externalPaid:
@@ -896,7 +896,7 @@ private struct YouTubeInlinePlayerView: UIViewRepresentable {
 	@Binding var webView: WKWebView?
 	let onStateChange: (State) -> Void
 	
-	private static let embedOrigin = URL(string: "https://localhost/ponder")!
+	private static let embedOrigin = URL(string: "https://localhost/foreword")!
 	
 	func makeUIView(context: Context) -> WKWebView {
 		let config = WKWebViewConfiguration()
@@ -907,7 +907,7 @@ private struct YouTubeInlinePlayerView: UIViewRepresentable {
 		} else {
 			config.requiresUserActionForMediaPlayback = false
 		}
-		config.userContentController.add(context.coordinator, name: "ponder")
+		config.userContentController.add(context.coordinator, name: "foreword")
 		
 		let web = WKWebView(frame: .zero, configuration: config)
 		web.scrollView.isScrollEnabled = false
@@ -931,12 +931,12 @@ private struct YouTubeInlinePlayerView: UIViewRepresentable {
 			"var ready=false;",
 			"var pendingPlay=false;",
 			"var pendingMute=\(mutedValue);",
-			"window.ponderSetMuted=function(m){ pendingMute=!!m; try{ if(player){ if(pendingMute){player.mute();}else{player.unMute();} } }catch(e){} };",
-			"window.ponderPause=function(){ try{ if(player){ player.pauseVideo(); } }catch(e){} };",
-			"window.ponderPlay=function(forceMute){",
+			"window.forewordSetMuted=function(m){ pendingMute=!!m; try{ if(player){ if(pendingMute){player.mute();}else{player.unMute();} } }catch(e){} };",
+			"window.forewordPause=function(){ try{ if(player){ player.pauseVideo(); } }catch(e){} };",
+			"window.forewordPlay=function(forceMute){",
 			"  try{ if(forceMute){ pendingMute=true; } }catch(e){}",
 			"  if(!ready){ pendingPlay=true; return; }",
-			"  try{ window.ponderSetMuted(pendingMute); }catch(e){}",
+			"  try{ window.forewordSetMuted(pendingMute); }catch(e){}",
 			"  try{ player.playVideo(); }catch(e){ pendingPlay=true; }",
 			"};",
 			"function onYouTubeIframeAPIReady(){",
@@ -946,14 +946,14 @@ private struct YouTubeInlinePlayerView: UIViewRepresentable {
 			"    events:{",
 			"      onReady:function(){",
 			"        ready=true;",
-			"        try{ window.ponderSetMuted(pendingMute); }catch(e){}",
+			"        try{ window.forewordSetMuted(pendingMute); }catch(e){}",
 			"        if(pendingPlay){ pendingPlay=false; try{ player.playVideo(); }catch(e){} }",
 			"      },",
 			"      onStateChange:function(e){",
-			"        if(e.data===1){window.webkit.messageHandlers.ponder.postMessage('playing');}",
-			"        if(e.data===0){window.webkit.messageHandlers.ponder.postMessage('ended');}",
+			"        if(e.data===1){window.webkit.messageHandlers.foreword.postMessage('playing');}",
+			"        if(e.data===0){window.webkit.messageHandlers.foreword.postMessage('ended');}",
 			"      },",
-			"      onError:function(e){ try{window.webkit.messageHandlers.ponder.postMessage('error:'+e.data);}catch(_){} }",
+			"      onError:function(e){ try{window.webkit.messageHandlers.foreword.postMessage('error:'+e.data);}catch(_){} }",
 			"    }",
 			"  });",
 			"}",
@@ -973,7 +973,7 @@ private struct YouTubeInlinePlayerView: UIViewRepresentable {
 		init(onStateChange: @escaping (State) -> Void) { self.onStateChange = onStateChange }
 		
 		func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-			guard message.name == "ponder", let str = message.body as? String else { return }
+			guard message.name == "foreword", let str = message.body as? String else { return }
 			if str == "playing" { onStateChange(.playing) }
 			else if str == "ended" { onStateChange(.ended) }
 			else if str.hasPrefix("error:") {
@@ -992,7 +992,7 @@ private struct VimeoInlinePlayerView: UIViewRepresentable {
 	@Binding var webView: WKWebView?
 	let onStateChange: (State) -> Void
 	
-	private static let embedOrigin = URL(string: "https://localhost/ponder")!
+	private static let embedOrigin = URL(string: "https://localhost/foreword")!
 	
 	func makeUIView(context: Context) -> WKWebView {
 		let config = WKWebViewConfiguration()
@@ -1003,7 +1003,7 @@ private struct VimeoInlinePlayerView: UIViewRepresentable {
 		} else {
 			config.requiresUserActionForMediaPlayback = false
 		}
-		config.userContentController.add(context.coordinator, name: "ponder")
+		config.userContentController.add(context.coordinator, name: "foreword")
 		
 		let web = WKWebView(frame: .zero, configuration: config)
 		web.scrollView.isScrollEnabled = false
@@ -1024,13 +1024,13 @@ private struct VimeoInlinePlayerView: UIViewRepresentable {
 			"<script>",
 			"var p = new Vimeo.Player('player', { id: \(videoID), autoplay: false, muted: \(muted), byline: false, title: false, portrait: false, controls: true });",
 			"var ready=false; var pendingPlay=false; var pendingMute=\(muted);",
-			"window.ponderSetMuted=function(m){ pendingMute=!!m; try{ if(p){ p.setMuted(pendingMute); } }catch(e){} };",
-			"window.ponderPause=function(){ try{ if(p){ p.pause(); } }catch(e){} };",
-			"window.ponderPlay=function(forceMute){ try{ if(forceMute){ pendingMute=true; } }catch(e){} if(!ready){ pendingPlay=true; return; } try{ window.ponderSetMuted(pendingMute); }catch(e){} try{ p.play(); }catch(e){ pendingPlay=true; } };",
+			"window.forewordSetMuted=function(m){ pendingMute=!!m; try{ if(p){ p.setMuted(pendingMute); } }catch(e){} };",
+			"window.forewordPause=function(){ try{ if(p){ p.pause(); } }catch(e){} };",
+			"window.forewordPlay=function(forceMute){ try{ if(forceMute){ pendingMute=true; } }catch(e){} if(!ready){ pendingPlay=true; return; } try{ window.forewordSetMuted(pendingMute); }catch(e){} try{ p.play(); }catch(e){ pendingPlay=true; } };",
 			"p.ready().then(function(){ ready=true; if(pendingPlay){ pendingPlay=false; try{ p.play(); }catch(e){} } });",
-			"p.on('play', function(){ try{window.webkit.messageHandlers.ponder.postMessage('playing');}catch(_){} });",
-			"p.on('ended', function(){ try{window.webkit.messageHandlers.ponder.postMessage('ended');}catch(_){} });",
-			"p.on('error', function(e){ var reason = (e && (e.name||e.message)) || 'error'; try{window.webkit.messageHandlers.ponder.postMessage('error:'+reason);}catch(_){ } });",
+			"p.on('play', function(){ try{window.webkit.messageHandlers.foreword.postMessage('playing');}catch(_){} });",
+			"p.on('ended', function(){ try{window.webkit.messageHandlers.foreword.postMessage('ended');}catch(_){} });",
+			"p.on('error', function(e){ var reason = (e && (e.name||e.message)) || 'error'; try{window.webkit.messageHandlers.foreword.postMessage('error:'+reason);}catch(_){ } });",
 			"</script></body></html>"
 		].joined(separator: "\n")
 		
@@ -1047,7 +1047,7 @@ private struct VimeoInlinePlayerView: UIViewRepresentable {
 		init(onStateChange: @escaping (State) -> Void) { self.onStateChange = onStateChange }
 		
 		func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-			guard message.name == "ponder", let str = message.body as? String else { return }
+			guard message.name == "foreword", let str = message.body as? String else { return }
 			if str == "playing" { onStateChange(.playing) }
 			else if str == "ended" { onStateChange(.ended) }
 			else if str.hasPrefix("error:") {

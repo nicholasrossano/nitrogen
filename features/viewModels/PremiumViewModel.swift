@@ -10,7 +10,7 @@ final class PremiumViewModel: ObservableObject {
 		didSet { canPurchase = !isSubscribed }
 	}
 	
-	var buttonTitle: String { isSubscribed ? "Manage Subscription" : "Subscribe to Ponder+" }
+	var buttonTitle: String { isSubscribed ? "Manage Subscription" : "Subscribe to Foreword+" }
 	
 	private let monthlyID = AppProductID.plusMonthly.rawValue
 	private let annualID  = AppProductID.plusAnnual.rawValue

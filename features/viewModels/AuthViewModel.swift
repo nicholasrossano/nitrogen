@@ -87,7 +87,7 @@ class AuthViewModel: NSObject, ObservableObject,
 				// Create or merge user doc by email (dedupe guard)
 				self.createOrMergeUserDocument(user: user, isNewUser: isNewUser) {
 					// Continue app boot regardless of merge outcome
-					PonderApp.sharedHomeViewModel?.fetchAllDomains()
+					ForewordApp.sharedHomeViewModel?.fetchAllDomains()
 					
 					// Only new Firebase users trigger onboarding
 					if isNewUser {

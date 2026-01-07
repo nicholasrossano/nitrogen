@@ -20,7 +20,7 @@ struct PremiumView: View {
 						.foregroundColor(Color("Beige"))
 						.padding(.vertical, 60)
 					
-					Text("Ponder+ gives power users even more potential.\n\n\n\nUnlock unlimited exchanges with the Curator and get first access to new features.")
+					Text("Foreword+ gives power users even more potential.\n\n\n\nUnlock unlimited exchanges with the Curator and get first access to new features.")
 						.font(.custom("Avenir", size: 18))
 						.multilineTextAlignment(.center)
 						.padding(.horizontal, 32)

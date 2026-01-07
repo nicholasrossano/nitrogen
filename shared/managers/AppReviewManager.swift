@@ -243,7 +243,7 @@ class AppReviewManager {
 		}
 		
 		let alert = UIAlertController(
-			title: "Enjoying Ponder AI?",
+			title: "Enjoying Foreword AI?",
 			message: "Tell us how your experience has been. We're a small team always working to improve.",
 			preferredStyle: .alert
 		)

@@ -77,8 +77,8 @@ final class OnboardingManager: ObservableObject {
 		]
 	]
 	
-	private let seenKey = "ponder.onboarding.seen"
-	private let shareUpdateCountKey = "ponder.onboarding.shareUpdate.count"
+	private let seenKey = "foreword.onboarding.seen"
+	private let shareUpdateCountKey = "foreword.onboarding.shareUpdate.count"
 	private let shareUpdateMaxCount = 3
 	
 	private init() {}
@@ -169,7 +169,7 @@ final class OnboardingManager: ObservableObject {
 	
 	// ─────────── Section Header ───────────
 	private func stableSeenKey(for flow: OnboardingFlow) -> String {
-		"ponder.onboarding.\(flow.storageId).seen"
+		"foreword.onboarding.\(flow.storageId).seen"
 	}
 	
 	// ─────────── Section Header ───────────

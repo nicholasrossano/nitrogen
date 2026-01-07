@@ -42,7 +42,7 @@ struct ActionCapsule: View {
 		}
 		let trimmedTopic = topicName.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 		if !trimmedTopic.isEmpty { return trimmedTopic }
-		return "Ponder"
+		return "Foreword"
 	}
 	
 	private var primaryShareHeadline: String {

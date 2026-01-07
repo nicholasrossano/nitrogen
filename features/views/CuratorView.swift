@@ -100,7 +100,7 @@ struct CuratorView: View {
 								Analytics.logEvent("curator_premium_cta_tap", parameters: params)
 								showPremium = true
 							} label: {
-								Text("Get unlimited with Ponder+")
+								Text("Get unlimited with Foreword+")
 									.font(.custom("Avenir", size: 15))
 									.foregroundColor(Color(.systemBackground))
 									.padding(.horizontal, 24)

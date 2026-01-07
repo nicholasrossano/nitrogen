@@ -87,7 +87,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 		}
 		
 		NotificationCenter.default.addObserver(
-			forName: .ponderAppReady,
+			forName: .forewordAppReady,
 			object: nil,
 			queue: .main
 		) { [weak self] _ in
@@ -109,7 +109,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 		
 		let cardId = (userInfo["card_id"] as? String) ?? ""
 		if !cardId.isEmpty {
-			if PonderApp.sharedHomeViewModel == nil || servicesLocator == nil {
+			if ForewordApp.sharedHomeViewModel == nil || servicesLocator == nil {
 				pendingCardIdFromNotification = cardId
 			} else {
 				routeToCard(cardId: cardId)
@@ -230,7 +230,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 		guard !useRemotePush else { return }
 		let content = UNMutableNotificationContent()
 		content.title = "New Cards Available"
-		content.body = "Take a moment to ponder this morning."
+		content.body = "Take a moment to browse this morning."
 		content.sound = .default
 		content.userInfo = ["notification_type": "morning_push_notification"]
 		content.badge = nil
@@ -259,7 +259,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 		guard !useRemotePush else { return }
 		let content = UNMutableNotificationContent()
 		content.title = "New Cards Available"
-		content.body = "Take a moment to ponder this evening."
+		content.body = "Take a moment to browse this evening."
 		content.sound = .default
 		content.userInfo = ["notification_type": "evening_push_notification"]
 		content.badge = nil
@@ -325,7 +325,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 		
 		if !cardId.isEmpty {
 			DispatchQueue.main.async {
-				if PonderApp.sharedHomeViewModel == nil || self.servicesLocator == nil {
+				if ForewordApp.sharedHomeViewModel == nil || self.servicesLocator == nil {
 					self.pendingCardIdFromNotification = cardId
 				} else {
 					self.routeToCard(cardId: cardId)
@@ -362,7 +362,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 	}
 	
 	private func routeToCard(cardId: String) {
-		guard let vm = PonderApp.sharedHomeViewModel else {
+		guard let vm = ForewordApp.sharedHomeViewModel else {
 			print("⚠️ routeToCard: VM not ready; deferring")
 			pendingCardIdFromNotification = cardId
 			return
@@ -378,7 +378,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate, Mes
 	
 	// ─────────── Section Header ───────────
 	private func purgeLegacyLocalNotifications() {
-		let ids = ["morningPonderNotification", "eveningPonderNotification", Self.voiceDigestNotificationIdentifier]
+		let ids = ["morninNotification", "eveningNotification", Self.voiceDigestNotificationIdentifier]
 		let center = UNUserNotificationCenter.current()
 		center.removePendingNotificationRequests(withIdentifiers: ids)
 		center.removeDeliveredNotifications(withIdentifiers: ids)

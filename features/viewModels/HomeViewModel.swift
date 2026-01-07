@@ -698,7 +698,7 @@ final class HomeViewModel: ObservableObject {
 		   let card = cards.first(where: { $0.id == cardID }) {
 			currentCard = card
 			highlightCard(cardID, for: domain)
-			PonderApp.sharedHomeViewModel?.isCardExpanded = true
+			ForewordApp.sharedHomeViewModel?.isCardExpanded = true
 		} else {
 			servicesLocator.cardService.fetchCardById(cardID)
 				.receive(on: DispatchQueue.main)
@@ -709,7 +709,7 @@ final class HomeViewModel: ObservableObject {
 					self.glanceCards[domain.name] = cards
 					self.currentCard = card
 					self.highlightCard(cardID, for: domain)
-					PonderApp.sharedHomeViewModel?.isCardExpanded = true
+					ForewordApp.sharedHomeViewModel?.isCardExpanded = true
 				}
 				.store(in: &cancellables)
 		}

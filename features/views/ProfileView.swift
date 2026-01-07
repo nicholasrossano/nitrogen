@@ -66,7 +66,7 @@ struct ProfileView: View {
 							}
 							Button("Cancel", role: .cancel) { }
 						} message: {
-							Text("Notifications for Ponder are disabled at the system level. Please enable them in Settings.")
+							Text("Notifications for Foreword are disabled at the system level. Please enable them in Settings.")
 						}
 						
 						if featureFlags.isAutoplayEnabled {
@@ -355,7 +355,7 @@ struct ProfileView: View {
 				Image(systemName: "crown.fill")
 					.foregroundColor(Color.gray)
 					.frame(width: iconWidth)
-				Text("Ponder+")
+				Text("Foreword+")
 				Spacer()
 				Text(subscriptionStatus.isPremiumUser ? "Manage" : "Subscribe")
 					.font(.custom("Avenir", size: mediumFontSize))
@@ -428,7 +428,7 @@ struct ProfileView: View {
 				Image(systemName: "square.and.arrow.up.fill")
 					.foregroundColor(.gray)
 					.frame(width: iconWidth)
-				Text("Share Ponder")
+				Text("Share Foreword")
 				Spacer()
 				Image(systemName: "arrowtriangle.forward.fill")
 					.foregroundColor(Color.accentSecondary)

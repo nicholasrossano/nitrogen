@@ -29,7 +29,7 @@ struct AuthView: View {
 	
 	var body: some View {
 		ZStack {
-			LoopingVideoPlayer(videoName: "LoginVideo", videoType: "mp4")
+			LoopingVideoPlayer(videoName: "LoginVideo-Foreword2", videoType: "mp4")
 				.ignoresSafeArea()
 			
 			BlurView(style: .systemUltraThinMaterialDark, intensity: 0)
@@ -118,7 +118,7 @@ struct AuthView: View {
 					.opacity(titleOpacity)
 				
 				Text("Foreword AI")
-					.font(.custom("Didot-Italic", size: 44))
+					.font(.custom("Didot-Italic", size: 36))
 					.foregroundColor(.white)
 					.opacity(titleOpacity)
 			}

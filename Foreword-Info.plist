@@ -6,10 +6,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.rossano.ponder</string>
+			<string>com.rossano.foreword</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>ponder</string>
+				<string>foreword</string>
 			</array>
 		</dict>
 		<dict>
@@ -30,7 +30,7 @@
 	<key>FacebookClientToken</key>
 	<string>2b1ae0e60cef626799d37e65e5e61c6a</string>
 	<key>FacebookDisplayName</key>
-	<string>Ponder AI</string>
+	<string>Foreword</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>youtube</string>

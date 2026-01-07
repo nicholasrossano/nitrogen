@@ -62,7 +62,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 			AppEvents.ParameterName("build_number"): (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
 		]
 		
-		AppEvents.shared.logEvent(AppEvents.Name("ponder_meta_smoke_test"), parameters: params)
+		AppEvents.shared.logEvent(AppEvents.Name("foreword_meta_smoke_test"), parameters: params)
 		AppEvents.shared.flush()
 #endif
 	}
