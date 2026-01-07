@@ -1,0 +1,269 @@
+{
+  "window": "day",
+  "language": "en-US",
+  "count": 3,
+  "directors": [
+    {
+      "id": 1189072,
+      "name": "Leah McKendrick",
+      "tmdb_url": "https://www.themoviedb.org/person/1189072",
+      "profile_image": "https://image.tmdb.org/t/p/w780/zB4x8f3HmzemgTdOMBGCwEZL0UP.jpg",
+      "known_for_department": "Acting",
+      "gender": "female",
+      "adult": false,
+      "biography": "Leah McKendrick is an actress, singer and filmmaker that got her start in musical theatre in San Francisco. She was raised by a Nicaraguan mother and Irish/Scottish father. She began writing and producing in her teen years and performed live throughout the Bay Area before moving south to study Theatre at Chapman University.",
+      "birthdate": "1986-09-03",
+      "deathdate": null,
+      "age": 38,
+      "place_of_birth": "San Francisco, California, USA",
+      "also_known_as": null,
+      "homepage": "https://www.leahmckendrick.com",
+      "popularity": 0.5839,
+      "external_ids": {
+        "imdb_id": "nm3159868",
+        "twitter_id": "leahmckendrick",
+        "instagram_id": "leahmckendrick",
+        "facebook_id": null,
+        "tiktok_id": null,
+        "youtube_id": null,
+        "wikidata_id": "Q124305817"
+      },
+      "social": {
+        "imdb": "https://www.imdb.com/name/nm3159868/",
+        "twitter": "https://twitter.com/leahmckendrick",
+        "instagram": "https://instagram.com/leahmckendrick",
+        "facebook": null,
+        "tiktok": null,
+        "youtube": null,
+        "wikidata": "https://www.wikidata.org/wiki/Q124305817"
+      },
+      "main_works": [
+        {
+          "title": "Scrambled",
+          "year": "2024",
+          "media_type": "movie",
+          "tmdb_id": 1073087,
+          "tmdb_url": "https://www.themoviedb.org/movie/1073087",
+          "poster_url": "https://image.tmdb.org/t/p/w780/yzwERLkcxNh9uve42IAUBHckU0s.jpg",
+          "vote_count": 32,
+          "popularity": 1.6012
+        },
+        {
+          "title": "Pamela & Ivy",
+          "year": "2020",
+          "media_type": "movie",
+          "tmdb_id": 703763,
+          "tmdb_url": "https://www.themoviedb.org/movie/703763",
+          "poster_url": "https://image.tmdb.org/t/p/w780/v6ALW3o80luyyc4I23ZQXPOCLJR.jpg",
+          "vote_count": 1,
+          "popularity": 1.2043
+        },
+        {
+          "title": "Voicemails for Isabelle",
+          "year": null,
+          "media_type": "movie",
+          "tmdb_id": 614945,
+          "tmdb_url": "https://www.themoviedb.org/movie/614945",
+          "poster_url": null,
+          "vote_count": 0,
+          "popularity": 1.2182
+        },
+        {
+          "title": "Untitled Leah McKendrick Monster Film",
+          "year": null,
+          "media_type": "movie",
+          "tmdb_id": 1324439,
+          "tmdb_url": "https://www.themoviedb.org/movie/1324439",
+          "poster_url": null,
+          "vote_count": 0,
+          "popularity": 0.2295
+        }
+      ],
+      "trending_known_for": []
+    },
+    {
+      "id": 1219037,
+      "name": "Frank Marino",
+      "tmdb_url": "https://www.themoviedb.org/person/1219037",
+      "profile_image": "https://image.tmdb.org/t/p/w780/kCFrUGqNFtbuOP1Ix2yXldkl48B.jpg",
+      "known_for_department": "Directing",
+      "gender": "male",
+      "adult": false,
+      "biography": null,
+      "birthdate": null,
+      "deathdate": null,
+      "age": null,
+      "place_of_birth": null,
+      "also_known_as": null,
+      "homepage": null,
+      "popularity": 0.3439,
+      "external_ids": {
+        "imdb_id": "nm0547772",
+        "twitter_id": null,
+        "instagram_id": null,
+        "facebook_id": null,
+        "tiktok_id": null,
+        "youtube_id": null,
+        "wikidata_id": "Q5976736"
+      },
+      "social": {
+        "imdb": "https://www.imdb.com/name/nm0547772/",
+        "twitter": null,
+        "instagram": null,
+        "facebook": null,
+        "tiktok": null,
+        "youtube": null,
+        "wikidata": "https://www.wikidata.org/wiki/Q5976736"
+      },
+      "main_works": [
+        {
+          "title": "Futurama",
+          "year": "1999",
+          "media_type": "tv",
+          "tmdb_id": 615,
+          "tmdb_url": "https://www.themoviedb.org/tv/615",
+          "poster_url": "https://image.tmdb.org/t/p/w780/6ZS8SOno6kTmWz4eQ8lX8EBXOMv.jpg",
+          "vote_count": 3485,
+          "popularity": 27.4522
+        },
+        {
+          "title": "Drawn Together",
+          "year": "2004",
+          "media_type": "tv",
+          "tmdb_id": 4336,
+          "tmdb_url": "https://www.themoviedb.org/tv/4336",
+          "poster_url": "https://image.tmdb.org/t/p/w780/12gxxU70l3Ng7WlllpA7QmeqTQF.jpg",
+          "vote_count": 1303,
+          "popularity": 7.21
+        },
+        {
+          "title": "Disenchantment",
+          "year": "2018",
+          "media_type": "tv",
+          "tmdb_id": 73021,
+          "tmdb_url": "https://www.themoviedb.org/tv/73021",
+          "poster_url": "https://image.tmdb.org/t/p/w780/1WynayCqKRzrl4cFZR8NOfiDwd6.jpg",
+          "vote_count": 1204,
+          "popularity": 10.6482
+        },
+        {
+          "title": "Harley Quinn",
+          "year": "2019",
+          "media_type": "tv",
+          "tmdb_id": 74440,
+          "tmdb_url": "https://www.themoviedb.org/tv/74440",
+          "poster_url": "https://image.tmdb.org/t/p/w780/9Dm1SEh8Wxt8LNNg02exHQ595zg.jpg",
+          "vote_count": 1098,
+          "popularity": 11.1272
+        },
+        {
+          "title": "Duncanville",
+          "year": "2020",
+          "media_type": "tv",
+          "tmdb_id": 93292,
+          "tmdb_url": "https://www.themoviedb.org/tv/93292",
+          "poster_url": "https://image.tmdb.org/t/p/w780/fLJ74pNLxYrAMFBNI95VSDPiOGd.jpg",
+          "vote_count": 271,
+          "popularity": 4.1179
+        }
+      ],
+      "trending_known_for": []
+    },
+    {
+      "id": 1343127,
+      "name": "A. Harsha",
+      "tmdb_url": "https://www.themoviedb.org/person/1343127",
+      "profile_image": "https://image.tmdb.org/t/p/w780/xKvSaY5qdryOlxJVHBpk2VsIkx9.jpg",
+      "known_for_department": "Writing",
+      "gender": "male",
+      "adult": false,
+      "biography": "A. Harsha is an Indian choreographer, director and writer who works predominantly in the Kannada film industry. A. Harsha started off his career choreographing songs in films before moving on to make his directorial debut in 2007 with Geleya. He then worked on Birugaali (2009) and Chingari (2012), all of which did not do that well at the box office although his fresh approach was appreciated. He changed all that with his 2013 film Bhajarangi featuring Shivarajkumar which was a massive hit. He then directed the films Vajrakaya (2015), Jai Maruthi 800 (2016) and Anjaniputra (2017) before he directed Seetharama Kalyana (2019).",
+      "birthdate": null,
+      "deathdate": null,
+      "age": null,
+      "place_of_birth": "Bengaluru, Karnataka, India",
+      "also_known_as": [
+        "ಎ.ಹರ್ಷ",
+        "Harsha A",
+        "Ashok Harsha",
+        "A Harsha\t",
+        "Harsha\t",
+        "Harsha Ashok\t",
+        "A.Harsha"
+      ],
+      "homepage": null,
+      "popularity": 0.2348,
+      "external_ids": {
+        "imdb_id": "nm5664775",
+        "twitter_id": null,
+        "instagram_id": null,
+        "facebook_id": null,
+        "tiktok_id": null,
+        "youtube_id": null,
+        "wikidata_id": "Q5673777"
+      },
+      "social": {
+        "imdb": "https://www.imdb.com/name/nm5664775/",
+        "twitter": null,
+        "instagram": null,
+        "facebook": null,
+        "tiktok": null,
+        "youtube": null,
+        "wikidata": "https://www.wikidata.org/wiki/Q5673777"
+      },
+      "main_works": [
+        {
+          "title": "Anjaniputra",
+          "year": "2017",
+          "media_type": "movie",
+          "tmdb_id": 512866,
+          "tmdb_url": "https://www.themoviedb.org/movie/512866",
+          "poster_url": "https://image.tmdb.org/t/p/w780/onmNHhm3Yf9GJLwVPNRIIpXlS07.jpg",
+          "vote_count": 8,
+          "popularity": 4.356
+        },
+        {
+          "title": "Vedha",
+          "year": "2022",
+          "media_type": "movie",
+          "tmdb_id": 813829,
+          "tmdb_url": "https://www.themoviedb.org/movie/813829",
+          "poster_url": "https://image.tmdb.org/t/p/w780/6QgxYSgcBSd5jbdUqzvSefPzO96.jpg",
+          "vote_count": 7,
+          "popularity": 0.7341
+        },
+        {
+          "title": "Bhimaa",
+          "year": "2024",
+          "media_type": "movie",
+          "tmdb_id": 1226886,
+          "tmdb_url": "https://www.themoviedb.org/movie/1226886",
+          "poster_url": "https://image.tmdb.org/t/p/w780/fdaob8wA5SkeGnKA0LrpWb14TFy.jpg",
+          "vote_count": 3,
+          "popularity": 4.0745
+        },
+        {
+          "title": "Chingari",
+          "year": "2012",
+          "media_type": "movie",
+          "tmdb_id": 505727,
+          "tmdb_url": "https://www.themoviedb.org/movie/505727",
+          "poster_url": "https://image.tmdb.org/t/p/w780/2eNaudcWQZ9M42uuediZbOCHa1Y.jpg",
+          "vote_count": 3,
+          "popularity": 3.3836
+        },
+        {
+          "title": "Seetharama Kalyana",
+          "year": "2019",
+          "media_type": "movie",
+          "tmdb_id": 577745,
+          "tmdb_url": "https://www.themoviedb.org/movie/577745",
+          "poster_url": "https://image.tmdb.org/t/p/w780/vf1RQLn1rOknH67g1iL9cBvCCyD.jpg",
+          "vote_count": 3,
+          "popularity": 2.7157
+        }
+      ],
+      "trending_known_for": []
+    }
+  ]
+}

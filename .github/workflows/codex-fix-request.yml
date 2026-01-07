@@ -1,0 +1,674 @@
+name: Curator Fix Request
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  curator_reply:
+    if: |
+      (github.event_name == 'issue_comment' ||
+       github.event_name == 'pull_request_review_comment' ||
+       github.event_name == 'pull_request_review') &&
+      github.actor != 'github-actions[bot]' &&
+      github.event.sender.type != 'Bot' &&
+      !(github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: curator-reply-${{ github.event_name }}-${{ github.event.comment.id || github.event.review.id || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Validate OPENAI_API_KEY secret
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "Missing OPENAI_API_KEY repo secret. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Create Curator app token
+        id: curator_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CURATOR_APP_ID }}
+          private-key: ${{ secrets.CURATOR_APP_PRIVATE_KEY }}
+
+      - name: Determine base branch
+        id: base
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const base = (context.payload?.repository?.default_branch || '').trim() || 'main';
+            core.setOutput('base_branch', base);
+
+      - name: Build reply context
+        id: reply_ctx
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const eventName = context.eventName;
+            const safe = (v) => (v == null ? '' : String(v));
+
+            let commentBody = '';
+            let where = '';
+            let diffHunk = '';
+
+            let replyMode = 'issue_comment';
+            let issueNumber = '';
+            let prNumber = '';
+            let inlineCommentId = '';
+            let prHeadSha = '';
+
+            if (eventName === 'issue_comment') {
+              commentBody = safe(context.payload.comment?.body);
+              const issue = context.payload.issue;
+              issueNumber = safe(issue?.number);
+
+              const isPrThread = !!issue?.pull_request;
+              where = isPrThread ? `PR conversation (#${issueNumber})` : `issue (#${issueNumber})`;
+              replyMode = 'issue_comment';
+
+              if (isPrThread && issueNumber) {
+                prNumber = issueNumber;
+              }
+            }
+
+            if (eventName === 'pull_request_review_comment') {
+              commentBody = safe(context.payload.comment?.body);
+
+              prNumber = safe(context.payload.pull_request?.number);
+              inlineCommentId = safe(context.payload.comment?.id);
+
+              const path = safe(context.payload.comment?.path);
+              const side = safe(context.payload.comment?.side || context.payload.comment?.original_side);
+              const l = context.payload.comment?.line;
+              const ol = context.payload.comment?.original_line;
+              const line = l != null ? String(l) : (ol != null ? String(ol) : '');
+
+              where = `${path}${line ? `:${line}` : ''}${side ? ` (${side})` : ''}`;
+              diffHunk = safe(context.payload.comment?.diff_hunk);
+
+              replyMode = (prNumber && inlineCommentId) ? 'inline_reply' : 'issue_comment';
+              issueNumber = prNumber;
+            }
+
+            if (eventName === 'pull_request_review') {
+              commentBody = safe(context.payload.review?.body);
+
+              prNumber = safe(context.payload.pull_request?.number);
+              issueNumber = prNumber;
+
+              const state = safe(context.payload.review?.state).toLowerCase();
+              where = `PR review (${state}) on #${prNumber}`;
+
+              replyMode = 'issue_comment';
+            }
+
+            if (prNumber) {
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(prNumber)
+              });
+              prHeadSha = safe(pr.data.head?.sha);
+            }
+
+            core.setOutput('event_name', eventName);
+            core.setOutput('comment_body', commentBody);
+            core.setOutput('where', where);
+            core.setOutput('diff_hunk', diffHunk);
+
+            core.setOutput('reply_mode', replyMode);
+            core.setOutput('issue_number', issueNumber);
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('inline_comment_id', inlineCommentId);
+
+            core.setOutput('pr_head_sha', prHeadSha);
+
+      - name: Checkout repository context
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.reply_ctx.outputs.pr_head_sha != '' && steps.reply_ctx.outputs.pr_head_sha || format('refs/heads/{0}', steps.base.outputs.base_branch) }}
+
+      - name: Prepare Curator home
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/curator-home"
+
+      - name: Curator reply (comment-only)
+        id: run_curator_reply
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: ${{ runner.temp }}/curator-home
+          effort: high
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+          codex-args: '["--full-auto"]'
+          output-file: ${{ runner.temp }}/curator-reply-output.md
+          prompt: |
+            You are Curator, an automated code assistant responding to a maintainer comment. You are NOT making code changes in this step.
+
+            Reply in plain English (concise, helpful). If the comment is a question, answer it. If it is a request, propose a concrete next step. Do not mention internal workflow details.
+
+            Context:
+            - Location: ${{ steps.reply_ctx.outputs.where }}
+
+            Inline diff hunk (if present):
+            ${{ steps.reply_ctx.outputs.diff_hunk }}
+
+            Maintainer comment:
+            ${{ steps.reply_ctx.outputs.comment_body }}
+
+      - name: Post Curator reply
+        uses: actions/github-script@v7
+        env:
+          REPLY_MODE: ${{ steps.reply_ctx.outputs.reply_mode }}
+          ISSUE_NUMBER: ${{ steps.reply_ctx.outputs.issue_number }}
+          PR_NUMBER: ${{ steps.reply_ctx.outputs.pr_number }}
+          INLINE_COMMENT_ID: ${{ steps.reply_ctx.outputs.inline_comment_id }}
+          WHERE: ${{ steps.reply_ctx.outputs.where }}
+          EVENT_NAME: ${{ steps.reply_ctx.outputs.event_name }}
+          CURATOR_TEXT: ${{ steps.run_curator_reply.outputs.final-message }}
+          DEBUG_RECEIPTS: ${{ vars.CURATOR_DEBUG_RECEIPTS }}
+        with:
+          github-token: ${{ steps.curator_token.outputs.token }}
+          script: |
+            const replyMode = process.env.REPLY_MODE || 'issue_comment';
+            const issueNumber = Number(process.env.ISSUE_NUMBER || '0');
+            const prNumber = Number(process.env.PR_NUMBER || '0');
+            const inlineCommentId = Number(process.env.INLINE_COMMENT_ID || '0');
+
+            const curatorText = (process.env.CURATOR_TEXT || '').trim() || '(no response)';
+            const debug = (process.env.DEBUG_RECEIPTS || '').toLowerCase() === 'true';
+
+            const receipt = debug
+              ? `\n\n---\n☑ Receipt\n- Event: ${process.env.EVENT_NAME || ''}\n- Where: ${process.env.WHERE || ''}\n`
+              : '';
+
+            const body = `${curatorText}${receipt}`;
+
+            if (replyMode === 'inline_reply' && prNumber && inlineCommentId) {
+              await github.rest.pulls.createReplyForReviewComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                comment_id: inlineCommentId,
+                body
+              });
+              return;
+            }
+
+            if (issueNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body
+              });
+            }
+
+  curator_fix:
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      github.event.sender.type != 'Bot' &&
+      (
+        (github.event_name == 'issues' &&
+          (github.event.label.name == 'fix-request' || github.event.label.name == 'fix_request')
+        ) ||
+        (github.event_name == 'pull_request_review' &&
+          github.event.review.state == 'changes_requested'
+        )
+      )
+    runs-on: ubuntu-latest
+    concurrency:
+      group: curator-fix-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Validate OPENAI_API_KEY secret
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "Missing OPENAI_API_KEY repo secret. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Create Curator app token
+        id: curator_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CURATOR_APP_ID }}
+          private-key: ${{ secrets.CURATOR_APP_PRIVATE_KEY }}
+
+      - name: Determine base branch
+        id: base
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const base = (context.payload?.repository?.default_branch || '').trim() || 'main';
+            core.setOutput('base_branch', base);
+
+      - name: Resolve context + collect inline comments for this review
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const eventName = context.eventName;
+            const safe = (v) => (v == null ? '' : String(v));
+
+            const parseFixIssueNumberFromPr = (pr) => {
+              const headRef = pr.data.head?.ref || '';
+              const title = pr.data.title || '';
+              let match = headRef.match(/^codex\/fix-request-(\d+)$/);
+              if (!match) match = title.match(/Fix request #(\d+)/i);
+              if (!match) return null;
+              return Number(match[1]);
+            };
+
+            let shouldRun = true;
+            let skipReason = '';
+
+            let fixIssueNumber = null;
+            let issueTitle = '';
+            let issueBody = '';
+
+            let triggerPrNumber = '';
+            let prUrl = '';
+            let prHeadRef = '';
+            let prHeadSha = '';
+            let prBaseRef = '';
+
+            let instructionBody = '';
+            let reviewInlineBlock = '';
+            let reviewCommentIds = [];
+
+            if (eventName === 'issues') {
+              fixIssueNumber = context.payload.issue?.number || null;
+              issueTitle = safe(context.payload.issue?.title);
+              issueBody = safe(context.payload.issue?.body);
+            }
+
+            if (eventName === 'pull_request_review') {
+              instructionBody = safe(context.payload.review?.body).trim();
+
+              const prNumber = context.payload.pull_request?.number;
+              if (!prNumber) {
+                core.setFailed('Missing pull_request.number in payload');
+                return;
+              }
+              triggerPrNumber = String(prNumber);
+
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+              prUrl = safe(pr.data.html_url);
+              prHeadRef = safe(pr.data.head?.ref);
+              prHeadSha = safe(pr.data.head?.sha);
+              prBaseRef = safe(pr.data.base?.ref);
+
+              const parsed = parseFixIssueNumberFromPr(pr);
+              if (!parsed) {
+                shouldRun = false;
+                skipReason = `This PR doesn’t look like a Curator fix-request PR (expected head ref "codex/fix-request-<n>" or title "Fix request #<n>: ...).`;
+              } else {
+                fixIssueNumber = parsed;
+              }
+
+              const reviewId = context.payload.review?.id;
+              if (reviewId && shouldRun) {
+                const all = await github.paginate(
+                  github.rest.pulls.listReviewComments,
+                  { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber, per_page: 100 }
+                );
+
+                const mine = all.filter(c => Number(c.pull_request_review_id) === Number(reviewId));
+                reviewCommentIds = mine.map(c => c.id).filter(Boolean);
+
+                const lines = [];
+                for (const c of mine) {
+                  const path = c.path || '';
+                  const line = c.line != null ? `:${c.line}` : (c.original_line != null ? `:${c.original_line}` : '');
+                  const body = (c.body || '').trim();
+                  const hunk = (c.diff_hunk || '').trim();
+
+                  lines.push(`- ${path}${line}`);
+                  if (body) lines.push(`  Comment: ${body}`);
+                  if (hunk) lines.push(`  Diff:\n${hunk}`);
+                  lines.push('');
+                }
+
+                reviewInlineBlock = lines.length
+                  ? `Inline comments from this "Request changes" review:\n\n${lines.join('\n')}`
+                  : '';
+              }
+
+              if (shouldRun && fixIssueNumber) {
+                const issueResp = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: fixIssueNumber
+                });
+
+                issueTitle = safe(issueResp.data?.title);
+                issueBody = safe(issueResp.data?.body);
+              }
+            }
+
+            core.setOutput('should_run', shouldRun ? 'true' : 'false');
+            core.setOutput('skip_reason', skipReason);
+
+            core.setOutput('fix_issue_number', shouldRun && fixIssueNumber ? String(fixIssueNumber) : '');
+            core.setOutput('issue_title', issueTitle);
+            core.setOutput('issue_body', issueBody);
+
+            core.setOutput('trigger_pr_number', triggerPrNumber);
+            core.setOutput('pr_url', prUrl);
+            core.setOutput('pr_head_ref', prHeadRef);
+            core.setOutput('pr_head_sha', prHeadSha);
+            core.setOutput('pr_base_ref', prBaseRef);
+
+            core.setOutput('instruction_body', instructionBody);
+            core.setOutput('review_inline_block', reviewInlineBlock);
+            core.setOutput('review_comment_ids_csv', reviewCommentIds.join(','));
+
+      - name: Comment skip reason (PR only)
+        if: ${{ steps.resolve.outputs.should_run != 'true' && steps.resolve.outputs.trigger_pr_number != '' }}
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.trigger_pr_number }}
+          SKIP_REASON: ${{ steps.resolve.outputs.skip_reason }}
+        with:
+          github-token: ${{ steps.curator_token.outputs.token }}
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER || '0');
+            const reason = (process.env.SKIP_REASON || '').trim() || '(unknown)';
+            if (!prNumber) return;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🅇 "Request changes" received, but Curator is not running.\n\nReason: ${reason}`
+            });
+
+      - name: Stop early if not runnable
+        if: ${{ steps.resolve.outputs.should_run != 'true' }}
+        run: echo "Not running Curator for this event."
+
+      - name: Checkout target
+        if: ${{ steps.resolve.outputs.should_run == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ steps.resolve.outputs.pr_head_sha != '' && steps.resolve.outputs.pr_head_sha || format('refs/heads/{0}', steps.base.outputs.base_branch) }}
+
+      - name: Prepare Curator home
+        if: ${{ steps.resolve.outputs.should_run == 'true' }}
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/curator-home"
+
+      - name: Run Curator (Codex Action)
+        if: ${{ steps.resolve.outputs.should_run == 'true' }}
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: ${{ runner.temp }}/curator-home
+          effort: high
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+          codex-args: '["--full-auto"]'
+          output-file: ${{ runner.temp }}/curator-output.md
+          prompt: |
+            You are Curator, an automated code assistant working in this repository.
+
+            Fix Request:
+            Title: ${{ steps.resolve.outputs.issue_title }}
+
+            Body:
+            ${{ steps.resolve.outputs.issue_body }}
+
+            If this run was triggered by a PR review submitted as "Request changes", here is the review body (may be empty):
+            ${{ steps.resolve.outputs.instruction_body }}
+
+            ${{ steps.resolve.outputs.review_inline_block }}
+
+            Requirements:
+            - Implement the smallest safe fix.
+            - Do not refactor unrelated code.
+            - Do not rename symbols unless required.
+            - Do not modify: Secrets.plist, Pods/, node_modules/, *.ipa, *.dSYM.zip, or .github/workflows/.
+            - Keep changes surgical and production-safe.
+
+            Produce a brief summary of the changes and directly address any review questions.
+
+      - name: Commit + push changes back to PR branch (review-triggered runs)
+        if: ${{ github.event_name == 'pull_request_review' && steps.resolve.outputs.pr_head_ref != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BRANCH="${{ steps.resolve.outputs.pr_head_ref }}"
+          SHA="${{ steps.resolve.outputs.pr_head_sha }}"
+          ISSUE_NUM="${{ steps.resolve.outputs.fix_issue_number }}"
+
+          git checkout -B "$BRANCH" "$SHA"
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "fix: curator fix request #${ISSUE_NUM}"
+
+          git push --force-with-lease origin "HEAD:$BRANCH"
+
+      - name: Create branch + commit + push (issue-labeled runs only)
+        if: ${{ github.event_name == 'issues' }}
+        id: push_issue_branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE="${{ steps.base.outputs.base_branch }}"
+          ISSUE_NUM="${{ steps.resolve.outputs.fix_issue_number }}"
+          BRANCH="codex/fix-request-${ISSUE_NUM}"
+
+          git fetch origin "$BASE" --depth=1
+          git checkout -B "$BRANCH" "origin/$BASE"
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "no_changes=true" >> "$GITHUB_OUTPUT"
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "fix: curator fix request #${ISSUE_NUM}"
+
+          git push --force-with-lease origin "HEAD:$BRANCH"
+
+          echo "no_changes=false" >> "$GITHUB_OUTPUT"
+          echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Comment no-op back on issue (issue-labeled runs only)
+        if: ${{ github.event_name == 'issues' && steps.push_issue_branch.outputs.no_changes == 'true' }}
+        uses: actions/github-script@v7
+        env:
+          FIX_ISSUE_NUMBER: ${{ steps.resolve.outputs.fix_issue_number }}
+          CURATOR_MESSAGE: ${{ steps.run_codex.outputs.final-message }}
+        with:
+          github-token: ${{ steps.curator_token.outputs.token }}
+          script: |
+            const issueNumber = Number(process.env.FIX_ISSUE_NUMBER || '0');
+            if (!issueNumber) return;
+
+            const msg = (process.env.CURATOR_MESSAGE || '').trim() || '(no output)';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `🅇 Curator ran but did not produce any code changes.\n\n**Summary:**\n${msg}`
+            });
+
+      - name: Create or find PR (issue-labeled runs only)
+        if: ${{ github.event_name == 'issues' && steps.push_issue_branch.outputs.no_changes != 'true' }}
+        id: pr_issue
+        uses: actions/github-script@v7
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.base_branch }}
+          FIX_ISSUE_NUMBER: ${{ steps.resolve.outputs.fix_issue_number }}
+          ISSUE_TITLE: ${{ steps.resolve.outputs.issue_title }}
+          BRANCH_NAME: ${{ steps.push_issue_branch.outputs.branch_name }}
+          CURATOR_MESSAGE: ${{ steps.run_codex.outputs.final-message }}
+        with:
+          github-token: ${{ steps.curator_token.outputs.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const base = (process.env.BASE_BRANCH || '').trim() || 'main';
+            const fixIssueNumber = Number(process.env.FIX_ISSUE_NUMBER || '0');
+            const issueTitle = (process.env.ISSUE_TITLE || '').trim() || 'Fix Request';
+            const branch = (process.env.BRANCH_NAME || '').trim();
+            const curatorMessage = (process.env.CURATOR_MESSAGE || '').trim() || '(no output)';
+
+            if (!branch) {
+              core.setFailed('Missing BRANCH_NAME for PR creation');
+              return;
+            }
+
+            const prTitle = `Fix request #${fixIssueNumber}: ${issueTitle}`;
+            const prBody =
+              `Auto-generated by Curator from issue #${fixIssueNumber}.\n\n` +
+              `Curator output:\n${curatorMessage}`;
+
+            const existing = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head: `${owner}:${branch}`,
+              base
+            });
+
+            let pr = existing.data && existing.data.length ? existing.data[0] : null;
+
+            if (!pr) {
+              const created = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: prTitle,
+                head: branch,
+                base,
+                body: prBody
+              });
+              pr = created.data;
+            }
+
+            try {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: pr.number,
+                labels: ['codex']
+              });
+            } catch (e) {}
+
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('pr_url', String(pr.html_url || ''));
+
+      - name: Comment PR URL back on issue (issue-labeled runs only)
+        if: ${{ github.event_name == 'issues' && steps.pr_issue.outputs.pr_url != '' }}
+        uses: actions/github-script@v7
+        env:
+          PR_URL: ${{ steps.pr_issue.outputs.pr_url }}
+          FIX_ISSUE_NUMBER: ${{ steps.resolve.outputs.fix_issue_number }}
+        with:
+          github-token: ${{ steps.curator_token.outputs.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.FIX_ISSUE_NUMBER),
+              body: `☑ Curator opened/updated a PR: ${process.env.PR_URL}`
+            });
+
+      - name: Comment results + reply to inline threads from this review
+        if: ${{ steps.resolve.outputs.should_run == 'true' && steps.resolve.outputs.trigger_pr_number != '' }}
+        uses: actions/github-script@v7
+        env:
+          TRIGGER_PR_NUMBER: ${{ steps.resolve.outputs.trigger_pr_number }}
+          PR_URL: ${{ steps.resolve.outputs.pr_url }}
+          CURATOR_MESSAGE: ${{ steps.run_codex.outputs.final-message }}
+          REVIEW_COMMENT_IDS_CSV: ${{ steps.resolve.outputs.review_comment_ids_csv }}
+        with:
+          github-token: ${{ steps.curator_token.outputs.token }}
+          script: |
+            const curatorMessage = (process.env.CURATOR_MESSAGE || '').trim() || '(no output)';
+            const prNumber = Number(process.env.TRIGGER_PR_NUMBER || '0');
+            const prUrl = (process.env.PR_URL || '').trim();
+
+            if (!prNumber) return;
+
+            const summaryBody =
+              `☑ Curator run complete.\n\n` +
+              (prUrl ? `PR: ${prUrl}\n\n` : '') +
+              `**Summary:**\n${curatorMessage}`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: summaryBody
+            });
+
+            const ids = (process.env.REVIEW_COMMENT_IDS_CSV || '')
+              .split(',')
+              .map(s => s.trim())
+              .filter(Boolean)
+              .slice(0, 25);
+
+            if (!ids.length) return;
+
+            for (const id of ids) {
+              try {
+                await github.rest.pulls.createReplyForReviewComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  comment_id: Number(id),
+                  body: `☑ Addressed via latest Curator run.\n\n${prUrl ? `PR: ${prUrl}\n` : ''}Summary:\n${curatorMessage}`
+                });
+              } catch (e) {}
+            }

@@ -1,0 +1,6 @@
+# Ignore generated stuff in Curator, but keep the schema manifest
+schemas/*
+!schemas/_manifest.json
+
+report.md
+*.png

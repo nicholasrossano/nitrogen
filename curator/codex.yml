@@ -1,0 +1,81 @@
+name: ponder-curator
+version: 1
+
+tasks:
+  - id: dump-schemas
+    name: Dump BigQuery Schemas
+    run:
+      command:
+        - bash
+        - -lc
+        - >
+          set -e;
+          # Run unit tests only when STRICT_MODE=1 (optional; skip if you have no tests)
+          if [ "${STRICT_MODE:-0}" -eq 1 ] && [ -d functions/tests ]; then
+            python -u -m unittest discover -s functions/tests -p 'test_*.py' -v;
+          fi;
+          # Main action
+          python -u dump_bq_schemas.py
+    env:
+      BQ_PROJECT: ${secrets.BQ_PROJECT}
+      BQ_DATASETS: ${secrets.BQ_DATASETS}
+      GOOGLE_APPLICATION_CREDENTIALS_JSON: ${secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON}
+      CURATOR_THREAD_PLAIN: "1"
+      STRICT_MODE: "0"
+    outputs:
+      - path: "schemas/_manifest.json"
+        label: "Schema Manifest"
+
+  - id: weekly-qa
+    name: Weekly Card QA (Curator)
+    run:
+      command:
+        - bash
+        - -lc
+        - >
+          set -e;
+          # Gate tests only when you care
+          if [ "${STRICT_MODE:-0}" -eq 1 ] && [ -d functions/tests ]; then
+            python -u -m unittest discover -s functions/tests -p 'test_*.py' -v;
+          fi;
+          # Generate report (always explains itself in chat)
+          python -u analyze.py;
+          # Optional post-flight checks that WARN but don't block (only in strict mode)
+          if [ "${STRICT_MODE:-0}" -eq 1 ] && [ -f scripts/verify_artifacts.py ]; then
+            python -u scripts/verify_artifacts.py || echo "[verify] non-blocking warning";
+          fi;
+    env:
+      BQ_PROJECT: ${secrets.BQ_PROJECT}
+      BQ_DATASETS: ${secrets.BQ_DATASETS}
+      GOOGLE_APPLICATION_CREDENTIALS_JSON: ${secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON}
+      BQ_TABLE_CARDS: ${secrets.BQ_TABLE_CARDS}
+      WINDOW_DAYS: "7"
+      CURATOR_THREAD_PLAIN: "1"
+      STRICT_MODE: "0"
+    outputs:
+      - path: "report.md"
+        label: "Curator Brief"
+      - path: "daily.png"
+        label: "Daily approvals vs rejections"
+      - path: "reasons.png"
+        label: "Top rejection reasons"
+
+  - id: daily-lane-summary
+    name: Daily Unified Scan Lane Summary
+    schedule:
+      cron: "0 7 * * *"
+      timezone: "America/Los_Angeles"
+    run:
+      command: ["python", "daily_lane_summary.py"]
+    env:
+      BQ_PROJECT: ${secrets.BQ_PROJECT}
+      GOOGLE_APPLICATION_CREDENTIALS_JSON: ${secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON}
+      CURATOR_THREAD_PLAIN: "1"
+      REPORT_TIMEZONE: "America/Los_Angeles"
+    outputs:
+      - path: "report.md"
+        label: "Daily lane summary"
+
+notifications:
+  on_success: true
+  on_failure: true

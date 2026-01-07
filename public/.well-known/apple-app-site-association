@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "QRQBZ3MHCX.com.rossano.ponder",
+        "paths": [
+          "/",
+          "/topics/*",
+          "/topics/*/cards/*",
+          "/cards/*",
+          "*"
+        ]
+      }
+    ]
+  }
+}

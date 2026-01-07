@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "ponder-f84ce"
+  },
+  "targets": {
+    "ponder-f84ce": {
+      "hosting": {
+        "app": [
+          "ponder-f84ce"
+        ],
+        "map": [
+          "ponder-map"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

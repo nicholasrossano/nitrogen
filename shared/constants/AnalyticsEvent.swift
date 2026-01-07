@@ -1,0 +1,195 @@
+// AnalyticsEvents.swift
+import Foundation
+
+// MARK: - Event names (GA4 custom events)
+struct AnalyticsEvent {
+	// Existing
+	static let card_impression       = "card_impression"
+	static let card_read             = "card_read"
+	static let widget_play_start     = "widget_play_start"
+	static let widget_play_complete  = "widget_play_complete"
+	static let widget_trailer_open   = "widget_trailer_open"
+	static let share_tap             = "share_tap"
+	static let share_complete        = "share_complete"
+	static let bookmark_add          = "bookmark_add"
+	static let bookmark_remove       = "bookmark_remove"
+	static let source_open           = "source_open"
+	static let swiped_left           = "swiped_left"
+	static let swiped_right          = "swiped_right"
+	static let card_expand           = "card_expand"
+	static let card_collapse         = "card_collapse"
+	static let topic_select          = "topic_select"
+	static let topics_grid_open      = "topics_grid_open"
+	static let topics_grid_close     = "topics_grid_close"
+	static let topic_favorite_add    = "topic_favorite_add"
+	static let topic_favorite_remove = "topic_favorite_remove"
+	static let deep_link_open        = "deep_link_open"
+	static let notification_open     = "notification_open"
+	static let widget_play_error     = "widget_play_error"
+	static let share_failed          = "share_failed"
+	static let search_performed      = "search_performed"
+	static let feed_paginate         = "feed_paginate"
+	
+	// Home
+	static let home_open                      = "home_open"
+	static let home_onboarding_triggered      = "home_onboarding_triggered"
+	static let home_topics_fetch_start        = "home_topics_fetch_start"
+	static let home_topics_fetch_complete     = "home_topics_fetch_complete"
+	static let home_topics_fetch_error        = "home_topics_fetch_error"
+	static let home_cards_fetch_start         = "home_cards_fetch_start"
+	static let home_cards_fetch_complete      = "home_cards_fetch_complete"
+	static let home_cards_fetch_error         = "home_cards_fetch_error"
+	static let home_search_integrated         = "home_search_integrated"
+	static let home_topic_change              = "home_topic_change"
+	static let home_bookmarks_open            = "home_bookmarks_open"
+	static let home_bookmarks_close           = "home_bookmarks_close"
+	static let home_deeplink_error            = "home_deeplink_error"
+	static let home_deeplink_received         = "home_deeplink_received"
+	static let home_deeplink_resolved         = "home_deeplink_resolved"
+	static let home_deeplink_fetch_error      = "home_deeplink_fetch_error"
+	static let home_search_cards_error        = "home_search_cards_error"
+	static let home_search_cards_fetched      = "home_search_cards_fetched"
+	static let home_toggle_expand             = "home_toggle_expand"
+	static let home_card_swipe                = "home_card_swipe"
+	// TTS
+	static let home_tts_intro_start           = "home_tts_intro_start"
+	static let home_tts_intro_play            = "home_tts_intro_play"
+	static let home_tts_intro_unavailable     = "home_tts_intro_unavailable"
+	static let home_tts_summary_generate_start = "home_tts_summary_generate_start"
+	static let home_tts_summary_generate_error = "home_tts_summary_generate_error"
+	static let home_tts_summary_tts_error     = "home_tts_summary_tts_error"
+	static let home_tts_summary_play_start    = "home_tts_summary_play_start"
+	// NEW TTS session around the auto-briefing button
+	static let home_tts_start                 = "home_tts_start"
+	static let home_tts_complete              = "home_tts_complete"
+	
+	// Curator/Search
+	static let curator_open            = "curator_open"
+	static let curator_mode_change     = "curator_mode_change"
+	static let curator_input_submit    = "curator_input_submit"
+	static let curator_voice_listen_start = "curator_voice_listen_start"
+	static let curator_voice_nav          = "curator_voice_nav"
+	static let curator_tts_start          = "curator_tts_start"
+	static let curator_tts_complete       = "curator_tts_complete"
+	static let curator_suggestion_tap     = "curator_suggestion_tap"
+	static let curator_dismiss            = "curator_dismiss"
+	static let curator_copy               = "curator_copy"
+	
+	static let search_open             = "search_open"
+	static let search_close            = "search_close"
+	static let search_cards_route      = "search_cards_route"
+	// NEW Search funnel
+	static let search_submit           = "search_submit"
+	static let search_suggestion_tap   = "search_suggestion_tap"
+	static let search_suggestions_update = "search_suggestions_update"
+	static let search_result_cards     = "search_result_cards"
+	static let search_result_curator   = "search_result_curator"
+	static let search_timeout          = "search_timeout"
+	static let search_abandon          = "search_abandon"
+	static let search_fetch_start      = "search_fetch_start"
+	static let search_fetch_complete   = "search_fetch_complete"
+	
+	// Profile
+	static let profile_open                    = "profile_open"
+	static let profile_close                   = "profile_close"
+	static let profile_close_gesture           = "profile_close_gesture"
+	static let profile_view_appear             = "profile_view_appear"
+	static let profile_bookmarks_open          = "profile_bookmarks_open"
+	static let profile_open_settings           = "profile_open_settings"
+	static let subscription_manage_open        = "subscription_manage_open"
+	static let subscription_open               = "subscription_open"
+	static let profile_nav_feature_voting_open = "profile_nav_feature_voting_open"
+	static let profile_nav_legal_open          = "profile_nav_legal_open"
+	static let profile_share_tap               = "profile_share_tap"
+	static let profile_logout_tap              = "profile_logout_tap"
+	static let profile_logout_success          = "profile_logout_success"
+	static let profile_logout_error            = "profile_logout_error"
+	static let onboarding_restart_begin        = "onboarding_restart_begin"
+	static let profile_delete_account_tap      = "profile_delete_account_tap"
+	static let profile_delete_account_success  = "profile_delete_account_success"
+	static let profile_delete_account_error    = "profile_delete_account_error"
+	static let profile_voice_style_change      = "profile_voice_style_change"
+	static let profile_voice_preview_play      = "profile_voice_preview_play"
+	static let profile_notifications_toggle    = "profile_notifications_toggle"
+	static let profile_notifications_denied_system = "profile_notifications_denied_system"
+	static let profile_notifications_scheduled = "profile_notifications_scheduled"
+	static let profile_button_tap              = "profile_button_tap"
+	
+	// User linkage
+	static let user_login_linked    = "user_login_linked"
+	static let user_logout_unlinked = "user_logout_unlinked"
+	
+	// Onboarding status write
+	static let onboarding_update_success = "onboarding_update_success"
+	static let onboarding_update_error   = "onboarding_update_error"
+	
+	// ─────────── NEW: Orchestrator (Option A) ───────────
+	static let curator_message_draft  = "curator_message_draft"   // (reserved if you want draft vs commit)
+	static let curator_message_commit = "curator_message_commit"
+	static let curator_directive_submit = "curator_directive_submit"
+	static let curator_directive_result = "curator_directive_result"
+	static let curator_directive_error  = "curator_directive_error"
+}
+
+// MARK: - Param names (GA4 custom params)
+struct AnalyticsParam {
+	// Existing
+	static let card_id         = "card_id"
+	static let topic_id        = "topic_id"
+	static let position        = "position"
+	static let screen          = "screen"
+	static let is_expanded     = "is_expanded"
+	static let trigger         = "trigger"
+	static let dwell_ms        = "dwell_ms"
+	static let widget_type     = "widget_type"
+	static let duration_ms     = "duration_ms"
+	static let completion_pct  = "completion_pct"
+	static let source          = "source"
+	static let domain          = "domain"
+	static let source_name     = "source_name"
+	static let channel         = "channel"
+	static let previous_topic_id = "previous_topic_id"
+	static let direction       = "direction"
+	static let batch_size      = "batch_size"
+	static let results_count   = "results_count"
+	static let query_length    = "query_length"
+	static let campaign        = "campaign"
+	static let medium          = "medium"
+	
+	// General
+	static let topic_name          = "topic_name"
+	static let open_mode           = "open_mode"
+	static let method              = "method"
+	static let message             = "message"
+	static let count               = "count"
+	static let enabled             = "enabled"
+	static let user_id             = "user_id"
+	
+	// Home/Search/Curator
+	static let has_selected_topic  = "has_selected_topic"
+	static let is_home_feed        = "is_home_feed"
+	static let is_load_more        = "is_load_more"
+	static let cards_count         = "cards_count"
+	static let search_id           = "search_id"
+	static let seed_len            = "seed_len"
+	static let has_card_id         = "has_card_id"
+	static let input_type          = "input_type"
+	static let length              = "length"
+	static let index               = "index"
+	static let session_id          = "session_id"
+	static let message_count       = "message_count"
+	static let last_mode           = "last_mode"
+	
+	// NEW — Search specifics
+	static let from_suggestion     = "from_suggestion"
+	static let elapsed_ms          = "elapsed_ms"
+	static let latency_ms          = "latency_ms"
+	static let result_type         = "result_type"
+	static let error               = "error"
+	static let label_length        = "label_length"
+	// For compatibility with existing emitters
+	static let result_count        = "result_count"
+	
+	// Profile/Voice
+	static let style               = "style"
+}

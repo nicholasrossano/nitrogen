@@ -1,0 +1,66 @@
+{
+	"firestore": {
+		"rules": "firestore.rules",
+		"indexes": "firestore.indexes.json"
+	},
+	"functions": [
+		{
+			"source": "functions",
+			"codebase": "default",
+			"ignore": [
+				"venv",
+				".git",
+				"firebase-debug.log",
+				"firebase-debug.*.log",
+				"*.local"
+			],
+			"runtime": "python311",
+			"memory": "512MB",
+			"timeoutSeconds": 300
+		}
+	],
+	"hosting": [
+		{
+			"target": "app",
+			"public": "public",
+			"ignore": [
+				"firebase.json",
+				"**/.*",
+				"**/node_modules/**"
+			],
+			"headers": [
+				{
+					"source": "/.well-known/apple-app-site-association",
+					"headers": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				}
+			],
+			"redirects": [
+				{
+					"source": "/cards/**",
+					"destination": "https://apps.apple.com/us/app/ponder-ai/id6503487947",
+					"type": 307
+				}
+			]
+		},
+		{
+			"target": "map",
+			"public": "map_public",
+			"ignore": [
+				"firebase.json",
+				"**/.*",
+				"**/node_modules/**"
+			],
+			"rewrites": [
+				{
+					"source": "/api/atlasChat",
+					"function": "atlasChat"
+				}
+			]
+		}
+	]
+}

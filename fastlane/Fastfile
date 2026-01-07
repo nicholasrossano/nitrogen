@@ -1,0 +1,424 @@
+FastlaneCore::Globals.verbose = false
+
+default_platform(:ios)
+
+require "json"
+require "net/http"
+require "uri"
+
+OPENAI_API_ENDPOINT = ENV["OPENAI_BASE_URL"] || "https://api.openai.com/v1/responses"
+OPENAI_MODEL        = ENV["OPENAI_MODEL"] || "gpt-4.1-mini"
+
+def safe_truncate(s, limit)
+  s = s.to_s
+  s.length > limit ? s[0, limit] + "…" : s
+end
+
+def http_post_openai(url, api_key, body)
+  uri = URI(url)
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = uri.scheme == "https"
+  http.open_timeout = 8
+  http.read_timeout = 20
+  req = Net::HTTP::Post.new(uri)
+  req["Content-Type"]  = "application/json"
+  req["Authorization"] = "Bearer #{api_key}"
+  req.body = JSON.dump(body)
+  res = http.request(req)
+  JSON.parse(res.body) rescue nil
+end
+
+def gpt_error_summary(fn_name:, error_message:, command:, backtrace:)
+  api_key = ENV["OPENAI_API_KEY"]
+  return nil if api_key.nil? || api_key.empty?
+
+  prompt = <<~TEXT
+    You are an expert CI/CD release engineer for an iOS app that deploys Google Cloud Functions with gcloud.
+    Analyze this failure and produce a Slack-ready summary with exactly these sections:
+
+    Root cause:
+    Fix:
+    Next checks:
+
+    Constraints: maximum 12 lines total; concrete flags, commands, or code edits only. If uncertain, list the 1–3 most likely causes.
+
+    Context:
+    Function: #{fn_name}
+    Command: #{safe_truncate(command.to_s, 500)}
+    Error: #{safe_truncate(error_message.to_s, 1000)}
+    Backtrace: #{safe_truncate(Array(backtrace).join("\n"), 1200)}
+  TEXT
+
+  body = {
+    model: OPENAI_MODEL,
+    input: prompt,
+    temperature: 0.2
+  }
+
+  json = http_post_openai(OPENAI_API_ENDPOINT, api_key, body)
+  return nil unless json
+
+  text = json["output_text"]
+  if (text.nil? || text.empty?) && json["output"].is_a?(Array)
+    chunks = json["output"].flat_map { |m| Array(m["content"]).map { |c| c.is_a?(Hash) ? c["text"] : nil } }.compact
+    text = chunks.join("\n")
+  end
+
+  out = text.to_s.strip
+  out.empty? ? nil : safe_truncate(out, 3500)
+rescue
+  nil
+end
+
+def notify_fn(fn_name:, success:, error_message: nil, command: nil, backtrace: nil)
+  message =
+    if success
+      "Successfully deployed #{fn_name}."
+    else
+      analysis = gpt_error_summary(
+        fn_name:       fn_name,
+        error_message: error_message,
+        command:       command,
+        backtrace:     backtrace
+      )
+      if analysis
+        "*Deployment of #{fn_name} failed*\n\n#{analysis}"
+      else
+        "Deployment of #{fn_name} failed: #{error_message}."
+      end
+    end
+
+  slack(
+    slack_url: "https://hooks.slack.com/services/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",
+    success:   success,
+    message:   message
+  )
+end
+
+$last_fn_name = nil
+$last_cmd = nil
+
+def run_cmd(command, fn_name, notify: true)
+  $last_fn_name = fn_name
+  $last_cmd = command
+  # Ensure gcloud is on PATH for Fastlane’s non-login shell (no other changes)
+  sh(%Q{env PATH="$HOME/google-cloud-sdk/bin:/opt/homebrew/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/bin:/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" #{command}})
+  notify_fn(fn_name: fn_name, success: true) if notify
+  $last_fn_name = nil
+  $last_cmd = nil
+end
+
+EXPORT_OPTS = {
+  method:        "app-store",
+  signingStyle:  "automatic",
+  uploadBitcode: false
+}
+
+api_creds = app_store_connect_api_key(
+  key_id:      "XPWMA7THT7",
+  issuer_id:   "f4fa7640-362b-4689-aa62-374fc1c5577f",
+  key_content: File.read("/Users/nicholasrossano/Development/Ponder/fastlane/AuthKey_XPWMA7THT7.p8")
+)
+
+platform :ios do
+
+  desc "Run Firebase emulators and pop their UI in the default browser"
+  lane :emulate do
+    data_dir = "./emulator-data"
+
+    pid = Process.spawn(
+      "firebase emulators:start " \
+      "--only functions,firestore " \
+      "--import=#{data_dir} " \
+      "--export-on-exit"
+    )
+
+    require "net/http"
+    require "timeout"
+
+    ui_root = URI("http://127.0.0.1:4000")
+    Timeout.timeout(30) do
+      loop do
+        begin
+          Net::HTTP.get_response(ui_root)
+          break
+        rescue Errno::ECONNREFUSED
+          sleep 1
+        end
+      end
+    end
+
+    %w[
+      http://127.0.0.1:4000/functions
+      http://127.0.0.1:4000/firestore
+    ].each { |u| system("open", u) }
+
+    Process.wait(pid)
+  end
+
+  desc "Deploy all Python back-end functions"
+  lane :functions do
+    cards
+    cinema
+    research
+    data
+    restaurants
+    google_trends
+    books
+  end
+
+  desc "Deploy card-generation function"
+  lane :cards do
+    run_cmd(
+      "gcloud functions deploy trigger_card_generation " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1800s " \
+      "--project=ponder-f84ce --source=../functions",
+      "trigger_card_generation"
+    )
+  end
+
+  desc "Deploy research-generation function"
+  lane :research do
+  run_cmd(
+      "gcloud functions deploy trigger_research_generation " \
+      "--gen2 " \
+      "--region=us-central1 " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1000s " \
+      "--allow-unauthenticated --project=ponder-f84ce --source=../functions",
+      "trigger_research_generation"
+    )
+  end
+
+  desc "Deploy data-warehouse function"
+  lane :data do
+    run_cmd(
+      "gcloud functions deploy update_data_warehouse " \
+      "--runtime=python311 --trigger-http --memory=2GB --timeout=1800s " \
+      "--allow-unauthenticated --project=ponder-f84ce --source=../functions",
+      "update_data_warehouse"
+    )
+  end
+
+  desc "Deploy scan_restaurants function"
+  lane :restaurants do
+    run_cmd(
+      "gcloud functions deploy scan_restaurant_news " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1800s " \
+      "--allow-unauthenticated --project=ponder-f84ce --source=../functions",
+      "scan_restaurant_news"
+    )
+  end
+
+  desc "Deploy scan_google_trends function"
+  lane :google_trends do
+    run_cmd(
+      "gcloud functions deploy scan_google_trends " \
+      "--runtime=python311 --trigger-http --memory=2GB --timeout=1800s " \
+      "--project=ponder-f84ce --source=../functions",
+      "scan_google_trends"
+    )
+  end
+
+  desc "Deploy scan_book_lists function"
+  lane :books do
+    run_cmd(
+      "gcloud functions deploy scan_book_lists " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1800s " \
+      "--project=ponder-f84ce --source=../functions",
+      "scan_book_lists"
+    )
+  end
+
+  desc "Deploy scan_cinema function"
+  lane :cinema do
+    run_cmd(
+      "gcloud functions deploy scan_cinema " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1800s " \
+      "--project=ponder-f84ce --source=../functions",
+      "scan_cinema"
+    )
+  end
+
+  desc "Deploy unified scanning function"
+  lane :unified do
+    run_cmd(
+      "gcloud functions deploy scan_unified " \
+      "--gen2 " \
+      "--region=us-central1 " \
+      "--runtime=python311 " \
+      "--trigger-http " \
+      "--allow-unauthenticated " \
+      "--memory=8GB " \
+      "--timeout=3600s " \
+      "--project=ponder-f84ce " \
+      "--source=../functions",
+      "scan_unified"
+    )
+  end
+
+  desc "Deploy scan_custom_search function"
+  lane :search do
+    run_cmd(
+      "gcloud functions deploy scan_custom_search " \
+      "--gen2 " \
+      "--region=us-east4 " \
+      "--runtime=python311 " \
+      "--trigger-http " \
+      "--memory=4GB " \
+      "--timeout=1800s " \
+      "--project=ponder-f84ce " \
+      "--source=../functions " \
+      "--entry-point=scan_custom_search " \
+      "--min-instances=1",
+      "scan_custom_search"
+    )
+  end
+
+  desc "Deploy Fastlane reports (card + user metrics)"
+  lane :reports do
+    run_cmd(
+      "gcloud functions deploy run_card_metrics " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1000s " \
+      "--allow-unauthenticated --project=ponder-f84ce --source=../functions",
+      "run_card_metrics"
+    )
+    run_cmd(
+      "gcloud functions deploy run_user_metrics " \
+      "--runtime=python311 --trigger-http --memory=4GB --timeout=1000s " \
+      "--allow-unauthenticated --project=ponder-f84ce --source=../functions",
+      "run_user_metrics"
+    )
+  end
+
+  desc "Deploy notifications function"
+  lane :notifications do
+    run_cmd(
+      "gcloud functions deploy send_top_card_pushes " \
+      "--gen2 " \
+      "--project=ponder-f84ce " \
+      "--region=us-central1 " \
+      "--runtime=python311 " \
+      "--trigger-topic=ponder-scheduled-push " \
+      "--memory=2GB " \
+      "--timeout=540s " \
+      "--source=../functions",
+      "send_top_card_pushes"
+    )
+  end
+
+  desc "Deploy ranking profiles builder function"
+  lane :ranking do
+    run_cmd(
+      "gcloud functions deploy build_rank_profiles " \
+      "--runtime=python311 " \
+      "--trigger-http " \
+      "--memory=4GB " \
+      "--timeout=1800s " \
+      "--allow-unauthenticated " \
+      "--project=ponder-f84ce " \
+      "--source=../functions",
+      "build_rank_profiles"
+    )
+  end
+
+  desc "Upload a new beta build to TestFlight"
+  lane :beta do |options|
+    notes = options[:release_notes] || prompt(text: "Enter TestFlight release notes:")
+
+    notify_testers =
+      if options.key?(:notify_testers)
+        v = options[:notify_testers]
+        if v == true || v == false
+          v
+        else
+          %w[1 true yes y on].include?(v.to_s.strip.downcase)
+        end
+      else
+        true
+      end
+
+    gym(
+      scheme:         "Ponder",
+      export_method:  "app-store",
+      export_options: EXPORT_OPTS
+    )
+    pilot(
+      api_key:                 api_creds,
+      skip_submission:         false,
+      groups:                  ["Core External"],
+      notify_external_testers: notify_testers,
+      changelog:               notes
+    )
+  end
+
+  desc "Upload a manual App Store release"
+  lane :appstore_manual do
+    gym(
+      scheme:         "Ponder",
+      export_method:  "app-store",
+      export_options: EXPORT_OPTS
+    )
+    notes = prompt(text: "Enter App Store release notes:")
+    deliver(
+      api_key:           api_creds,
+      changelog:         notes,
+      automatic_release: false,
+      force:             true,
+      skip_metadata:     true,
+      skip_screenshots:  true
+    )
+  end
+
+  desc "Upload an automatic App Store release"
+  lane :appstore_auto do
+    increment_build_number
+    gym(
+      scheme:         "Ponder",
+      export_method:  "app-store",
+      export_options: EXPORT_OPTS
+    )
+    notes = prompt(text: "Enter App Store release notes:")
+    deliver(
+      api_key:           api_creds,
+      changelog:         notes,
+      automatic_release: true,
+      force:             true,
+      skip_metadata:     true,
+      skip_screenshots:  true
+    )
+  end
+
+  desc "Terminate Firebase emulators on common ports"
+  lane :terminate do
+    run_cmd(
+      "lsof -ti:8080 -ti:5001 -ti:9099 -ti:9199 | xargs kill -9",
+      "terminate_emulators",
+      notify: false
+    )
+  end
+
+  desc "Activate Python virtual environment"
+  lane :activate do
+    run_cmd(
+      "cd /Users/nicholasrossano/Development/Ponder/functions && source venv/bin/activate",
+      "activate_venv"
+    )
+  end
+
+end
+
+error do |lane, exception|
+  fn_to_report  = $last_fn_name || "lane #{lane}"
+  cmd_to_report = $last_cmd
+  unless fn_to_report == "terminate_emulators" || lane.to_s == "terminate"
+    notify_fn(
+      fn_name:       fn_to_report,
+      success:       false,
+      error_message: exception.message,
+      command:       cmd_to_report,
+      backtrace:     exception.backtrace
+    )
+  end
+  $last_fn_name = nil
+  $last_cmd = nil
+end

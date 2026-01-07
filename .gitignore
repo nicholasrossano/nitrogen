@@ -1,0 +1,65 @@
+# Conservator artifacts (keep code + manifest tracked)
+conservator/*.png
+conservator/report.md
+
+# If any other JSON ends up in schemas, ignore them, but keep the manifest
+conservator/schemas/*.json
+!conservator/schemas/_manifest.json
+
+# --- macOS / editor junk ---
+.DS_Store
+*.swp
+*.swo
+
+# --- Xcode / iOS build artifacts ---
+DerivedData/
+build/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.dSYM
+*.ipa
+*.moved-aside
+
+# --- Xcode user data (never commit) ---
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# --- CocoaPods (keep Podfile & Podfile.lock tracked) ---
+Pods/
+
+# --- SwiftPM ---
+.swiftpm/
+.build/
+
+# --- Firebase / Crashlytics / Performance local state ---
+.firebase/
+firebase-*.log
+firestore-*.log
+
+# --- Fastlane artifacts/logs ---
+fastlane/*.log
+fastlane/report.xml
+fastlane/emulator-data/
+
+# --- Node ---
+node_modules/
+Scripts/node_modules/
+
+# --- Python ---
+venv/
+functions/venv/
+**/__pycache__/
+*.pyc
+.env
+functions/.env
+
+# --- Conservator run artifacts (keep manifest tracked) ---
+conservator/*.png
+conservator/report.md
+conservator/schemas/*.json
+!conservator/schemas/_manifest.json
+
+# --- Binaries / bundles ---
+Ponder.app.dSYM.zip
+Ponder.ipa

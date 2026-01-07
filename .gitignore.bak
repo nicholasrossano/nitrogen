@@ -1,0 +1,7 @@
+# Conservator artifacts (keep code + manifest tracked)
+conservator/*.png
+conservator/report.md
+
+# If any other JSON ends up in schemas, ignore them, but keep the manifest
+conservator/schemas/*.json
+!conservator/schemas/_manifest.json

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyDK987z3k9qyiZMfNJPBkJKNqZVR3qhGBY</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1070041172712</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.rossano.ponder</string>
+	<key>PROJECT_ID</key>
+	<string>ponder-f84ce</string>
+	<key>STORAGE_BUCKET</key>
+	<string>ponder-f84ce.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<true/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1070041172712:ios:8077568d3a592eda13575d</string>
+</dict>
+</plist>

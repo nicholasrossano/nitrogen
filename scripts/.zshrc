@@ -1,0 +1,1 @@
+export OMDB_API_KEY='3e358e38'

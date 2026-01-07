@@ -1,0 +1,8 @@
+# Appfile
+
+app_identifier("com.rossano.ponder")          # The bundle identifier of your app
+apple_id("nicholas.rossano@gmail.com")        # Your Apple Developer Portal username (Apple ID)
+team_id("QRQBZ3MHCX")                         # Your Apple Developer Team ID
+
+# Optional:
+# itc_team_id("YOUR_ITC_TEAM_ID")
