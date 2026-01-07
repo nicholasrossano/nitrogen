@@ -1,10 +1,10 @@
-# Ponder — Curator (Codex)
+# Foreword — Curator (Codex)
 
-This file contains Curator-specific run rules and analytics conventions. General “run vs chat” behavior is governed by the Codex global prompt; this file adds Ponder/Curator details.
+This file contains Curator-specific run rules and analytics conventions. General “run vs chat” behavior is governed by the Codex global prompt; this file adds Foreword/Curator details.
 
 ## Working directory + environment
 - Use the **Curator** Codex environment for analytics runs.
-- Run from: `/workspace/ponder/curator`
+- Run from: `/workspace/foreword/curator`
 
 ## Schema manifest freshness
 - If `schemas/_manifest.json` is missing **or older than 24 hours**, run:
