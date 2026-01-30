@@ -210,3 +210,17 @@ textarea {
   @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
   @apply bg-accent-wash text-accent-anchor rounded-sm;
 }
+
+/* Watershed-style accent dividers */
+.divider-accent {
+  @apply w-full h-px bg-accent;
+}
+
+.divider-accent-thin {
+  @apply w-full h-px bg-accent;
+}
+
+/* Section divider with spacing */
+.section-divider {
+  @apply w-full border-t-2 border-accent;
+}
