@@ -35,7 +35,7 @@ async def create_initiative(
     initial_message = ChatMessage(
         initiative_id=initiative.id,
         role="assistant",
-        content="What are you working on? Describe your initiative, where it's happening, who it's for, and what success looks like.",
+        content="What are you working on?",
     )
     db.add(initial_message)
     await db.commit()
@@ -128,9 +128,67 @@ async def list_initiatives(
     result = await db.execute(
         select(Initiative)
         .where(Initiative.user_id == user.uid)
-        .order_by(Initiative.created_at.desc())
+        .order_by(Initiative.updated_at.desc())
         .limit(limit)
         .offset(offset)
     )
     initiatives = result.scalars().all()
     return initiatives
+
+
+@router.patch("/initiatives/{initiative_id}", response_model=InitiativeResponse)
+async def update_initiative(
+    initiative_id: UUID,
+    data: InitiativeCreate,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Update an initiative (title, etc.)"""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    if data.title is not None:
+        initiative.title = data.title
+    
+    await db.commit()
+    await db.refresh(initiative)
+    
+    return initiative
+
+
+@router.delete("/initiatives/{initiative_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_initiative(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete an initiative and all related data"""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    await db.delete(initiative)
+    await db.commit()
+    
+    return None

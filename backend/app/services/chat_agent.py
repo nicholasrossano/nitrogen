@@ -1,8 +1,8 @@
 """Chat agent service for conversational workflow."""
 
 from openai import AsyncOpenAI
+import json
 from typing import Optional
-from pathlib import Path
 
 from app.config import get_settings
 from app.models.initiative import Initiative, InitiativeStage
@@ -20,10 +20,10 @@ class ChatAgentService:
         self.model = settings.openai_model
         self.registry = get_tool_registry()
     
-    def _get_system_prompt(self, stage: str, widget_type: str | None = None) -> str:
-        """Get system prompt based on current stage and widget context."""
+    def _get_system_prompt(self, initiative: Initiative, widget_type: str | None = None) -> str:
+        """Get system prompt based on current context."""
         
-        # If we're showing a widget, use ultra-brief prompts
+        # If we're showing a widget, use context-specific prompts
         if widget_type == "tool_checklist":
             return """You are a professional advisor helping development practitioners prepare project documentation.
 
@@ -37,16 +37,7 @@ RULES:
 - Be professional, not casual
 - Reference what practitioners typically prepare for this project type
 - Do NOT explain the project's potential impact or benefits
-- Do NOT write more than 50 words
-
-Example for a solar mini-grid project:
-"For energy access projects like this, teams typically prepare investment memos to secure funding and due diligence checklists to assess implementation risks. Based on your mini-grid initiative in Kenya, I'd recommend:"
-
-Example for an LPG project:
-"Clean cooking initiatives often require investment documentation and risk assessments for stakeholder review. For your LPG distribution project in Namibia, here's what I'd suggest:"
-
-BAD (too casual): "Great project! Here are some tools:"
-BAD (too long): "Your initiative focuses on promoting the use of..." """
+- Do NOT write more than 50 words"""
 
         elif widget_type == "deliverables_overview":
             return """The user has provided all the information needed. Write ONE brief sentence saying you're ready to generate their deliverables.
@@ -57,50 +48,78 @@ RULES:
 - Do NOT summarize the project
 - Do NOT list what you'll create
 
-Example: "I have everything I need - here's what I'll prepare for you:"
-"""
+Example: "I have everything I need - here's what I'll prepare for you:" """
 
-        elif stage == InitiativeStage.DESCRIBE.value:
-            return """You are a helpful assistant for Nitrogen, a platform that helps development professionals create project documentation.
+        # Default flexible prompt for general conversation
+        context = self._build_context(initiative)
+        
+        return f"""You are a helpful assistant for Nitrogen, a platform that helps development professionals create project documentation like investment memos and due diligence checklists.
 
-Your goal is to understand what project the user is working on. Keep it conversational and brief.
+Current project state:
+{context if context else "No project details yet."}
 
-RULES:
-- Keep ALL responses to 1-2 sentences MAX
-- Ask ONE question at a time
-- Be friendly but concise
-- Don't explain the platform
-- Don't elaborate on their project's potential impact"""
-
-        elif stage == InitiativeStage.SELECT_TOOLS.value:
-            return """The user is selecting which tools to use. Keep responses very brief.
+Your role:
+- Help users describe their projects and gather information needed for outputs
+- Answer questions about the platform or their project
+- Guide them to upload evidence documents when relevant
+- Help them understand what information is needed for different tools
 
 RULES:
-- 1-2 sentences maximum
-- Just acknowledge their selection briefly"""
+- Keep ALL responses to 1-3 sentences MAX
+- Be concise and direct
+- If the user asks for something that needs more info, ask ONE specific question
+- Don't lecture or over-explain
+- Be friendly but professional
 
-        elif stage == InitiativeStage.GATHER_INPUTS.value:
-            return """You are gathering information needed for the user's selected tools. Ask questions to fill in missing details.
-
-RULES:
-- Keep responses to 1-2 sentences
-- Ask ONE specific question at a time
-- If user doesn't have info, that's okay - move on
-- Be helpful but concise"""
-
-        elif stage == InitiativeStage.REVIEW.value:
-            return """The user is reviewing their project overview before generation.
-
-RULES:
-- Keep responses very brief (1 sentence)
-- Just acknowledge and let them review"""
-
-        else:
-            return """You are a helpful assistant. Keep responses brief and helpful.
-
-RULES:
-- Maximum 2 sentences
-- Be concise and direct"""
+If tools are selected and you notice missing required inputs, gently ask about them one at a time."""
+    
+    def _build_context(self, initiative: Initiative) -> str:
+        """Build context string from initiative state."""
+        parts = []
+        
+        if initiative.title:
+            parts.append(f"Project title: {initiative.title}")
+        if initiative.project_description:
+            parts.append(f"Description: {initiative.project_description[:200]}")
+        if initiative.project_type:
+            parts.append(f"Type: {initiative.project_type}")
+        if initiative.geography:
+            parts.append(f"Location: {initiative.geography}")
+        if initiative.target_population:
+            parts.append(f"Target beneficiaries: {initiative.target_population}")
+        if initiative.goal:
+            parts.append(f"Goal: {initiative.goal}")
+        
+        if initiative.selected_tools:
+            tool_names = []
+            for tool_id in initiative.selected_tools:
+                tool = self.registry.get_tool(tool_id)
+                if tool:
+                    tool_names.append(tool.definition.name)
+            if tool_names:
+                parts.append(f"Selected outputs: {', '.join(tool_names)}")
+        
+        # Check for evidence
+        if initiative.evidence_ready:
+            parts.append("Evidence documents: Uploaded")
+        
+        # Check for deliverables
+        if initiative.deliverables:
+            deliverable_names = list(initiative.deliverables.keys())
+            if deliverable_names:
+                parts.append(f"Generated outputs: {', '.join(deliverable_names)}")
+        
+        # Note missing inputs if tools are selected
+        if initiative.selected_tools:
+            missing = initiative.get_missing_tool_inputs()
+            if missing:
+                missing_fields = []
+                for tool_id, fields in missing.items():
+                    missing_fields.extend(fields)
+                if missing_fields:
+                    parts.append(f"Still needed: {', '.join(missing_fields[:3])}")
+        
+        return "\n".join(parts) if parts else ""
     
     def _build_messages(
         self, 
@@ -109,16 +128,7 @@ RULES:
         widget_type: str | None = None,
     ) -> list[dict]:
         """Build message list for OpenAI API."""
-        stage = initiative.stage or InitiativeStage.DESCRIBE.value
-        messages = [{"role": "system", "content": self._get_system_prompt(stage, widget_type)}]
-        
-        # Add context about current state
-        context = self._build_context(initiative)
-        if context:
-            messages.append({
-                "role": "system", 
-                "content": f"Project context:\n{context}"
-            })
+        messages = [{"role": "system", "content": self._get_system_prompt(initiative, widget_type)}]
         
         # Add chat history (last 10 messages to keep context manageable)
         recent_history = chat_history[-10:] if len(chat_history) > 10 else chat_history
@@ -130,29 +140,6 @@ RULES:
         
         return messages
     
-    def _build_context(self, initiative: Initiative) -> str:
-        """Build context string from initiative state."""
-        parts = []
-        
-        if initiative.project_description:
-            parts.append(f"Project: {initiative.project_description[:200]}")
-        if initiative.project_type:
-            parts.append(f"Type: {initiative.project_type}")
-        if initiative.title:
-            parts.append(f"Title: {initiative.title}")
-        if initiative.geography:
-            parts.append(f"Location: {initiative.geography}")
-        if initiative.selected_tools:
-            tool_names = []
-            for tool_id in initiative.selected_tools:
-                tool = self.registry.get_tool(tool_id)
-                if tool:
-                    tool_names.append(tool.definition.name)
-            if tool_names:
-                parts.append(f"Selected tools: {', '.join(tool_names)}")
-        
-        return "\n".join(parts) if parts else ""
-    
     async def generate_response(
         self,
         messages: list[ChatMessage],
@@ -163,7 +150,7 @@ RULES:
         api_messages = self._build_messages(messages, initiative, widget_type)
         
         # Use lower max_tokens to enforce brevity
-        max_tokens = 120 if widget_type else 150
+        max_tokens = 120 if widget_type else 200
         
         response = await self.client.chat.completions.create(
             model=self.model,
@@ -173,6 +160,99 @@ RULES:
         )
         
         return response.choices[0].message.content
+    
+    async def analyze_intent(
+        self,
+        messages: list[ChatMessage],
+        initiative: Initiative,
+    ) -> dict:
+        """Analyze what the user is trying to do and what info they're providing."""
+        
+        # Get the last user message
+        last_user_msg = None
+        for msg in reversed(messages):
+            if msg.role == "user":
+                last_user_msg = msg.content
+                break
+        
+        if not last_user_msg:
+            return {"intent": "greeting", "extracted_info": {}}
+        
+        # Build context for analysis
+        context = self._build_context(initiative)
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""Analyze this user message and extract any project information they're providing.
+
+Current project state:
+{context if context else "New project, no details yet."}
+
+Determine:
+1. What intent the user has (describing_project, asking_question, requesting_generation, uploading_evidence, selecting_tools, other)
+2. What new information they're providing about their project
+3. Whether they seem ready for tool recommendations (have they described enough about their project?)"""
+                },
+                {
+                    "role": "user",
+                    "content": last_user_msg
+                }
+            ],
+            tools=[{
+                "type": "function",
+                "function": {
+                    "name": "analyze_message",
+                    "description": "Analyze user intent and extract information",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "intent": {
+                                "type": "string",
+                                "enum": ["describing_project", "asking_question", "requesting_generation", "providing_info", "other"],
+                                "description": "What the user is trying to do"
+                            },
+                            "project_description": {
+                                "type": "string",
+                                "description": "Brief description of the project if provided"
+                            },
+                            "project_type": {
+                                "type": "string",
+                                "enum": ["energy_access", "clean_cooking", "agriculture", "water_sanitation", "health", "general", ""],
+                                "description": "Type of project if identifiable"
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Short title for the project if provided"
+                            },
+                            "geography": {
+                                "type": "string",
+                                "description": "Location/geography if mentioned"
+                            },
+                            "target_beneficiaries": {
+                                "type": "string",
+                                "description": "Who will benefit from this project if mentioned"
+                            },
+                            "project_goal": {
+                                "type": "string",
+                                "description": "Main goal or objective if mentioned"
+                            },
+                            "ready_for_tools": {
+                                "type": "boolean",
+                                "description": "True if user has provided enough project context to recommend tools"
+                            }
+                        },
+                        "required": ["intent", "ready_for_tools"]
+                    }
+                }
+            }],
+            tool_choice={"type": "function", "function": {"name": "analyze_message"}},
+        )
+        
+        tool_call = response.choices[0].message.tool_calls[0]
+        return json.loads(tool_call.function.arguments)
     
     async def extract_project_info(
         self,
@@ -239,7 +319,6 @@ RULES:
             tool_choice={"type": "function", "function": {"name": "extract_project_info"}},
         )
         
-        import json
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
     
@@ -294,6 +373,5 @@ RULES:
             tool_choice={"type": "function", "function": {"name": "extract_inputs"}},
         )
         
-        import json
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
