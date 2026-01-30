@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
+from app.models.evidence import EvidenceDoc
 from app.schemas.chat import (
     ChatMessageCreate,
     ChatMessageResponse,
@@ -87,32 +88,152 @@ async def send_chat_message(
     )
     messages = list(history_result.scalars().all())
     
-    # Process message with chat agent
+    # ============================================================
+    # DETERMINISTIC ONBOARDING STATE MACHINE
+    # No LLM for flow control - just simple, reliable logic
+    # ============================================================
+    
     chat_agent = ChatAgentService()
     widget_type = None
     widget_data = None
+    should_show_tools_next = False
+    assistant_response = None
     
-    # Analyze user intent and extract information
-    try:
-        analysis = await chat_agent.analyze_intent(messages, initiative)
-    except Exception as e:
-        # If analysis fails, provide defaults and log the error
-        import logging
-        logging.error(f"Intent analysis failed: {e}")
-        analysis = {
-            "intent": "describing_project",
-            "ready_for_tools": False,
-            "is_question": False,
-            "wants_to_proceed": False,
-            "wants_to_go_back": False,
+    # Count message types to determine stage
+    user_message_count = sum(1 for m in messages if m.role == "user")
+    
+    # Check for key widgets in history
+    has_document_request = any(
+        m.widget_type == "document_request" for m in messages if m.role == "assistant"
+    )
+    has_tool_checklist = any(
+        m.widget_type == "tool_checklist" for m in messages if m.role == "assistant"
+    )
+    
+    # Get last assistant message
+    last_assistant_msg = None
+    for msg in reversed(messages):
+        if msg.role == "assistant":
+            last_assistant_msg = msg
+            break
+    
+    import logging
+    logging.info(f"ONBOARDING STATE: user_msgs={user_message_count}, has_doc_request={has_document_request}, has_tools={has_tool_checklist}")
+    
+    # ============================================================
+    # STAGE 1: First user message -> Ask for materials
+    # Trigger: user_message_count == 1 AND no document_request yet
+    # ============================================================
+    if user_message_count == 1 and not has_document_request:
+        logging.info("STAGE 1: Asking for materials")
+        
+        # Get the user's project description
+        user_description = data.content
+        
+        # Extract and save project info
+        try:
+            project_info = await chat_agent.extract_project_info(messages)
+            if project_info.get("project_description"):
+                initiative.project_description = project_info["project_description"]
+            if project_info.get("project_type"):
+                initiative.project_type = project_info["project_type"]
+            if project_info.get("title") and not initiative.title:
+                initiative.title = project_info["title"]
+            if project_info.get("geography") and not initiative.geography:
+                initiative.geography = project_info["geography"]
+            await db.commit()
+            await db.refresh(initiative)
+        except Exception as e:
+            logging.error(f"Project extraction failed: {e}")
+        
+        # LLM generates the materials request with context-appropriate details
+        assistant_response = await chat_agent.generate_materials_request_v2(user_description)
+        widget_type = "document_request"
+        widget_data = {"allow_multiple": True}
+    
+    # ============================================================
+    # STAGE 2: User responded to document request -> Confirm docs + show tools
+    # Trigger: last message was document_request widget AND user just responded
+    # ============================================================
+    elif last_assistant_msg and last_assistant_msg.widget_type == "document_request" and not has_tool_checklist:
+        logging.info("STAGE 2: Confirming documents and showing tools")
+        
+        # Get uploaded documents
+        docs_result = await db.execute(
+            select(EvidenceDoc).where(EvidenceDoc.initiative_id == initiative_id)
+        )
+        docs = list(docs_result.scalars().all())
+        
+        # Build confirmation message
+        if docs:
+            # Get preview of first document
+            from app.models.evidence import EvidenceChunk
+            preview_text = ""
+            chunks_result = await db.execute(
+                select(EvidenceChunk)
+                .where(EvidenceChunk.evidence_doc_id == docs[0].id)
+                .order_by(EvidenceChunk.chunk_index)
+                .limit(1)
+            )
+            first_chunk = chunks_result.scalar_one_or_none()
+            if first_chunk:
+                preview_text = first_chunk.content[:200].replace('\n', ' ').strip()
+            
+            doc_names = ", ".join([d.filename for d in docs])
+            confirmation_msg = f"Thanks! I've received and processed {len(docs)} document{'s' if len(docs) > 1 else ''}: {doc_names}."
+            if preview_text:
+                try:
+                    summary = await chat_agent.quick_doc_summary(preview_text)
+                    confirmation_msg += f" {summary}"
+                except:
+                    confirmation_msg += " I'll use this to create more accurate outputs."
+        else:
+            confirmation_msg = "No problem! I can create documentation based on our conversation. I may need to make some assumptions, but I'll flag those for you."
+        
+        # Save the confirmation message FIRST (no widget)
+        confirmation_message = ChatMessage(
+            initiative_id=initiative.id,
+            role="assistant",
+            content=confirmation_msg,
+            widget_type=None,
+            widget_data=None,
+        )
+        db.add(confirmation_message)
+        await db.commit()
+        
+        # Now prepare the tool recommendations message
+        assistant_response = "Based on your project, here are the tools I recommend:"
+        
+        widget_type = "tool_checklist"
+        registry = get_tool_registry()
+        recommendations = registry.recommend_tools(
+            project_description=initiative.project_description,
+            project_type=initiative.project_type,
+        )
+        widget_data = {
+            "recommendations": [
+                {
+                    "tool": tool.definition.to_dict(),
+                    "confidence": confidence,
+                    "recommended": confidence > 0.3,
+                }
+                for tool, confidence in recommendations
+            ],
+            "project_type": initiative.project_type,
         }
     
-    # Check if user wants to go back or change something
-    if analysis.get("wants_to_go_back", False):
-        # Don't show any widgets, just let them have a conversation
-        widget_type = None
-        widget_data = None
+    # ============================================================
+    # DEFAULT: Use LLM for everything after onboarding
+    # ============================================================
     else:
+        logging.info("DEFAULT: Using LLM for response")
+        
+        # Analyze intent only for post-onboarding
+        try:
+            analysis = await chat_agent.analyze_intent(messages, initiative)
+        except:
+            analysis = {"intent": "general_conversation"}
+        
         # Update initiative with any extracted info
         info_updated = False
         if analysis.get("project_description") and not initiative.project_description:
@@ -132,89 +253,12 @@ async def send_chat_message(
             info_updated = True
         
         if info_updated:
-            # Classify SDG if we have project info
-            if initiative.project_description or initiative.goal:
-                sdg_info = classify_sdg(
-                    initiative.project_description or initiative.goal or "",
-                    initiative.project_type,
-                )
-                if sdg_info:
-                    tool_inputs = initiative.tool_inputs or {}
-                    tool_inputs["sdg"] = sdg_info
-                    initiative.tool_inputs = tool_inputs
-            
             await db.commit()
             await db.refresh(initiative)
-        
-        # Determine if we should show tool recommendations
-        # Be AGGRESSIVE: Show tools if:
-        # 1. User described a project (has info in analysis OR initiative)
-        # 2. Haven't selected tools yet
-        # 3. Not explicitly just asking a general question
-        
-        is_just_asking = analysis.get("intent") == "asking_question"
-        described_project = analysis.get("intent") in ["describing_project", "providing_info"]
-        has_any_project_info = (
-            initiative.project_description or 
-            initiative.title or 
-            analysis.get("project_description") or 
-            analysis.get("title") or
-            described_project
-        )
-        
-        # Show tools if they mentioned a project at all, UNLESS they're just asking a question
-        show_tool_recommendations = (
-            has_any_project_info and
-            not initiative.selected_tools and
-            not is_just_asking
-        )
-        
-        import logging
-        logging.info(f"Tool recommendation logic: has_any_project_info={has_any_project_info}, selected_tools={initiative.selected_tools}, is_just_asking={is_just_asking}, show={show_tool_recommendations}")
-        
-        if show_tool_recommendations:
-            # Do a full extraction to ensure we have all info before showing tools
-            project_info = await chat_agent.extract_project_info(messages)
-            logging.info(f"Extracted project info: {project_info}")
-            
-            # Update with extracted info
-            if project_info.get("project_description"):
-                initiative.project_description = project_info["project_description"]
-            if project_info.get("project_type"):
-                initiative.project_type = project_info["project_type"]
-            # Set title when showing tool recommendations (user has provided enough context)
-            if project_info.get("title") and not initiative.title:
-                initiative.title = project_info["title"]
-            if project_info.get("geography") and not initiative.geography:
-                initiative.geography = project_info["geography"]
-            if project_info.get("target_beneficiaries") and not initiative.target_population:
-                initiative.target_population = project_info["target_beneficiaries"]
-            if project_info.get("project_goal") and not initiative.goal:
-                initiative.goal = project_info["project_goal"]
-            
-            await db.commit()
-            await db.refresh(initiative)
-            
-            widget_type = "tool_checklist"
-            registry = get_tool_registry()
-            recommendations = registry.recommend_tools(
-                project_description=initiative.project_description,
-                project_type=initiative.project_type,
-            )
-            widget_data = {
-                "recommendations": [
-                    {
-                        "tool": tool.definition.to_dict(),
-                        "confidence": confidence,
-                        "recommended": confidence > 0.3,
-                    }
-                    for tool, confidence in recommendations
-                ],
-                "project_type": initiative.project_type,
-            }
         
         # If tools are selected, extract any tool-specific inputs from conversation
-        elif initiative.selected_tools and not is_just_asking:
+        is_just_asking = analysis.get("intent") == "asking_question"
+        if initiative.selected_tools and not is_just_asking:
             tool_inputs = await chat_agent.extract_tool_inputs(
                 messages=messages,
                 tool_ids=initiative.selected_tools,
@@ -265,12 +309,13 @@ async def send_chat_message(
                     "tool_inputs": initiative.tool_inputs or {},
                 }
     
-    # Generate assistant response
-    assistant_response = await chat_agent.generate_response(
-        messages=messages,
-        initiative=initiative,
-        widget_type=widget_type,
-    )
+    # Generate assistant response ONLY if not already set by deterministic stages
+    if assistant_response is None:
+        assistant_response = await chat_agent.generate_response(
+            messages=messages,
+            initiative=initiative,
+            widget_type=widget_type,
+        )
     
     # Save assistant message
     assistant_message = ChatMessage(
@@ -296,6 +341,7 @@ async def send_chat_message(
         extracted_fields=None,
         stage_status=build_stage_status(initiative),
         show_confirmation=widget_type == "deliverables_overview",
+        trigger_tools_next=locals().get('should_show_tools_next', False),
     )
 
 
@@ -334,7 +380,7 @@ async def get_chat_history(
         greeting = ChatMessage(
             initiative_id=initiative_id,
             role="assistant",
-            content="Hi! I help development teams prepare investment memos and due diligence checklists for impact projects. What are you working on?",
+            content="What are you working on?",
         )
         db.add(greeting)
         await db.commit()
