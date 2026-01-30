@@ -131,16 +131,16 @@ body {
 
 /* Card base style - white surface with subtle stroke */
 .card {
-  @apply bg-white rounded-lg border border-stroke-subtle;
+  @apply bg-white border border-stroke-subtle;
 }
 
 .card-elevated {
-  @apply bg-white rounded-lg border border-stroke-subtle shadow-subtle;
+  @apply bg-white border border-stroke-subtle shadow-subtle;
 }
 
 /* Input field base style */
 .input-field {
-  @apply w-full px-4 py-3 bg-white border border-stroke-subtle rounded-sm text-text-primary placeholder:text-text-tertiary;
+  @apply w-full px-4 py-3 bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary;
   @apply focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none;
   @apply transition-colors duration-150;
 }
@@ -158,7 +158,7 @@ textarea {
 /* Button base styles */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
-  @apply bg-accent text-white font-medium rounded-sm;
+  @apply bg-accent text-white font-medium;
   @apply hover:bg-accent-anchor active:bg-accent-anchor;
   @apply transition-colors duration-150;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
@@ -166,7 +166,7 @@ textarea {
 
 .btn-secondary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
-  @apply bg-white text-text-primary font-medium rounded-sm border border-stroke-subtle;
+  @apply bg-white text-text-primary font-medium border border-stroke-subtle;
   @apply hover:bg-surface-subtle active:bg-surface-subtle;
   @apply transition-colors duration-150;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
@@ -174,7 +174,7 @@ textarea {
 
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2;
-  @apply text-text-secondary font-medium rounded-sm;
+  @apply text-text-secondary font-medium;
   @apply hover:bg-surface-subtle active:bg-surface-subtle;
   @apply transition-colors duration-150;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
@@ -188,27 +188,27 @@ textarea {
 /* Status badge utilities */
 .badge-success {
   @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
-  @apply bg-indicator-green/10 text-indicator-green rounded-sm;
+  @apply bg-indicator-green/10 text-indicator-green;
 }
 
 .badge-warning {
   @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
-  @apply bg-indicator-orange/10 text-indicator-orange rounded-sm;
+  @apply bg-indicator-orange/10 text-indicator-orange;
 }
 
 .badge-pending {
   @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
-  @apply bg-indicator-yellow/10 text-indicator-yellow rounded-sm;
+  @apply bg-indicator-yellow/10 text-indicator-yellow;
 }
 
 .badge-neutral {
   @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
-  @apply bg-surface-subtle text-text-secondary rounded-sm;
+  @apply bg-surface-subtle text-text-secondary;
 }
 
 .badge-accent {
   @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
-  @apply bg-accent-wash text-accent-anchor rounded-sm;
+  @apply bg-accent-wash text-accent-anchor;
 }
 
 /* Watershed-style accent dividers */
