@@ -93,139 +93,179 @@ async def send_chat_message(
     widget_data = None
     
     # Analyze user intent and extract information
-    analysis = await chat_agent.analyze_intent(messages, initiative)
-    
-    # Update initiative with any extracted info
-    info_updated = False
-    if analysis.get("project_description") and not initiative.project_description:
-        initiative.project_description = analysis["project_description"]
-        info_updated = True
-    if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
-        initiative.project_type = analysis["project_type"]
-        info_updated = True
-    if analysis.get("title") and not initiative.title:
-        initiative.title = analysis["title"]
-        info_updated = True
-    if analysis.get("geography") and not initiative.geography:
-        initiative.geography = analysis["geography"]
-        info_updated = True
-    if analysis.get("target_beneficiaries") and not initiative.target_population:
-        initiative.target_population = analysis["target_beneficiaries"]
-        info_updated = True
-    if analysis.get("project_goal") and not initiative.goal:
-        initiative.goal = analysis["project_goal"]
-        info_updated = True
-    
-    if info_updated:
-        # Classify SDG if we have project info
-        if initiative.project_description or initiative.goal:
-            sdg_info = classify_sdg(
-                initiative.project_description or initiative.goal or "",
-                initiative.project_type,
-            )
-            if sdg_info:
-                tool_inputs = initiative.tool_inputs or {}
-                tool_inputs["sdg"] = sdg_info
-                initiative.tool_inputs = tool_inputs
-        
-        await db.commit()
-        await db.refresh(initiative)
-    
-    # Determine if we should show tool recommendations
-    # Show if: user described project enough AND hasn't selected tools yet
-    show_tool_recommendations = (
-        analysis.get("ready_for_tools", False) and 
-        initiative.has_project_description() and
-        not initiative.selected_tools
-    )
-    
-    if show_tool_recommendations:
-        # Do a full extraction to ensure we have all info
-        project_info = await chat_agent.extract_project_info(messages)
-        
-        # Update with extracted info
-        if project_info.get("project_description"):
-            initiative.project_description = project_info["project_description"]
-        if project_info.get("project_type"):
-            initiative.project_type = project_info["project_type"]
-        if project_info.get("title") and not initiative.title:
-            initiative.title = project_info["title"]
-        if project_info.get("geography") and not initiative.geography:
-            initiative.geography = project_info["geography"]
-        if project_info.get("target_beneficiaries") and not initiative.target_population:
-            initiative.target_population = project_info["target_beneficiaries"]
-        if project_info.get("project_goal") and not initiative.goal:
-            initiative.goal = project_info["project_goal"]
-        
-        await db.commit()
-        await db.refresh(initiative)
-        
-        widget_type = "tool_checklist"
-        registry = get_tool_registry()
-        recommendations = registry.recommend_tools(
-            project_description=initiative.project_description,
-            project_type=initiative.project_type,
-        )
-        widget_data = {
-            "recommendations": [
-                {
-                    "tool": tool.definition.to_dict(),
-                    "confidence": confidence,
-                    "recommended": confidence > 0.3,
-                }
-                for tool, confidence in recommendations
-            ],
-            "project_type": initiative.project_type,
+    try:
+        analysis = await chat_agent.analyze_intent(messages, initiative)
+    except Exception as e:
+        # If analysis fails, provide defaults and log the error
+        import logging
+        logging.error(f"Intent analysis failed: {e}")
+        analysis = {
+            "intent": "describing_project",
+            "ready_for_tools": False,
+            "is_question": False,
+            "wants_to_proceed": False,
+            "wants_to_go_back": False,
         }
     
-    # If tools are selected, extract any tool-specific inputs from conversation
-    elif initiative.selected_tools:
-        tool_inputs = await chat_agent.extract_tool_inputs(
-            messages=messages,
-            tool_ids=initiative.selected_tools,
+    # Check if user wants to go back or change something
+    if analysis.get("wants_to_go_back", False):
+        # Don't show any widgets, just let them have a conversation
+        widget_type = None
+        widget_data = None
+    else:
+        # Update initiative with any extracted info
+        info_updated = False
+        if analysis.get("project_description") and not initiative.project_description:
+            initiative.project_description = analysis["project_description"]
+            info_updated = True
+        if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
+            initiative.project_type = analysis["project_type"]
+            info_updated = True
+        if analysis.get("title") and not initiative.title:
+            initiative.title = analysis["title"]
+            info_updated = True
+        if analysis.get("geography") and not initiative.geography:
+            initiative.geography = analysis["geography"]
+            info_updated = True
+        if analysis.get("target_beneficiaries") and not initiative.target_population:
+            initiative.target_population = analysis["target_beneficiaries"]
+            info_updated = True
+        if analysis.get("project_goal") and not initiative.goal:
+            initiative.goal = analysis["project_goal"]
+            info_updated = True
+        
+        if info_updated:
+            # Classify SDG if we have project info
+            if initiative.project_description or initiative.goal:
+                sdg_info = classify_sdg(
+                    initiative.project_description or initiative.goal or "",
+                    initiative.project_type,
+                )
+                if sdg_info:
+                    tool_inputs = initiative.tool_inputs or {}
+                    tool_inputs["sdg"] = sdg_info
+                    initiative.tool_inputs = tool_inputs
+            
+            await db.commit()
+            await db.refresh(initiative)
+        
+        # Determine if we should show tool recommendations
+        # Be AGGRESSIVE: Show tools if:
+        # 1. User described a project (has info in analysis OR initiative)
+        # 2. Haven't selected tools yet
+        # 3. Not explicitly just asking a general question
+        
+        is_just_asking = analysis.get("intent") == "asking_question"
+        described_project = analysis.get("intent") in ["describing_project", "providing_info"]
+        has_any_project_info = (
+            initiative.project_description or 
+            initiative.title or 
+            analysis.get("project_description") or 
+            analysis.get("title") or
+            described_project
         )
         
-        # Merge with existing inputs
-        current_inputs = initiative.tool_inputs or {}
-        for key, value in tool_inputs.items():
-            if value:  # Only update non-empty values
-                current_inputs[key] = value
-        initiative.tool_inputs = current_inputs
+        # Show tools if they mentioned a project at all, UNLESS they're just asking a question
+        show_tool_recommendations = (
+            has_any_project_info and
+            not initiative.selected_tools and
+            not is_just_asking
+        )
         
-        # Also update legacy fields
-        if tool_inputs.get("project_title") and not initiative.title:
-            initiative.title = tool_inputs["project_title"]
-        if tool_inputs.get("geography") and not initiative.geography:
-            initiative.geography = tool_inputs["geography"]
-        if tool_inputs.get("target_beneficiaries") and not initiative.target_population:
-            initiative.target_population = tool_inputs["target_beneficiaries"]
-        if tool_inputs.get("project_goal") and not initiative.goal:
-            initiative.goal = tool_inputs["project_goal"]
+        import logging
+        logging.info(f"Tool recommendation logic: has_any_project_info={has_any_project_info}, selected_tools={initiative.selected_tools}, is_just_asking={is_just_asking}, show={show_tool_recommendations}")
         
-        await db.commit()
-        await db.refresh(initiative)
-        
-        # Check if ready to show deliverables overview
-        missing = initiative.get_missing_tool_inputs()
-        if not missing:
-            widget_type = "deliverables_overview"
+        if show_tool_recommendations:
+            # Do a full extraction to ensure we have all info before showing tools
+            project_info = await chat_agent.extract_project_info(messages)
+            logging.info(f"Extracted project info: {project_info}")
+            
+            # Update with extracted info
+            if project_info.get("project_description"):
+                initiative.project_description = project_info["project_description"]
+            if project_info.get("project_type"):
+                initiative.project_type = project_info["project_type"]
+            if project_info.get("title") and not initiative.title:
+                initiative.title = project_info["title"]
+            if project_info.get("geography") and not initiative.geography:
+                initiative.geography = project_info["geography"]
+            if project_info.get("target_beneficiaries") and not initiative.target_population:
+                initiative.target_population = project_info["target_beneficiaries"]
+            if project_info.get("project_goal") and not initiative.goal:
+                initiative.goal = project_info["project_goal"]
+            
+            await db.commit()
+            await db.refresh(initiative)
+            
+            widget_type = "tool_checklist"
             registry = get_tool_registry()
-            tools_info = []
-            for tool_id in (initiative.selected_tools or []):
-                tool = registry.get_tool(tool_id)
-                if tool:
-                    tools_info.append({
-                        "id": tool.definition.id,
-                        "name": tool.definition.name,
-                        "description": tool.definition.description,
-                        "icon": tool.definition.icon,
-                        "output_type": tool.definition.output_type,
-                    })
+            recommendations = registry.recommend_tools(
+                project_description=initiative.project_description,
+                project_type=initiative.project_type,
+            )
             widget_data = {
-                "project_summary": initiative.to_summary_dict(),
-                "selected_tools": tools_info,
-                "tool_inputs": initiative.tool_inputs or {},
+                "recommendations": [
+                    {
+                        "tool": tool.definition.to_dict(),
+                        "confidence": confidence,
+                        "recommended": confidence > 0.3,
+                    }
+                    for tool, confidence in recommendations
+                ],
+                "project_type": initiative.project_type,
             }
+        
+        # If tools are selected, extract any tool-specific inputs from conversation
+        elif initiative.selected_tools and not is_just_asking:
+            tool_inputs = await chat_agent.extract_tool_inputs(
+                messages=messages,
+                tool_ids=initiative.selected_tools,
+            )
+            
+            # Merge with existing inputs
+            current_inputs = initiative.tool_inputs or {}
+            for key, value in tool_inputs.items():
+                if value:  # Only update non-empty values
+                    current_inputs[key] = value
+            initiative.tool_inputs = current_inputs
+            
+            # Also update legacy fields
+            if tool_inputs.get("project_title") and not initiative.title:
+                initiative.title = tool_inputs["project_title"]
+            if tool_inputs.get("geography") and not initiative.geography:
+                initiative.geography = tool_inputs["geography"]
+            if tool_inputs.get("target_beneficiaries") and not initiative.target_population:
+                initiative.target_population = tool_inputs["target_beneficiaries"]
+            if tool_inputs.get("project_goal") and not initiative.goal:
+                initiative.goal = tool_inputs["project_goal"]
+            
+            await db.commit()
+            await db.refresh(initiative)
+            
+            # Only show deliverables overview if user explicitly wants to proceed OR all inputs are ready and they're providing final info
+            missing = initiative.get_missing_tool_inputs()
+            wants_to_proceed = analysis.get("wants_to_proceed", False)
+            is_providing_info = analysis.get("intent") in ["describing_project", "providing_info"]
+            
+            if not missing and (wants_to_proceed or is_providing_info):
+                widget_type = "deliverables_overview"
+                registry = get_tool_registry()
+                tools_info = []
+                for tool_id in (initiative.selected_tools or []):
+                    tool = registry.get_tool(tool_id)
+                    if tool:
+                        tools_info.append({
+                            "id": tool.definition.id,
+                            "name": tool.definition.name,
+                            "description": tool.definition.description,
+                            "icon": tool.definition.icon,
+                            "output_type": tool.definition.output_type,
+                        })
+                widget_data = {
+                    "project_summary": initiative.to_summary_dict(),
+                    "selected_tools": tools_info,
+                    "tool_inputs": initiative.tool_inputs or {},
+                }
     
     # Generate assistant response
     assistant_response = await chat_agent.generate_response(
@@ -296,7 +336,7 @@ async def get_chat_history(
         greeting = ChatMessage(
             initiative_id=initiative_id,
             role="assistant",
-            content="What are you working on?",
+            content="Hi! I help development teams prepare investment memos and due diligence checklists for impact projects. What are you working on?",
         )
         db.add(greeting)
         await db.commit()
