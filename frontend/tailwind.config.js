@@ -18,7 +18,7 @@ module.exports = {
           DEFAULT: '#FAFAFA',
           subtle: '#EEEEEF',
           grey: '#EEEEEF',
-          header: '#FEFCF5',
+          header: '#f6f6f6',
         },
         // Text
         text: {
@@ -28,10 +28,10 @@ module.exports = {
         },
         // Primary Accent (use sparingly)
         accent: {
-          anchor: '#1A0F00',
-          DEFAULT: '#301900',
-          tint: '#7A5839',
-          wash: '#EBE3DA',
+          anchor: '#2E2749',
+          DEFAULT: '#3E355F',
+          tint: '#7B739D',
+          wash: '#D5D2E8',
         },
         // Semantic Indicators (meaning only)
         indicator: {
@@ -42,7 +42,7 @@ module.exports = {
         // Strokes & Dividers
         stroke: {
           subtle: '#D5D5DB',
-          accent: '#301900',
+          accent: '#3E355F',
         },
         divider: '#DADADF',
       },
