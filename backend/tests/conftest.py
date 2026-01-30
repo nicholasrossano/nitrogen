@@ -40,7 +40,7 @@ async def async_engine():
     """Create async engine for testing.
     
     Note: We only create tables that don't use PostgreSQL-specific features
-    like pgvector. EvidenceDoc and EvidenceChunk tables are excluded.
+    like pgvector or JSONB. Some tables are excluded due to SQLite limitations.
     """
     engine = create_async_engine(
         TEST_DATABASE_URL,
@@ -49,11 +49,17 @@ async def async_engine():
         echo=False,
     )
     
-    # Get tables to create (exclude those with Vector columns)
+    # Tables to exclude (have Vector or JSONB columns not supported by SQLite)
+    excluded_tables = {
+        'evidence_chunks',   # Has Vector column
+        'corpus_chunks',     # Has Vector column
+        'corpus_documents',  # Has JSONB column
+    }
+    
+    # Get tables to create (exclude those with PostgreSQL-specific columns)
     tables_to_create = []
     for table in Base.metadata.sorted_tables:
-        # Skip evidence_chunks table which has Vector column
-        if table.name not in ['evidence_chunks']:
+        if table.name not in excluded_tables:
             tables_to_create.append(table)
     
     async with engine.begin() as conn:

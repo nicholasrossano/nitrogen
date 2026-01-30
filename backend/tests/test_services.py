@@ -163,7 +163,7 @@ class TestSDGClassifier:
         from app.services.sdg_classifier import classify_sdg
         
         result = classify_sdg(
-            description="A project to improve primary education access in rural areas",
+            project_description="A project to improve primary education access in rural areas",
             project_type="education"
         )
         
@@ -176,19 +176,42 @@ class TestSDGClassifier:
         from app.services.sdg_classifier import classify_sdg
         
         result = classify_sdg(
-            description="Healthcare initiative to reduce infant mortality",
-            project_type="healthcare"
+            project_description="Healthcare initiative to reduce infant mortality and improve health",
+            project_type="health"
         )
         
         if result:
             assert isinstance(result, dict)
+            assert "sdg" in result
+            assert result["sdg"] == "3"  # Health SDG
+
+    def test_classify_sdg_energy(self):
+        """Test SDG classification for energy project."""
+        from app.services.sdg_classifier import classify_sdg
+        
+        result = classify_sdg(
+            project_description="Solar mini-grid project for rural electrification with renewable energy",
+            project_type="energy_access"
+        )
+        
+        if result:
+            assert result["sdg"] == "7"  # Energy SDG
 
     def test_classify_sdg_empty(self):
         """Test SDG classification with empty description."""
         from app.services.sdg_classifier import classify_sdg
         
-        result = classify_sdg(description="", project_type=None)
-        # Should handle gracefully (return None or empty)
+        result = classify_sdg(project_description="", project_type=None)
+        # Should handle gracefully and return None
+        assert result is None
+
+    def test_classify_sdg_no_match(self):
+        """Test SDG classification with no matching keywords."""
+        from app.services.sdg_classifier import classify_sdg
+        
+        result = classify_sdg(project_description="random text without keywords", project_type=None)
+        # Should return None when no match
+        assert result is None
 
 
 class TestToolRegistry:
@@ -206,21 +229,38 @@ class TestToolRegistry:
         from app.tools import get_tool_registry
         
         registry = get_tool_registry()
-        tools = registry.list_tools()
+        tools = registry.get_all_tools()
         
         assert isinstance(tools, list)
+        assert len(tools) >= 1
 
     def test_get_tool_by_id(self):
         """Test getting a specific tool by ID."""
         from app.tools import get_tool_registry
         
         registry = get_tool_registry()
-        tools = registry.list_tools()
+        tools = registry.get_all_tools()
         
         if tools:
             first_tool = tools[0]
             tool = registry.get_tool(first_tool.definition.id)
             assert tool is not None
+            assert tool.definition.id == first_tool.definition.id
+
+    def test_get_all_definitions(self):
+        """Test getting tool definitions."""
+        from app.tools import get_tool_registry
+        
+        registry = get_tool_registry()
+        definitions = registry.get_all_definitions()
+        
+        assert isinstance(definitions, list)
+        assert len(definitions) >= 1
+        # Each definition should have required fields
+        for definition in definitions:
+            assert hasattr(definition, 'id')
+            assert hasattr(definition, 'name')
+            assert hasattr(definition, 'description')
 
     def test_recommend_tools(self):
         """Test tool recommendations."""
@@ -228,8 +268,31 @@ class TestToolRegistry:
         
         registry = get_tool_registry()
         recommendations = registry.recommend_tools(
-            project_description="An investment in clean water infrastructure",
-            project_type="infrastructure"
+            project_description="A solar mini-grid project for rural electrification",
+            project_type="energy_access"
         )
         
         assert isinstance(recommendations, list)
+        assert len(recommendations) >= 1
+        # Each recommendation should be (tool, confidence) tuple
+        for tool, confidence in recommendations:
+            assert hasattr(tool, 'definition')
+            assert 0 <= confidence <= 1
+
+    def test_classify_project_type(self):
+        """Test project type classification."""
+        from app.tools import get_tool_registry
+        
+        registry = get_tool_registry()
+        
+        # Test energy classification
+        assert registry.classify_project_type("solar mini-grid project") == "energy_access"
+        
+        # Test clean cooking classification
+        assert registry.classify_project_type("lpg cookstove distribution") == "clean_cooking"
+        
+        # Test water classification
+        assert registry.classify_project_type("water sanitation project") == "water_sanitation"
+        
+        # Test default
+        assert registry.classify_project_type("random project") == "general"
