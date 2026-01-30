@@ -93,7 +93,7 @@ function ChatMessageItem({
           className={`
             rounded-lg px-3 py-2 text-sm
             ${isUser
-              ? 'bg-surface-subtle text-text-primary'
+              ? 'bg-accent text-white'
               : 'bg-white text-text-primary'
             }
           `}
