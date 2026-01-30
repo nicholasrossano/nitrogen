@@ -29,9 +29,9 @@ Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
 - `TextTertiary`: `#7A7A82` (helper text)
 
 ### Accent (use sparingly)
-- `AccentPrimary`: `#8285B6` (borders, focus, selection, links)
-- `AccentTint`: `#B2B4D6` (hover backgrounds)
-- `AccentWash`: `#E6E7F2` (selected rows)
+- `AccentPrimary`: `#3E355F` (borders, focus, selection, links)
+- `AccentTint`: `#7B739D` (hover backgrounds)
+- `AccentWash`: `#D5D2E8` (selected rows)
 
 ### Semantic Indicators (meaning, not decoration)
 - `IndicatorOrange`: `#B97A5D` (warning/needs review)
@@ -41,7 +41,7 @@ Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
 ### Strokes
 - `Divider`: `#E6E6EA`
 - `StrokeSubtle`: `#E1E1E6` (borders)
-- `StrokeAccent`: `#8285B6` (focus borders)
+- `StrokeAccent`: `#3E355F` (focus borders)
 
 ## Typography
 
