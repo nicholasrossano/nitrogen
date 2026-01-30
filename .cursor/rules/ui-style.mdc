@@ -46,8 +46,8 @@ Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
 ## Typography
 
 - **Primary font**: Inter (body, labels, controls, most headers)
-- **Display font**: Space Grotesk (select hero headers only, 1-2 levels max)
-- **Don't mix** Inter + Space Grotesk in dense tables/forms
+- **Display font**: Urbanist (select hero headers only, 1-2 levels max)
+- **Don't mix** Inter + Urbanist in dense tables/forms
 
 ## Component Patterns
 
@@ -75,9 +75,30 @@ Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
 <div className="bg-indicator-orange"> // Only for status
 ```
 
+## Icons
+
+- **Icon System**: Lucide React only (monochromatic SVG icons)
+- **Never use emojis** in production UI
+- **Icon sizes**: 16px (w-4 h-4) to 24px (w-6 h-6) standard
+- **Icon colors**: Inherit from context or use system colors
+  - Default: `text-text-secondary`
+  - Active/accent: `text-accent`
+  - Status: `text-indicator-green/orange/yellow`
+
+```tsx
+// ✅ DO
+<FileText className="w-5 h-5 text-accent" />
+<CheckCircle className="w-4 h-4 text-indicator-green" />
+
+// ❌ DON'T
+<span>📄</span> // No emojis
+<Icon style={{ color: '#custom' }} /> // Use system colors
+```
+
 ## Quick Checklist
 - [ ] Using white (`#FFFFFF`) as primary background?
 - [ ] Accent color only for borders/focus, not large fills?
 - [ ] Semantic colors (orange/yellow/green) only for status indicators?
 - [ ] Using Inter font by default?
 - [ ] Strokes preferred over shadows for separation?
+- [ ] Using Lucide React icons (no emojis)?

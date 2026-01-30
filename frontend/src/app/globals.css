@@ -1,28 +1,37 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Urbanist:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Nitrogen Design Tokens */
-  --color-background: #FEFCF5;
-  --color-cream: #FFFEF9;
-  --color-beige: #DAD7C5;
-  --color-blush: #ECE4DB;
-  --color-brown: #301900;
-  --color-primary: #7677B8;
-  --color-primary-light: #9596C8;
-  --color-accent: #8285B6;
-  --color-merlot: #711248;
-  --color-rust: #BD6217;
-  --color-forest: #127112;
-  --color-teal: #0E7171;
+  /* Nitrogen Enterprise Design Tokens */
+  /* Surfaces */
+  --color-background: #FFFFFF;
+  --color-background-tinted: #EFEAE2;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F7F7F8;
   
-  /* Shadows */
-  --shadow-subtle: 0 1px 3px rgba(48, 25, 0, 0.1);
-  --shadow-lifted: 0 4px 6px rgba(48, 25, 0, 0.15);
-  --shadow-heavy: 0 4px 10px rgba(48, 25, 0, 0.25);
+  /* Text */
+  --color-text-primary: #1C1C1E;
+  --color-text-secondary: #5A5A60;
+  --color-text-tertiary: #7A7A82;
+  
+  /* Accent */
+  --color-accent-anchor: #5F628F;
+  --color-accent: #8285B6;
+  --color-accent-tint: #B2B4D6;
+  --color-accent-wash: #E6E7F2;
+  
+  /* Semantic Indicators */
+  --color-indicator-orange: #B97A5D;
+  --color-indicator-yellow: #C6B875;
+  --color-indicator-green: #9DAA9B;
+  
+  /* Strokes */
+  --color-divider: #E6E6EA;
+  --color-stroke-subtle: #E1E1E6;
+  --color-stroke-accent: #8285B6;
 }
 
 html {
@@ -31,105 +40,72 @@ html {
 
 body {
   height: 100%;
-  color: var(--color-brown);
+  color: var(--color-text-primary);
   background: var(--color-background);
-  font-family: 'Nunito Sans', 'Avenir', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar - warm tones */
+/* Minimal scrollbar - enterprise neutral */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-cream);
+  background: var(--color-surface-subtle);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-beige);
-  border-radius: 4px;
+  background: var(--color-divider);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #c5c2b2;
+  background: var(--color-stroke-subtle);
 }
 
-/* Chat message animations */
-@keyframes slideIn {
+/* Chat message animation - fast, subtle */
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
   }
 }
 
 .message-enter {
-  animation: slideIn 0.25s ease-out;
+  animation: fadeIn 0.15s ease-out;
 }
 
-/* Loading dots animation */
-@keyframes bounce {
-  0%, 80%, 100% {
-    transform: translateY(0);
-  }
-  40% {
-    transform: translateY(-6px);
-  }
+/* Loading indicator - simple dots */
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .loading-dot {
-  animation: bounce 1.4s ease-in-out infinite;
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
-.loading-dot:nth-child(1) {
-  animation-delay: 0s;
-}
+.loading-dot:nth-child(1) { animation-delay: 0s; }
+.loading-dot:nth-child(2) { animation-delay: 0.2s; }
+.loading-dot:nth-child(3) { animation-delay: 0.4s; }
 
-.loading-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.loading-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-/* Shimmer loading effect */
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--color-blush) 0%,
-    var(--color-cream) 50%,
-    var(--color-blush) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* Prose styling for memo viewer - warm editorial style */
+/* Prose styling for memo viewer - clean, institutional */
 .prose-memo {
-  @apply text-brown leading-relaxed;
+  @apply text-text-primary leading-relaxed;
 }
 
 .prose-memo h1 {
-  @apply text-2xl font-bold text-brown mb-4;
-  font-family: 'Georgia', serif;
+  @apply text-2xl font-semibold text-text-primary mb-4;
+  font-family: 'Urbanist', 'Inter', system-ui, sans-serif;
 }
 
 .prose-memo h2 {
-  @apply text-lg font-semibold text-brown mt-6 mb-3;
-  font-family: 'Georgia', serif;
+  @apply text-lg font-semibold text-text-primary mt-6 mb-3;
+  font-family: 'Urbanist', 'Inter', system-ui, sans-serif;
 }
 
 .prose-memo p {
@@ -144,39 +120,29 @@ body {
   @apply mb-2;
 }
 
-/* Citation styling - burgundy accent */
+/* Citation styling - accent color */
 .citation {
-  @apply text-primary-600 font-medium cursor-help;
+  @apply text-accent font-medium cursor-help;
 }
 
 .citation:hover {
-  @apply text-primary-700 underline;
+  @apply text-accent-anchor underline;
 }
 
-/* Card base style */
+/* Card base style - white surface with subtle stroke */
 .card {
-  @apply bg-cream rounded-card border border-beige/50 shadow-subtle;
+  @apply bg-white rounded-lg border border-stroke-subtle;
 }
 
 .card-elevated {
-  @apply bg-cream rounded-widget border border-beige/30 shadow-lifted;
-}
-
-/* Pill/chip base style */
-.pill {
-  @apply inline-flex items-center px-4 py-2 rounded-pill text-sm font-medium transition-all duration-200;
-}
-
-/* Glass effect for chrome elements */
-.glass {
-  @apply bg-cream/80 backdrop-blur-md border border-white/50;
+  @apply bg-white rounded-lg border border-stroke-subtle shadow-subtle;
 }
 
 /* Input field base style */
 .input-field {
-  @apply w-full px-4 py-3 bg-cream border border-beige rounded-input text-brown placeholder:text-brown/50;
-  @apply focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 focus:outline-none;
-  @apply transition-all duration-200;
+  @apply w-full px-4 py-3 bg-white border border-stroke-subtle rounded-sm text-text-primary placeholder:text-text-tertiary;
+  @apply focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none;
+  @apply transition-colors duration-150;
 }
 
 /* Hide scrollbar for textarea */
@@ -191,24 +157,56 @@ textarea {
 
 /* Button base styles */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3;
-  @apply bg-primary-600 text-white font-semibold rounded-pill;
-  @apply hover:bg-primary-700 active:bg-primary-800;
-  @apply shadow-lifted hover:shadow-heavy;
-  @apply transition-all duration-200;
-  @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lifted;
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
+  @apply bg-accent text-white font-medium rounded-sm;
+  @apply hover:bg-accent-anchor active:bg-accent-anchor;
+  @apply transition-colors duration-150;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3;
-  @apply bg-cream text-brown font-medium rounded-pill border border-beige;
-  @apply hover:bg-blush active:bg-beige;
-  @apply shadow-subtle hover:shadow-lifted;
-  @apply transition-all duration-200;
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
+  @apply bg-white text-text-primary font-medium rounded-sm border border-stroke-subtle;
+  @apply hover:bg-surface-subtle active:bg-surface-subtle;
+  @apply transition-colors duration-150;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2;
+  @apply text-text-secondary font-medium rounded-sm;
+  @apply hover:bg-surface-subtle active:bg-surface-subtle;
+  @apply transition-colors duration-150;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 /* Focus ring utility */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:ring-offset-2 focus:ring-offset-cream;
+  @apply focus:outline-none focus:ring-2 focus:ring-accent/20 focus:ring-offset-2 focus:ring-offset-white;
+}
+
+/* Status badge utilities */
+.badge-success {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply bg-indicator-green/10 text-indicator-green rounded-sm;
+}
+
+.badge-warning {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply bg-indicator-orange/10 text-indicator-orange rounded-sm;
+}
+
+.badge-pending {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply bg-indicator-yellow/10 text-indicator-yellow rounded-sm;
+}
+
+.badge-neutral {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply bg-surface-subtle text-text-secondary rounded-sm;
+}
+
+.badge-accent {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply bg-accent-wash text-accent-anchor rounded-sm;
 }

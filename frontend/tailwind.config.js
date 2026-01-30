@@ -8,73 +8,70 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Nitrogen Design System
+        // Nitrogen Enterprise Design System
+        // Core Surfaces
         background: {
-          DEFAULT: '#FEFCF5',
-          dark: '#1C1C1E',
+          DEFAULT: '#FFFFFF',
+          tinted: '#EFEAE2',
         },
-        cream: '#FFFEF9',
-        beige: {
-          DEFAULT: '#DAD7C5',
-          dark: '#E4DEC7',
+        surface: {
+          DEFAULT: '#FFFFFF',
+          subtle: '#F7F7F8',
         },
-        blush: '#ECE4DB',
-        brown: '#301900',
-        // Primary - Periwinkle accent
-        primary: {
-          DEFAULT: '#7677B8',
-          50: '#F5F5FB',
-          100: '#EBEBF7',
-          200: '#D4D4EE',
-          300: '#B5B6D9',
-          400: '#9596C8',
-          500: '#7677B8',
-          600: '#7677B8',
-          700: '#5C5D9A',
-          800: '#47487A',
-          900: '#35365C',
+        // Text
+        text: {
+          primary: '#1C1C1E',
+          secondary: '#5A5A60',
+          tertiary: '#7A7A82',
         },
-        // Secondary accents
+        // Primary Accent (use sparingly)
         accent: {
+          anchor: '#5F628F',
           DEFAULT: '#8285B6',
-          secondary: '#301900',
-          tertiary: '#ECE4DB',
+          tint: '#B2B4D6',
+          wash: '#E6E7F2',
         },
-        merlot: '#711248',
-        rust: '#BD6217',
-        forest: '#127112',
-        teal: '#0E7171',
+        // Semantic Indicators (meaning only)
+        indicator: {
+          orange: '#B97A5D',
+          yellow: '#C6B875',
+          green: '#9DAA9B',
+        },
+        // Strokes & Dividers
+        stroke: {
+          subtle: '#E1E1E6',
+          accent: '#8285B6',
+        },
+        divider: '#E6E6EA',
       },
       fontFamily: {
-        sans: ['Avenir', 'Nunito Sans', 'system-ui', 'sans-serif'],
-        display: ['Didot', 'Georgia', 'serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Urbanist', 'Inter', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        'card': '12px',
-        'pill': '18px',
-        'input': '10px',
-        'capsule': '50px',
-        'widget': '12px',
+        'none': '0',
+        'sm': '6px',
+        'DEFAULT': '8px',
+        'md': '8px',
+        'lg': '10px',
+        'xl': '12px',
       },
       boxShadow: {
-        'subtle': '0 1px 3px rgba(48, 25, 0, 0.1)',
-        'lifted': '0 4px 6px rgba(48, 25, 0, 0.15)',
-        'heavy': '0 4px 10px rgba(48, 25, 0, 0.25)',
-        'glow': '0 0 20px rgba(218, 215, 197, 0.5)',
+        'subtle': '0 1px 2px rgba(0, 0, 0, 0.05)',
+        'DEFAULT': '0 1px 3px rgba(0, 0, 0, 0.08)',
       },
       animation: {
-        'slide-in': 'slideIn 0.3s ease-out',
-        'fade-in': 'fadeIn 0.2s ease-out',
+        'fade-in': 'fadeIn 0.15s ease-out',
       },
       keyframes: {
-        slideIn: {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
+      },
+      spacing: {
+        '18': '4.5rem',
+        '22': '5.5rem',
       },
     },
   },
