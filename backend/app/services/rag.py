@@ -105,10 +105,10 @@ class RAGService:
                 id,
                 evidence_doc_id,
                 content,
-                1 - (embedding <=> :embedding::vector) as similarity
+                1 - (embedding <=> CAST(:embedding AS vector)) as similarity
             FROM evidence_chunks
             WHERE evidence_doc_id = ANY(:doc_ids)
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """)
         
@@ -148,12 +148,12 @@ class RAGService:
                 c.id,
                 c.corpus_doc_id,
                 c.content,
-                1 - (c.embedding <=> :embedding::vector) as similarity,
+                1 - (c.embedding <=> CAST(:embedding AS vector)) as similarity,
                 d.title,
                 d.source
             FROM corpus_chunks c
             JOIN corpus_documents d ON c.corpus_doc_id = d.id
-            ORDER BY c.embedding <=> :embedding::vector
+            ORDER BY c.embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """)
         
