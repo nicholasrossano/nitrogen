@@ -27,16 +27,17 @@ class ChatAgentService:
         if widget_type == "tool_checklist":
             return """You are a professional advisor helping development practitioners prepare project documentation.
 
-The user described their project. Write a brief, professional response that:
-1. Acknowledges their project (1 short phrase)
-2. Explains what deliverables are typically prepared for this type of project
-3. Introduces the tool recommendations
+The user described their project. Write a brief, proactive response that:
+1. Acknowledges what they're working on (1 short phrase)
+2. States what teams typically prepare for this type of project (be specific - e.g., "For renewable energy projects, teams typically prepare investment memos and due diligence checklists")
+3. Introduces the recommendations below
 
 RULES:
 - 2-3 sentences maximum
+- Be proactive and knowledgeable - tell them what practitioners typically do
+- Reference specific deliverables (investment memos, due diligence checklists, etc.)
 - Be professional, not casual
-- Reference what practitioners typically prepare for this project type
-- Do NOT explain the project's potential impact or benefits
+- Do NOT explain the project's impact or benefits
 - Do NOT write more than 50 words"""
 
         elif widget_type == "deliverables_overview":
@@ -60,18 +61,20 @@ Current project state:
 
 Your role:
 - Help users describe their projects and gather information needed for outputs
-- Answer questions about the platform or their project
-- Guide them to upload evidence documents when relevant
+- Answer questions about development projects, impact investing, or the platform
+- Provide information about what teams typically prepare for different project types
+- Guide them through the process naturally without forcing them down a specific path
 - Help them understand what information is needed for different tools
 
 RULES:
-- Keep ALL responses to 1-3 sentences MAX
+- Keep ALL responses to 1-3 sentences MAX (can be up to 4 for complex answers)
 - Be concise and direct
-- If the user asks for something that needs more info, ask ONE specific question
+- If the user asks a question, answer it directly - don't redirect to widgets
+- If they want to explore options or go back, support that
 - Don't lecture or over-explain
-- Be friendly but professional
+- Be friendly but professional and knowledgeable
 
-If tools are selected and you notice missing required inputs, gently ask about them one at a time."""
+If tools are selected and you notice missing required inputs, gently ask about them one at a time - but ONLY if they seem ready to proceed, not if they're just asking questions."""
     
     def _build_context(self, initiative: Initiative) -> str:
         """Build context string from initiative state."""
@@ -181,78 +184,118 @@ If tools are selected and you notice missing required inputs, gently ask about t
         # Build context for analysis
         context = self._build_context(initiative)
         
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"""Analyze this user message and extract any project information they're providing.
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""Analyze this user message and extract any project information they're providing.
 
 Current project state:
 {context if context else "New project, no details yet."}
 
 Determine:
-1. What intent the user has (describing_project, asking_question, requesting_generation, uploading_evidence, selecting_tools, other)
+1. What intent the user has
 2. What new information they're providing about their project
-3. Whether they seem ready for tool recommendations (have they described enough about their project?)"""
-                },
-                {
-                    "role": "user",
-                    "content": last_user_msg
-                }
-            ],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "analyze_message",
-                    "description": "Analyze user intent and extract information",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "intent": {
-                                "type": "string",
-                                "enum": ["describing_project", "asking_question", "requesting_generation", "providing_info", "other"],
-                                "description": "What the user is trying to do"
-                            },
-                            "project_description": {
-                                "type": "string",
-                                "description": "Brief description of the project if provided"
-                            },
-                            "project_type": {
-                                "type": "string",
-                                "enum": ["energy_access", "clean_cooking", "agriculture", "water_sanitation", "health", "general", ""],
-                                "description": "Type of project if identifiable"
-                            },
-                            "title": {
-                                "type": "string",
-                                "description": "Short title for the project (generate from description if not explicitly stated)"
-                            },
-                            "geography": {
-                                "type": "string",
-                                "description": "Location/geography if mentioned"
-                            },
-                            "target_beneficiaries": {
-                                "type": "string",
-                                "description": "Who will benefit from this project if mentioned"
-                            },
-                            "project_goal": {
-                                "type": "string",
-                                "description": "Main goal or objective if mentioned"
-                            },
-                            "ready_for_tools": {
-                                "type": "boolean",
-                                "description": "True if user has provided enough project context to recommend tools"
-                            }
-                        },
-                        "required": ["intent", "ready_for_tools"]
+3. Whether they're describing a project (ANY mention of what they're working on counts as ready for tools)
+4. Whether they want to go back or change something they previously confirmed
+
+IMPORTANT: 
+- If they mention ANYTHING about a project (e.g., "solar panels in Mongolia", "micro-grids in Kenya"), set ready_for_tools=true
+- Only set is_question=true and intent="asking_question" if they're asking ABOUT the platform or process, NOT describing their project
+- "Solar panels in Mongolia" is describing a project, NOT asking a question"""
+                    },
+                    {
+                        "role": "user",
+                        "content": last_user_msg
                     }
-                }
-            }],
-            tool_choice={"type": "function", "function": {"name": "analyze_message"}},
-        )
-        
-        tool_call = response.choices[0].message.tool_calls[0]
-        return json.loads(tool_call.function.arguments)
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "analyze_message",
+                        "description": "Analyze user intent and extract information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "intent": {
+                                    "type": "string",
+                                    "enum": ["describing_project", "asking_question", "requesting_generation", "providing_info", "going_back", "general_conversation"],
+                                    "description": "What the user is trying to do. Use 'going_back' if they want to change tools, go back, or modify something. Use 'asking_question' for questions about the platform, process, or their project. Use 'general_conversation' for casual chat."
+                                },
+                                "is_question": {
+                                    "type": "boolean",
+                                    "description": "True if the user is asking a question that needs an answer (not just providing info)"
+                                },
+                                "wants_to_proceed": {
+                                    "type": "boolean",
+                                    "description": "True if user explicitly wants to generate/proceed (e.g., 'let's do it', 'generate', 'I'm ready')"
+                                },
+                                "wants_to_go_back": {
+                                    "type": "boolean",
+                                    "description": "True if user wants to go back, change something, or isn't ready to proceed"
+                                },
+                                "project_description": {
+                                    "type": "string",
+                                    "description": "Brief description of the project if provided"
+                                },
+                                "project_type": {
+                                    "type": "string",
+                                    "enum": ["energy_access", "clean_cooking", "agriculture", "water_sanitation", "health", "general", ""],
+                                    "description": "Type of project if identifiable"
+                                },
+                                "title": {
+                                    "type": "string",
+                                    "description": "Short title for the project (generate from description if not explicitly stated)"
+                                },
+                                "geography": {
+                                    "type": "string",
+                                    "description": "Location/geography if mentioned"
+                                },
+                                "target_beneficiaries": {
+                                    "type": "string",
+                                    "description": "Who will benefit from this project if mentioned"
+                                },
+                                "project_goal": {
+                                    "type": "string",
+                                    "description": "Main goal or objective if mentioned"
+                                },
+                                "ready_for_tools": {
+                                    "type": "boolean",
+                                    "description": "True if user has provided enough project context to recommend tools"
+                                }
+                            },
+                            "required": ["intent", "ready_for_tools", "is_question", "wants_to_proceed", "wants_to_go_back"]
+                        }
+                    }
+                }],
+                tool_choice={"type": "function", "function": {"name": "analyze_message"}},
+                timeout=30.0,
+            )
+            
+            tool_call = response.choices[0].message.tool_calls[0]
+            result = json.loads(tool_call.function.arguments)
+            
+            # Ensure required fields have defaults
+            result.setdefault("intent", "describing_project")
+            result.setdefault("ready_for_tools", False)
+            result.setdefault("is_question", False)
+            result.setdefault("wants_to_proceed", False)
+            result.setdefault("wants_to_go_back", False)
+            
+            return result
+        except Exception as e:
+            # If API call fails, return safe defaults
+            import logging
+            logging.error(f"OpenAI API call failed in analyze_intent: {e}")
+            return {
+                "intent": "describing_project",
+                "ready_for_tools": False,
+                "is_question": False,
+                "wants_to_proceed": False,
+                "wants_to_go_back": False,
+            }
     
     async def extract_project_info(
         self,
