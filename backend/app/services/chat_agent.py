@@ -247,11 +247,11 @@ IMPORTANT:
                                 },
                                 "title": {
                                     "type": "string",
-                                    "description": "Short, descriptive title for the project ONLY if the user has provided substantial details"
+                                    "description": "Short, descriptive title (3-6 words) that captures the project - ALWAYS generate if user describes a project"
                                 },
                                 "geography": {
                                     "type": "string",
-                                    "description": "Location/geography if mentioned"
+                                    "description": "Location/country/region - ALWAYS extract if ANY location is mentioned (e.g., 'Kenya', 'East Africa', 'rural India')"
                                 },
                                 "target_beneficiaries": {
                                     "type": "string",
@@ -316,13 +316,23 @@ IMPORTANT:
                     "role": "system",
                     "content": """Extract project information from this conversation. Return structured data.
 
-IMPORTANT for title: Generate a concise, descriptive title (3-6 words) that captures the essence of what the user described. 
-Examples:
-- User says "solar mini-grids in Kenya" → title: "Solar Mini-Grids in Kenya"
-- User says "LPG distribution project in Namibia" → title: "LPG Distribution in Namibia"
-- User says "micro solar grids in Zimbabwe" → title: "Micro Solar Grids in Zimbabwe"
+CRITICAL EXTRACTION RULES:
 
-The title should match what the user described, not a generic example."""
+1. TITLE (REQUIRED): Generate a concise, descriptive title (3-6 words) that captures what the user described.
+   - User says "solar mini-grids in Kenya" → title: "Solar Mini-Grids in Kenya"
+   - User says "LPG distribution project in Namibia" → title: "LPG Distribution in Namibia"  
+   - User says "micro solar grids in Zimbabwe" → title: "Micro Solar Grids in Zimbabwe"
+   - The title MUST match what the user described, not a generic example
+
+2. GEOGRAPHY (REQUIRED if mentioned): Extract ANY location, country, or region mentioned.
+   - "in Kenya" → geography: "Kenya"
+   - "across East Africa" → geography: "East Africa"
+   - "rural Mongolia" → geography: "Mongolia"
+   - If the user mentions a location, you MUST extract it
+
+3. PROJECT_TYPE (REQUIRED): Classify based on the primary focus area.
+
+Do NOT return null/empty for title or geography if the user mentioned them."""
                 },
                 {
                     "role": "user",
