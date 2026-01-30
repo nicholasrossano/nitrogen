@@ -247,7 +247,7 @@ IMPORTANT:
                                 },
                                 "title": {
                                     "type": "string",
-                                    "description": "Short title for the project (generate from description if not explicitly stated)"
+                                    "description": "Short, descriptive title for the project ONLY if the user has provided substantial details"
                                 },
                                 "geography": {
                                     "type": "string",
