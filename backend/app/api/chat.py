@@ -242,6 +242,9 @@ async def send_chat_message(
         if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
             initiative.project_type = analysis["project_type"]
             info_updated = True
+        if analysis.get("title") and not initiative.title:
+            initiative.title = analysis["title"]
+            info_updated = True
         if analysis.get("geography") and not initiative.geography:
             initiative.geography = analysis["geography"]
             info_updated = True
@@ -303,10 +306,23 @@ async def send_chat_message(
                             "icon": tool.definition.icon,
                             "output_type": tool.definition.output_type,
                         })
+                
+                # Build tool_inputs with SDG classification
+                tool_inputs = initiative.tool_inputs or {}
+                
+                # Classify SDG based on project description
+                if initiative.project_description:
+                    sdg_info = classify_sdg(
+                        project_description=initiative.project_description,
+                        project_type=initiative.project_type
+                    )
+                    if sdg_info:
+                        tool_inputs["sdg"] = sdg_info
+                
                 widget_data = {
                     "project_summary": initiative.to_summary_dict(),
                     "selected_tools": tools_info,
-                    "tool_inputs": initiative.tool_inputs or {},
+                    "tool_inputs": tool_inputs,
                 }
     
     # Generate assistant response ONLY if not already set by deterministic stages
