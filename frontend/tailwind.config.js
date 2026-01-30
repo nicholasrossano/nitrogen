@@ -11,12 +11,12 @@ module.exports = {
         // Wisterion Enterprise Design System
         // Core Surfaces
         background: {
-          DEFAULT: '#FFFFFF',
-          tinted: '#EFEAE2',
+          DEFAULT: '#F5F5F7',
+          tinted: '#E8E3DB',
         },
         surface: {
-          DEFAULT: '#FFFFFF',
-          subtle: '#F7F7F8',
+          DEFAULT: '#FAFAFA',
+          subtle: '#EEEEEF',
         },
         // Text
         text: {
@@ -26,10 +26,10 @@ module.exports = {
         },
         // Primary Accent (use sparingly)
         accent: {
-          anchor: '#5F628F',
-          DEFAULT: '#8285B6',
-          tint: '#B2B4D6',
-          wash: '#E6E7F2',
+          anchor: '#4E5173',
+          DEFAULT: '#6B6E9D',
+          tint: '#9B9DC4',
+          wash: '#D4D5E8',
         },
         // Semantic Indicators (meaning only)
         indicator: {
@@ -39,10 +39,10 @@ module.exports = {
         },
         // Strokes & Dividers
         stroke: {
-          subtle: '#E1E1E6',
-          accent: '#8285B6',
+          subtle: '#D5D5DB',
+          accent: '#6B6E9D',
         },
-        divider: '#E6E6EA',
+        divider: '#DADADF',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

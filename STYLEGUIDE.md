@@ -32,10 +32,10 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ### Core surfaces
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `BackgroundPrimary` | `#FFFFFF` | App background |
-| `BackgroundTinted` | `#EFEAE2` | Secondary grouping background |
-| `SurfacePrimary` | `#FFFFFF` | Cards / panels |
-| `SurfaceSubtle` | `#F7F7F8` | Forms / secondary panels |
+| `BackgroundPrimary` | `#F5F5F7` | App background |
+| `BackgroundTinted` | `#E8E3DB` | Secondary grouping background |
+| `SurfacePrimary` | `#FAFAFA` | Cards / panels |
+| `SurfaceSubtle` | `#EEEEEF` | Forms / secondary panels |
 
 ### Text
 | Token | Hex | Usage |
@@ -47,10 +47,10 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ### Primary accent (use sparingly)
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `AccentAnchor` | `#5F628F` | Rare strong emphasis |
-| `AccentPrimary` | `#8285B6` | Borders, focus, selection, links |
-| `AccentTint` | `#B2B4D6` | Hover / pressed fills |
-| `AccentWash` | `#E6E7F2` | Subtle highlight |
+| `AccentAnchor` | `#4E5173` | Rare strong emphasis |
+| `AccentPrimary` | `#6B6E9D` | Borders, focus, selection, links |
+| `AccentTint` | `#9B9DC4` | Hover / pressed fills |
+| `AccentWash` | `#D4D5E8` | Subtle highlight |
 
 ### Semantic indicators
 | Token | Hex | Usage |
@@ -62,9 +62,9 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ### Strokes & dividers
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `Divider` | `#E6E6EA` | Separators |
-| `StrokeSubtle` | `#E1E1E6` | Borders |
-| `StrokeAccent` | `#8285B6` | Focus / selected border |
+| `Divider` | `#DADADF` | Separators |
+| `StrokeSubtle` | `#D5D5DB` | Borders |
+| `StrokeAccent` | `#6B6E9D` | Focus / selected border |
 
 **Rules**
 - Default UI should read neutral  

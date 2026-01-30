@@ -7,10 +7,10 @@
 :root {
   /* Wisterion Enterprise Design Tokens */
   /* Surfaces */
-  --color-background: #FFFFFF;
-  --color-background-tinted: #EFEAE2;
-  --color-surface: #FFFFFF;
-  --color-surface-subtle: #F7F7F8;
+  --color-background: #F5F5F7;
+  --color-background-tinted: #E8E3DB;
+  --color-surface: #FAFAFA;
+  --color-surface-subtle: #EEEEEF;
   
   /* Text */
   --color-text-primary: #1C1C1E;
@@ -18,10 +18,10 @@
   --color-text-tertiary: #7A7A82;
   
   /* Accent */
-  --color-accent-anchor: #5F628F;
-  --color-accent: #8285B6;
-  --color-accent-tint: #B2B4D6;
-  --color-accent-wash: #E6E7F2;
+  --color-accent-anchor: #4E5173;
+  --color-accent: #6B6E9D;
+  --color-accent-tint: #9B9DC4;
+  --color-accent-wash: #D4D5E8;
   
   /* Semantic Indicators */
   --color-indicator-orange: #B97A5D;
@@ -29,9 +29,9 @@
   --color-indicator-green: #9DAA9B;
   
   /* Strokes */
-  --color-divider: #E6E6EA;
-  --color-stroke-subtle: #E1E1E6;
-  --color-stroke-accent: #8285B6;
+  --color-divider: #DADADF;
+  --color-stroke-subtle: #D5D5DB;
+  --color-stroke-accent: #6B6E9D;
 }
 
 html {
@@ -131,11 +131,11 @@ body {
 
 /* Card base style - white surface with subtle stroke */
 .card {
-  @apply bg-white border border-stroke-subtle;
+  @apply bg-surface border border-stroke-subtle;
 }
 
 .card-elevated {
-  @apply bg-white border border-stroke-subtle shadow-subtle;
+  @apply bg-surface border border-stroke-subtle shadow-subtle;
 }
 
 /* Input field base style */
