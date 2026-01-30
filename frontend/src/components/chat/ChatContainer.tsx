@@ -40,9 +40,9 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
           
           {/* Loading indicator */}
           {(sending || generating) && (
-            <div className="flex items-center gap-3 text-brown/60">
-              <div className="flex items-center gap-2 px-4 py-2 bg-blush rounded-pill">
-                <Loader2 className="w-4 h-4 animate-spin text-primary-600" />
+            <div className="flex items-center gap-3 text-text-secondary">
+              <div className="flex items-center gap-2 px-4 py-2 bg-surface-subtle rounded border border-stroke-subtle">
+                <Loader2 className="w-4 h-4 animate-spin text-accent" />
                 <span className="text-sm font-medium">
                   {generating ? 'Generating memo...' : 'Thinking...'}
                 </span>

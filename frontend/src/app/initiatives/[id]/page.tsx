@@ -28,10 +28,10 @@ export default function InitiativePage() {
 
   if (loading && !initiative) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex items-center justify-center min-h-screen bg-white">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-          <span className="text-sm text-brown/60">Loading initiative...</span>
+          <Loader2 className="w-6 h-6 animate-spin text-accent" />
+          <span className="text-sm text-text-secondary">Loading initiative...</span>
         </div>
       </div>
     );
@@ -39,9 +39,9 @@ export default function InitiativePage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-background">
-        <div className="card-elevated p-8 text-center max-w-md">
-          <p className="text-primary-600 mb-4">{error}</p>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-white">
+        <div className="card p-8 text-center max-w-md">
+          <p className="text-indicator-orange mb-4">{error}</p>
           <Link 
             href="/" 
             className="btn-secondary inline-flex"
@@ -55,22 +55,22 @@ export default function InitiativePage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
-      {/* Header - Glass effect with warm tones */}
-      <header className="flex-shrink-0 border-b border-beige/50 bg-cream/90 backdrop-blur-sm">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
+      {/* Header - Clean white with subtle border */}
+      <header className="flex-shrink-0 border-b border-divider bg-white">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
               href="/" 
-              className="p-2.5 hover:bg-blush rounded-pill transition-all duration-200"
+              className="p-2 hover:bg-surface-subtle rounded transition-colors duration-150"
             >
-              <ArrowLeft className="w-5 h-5 text-brown/70" />
+              <ArrowLeft className="w-5 h-5 text-text-secondary" />
             </Link>
             <div>
-              <h1 className="font-semibold text-brown">
+              <h1 className="font-semibold text-text-primary">
                 {initiative?.title || 'New Initiative'}
               </h1>
-              <p className="text-sm text-brown/50 capitalize">
+              <p className="text-sm text-text-tertiary capitalize">
                 Stage: {initiative?.stage || 'intake'}
               </p>
             </div>
@@ -133,19 +133,19 @@ function StageIndicator({
           <div key={s.id} className="flex items-center">
             <div 
               className={`
-                px-3 py-1.5 rounded-pill text-xs font-semibold transition-all duration-200
+                px-3 py-1.5 rounded-sm text-xs font-medium transition-colors duration-150
                 ${isComplete 
-                  ? 'bg-forest/15 text-forest' 
+                  ? 'bg-indicator-green/10 text-indicator-green' 
                   : isCurrent 
-                    ? 'bg-primary-100 text-primary-700' 
-                    : 'bg-beige/50 text-brown/50'
+                    ? 'bg-accent-wash text-accent-anchor' 
+                    : 'bg-surface-subtle text-text-tertiary'
                 }
               `}
             >
               {s.label}
             </div>
             {i < stages.length - 1 && (
-              <div className={`w-4 h-0.5 transition-colors duration-200 ${isComplete ? 'bg-forest/40' : 'bg-beige'}`} />
+              <div className={`w-4 h-0.5 transition-colors duration-150 ${isComplete ? 'bg-indicator-green/30' : 'bg-divider'}`} />
             )}
           </div>
         );

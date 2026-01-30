@@ -48,7 +48,7 @@ class ToolDefinition:
     id: str
     name: str
     description: str
-    icon: str  # Emoji or icon name
+    icon: str  # Lucide icon name (e.g., "FileText", "CheckSquare")
     output_type: str
     category: str  # "analysis", "documentation", "technical", etc.
     keywords: list[str] = field(default_factory=list)  # For recommendation matching

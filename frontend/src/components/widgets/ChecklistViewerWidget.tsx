@@ -49,13 +49,13 @@ interface ChecklistViewerWidgetProps {
 
 function RiskBadge({ level }: { level: 'low' | 'medium' | 'high' }) {
   const colors = {
-    low: 'bg-forest/15 text-forest',
-    medium: 'bg-rust/15 text-rust',
-    high: 'bg-merlot/15 text-merlot',
+    low: 'bg-indicator-green/10 text-indicator-green',
+    medium: 'bg-indicator-yellow/10 text-indicator-yellow',
+    high: 'bg-indicator-orange/10 text-indicator-orange',
   };
   
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[level]}`}>
+    <span className={`text-xs px-2 py-0.5 rounded-sm font-medium ${colors[level]}`}>
       {level}
     </span>
   );
@@ -65,36 +65,36 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
   return (
-    <div className="border border-beige/50 rounded-card overflow-hidden">
+    <div className="border border-stroke-subtle rounded overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-blush/30 hover:bg-blush/50 transition-colors text-left"
+        className="w-full flex items-center justify-between px-4 py-3 bg-surface-subtle hover:bg-surface-subtle/80 transition-colors text-left"
       >
         <div>
-          <h4 className="font-semibold text-brown">{category.name}</h4>
-          <p className="text-xs text-brown/60">{category.description}</p>
+          <h4 className="font-semibold text-text-primary">{category.name}</h4>
+          <p className="text-xs text-text-secondary">{category.description}</p>
         </div>
         {isOpen ? (
-          <ChevronDown className="w-5 h-5 text-brown/50" />
+          <ChevronDown className="w-5 h-5 text-text-tertiary" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-brown/50" />
+          <ChevronRight className="w-5 h-5 text-text-tertiary" />
         )}
       </button>
       
       {isOpen && (
-        <div className="p-4 space-y-3 bg-cream">
+        <div className="p-4 space-y-3 bg-white">
           {category.items.map((item, idx) => (
             <div key={idx} className="flex gap-3">
-              <Circle className="w-4 h-4 text-beige mt-1 flex-shrink-0" />
+              <Circle className="w-4 h-4 text-divider mt-1 flex-shrink-0" />
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm text-brown font-medium">{item.item}</p>
+                  <p className="text-sm text-text-primary font-medium">{item.item}</p>
                   <RiskBadge level={item.risk_level} />
                 </div>
                 {item.questions && item.questions.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {item.questions.map((q, qIdx) => (
-                      <li key={qIdx} className="text-xs text-brown/60 pl-2 border-l-2 border-beige">
+                      <li key={qIdx} className="text-xs text-text-secondary pl-2 border-l-2 border-divider">
                         {q}
                       </li>
                     ))}
@@ -128,27 +128,27 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
   if (!content || !content.categories) {
     return (
       <div className="card-elevated p-6">
-        <p className="text-brown/60">Checklist content not available</p>
+        <p className="text-text-secondary">Checklist content not available</p>
       </div>
     );
   }
   
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header - matches memo viewer style */}
-      <div className="px-5 py-4 bg-gradient-to-r from-forest/10 to-teal/10 border-b border-beige/50 flex items-center justify-between">
+      {/* Header */}
+      <div className="px-5 py-4 bg-surface-subtle border-b border-divider flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-brown">{content.title}</h3>
-          <p className="text-sm text-brown/60">{content.date}</p>
+          <h3 className="font-semibold text-text-primary">{content.title}</h3>
+          <p className="text-sm text-text-secondary">{content.date}</p>
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="p-2.5 hover:bg-forest/10 rounded-pill transition-all duration-200"
+          className="p-2 hover:bg-white rounded transition-colors duration-150"
         >
           {expanded ? (
-            <ChevronUp className="w-5 h-5 text-forest" />
+            <ChevronUp className="w-5 h-5 text-text-secondary" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-forest" />
+            <ChevronDown className="w-5 h-5 text-text-secondary" />
           )}
         </button>
       </div>
@@ -156,18 +156,18 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
       {expanded && (
         <>
           {/* Content */}
-          <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto bg-cream">
+          <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto bg-white">
             {/* Priority Items */}
             {content.priority_items && content.priority_items.length > 0 && (
               <section>
-                <h2 className="text-lg font-semibold text-brown mb-3 flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-rust" />
+                <h2 className="text-lg font-semibold text-text-primary mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-indicator-orange" />
                   Priority Items
                 </h2>
                 <ul className="space-y-2">
                   {content.priority_items.map((item, idx) => (
-                    <li key={idx} className="text-sm text-brown/80 flex items-start gap-2">
-                      <span className="text-rust font-bold">{idx + 1}.</span>
+                    <li key={idx} className="text-sm text-text-secondary flex items-start gap-2">
+                      <span className="text-indicator-orange font-bold">{idx + 1}.</span>
                       {item}
                     </li>
                   ))}
@@ -177,7 +177,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             
             {/* Categories */}
             <section>
-              <h2 className="text-lg font-semibold text-brown mb-3">Checklist Categories</h2>
+              <h2 className="text-lg font-semibold text-text-primary mb-3">Checklist Categories</h2>
               <div className="space-y-3">
                 {content.categories.map((category, idx) => (
                   <CategorySection key={idx} category={category} defaultOpen={idx === 0} />
@@ -188,21 +188,21 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             {/* Next Steps */}
             {content.next_steps && content.next_steps.length > 0 && (
               <section>
-                <h2 className="text-lg font-semibold text-brown mb-3 flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-forest" />
+                <h2 className="text-lg font-semibold text-text-primary mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-indicator-green" />
                   Recommended Next Steps
                 </h2>
                 <ol className="space-y-2 list-decimal list-inside">
                   {content.next_steps.map((step, idx) => (
-                    <li key={idx} className="text-sm text-brown/80">{step}</li>
+                    <li key={idx} className="text-sm text-text-secondary">{step}</li>
                   ))}
                 </ol>
               </section>
             )}
           </div>
 
-          {/* Actions - matches memo viewer style */}
-          <div className="px-5 py-4 bg-blush/50 border-t border-beige/50">
+          {/* Actions */}
+          <div className="px-5 py-4 bg-surface-subtle border-t border-divider">
             <button
               onClick={handleExport}
               disabled={exporting}

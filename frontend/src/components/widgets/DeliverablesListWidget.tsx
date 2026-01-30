@@ -24,7 +24,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
   if (deliverables.length === 0) {
     return (
       <div className="card-elevated p-6">
-        <p className="text-brown/60">No deliverables generated</p>
+        <p className="text-text-secondary">No deliverables generated</p>
       </div>
     );
   }
@@ -55,11 +55,11 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           // Generic document viewer fallback
           return (
             <div key={idx} className="card-elevated overflow-hidden">
-              <div className="px-5 py-4 bg-gradient-to-r from-primary-50 to-accent/10 border-b border-beige/50">
-                <h3 className="font-semibold text-brown">{deliverable.tool_name}</h3>
+              <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+                <h3 className="font-semibold text-text-primary">{deliverable.tool_name}</h3>
               </div>
-              <div className="p-5 bg-cream">
-                <pre className="text-sm text-brown/80 whitespace-pre-wrap">
+              <div className="p-5 bg-white">
+                <pre className="text-sm text-text-secondary whitespace-pre-wrap">
                   {JSON.stringify(deliverable.content, null, 2)}
                 </pre>
               </div>
