@@ -20,7 +20,7 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
   }, [messages]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto space-y-4">
@@ -35,11 +35,13 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
           
           {/* Loading indicator */}
           {(sending || generating) && (
-            <div className="flex items-center gap-2 text-gray-500 pl-12">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">
-                {generating ? 'Generating memo...' : 'Thinking...'}
-              </span>
+            <div className="flex items-center gap-3 text-brown/60">
+              <div className="flex items-center gap-2 px-4 py-2 bg-blush rounded-pill">
+                <Loader2 className="w-4 h-4 animate-spin text-primary-600" />
+                <span className="text-sm font-medium">
+                  {generating ? 'Generating memo...' : 'Thinking...'}
+                </span>
+              </div>
             </div>
           )}
           
@@ -47,9 +49,9 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
         </div>
       </div>
 
-      {/* Input area */}
-      <div className="flex-shrink-0 border-t border-gray-200 bg-white">
-        <div className="max-w-3xl mx-auto px-4 py-4">
+      {/* Input area - no container/border */}
+      <div className="flex-shrink-0 pb-4">
+        <div className="max-w-3xl mx-auto px-4">
           <ChatInput 
             initiativeId={initiativeId}
             disabled={sending || generating}

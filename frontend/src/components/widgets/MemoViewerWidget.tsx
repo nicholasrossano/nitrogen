@@ -18,9 +18,10 @@ import { MemoContent, Citation } from '@/lib/api';
 interface MemoViewerWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
+  isActive?: boolean;
 }
 
-export function MemoViewerWidget({ data, initiativeId }: MemoViewerWidgetProps) {
+export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoViewerWidgetProps) {
   const [expanded, setExpanded] = useState(true);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const { exportMemo, loading } = useInitiativeStore();
@@ -36,30 +37,30 @@ export function MemoViewerWidget({ data, initiativeId }: MemoViewerWidgetProps) 
     const config = {
       proceed: { 
         icon: CheckCircle, 
-        bg: 'bg-green-100', 
-        text: 'text-green-800',
-        border: 'border-green-200'
+        bg: 'bg-forest/10', 
+        text: 'text-forest',
+        border: 'border-forest/30'
       },
       hold: { 
         icon: PauseCircle, 
-        bg: 'bg-yellow-100', 
-        text: 'text-yellow-800',
-        border: 'border-yellow-200'
+        bg: 'bg-rust/10', 
+        text: 'text-rust',
+        border: 'border-rust/30'
       },
       reject: { 
         icon: AlertCircle, 
-        bg: 'bg-red-100', 
-        text: 'text-red-800',
-        border: 'border-red-200'
+        bg: 'bg-primary-50', 
+        text: 'text-primary-600',
+        border: 'border-primary-200'
       },
-    }[rec] || { icon: CheckCircle, bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200' };
+    }[rec] || { icon: CheckCircle, bg: 'bg-beige', text: 'text-brown', border: 'border-beige' };
     
     const Icon = config.icon;
 
     return (
-      <div className={`inline-flex items-center gap-2 px-4 py-2 ${config.bg} ${config.border} border rounded-full`}>
+      <div className={`inline-flex items-center gap-2 px-5 py-2.5 ${config.bg} ${config.border} border rounded-pill shadow-subtle`}>
         <Icon className={`w-5 h-5 ${config.text}`} />
-        <span className={`font-semibold uppercase ${config.text}`}>
+        <span className={`font-semibold uppercase tracking-wide ${config.text}`}>
           {rec}
         </span>
       </div>
@@ -93,21 +94,21 @@ export function MemoViewerWidget({ data, initiativeId }: MemoViewerWidgetProps) 
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-100 border-b border-green-200 flex items-center justify-between">
+    <div className="card-elevated overflow-hidden">
+      {/* Header - Forest/success accent */}
+      <div className="px-5 py-4 bg-gradient-to-r from-forest/10 to-teal/10 border-b border-beige/50 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-green-900">{content.title}</h3>
-          <p className="text-sm text-green-700">{content.date}</p>
+          <h3 className="font-semibold text-brown font-display">{content.title}</h3>
+          <p className="text-sm text-brown/60">{content.date}</p>
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="p-2 hover:bg-green-200 rounded-lg transition-colors"
+          className="p-2.5 hover:bg-forest/10 rounded-pill transition-all duration-200"
         >
           {expanded ? (
-            <ChevronUp className="w-5 h-5 text-green-700" />
+            <ChevronUp className="w-5 h-5 text-forest" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-green-700" />
+            <ChevronDown className="w-5 h-5 text-forest" />
           )}
         </button>
       </div>
@@ -115,7 +116,7 @@ export function MemoViewerWidget({ data, initiativeId }: MemoViewerWidgetProps) 
       {expanded && (
         <>
           {/* Content */}
-          <div className="p-6 space-y-6 prose-memo max-h-[500px] overflow-y-auto">
+          <div className="p-6 space-y-6 prose-memo max-h-[500px] overflow-y-auto bg-cream">
             {/* Recommendation */}
             <div className="text-center py-4">
               <RecommendationBadge />
@@ -161,40 +162,42 @@ export function MemoViewerWidget({ data, initiativeId }: MemoViewerWidgetProps) 
             {content.citations.length > 0 && (
               <section>
                 <h2>References</h2>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {content.citations.map((citation) => (
                     <div 
                       key={citation.number}
                       className={`
-                        p-3 rounded-lg border text-sm cursor-pointer transition-colors
+                        p-4 rounded-card border text-sm cursor-pointer transition-all duration-200
                         ${citation.source_type === 'corpus' 
-                          ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' 
-                          : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                          ? 'bg-accent/10 border-accent/30 hover:bg-accent/20' 
+                          : 'bg-teal/10 border-teal/30 hover:bg-teal/20'
                         }
-                        ${selectedCitation?.number === citation.number ? 'ring-2 ring-primary-500' : ''}
+                        ${selectedCitation?.number === citation.number ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-cream' : ''}
                       `}
                       onClick={() => setSelectedCitation(
                         selectedCitation?.number === citation.number ? null : citation
                       )}
                     >
-                      <div className="flex items-start gap-2">
-                        <span className="font-semibold text-gray-700">[{citation.number}]</span>
-                        <div>
+                      <div className="flex items-start gap-3">
+                        <span className="font-semibold text-brown">[{citation.number}]</span>
+                        <div className="flex-1">
                           <div className="flex items-center gap-2">
                             {citation.source_type === 'corpus' ? (
-                              <BookOpen className="w-4 h-4 text-purple-600" />
+                              <BookOpen className="w-4 h-4 text-accent" />
                             ) : (
-                              <ExternalLink className="w-4 h-4 text-blue-600" />
+                              <ExternalLink className="w-4 h-4 text-teal" />
                             )}
-                            <span className={`text-xs uppercase font-medium ${
-                              citation.source_type === 'corpus' ? 'text-purple-600' : 'text-blue-600'
+                            <span className={`text-xs uppercase font-semibold tracking-wide ${
+                              citation.source_type === 'corpus' ? 'text-accent' : 'text-teal'
                             }`}>
                               {citation.source_type === 'corpus' ? 'Case Study' : 'Your Evidence'}
                             </span>
                           </div>
-                          <p className="font-medium text-gray-900 mt-1">{citation.source_title}</p>
+                          <p className="font-medium text-brown mt-1">{citation.source_title}</p>
                           {selectedCitation?.number === citation.number && (
-                            <p className="text-gray-600 mt-2 italic">"{citation.excerpt}"</p>
+                            <p className="text-brown/70 mt-3 italic border-l-2 border-beige pl-3">
+                              "{citation.excerpt}"
+                            </p>
                           )}
                         </div>
                       </div>
@@ -206,11 +209,11 @@ export function MemoViewerWidget({ data, initiativeId }: MemoViewerWidgetProps) 
           </div>
 
           {/* Actions */}
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+          <div className="px-5 py-4 bg-blush/50 border-t border-beige/50">
             <button
               onClick={handleExport}
               disabled={loading}
-              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="btn-primary w-full"
             >
               {loading ? (
                 <>

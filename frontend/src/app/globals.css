@@ -1,40 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 250, 250, 252;
-  --background-end-rgb: 255, 255, 255;
+  /* Nitrogen Design Tokens */
+  --color-background: #FEFCF5;
+  --color-cream: #FFFEF9;
+  --color-beige: #DAD7C5;
+  --color-blush: #ECE4DB;
+  --color-brown: #301900;
+  --color-primary: #7677B8;
+  --color-primary-light: #9596C8;
+  --color-accent: #8285B6;
+  --color-merlot: #711248;
+  --color-rust: #BD6217;
+  --color-forest: #127112;
+  --color-teal: #0E7171;
+  
+  /* Shadows */
+  --shadow-subtle: 0 1px 3px rgba(48, 25, 0, 0.1);
+  --shadow-lifted: 0 4px 6px rgba(48, 25, 0, 0.15);
+  --shadow-heavy: 0 4px 10px rgba(48, 25, 0, 0.25);
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--color-brown);
+  background: var(--color-background);
   min-height: 100vh;
+  font-family: 'Nunito Sans', 'Avenir', system-ui, sans-serif;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - warm tones */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--color-cream);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
+  background: var(--color-beige);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #c5c2b2;
 }
 
 /* Chat message animations */
@@ -49,8 +62,17 @@ body {
   }
 }
 
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 .message-enter {
-  animation: slideIn 0.3s ease-out;
+  animation: slideIn 0.25s ease-out;
 }
 
 /* Loading dots animation */
@@ -79,17 +101,31 @@ body {
   animation-delay: 0.4s;
 }
 
-/* Prose styling for memo viewer */
+/* Shimmer loading effect */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-blush) 0%,
+    var(--color-cream) 50%,
+    var(--color-blush) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Prose styling for memo viewer - warm editorial style */
 .prose-memo {
-  @apply text-gray-700 leading-relaxed;
+  @apply text-brown leading-relaxed;
 }
 
 .prose-memo h1 {
-  @apply text-2xl font-bold text-gray-900 mb-4;
+  @apply text-2xl font-bold text-brown mb-4;
+  font-family: 'Georgia', serif;
 }
 
 .prose-memo h2 {
-  @apply text-xl font-semibold text-gray-800 mt-6 mb-3;
+  @apply text-lg font-semibold text-brown mt-6 mb-3;
+  font-family: 'Georgia', serif;
 }
 
 .prose-memo p {
@@ -104,11 +140,71 @@ body {
   @apply mb-2;
 }
 
-/* Citation styling */
+/* Citation styling - burgundy accent */
 .citation {
   @apply text-primary-600 font-medium cursor-help;
 }
 
 .citation:hover {
   @apply text-primary-700 underline;
+}
+
+/* Card base style */
+.card {
+  @apply bg-cream rounded-card border border-beige/50 shadow-subtle;
+}
+
+.card-elevated {
+  @apply bg-cream rounded-widget border border-beige/30 shadow-lifted;
+}
+
+/* Pill/chip base style */
+.pill {
+  @apply inline-flex items-center px-4 py-2 rounded-pill text-sm font-medium transition-all duration-200;
+}
+
+/* Glass effect for chrome elements */
+.glass {
+  @apply bg-cream/80 backdrop-blur-md border border-white/50;
+}
+
+/* Input field base style */
+.input-field {
+  @apply w-full px-4 py-3 bg-cream border border-beige rounded-input text-brown placeholder:text-brown/50;
+  @apply focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 focus:outline-none;
+  @apply transition-all duration-200;
+}
+
+/* Hide scrollbar for textarea */
+textarea::-webkit-scrollbar {
+  display: none;
+}
+
+textarea {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Button base styles */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3;
+  @apply bg-primary-600 text-white font-semibold rounded-pill;
+  @apply hover:bg-primary-700 active:bg-primary-800;
+  @apply shadow-lifted hover:shadow-heavy;
+  @apply transition-all duration-200;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lifted;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3;
+  @apply bg-cream text-brown font-medium rounded-pill border border-beige;
+  @apply hover:bg-blush active:bg-beige;
+  @apply shadow-subtle hover:shadow-lifted;
+  @apply transition-all duration-200;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:ring-offset-2 focus:ring-offset-cream;
 }
