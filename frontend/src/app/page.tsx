@@ -21,7 +21,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
+    <main className="flex min-h-full flex-col items-center justify-center p-8 bg-background">
       <div className="max-w-2xl mx-auto text-center">
         {/* Logo/Title - Editorial style with Didot-like font */}
         <div className="mb-10">

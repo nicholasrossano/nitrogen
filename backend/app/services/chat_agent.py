@@ -1,76 +1,128 @@
+"""Chat agent service for conversational workflow."""
+
 from openai import AsyncOpenAI
 from typing import Optional
 from pathlib import Path
 
 from app.config import get_settings
-from app.models.initiative import Initiative
+from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
+from app.tools import get_tool_registry
 
 settings = get_settings()
 
 
 class ChatAgentService:
-    """Service for conversational intake agent"""
+    """Service for conversational intake and workflow agent."""
     
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_model
-        self.system_prompt = self._load_system_prompt()
+        self.registry = get_tool_registry()
     
-    def _load_system_prompt(self) -> str:
-        """Load system prompt from file"""
-        prompt_path = Path(__file__).parent.parent / "prompts" / "intake_system.txt"
-        if prompt_path.exists():
-            return prompt_path.read_text()
-        return self._default_system_prompt()
-    
-    def _default_system_prompt(self) -> str:
-        return """You are a helpful assistant guiding users through defining their development initiative. Your goal is to gather the following information through natural conversation:
+    def _get_system_prompt(self, stage: str, widget_type: str | None = None) -> str:
+        """Get system prompt based on current stage and widget context."""
+        
+        # If we're showing a widget, use ultra-brief prompts
+        if widget_type == "tool_checklist":
+            return """You are a professional advisor helping development practitioners prepare project documentation.
 
-REQUIRED FIELDS (must gather all):
-- Initiative title or short name
-- Sector (default to "clean cooking" if discussing cookstoves, fuels, etc.)
-- Geography (country or region)
-- Target population / beneficiary
-- Goal (one sentence describing success)
+The user described their project. Write a brief, professional response that:
+1. Acknowledges their project (1 short phrase)
+2. Explains what deliverables are typically prepared for this type of project
+3. Introduces the tool recommendations
 
-OPTIONAL FIELDS (ask if natural):
-- Budget range
-- Timeline
-- Key constraints (1-3 bullets)
+RULES:
+- 2-3 sentences maximum
+- Be professional, not casual
+- Reference what practitioners typically prepare for this project type
+- Do NOT explain the project's potential impact or benefits
+- Do NOT write more than 50 words
 
-CONVERSATION GUIDELINES:
-1. Ask ONE question at a time
-2. Be conversational and friendly, not robotic
-3. Acknowledge what the user shares before asking the next question
-4. If the user provides multiple pieces of information at once, acknowledge them all
-5. Don't repeat information the user has already provided
-6. Once you have all required fields, summarize what you've learned and indicate readiness to proceed
+Example for a solar mini-grid project:
+"For energy access projects like this, teams typically prepare investment memos to secure funding and due diligence checklists to assess implementation risks. Based on your mini-grid initiative in Kenya, I'd recommend:"
 
-IMPORTANT:
-- Keep responses concise (2-3 sentences max)
-- Don't use bullet points in your responses
-- Don't explain the process, just guide through it naturally
-- If the user's response is unclear, ask a clarifying follow-up"""
+Example for an LPG project:
+"Clean cooking initiatives often require investment documentation and risk assessments for stakeholder review. For your LPG distribution project in Namibia, here's what I'd suggest:"
+
+BAD (too casual): "Great project! Here are some tools:"
+BAD (too long): "Your initiative focuses on promoting the use of..." """
+
+        elif widget_type == "deliverables_overview":
+            return """The user has provided all the information needed. Write ONE brief sentence saying you're ready to generate their deliverables.
+
+RULES:
+- Maximum 1 sentence
+- Just say you have what you need and here's the overview
+- Do NOT summarize the project
+- Do NOT list what you'll create
+
+Example: "I have everything I need - here's what I'll prepare for you:"
+"""
+
+        elif stage == InitiativeStage.DESCRIBE.value:
+            return """You are a helpful assistant for Nitrogen, a platform that helps development professionals create project documentation.
+
+Your goal is to understand what project the user is working on. Keep it conversational and brief.
+
+RULES:
+- Keep ALL responses to 1-2 sentences MAX
+- Ask ONE question at a time
+- Be friendly but concise
+- Don't explain the platform
+- Don't elaborate on their project's potential impact"""
+
+        elif stage == InitiativeStage.SELECT_TOOLS.value:
+            return """The user is selecting which tools to use. Keep responses very brief.
+
+RULES:
+- 1-2 sentences maximum
+- Just acknowledge their selection briefly"""
+
+        elif stage == InitiativeStage.GATHER_INPUTS.value:
+            return """You are gathering information needed for the user's selected tools. Ask questions to fill in missing details.
+
+RULES:
+- Keep responses to 1-2 sentences
+- Ask ONE specific question at a time
+- If user doesn't have info, that's okay - move on
+- Be helpful but concise"""
+
+        elif stage == InitiativeStage.REVIEW.value:
+            return """The user is reviewing their project overview before generation.
+
+RULES:
+- Keep responses very brief (1 sentence)
+- Just acknowledge and let them review"""
+
+        else:
+            return """You are a helpful assistant. Keep responses brief and helpful.
+
+RULES:
+- Maximum 2 sentences
+- Be concise and direct"""
     
     def _build_messages(
         self, 
         chat_history: list[ChatMessage],
         initiative: Initiative,
+        widget_type: str | None = None,
     ) -> list[dict]:
-        """Build message list for OpenAI API"""
-        messages = [{"role": "system", "content": self.system_prompt}]
+        """Build message list for OpenAI API."""
+        stage = initiative.stage or InitiativeStage.DESCRIBE.value
+        messages = [{"role": "system", "content": self._get_system_prompt(stage, widget_type)}]
         
-        # Add context about current initiative state
+        # Add context about current state
         context = self._build_context(initiative)
         if context:
             messages.append({
                 "role": "system", 
-                "content": f"Current initiative state:\n{context}"
+                "content": f"Project context:\n{context}"
             })
         
-        # Add chat history
-        for msg in chat_history:
+        # Add chat history (last 10 messages to keep context manageable)
+        recent_history = chat_history[-10:] if len(chat_history) > 10 else chat_history
+        for msg in recent_history:
             messages.append({
                 "role": msg.role,
                 "content": msg.content,
@@ -79,24 +131,25 @@ IMPORTANT:
         return messages
     
     def _build_context(self, initiative: Initiative) -> str:
-        """Build context string from initiative fields"""
+        """Build context string from initiative state."""
         parts = []
+        
+        if initiative.project_description:
+            parts.append(f"Project: {initiative.project_description[:200]}")
+        if initiative.project_type:
+            parts.append(f"Type: {initiative.project_type}")
         if initiative.title:
             parts.append(f"Title: {initiative.title}")
-        if initiative.sector:
-            parts.append(f"Sector: {initiative.sector}")
         if initiative.geography:
-            parts.append(f"Geography: {initiative.geography}")
-        if initiative.target_population:
-            parts.append(f"Target population: {initiative.target_population}")
-        if initiative.goal:
-            parts.append(f"Goal: {initiative.goal}")
-        if initiative.budget_range:
-            parts.append(f"Budget: {initiative.budget_range}")
-        if initiative.timeline:
-            parts.append(f"Timeline: {initiative.timeline}")
-        if initiative.constraints:
-            parts.append(f"Constraints: {', '.join(initiative.constraints)}")
+            parts.append(f"Location: {initiative.geography}")
+        if initiative.selected_tools:
+            tool_names = []
+            for tool_id in initiative.selected_tools:
+                tool = self.registry.get_tool(tool_id)
+                if tool:
+                    tool_names.append(tool.definition.name)
+            if tool_names:
+                parts.append(f"Selected tools: {', '.join(tool_names)}")
         
         return "\n".join(parts) if parts else ""
     
@@ -104,23 +157,143 @@ IMPORTANT:
         self,
         messages: list[ChatMessage],
         initiative: Initiative,
+        widget_type: str | None = None,
     ) -> str:
-        """Generate assistant response based on conversation"""
-        api_messages = self._build_messages(messages, initiative)
+        """Generate assistant response based on conversation."""
+        api_messages = self._build_messages(messages, initiative, widget_type)
         
-        # Check if all required fields are complete
-        if initiative.is_intake_complete():
-            # Add instruction to wrap up
-            api_messages.append({
-                "role": "system",
-                "content": "All required fields have been gathered. Provide a brief summary of the initiative and indicate that you're ready to proceed to the next step (uploading evidence)."
-            })
+        # Use lower max_tokens to enforce brevity
+        max_tokens = 120 if widget_type else 150
         
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=api_messages,
             temperature=0.7,
-            max_tokens=500,
+            max_tokens=max_tokens,
         )
         
         return response.choices[0].message.content
+    
+    async def extract_project_info(
+        self,
+        messages: list[ChatMessage],
+    ) -> dict:
+        """Extract project information from conversation."""
+        
+        # Build conversation text
+        conversation = "\n".join([
+            f"{msg.role}: {msg.content}" 
+            for msg in messages
+        ])
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Extract project information from this conversation. Return structured data."
+                },
+                {
+                    "role": "user",
+                    "content": conversation
+                }
+            ],
+            tools=[{
+                "type": "function",
+                "function": {
+                    "name": "extract_project_info",
+                    "description": "Extract project information from conversation",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "project_description": {
+                                "type": "string",
+                                "description": "Brief description of the project (1-2 sentences max)"
+                            },
+                            "project_type": {
+                                "type": "string",
+                                "enum": ["energy_access", "clean_cooking", "agriculture", "water_sanitation", "health", "general"],
+                                "description": "Type of project"
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Short title for the project (3-6 words)"
+                            },
+                            "geography": {
+                                "type": "string",
+                                "description": "Location/geography of the project"
+                            },
+                            "target_beneficiaries": {
+                                "type": "string",
+                                "description": "Who will benefit from this project"
+                            },
+                            "project_goal": {
+                                "type": "string",
+                                "description": "Main goal or objective"
+                            }
+                        },
+                        "required": ["project_description", "project_type"]
+                    }
+                }
+            }],
+            tool_choice={"type": "function", "function": {"name": "extract_project_info"}},
+        )
+        
+        import json
+        tool_call = response.choices[0].message.tool_calls[0]
+        return json.loads(tool_call.function.arguments)
+    
+    async def extract_tool_inputs(
+        self,
+        messages: list[ChatMessage],
+        tool_ids: list[str],
+    ) -> dict:
+        """Extract tool-specific inputs from conversation."""
+        
+        # Get input definitions for selected tools
+        input_schema = {}
+        for tool_id in tool_ids:
+            tool = self.registry.get_tool(tool_id)
+            if tool:
+                for inp in tool.all_inputs:
+                    if inp.name not in input_schema:
+                        input_schema[inp.name] = {
+                            "type": "string",
+                            "description": inp.description,
+                        }
+        
+        # Build conversation text
+        conversation = "\n".join([
+            f"{msg.role}: {msg.content}" 
+            for msg in messages
+        ])
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Extract project and tool input information from this conversation. Only include fields that are clearly stated."
+                },
+                {
+                    "role": "user",
+                    "content": conversation
+                }
+            ],
+            tools=[{
+                "type": "function",
+                "function": {
+                    "name": "extract_inputs",
+                    "description": "Extract inputs from conversation",
+                    "parameters": {
+                        "type": "object",
+                        "properties": input_schema,
+                    }
+                }
+            }],
+            tool_choice={"type": "function", "function": {"name": "extract_inputs"}},
+        )
+        
+        import json
+        tool_call = response.choices[0].message.tool_calls[0]
+        return json.loads(tool_call.function.arguments)

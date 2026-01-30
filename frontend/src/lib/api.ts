@@ -16,6 +16,21 @@ export interface Initiative {
   evidence_ready: boolean;
   created_at: string;
   updated_at: string;
+  // New tool-based fields
+  project_description: string | null;
+  project_type: string | null;
+  selected_tools: string[] | null;
+  tool_inputs: Record<string, any> | null;
+  deliverables: Record<string, any> | null;
+}
+
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  output_type: string;
+  category: string;
 }
 
 export interface ChatMessage {
@@ -181,4 +196,64 @@ export const api = {
   downloadExport: (memoId: string) => {
     window.open(`${API_URL}/api/v1/exports/${memoId}`, '_blank');
   },
+
+  exportChecklist: async (initiativeId: string, content: any) => {
+    const response = await fetch(
+      `${API_URL}/api/v1/initiatives/${initiativeId}/export-checklist`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to export checklist');
+    }
+    
+    // Download the file
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'due_diligence_checklist.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  // Tools
+  getTools: () =>
+    fetchApi<ToolDefinition[]>('/api/v1/tools'),
+
+  getRecommendedTools: (initiativeId: string) =>
+    fetchApi<{
+      recommendations: { tool: ToolDefinition; confidence: number; recommended: boolean }[];
+      project_type: string | null;
+    }>(`/api/v1/initiatives/${initiativeId}/recommended-tools`),
+
+  selectTools: (initiativeId: string, toolIds: string[]) =>
+    fetchApi<{ success: boolean; selected_tools: string[]; stage: string }>(
+      `/api/v1/initiatives/${initiativeId}/select-tools`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ tool_ids: toolIds }),
+      }
+    ),
+
+  updateToolInputs: (initiativeId: string, inputs: Record<string, any>) =>
+    fetchApi<{ success: boolean; inputs: Record<string, any>; missing_inputs: Record<string, string[]>; ready_to_generate: boolean }>(
+      `/api/v1/initiatives/${initiativeId}/update-inputs`,
+      {
+        method: 'POST',
+        body: JSON.stringify(inputs),
+      }
+    ),
+
+  generateAllDeliverables: (initiativeId: string) =>
+    fetchApi<{ success: boolean; deliverables: Record<string, any> }>(
+      `/api/v1/initiatives/${initiativeId}/generate-all`,
+      { method: 'POST' }
+    ),
 };

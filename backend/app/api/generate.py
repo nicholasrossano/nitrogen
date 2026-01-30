@@ -5,11 +5,12 @@ from uuid import UUID
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
-from app.models.initiative import Initiative
+from app.models.initiative import Initiative, InitiativeStage
 from app.models.memo import MemoVersion
 from app.models.chat import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
 from app.services.memo_generator import MemoGeneratorService
+from app.tools import get_tool_registry
 
 router = APIRouter()
 
@@ -134,3 +135,121 @@ async def get_latest_memo(
         content=MemoContent(**memo.content),
         created_at=memo.created_at,
     )
+
+
+@router.post("/initiatives/{initiative_id}/generate-all")
+async def generate_all_deliverables(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Generate all selected deliverables for an initiative."""
+    # Get initiative
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    if not initiative.selected_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No tools selected",
+        )
+    
+    # Get tool registry
+    registry = get_tool_registry()
+    
+    # Prepare inputs from initiative
+    inputs = initiative.tool_inputs or {}
+    # Add legacy field mappings
+    if initiative.title:
+        inputs.setdefault("project_title", initiative.title)
+    if initiative.geography:
+        inputs.setdefault("geography", initiative.geography)
+    if initiative.target_population:
+        inputs.setdefault("target_beneficiaries", initiative.target_population)
+    if initiative.goal:
+        inputs.setdefault("project_goal", initiative.goal)
+    if initiative.budget_range:
+        inputs.setdefault("budget_range", initiative.budget_range)
+    if initiative.timeline:
+        inputs.setdefault("timeline", initiative.timeline)
+    
+    # Generate each deliverable
+    deliverables = {}
+    deliverable_widgets = []
+    
+    for tool_id in initiative.selected_tools:
+        tool = registry.get_tool(tool_id)
+        if not tool:
+            continue
+        
+        try:
+            output = await tool.execute(
+                db=db,
+                initiative_id=initiative_id,
+                inputs=inputs,
+                include_corpus=True,
+            )
+            
+            deliverables[tool_id] = {
+                "title": output.title,
+                "output_type": output.output_type,
+                "content": output.content,
+            }
+            
+            # Determine widget type based on output type
+            if output.output_type == "memo":
+                widget_type = "memo_viewer"
+            elif output.output_type == "checklist":
+                widget_type = "checklist_viewer"
+            else:
+                widget_type = "document_viewer"
+            
+            deliverable_widgets.append({
+                "tool_id": tool_id,
+                "tool_name": tool.definition.name,
+                "widget_type": widget_type,
+                "content": output.content,
+            })
+            
+        except Exception as e:
+            deliverables[tool_id] = {
+                "error": str(e),
+            }
+    
+    # Update initiative
+    initiative.deliverables = deliverables
+    initiative.stage = InitiativeStage.COMPLETE.value
+    await db.commit()
+    
+    # Add chat message with deliverables
+    message_content = f"I've generated {len(deliverable_widgets)} deliverable(s) for your project:"
+    for widget in deliverable_widgets:
+        message_content += f"\n- **{widget['tool_name']}**"
+    
+    chat_message = ChatMessage(
+        initiative_id=initiative_id,
+        role="assistant",
+        content=message_content,
+        widget_type="deliverables_list",
+        widget_data={
+            "deliverables": deliverable_widgets,
+        },
+    )
+    db.add(chat_message)
+    await db.commit()
+    
+    return {
+        "success": True,
+        "deliverables": deliverables,
+    }
