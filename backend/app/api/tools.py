@@ -11,6 +11,7 @@ from app.core.auth import get_current_user, MockUser
 from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
 from app.tools import get_tool_registry
+from app.services.sdg_classifier import classify_sdg
 
 router = APIRouter()
 
@@ -208,6 +209,16 @@ async def select_tools(
                     "output_type": tool.definition.output_type,
                 })
         
+        # Build tool_inputs with SDG classification
+        tool_inputs = initiative.tool_inputs or {}
+        if initiative.project_description:
+            sdg_info = classify_sdg(
+                project_description=initiative.project_description,
+                project_type=initiative.project_type
+            )
+            if sdg_info:
+                tool_inputs["sdg"] = sdg_info
+        
         message = ChatMessage(
             initiative_id=initiative_id,
             role="assistant",
@@ -216,7 +227,7 @@ async def select_tools(
             widget_data={
                 "project_summary": initiative.to_summary_dict(),
                 "selected_tools": tools_info,
-                "tool_inputs": initiative.tool_inputs or {},
+                "tool_inputs": tool_inputs,
             },
         )
         db.add(message)
