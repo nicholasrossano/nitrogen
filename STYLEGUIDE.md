@@ -47,10 +47,10 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ### Primary accent (use sparingly)
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `AccentAnchor` | `#4E5173` | Rare strong emphasis |
-| `AccentPrimary` | `#6B6E9D` | Borders, focus, selection, links |
-| `AccentTint` | `#9B9DC4` | Hover / pressed fills |
-| `AccentWash` | `#D4D5E8` | Subtle highlight |
+| `AccentAnchor` | `#2E2749` | Rare strong emphasis |
+| `AccentPrimary` | `#3E355F` | Borders, focus, selection, links |
+| `AccentTint` | `#7B739D` | Hover / pressed fills |
+| `AccentWash` | `#D5D2E8` | Subtle highlight |
 
 ### Semantic indicators
 | Token | Hex | Usage |
@@ -64,7 +64,7 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 | --- | --- | --- |
 | `Divider` | `#DADADF` | Separators |
 | `StrokeSubtle` | `#D5D5DB` | Borders |
-| `StrokeAccent` | `#6B6E9D` | Focus / selected border |
+| `StrokeAccent` | `#3E355F` | Focus / selected border |
 
 **Rules**
 - Default UI should read neutral  
