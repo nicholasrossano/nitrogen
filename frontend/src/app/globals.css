@@ -25,10 +25,14 @@
   --shadow-heavy: 0 4px 10px rgba(48, 25, 0, 0.25);
 }
 
+html {
+  height: 100%;
+}
+
 body {
+  height: 100%;
   color: var(--color-brown);
   background: var(--color-background);
-  min-height: 100vh;
   font-family: 'Nunito Sans', 'Avenir', system-ui, sans-serif;
 }
 

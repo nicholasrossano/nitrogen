@@ -50,6 +50,12 @@ class InitiativeResponse(BaseModel):
     evidence_ready: bool
     created_at: datetime
     updated_at: datetime
+    # New tool-based fields
+    project_description: Optional[str] = None
+    project_type: Optional[str] = None
+    selected_tools: Optional[list[str]] = None
+    tool_inputs: Optional[dict] = None
+    deliverables: Optional[dict] = None
     
     class Config:
         from_attributes = True
