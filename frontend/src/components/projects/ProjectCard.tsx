@@ -35,7 +35,7 @@ function getOutputCount(project: Initiative): number {
 }
 
 export function ProjectCard({ project, onDelete }: ProjectCardProps) {
-  const title = project.title || project.project_description?.slice(0, 50) || 'Untitled Project';
+  const title = project.title || 'Untitled';
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
 

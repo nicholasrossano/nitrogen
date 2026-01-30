@@ -83,7 +83,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
             <label
               key={rec.tool.id}
               className={`
-                flex items-start gap-3 p-3 rounded border cursor-pointer transition-colors duration-150
+                flex items-start gap-3 p-3 border cursor-pointer transition-colors duration-150
                 ${isSelected 
                   ? 'border-accent bg-accent-wash/30' 
                   : 'border-stroke-subtle hover:border-accent-tint hover:bg-surface-subtle'
@@ -92,7 +92,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
               `}
             >
               <div className={`
-                w-5 h-5 rounded-sm border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
+                w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
                 ${isSelected 
                   ? 'border-accent bg-accent' 
                   : 'border-stroke-subtle'

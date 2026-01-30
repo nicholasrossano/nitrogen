@@ -426,3 +426,63 @@ The title should match what the user described, not a generic example."""
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
+    
+    async def quick_doc_summary(self, preview_text: str) -> str:
+        """Generate a ONE sentence summary of what the document appears to be about."""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Based on this document excerpt, write ONE short sentence (max 15 words) describing what the document covers. Start with 'This covers' or 'I can see this includes'. Example: 'This covers your project's financial model and revenue projections.'"
+                    },
+                    {
+                        "role": "user",
+                        "content": preview_text
+                    }
+                ],
+                temperature=0.5,
+                max_tokens=40,
+            )
+            return response.choices[0].message.content
+        except:
+            return "I'll use this to create more accurate outputs."
+    
+    async def generate_materials_request_v2(self, user_description: str) -> str:
+        """Generate a contextual materials request based on user's project description."""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You help development practitioners prepare project documentation. Based on the user's project description, write a brief message asking if they have materials to upload.
+
+Your response should follow this structure (but DO NOT include quotes):
+For [relevant SDG or sector context], projects like this often involve [relevant financing/implementation approach]. Do you have any existing materials such as [2-3 relevant document types]?
+
+RULES:
+- Output ONLY the message text, no quotes or formatting
+- Keep it to 2 sentences maximum
+- Be specific to their project
+- Mention a relevant SDG or sector context
+- Reference financing/implementation approaches relevant to their project
+- Suggest 2-3 document types useful for their specific project"""
+                    },
+                    {
+                        "role": "user",
+                        "content": user_description
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=120,
+            )
+            # Strip any quotes the LLM might add
+            result = response.choices[0].message.content.strip()
+            if result.startswith('"') and result.endswith('"'):
+                result = result[1:-1]
+            return result
+        except Exception as e:
+            # Fallback to generic message if LLM fails
+            return "For impact projects like this, teams often have supporting documentation. Do you have any existing materials such as pitch decks, feasibility studies, or financial projections?"

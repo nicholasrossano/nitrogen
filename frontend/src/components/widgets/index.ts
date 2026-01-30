@@ -1,4 +1,5 @@
 export { ConfirmationWidget } from './ConfirmationWidget';
+export { DocumentRequestWidget } from './DocumentRequestWidget';
 export { EvidenceInputWidget } from './EvidenceInputWidget';
 export { GenerateOptionsWidget } from './GenerateOptionsWidget';
 export { MemoViewerWidget } from './MemoViewerWidget';
