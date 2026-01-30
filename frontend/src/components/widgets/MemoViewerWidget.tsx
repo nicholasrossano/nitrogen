@@ -98,7 +98,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
       {/* Header - Forest/success accent */}
       <div className="px-5 py-4 bg-gradient-to-r from-forest/10 to-teal/10 border-b border-beige/50 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-brown font-display">{content.title}</h3>
+          <h3 className="font-semibold text-brown">{content.title}</h3>
           <p className="text-sm text-brown/60">{content.date}</p>
         </div>
         <button
@@ -117,11 +117,6 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
         <>
           {/* Content */}
           <div className="p-6 space-y-6 prose-memo max-h-[500px] overflow-y-auto bg-cream">
-            {/* Recommendation */}
-            <div className="text-center py-4">
-              <RecommendationBadge />
-            </div>
-
             {/* Executive Summary */}
             <section>
               <h2>Executive Summary</h2>

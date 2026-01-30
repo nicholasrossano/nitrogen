@@ -24,6 +24,8 @@ interface InitiativeState {
   pasteEvidence: (id: string, content: string, title?: string) => Promise<void>;
   generateMemo: (id: string, includeCorpus?: boolean) => Promise<void>;
   exportMemo: (id: string) => Promise<void>;
+  selectTools: (id: string, toolIds: string[]) => Promise<void>;
+  generateAllDeliverables: (id: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -228,6 +230,58 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({
         error: error instanceof Error ? error.message : 'Failed to export',
         loading: false,
+      });
+    }
+  },
+
+  // Select tools for initiative
+  selectTools: async (id: string, toolIds: string[]) => {
+    set({ loading: true, error: null });
+    try {
+      await api.selectTools(id, toolIds);
+      
+      // Reload everything
+      const [initiative, { messages, stage_status }] = await Promise.all([
+        api.getInitiative(id),
+        api.getChatHistory(id),
+      ]);
+      
+      set({
+        initiative,
+        messages,
+        stageStatus: stage_status,
+        loading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to select tools',
+        loading: false,
+      });
+    }
+  },
+
+  // Generate all deliverables
+  generateAllDeliverables: async (id: string) => {
+    set({ generating: true, error: null });
+    try {
+      await api.generateAllDeliverables(id);
+      
+      // Reload everything
+      const [initiative, { messages, stage_status }] = await Promise.all([
+        api.getInitiative(id),
+        api.getChatHistory(id),
+      ]);
+      
+      set({
+        initiative,
+        messages,
+        stageStatus: stage_status,
+        generating: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to generate deliverables',
+        generating: false,
       });
     }
   },

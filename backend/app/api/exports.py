@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 from pathlib import Path
+from pydantic import BaseModel
+from typing import Optional
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
@@ -12,8 +14,13 @@ from app.models.initiative import Initiative
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
+from app.services.excel_exporter import ExcelExporterService
 
 router = APIRouter()
+
+
+class ChecklistExportRequest(BaseModel):
+    content: dict  # The checklist content to export
 
 
 @router.post("/initiatives/{initiative_id}/export", response_model=ExportResponse)
@@ -136,10 +143,51 @@ async def download_export(
     filename = f"memo_{initiative.title or 'untitled'}.docx".replace(" ", "_")
     
     # Return file
-    from fastapi.responses import Response
     return Response(
         content=file_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+@router.post("/initiatives/{initiative_id}/export-checklist")
+async def export_checklist(
+    initiative_id: UUID,
+    data: ChecklistExportRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Export checklist to Excel"""
+    # Verify access
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    # Generate Excel
+    exporter = ExcelExporterService()
+    filepath = await exporter.export_checklist(data.content)
+    
+    # Read the file
+    with open(filepath, 'rb') as f:
+        file_bytes = f.read()
+    
+    filename = f"due_diligence_checklist_{initiative.title or 'untitled'}.xlsx".replace(" ", "_")
+    
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"'
         }

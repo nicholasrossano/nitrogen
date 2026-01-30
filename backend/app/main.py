@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools
 
 
 settings = get_settings()
@@ -44,6 +44,7 @@ app.include_router(evidence.router, prefix="/api/v1", tags=["evidence"])
 app.include_router(generate.router, prefix="/api/v1", tags=["generate"])
 app.include_router(exports.router, prefix="/api/v1", tags=["exports"])
 app.include_router(corpus.router, prefix="/api/v1", tags=["corpus"])
+app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
 
 
 @app.get("/")

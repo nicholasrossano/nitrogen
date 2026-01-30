@@ -55,7 +55,7 @@ export default function InitiativePage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Header - Glass effect with warm tones */}
       <header className="flex-shrink-0 border-b border-beige/50 bg-cream/90 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -104,34 +104,52 @@ function StageIndicator({
   stage1Complete: boolean;
   evidenceReady: boolean;
 }) {
+  // Map stage to progress
+  const stageOrder = ['describe', 'select_tools', 'gather_inputs', 'review', 'generate', 'complete'];
+  const currentIndex = stageOrder.indexOf(stage);
+  
+  // For backward compatibility, also check legacy stages
+  const legacyMap: Record<string, number> = {
+    'intake': 0,
+    'evidence': 2,
+  };
+  const effectiveIndex = currentIndex >= 0 ? currentIndex : (legacyMap[stage] ?? 0);
+  
   const stages = [
-    { id: 'intake', label: 'Define', complete: stage1Complete },
-    { id: 'evidence', label: 'Evidence', complete: evidenceReady },
-    { id: 'generate', label: 'Generate', complete: stage === 'complete' },
+    { id: 'describe', label: 'Describe' },
+    { id: 'gather_inputs', label: 'Inputs' },
+    { id: 'generate', label: 'Generate' },
   ];
 
   return (
     <div className="flex items-center">
-      {stages.map((s, i) => (
-        <div key={s.id} className="flex items-center">
-          <div 
-            className={`
-              px-3 py-1.5 rounded-pill text-xs font-semibold transition-all duration-200
-              ${s.complete 
-                ? 'bg-forest/15 text-forest' 
-                : stage === s.id 
-                  ? 'bg-primary-100 text-primary-700' 
-                  : 'bg-beige/50 text-brown/50'
-              }
-            `}
-          >
-            {s.label}
+      {stages.map((s, i) => {
+        // Calculate if this stage is complete or current
+        const stageIdx = s.id === 'describe' ? 0 : s.id === 'gather_inputs' ? 2 : 4;
+        const isComplete = effectiveIndex > stageIdx || stage === 'complete';
+        const isCurrent = effectiveIndex >= stageIdx && effectiveIndex <= (s.id === 'generate' ? 5 : stageIdx + 1) && !isComplete;
+        
+        return (
+          <div key={s.id} className="flex items-center">
+            <div 
+              className={`
+                px-3 py-1.5 rounded-pill text-xs font-semibold transition-all duration-200
+                ${isComplete 
+                  ? 'bg-forest/15 text-forest' 
+                  : isCurrent 
+                    ? 'bg-primary-100 text-primary-700' 
+                    : 'bg-beige/50 text-brown/50'
+                }
+              `}
+            >
+              {s.label}
+            </div>
+            {i < stages.length - 1 && (
+              <div className={`w-4 h-0.5 transition-colors duration-200 ${isComplete ? 'bg-forest/40' : 'bg-beige'}`} />
+            )}
           </div>
-          {i < stages.length - 1 && (
-            <div className={`w-4 h-0.5 transition-colors duration-200 ${s.complete ? 'bg-forest/40' : 'bg-beige'}`} />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -12,17 +12,22 @@ interface ChatContainerProps {
 
 export function ChatContainer({ initiativeId }: ChatContainerProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef<number>(0);
   const { messages, sending, generating, stageStatus } = useInitiativeStore();
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom only when new messages are added
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // Only scroll if message count increased (new message added)
+    if (messages.length > prevMessageCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length]);
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      {/* Messages area - contains all scrollable content */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 relative">
         <div className="max-w-3xl mx-auto space-y-4">
           {messages.map((message, index) => (
             <ChatMessage 

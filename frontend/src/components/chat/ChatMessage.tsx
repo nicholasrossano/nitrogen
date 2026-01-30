@@ -6,6 +6,10 @@ import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
+import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
+import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
+import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
+import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWidget';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -86,6 +90,14 @@ function MessageWidget({
       return <GenerateOptionsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'memo_viewer':
       return <MemoViewerWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'tool_checklist':
+      return <ToolChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'deliverables_overview':
+      return <DeliverablesOverviewWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'checklist_viewer':
+      return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'deliverables_list':
+      return <DeliverablesListWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:
       return null;
   }
