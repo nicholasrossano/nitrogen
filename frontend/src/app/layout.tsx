@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Wisterion - Decision Packet Studio',
+  title: 'Wisteria',
   description: 'Generate investment memos through conversational AI',
 };
 

@@ -58,7 +58,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
-          Wisterion
+          Wisteria
         </h1>
         <button
           onClick={handleNewProject}
