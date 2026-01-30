@@ -110,17 +110,33 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 
 ## E) Shape & Corner Radius
 
-### Radius scale
-- **0** — tables, dense lists  
-- **6** — inputs, compact controls  
-- **8** — cards / panels  
-- **10–12** — modals / sheets  
-- **12–16** — chips (sparingly)
+### Default: Sharp Edges
+**Most UI elements use no border radius (0px) for a precise, architectural feel:**
+- Cards & panels
+- Buttons (primary, secondary, ghost)
+- Input fields & text areas
+- Badges & status indicators
+- Data tables & list items
+- Navigation elements
+
+### Exceptions: Subtle Rounding for Interactive Elements
+**Small radius (4-6px) reserved for:**
+- Icon-only buttons (edit, delete, close actions)
+- Interactive pill buttons (input/output selection tags)
+- Action icons that need tactile affordance
+- Upload zones with rounded borders
+
+### Why Sharp?
+- Creates clean grid alignment
+- Enhances institutional, precise aesthetic
+- Maintains consistency with data-heavy interfaces
+- Better suits Watershed-inspired hard accent lines
 
 **Rules**
-- Avoid large soft radii  
-- Round containers, not rows  
-- Never exceed **16** in core UI  
+- Default to **0** (sharp corners) for all containers and buttons
+- Use **4-6px** only for small interactive elements that benefit from softness
+- Never use radius > **8px** anywhere in the UI
+- Consistent application: if one button is sharp, all similar buttons are sharp  
 
 ---
 
