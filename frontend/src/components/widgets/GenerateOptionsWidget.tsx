@@ -21,7 +21,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+      <div className="px-5 py-4 bg-surface-header border-b border-divider">
         <h3 className="font-semibold text-text-primary">Generate Memo</h3>
         <p className="text-sm text-text-secondary">
           Evidence received: {data.chunk_count || 0} sections processed

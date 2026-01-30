@@ -50,7 +50,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+      <div className="px-5 py-4 bg-surface-header border-b border-divider">
         <h3 className="font-semibold text-text-primary">Add Evidence</h3>
         <p className="text-sm text-text-secondary">Upload a document or paste text</p>
       </div>
