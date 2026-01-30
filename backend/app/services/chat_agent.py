@@ -225,7 +225,7 @@ Determine:
                             },
                             "title": {
                                 "type": "string",
-                                "description": "Short title for the project if provided"
+                                "description": "Short title for the project (generate from description if not explicitly stated)"
                             },
                             "geography": {
                                 "type": "string",
@@ -271,7 +271,15 @@ Determine:
             messages=[
                 {
                     "role": "system",
-                    "content": "Extract project information from this conversation. Return structured data."
+                    "content": """Extract project information from this conversation. Return structured data.
+
+IMPORTANT for title: Generate a concise, descriptive title (3-6 words) that captures the essence of what the user described. 
+Examples:
+- User says "solar mini-grids in Kenya" → title: "Solar Mini-Grids in Kenya"
+- User says "LPG distribution project in Namibia" → title: "LPG Distribution in Namibia"
+- User says "micro solar grids in Zimbabwe" → title: "Micro Solar Grids in Zimbabwe"
+
+The title should match what the user described, not a generic example."""
                 },
                 {
                     "role": "user",
@@ -297,7 +305,7 @@ Determine:
                             },
                             "title": {
                                 "type": "string",
-                                "description": "Short title for the project (3-6 words)"
+                                "description": "Short, descriptive title for the project (3-6 words) - MUST reflect what the user actually described"
                             },
                             "geography": {
                                 "type": "string",
@@ -312,7 +320,7 @@ Determine:
                                 "description": "Main goal or objective"
                             }
                         },
-                        "required": ["project_description", "project_type"]
+                        "required": ["project_description", "project_type", "title"]
                     }
                 }
             }],

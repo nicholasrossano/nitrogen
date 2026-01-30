@@ -82,7 +82,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         {!project.project_description && <div className="flex-1" />}
 
         {/* Stats row */}
-        <div className="flex items-center justify-between text-xs text-text-tertiary pt-3 border-t border-divider">
+        <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-3 border-t border-divider">
           <div className="flex items-center gap-3">
             {outputCount > 0 && (
               <span className="flex items-center gap-1">
