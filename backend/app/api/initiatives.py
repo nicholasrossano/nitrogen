@@ -35,7 +35,7 @@ async def create_initiative(
     initial_message = ChatMessage(
         initiative_id=initiative.id,
         role="assistant",
-        content="What are you working on?",
+        content="Briefly describe your project.",
     )
     db.add(initial_message)
     await db.commit()

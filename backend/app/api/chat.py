@@ -380,7 +380,7 @@ async def get_chat_history(
         greeting = ChatMessage(
             initiative_id=initiative_id,
             role="assistant",
-            content="What are you working on?",
+            content="Briefly describe your project.",
         )
         db.add(greeting)
         await db.commit()
