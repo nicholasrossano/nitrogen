@@ -221,6 +221,15 @@ export const api = {
   getEvidence: (initiativeId: string) =>
     fetchApi<EvidenceDoc[]>(`/api/v1/initiatives/${initiativeId}/evidence`),
 
+  getEvidenceContent: (evidenceId: string) =>
+    fetchApi<{
+      id: string;
+      filename: string | null;
+      file_type: string | null;
+      content: string;
+      chunk_count: number;
+    }>(`/api/v1/evidence/${evidenceId}/content`),
+
   exportChecklist: async (initiativeId: string, content: any) => {
     const response = await fetch(
       `${API_URL}/api/v1/initiatives/${initiativeId}/export-checklist`,

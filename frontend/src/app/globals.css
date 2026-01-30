@@ -53,7 +53,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-surface-subtle);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {

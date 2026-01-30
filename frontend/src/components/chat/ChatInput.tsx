@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Send, Loader2 } from 'lucide-react';
+import { Send } from 'lucide-react';
 
 interface ChatInputProps {
   initiativeId?: string;
@@ -79,11 +79,7 @@ export function ChatInput({
         disabled={disabled || !input.trim()}
         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded bg-accent text-white hover:bg-accent-anchor disabled:bg-stroke-subtle disabled:text-text-tertiary disabled:cursor-not-allowed transition-colors duration-150"
       >
-        {disabled ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <Send className="w-4 h-4" />
-        )}
+        <Send className="w-4 h-4" />
       </button>
     </form>
   );
