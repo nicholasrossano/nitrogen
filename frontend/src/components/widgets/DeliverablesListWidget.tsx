@@ -55,7 +55,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           // Generic document viewer fallback
           return (
             <div key={idx} className="card-elevated overflow-hidden">
-              <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+              <div className="px-5 py-4 bg-surface-header border-b border-divider">
                 <h3 className="font-semibold text-text-primary">{deliverable.tool_name}</h3>
               </div>
               <div className="p-5 bg-white">

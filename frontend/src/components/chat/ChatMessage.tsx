@@ -25,8 +25,8 @@ export function ChatMessage({ message, initiativeId, isLatest }: ChatMessageProp
       {/* Message content */}
       <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
         {isUser ? (
-          // User message - subtle surface background
-          <div className="px-4 py-3 rounded border border-stroke-subtle bg-surface-subtle text-text-primary">
+          // User message - accent background
+          <div className="px-4 py-3 rounded bg-accent text-white">
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (

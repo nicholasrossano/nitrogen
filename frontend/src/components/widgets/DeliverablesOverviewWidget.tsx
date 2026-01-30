@@ -61,7 +61,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+      <div className="px-5 py-4 bg-surface-header border-b border-divider">
         <h3 className="font-semibold text-text-primary">Project Overview</h3>
         <p className="text-sm text-text-secondary">
           Review your project details and deliverables
@@ -137,7 +137,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
 
       {/* Generate button - only show when active */}
       {isActive && (
-        <div className="px-5 py-4 bg-surface-subtle border-t border-divider">
+        <div className="px-5 py-4 bg-surface-header border-t border-divider">
           <button
             onClick={handleGenerate}
             disabled={loading}

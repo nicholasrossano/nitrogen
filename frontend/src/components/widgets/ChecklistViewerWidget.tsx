@@ -68,7 +68,7 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
     <div className="border border-stroke-subtle rounded overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-surface-subtle hover:bg-surface-subtle/80 transition-colors text-left"
+        className="w-full flex items-center justify-between px-4 py-3 bg-surface-header hover:bg-surface-header/80 transition-colors text-left"
       >
         <div>
           <h4 className="font-semibold text-text-primary">{category.name}</h4>
@@ -136,7 +136,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-subtle border-b border-divider flex items-center justify-between">
+      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-text-primary">{content.title}</h3>
           <p className="text-sm text-text-secondary">{content.date}</p>
@@ -202,7 +202,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
           </div>
 
           {/* Actions */}
-          <div className="px-5 py-4 bg-surface-subtle border-t border-divider">
+          <div className="px-5 py-4 bg-surface-header border-t border-divider">
             <button
               onClick={handleExport}
               disabled={exporting}

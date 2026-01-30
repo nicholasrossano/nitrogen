@@ -66,7 +66,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+      <div className="px-5 py-4 bg-surface-header border-b border-divider">
         <h3 className="font-semibold text-text-primary">Available Tools</h3>
         <p className="text-sm text-text-secondary">
           Select the deliverables you'd like to prepare
@@ -130,7 +130,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
 
       {/* Actions - only show when active */}
       {isActive && (
-        <div className="px-5 py-4 bg-surface-subtle border-t border-divider">
+        <div className="px-5 py-4 bg-surface-header border-t border-divider">
           <button
             onClick={handleConfirm}
             disabled={loading || selectedTools.size === 0}
