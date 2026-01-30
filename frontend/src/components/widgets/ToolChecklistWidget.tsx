@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Check, Loader2 } from 'lucide-react';
+import { getIconByName } from '@/lib/icons';
 
 interface ToolRecommendation {
   tool: {
@@ -38,7 +39,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
   
   // Don't render if no recommendations
   if (!recommendations.length) {
-    return <div className="text-brown/50 text-sm">No tools available</div>;
+    return <div className="text-text-tertiary text-sm">No tools available</div>;
   }
 
   const toggleTool = (toolId: string) => {
@@ -65,15 +66,15 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-gradient-to-r from-primary-50 to-accent/10 border-b border-beige/50">
-        <h3 className="font-semibold text-brown">Available Tools</h3>
-        <p className="text-sm text-brown/60">
+      <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+        <h3 className="font-semibold text-text-primary">Available Tools</h3>
+        <p className="text-sm text-text-secondary">
           Select the deliverables you'd like to prepare
         </p>
       </div>
 
       {/* Tool list */}
-      <div className="p-5 space-y-3 bg-cream">
+      <div className="p-5 space-y-3 bg-white">
         {recommendations.map((rec) => {
           const isSelected = selectedTools.has(rec.tool.id);
           
@@ -81,19 +82,19 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
             <label
               key={rec.tool.id}
               className={`
-                flex items-start gap-4 p-4 rounded-widget border cursor-pointer transition-all duration-200
+                flex items-start gap-4 p-4 rounded border cursor-pointer transition-colors duration-150
                 ${isSelected 
-                  ? 'border-primary-300 bg-primary-50' 
-                  : 'border-beige hover:border-primary-200 hover:bg-blush/30'
+                  ? 'border-accent bg-accent-wash/30' 
+                  : 'border-stroke-subtle hover:border-accent-tint hover:bg-surface-subtle'
                 }
                 ${!isActive ? 'pointer-events-none opacity-60' : ''}
               `}
             >
               <div className={`
-                w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
+                w-6 h-6 rounded-sm border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
                 ${isSelected 
-                  ? 'border-primary-600 bg-primary-600' 
-                  : 'border-beige'
+                  ? 'border-accent bg-accent' 
+                  : 'border-stroke-subtle'
                 }
               `}>
                 {isSelected && <Check className="w-4 h-4 text-white" />}
@@ -109,15 +110,18 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
               
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xl">{rec.tool.icon}</span>
-                  <span className="font-medium text-brown">{rec.tool.name}</span>
+                  {(() => {
+                    const Icon = getIconByName(rec.tool.icon);
+                    return <Icon className="w-5 h-5 text-accent" />;
+                  })()}
+                  <span className="font-medium text-text-primary">{rec.tool.name}</span>
                   {rec.confidence > 0.5 && (
-                    <span className="text-xs px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full font-medium">
+                    <span className="badge-accent">
                       Recommended
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-brown/70 mt-1 leading-relaxed">
+                <p className="text-sm text-text-secondary mt-1 leading-relaxed">
                   {rec.tool.description}
                 </p>
               </div>
@@ -128,7 +132,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
 
       {/* Actions - only show when active */}
       {isActive && (
-        <div className="px-5 py-4 bg-blush/50 border-t border-beige/50">
+        <div className="px-5 py-4 bg-surface-subtle border-t border-divider">
           <button
             onClick={handleConfirm}
             disabled={loading || selectedTools.size === 0}
