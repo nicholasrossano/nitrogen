@@ -141,7 +141,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="w-full px-6 py-3 bg-accent text-white rounded font-medium hover:bg-accent-anchor transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full px-6 py-3 bg-accent text-white rounded-none font-medium hover:bg-accent-anchor transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
@@ -151,7 +151,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                Generate All Deliverables
+                Generate Deliverables
               </>
             )}
           </button>
