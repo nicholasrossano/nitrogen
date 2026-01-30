@@ -49,20 +49,20 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header - Teal accent for evidence */}
-      <div className="px-5 py-4 bg-gradient-to-r from-teal/10 to-accent/10 border-b border-beige/50">
-        <h3 className="font-semibold text-brown">Add Evidence</h3>
-        <p className="text-sm text-brown/60">Upload a document or paste text</p>
+      {/* Header */}
+      <div className="px-5 py-4 bg-surface-subtle border-b border-divider">
+        <h3 className="font-semibold text-text-primary">Add Evidence</h3>
+        <p className="text-sm text-text-secondary">Upload a document or paste text</p>
       </div>
 
       {/* Mode tabs */}
-      <div className="flex border-b border-beige/50 bg-cream">
+      <div className="flex border-b border-divider bg-white">
         <button
           onClick={() => setMode('upload')}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 ${
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors duration-150 ${
             mode === 'upload' 
-              ? 'text-primary-600 border-b-2 border-primary-600 bg-blush/30' 
-              : 'text-brown/60 hover:text-brown hover:bg-blush/20'
+              ? 'text-accent border-b-2 border-accent bg-accent-wash/30' 
+              : 'text-text-secondary hover:text-text-primary hover:bg-surface-subtle'
           }`}
         >
           <Upload className="w-4 h-4 inline mr-2" />
@@ -70,10 +70,10 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
         </button>
         <button
           onClick={() => setMode('paste')}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 ${
+          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors duration-150 ${
             mode === 'paste' 
-              ? 'text-primary-600 border-b-2 border-primary-600 bg-blush/30' 
-              : 'text-brown/60 hover:text-brown hover:bg-blush/20'
+              ? 'text-accent border-b-2 border-accent bg-accent-wash/30' 
+              : 'text-text-secondary hover:text-text-primary hover:bg-surface-subtle'
           }`}
         >
           <ClipboardPaste className="w-4 h-4 inline mr-2" />
@@ -83,7 +83,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
 
       {/* Content - only show interactive parts when active */}
       {isActive && (
-        <div className="p-5 bg-cream">
+        <div className="p-5 bg-white">
           {mode === 'upload' ? (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
@@ -91,10 +91,10 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
             className={`
-              border-2 border-dashed rounded-card p-10 text-center cursor-pointer transition-all duration-200
+              border-2 border-dashed rounded p-10 text-center cursor-pointer transition-colors duration-150
               ${dragActive 
-                ? 'border-primary-400 bg-primary-50' 
-                : 'border-beige hover:border-primary-300 hover:bg-blush/30'
+                ? 'border-accent bg-accent-wash/30' 
+                : 'border-stroke-subtle hover:border-accent hover:bg-surface-subtle'
               }
               ${loading ? 'pointer-events-none opacity-50' : ''}
             `}
@@ -109,18 +109,18 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
             
             {loading ? (
               <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
-                <p className="text-sm text-brown/70 font-medium">Processing document...</p>
+                <Loader2 className="w-10 h-10 text-accent animate-spin" />
+                <p className="text-sm text-text-secondary font-medium">Processing document...</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-card bg-blush flex items-center justify-center">
-                  <FileText className="w-7 h-7 text-brown/50" />
+                <div className="w-12 h-12 rounded bg-accent-wash flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-accent" />
                 </div>
-                <p className="text-sm font-medium text-brown">
+                <p className="text-sm font-medium text-text-primary">
                   Drop your file here or click to browse
                 </p>
-                <p className="text-xs text-brown/50">
+                <p className="text-xs text-text-tertiary">
                   PDF or DOCX, max 10MB
                 </p>
               </div>
@@ -168,8 +168,8 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
       
       {/* Show completed state when not active */}
       {!isActive && (
-        <div className="p-5 bg-cream text-center">
-          <p className="text-sm text-brown/60">Evidence uploaded</p>
+        <div className="p-5 bg-white text-center">
+          <p className="text-sm text-text-secondary">Evidence uploaded</p>
         </div>
       )}
     </div>

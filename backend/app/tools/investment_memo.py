@@ -32,7 +32,7 @@ class InvestmentMemoTool(BaseTool):
             id="investment_memo",
             name="Investment Memo",
             description="Generate a structured investment recommendation with executive summary, rationale, risks, and evidence-backed citations.",
-            icon="📋",
+            icon="FileText",
             output_type="memo",
             category="documentation",
             keywords=["investment", "memo", "recommendation", "funding", "grant", "decision"],

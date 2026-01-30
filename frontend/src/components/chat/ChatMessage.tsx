@@ -25,13 +25,13 @@ export function ChatMessage({ message, initiativeId, isLatest }: ChatMessageProp
       {/* Message content */}
       <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
         {isUser ? (
-          // User message - bubble with cream color, plain text
-          <div className="px-4 py-3 rounded-card shadow-subtle bg-cream border border-beige/50 text-brown">
+          // User message - subtle surface background
+          <div className="px-4 py-3 rounded border border-stroke-subtle bg-surface-subtle text-text-primary">
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (
           // Bot message - no bubble, markdown rendered
-          <div className="text-brown prose-chat">
+          <div className="text-text-primary prose-chat">
             <ReactMarkdown
               components={{
                 p: ({ children }) => <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>,
@@ -43,10 +43,10 @@ export function ChatMessage({ message, initiativeId, isLatest }: ChatMessageProp
                 h1: ({ children }) => <h1 className="text-lg font-semibold mb-2">{children}</h1>,
                 h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
                 h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
-                code: ({ children }) => <code className="text-xs bg-blush px-1.5 py-0.5 rounded">{children}</code>,
-                pre: ({ children }) => <pre className="text-xs bg-blush p-3 rounded-widget overflow-x-auto mb-2">{children}</pre>,
-                a: ({ href, children }) => <a href={href} className="text-primary-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-                blockquote: ({ children }) => <blockquote className="border-l-2 border-beige pl-3 italic text-brown/70 mb-2">{children}</blockquote>,
+                code: ({ children }) => <code className="text-xs bg-surface-subtle px-1.5 py-0.5 rounded-sm border border-stroke-subtle">{children}</code>,
+                pre: ({ children }) => <pre className="text-xs bg-surface-subtle p-3 rounded border border-stroke-subtle overflow-x-auto mb-2">{children}</pre>,
+                a: ({ href, children }) => <a href={href} className="text-accent hover:text-accent-anchor hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                blockquote: ({ children }) => <blockquote className="border-l-2 border-divider pl-3 text-text-secondary mb-2">{children}</blockquote>,
               }}
             >
               {message.content}
