@@ -14,6 +14,11 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
   const { messages, sending, generating, stageStatus } = useInitiativeStore();
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('ChatContainer: sending =', sending, 'generating =', generating);
+  }, [sending, generating]);
 
   // Auto-scroll to bottom only when new messages are added
   useEffect(() => {

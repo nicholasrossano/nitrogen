@@ -83,6 +83,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   sendMessage: async (id: string, content: string) => {
     const { messages } = get();
     
+    // Set sending state first
+    set({ 
+      sending: true,
+      error: null,
+    });
+    
     // Optimistic update - add user message immediately
     const userMessage: ChatMessage = {
       id: `temp-${Date.now()}`,
@@ -95,12 +101,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     
     set({ 
       messages: [...messages, userMessage],
-      sending: true,
-      error: null,
     });
 
     try {
+      console.log('Starting API call, sending state should be true');
       const response = await api.sendMessage(id, content);
+      console.log('API call completed');
       
       // Replace temp message with real one and add assistant response
       set(state => ({
