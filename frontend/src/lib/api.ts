@@ -55,6 +55,7 @@ export interface ChatResponse {
   extracted_fields: Record<string, any> | null;
   stage_status: StageStatus;
   show_confirmation: boolean;
+  trigger_tools_next?: boolean;
 }
 
 export interface MemoContent {

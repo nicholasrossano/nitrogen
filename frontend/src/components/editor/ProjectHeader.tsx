@@ -13,10 +13,15 @@ interface ProjectHeaderProps {
 export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(
-    initiative.title || initiative.project_description?.slice(0, 50) || 'Untitled Project'
+    initiative.title || 'Untitled'
   );
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Update local title state when initiative changes (e.g., switching projects or title is generated)
+  useEffect(() => {
+    setTitle(initiative.title || 'Untitled');
+  }, [initiative.id, initiative.title]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -27,7 +32,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
 
   const handleSave = async () => {
     if (!title.trim()) {
-      setTitle(initiative.title || 'Untitled Project');
+      setTitle(initiative.title || 'Untitled');
       setIsEditing(false);
       return;
     }
@@ -45,7 +50,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
   };
 
   const handleCancel = () => {
-    setTitle(initiative.title || initiative.project_description?.slice(0, 50) || 'Untitled Project');
+    setTitle(initiative.title || 'Untitled');
     setIsEditing(false);
   };
 
