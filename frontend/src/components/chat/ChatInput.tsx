@@ -57,12 +57,13 @@ export function ChatInput({ initiativeId, disabled, stage }: ChatInputProps) {
         placeholder={placeholder}
         disabled={disabled}
         rows={1}
-        className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 pr-12 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+        className="w-full resize-none rounded-card border border-beige bg-cream px-4 py-3.5 pr-12 text-sm text-brown placeholder:text-brown/40 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 focus:outline-none disabled:bg-blush disabled:text-brown/50 transition-all duration-200 shadow-subtle overflow-hidden"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       />
       <button
         type="submit"
         disabled={disabled || !input.trim()}
-        className="absolute right-2 bottom-2 p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-primary-600 text-white hover:bg-primary-700 disabled:bg-beige disabled:text-brown/30 disabled:cursor-not-allowed transition-all duration-200"
       >
         {disabled ? (
           <Loader2 className="w-4 h-4 animate-spin" />
