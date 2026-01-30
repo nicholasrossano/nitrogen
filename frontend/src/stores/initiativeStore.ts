@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc } from '@/lib/api';
 
 interface InitiativeState {
   // Data
@@ -8,6 +8,7 @@ interface InitiativeState {
   stageStatus: StageStatus | null;
   memo: MemoContent | null;
   memoId: string | null;
+  evidenceDocs: EvidenceDoc[];
   
   // UI State
   loading: boolean;
@@ -18,6 +19,7 @@ interface InitiativeState {
   // Actions
   loadInitiative: (id: string) => Promise<void>;
   loadChatHistory: (id: string) => Promise<void>;
+  loadEvidence: (id: string) => Promise<void>;
   sendMessage: (id: string, content: string) => Promise<void>;
   confirmIntake: (id: string) => Promise<void>;
   uploadEvidence: (id: string, file: File) => Promise<void>;
@@ -26,6 +28,7 @@ interface InitiativeState {
   exportMemo: (id: string) => Promise<void>;
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
   generateAllDeliverables: (id: string) => Promise<void>;
+  updateTitle: (id: string, title: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -36,6 +39,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   stageStatus: null,
   memo: null,
   memoId: null,
+  evidenceDocs: [],
   loading: false,
   sending: false,
   generating: false,
@@ -62,6 +66,16 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({ messages, stageStatus: stage_status });
     } catch (error) {
       console.error('Failed to load chat history:', error);
+    }
+  },
+
+  // Load evidence documents
+  loadEvidence: async (id: string) => {
+    try {
+      const evidenceDocs = await api.getEvidence(id);
+      set({ evidenceDocs });
+    } catch (error) {
+      console.error('Failed to load evidence:', error);
     }
   },
 
@@ -145,15 +159,17 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       await api.uploadEvidence(id, file);
       
       // Reload
-      const [initiative, { messages, stage_status }] = await Promise.all([
+      const [initiative, { messages, stage_status }, evidenceDocs] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
+        api.getEvidence(id),
       ]);
       
       set({
         initiative,
         messages,
         stageStatus: stage_status,
+        evidenceDocs,
         loading: false,
       });
     } catch (error) {
@@ -286,6 +302,16 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
+  // Update initiative title
+  updateTitle: async (id: string, title: string) => {
+    try {
+      const initiative = await api.updateInitiative(id, { title });
+      set({ initiative });
+    } catch (error) {
+      console.error('Failed to update title:', error);
+    }
+  },
+
   // Reset state
   reset: () => {
     set({
@@ -294,6 +320,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       stageStatus: null,
       memo: null,
       memoId: null,
+      evidenceDocs: [],
       loading: false,
       sending: false,
       generating: false,

@@ -18,7 +18,6 @@ from app.schemas.chat import (
     ExtractedFields,
 )
 from app.services.chat_agent import ChatAgentService
-from app.services.field_extractor import FieldExtractorService
 from app.services.sdg_classifier import classify_sdg
 from app.tools import get_tool_registry
 
@@ -27,22 +26,17 @@ router = APIRouter()
 
 def build_stage_status(initiative: Initiative) -> StageStatus:
     """Build stage status from initiative."""
-    # For new flow, check tool-based completion
     missing = []
-    if initiative.stage in [InitiativeStage.GATHER_INPUTS.value, InitiativeStage.REVIEW.value]:
+    
+    # Check for missing tool inputs if tools are selected
+    if initiative.selected_tools:
         missing_inputs = initiative.get_missing_tool_inputs()
         for tool_id, fields in missing_inputs.items():
             missing.extend(fields)
     else:
-        # Legacy field checking
-        if not initiative.title:
-            missing.append("title")
-        if not initiative.geography:
-            missing.append("geography")
-        if not initiative.target_population:
-            missing.append("target_population")
-        if not initiative.goal:
-            missing.append("goal")
+        # Basic fields for project description
+        if not initiative.project_description and not initiative.title:
+            missing.append("project_description")
     
     return StageStatus(
         stage=initiative.stage,
@@ -93,104 +87,127 @@ async def send_chat_message(
     )
     messages = list(history_result.scalars().all())
     
-    # Process based on current stage
+    # Process message with chat agent
     chat_agent = ChatAgentService()
     widget_type = None
     widget_data = None
-    extracted = None
-    assistant_response = None  # Will be set by stage logic or generated
     
-    if initiative.stage == InitiativeStage.DESCRIBE.value:
-        # Extract project info from conversation
+    # Analyze user intent and extract information
+    analysis = await chat_agent.analyze_intent(messages, initiative)
+    
+    # Update initiative with any extracted info
+    info_updated = False
+    if analysis.get("project_description") and not initiative.project_description:
+        initiative.project_description = analysis["project_description"]
+        info_updated = True
+    if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
+        initiative.project_type = analysis["project_type"]
+        info_updated = True
+    if analysis.get("title") and not initiative.title:
+        initiative.title = analysis["title"]
+        info_updated = True
+    if analysis.get("geography") and not initiative.geography:
+        initiative.geography = analysis["geography"]
+        info_updated = True
+    if analysis.get("target_beneficiaries") and not initiative.target_population:
+        initiative.target_population = analysis["target_beneficiaries"]
+        info_updated = True
+    if analysis.get("project_goal") and not initiative.goal:
+        initiative.goal = analysis["project_goal"]
+        info_updated = True
+    
+    if info_updated:
+        # Classify SDG if we have project info
+        if initiative.project_description or initiative.goal:
+            sdg_info = classify_sdg(
+                initiative.project_description or initiative.goal or "",
+                initiative.project_type,
+            )
+            if sdg_info:
+                tool_inputs = initiative.tool_inputs or {}
+                tool_inputs["sdg"] = sdg_info
+                initiative.tool_inputs = tool_inputs
+        
+        await db.commit()
+        await db.refresh(initiative)
+    
+    # Determine if we should show tool recommendations
+    # Show if: user described project enough AND hasn't selected tools yet
+    show_tool_recommendations = (
+        analysis.get("ready_for_tools", False) and 
+        initiative.has_project_description() and
+        not initiative.selected_tools
+    )
+    
+    if show_tool_recommendations:
+        # Do a full extraction to ensure we have all info
         project_info = await chat_agent.extract_project_info(messages)
         
-        # Update initiative
+        # Update with extracted info
         if project_info.get("project_description"):
             initiative.project_description = project_info["project_description"]
         if project_info.get("project_type"):
             initiative.project_type = project_info["project_type"]
-        if project_info.get("title"):
+        if project_info.get("title") and not initiative.title:
             initiative.title = project_info["title"]
-        if project_info.get("geography"):
+        if project_info.get("geography") and not initiative.geography:
             initiative.geography = project_info["geography"]
-        if project_info.get("target_beneficiaries"):
+        if project_info.get("target_beneficiaries") and not initiative.target_population:
             initiative.target_population = project_info["target_beneficiaries"]
-        if project_info.get("project_goal"):
+        if project_info.get("project_goal") and not initiative.goal:
             initiative.goal = project_info["project_goal"]
-        
-        # Classify SDG
-        sdg_info = classify_sdg(
-            initiative.project_description or "",
-            initiative.project_type,
-        )
-        if sdg_info:
-            # Store SDG in tool_inputs for now
-            tool_inputs = initiative.tool_inputs or {}
-            tool_inputs["sdg"] = sdg_info
-            initiative.tool_inputs = tool_inputs
         
         await db.commit()
         await db.refresh(initiative)
         
-        # Check if we should show tool recommendations
-        if initiative.has_project_description():
-            widget_type = "tool_checklist"
-            registry = get_tool_registry()
-            recommendations = registry.recommend_tools(
-                project_description=initiative.project_description,
-                project_type=initiative.project_type,
-            )
-            widget_data = {
-                "recommendations": [
-                    {
-                        "tool": tool.definition.to_dict(),
-                        "confidence": confidence,
-                        "recommended": confidence > 0.3,
-                    }
-                    for tool, confidence in recommendations
-                ],
-                "project_type": initiative.project_type,
-            }
-            # Move to tool selection stage
-            initiative.stage = InitiativeStage.SELECT_TOOLS.value
-            await db.commit()
-            
+        widget_type = "tool_checklist"
+        registry = get_tool_registry()
+        recommendations = registry.recommend_tools(
+            project_description=initiative.project_description,
+            project_type=initiative.project_type,
+        )
+        widget_data = {
+            "recommendations": [
+                {
+                    "tool": tool.definition.to_dict(),
+                    "confidence": confidence,
+                    "recommended": confidence > 0.3,
+                }
+                for tool, confidence in recommendations
+            ],
+            "project_type": initiative.project_type,
+        }
     
-    elif initiative.stage == InitiativeStage.GATHER_INPUTS.value:
-        # Extract tool inputs from conversation
-        if initiative.selected_tools:
-            tool_inputs = await chat_agent.extract_tool_inputs(
-                messages=messages,
-                tool_ids=initiative.selected_tools,
-            )
-            
-            # Merge with existing inputs
-            current_inputs = initiative.tool_inputs or {}
-            for key, value in tool_inputs.items():
-                if value:  # Only update non-empty values
-                    current_inputs[key] = value
-            initiative.tool_inputs = current_inputs
-            
-            # Also update legacy fields
-            if tool_inputs.get("project_title"):
-                initiative.title = tool_inputs["project_title"]
-            if tool_inputs.get("geography"):
-                initiative.geography = tool_inputs["geography"]
-            if tool_inputs.get("target_beneficiaries"):
-                initiative.target_population = tool_inputs["target_beneficiaries"]
-            if tool_inputs.get("project_goal"):
-                initiative.goal = tool_inputs["project_goal"]
-            
-            await db.commit()
-            await db.refresh(initiative)
+    # If tools are selected, extract any tool-specific inputs from conversation
+    elif initiative.selected_tools:
+        tool_inputs = await chat_agent.extract_tool_inputs(
+            messages=messages,
+            tool_ids=initiative.selected_tools,
+        )
+        
+        # Merge with existing inputs
+        current_inputs = initiative.tool_inputs or {}
+        for key, value in tool_inputs.items():
+            if value:  # Only update non-empty values
+                current_inputs[key] = value
+        initiative.tool_inputs = current_inputs
+        
+        # Also update legacy fields
+        if tool_inputs.get("project_title") and not initiative.title:
+            initiative.title = tool_inputs["project_title"]
+        if tool_inputs.get("geography") and not initiative.geography:
+            initiative.geography = tool_inputs["geography"]
+        if tool_inputs.get("target_beneficiaries") and not initiative.target_population:
+            initiative.target_population = tool_inputs["target_beneficiaries"]
+        if tool_inputs.get("project_goal") and not initiative.goal:
+            initiative.goal = tool_inputs["project_goal"]
+        
+        await db.commit()
+        await db.refresh(initiative)
         
         # Check if ready to show deliverables overview
         missing = initiative.get_missing_tool_inputs()
         if not missing:
-            # Move to review stage
-            initiative.stage = InitiativeStage.REVIEW.value
-            await db.commit()
-            
             widget_type = "deliverables_overview"
             registry = get_tool_registry()
             tools_info = []
@@ -238,7 +255,7 @@ async def send_chat_message(
             widget_data=assistant_message.widget_data,
             created_at=assistant_message.created_at,
         ),
-        extracted_fields=extracted,
+        extracted_fields=None,
         stage_status=build_stage_status(initiative),
         show_confirmation=widget_type == "deliverables_overview",
     )

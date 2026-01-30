@@ -116,6 +116,9 @@ async function fetchApi<T>(
 
 export const api = {
   // Initiatives
+  listInitiatives: (limit: number = 20, offset: number = 0) =>
+    fetchApi<Initiative[]>(`/api/v1/initiatives?limit=${limit}&offset=${offset}`),
+
   createInitiative: (title?: string) =>
     fetchApi<Initiative>('/api/v1/initiatives', {
       method: 'POST',
@@ -124,6 +127,24 @@ export const api = {
 
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
+  
+  updateInitiative: (id: string, data: { title?: string }) =>
+    fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteInitiative: async (id: string) => {
+    const url = `${API_URL}/api/v1/initiatives/${id}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
+      throw new Error(error.detail);
+    }
+  },
 
   confirmInitiative: (id: string) =>
     fetchApi<{ success: boolean; stage: string; message: string }>(
@@ -196,6 +217,9 @@ export const api = {
   downloadExport: (memoId: string) => {
     window.open(`${API_URL}/api/v1/exports/${memoId}`, '_blank');
   },
+
+  getEvidence: (initiativeId: string) =>
+    fetchApi<EvidenceDoc[]>(`/api/v1/initiatives/${initiativeId}/evidence`),
 
   exportChecklist: async (initiativeId: string, content: any) => {
     const response = await fetch(
