@@ -155,9 +155,9 @@ function EvidenceDocumentViewer({ doc }: { doc: EvidenceDoc }) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-6 pb-6">
-      <div className="border border-stroke-subtle flex flex-col overflow-hidden bg-surface-grey">
+      <div className="card-elevated flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-divider">
+        <div className="flex items-center gap-3 px-6 pt-6 pb-4 bg-surface-header border-b border-divider">
           <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
             <FileText className="w-5 h-5 text-accent" />
           </div>
@@ -171,11 +171,11 @@ function EvidenceDocumentViewer({ doc }: { doc: EvidenceDoc }) {
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center py-12 px-6">
+          <div className="flex items-center justify-center py-12 px-6 bg-white">
             <div className="text-sm text-text-tertiary">Loading content...</div>
           </div>
         ) : content ? (
-          <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="flex-1 overflow-y-auto px-6 py-6 bg-white">
             <div className="text-sm text-text-secondary leading-relaxed font-normal">
               <p className="whitespace-pre-wrap">
                 {displayContent}
@@ -191,7 +191,7 @@ function EvidenceDocumentViewer({ doc }: { doc: EvidenceDoc }) {
             )}
           </div>
         ) : (
-          <div className="px-6 py-12">
+          <div className="px-6 py-12 bg-white">
             <p className="text-sm text-text-tertiary">
               Content not available for this document.
             </p>
