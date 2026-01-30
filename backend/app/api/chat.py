@@ -121,9 +121,6 @@ async def send_chat_message(
         if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
             initiative.project_type = analysis["project_type"]
             info_updated = True
-        if analysis.get("title") and not initiative.title:
-            initiative.title = analysis["title"]
-            info_updated = True
         if analysis.get("geography") and not initiative.geography:
             initiative.geography = analysis["geography"]
             info_updated = True
@@ -185,6 +182,7 @@ async def send_chat_message(
                 initiative.project_description = project_info["project_description"]
             if project_info.get("project_type"):
                 initiative.project_type = project_info["project_type"]
+            # Set title when showing tool recommendations (user has provided enough context)
             if project_info.get("title") and not initiative.title:
                 initiative.title = project_info["title"]
             if project_info.get("geography") and not initiative.geography:
