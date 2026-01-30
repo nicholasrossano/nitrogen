@@ -17,6 +17,8 @@ module.exports = {
         surface: {
           DEFAULT: '#FAFAFA',
           subtle: '#EEEEEF',
+          grey: '#EEEEEF',
+          header: '#FEFCF5',
         },
         // Text
         text: {

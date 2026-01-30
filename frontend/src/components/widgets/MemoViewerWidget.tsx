@@ -96,7 +96,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-subtle border-b border-divider flex items-center justify-between">
+      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-text-primary">{content.title}</h3>
           <p className="text-sm text-text-secondary">{content.date}</p>
@@ -204,7 +204,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
           </div>
 
           {/* Actions */}
-          <div className="px-5 py-4 bg-surface-subtle border-t border-divider">
+          <div className="px-5 py-4 bg-surface-header border-t border-divider">
             <button
               onClick={handleExport}
               disabled={loading}
