@@ -46,12 +46,6 @@ async def upload_evidence(
             detail="Initiative not found",
         )
     
-    if not initiative.stage_1_complete:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot upload evidence: intake not complete",
-        )
-    
     # Validate input
     if not file and not text_content:
         raise HTTPException(
@@ -121,18 +115,6 @@ async def upload_evidence(
     
     # Update initiative
     initiative.evidence_ready = True
-    initiative.stage = "generate"
-    await db.commit()
-    
-    # Add message about evidence
-    evidence_message = ChatMessage(
-        initiative_id=initiative.id,
-        role="assistant",
-        content=f"Evidence received: **{filename}**. I've processed {len(chunks)} sections. You can now generate your memo.",
-        widget_type="generate_options",
-        widget_data={"evidence_ready": True, "chunk_count": len(chunks)},
-    )
-    db.add(evidence_message)
     await db.commit()
     
     # Get chunk count
@@ -223,3 +205,42 @@ async def list_evidence(
         ))
     
     return response
+
+
+@router.get("/evidence/{evidence_id}/content")
+async def get_evidence_content(
+    evidence_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Get the full content of an evidence document"""
+    # Get evidence doc
+    result = await db.execute(
+        select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
+    )
+    evidence_doc = result.scalar_one_or_none()
+    
+    if not evidence_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence document not found",
+        )
+    
+    # Get all chunks ordered by index
+    chunks_result = await db.execute(
+        select(EvidenceChunk)
+        .where(EvidenceChunk.evidence_doc_id == evidence_id)
+        .order_by(EvidenceChunk.chunk_index)
+    )
+    chunks = chunks_result.scalars().all()
+    
+    # Combine chunk content
+    full_content = "\n\n".join([chunk.content for chunk in chunks])
+    
+    return {
+        "id": str(evidence_doc.id),
+        "filename": evidence_doc.filename,
+        "file_type": evidence_doc.file_type,
+        "content": full_content,
+        "chunk_count": len(chunks),
+    }

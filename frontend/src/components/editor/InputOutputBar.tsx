@@ -54,9 +54,9 @@ export function InputOutputBar({
 
   return (
     <div className="flex-shrink-0 bg-white border-b border-divider">
-      <div className="px-4 py-3 flex items-start gap-8">
+      <div className="flex items-stretch">
         {/* Inputs section */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 px-4 py-3">
           <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
             Inputs
           </h3>
@@ -80,7 +80,7 @@ export function InputOutputBar({
                       flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors
                       ${selectedItemId === doc.id
                         ? 'bg-accent-wash border border-stroke-accent text-accent-anchor'
-                        : 'bg-surface-subtle border border-transparent text-text-primary hover:border-stroke-subtle'
+                        : 'bg-surface-grey border border-transparent text-text-primary hover:border-stroke-subtle'
                       }
                     `}
                   >
@@ -104,34 +104,37 @@ export function InputOutputBar({
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="w-px h-12 bg-divider self-center" />
-
-        {/* Outputs section */}
+        {/* Divider and Outputs section */}
         {hasOutputs && (
-          <div className="flex-1 min-w-0">
-            <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
-              Outputs
-            </h3>
-            <div className="flex items-center gap-2 flex-wrap">
-              {outputs.map((output) => (
-                <button
-                  key={output.id}
-                  onClick={() => onSelectItem(output.id, 'output')}
-                  className={`
-                    flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors
-                    ${selectedItemId === output.id
-                      ? 'bg-accent-wash border border-stroke-accent text-accent-anchor'
-                      : 'bg-surface-subtle border border-transparent text-text-primary hover:border-stroke-subtle'
-                    }
-                  `}
-                >
-                  <FileText className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate max-w-[120px]">{output.name}</span>
-                </button>
-              ))}
+          <>
+            {/* Divider */}
+            <div className="w-px bg-divider" />
+
+            {/* Outputs section */}
+            <div className="flex-1 min-w-0 px-4 py-3">
+              <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
+                Outputs
+              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                {outputs.map((output) => (
+                  <button
+                    key={output.id}
+                    onClick={() => onSelectItem(output.id, 'output')}
+                    className={`
+                      flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors
+                      ${selectedItemId === output.id
+                        ? 'bg-accent-wash border border-stroke-accent text-accent-anchor'
+                        : 'bg-surface-grey border border-transparent text-text-primary hover:border-stroke-subtle'
+                      }
+                    `}
+                  >
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate max-w-[120px]">{output.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 

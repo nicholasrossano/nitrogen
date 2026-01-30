@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
 import { ChatMessage } from '@/lib/api';
 import { ChatInput } from '@/components/chat/ChatInput';
 import ReactMarkdown from 'react-markdown';
@@ -47,11 +46,6 @@ export function ChatPanel({
 
   return (
     <div className={`flex flex-col h-full ${fullWidth ? '' : 'border-r border-divider'}`}>
-      {/* Chat header */}
-      <div className="flex-shrink-0 px-4 py-3 border-b border-divider">
-        <h2 className="text-sm font-medium text-text-primary">Chat</h2>
-      </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.map((message, index) => (
@@ -62,14 +56,6 @@ export function ChatPanel({
             isLatest={index === messages.length - 1}
           />
         ))}
-        
-        {/* Loading indicator */}
-        {(sending || generating) && (
-          <div className="flex items-center gap-2 text-sm text-text-tertiary">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>{generating ? 'Generating...' : 'Thinking...'}</span>
-          </div>
-        )}
         
         <div ref={messagesEndRef} />
       </div>
