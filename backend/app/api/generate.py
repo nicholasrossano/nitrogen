@@ -53,7 +53,7 @@ async def generate_memo(
     # Save memo version
     memo_version = MemoVersion(
         initiative_id=initiative.id,
-        content=memo_content.model_dump(),
+        content=memo_content.model_dump(mode="json"),
     )
     db.add(memo_version)
     await db.commit()
@@ -77,7 +77,7 @@ async def generate_memo(
         widget_type="memo_viewer",
         widget_data={
             "memo_id": str(memo_version.id),
-            "content": memo_content.model_dump(),
+            "content": memo_content.model_dump(mode="json"),
         },
     )
     db.add(memo_message)
