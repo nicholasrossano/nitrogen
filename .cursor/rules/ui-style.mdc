@@ -1,0 +1,83 @@
+---
+description: Wisterion UI style guide - colors, typography, and design principles
+globs: **/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# Wisterion UI Style Guide
+
+Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
+
+## Design Principles
+
+- **White-first surfaces**: Use `#FFFFFF` as default background
+- **Restrained color**: Accent colors for borders/focus only, not large fills
+- **Typography hierarchy**: Use scale and weight, not color for hierarchy
+- **Minimal depth**: Prefer strokes over shadows
+
+## Color Tokens (Always use these exact values)
+
+### Core Surfaces
+- `BackgroundPrimary`: `#FFFFFF` (default canvas)
+- `BackgroundTinted`: `#EFEAE2` (sparingly, for grouping)
+- `SurfacePrimary`: `#FFFFFF` (cards/panels)
+- `SurfaceSubtle`: `#F7F7F8` (forms, secondary panels)
+
+### Text
+- `TextPrimary`: `#1C1C1E` (primary text)
+- `TextSecondary`: `#5A5A60` (metadata)
+- `TextTertiary`: `#7A7A82` (helper text)
+
+### Accent (use sparingly)
+- `AccentPrimary`: `#8285B6` (borders, focus, selection, links)
+- `AccentTint`: `#B2B4D6` (hover backgrounds)
+- `AccentWash`: `#E6E7F2` (selected rows)
+
+### Semantic Indicators (meaning, not decoration)
+- `IndicatorOrange`: `#B97A5D` (warning/needs review)
+- `IndicatorYellow`: `#C6B875` (pending/in progress)
+- `IndicatorGreen`: `#9DAA9B` (success/verified)
+
+### Strokes
+- `Divider`: `#E6E6EA`
+- `StrokeSubtle`: `#E1E1E6` (borders)
+- `StrokeAccent`: `#8285B6` (focus borders)
+
+## Typography
+
+- **Primary font**: Inter (body, labels, controls, most headers)
+- **Display font**: Space Grotesk (select hero headers only, 1-2 levels max)
+- **Don't mix** Inter + Space Grotesk in dense tables/forms
+
+## Component Patterns
+
+### ✅ DO
+```tsx
+// White backgrounds with subtle borders
+<div className="bg-white border border-stroke-subtle rounded-lg">
+
+// Semantic indicators as small badges
+<span className="bg-indicator-green/10 text-indicator-green">Verified</span>
+
+// Accent for focus/selection
+<button className="focus:border-accent-primary focus:ring-accent-wash">
+```
+
+### ❌ DON'T
+```tsx
+// Large accent fills
+<div className="bg-accent-primary"> // Too much color
+
+// Multiple accent colors without semantic meaning
+<div className="border-blue-500"> // Use defined tokens
+
+// Semantic colors as decoration
+<div className="bg-indicator-orange"> // Only for status
+```
+
+## Quick Checklist
+- [ ] Using white (`#FFFFFF`) as primary background?
+- [ ] Accent color only for borders/focus, not large fills?
+- [ ] Semantic colors (orange/yellow/green) only for status indicators?
+- [ ] Using Inter font by default?
+- [ ] Strokes preferred over shadows for separation?
