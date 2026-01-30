@@ -1,7 +1,8 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { FileText, Upload } from 'lucide-react';
-import { Initiative, EvidenceDoc, MemoContent } from '@/lib/api';
+import { Initiative, EvidenceDoc, MemoContent, api } from '@/lib/api';
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 
@@ -64,32 +65,7 @@ export function EditorPanel({
     const doc = evidenceDocs.find(d => d.id === selectedItemId);
     if (!doc) return null;
 
-    // Clean filename - remove "...: Untitled Project" pattern
-    const cleanFilename = (filename: string | null) => {
-      if (!filename) return 'Document';
-      return filename.replace(/\.\.\.:\s*Untitled Project$/i, '');
-    };
-
-    return (
-      <div className="flex-1 overflow-auto p-6">
-        <div className="card p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
-              <FileText className="w-5 h-5 text-accent" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-text-primary">{cleanFilename(doc.filename)}</h3>
-              <p className="text-sm text-text-tertiary">
-                {doc.file_type?.toUpperCase()} • {doc.chunk_count} sections
-              </p>
-            </div>
-          </div>
-          <p className="text-sm text-text-secondary">
-            This document has been processed and indexed. The AI can reference it when generating outputs.
-          </p>
-        </div>
-      </div>
-    );
+    return <EvidenceDocumentViewer doc={doc} />;
   }
 
   // Show selected output (deliverable)
@@ -103,7 +79,7 @@ export function EditorPanel({
     // Render appropriate widget based on type
     if (widgetType === 'memo_viewer' || selectedItemId.includes('memo')) {
       return (
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 pb-6">
           <MemoViewerWidget
             data={widgetData as MemoContent}
             isActive={true}
@@ -115,7 +91,7 @@ export function EditorPanel({
 
     if (widgetType === 'checklist_viewer' || selectedItemId.includes('checklist')) {
       return (
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 pb-6">
           <ChecklistViewerWidget
             data={widgetData}
             isActive={true}
@@ -127,7 +103,7 @@ export function EditorPanel({
 
     // Default: show raw data
     return (
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 pb-6">
         <div className="card p-6">
           <h3 className="font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
           <pre className="text-xs text-text-secondary bg-surface-subtle p-4 rounded overflow-auto">
@@ -139,4 +115,89 @@ export function EditorPanel({
   }
 
   return null;
+}
+
+// Helper component to display evidence document with content preview
+function EvidenceDocumentViewer({ doc }: { doc: EvidenceDoc }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showFull, setShowFull] = useState(false);
+
+  // Clean filename - remove "...: Untitled Project" pattern
+  const cleanFilename = (filename: string | null) => {
+    if (!filename) return 'Document';
+    return filename.replace(/\.\.\.:\s*Untitled Project$/i, '');
+  };
+
+  useEffect(() => {
+    const fetchContent = async () => {
+      try {
+        setLoading(true);
+        const data = await api.getEvidenceContent(doc.id);
+        setContent(data.content);
+      } catch (error) {
+        console.error('Failed to fetch evidence content:', error);
+        setContent(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchContent();
+  }, [doc.id]);
+
+  // Content preview limit (3000 characters)
+  const PREVIEW_LIMIT = 3000;
+  const isTruncated = content && content.length > PREVIEW_LIMIT;
+  const displayContent = content && !showFull && isTruncated
+    ? content.substring(0, PREVIEW_LIMIT) + '...'
+    : content;
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden p-6 pb-6">
+      <div className="card flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-divider bg-white">
+          <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
+            <FileText className="w-5 h-5 text-accent" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-text-primary">{cleanFilename(doc.filename)}</h3>
+            <p className="text-sm text-text-tertiary">
+              {doc.file_type?.toUpperCase()} • {doc.chunk_count} sections
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12 px-6">
+            <div className="text-sm text-text-tertiary">Loading content...</div>
+          </div>
+        ) : content ? (
+          <div className="flex-1 overflow-y-auto px-6 py-6 bg-white">
+            <div className="text-sm text-text-secondary leading-relaxed font-normal">
+              <p className="whitespace-pre-wrap">
+                {displayContent}
+              </p>
+            </div>
+            {isTruncated && (
+              <button
+                onClick={() => setShowFull(!showFull)}
+                className="mt-6 text-sm text-accent hover:text-accent-anchor font-medium"
+              >
+                {showFull ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="px-6 py-12">
+            <p className="text-sm text-text-tertiary">
+              Content not available for this document.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
