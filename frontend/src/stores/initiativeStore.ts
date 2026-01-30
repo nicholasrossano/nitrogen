@@ -122,6 +122,10 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       // Reload initiative to get updated fields
       const initiative = await api.getInitiative(id);
       set({ initiative });
+      
+      // Reload chat history to get any additional messages the backend added
+      const chatHistory = await api.getChatHistory(id);
+      set({ messages: chatHistory.messages });
     } catch (error) {
       // Remove optimistic update on error
       set(state => ({
