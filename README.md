@@ -113,15 +113,6 @@ Wisterion/
 | `/api/v1/initiatives/{id}/export` | POST | Export to DOCX |
 | `/api/v1/corpus` | GET/POST | Manage case study corpus |
 
-## Demo Flow
-
-1. Start chat → "What are you working on?"
-2. Answer follow-up questions about your initiative
-3. Confirm the initiative summary
-4. Upload a supporting document
-5. Generate a memo with AI-powered citations
-6. Export to Word document
-
 ## License
 
 Proprietary - All rights reserved
