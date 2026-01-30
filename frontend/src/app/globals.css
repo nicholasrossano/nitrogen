@@ -18,10 +18,10 @@
   --color-text-tertiary: #7A7A82;
   
   /* Accent */
-  --color-accent-anchor: #1A0F00;
-  --color-accent: #301900;
-  --color-accent-tint: #7A5839;
-  --color-accent-wash: #EBE3DA;
+  --color-accent-anchor: #2E2749;
+  --color-accent: #3E355F;
+  --color-accent-tint: #7B739D;
+  --color-accent-wash: #D5D2E8;
   
   /* Semantic Indicators */
   --color-indicator-orange: #B97A5D;
@@ -31,7 +31,7 @@
   /* Strokes */
   --color-divider: #DADADF;
   --color-stroke-subtle: #D5D5DB;
-  --color-stroke-accent: #301900;
+  --color-stroke-accent: #3E355F;
 }
 
 html {
