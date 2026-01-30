@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Integer, DateTime
+from sqlalchemy import String, Text, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector
@@ -25,7 +25,8 @@ class CorpusDocument(Base):
     storage_path: Mapped[str | None] = mapped_column(String(500))
     
     # Extended metadata (sector, geography, year, tags)
-    metadata: Mapped[dict | None] = mapped_column(JSONB)
+    # Note: column is named 'metadata' in DB but 'doc_metadata' in Python to avoid SQLAlchemy reserved name
+    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB)
     
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
@@ -51,6 +52,7 @@ class CorpusChunk(Base):
     )
     corpus_doc_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
+        ForeignKey("corpus_documents.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )

@@ -56,7 +56,7 @@ async def list_corpus(
             title=doc.title,
             source=doc.source,
             file_type=doc.file_type,
-            metadata=doc.metadata,
+            metadata=doc.doc_metadata,
             chunk_count=chunk_count,
             created_at=doc.created_at,
         ))
@@ -122,7 +122,7 @@ async def add_corpus_document(
         source=source,
         file_type=file_type,
         storage_path=storage_path,
-        metadata=metadata,
+        doc_metadata=metadata,
     )
     db.add(corpus_doc)
     await db.commit()
@@ -148,7 +148,7 @@ async def add_corpus_document(
         title=corpus_doc.title,
         source=corpus_doc.source,
         file_type=corpus_doc.file_type,
-        metadata=corpus_doc.metadata,
+            metadata=corpus_doc.doc_metadata,
         chunk_count=len(chunks),
         created_at=corpus_doc.created_at,
     )
@@ -169,7 +169,7 @@ async def add_corpus_text(
         title=data.title,
         source=data.source,
         file_type="text",
-        metadata=data.metadata.model_dump() if data.metadata else None,
+        doc_metadata=data.metadata.model_dump() if data.metadata else None,
     )
     db.add(corpus_doc)
     await db.commit()
@@ -195,7 +195,7 @@ async def add_corpus_text(
         title=corpus_doc.title,
         source=corpus_doc.source,
         file_type=corpus_doc.file_type,
-        metadata=corpus_doc.metadata,
+            metadata=corpus_doc.doc_metadata,
         chunk_count=len(chunks),
         created_at=corpus_doc.created_at,
     )

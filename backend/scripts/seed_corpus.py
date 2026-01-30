@@ -347,7 +347,7 @@ async def seed_corpus():
                 title=study['title'],
                 source=study['source'],
                 file_type='text',
-                metadata=study['metadata'],
+                doc_metadata=study['metadata'],
             )
             session.add(doc)
             await session.commit()
