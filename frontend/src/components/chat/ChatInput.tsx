@@ -5,12 +5,20 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Send, Loader2 } from 'lucide-react';
 
 interface ChatInputProps {
-  initiativeId: string;
-  disabled: boolean;
-  stage: string;
+  initiativeId?: string;
+  disabled?: boolean;
+  stage?: string;
+  placeholder?: string;
+  onSend?: (content: string) => void;
 }
 
-export function ChatInput({ initiativeId, disabled, stage }: ChatInputProps) {
+export function ChatInput({ 
+  initiativeId, 
+  disabled = false, 
+  stage,
+  placeholder: customPlaceholder,
+  onSend,
+}: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { sendMessage } = useInitiativeStore();
@@ -30,7 +38,12 @@ export function ChatInput({ initiativeId, disabled, stage }: ChatInputProps) {
 
     const message = input.trim();
     setInput('');
-    await sendMessage(initiativeId, message);
+    
+    if (onSend) {
+      onSend(message);
+    } else if (initiativeId) {
+      await sendMessage(initiativeId, message);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -41,11 +54,12 @@ export function ChatInput({ initiativeId, disabled, stage }: ChatInputProps) {
   };
 
   // Show different placeholder based on stage
-  const placeholder = 
+  const placeholder = customPlaceholder || (
     stage === 'intake' ? "Describe your initiative..." :
-    stage === 'evidence' ? "Upload evidence above or ask a question..." :
+    stage === 'evidence' ? "Upload documents above or ask a question..." :
     stage === 'generate' ? "Click Generate above or ask a question..." :
-    "Ask a question about the memo...";
+    "Ask a question..."
+  );
 
   return (
     <form onSubmit={handleSubmit} className="relative">

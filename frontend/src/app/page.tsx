@@ -1,104 +1,145 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, ArrowRight, MessageSquare, FileText, Library } from 'lucide-react';
-import { api } from '@/lib/api';
+import { Plus, FolderOpen, Loader2 } from 'lucide-react';
+import { api, Initiative } from '@/lib/api';
+import { ProjectCard } from '@/components/projects';
 
 export default function HomePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [projects, setProjects] = useState<Initiative[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleNewInitiative = async () => {
-    setLoading(true);
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
     try {
-      const initiative = await api.createInitiative();
-      router.push(`/initiatives/${initiative.id}`);
-    } catch (error) {
-      console.error('Failed to create initiative:', error);
+      const data = await api.listInitiatives();
+      setProjects(data);
+    } catch (err) {
+      setError('Failed to load projects');
+      console.error('Failed to load projects:', err);
+    } finally {
       setLoading(false);
     }
   };
 
+  const handleNewProject = async () => {
+    setCreating(true);
+    try {
+      const initiative = await api.createInitiative();
+      router.push(`/initiatives/${initiative.id}`);
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this project? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await api.deleteInitiative(id);
+      setProjects(projects.filter(p => p.id !== id));
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+    }
+  };
+
   return (
-    <main className="flex min-h-full flex-col items-center justify-center p-8 bg-white">
-      <div className="max-w-2xl mx-auto text-center">
-        {/* Logo/Title - Clean enterprise style */}
-        <div className="mb-10">
-          <h1 className="text-4xl font-display font-semibold text-text-primary mb-2 tracking-tight">
-            Wisterion
-          </h1>
-          <p className="text-base text-text-secondary font-medium">
-            Decision Packet Studio
-          </p>
-        </div>
-
-        {/* Description */}
-        <p className="text-text-secondary mb-10 max-w-lg mx-auto leading-relaxed">
-          Generate investment memos grounded in evidence through conversational AI. 
-          Tell us about your initiative, upload supporting documents, and receive 
-          a structured recommendation with citations.
-        </p>
-
-        {/* CTA Button - Enterprise accent */}
+    <main className="min-h-full bg-white">
+      {/* Header */}
+      <header className="px-6 py-4 flex items-center justify-between">
+        <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
+          Wisterion
+        </h1>
         <button
-          onClick={handleNewInitiative}
-          disabled={loading}
-          className="btn-primary text-base px-8 py-3"
+          onClick={handleNewProject}
+          disabled={creating}
+          className="btn-primary text-sm"
         >
-          {loading ? (
+          {creating ? (
             <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
               Creating...
             </>
           ) : (
             <>
               <Plus className="w-4 h-4" />
-              New Initiative
-              <ArrowRight className="w-4 h-4" />
+              New Project
             </>
           )}
         </button>
+      </header>
 
-        {/* Feature highlights - Clean white cards with subtle borders */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-5 text-left">
-          <div className="card p-5 hover:border-stroke-accent transition-colors duration-150">
-            <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center mb-4">
-              <MessageSquare className="w-5 h-5 text-accent" />
-            </div>
-            <h3 className="font-semibold text-text-primary mb-1.5 text-sm">Conversational Intake</h3>
-            <p className="text-sm text-text-secondary leading-relaxed">
-              Define your initiative through natural conversation, not forms.
-            </p>
-          </div>
-          
-          <div className="card p-5 hover:border-stroke-accent transition-colors duration-150">
-            <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center mb-4">
-              <FileText className="w-5 h-5 text-accent" />
-            </div>
-            <h3 className="font-semibold text-text-primary mb-1.5 text-sm">Evidence-Grounded</h3>
-            <p className="text-sm text-text-secondary leading-relaxed">
-              Upload documents and get recommendations backed by citations.
-            </p>
-          </div>
-          
-          <div className="card p-5 hover:border-stroke-accent transition-colors duration-150">
-            <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center mb-4">
-              <Library className="w-5 h-5 text-accent" />
-            </div>
-            <h3 className="font-semibold text-text-primary mb-1.5 text-sm">Case Study Library</h3>
-            <p className="text-sm text-text-secondary leading-relaxed">
-              Memos draw on a curated corpus of clean cooking case studies.
-            </p>
-          </div>
-        </div>
+      {/* Accent divider */}
+      <div className="divider-accent" />
 
-        {/* Subtle footer accent */}
-        <div className="mt-14 flex items-center justify-center gap-3">
-          <div className="w-8 h-px bg-divider"></div>
-          <span className="text-xs text-text-tertiary uppercase tracking-wider">Powered by AI</span>
-          <div className="w-8 h-px bg-divider"></div>
-        </div>
+      {/* Content */}
+      <div className="px-6 py-8">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-6 h-6 text-accent animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="text-center py-20">
+            <p className="text-text-secondary">{error}</p>
+            <button 
+              onClick={loadProjects}
+              className="btn-secondary mt-4 text-sm"
+            >
+              Try again
+            </button>
+          </div>
+        ) : projects.length === 0 ? (
+          /* Empty state */
+          <div className="flex flex-col items-center justify-center py-20 max-w-md mx-auto text-center">
+            <div className="w-16 h-16 bg-accent-wash rounded-lg flex items-center justify-center mb-6">
+              <FolderOpen className="w-8 h-8 text-accent" />
+            </div>
+            <h2 className="text-lg font-semibold text-text-primary mb-2">
+              No projects yet
+            </h2>
+            <p className="text-text-secondary text-sm mb-6">
+              Create your first project to get started with investment memos and due diligence.
+            </p>
+            <button
+              onClick={handleNewProject}
+              disabled={creating}
+              className="btn-primary"
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Create Project
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+          /* Project grid */
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {projects.map((project) => (
+              <ProjectCard 
+                key={project.id} 
+                project={project} 
+                onDelete={handleDeleteProject}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );

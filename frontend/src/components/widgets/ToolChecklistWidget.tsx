@@ -77,12 +77,13 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
       <div className="p-5 space-y-3 bg-white">
         {recommendations.map((rec) => {
           const isSelected = selectedTools.has(rec.tool.id);
+          const Icon = getIconByName(rec.tool.icon);
           
           return (
             <label
               key={rec.tool.id}
               className={`
-                flex items-start gap-4 p-4 rounded border cursor-pointer transition-colors duration-150
+                flex items-start gap-3 p-3 rounded border cursor-pointer transition-colors duration-150
                 ${isSelected 
                   ? 'border-accent bg-accent-wash/30' 
                   : 'border-stroke-subtle hover:border-accent-tint hover:bg-surface-subtle'
@@ -91,13 +92,13 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
               `}
             >
               <div className={`
-                w-6 h-6 rounded-sm border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
+                w-5 h-5 rounded-sm border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
                 ${isSelected 
                   ? 'border-accent bg-accent' 
                   : 'border-stroke-subtle'
                 }
               `}>
-                {isSelected && <Check className="w-4 h-4 text-white" />}
+                {isSelected && <Check className="w-3 h-3 text-white" />}
               </div>
               
               <input
@@ -109,19 +110,16 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
               />
               
               <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {(() => {
-                    const Icon = getIconByName(rec.tool.icon);
-                    return <Icon className="w-5 h-5 text-accent" />;
-                  })()}
-                  <span className="font-medium text-text-primary">{rec.tool.name}</span>
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <Icon className="w-4 h-4 text-accent" />
+                  <span className="font-medium text-text-primary text-sm">{rec.tool.name}</span>
                   {rec.confidence > 0.5 && (
-                    <span className="badge-accent">
+                    <span className="badge-accent text-xs">
                       Recommended
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-text-secondary mt-1 leading-relaxed">
+                <p className="text-xs text-text-secondary leading-relaxed">
                   {rec.tool.description}
                 </p>
               </div>
