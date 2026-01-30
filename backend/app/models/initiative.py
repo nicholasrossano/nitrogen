@@ -136,8 +136,18 @@ class Initiative(Base):
     
     def to_summary_dict(self) -> dict:
         """Get initiative summary for confirmation widget."""
+        # Generate a fallback title from project_description if title is missing
+        title = self.title
+        if not title and self.project_description:
+            # Extract first meaningful phrase (up to 60 chars, end at word boundary)
+            desc = self.project_description.strip()
+            if len(desc) > 60:
+                title = desc[:60].rsplit(' ', 1)[0] + "..."
+            else:
+                title = desc
+        
         return {
-            "title": self.title,
+            "title": title,
             "sector": self.sector,
             "geography": self.geography,
             "target_population": self.target_population,
