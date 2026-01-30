@@ -77,11 +77,11 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 
 ### Fonts
 - **Inter** — primary UI font
-- **Space Grotesk** — limited display/header use
+- **Urbanist** — limited display/header use
 
 ### Type scale
 - **Screen Title**: 32, Inter Semibold  
-- **Section Header**: 20–24, Space Grotesk Semibold  
+- **Section Header**: 20–24, Urbanist Semibold  
 - **Headline**: 18–20, Inter Semibold  
 - **Body**: 16, Inter  
 - **Body Small**: 14–15, Inter  
@@ -90,7 +90,7 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 
 **Rules**
 - Inter by default everywhere  
-- Space Grotesk only for select headers  
+- Urbanist only for select headers  
 - Avoid italics in dense UI  
 
 ---
@@ -135,10 +135,34 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 
 ## G) Icons & Imagery
 
-- Neutral, functional icons  
-- Text first, icons second  
+### Icons
+- **System**: Lucide React (monochromatic, 16-24px stroke)
+- **Color**: Inherit from context or use accent colors
+- **Usage**: Functional only — enhance meaning, don't decorate
+- **No emojis**: Never use emoji in production UI
+
+**Icon color patterns**
+- Default state: `text-text-secondary` (neutral)
+- Active/selected: `text-accent` (primary accent)
+- Status indicators: `text-indicator-*` (semantic meaning)
+
+**Do**
+```tsx
+<FileText className="w-5 h-5 text-accent" />
+<CheckCircle className="w-4 h-4 text-indicator-green" />
+```
+
+**Don't**
+```tsx
+<span>📄</span> // No emojis
+<Icon className="w-12 h-12" /> // Too large
+<Icon color="#FF5733" /> // Custom colors outside system
+```
+
+### Imagery
 - Informational imagery only  
-- Match image corners to container  
+- Match image corners to container (8px standard)
+- No decorative illustrations  
 
 ---
 
