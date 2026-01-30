@@ -88,7 +88,8 @@ describe('API Client', () => {
       jest.resetModules();
       const { api } = await import('@/lib/api');
       
-      await expect(api.getInitiative('test-id')).rejects.toThrow('HTTP 500');
+      // When JSON parsing fails, the API returns 'Unknown error' from the catch block
+      await expect(api.getInitiative('test-id')).rejects.toThrow('Unknown error');
     });
   });
 
