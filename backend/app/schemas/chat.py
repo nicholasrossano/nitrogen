@@ -55,6 +55,7 @@ class ChatResponse(BaseModel):
     extracted_fields: Optional[ExtractedFields] = None
     stage_status: StageStatus
     show_confirmation: bool = False
+    trigger_tools_next: bool = False  # Signal frontend to immediately request tool recommendations
 
 
 class ChatHistoryResponse(BaseModel):

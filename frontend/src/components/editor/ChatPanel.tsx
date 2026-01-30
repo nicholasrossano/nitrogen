@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 
 // Interactive widgets that should appear in chat
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
+import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
 import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
@@ -30,6 +31,9 @@ const CHAT_WIDGET_TYPES = [
   'deliverables_overview',
 ];
 
+// Widget that should render above the input bar
+const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
+
 export function ChatPanel({
   messages,
   sending,
@@ -43,6 +47,10 @@ export function ChatPanel({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Check if the latest message has a document_request widget
+  const latestMessage = messages[messages.length - 1];
+  const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
 
   return (
     <div className={`flex flex-col h-full ${fullWidth ? '' : 'border-r border-divider'}`}>
@@ -59,6 +67,15 @@ export function ChatPanel({
         
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Document Request Widget (above input) */}
+      {showDocumentRequest && (
+        <DocumentRequestWidget
+          initiativeId={initiativeId}
+          isActive={true}
+          data={latestMessage.widget_data}
+        />
+      )}
 
       {/* Input */}
       <div className="flex-shrink-0 p-4 border-t border-divider">
@@ -86,6 +103,9 @@ function ChatMessageItem({
     message.widget_data && 
     CHAT_WIDGET_TYPES.includes(message.widget_type);
 
+  // Show message but not widget for document_request (widget shown above input instead)
+  const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex flex-col ${isUser ? 'max-w-[90%] items-end' : 'w-full items-start'}`}>
@@ -107,8 +127,8 @@ function ChatMessageItem({
           )}
         </div>
 
-        {/* Interactive widgets render in chat */}
-        {shouldShowWidget && (
+        {/* Interactive widgets render in chat (but not document_request) */}
+        {shouldShowWidget && !isDocumentRequest && (
           <div className="mt-3 w-full">
             <ChatWidget 
               type={message.widget_type!}
