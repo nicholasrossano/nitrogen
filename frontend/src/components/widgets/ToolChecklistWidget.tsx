@@ -90,7 +90,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
       </div>
 
       {/* Tool list */}
-      <div className="p-5 space-y-3 bg-white">
+      <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-3 bg-white">
         {recommendations.map((rec, index) => {
           // Defensive: skip invalid recommendations
           if (!rec?.tool?.id) {
