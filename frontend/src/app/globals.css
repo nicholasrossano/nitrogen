@@ -163,6 +163,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
+  transition: box-shadow 300ms ease-out, transform 300ms ease-out;
 }
 
 .btn-primary::before {
@@ -180,12 +181,17 @@ textarea {
 }
 
 .btn-primary:hover {
-  @apply text-white;
+  @apply text-white shadow-md;
+  transform: translateY(-2px);
 }
 
 .btn-primary:active::before {
   opacity: 1;
   background-color: var(--color-accent-anchor);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .btn-secondary {
@@ -195,6 +201,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
+  transition: box-shadow 300ms ease-out, transform 300ms ease-out;
 }
 
 .btn-secondary::before {
@@ -210,6 +217,15 @@ textarea {
 .btn-secondary:hover::before,
 .btn-secondary:active::before {
   opacity: 1;
+}
+
+.btn-secondary:hover {
+  @apply shadow-md;
+  transform: translateY(-2px);
+}
+
+.btn-secondary:active {
+  transform: translateY(0);
 }
 
 .btn-ghost {
