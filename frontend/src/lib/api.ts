@@ -14,6 +14,7 @@ export interface Initiative {
   stage: string;
   stage_1_complete: boolean;
   evidence_ready: boolean;
+  archived: boolean;
   created_at: string;
   updated_at: string;
   // New tool-based fields
@@ -154,8 +155,8 @@ async function fetchApi<T>(
 
 export const api = {
   // Initiatives
-  listInitiatives: (limit: number = 20, offset: number = 0) =>
-    fetchApi<Initiative[]>(`/api/v1/initiatives?limit=${limit}&offset=${offset}`),
+  listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false) =>
+    fetchApi<Initiative[]>(`/api/v1/initiatives?limit=${limit}&offset=${offset}&archived=${archived}`),
 
   createInitiative: (title?: string) =>
     fetchApi<Initiative>('/api/v1/initiatives', {
@@ -183,6 +184,11 @@ export const api = {
       throw new Error(error.detail);
     }
   },
+
+  restoreInitiative: (id: string) =>
+    fetchApi<Initiative>(`/api/v1/initiatives/${id}/restore`, {
+      method: 'POST',
+    }),
 
   confirmInitiative: (id: string) =>
     fetchApi<{ success: boolean; stage: string; message: string }>(
