@@ -106,7 +106,7 @@ class MemoTool(BaseTool):
         return ToolDefinition(
             id="memo",
             name="memo",
-            description="Generate a structured investment recommendation with executive summary, rationale, risks, and evidence-backed citations.",
+            description="Structured memo with executive summary, rationale, risks, and evidence-backed citations",
             icon="FileText",
             output_type="memo",
             category="documentation",
