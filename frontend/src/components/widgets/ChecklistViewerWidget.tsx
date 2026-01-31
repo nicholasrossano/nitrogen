@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { 
   ChevronDown, 
-  ChevronUp, 
   ChevronRight, 
   AlertTriangle, 
   CheckCircle, 
@@ -68,7 +67,7 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
     <div className="border border-stroke-subtle rounded overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-surface-header hover:bg-surface-header/80 transition-colors text-left"
+        className="expandable-header bg-surface-header"
       >
         <div>
           <h4 className="font-semibold text-text-primary">{category.name}</h4>
@@ -111,7 +110,6 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
 
 export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: ChecklistViewerWidgetProps) {
   const content = data.content;
-  const [expanded, setExpanded] = useState(true);
   const [exporting, setExporting] = useState(false);
   
   const handleExport = async () => {
@@ -136,26 +134,12 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-text-primary">{content.title}</h3>
-          <p className="text-sm text-text-secondary">{content.date}</p>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="p-2 hover:bg-white rounded transition-colors duration-150"
-        >
-          {expanded ? (
-            <ChevronUp className="w-5 h-5 text-text-secondary" />
-          ) : (
-            <ChevronDown className="w-5 h-5 text-text-secondary" />
-          )}
-        </button>
+      <div className="px-5 py-4 bg-surface-header border-b border-divider">
+        <h3 className="font-semibold text-text-primary">{content.title}</h3>
+        <p className="text-sm text-text-secondary">{content.date}</p>
       </div>
 
-      {expanded && (
-        <>
-          {/* Content */}
+      {/* Content */}
           <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto bg-white">
             {/* Priority Items */}
             {content.priority_items && content.priority_items.length > 0 && (
@@ -221,8 +205,6 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
               )}
             </button>
           </div>
-        </>
-      )}
     </div>
   );
 }

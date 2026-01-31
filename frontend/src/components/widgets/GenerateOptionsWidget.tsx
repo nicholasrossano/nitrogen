@@ -47,7 +47,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
         {/* Include corpus toggle - only when active */}
         {isActive && (
           <>
-            <label className="flex items-start gap-3 p-4 border border-stroke-subtle rounded cursor-pointer hover:bg-surface-subtle transition-colors duration-150">
+            <label className="hover-fade flex items-start gap-3 p-4 border border-stroke-subtle rounded cursor-pointer">
               <input
                 type="checkbox"
                 checked={includeCorpus}
@@ -70,7 +70,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="w-full px-6 py-3 bg-accent text-white rounded font-medium hover:bg-accent-anchor transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="btn-primary w-full px-6 py-3 rounded-none flex items-center justify-center gap-2"
             >
               {generating ? (
                 <>

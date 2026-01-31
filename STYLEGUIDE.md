@@ -182,11 +182,65 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 
 ---
 
-## H) Motion
+## H) Motion & Transitions
 
-- Short, fast transitions  
-- No expressive easing  
-- No playful or elastic motion  
+### Timing
+- **Default duration**: 200ms for hover states
+- **Easing**: `ease-in-out` for smooth fade effects
+- No expressive or elastic easing
+
+### Opacity Fade Pattern (Preferred)
+For button and interactive element hover states, use **opacity-based transitions** via pseudo-elements. This creates a smooth, professional fade-in/fade-out effect rather than an abrupt color swap.
+
+**Implementation:**
+```css
+.element {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.element::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--target-color);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.element:hover::before {
+  opacity: 1;
+}
+```
+
+**Available CSS classes:**
+
+*Buttons:*
+- `.btn-primary` — Accent border/text, fills with accent on hover
+- `.btn-secondary` — Subtle border, fills with surface-subtle on hover
+- `.btn-ghost` — No border, fills with surface-subtle on hover
+- `.btn-filled` — For filled buttons that darken on hover (e.g., send button)
+- `.upload-btn` — Dashed border upload/action button
+
+*Interactive Elements:*
+- `.selectable-item` — For checkbox/toggle style items (add `.selected` when active)
+- `.checkbox-indicator` — Checkbox square with fade (add `.checked` when active)
+- `.pill-btn` — Pill/tag buttons (add `.selected` when active)
+- `.icon-btn` — Icon-only buttons (variants: `.icon-btn-danger`, `.icon-btn-success`)
+- `.expandable-header` — Collapsible section headers
+- `.card-interactive` — Clickable cards with hover effect
+
+*Generic Utilities:*
+- `.hover-fade` — Generic utility for surface-subtle hover fade
+- `.hover-fade-accent` — Generic utility for accent-wash hover fade
+
+**Rules**
+- Use opacity fade for all buttons (primary, secondary, ghost)
+- Use opacity fade for significant interactive elements
+- Simple icon buttons can use standard `transition-colors` for subtle states
+- Keep transitions short and purposeful — no decorative motion
 
 ---
 

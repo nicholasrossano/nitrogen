@@ -5,8 +5,6 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { 
   Download, 
   Loader2, 
-  ChevronDown, 
-  ChevronUp,
   CheckCircle,
   AlertCircle,
   PauseCircle,
@@ -22,7 +20,6 @@ interface MemoViewerWidgetProps {
 }
 
 export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoViewerWidgetProps) {
-  const [expanded, setExpanded] = useState(true);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const { exportMemo, loading } = useInitiativeStore();
 
@@ -96,26 +93,12 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-text-primary">{content.title}</h3>
-          <p className="text-sm text-text-secondary">{content.date}</p>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="p-2 hover:bg-white rounded transition-colors duration-150"
-        >
-          {expanded ? (
-            <ChevronUp className="w-5 h-5 text-text-secondary" />
-          ) : (
-            <ChevronDown className="w-5 h-5 text-text-secondary" />
-          )}
-        </button>
+      <div className="px-5 py-4 bg-surface-header border-b border-divider">
+        <h3 className="font-semibold text-text-primary">{content.title}</h3>
+        <p className="text-sm text-text-secondary">{content.date}</p>
       </div>
 
-      {expanded && (
-        <>
-          {/* Content */}
+      {/* Content */}
           <div className="p-6 space-y-6 prose-memo max-h-[500px] overflow-y-auto bg-white">
             {/* Executive Summary */}
             <section>
@@ -162,12 +145,12 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
                     <div 
                       key={citation.number}
                       className={`
-                        p-4 rounded border text-sm cursor-pointer transition-colors duration-150
+                        selectable-item p-4 rounded text-sm
                         ${citation.source_type === 'corpus' 
-                          ? 'bg-accent-wash/30 border-accent-tint hover:bg-accent-wash/50' 
-                          : 'bg-surface-subtle border-stroke-subtle hover:bg-surface-subtle/80'
+                          ? 'border-accent-tint' 
+                          : 'border-stroke-subtle'
                         }
-                        ${selectedCitation?.number === citation.number ? 'ring-2 ring-accent ring-offset-2 ring-offset-white' : ''}
+                        ${selectedCitation?.number === citation.number ? 'selected ring-2 ring-accent ring-offset-2 ring-offset-white' : ''}
                       `}
                       onClick={() => setSelectedCitation(
                         selectedCitation?.number === citation.number ? null : citation
@@ -223,8 +206,6 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
               )}
             </button>
           </div>
-        </>
-      )}
     </div>
   );
 }

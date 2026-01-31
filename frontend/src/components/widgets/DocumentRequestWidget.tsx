@@ -77,7 +77,7 @@ export function DocumentRequestWidget({
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 border border-dashed border-stroke-subtle rounded hover:border-accent hover:bg-accent-wash/30 transition-colors text-sm text-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="upload-btn"
           >
             {loading ? (
               <>
@@ -107,7 +107,7 @@ export function DocumentRequestWidget({
               <span className="text-sm text-text-tertiary">or</span>
               <button
                 onClick={handleNoDocuments}
-                className="flex items-center gap-2 px-3 py-2 border border-stroke-subtle rounded hover:border-accent hover:bg-accent-wash/30 transition-colors text-sm text-text-secondary"
+                className="upload-btn border-solid"
               >
                 I don't have any documents
               </button>
