@@ -16,15 +16,18 @@ interface ChatMessageProps {
   message: ChatMessageType;
   initiativeId: string;
   isLatest: boolean;
+  animate?: boolean;
   className?: string;
 }
 
-export function ChatMessage({ message, initiativeId, isLatest, className = '' }: ChatMessageProps) {
+export function ChatMessage({ message, initiativeId, isLatest, animate = false, className = '' }: ChatMessageProps) {
   const isUser = message.role === 'user';
+
+  const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
 
   return (
     <div
-      className={`flex message-enter ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
+      className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
     >
       {/* Message content */}
       <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
@@ -60,7 +63,7 @@ export function ChatMessage({ message, initiativeId, isLatest, className = '' }:
 
         {/* Widget - always show, pass isLatest to control buttons */}
         {message.widget_type && message.widget_data && (
-          <div className="mt-2 w-full">
+          <div className={`mt-2 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
             <MessageWidget 
               type={message.widget_type}
               data={message.widget_data}
