@@ -106,7 +106,7 @@ class DueDiligenceChecklistTool(BaseTool):
         return ToolDefinition(
             id="due_diligence_checklist",
             name="Due Diligence Checklist",
-            description="Generate a comprehensive due diligence checklist covering technical, financial, operational, and regulatory aspects of the project.",
+            description="Checklist covering technical, financial, operational, and regulatory aspects of the project",
             icon="CheckSquare",
             output_type="checklist",
             category="assessment",
