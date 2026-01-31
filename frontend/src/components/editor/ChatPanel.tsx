@@ -49,6 +49,8 @@ export function ChatPanel({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
   const prevLastMessageIdRef = useRef<string | null>(null);
+  const lastSeenCountRef = useRef<number>(0);
+  const isInitialLoadRef = useRef<boolean>(true);
 
   // Ensure messages is always an array
   const safeMessages = messages || [];
@@ -97,6 +99,14 @@ export function ChatPanel({
     prevLastMessageIdRef.current = lastMessageId;
   }, [safeMessages]);
 
+  // Track which messages to animate (only newly sent/received, not on initial load)
+  useEffect(() => {
+    if (safeMessages.length > 0 && isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+    }
+    lastSeenCountRef.current = safeMessages.length;
+  }, [safeMessages.length]);
+
   // Check if the latest message has a document_request widget
   const latestMessage = safeMessages[safeMessages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
@@ -117,6 +127,7 @@ export function ChatPanel({
                 message={message}
                 initiativeId={initiativeId}
                 isLatest={index === safeMessages.length - 1}
+                animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
               />
             </ErrorBoundary>
           ))
@@ -152,11 +163,13 @@ export function ChatPanel({
 function ChatMessageItem({ 
   message,
   initiativeId,
-  isLatest 
+  isLatest,
+  animate = false
 }: { 
   message: ChatMessage;
   initiativeId: string;
   isLatest: boolean;
+  animate?: boolean;
 }) {
   // Defensive: ensure message is valid
   if (!message) {
@@ -172,8 +185,10 @@ function ChatMessageItem({
   // Show message but not widget for document_request (widget shown above input instead)
   const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
 
+  const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
+
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex flex-col ${isUser ? 'max-w-[90%] items-end' : 'w-full items-start'}`}>
         <div
           className={`
@@ -195,7 +210,7 @@ function ChatMessageItem({
 
         {/* Interactive widgets render in chat (but not document_request) */}
         {shouldShowWidget && !isDocumentRequest && (
-          <div className="mt-3 w-full">
+          <div className={`mt-3 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
             <ChatWidget 
               type={message.widget_type!}
               data={message.widget_data!}
