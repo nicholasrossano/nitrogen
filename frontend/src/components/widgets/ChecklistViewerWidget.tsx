@@ -11,6 +11,7 @@ import {
   Loader2 
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useInitiativeStore } from '@/stores/initiativeStore';
 
 interface ChecklistItem {
   item: string;
@@ -108,9 +109,22 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
   );
 }
 
+function formatHeaderDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: ChecklistViewerWidgetProps) {
+  const initiative = useInitiativeStore((s) => s.initiative);
   const content = data.content;
   const [exporting, setExporting] = useState(false);
+  const projectName =
+    initiative?.title ??
+    (content.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
+    'Project';
   
   const handleExport = async () => {
     setExporting(true);
@@ -134,9 +148,12 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">{content.title}</h3>
-        <p className="text-sm text-text-secondary">{content.date}</p>
+      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-text-primary">Due Diligence Checklist</h3>
+          <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
+        </div>
+        <p className="text-sm text-text-secondary whitespace-nowrap">{formatHeaderDate(content.date)}</p>
       </div>
 
       {/* Content */}
