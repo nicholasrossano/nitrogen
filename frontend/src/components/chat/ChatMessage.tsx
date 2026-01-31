@@ -10,6 +10,7 @@ import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWidget';
+import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -98,6 +99,8 @@ function MessageWidget({
       return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'deliverables_list':
       return <DeliverablesListWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'alignment':
+      return <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:
       return null;
   }

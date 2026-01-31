@@ -62,3 +62,56 @@ class ChatHistoryResponse(BaseModel):
     """Response for chat history"""
     messages: list[ChatMessageResponse]
     stage_status: StageStatus
+
+
+# Alignment schemas
+class AlignmentSectionSchema(BaseModel):
+    """A section within a tool alignment"""
+    id: str
+    title: str
+    description: str
+    key_points: list[str] = Field(default_factory=list)
+    include: bool = True
+    order: int = 0
+
+
+class AlignmentParameterSchema(BaseModel):
+    """A configurable parameter for tool alignment"""
+    name: str
+    label: str
+    description: str
+    param_type: str  # "text", "number", "select", "boolean"
+    value: Any
+    options: Optional[list[str]] = None
+    unit: Optional[str] = None
+
+
+class ToolAlignmentSchema(BaseModel):
+    """Alignment configuration for a tool"""
+    tool_id: str
+    title: str
+    description: str
+    sections: list[AlignmentSectionSchema] = Field(default_factory=list)
+    parameters: list[AlignmentParameterSchema] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    confirmed: bool = False
+    feedback: Optional[str] = None
+
+
+class AlignmentFeedbackRequest(BaseModel):
+    """Request to provide feedback on an alignment"""
+    tool_id: str
+    feedback: str = Field(..., min_length=1, max_length=5000)
+
+
+class AlignmentConfirmRequest(BaseModel):
+    """Request to confirm an alignment, optionally with modifications"""
+    tool_id: str
+    sections: Optional[list[AlignmentSectionSchema]] = None  # Optional modifications
+    parameters: Optional[list[AlignmentParameterSchema]] = None
+
+
+class AlignmentResponse(BaseModel):
+    """Response containing alignment data"""
+    alignment: ToolAlignmentSchema
+    message: str

@@ -7,3 +7,4 @@ export { ToolChecklistWidget } from './ToolChecklistWidget';
 export { DeliverablesOverviewWidget } from './DeliverablesOverviewWidget';
 export { ChecklistViewerWidget } from './ChecklistViewerWidget';
 export { DeliverablesListWidget } from './DeliverablesListWidget';
+export { AlignmentWidget } from './AlignmentWidget';

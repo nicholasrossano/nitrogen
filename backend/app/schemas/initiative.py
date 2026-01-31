@@ -55,6 +55,7 @@ class InitiativeResponse(BaseModel):
     project_type: Optional[str] = None
     selected_tools: Optional[list[str]] = None
     tool_inputs: Optional[dict] = None
+    tool_alignments: Optional[dict] = None
     deliverables: Optional[dict] = None
     
     class Config:

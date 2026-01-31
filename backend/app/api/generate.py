@@ -11,6 +11,7 @@ from app.models.chat import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
 from app.services.memo_generator import MemoGeneratorService
 from app.tools import get_tool_registry
+from app.tools.base import ToolAlignment
 
 router = APIRouter()
 
@@ -184,6 +185,9 @@ async def generate_all_deliverables(
     if initiative.timeline:
         inputs.setdefault("timeline", initiative.timeline)
     
+    # Get tool alignments
+    tool_alignments = initiative.tool_alignments or {}
+    
     # Generate each deliverable
     deliverables = {}
     deliverable_widgets = []
@@ -194,11 +198,19 @@ async def generate_all_deliverables(
             continue
         
         try:
+            # Get alignment for this tool if available
+            alignment = None
+            if tool_id in tool_alignments:
+                alignment_data = tool_alignments[tool_id]
+                if alignment_data.get("confirmed"):
+                    alignment = ToolAlignment.from_dict(alignment_data)
+            
             output = await tool.execute(
                 db=db,
                 initiative_id=initiative_id,
                 inputs=inputs,
                 include_corpus=True,
+                alignment=alignment,
             )
             
             deliverables[tool_id] = {

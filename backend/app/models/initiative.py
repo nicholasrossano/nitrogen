@@ -45,6 +45,7 @@ class Initiative(Base):
     # Tool-based workflow
     selected_tools: Mapped[list[str] | None] = mapped_column(ARRAY(Text))  # Tool IDs
     tool_inputs: Mapped[dict | None] = mapped_column(JSONB)  # Tool-specific inputs
+    tool_alignments: Mapped[dict | None] = mapped_column(JSONB)  # Tool alignments (outline, params) keyed by tool_id
     deliverables: Mapped[dict | None] = mapped_column(JSONB)  # Generated output references
     
     # Stage tracking
@@ -122,6 +123,55 @@ class Initiative(Base):
             self.has_selected_tools() and
             len(self.get_missing_tool_inputs()) == 0
         )
+    
+    def get_alignment_for_tool(self, tool_id: str) -> dict | None:
+        """Get alignment configuration for a specific tool."""
+        if not self.tool_alignments:
+            return None
+        return self.tool_alignments.get(tool_id)
+    
+    def set_alignment_for_tool(self, tool_id: str, alignment: dict):
+        """Set alignment configuration for a specific tool."""
+        if self.tool_alignments is None:
+            self.tool_alignments = {}
+        self.tool_alignments[tool_id] = alignment
+    
+    def has_confirmed_alignments(self) -> bool:
+        """Check if all selected tools have confirmed alignments."""
+        if not self.selected_tools:
+            return True  # No tools selected
+        if not self.tool_alignments:
+            return False
+        
+        from app.tools import get_tool_registry
+        registry = get_tool_registry()
+        
+        for tool_id in self.selected_tools:
+            tool = registry.get_tool(tool_id)
+            if tool and tool.requires_alignment:
+                alignment = self.tool_alignments.get(tool_id)
+                if not alignment or not alignment.get("confirmed"):
+                    return False
+        return True
+    
+    def get_pending_alignment_tools(self) -> list[str]:
+        """Get list of tool IDs that require alignment but haven't been confirmed."""
+        if not self.selected_tools:
+            return []
+        
+        from app.tools import get_tool_registry
+        registry = get_tool_registry()
+        
+        pending = []
+        alignments = self.tool_alignments or {}
+        
+        for tool_id in self.selected_tools:
+            tool = registry.get_tool(tool_id)
+            if tool and tool.requires_alignment:
+                alignment = alignments.get(tool_id)
+                if not alignment or not alignment.get("confirmed"):
+                    pending.append(tool_id)
+        return pending
     
     # Legacy methods (for backward compatibility)
     def is_intake_complete(self) -> bool:

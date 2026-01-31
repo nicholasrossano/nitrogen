@@ -31,25 +31,41 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
   // Defensive: ensure recommendations is an array
   const recommendations = data?.recommendations || [];
   
-  const [selectedTools, setSelectedTools] = useState<Set<string>>(() => 
-    new Set(recommendations.filter(r => r.recommended).map(r => r.tool.id))
-  );
+  // Debug logging
+  console.log('ToolChecklistWidget render:', { 
+    recommendationsCount: recommendations.length,
+    isActive,
+    dataKeys: Object.keys(data || {})
+  });
+  
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(() => {
+    const initial = new Set(recommendations.filter(r => r?.recommended).map(r => r?.tool?.id).filter(Boolean));
+    console.log('ToolChecklistWidget: initial selectedTools', Array.from(initial));
+    return initial;
+  });
   const [loading, setLoading] = useState(false);
   const { selectTools } = useInitiativeStore();
   
   // Don't render if no recommendations
   if (!recommendations.length) {
+    console.log('ToolChecklistWidget: no recommendations, showing fallback');
     return <div className="text-text-tertiary text-sm">No tools available</div>;
   }
 
   const toggleTool = (toolId: string) => {
-    const newSelected = new Set(selectedTools);
-    if (newSelected.has(toolId)) {
-      newSelected.delete(toolId);
-    } else {
-      newSelected.add(toolId);
+    console.log('ToolChecklistWidget toggleTool:', toolId);
+    try {
+      const newSelected = new Set(selectedTools);
+      if (newSelected.has(toolId)) {
+        newSelected.delete(toolId);
+      } else {
+        newSelected.add(toolId);
+      }
+      console.log('ToolChecklistWidget: new selection', Array.from(newSelected));
+      setSelectedTools(newSelected);
+    } catch (error) {
+      console.error('ToolChecklistWidget toggleTool error:', error);
     }
-    setSelectedTools(newSelected);
   };
 
   const handleConfirm = async () => {
@@ -75,13 +91,20 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
 
       {/* Tool list */}
       <div className="p-5 space-y-3 bg-white">
-        {recommendations.map((rec) => {
-          const isSelected = selectedTools.has(rec.tool.id);
-          const Icon = getIconByName(rec.tool.icon);
+        {recommendations.map((rec, index) => {
+          // Defensive: skip invalid recommendations
+          if (!rec?.tool?.id) {
+            console.warn('ToolChecklistWidget: skipping invalid recommendation at index', index, rec);
+            return null;
+          }
+          
+          const toolId = rec.tool.id;
+          const isSelected = selectedTools.has(toolId);
+          const Icon = getIconByName(rec.tool.icon || 'FileText');
           
           return (
             <label
-              key={rec.tool.id}
+              key={toolId}
               className={`
                 flex items-start gap-3 p-3 border cursor-pointer transition-colors duration-150
                 ${isSelected 
@@ -104,7 +127,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
               <input
                 type="checkbox"
                 checked={isSelected}
-                onChange={() => toggleTool(rec.tool.id)}
+                onChange={() => toggleTool(toolId)}
                 className="sr-only"
                 disabled={!isActive}
               />
@@ -112,15 +135,15 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <Icon className="w-4 h-4 text-accent" />
-                  <span className="font-medium text-text-primary text-sm">{rec.tool.name}</span>
-                  {rec.confidence > 0.5 && (
+                  <span className="font-medium text-text-primary text-sm">{rec.tool.name || 'Unknown Tool'}</span>
+                  {(rec.confidence || 0) > 0.5 && (
                     <span className="badge-accent text-xs">
                       Recommended
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-text-secondary leading-relaxed">
-                  {rec.tool.description}
+                  {rec.tool.description || 'No description available'}
                 </p>
               </div>
             </label>

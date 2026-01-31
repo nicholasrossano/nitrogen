@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Sparkles, Loader2, FileText, Target, MapPin, Globe } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Target, MapPin, Globe, Plus } from 'lucide-react';
 import { getIconByName } from '@/lib/icons';
 
 interface ToolInfo {
@@ -44,7 +44,8 @@ interface DeliverablesOverviewWidgetProps {
 
 export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true }: DeliverablesOverviewWidgetProps) {
   const [loading, setLoading] = useState(false);
-  const { generateAllDeliverables } = useInitiativeStore();
+  const [modifying, setModifying] = useState(false);
+  const { generateAllDeliverables, sendMessage } = useInitiativeStore();
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -55,8 +56,23 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
     }
   };
 
-  const summary = data.project_summary;
-  const sdg = data.tool_inputs?.sdg || summary.tool_inputs?.sdg;
+  const handleModifyTools = async () => {
+    console.log('handleModifyTools: starting');
+    setModifying(true);
+    try {
+      await sendMessage(initiativeId, "I'd like to change my tool selection.");
+      console.log('handleModifyTools: completed');
+    } catch (error) {
+      console.error('handleModifyTools: error', error);
+    } finally {
+      setModifying(false);
+    }
+  };
+
+  // Defensive checks
+  const summary = data?.project_summary || {};
+  const selectedTools = data?.selected_tools || [];
+  const sdg = data?.tool_inputs?.sdg || summary?.tool_inputs?.sdg;
 
   return (
     <div className="card-elevated overflow-hidden">
@@ -119,8 +135,8 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
           What We'll Generate
         </h4>
         
-        <div className="flex flex-wrap gap-2">
-          {data.selected_tools.map((tool) => {
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedTools.map((tool) => {
             const Icon = getIconByName(tool.icon);
             return (
               <div
@@ -132,6 +148,20 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
               </div>
             );
           })}
+          {isActive && (
+            <button
+              onClick={handleModifyTools}
+              disabled={loading || modifying}
+              className="w-9 h-9 flex items-center justify-center border border-dashed border-stroke-subtle rounded hover:border-accent hover:bg-accent-wash/30 transition-colors text-text-tertiary disabled:opacity-50"
+              title="Modify tool selection"
+            >
+              {modifying ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+            </button>
+          )}
         </div>
       </div>
 
