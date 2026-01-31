@@ -10,13 +10,88 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.tools.base import BaseTool, ToolDefinition, ToolInput, ToolOutput
+from app.tools.base import (
+    BaseTool, 
+    ToolDefinition, 
+    ToolInput, 
+    ToolOutput, 
+    ToolAlignment, 
+    AlignmentSection,
+    AlignmentParameter,
+)
 from app.models.initiative import Initiative
 from app.models.memo import MemoVersion, Citation
 from app.services.rag import RAGService
 from app.services.docx_exporter import DocxExporterService
 
 settings = get_settings()
+
+# Default memo sections with their descriptions
+DEFAULT_MEMO_SECTIONS = [
+    {
+        "id": "executive_summary",
+        "title": "Executive Summary",
+        "description": "2-3 paragraph overview of the project and key recommendation",
+        "default_points": [
+            "Project overview and context",
+            "Investment ask and use of funds",
+            "Key value proposition",
+            "Summary recommendation",
+        ],
+    },
+    {
+        "id": "recommendation",
+        "title": "Recommendation",
+        "description": "Clear recommendation (proceed, hold, or reject) with confidence level",
+        "default_points": [
+            "Decision: proceed / hold / reject",
+            "Confidence level and key factors",
+            "Conditions or prerequisites",
+        ],
+    },
+    {
+        "id": "recommendation_rationale",
+        "title": "Rationale",
+        "description": "Detailed justification for the recommendation with evidence",
+        "default_points": [
+            "Strategic alignment",
+            "Track record and team capacity",
+            "Market opportunity",
+            "Path to impact and sustainability",
+        ],
+    },
+    {
+        "id": "evidence_summary",
+        "title": "Evidence Summary",
+        "description": "Summary of supporting evidence and comparable case studies",
+        "default_points": [
+            "Key findings from submitted materials",
+            "Relevant case study insights",
+            "Data quality and gaps",
+        ],
+    },
+    {
+        "id": "risks_and_assumptions",
+        "title": "Risks & Assumptions",
+        "description": "Critical risks and key assumptions underlying the analysis",
+        "default_points": [
+            "Technical risks",
+            "Financial/market risks",
+            "Operational risks",
+            "Key assumptions to validate",
+        ],
+    },
+    {
+        "id": "open_questions",
+        "title": "Open Questions",
+        "description": "Outstanding questions that need to be addressed",
+        "default_points": [
+            "Information gaps",
+            "Due diligence items",
+            "Clarifications needed from applicant",
+        ],
+    },
+]
 
 
 class InvestmentMemoTool(BaseTool):
@@ -37,6 +112,11 @@ class InvestmentMemoTool(BaseTool):
             category="documentation",
             keywords=["investment", "memo", "recommendation", "funding", "grant", "decision"],
         )
+    
+    @property
+    def requires_alignment(self) -> bool:
+        """Investment memo requires alignment to confirm outline before generation."""
+        return True
     
     @property
     def required_inputs(self) -> list[ToolInput]:
@@ -97,14 +177,350 @@ class InvestmentMemoTool(BaseTool):
             ),
         ]
     
+    async def generate_alignment(
+        self,
+        db: AsyncSession,
+        initiative_id: UUID,
+        inputs: dict[str, Any],
+    ) -> ToolAlignment:
+        """
+        Generate a proposed memo outline based on project context.
+        
+        Uses LLM to create a context-aware outline with intelligent defaults.
+        """
+        # Get initiative for context
+        result = await db.execute(
+            select(Initiative).where(Initiative.id == initiative_id)
+        )
+        initiative = result.scalar_one_or_none()
+        
+        # Build inputs with smart defaults from initiative
+        if initiative:
+            inputs.setdefault("project_title", initiative.title or "Untitled Project")
+            inputs.setdefault("geography", initiative.geography or "Not specified")
+            inputs.setdefault("target_beneficiaries", initiative.target_population or "Target communities")
+            inputs.setdefault("project_goal", initiative.goal or initiative.project_description or "Project objectives")
+        
+        project_title = inputs.get("project_title", "Untitled Project")
+        
+        # Build project summary for LLM
+        project_summary = f"""
+Project: {project_title}
+Type: {initiative.project_type if initiative else 'development'}
+Geography: {inputs.get('geography', 'Not specified')}
+Target Beneficiaries: {inputs.get('target_beneficiaries', 'Not specified')}
+Goal: {inputs.get('project_goal', 'Not specified')}
+Budget: {inputs.get('budget_range', 'Not specified')}
+Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
+"""
+        
+        # Use LLM to generate context-aware outline
+        try:
+            outline_data = await self._generate_outline(project_summary)
+        except Exception as e:
+            # Fall back to default outline if LLM fails
+            import logging
+            logging.error(f"Failed to generate memo outline: {e}")
+            outline_data = self._get_default_outline()
+        
+        # Build alignment sections from outline
+        sections = []
+        for i, section_data in enumerate(outline_data.get("sections", [])):
+            sections.append(AlignmentSection(
+                id=section_data.get("id", f"section_{i}"),
+                title=section_data.get("title", f"Section {i+1}"),
+                description=section_data.get("description", ""),
+                key_points=section_data.get("key_points", []),
+                include=section_data.get("include", True),
+                order=i,
+            ))
+        
+        # Build alignment parameters
+        parameters = [
+            AlignmentParameter(
+                name="tone",
+                label="Tone",
+                description="Writing style for the memo",
+                param_type="select",
+                value=outline_data.get("tone", "balanced"),
+                options=["conservative", "balanced", "optimistic"],
+            ),
+            AlignmentParameter(
+                name="detail_level",
+                label="Detail Level",
+                description="How detailed should the memo be",
+                param_type="select",
+                value=outline_data.get("detail_level", "standard"),
+                options=["concise", "standard", "comprehensive"],
+            ),
+        ]
+        
+        return ToolAlignment(
+            tool_id=self.definition.id,
+            title=f"Investment Memo Outline: {project_title}",
+            description="Review the proposed memo structure below. You can adjust sections, add specific points to cover, or request changes.",
+            sections=sections,
+            parameters=parameters,
+            assumptions=outline_data.get("assumptions", []),
+            confirmed=False,
+        )
+    
+    async def _generate_outline(self, project_summary: str) -> dict:
+        """Use LLM to generate a context-aware memo outline."""
+        system_prompt = """You are an expert at structuring investment memos for development projects.
+
+Given a project description, generate a tailored memo outline that will help the user understand what the memo will cover.
+
+For each section, provide:
+- A clear title
+- A brief description of what it covers
+- 3-5 specific key points that should be addressed for THIS project
+
+Also identify:
+- Key assumptions being made (2-3 items)
+- Recommended tone (conservative, balanced, or optimistic)
+- Detail level (concise, standard, or comprehensive)
+
+Tailor the key points to the specific project context - don't just use generic points."""
+
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"""Generate a memo outline for this project:
+
+{project_summary}
+
+Create a structured outline with sections tailored to this specific project type and context.
+"""
+                }
+            ],
+            tools=[{
+                "type": "function",
+                "function": {
+                    "name": "generate_outline",
+                    "description": "Generate a structured memo outline",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "sections": {
+                                "type": "array",
+                                "description": "Memo sections in order",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string", "description": "Section identifier (e.g., executive_summary)"},
+                                        "title": {"type": "string", "description": "Section title"},
+                                        "description": {"type": "string", "description": "What this section covers"},
+                                        "key_points": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Specific points to cover in this section"
+                                        },
+                                        "include": {"type": "boolean", "description": "Whether to include this section"},
+                                    },
+                                    "required": ["id", "title", "description", "key_points", "include"]
+                                }
+                            },
+                            "assumptions": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Key assumptions being made"
+                            },
+                            "tone": {
+                                "type": "string",
+                                "enum": ["conservative", "balanced", "optimistic"],
+                                "description": "Recommended tone for the memo"
+                            },
+                            "detail_level": {
+                                "type": "string",
+                                "enum": ["concise", "standard", "comprehensive"],
+                                "description": "Recommended detail level"
+                            }
+                        },
+                        "required": ["sections", "assumptions", "tone", "detail_level"]
+                    }
+                }
+            }],
+            tool_choice={"type": "function", "function": {"name": "generate_outline"}},
+            temperature=0.7,
+        )
+        
+        tool_call = response.choices[0].message.tool_calls[0]
+        return json.loads(tool_call.function.arguments)
+    
+    def _get_default_outline(self) -> dict:
+        """Return default memo outline structure."""
+        sections = []
+        for i, section in enumerate(DEFAULT_MEMO_SECTIONS):
+            sections.append({
+                "id": section["id"],
+                "title": section["title"],
+                "description": section["description"],
+                "key_points": section["default_points"],
+                "include": True,
+            })
+        
+        return {
+            "sections": sections,
+            "assumptions": [
+                "Information provided is accurate and complete",
+                "Market conditions remain stable",
+                "No major regulatory changes expected",
+            ],
+            "tone": "balanced",
+            "detail_level": "standard",
+        }
+    
+    async def update_alignment_from_feedback(
+        self,
+        current_alignment: ToolAlignment,
+        feedback: str,
+        db: AsyncSession,
+        initiative_id: UUID,
+    ) -> ToolAlignment:
+        """Update memo outline based on user feedback."""
+        
+        # Build current outline for LLM
+        current_outline = {
+            "sections": [s.to_dict() for s in current_alignment.sections],
+            "assumptions": current_alignment.assumptions,
+        }
+        
+        # Get parameters
+        tone = "balanced"
+        detail_level = "standard"
+        for param in current_alignment.parameters:
+            if param.name == "tone":
+                tone = param.value
+            elif param.name == "detail_level":
+                detail_level = param.value
+        
+        system_prompt = """You are helping refine an investment memo outline based on user feedback.
+
+Given the current outline and user feedback, update the outline to address their requests.
+You can:
+- Add new sections
+- Remove sections (set include=false)
+- Modify key points within sections
+- Update assumptions
+- Change tone or detail level
+
+Preserve parts of the outline that the user didn't mention changing."""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": f"""Current outline:
+{json.dumps(current_outline, indent=2)}
+
+Current settings:
+- Tone: {tone}
+- Detail level: {detail_level}
+
+User feedback:
+{feedback}
+
+Update the outline based on this feedback.
+"""
+                    }
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "update_outline",
+                        "description": "Update the memo outline based on feedback",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "sections": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "title": {"type": "string"},
+                                            "description": {"type": "string"},
+                                            "key_points": {"type": "array", "items": {"type": "string"}},
+                                            "include": {"type": "boolean"},
+                                        },
+                                        "required": ["id", "title", "description", "key_points", "include"]
+                                    }
+                                },
+                                "assumptions": {"type": "array", "items": {"type": "string"}},
+                                "tone": {"type": "string", "enum": ["conservative", "balanced", "optimistic"]},
+                                "detail_level": {"type": "string", "enum": ["concise", "standard", "comprehensive"]},
+                            },
+                            "required": ["sections", "assumptions", "tone", "detail_level"]
+                        }
+                    }
+                }],
+                tool_choice={"type": "function", "function": {"name": "update_outline"}},
+                temperature=0.7,
+            )
+            
+            tool_call = response.choices[0].message.tool_calls[0]
+            updated_data = json.loads(tool_call.function.arguments)
+            
+            # Build updated alignment
+            sections = []
+            for i, section_data in enumerate(updated_data.get("sections", [])):
+                sections.append(AlignmentSection(
+                    id=section_data.get("id", f"section_{i}"),
+                    title=section_data.get("title", f"Section {i+1}"),
+                    description=section_data.get("description", ""),
+                    key_points=section_data.get("key_points", []),
+                    include=section_data.get("include", True),
+                    order=i,
+                ))
+            
+            parameters = [
+                AlignmentParameter(
+                    name="tone",
+                    label="Tone",
+                    description="Writing style for the memo",
+                    param_type="select",
+                    value=updated_data.get("tone", tone),
+                    options=["conservative", "balanced", "optimistic"],
+                ),
+                AlignmentParameter(
+                    name="detail_level",
+                    label="Detail Level",
+                    description="How detailed should the memo be",
+                    param_type="select",
+                    value=updated_data.get("detail_level", detail_level),
+                    options=["concise", "standard", "comprehensive"],
+                ),
+            ]
+            
+            current_alignment.sections = sections
+            current_alignment.parameters = parameters
+            current_alignment.assumptions = updated_data.get("assumptions", current_alignment.assumptions)
+            current_alignment.feedback = None  # Clear feedback after processing
+            
+            return current_alignment
+            
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to update alignment from feedback: {e}")
+            current_alignment.feedback = feedback
+            return current_alignment
+    
     async def execute(
         self,
         db: AsyncSession,
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
+        alignment: ToolAlignment | None = None,
     ) -> ToolOutput:
-        """Generate the investment memo."""
+        """Generate the investment memo, optionally using alignment configuration."""
         from sqlalchemy import select
         from app.models.initiative import Initiative
         
@@ -158,8 +574,13 @@ Timeline: {inputs.get('timeline', 'Not specified')}
 Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
 """
         
+        # Build alignment instructions if provided
+        alignment_instructions = None
+        if alignment:
+            alignment_instructions = self._build_alignment_instructions(alignment)
+        
         # Generate memo content
-        memo_data = await self._generate_content(project_summary, context)
+        memo_data = await self._generate_content(project_summary, context, alignment_instructions)
         
         # Build citations list
         citations = [
@@ -230,10 +651,50 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
         
         return "\n".join(context_parts)
     
-    async def _generate_content(self, project_summary: str, context: str) -> dict:
+    def _build_alignment_instructions(self, alignment: ToolAlignment) -> str:
+        """Build generation instructions from alignment configuration."""
+        instructions = []
+        
+        # Section structure
+        instructions.append("MEMO STRUCTURE (follow this outline):")
+        for section in sorted(alignment.sections, key=lambda s: s.order):
+            if section.include:
+                instructions.append(f"\n## {section.title}")
+                instructions.append(f"   {section.description}")
+                if section.key_points:
+                    instructions.append("   Key points to address:")
+                    for point in section.key_points:
+                        instructions.append(f"   - {point}")
+        
+        # Parameters
+        for param in alignment.parameters:
+            if param.name == "tone":
+                if param.value == "conservative":
+                    instructions.append("\nTONE: Conservative - emphasize risks and uncertainties, be cautious with claims")
+                elif param.value == "optimistic":
+                    instructions.append("\nTONE: Optimistic - highlight opportunities and potential, while still noting risks")
+                else:
+                    instructions.append("\nTONE: Balanced - present both opportunities and risks objectively")
+            elif param.name == "detail_level":
+                if param.value == "concise":
+                    instructions.append("LENGTH: Concise - keep sections brief and focused")
+                elif param.value == "comprehensive":
+                    instructions.append("LENGTH: Comprehensive - provide detailed analysis in each section")
+                else:
+                    instructions.append("LENGTH: Standard - moderate detail level")
+        
+        # Assumptions to note
+        if alignment.assumptions:
+            instructions.append("\nKEY ASSUMPTIONS TO ACKNOWLEDGE:")
+            for assumption in alignment.assumptions:
+                instructions.append(f"- {assumption}")
+        
+        return "\n".join(instructions)
+    
+    async def _generate_content(self, project_summary: str, context: str, alignment_instructions: str | None = None) -> dict:
         """Generate memo content using GPT."""
         
-        system_prompt = """You are an expert analyst generating investment memos for development initiatives.
+        base_system_prompt = """You are an expert analyst generating investment memos for development initiatives.
 
 Your task is to generate a structured memo that:
 1. Provides a clear recommendation (proceed, hold, or reject)
@@ -246,7 +707,18 @@ CITATION RULES:
 - Every factual claim should have a citation
 - Use the format [1], [2], etc. inline
 - Distinguish between user-provided evidence and case study corpus findings
-- If evidence is limited, acknowledge uncertainty
+- If evidence is limited, acknowledge uncertainty"""
+        
+        # Add alignment instructions if provided
+        if alignment_instructions:
+            system_prompt = f"""{base_system_prompt}
+
+USER-SPECIFIED STRUCTURE AND PREFERENCES:
+{alignment_instructions}
+
+Follow the user's specified structure and preferences closely."""
+        else:
+            system_prompt = f"""{base_system_prompt}
 
 TONE:
 - Professional and analytical
@@ -254,13 +726,7 @@ TONE:
 - Action-oriented (clear next steps)
 - Concise but thorough"""
         
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": f"""Generate an investment memo for this project.
+        user_message = f"""Generate an investment memo for this project.
 
 PROJECT DETAILS:
 {project_summary}
@@ -268,9 +734,16 @@ PROJECT DETAILS:
 EVIDENCE AND CONTEXT:
 {context}
 
-Generate a structured memo with the following sections. Use citation numbers [1], [2], etc. to reference evidence.
-"""
-                }
+Generate a structured memo with the following sections. Use citation numbers [1], [2], etc. to reference evidence."""
+        
+        if alignment_instructions:
+            user_message += "\n\nFollow the specified structure and key points from the alignment instructions."
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
             ],
             tools=[{
                 "type": "function",

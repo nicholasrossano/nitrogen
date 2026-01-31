@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
+import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
@@ -17,10 +18,17 @@ from app.schemas.chat import (
     ChatHistoryResponse,
     StageStatus,
     ExtractedFields,
+    ToolAlignmentSchema,
+    AlignmentSectionSchema,
+    AlignmentParameterSchema,
+    AlignmentFeedbackRequest,
+    AlignmentConfirmRequest,
+    AlignmentResponse,
 )
 from app.services.chat_agent import ChatAgentService
 from app.services.sdg_classifier import classify_sdg
 from app.tools import get_tool_registry
+from app.tools.base import ToolAlignment
 
 router = APIRouter()
 
@@ -109,6 +117,9 @@ async def send_chat_message(
     has_tool_checklist = any(
         m.widget_type == "tool_checklist" for m in messages if m.role == "assistant"
     )
+    has_alignment_widget = any(
+        m.widget_type == "alignment" for m in messages if m.role == "assistant"
+    )
     
     # Get last assistant message
     last_assistant_msg = None
@@ -117,8 +128,7 @@ async def send_chat_message(
             last_assistant_msg = msg
             break
     
-    import logging
-    logging.info(f"ONBOARDING STATE: user_msgs={user_message_count}, has_doc_request={has_document_request}, has_tools={has_tool_checklist}")
+    logging.info(f"ONBOARDING STATE: user_msgs={user_message_count}, has_doc_request={has_document_request}, has_tools={has_tool_checklist}, has_alignment={has_alignment_widget}")
     
     # ============================================================
     # STAGE 1: First user message -> Ask for materials
@@ -234,96 +244,184 @@ async def send_chat_message(
         except:
             analysis = {"intent": "general_conversation"}
         
-        # Update initiative with any extracted info
-        info_updated = False
-        if analysis.get("project_description") and not initiative.project_description:
-            initiative.project_description = analysis["project_description"]
-            info_updated = True
-        if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
-            initiative.project_type = analysis["project_type"]
-            info_updated = True
-        if analysis.get("title") and not initiative.title:
-            initiative.title = analysis["title"]
-            info_updated = True
-        if analysis.get("geography") and not initiative.geography:
-            initiative.geography = analysis["geography"]
-            info_updated = True
-        if analysis.get("target_beneficiaries") and not initiative.target_population:
-            initiative.target_population = analysis["target_beneficiaries"]
-            info_updated = True
-        if analysis.get("project_goal") and not initiative.goal:
-            initiative.goal = analysis["project_goal"]
-            info_updated = True
+        # Check if user wants to go back to tool selection
+        wants_to_go_back = analysis.get("wants_to_go_back", False)
+        user_msg_lower = data.content.lower()
+        is_tool_change_request = any(phrase in user_msg_lower for phrase in [
+            "change my tool", "modify tool", "different tool", "change tool",
+            "go back", "change selection", "modify selection", "add more tool",
+            "remove tool", "change deliverable", "modify deliverable"
+        ])
         
-        if info_updated:
+        if wants_to_go_back or is_tool_change_request:
+            logging.info("User wants to modify tool selection - showing tool checklist")
+            
+            # Clear existing alignments since tools may change
+            initiative.tool_alignments = None
             await db.commit()
             await db.refresh(initiative)
-        
-        # If tools are selected, extract any tool-specific inputs from conversation
-        is_just_asking = analysis.get("intent") == "asking_question"
-        if initiative.selected_tools and not is_just_asking:
-            tool_inputs = await chat_agent.extract_tool_inputs(
-                messages=messages,
-                tool_ids=initiative.selected_tools,
+            
+            assistant_response = "No problem! Here are the available tools - you can adjust your selection:"
+            widget_type = "tool_checklist"
+            registry = get_tool_registry()
+            recommendations = registry.recommend_tools(
+                project_description=initiative.project_description,
+                project_type=initiative.project_type,
             )
+            # Pre-select currently selected tools
+            selected_tool_ids = set(initiative.selected_tools or [])
+            widget_data = {
+                "recommendations": [
+                    {
+                        "tool": tool.definition.to_dict(),
+                        "confidence": confidence,
+                        "recommended": tool.definition.id in selected_tool_ids or confidence > 0.3,
+                    }
+                    for tool, confidence in recommendations
+                ],
+                "project_type": initiative.project_type,
+            }
+        else:
+            # Update initiative with any extracted info
+            info_updated = False
+            if analysis.get("project_description") and not initiative.project_description:
+                initiative.project_description = analysis["project_description"]
+                info_updated = True
+            if analysis.get("project_type") and analysis["project_type"] and not initiative.project_type:
+                initiative.project_type = analysis["project_type"]
+                info_updated = True
+            if analysis.get("title") and not initiative.title:
+                initiative.title = analysis["title"]
+                info_updated = True
+            if analysis.get("geography") and not initiative.geography:
+                initiative.geography = analysis["geography"]
+                info_updated = True
+            if analysis.get("target_beneficiaries") and not initiative.target_population:
+                initiative.target_population = analysis["target_beneficiaries"]
+                info_updated = True
+            if analysis.get("project_goal") and not initiative.goal:
+                initiative.goal = analysis["project_goal"]
+                info_updated = True
             
-            # Merge with existing inputs
-            current_inputs = initiative.tool_inputs or {}
-            for key, value in tool_inputs.items():
-                if value:  # Only update non-empty values
-                    current_inputs[key] = value
-            initiative.tool_inputs = current_inputs
+            if info_updated:
+                await db.commit()
+                await db.refresh(initiative)
             
-            # Also update legacy fields
-            if tool_inputs.get("project_title") and not initiative.title:
-                initiative.title = tool_inputs["project_title"]
-            if tool_inputs.get("geography") and not initiative.geography:
-                initiative.geography = tool_inputs["geography"]
-            if tool_inputs.get("target_beneficiaries") and not initiative.target_population:
-                initiative.target_population = tool_inputs["target_beneficiaries"]
-            if tool_inputs.get("project_goal") and not initiative.goal:
-                initiative.goal = tool_inputs["project_goal"]
-            
-            await db.commit()
-            await db.refresh(initiative)
-            
-            # Only show deliverables overview if user explicitly wants to proceed OR all inputs are ready and they're providing final info
-            missing = initiative.get_missing_tool_inputs()
-            wants_to_proceed = analysis.get("wants_to_proceed", False)
-            is_providing_info = analysis.get("intent") in ["describing_project", "providing_info"]
-            
-            if not missing and (wants_to_proceed or is_providing_info):
-                widget_type = "deliverables_overview"
-                registry = get_tool_registry()
-                tools_info = []
-                for tool_id in (initiative.selected_tools or []):
-                    tool = registry.get_tool(tool_id)
-                    if tool:
-                        tools_info.append({
-                            "id": tool.definition.id,
-                            "name": tool.definition.name,
-                            "description": tool.definition.description,
-                            "icon": tool.definition.icon,
-                            "output_type": tool.definition.output_type,
-                        })
+            # If tools are selected, extract any tool-specific inputs from conversation
+            is_just_asking = analysis.get("intent") == "asking_question"
+            if initiative.selected_tools and not is_just_asking:
+                tool_inputs = await chat_agent.extract_tool_inputs(
+                    messages=messages,
+                    tool_ids=initiative.selected_tools,
+                )
                 
-                # Build tool_inputs with SDG classification
-                tool_inputs = initiative.tool_inputs or {}
+                # Merge with existing inputs
+                current_inputs = initiative.tool_inputs or {}
+                for key, value in tool_inputs.items():
+                    if value:  # Only update non-empty values
+                        current_inputs[key] = value
+                initiative.tool_inputs = current_inputs
                 
-                # Classify SDG based on project description
-                if initiative.project_description:
-                    sdg_info = classify_sdg(
-                        project_description=initiative.project_description,
-                        project_type=initiative.project_type
-                    )
-                    if sdg_info:
-                        tool_inputs["sdg"] = sdg_info
+                # Also update legacy fields
+                if tool_inputs.get("project_title") and not initiative.title:
+                    initiative.title = tool_inputs["project_title"]
+                if tool_inputs.get("geography") and not initiative.geography:
+                    initiative.geography = tool_inputs["geography"]
+                if tool_inputs.get("target_beneficiaries") and not initiative.target_population:
+                    initiative.target_population = tool_inputs["target_beneficiaries"]
+                if tool_inputs.get("project_goal") and not initiative.goal:
+                    initiative.goal = tool_inputs["project_goal"]
                 
-                widget_data = {
-                    "project_summary": initiative.to_summary_dict(),
-                    "selected_tools": tools_info,
-                    "tool_inputs": tool_inputs,
-                }
+                await db.commit()
+                await db.refresh(initiative)
+                
+                # Only show deliverables overview if user explicitly wants to proceed OR all inputs are ready and they're providing final info
+                missing = initiative.get_missing_tool_inputs()
+                wants_to_proceed = analysis.get("wants_to_proceed", False)
+                is_providing_info = analysis.get("intent") in ["describing_project", "providing_info"]
+                
+                if not missing and (wants_to_proceed or is_providing_info):
+                    registry = get_tool_registry()
+                    
+                    # Check for pending alignments first
+                    pending_alignment_tools = initiative.get_pending_alignment_tools()
+                    
+                    if pending_alignment_tools:
+                        # Show alignment widget for the first tool needing alignment
+                        tool_id = pending_alignment_tools[0]
+                        tool = registry.get_tool(tool_id)
+                        
+                        if tool and tool.requires_alignment:
+                            # Check if alignment already exists but just needs confirmation
+                            existing_alignment = initiative.get_alignment_for_tool(tool_id)
+                            
+                            if existing_alignment:
+                                # Show existing alignment for review
+                                alignment_data = existing_alignment
+                            else:
+                                # Generate new alignment
+                                try:
+                                    alignment_obj = await tool.generate_alignment(
+                                        db=db,
+                                        initiative_id=initiative_id,
+                                        inputs=initiative.tool_inputs or {},
+                                    )
+                                    alignment_data = alignment_obj.to_dict()
+                                    
+                                    # Save alignment to initiative
+                                    initiative.set_alignment_for_tool(tool_id, alignment_data)
+                                    await db.commit()
+                                    await db.refresh(initiative)
+                                except Exception as e:
+                                    logging.error(f"Failed to generate alignment for {tool_id}: {e}")
+                                    alignment_data = None
+                            
+                            if alignment_data:
+                                widget_type = "alignment"
+                                widget_data = {
+                                    "alignment": alignment_data,
+                                    "tool": tool.definition.to_dict(),
+                                    "pending_tools": [
+                                        registry.get_tool(tid).definition.to_dict() 
+                                        for tid in pending_alignment_tools[1:] 
+                                        if registry.get_tool(tid)
+                                    ],
+                                }
+                                assistant_response = f"Before generating the {tool.definition.name}, let me share the proposed outline. Please review and let me know if you'd like any adjustments."
+                    
+                    # If no pending alignments (or alignment generation failed), show deliverables overview
+                    if widget_type is None:
+                        widget_type = "deliverables_overview"
+                        tools_info = []
+                        for tool_id in (initiative.selected_tools or []):
+                            tool = registry.get_tool(tool_id)
+                            if tool:
+                                tools_info.append({
+                                    "id": tool.definition.id,
+                                    "name": tool.definition.name,
+                                    "description": tool.definition.description,
+                                    "icon": tool.definition.icon,
+                                    "output_type": tool.definition.output_type,
+                                })
+                        
+                        # Build tool_inputs with SDG classification
+                        tool_inputs = initiative.tool_inputs or {}
+                        
+                        # Classify SDG based on project description
+                        if initiative.project_description:
+                            sdg_info = classify_sdg(
+                                project_description=initiative.project_description,
+                                project_type=initiative.project_type
+                            )
+                            if sdg_info:
+                                tool_inputs["sdg"] = sdg_info
+                        
+                        widget_data = {
+                            "project_summary": initiative.to_summary_dict(),
+                            "selected_tools": tools_info,
+                            "tool_inputs": tool_inputs,
+                            "alignments": initiative.tool_alignments,  # Include confirmed alignments
+                        }
     
     # Generate assistant response ONLY if not already set by deterministic stages
     if assistant_response is None:
@@ -417,3 +515,243 @@ async def get_chat_history(
         ],
         stage_status=build_stage_status(initiative),
     )
+
+
+@router.post("/initiatives/{initiative_id}/alignment/confirm", response_model=AlignmentResponse)
+async def confirm_alignment(
+    initiative_id: UUID,
+    data: AlignmentConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Confirm an alignment, optionally with modifications."""
+    # Get initiative
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    # Get existing alignment
+    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
+    if not alignment_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No alignment found for tool {data.tool_id}",
+        )
+    
+    # Apply modifications if provided
+    if data.sections:
+        alignment_data["sections"] = [s.model_dump() for s in data.sections]
+    if data.parameters:
+        alignment_data["parameters"] = [p.model_dump() for p in data.parameters]
+    
+    # Mark as confirmed
+    alignment_data["confirmed"] = True
+    alignment_data["feedback"] = None
+    
+    # Save updated alignment
+    initiative.set_alignment_for_tool(data.tool_id, alignment_data)
+    await db.commit()
+    await db.refresh(initiative)
+    
+    # Add confirmation message to chat
+    registry = get_tool_registry()
+    tool = registry.get_tool(data.tool_id)
+    tool_name = tool.definition.name if tool else data.tool_id
+    
+    # Check if there are more alignments needed
+    pending = initiative.get_pending_alignment_tools()
+    if pending:
+        next_tool = registry.get_tool(pending[0])
+        next_tool_name = next_tool.definition.name if next_tool else pending[0]
+        message = f"Great, I've confirmed the {tool_name} outline. Let's review the {next_tool_name} next."
+    else:
+        message = f"Perfect! The {tool_name} outline is confirmed. We're ready to generate your deliverables."
+    
+    # Save assistant message
+    assistant_message = ChatMessage(
+        initiative_id=initiative.id,
+        role="assistant",
+        content=message,
+        widget_type=None,
+        widget_data=None,
+    )
+    db.add(assistant_message)
+    await db.commit()
+    
+    return AlignmentResponse(
+        alignment=ToolAlignmentSchema(**alignment_data),
+        message=message,
+    )
+
+
+@router.post("/initiatives/{initiative_id}/alignment/feedback", response_model=AlignmentResponse)
+async def provide_alignment_feedback(
+    initiative_id: UUID,
+    data: AlignmentFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Provide feedback to update an alignment."""
+    # Get initiative
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    # Get existing alignment
+    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
+    if not alignment_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No alignment found for tool {data.tool_id}",
+        )
+    
+    # Get the tool and update alignment based on feedback
+    registry = get_tool_registry()
+    tool = registry.get_tool(data.tool_id)
+    
+    if not tool:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tool {data.tool_id} not found",
+        )
+    
+    # Reconstruct alignment object
+    current_alignment = ToolAlignment.from_dict(alignment_data)
+    
+    # Update alignment based on feedback
+    try:
+        updated_alignment = await tool.update_alignment_from_feedback(
+            current_alignment=current_alignment,
+            feedback=data.feedback,
+            db=db,
+            initiative_id=initiative_id,
+        )
+        updated_data = updated_alignment.to_dict()
+    except Exception as e:
+        logging.error(f"Failed to update alignment from feedback: {e}")
+        # Just store the feedback and let user try again
+        alignment_data["feedback"] = data.feedback
+        updated_data = alignment_data
+    
+    # Save updated alignment
+    initiative.set_alignment_for_tool(data.tool_id, updated_data)
+    await db.commit()
+    await db.refresh(initiative)
+    
+    # Save user's feedback as a chat message
+    user_msg = ChatMessage(
+        initiative_id=initiative.id,
+        role="user",
+        content=data.feedback,
+    )
+    db.add(user_msg)
+    await db.commit()
+    
+    # Save assistant response
+    tool_name = tool.definition.name
+    assistant_message = ChatMessage(
+        initiative_id=initiative.id,
+        role="assistant",
+        content=f"I've updated the {tool_name} outline based on your feedback. Please review the changes.",
+        widget_type="alignment",
+        widget_data={
+            "alignment": updated_data,
+            "tool": tool.definition.to_dict(),
+            "pending_tools": [],
+        },
+    )
+    db.add(assistant_message)
+    await db.commit()
+    
+    return AlignmentResponse(
+        alignment=ToolAlignmentSchema(**updated_data),
+        message=f"Updated {tool_name} outline based on your feedback.",
+    )
+
+
+@router.get("/initiatives/{initiative_id}/alignment/{tool_id}")
+async def get_alignment(
+    initiative_id: UUID,
+    tool_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Get the current alignment for a specific tool."""
+    # Get initiative
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    # Get alignment
+    alignment_data = initiative.get_alignment_for_tool(tool_id)
+    
+    if not alignment_data:
+        # Generate alignment if it doesn't exist
+        registry = get_tool_registry()
+        tool = registry.get_tool(tool_id)
+        
+        if not tool:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tool {tool_id} not found",
+            )
+        
+        if not tool.requires_alignment:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tool {tool_id} does not require alignment",
+            )
+        
+        try:
+            alignment_obj = await tool.generate_alignment(
+                db=db,
+                initiative_id=initiative_id,
+                inputs=initiative.tool_inputs or {},
+            )
+            alignment_data = alignment_obj.to_dict()
+            
+            # Save alignment to initiative
+            initiative.set_alignment_for_tool(tool_id, alignment_data)
+            await db.commit()
+            await db.refresh(initiative)
+        except Exception as e:
+            logging.error(f"Failed to generate alignment for {tool_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate alignment: {str(e)}",
+            )
+    
+    return {
+        "alignment": alignment_data,
+        "tool_id": tool_id,
+    }

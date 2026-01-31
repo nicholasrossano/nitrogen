@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter } from '@/lib/api';
 
 interface InitiativeState {
   // Data
@@ -14,6 +14,7 @@ interface InitiativeState {
   loading: boolean;
   sending: boolean;
   generating: boolean;
+  alignmentLoading: boolean;
   error: string | null;
   
   // Actions
@@ -29,6 +30,8 @@ interface InitiativeState {
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
   generateAllDeliverables: (id: string) => Promise<void>;
   updateTitle: (id: string, title: string) => Promise<void>;
+  confirmAlignment: (id: string, toolId: string, sections?: AlignmentSection[], parameters?: AlignmentParameter[]) => Promise<void>;
+  provideFeedback: (id: string, toolId: string, feedback: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -43,6 +46,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   loading: false,
   sending: false,
   generating: false,
+  alignmentLoading: false,
   error: null,
 
   // Load initiative details
@@ -62,7 +66,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   // Load chat history
   loadChatHistory: async (id: string) => {
     try {
-      const { messages, stage_status } = await api.getChatHistory(id);
+      const response = await api.getChatHistory(id);
+      console.log('loadChatHistory: response', response);
+      const messages = response?.messages || [];
+      const stage_status = response?.stage_status;
+      console.log('loadChatHistory: setting messages', { count: messages.length });
       set({ messages, stageStatus: stage_status });
     } catch (error) {
       console.error('Failed to load chat history:', error);
@@ -82,6 +90,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   // Send a message
   sendMessage: async (id: string, content: string) => {
     const { messages } = get();
+    console.log('sendMessage: starting', { id, content, currentMessageCount: messages?.length });
     
     // Set sending state first
     set({ 
@@ -99,37 +108,52 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       created_at: new Date().toISOString(),
     };
     
+    const currentMessages = messages || [];
     set({ 
-      messages: [...messages, userMessage],
+      messages: [...currentMessages, userMessage],
     });
+    console.log('sendMessage: optimistic update done', { newCount: currentMessages.length + 1 });
 
     try {
-      console.log('Starting API call, sending state should be true');
+      console.log('sendMessage: calling API');
       const response = await api.sendMessage(id, content);
-      console.log('API call completed');
+      console.log('sendMessage: API response', { 
+        hasMessage: !!response?.message,
+        messageContent: response?.message?.content?.substring(0, 50)
+      });
       
       // Replace temp message with real one and add assistant response
-      set(state => ({
-        messages: [
-          ...state.messages.filter(m => m.id !== userMessage.id),
+      set(state => {
+        const filtered = (state.messages || []).filter(m => m.id !== userMessage.id);
+        const newMessages = [
+          ...filtered,
           { ...userMessage, id: `user-${Date.now()}` },
           response.message,
-        ],
-        stageStatus: response.stage_status,
-        sending: false,
-      }));
+        ];
+        console.log('sendMessage: updating messages after API', { newCount: newMessages.length });
+        return {
+          messages: newMessages,
+          stageStatus: response.stage_status,
+          sending: false,
+        };
+      });
 
       // Reload initiative to get updated fields
+      console.log('sendMessage: reloading initiative');
       const initiative = await api.getInitiative(id);
       set({ initiative });
       
       // Reload chat history to get any additional messages the backend added
+      console.log('sendMessage: reloading chat history');
       const chatHistory = await api.getChatHistory(id);
-      set({ messages: chatHistory.messages });
+      const finalMessages = chatHistory?.messages || [];
+      console.log('sendMessage: setting final messages', { count: finalMessages.length });
+      set({ messages: finalMessages });
     } catch (error) {
+      console.error('sendMessage: error', error);
       // Remove optimistic update on error
       set(state => ({
-        messages: state.messages.filter(m => m.id !== userMessage.id),
+        messages: (state.messages || []).filter(m => m.id !== userMessage.id),
         error: error instanceof Error ? error.message : 'Failed to send message',
         sending: false,
       }));
@@ -262,15 +286,24 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
 
   // Select tools for initiative
   selectTools: async (id: string, toolIds: string[]) => {
+    console.log('selectTools: starting', { id, toolIds });
     set({ loading: true, error: null });
     try {
+      console.log('selectTools: calling API');
       await api.selectTools(id, toolIds);
+      console.log('selectTools: API returned successfully');
       
       // Reload everything
+      console.log('selectTools: reloading data');
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
       ]);
+      console.log('selectTools: data reloaded', { 
+        initiative: !!initiative, 
+        messageCount: messages?.length,
+        lastMessage: messages?.[messages.length - 1]
+      });
       
       set({
         initiative,
@@ -278,7 +311,9 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         stageStatus: stage_status,
         loading: false,
       });
+      console.log('selectTools: state updated');
     } catch (error) {
+      console.error('selectTools: error', error);
       set({
         error: error instanceof Error ? error.message : 'Failed to select tools',
         loading: false,
@@ -322,6 +357,58 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
+  // Confirm alignment for a tool
+  confirmAlignment: async (id: string, toolId: string, sections?: AlignmentSection[], parameters?: AlignmentParameter[]) => {
+    set({ alignmentLoading: true, error: null });
+    try {
+      await api.confirmAlignment(id, toolId, sections, parameters);
+      
+      // Reload everything to get next alignment or deliverables overview
+      const [initiative, { messages, stage_status }] = await Promise.all([
+        api.getInitiative(id),
+        api.getChatHistory(id),
+      ]);
+      
+      set({
+        initiative,
+        messages,
+        stageStatus: stage_status,
+        alignmentLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to confirm alignment',
+        alignmentLoading: false,
+      });
+    }
+  },
+
+  // Provide feedback on alignment
+  provideFeedback: async (id: string, toolId: string, feedback: string) => {
+    set({ alignmentLoading: true, error: null });
+    try {
+      await api.provideFeedback(id, toolId, feedback);
+      
+      // Reload chat to get updated alignment widget
+      const [initiative, { messages, stage_status }] = await Promise.all([
+        api.getInitiative(id),
+        api.getChatHistory(id),
+      ]);
+      
+      set({
+        initiative,
+        messages,
+        stageStatus: stage_status,
+        alignmentLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to provide feedback',
+        alignmentLoading: false,
+      });
+    }
+  },
+
   // Reset state
   reset: () => {
     set({
@@ -334,6 +421,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       loading: false,
       sending: false,
       generating: false,
+      alignmentLoading: false,
       error: null,
     });
   },
