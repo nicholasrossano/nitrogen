@@ -407,6 +407,32 @@ textarea {
   background-color: rgba(157, 170, 155, 0.1); /* indicator-green/10 */
 }
 
+/* Project action buttons - like icon-btn but without padding override */
+.project-action-btn {
+  overflow: hidden;
+}
+
+.project-action-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.project-action-btn:hover::before {
+  opacity: 1;
+}
+
+.project-action-btn-danger::before {
+  background-color: rgba(185, 122, 93, 0.1); /* indicator-orange/10 */
+}
+
+.project-action-btn-success::before {
+  background-color: rgba(157, 170, 155, 0.2); /* indicator-green/20 for visibility */
+}
+
 /* Pill button (for input/output tags) with opacity fade */
 .pill-btn {
   @apply flex items-center gap-2 px-3 py-2 rounded text-sm border border-transparent text-text-primary;
@@ -593,13 +619,13 @@ textarea {
   @apply w-full border-t-2 border-accent;
 }
 
-/* Navigation row - flat spreadsheet style with hover lift */
+/* Navigation row - flat spreadsheet style */
 .nav-row {
-  @apply flex items-center gap-3 px-4 py-3 text-left text-text-secondary border-b border-accent bg-white;
+  @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary bg-white border-b border-accent;
   position: relative;
   overflow: hidden;
   z-index: 0;
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out, color 200ms ease-out;
+  transition: color 200ms ease-out;
 }
 
 .nav-row::before {
@@ -613,30 +639,33 @@ textarea {
 }
 
 .nav-row:hover {
-  @apply text-text-primary shadow-md;
-  transform: translateY(-2px);
+  @apply text-text-primary;
 }
 
 .nav-row:hover::before {
   opacity: 1;
 }
 
-.nav-row:active {
-  @apply shadow-none;
-  transform: translateY(0) scale(0.98);
-  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
-}
-
-/* Active nav row state */
+/* Active nav row state - purple bar on right */
 .nav-row-active {
   @apply text-accent-anchor;
 }
 
-.nav-row-active::before {
-  background-color: var(--color-accent-wash);
-  opacity: 1;
+.nav-row-active::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background-color: var(--color-accent);
+  z-index: 1;
+}
+
+.nav-row-active:hover {
+  @apply text-accent-anchor;
 }
 
 .nav-row-active:hover::before {
-  opacity: 0.8;
+  opacity: 1;
 }
