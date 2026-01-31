@@ -19,11 +19,23 @@ interface MemoViewerWidgetProps {
   isActive?: boolean;
 }
 
+function formatHeaderDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoViewerWidgetProps) {
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
-  const { exportMemo, loading } = useInitiativeStore();
+  const { exportMemo, loading, initiative } = useInitiativeStore();
 
   const content = data.content as MemoContent;
+  const projectName =
+    initiative?.title ??
+    (content.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
+    'Project';
 
   const handleExport = async () => {
     await exportMemo(initiativeId);
@@ -93,9 +105,12 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">{content.title}</h3>
-        <p className="text-sm text-text-secondary">{content.date}</p>
+      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-text-primary">Investment Memo</h3>
+          <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
+        </div>
+        <p className="text-sm text-text-secondary whitespace-nowrap">{formatHeaderDate(content.date)}</p>
       </div>
 
       {/* Content */}
