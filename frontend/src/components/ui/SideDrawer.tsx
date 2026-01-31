@@ -12,13 +12,14 @@ interface SideDrawerProps {
 export function SideDrawer({ activeItem, onItemSelect }: SideDrawerProps) {
   return (
     <aside className="w-56 bg-white border-r border-accent min-h-screen flex flex-col flex-shrink-0">
-      {/* Account section - h-[72px] matches main header exactly */}
-      <div className="h-[72px] px-6 flex items-center gap-3 border-b border-accent">
-        {/* Circular avatar placeholder */}
-        <div className="w-10 h-10 rounded-full bg-accent-wash border border-accent-tint flex items-center justify-center flex-shrink-0">
-          <span className="text-sm font-medium text-accent-anchor">P</span>
+      {/* Account - top left, bottom-aligned within header cell */}
+      <div className="h-[72px] px-4 pb-2 flex items-end border-b border-accent shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-6 h-6 rounded-full bg-accent-wash border border-accent-tint flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-medium text-accent-anchor">A</span>
+          </div>
+          <span className="text-sm text-text-secondary">Account</span>
         </div>
-        <span className="font-medium text-text-primary">Account</span>
       </div>
 
       {/* Navigation items */}

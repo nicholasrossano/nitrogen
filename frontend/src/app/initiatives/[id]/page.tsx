@@ -91,8 +91,14 @@ export default function InitiativePage() {
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const handleSelectItem = (id: string, type: 'input' | 'output') => {
-    setSelectedItemId(id);
-    setSelectedItemType(type);
+    // If clicking the same item, deselect it
+    if (selectedItemId === id && selectedItemType === type) {
+      setSelectedItemId(null);
+      setSelectedItemType(null);
+    } else {
+      setSelectedItemId(id);
+      setSelectedItemType(type);
+    }
   };
 
   const handleUploadEvidence = async (file: File) => {
@@ -146,6 +152,10 @@ export default function InitiativePage() {
 
   // Check if there are any outputs
   const hasOutputs = initiative.deliverables && Object.keys(initiative.deliverables).length > 0;
+  
+  // Determine if editor should be shown
+  // Show editor if: there are outputs OR an input document is selected
+  const shouldShowEditor = hasOutputs || (selectedItemType === 'input' && selectedItemId !== null);
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
@@ -167,7 +177,7 @@ export default function InitiativePage() {
 
       {/* Main content: Chat + Editor split (or just Chat if no outputs) */}
       <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
-        {hasOutputs ? (
+        {shouldShowEditor ? (
           <>
             {/* Chat Panel - Left side (resizable) */}
             <div 
