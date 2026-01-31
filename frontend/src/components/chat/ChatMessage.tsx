@@ -16,13 +16,16 @@ interface ChatMessageProps {
   message: ChatMessageType;
   initiativeId: string;
   isLatest: boolean;
+  className?: string;
 }
 
-export function ChatMessage({ message, initiativeId, isLatest }: ChatMessageProps) {
+export function ChatMessage({ message, initiativeId, isLatest, className = '' }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
   return (
-    <div className={`flex message-enter ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div
+      className={`flex message-enter ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
+    >
       {/* Message content */}
       <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
         {isUser ? (
@@ -57,7 +60,7 @@ export function ChatMessage({ message, initiativeId, isLatest }: ChatMessageProp
 
         {/* Widget - always show, pass isLatest to control buttons */}
         {message.widget_type && message.widget_data && (
-          <div className="mt-3 w-full">
+          <div className="mt-2 w-full">
             <MessageWidget 
               type={message.widget_type}
               data={message.widget_data}

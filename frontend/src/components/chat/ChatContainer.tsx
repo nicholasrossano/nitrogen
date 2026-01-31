@@ -33,19 +33,25 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
     <div className="flex flex-col h-full bg-white">
       {/* Messages area - contains all scrollable content */}
       <div className="flex-1 overflow-y-auto px-4 py-6 relative">
-        <div className="max-w-3xl mx-auto space-y-4">
-          {messages.map((message, index) => (
-            <ChatMessage 
-              key={message.id} 
-              message={message}
-              initiativeId={initiativeId}
-              isLatest={index === messages.length - 1}
-            />
-          ))}
+        <div className="max-w-3xl mx-auto">
+          {messages.map((message, index) => {
+            const prevRole = index > 0 ? messages[index - 1].role : null;
+            const isUserFollowingBot = prevRole === 'assistant' && message.role === 'user';
+            const marginClass = index === 0 ? '' : isUserFollowingBot ? 'mt-1' : 'mt-3';
+            return (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                initiativeId={initiativeId}
+                isLatest={index === messages.length - 1}
+                className={marginClass}
+              />
+            );
+          })}
           
           {/* Loading indicator */}
           {(sending || generating) && (
-            <div className="flex items-center gap-3 text-text-secondary">
+            <div className={`flex items-center gap-3 text-text-secondary ${messages.length > 0 ? 'mt-3' : ''}`}>
               <div className="flex items-center gap-2 px-4 py-2 bg-surface-subtle rounded border border-stroke-subtle">
                 <Loader2 className="w-4 h-4 animate-spin text-accent" />
                 <span className="text-sm font-medium">
