@@ -92,7 +92,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
             <FolderOpen className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className={`font-semibold text-sm truncate ${isTrash ? 'text-text-secondary' : 'text-text-primary'}`}>
+            <h3 className={`font-semibold text-sm line-clamp-2 ${isTrash ? 'text-text-secondary' : 'text-text-primary'}`}>
               {title}
             </h3>
           </div>
