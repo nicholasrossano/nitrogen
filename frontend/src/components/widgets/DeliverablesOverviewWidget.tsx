@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Sparkles, Loader2, FileText, Target, MapPin, Globe, Plus } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Target, MapPin, Globe } from 'lucide-react';
 import { getIconByName } from '@/lib/icons';
 
 interface ToolInfo {
@@ -148,43 +148,41 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
               </div>
             );
           })}
-          {isActive && (
-            <button
-              onClick={handleModifyTools}
-              disabled={loading || modifying}
-              className="w-9 h-9 flex items-center justify-center border border-dashed border-stroke-subtle rounded hover:border-accent hover:bg-accent-wash/30 transition-colors text-text-tertiary disabled:opacity-50"
-              title="Modify tool selection"
-            >
-              {modifying ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-            </button>
-          )}
         </div>
       </div>
 
       {/* Generate button - only show when active */}
       {isActive && (
         <div className="px-5 py-4 bg-surface-header border-t border-divider">
-          <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="w-full px-6 py-3 bg-accent text-white rounded-none font-medium hover:bg-accent-anchor transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Generating deliverables...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5" />
-                Generate Deliverables
-              </>
-            )}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleModifyTools}
+              disabled={loading || modifying}
+              className="px-4 py-3 border border-stroke-subtle bg-white text-text-primary rounded-none font-medium hover:bg-surface-subtle transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {modifying ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : null}
+              Change Tools
+            </button>
+            <button
+              onClick={handleGenerate}
+              disabled={loading}
+              className="flex-1 px-6 py-3 bg-accent text-white rounded-none font-medium hover:bg-accent-anchor transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Generating deliverables...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  Generate Deliverables
+                </>
+              )}
+            </button>
+          </div>
           
           {loading && (
             <p className="text-xs text-center text-text-tertiary mt-2">
