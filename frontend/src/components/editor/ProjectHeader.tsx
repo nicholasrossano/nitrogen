@@ -68,7 +68,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
         {/* Back button */}
         <Link 
           href="/" 
-          className="p-2 hover:bg-surface-subtle rounded transition-colors duration-150"
+          className="icon-btn"
         >
           <ArrowLeft className="w-5 h-5 text-text-secondary" />
         </Link>
@@ -94,14 +94,14 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="p-1.5 hover:bg-indicator-green/10 rounded text-indicator-green transition-colors"
+                className="icon-btn icon-btn-success p-1.5 text-indicator-green"
               >
                 <Check className="w-4 h-4" />
               </button>
               <button
                 onClick={handleCancel}
                 disabled={saving}
-                className="p-1.5 hover:bg-surface-subtle rounded text-text-tertiary transition-colors"
+                className="icon-btn p-1.5 text-text-tertiary"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -113,7 +113,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
               </h1>
               <button
                 onClick={() => setIsEditing(true)}
-                className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-surface-subtle rounded text-text-tertiary transition-all"
+                className="icon-btn p-1.5 opacity-0 group-hover:opacity-100 text-text-tertiary"
               >
                 <Pencil className="w-4 h-4" />
               </button>
