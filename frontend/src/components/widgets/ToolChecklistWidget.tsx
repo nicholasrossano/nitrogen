@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Check, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { getIconByName } from '@/lib/icons';
 
 interface ToolRecommendation {
@@ -103,26 +103,17 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
           const Icon = getIconByName(rec.tool.icon || 'FileText');
           
           return (
-            <label
+            <button
               key={toolId}
+              type="button"
+              onClick={() => isActive && toggleTool(toolId)}
+              disabled={!isActive}
               className={`
-                selectable-item flex items-start gap-3 p-3
+                selectable-item flex items-start gap-3 p-3 text-left w-full
                 ${isSelected ? 'selected' : 'border-stroke-subtle'}
                 ${!isActive ? 'pointer-events-none opacity-60' : ''}
               `}
             >
-              <div className={`checkbox-indicator mt-0.5 ${isSelected ? 'checked' : ''}`}>
-                {isSelected && <Check className="w-3 h-3 text-white relative z-10" />}
-              </div>
-              
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => toggleTool(toolId)}
-                className="sr-only"
-                disabled={!isActive}
-              />
-              
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <Icon className="w-4 h-4 text-accent" />
@@ -137,7 +128,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
                   {rec.tool.description || 'No description available'}
                 </p>
               </div>
-            </label>
+            </button>
           );
         })}
       </div>

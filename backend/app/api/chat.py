@@ -489,6 +489,28 @@ async def get_chat_history(
     )
     messages = messages_result.scalars().all()
     
+    # Rehydrate tool_checklist widget_data with current tool definitions
+    # (stored data may have stale descriptions from when the message was created)
+    registry = get_tool_registry()
+    tools_by_id = {t.definition.id: t.definition for t in registry.get_all_tools()}
+    
+    def rehydrate_widget_data(widget_data: dict | None) -> dict | None:
+        if not widget_data or "recommendations" not in widget_data:
+            return widget_data
+        recs = []
+        for r in widget_data["recommendations"]:
+            tool_data = r.get("tool") or {}
+            tool_id = tool_data.get("id")
+            current_def = tools_by_id.get(tool_id) if tool_id else None
+            if current_def:
+                recs.append({
+                    **r,
+                    "tool": current_def.to_dict(),
+                })
+            else:
+                recs.append(r)
+        return {**widget_data, "recommendations": recs}
+    
     # If no messages, add initial greeting
     if not messages:
         greeting = ChatMessage(
@@ -508,7 +530,7 @@ async def get_chat_history(
                 role=msg.role,
                 content=msg.content,
                 widget_type=msg.widget_type,
-                widget_data=msg.widget_data,
+                widget_data=rehydrate_widget_data(msg.widget_data) if msg.widget_type == "tool_checklist" else msg.widget_data,
                 created_at=msg.created_at,
             )
             for msg in messages
