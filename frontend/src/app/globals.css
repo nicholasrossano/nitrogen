@@ -501,6 +501,10 @@ textarea {
   opacity: 0.3;
 }
 
+.upload-btn.border-solid:hover {
+  border-style: solid;
+}
+
 .upload-btn:disabled {
   @apply opacity-50 cursor-not-allowed;
 }
