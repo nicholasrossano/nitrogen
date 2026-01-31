@@ -123,11 +123,15 @@ async def list_initiatives(
     user: MockUser = Depends(get_current_user),
     limit: int = 20,
     offset: int = 0,
+    archived: bool = False,
 ):
-    """List all initiatives for the current user"""
+    """List initiatives for the current user. Set archived=true to list archived/trashed projects."""
     result = await db.execute(
         select(Initiative)
-        .where(Initiative.user_id == user.uid)
+        .where(
+            Initiative.user_id == user.uid,
+            Initiative.archived == archived,
+        )
         .order_by(Initiative.updated_at.desc())
         .limit(limit)
         .offset(offset)
@@ -168,12 +172,73 @@ async def update_initiative(
 
 
 @router.delete("/initiatives/{initiative_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_initiative(
+async def archive_initiative(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Delete an initiative and all related data"""
+    """Archive (soft delete) an initiative - moves it to trash"""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    initiative.archived = True
+    await db.commit()
+    
+    return None
+
+
+@router.post("/initiatives/{initiative_id}/restore", response_model=InitiativeResponse)
+async def restore_initiative(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Restore an archived initiative from trash"""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    if not initiative.archived:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Initiative is not archived",
+        )
+    
+    initiative.archived = False
+    await db.commit()
+    await db.refresh(initiative)
+    
+    return initiative
+
+
+@router.delete("/initiatives/{initiative_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def permanently_delete_initiative(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Permanently delete an initiative and all related data"""
     result = await db.execute(
         select(Initiative).where(
             Initiative.id == initiative_id,

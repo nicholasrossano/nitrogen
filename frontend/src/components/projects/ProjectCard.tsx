@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, FolderOpen, Clock, Trash2 } from 'lucide-react';
+import { FileText, FolderOpen, Clock, Trash2, RotateCcw } from 'lucide-react';
 import { Initiative } from '@/lib/api';
 
 interface ProjectCardProps {
   project: Initiative;
   onDelete?: (id: string) => void;
+  onRestore?: (id: string) => void;
+  isTrash?: boolean;
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -34,7 +36,7 @@ function getOutputCount(project: Initiative): number {
   return Object.keys(project.deliverables).length;
 }
 
-export function ProjectCard({ project, onDelete }: ProjectCardProps) {
+export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: ProjectCardProps) {
   const title = project.title || 'Untitled';
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
@@ -47,27 +49,50 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     }
   };
 
+  const handleRestore = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onRestore) {
+      onRestore(project.id);
+    }
+  };
+
+  const CardWrapper = isTrash ? 'div' : Link;
+  const cardProps = isTrash ? {} : { href: `/initiatives/${project.id}` };
+
   return (
-    <Link href={`/initiatives/${project.id}`}>
-      <div className="card-interactive p-5 h-full flex flex-col relative group">
-        {/* Delete button */}
-        {onDelete && (
-          <button
-            onClick={handleDelete}
-            className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange hover:bg-indicator-orange/10 transition-all"
-            title="Delete project"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+    <CardWrapper {...cardProps as any}>
+      <div className={`p-5 h-full flex flex-col relative group ${isTrash ? 'card cursor-default' : 'card-interactive'}`}>
+        {/* Action button */}
+        {isTrash ? (
+          onRestore && (
+            <button
+              onClick={handleRestore}
+              className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green hover:bg-indicator-green/10 transition-all"
+              title="Restore project"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )
+        ) : (
+          onDelete && (
+            <button
+              onClick={handleDelete}
+              className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange hover:bg-indicator-orange/10 transition-all"
+              title="Delete project"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )
         )}
 
         {/* Icon and title */}
         <div className="flex items-start gap-3 mb-3 pr-6">
-          <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
-            <FolderOpen className="w-5 h-5 text-accent" />
+          <div className={`w-10 h-10 rounded flex items-center justify-center flex-shrink-0 ${isTrash ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
+            <FolderOpen className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-text-primary text-sm truncate">
+            <h3 className={`font-semibold text-sm truncate ${isTrash ? 'text-text-secondary' : 'text-text-primary'}`}>
               {title}
             </h3>
           </div>
@@ -97,6 +122,6 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
           </span>
         </div>
       </div>
-    </Link>
+    </CardWrapper>
   );
 }
