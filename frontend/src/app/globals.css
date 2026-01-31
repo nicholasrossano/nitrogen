@@ -138,6 +138,14 @@ body {
   @apply bg-surface border border-stroke-subtle shadow-subtle;
 }
 
+/* Clamp text to two lines */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* Input field base style */
 .input-field {
   @apply w-full px-4 py-3 bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary;
