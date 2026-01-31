@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { ChatMessage } from '@/lib/api';
 import { ChatInput } from '@/components/chat/ChatInput';
 import ReactMarkdown from 'react-markdown';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Interactive widgets that should appear in chat
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
@@ -12,6 +13,7 @@ import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
 import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
+import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -29,6 +31,7 @@ const CHAT_WIDGET_TYPES = [
   'generate_options',
   'tool_checklist',
   'deliverables_overview',
+  'alignment',
 ];
 
 // Widget that should render above the input bar
@@ -43,29 +46,89 @@ export function ChatPanel({
   fullWidth = false,
 }: ChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef<number>(0);
+  const prevLastMessageIdRef = useRef<string | null>(null);
 
+  // Ensure messages is always an array
+  const safeMessages = messages || [];
+  
+  // Debug logging
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    console.log('ChatPanel: mounted/messages changed', { 
+      count: safeMessages.length,
+      lastMessage: safeMessages[safeMessages.length - 1]?.content?.substring(0, 50)
+    });
+    
+    return () => {
+      console.log('ChatPanel: UNMOUNTING!');
+    };
+  }, [safeMessages]);
+  
+  // Log every render
+  console.log('ChatPanel: rendering', { messageCount: safeMessages.length });
+
+  // Scroll to bottom when messages change (new message added or content reloaded)
+  useEffect(() => {
+    const lastMessage = safeMessages[safeMessages.length - 1];
+    const lastMessageId = lastMessage?.id || null;
+    
+    // Scroll if message count increased OR if the last message ID changed (content reload)
+    const shouldScroll = 
+      safeMessages.length > prevMessageCountRef.current ||
+      (lastMessageId && lastMessageId !== prevLastMessageIdRef.current);
+    
+    if (shouldScroll && scrollContainerRef.current) {
+      // Use setTimeout to ensure DOM has fully rendered
+      setTimeout(() => {
+        if (scrollContainerRef.current) {
+          // Scroll to bottom of container
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+          console.log('ChatPanel: scrolled to bottom', {
+            scrollTop: scrollContainerRef.current.scrollTop,
+            scrollHeight: scrollContainerRef.current.scrollHeight,
+            clientHeight: scrollContainerRef.current.clientHeight
+          });
+        }
+      }, 100);
+    }
+    
+    prevMessageCountRef.current = safeMessages.length;
+    prevLastMessageIdRef.current = lastMessageId;
+  }, [safeMessages]);
 
   // Check if the latest message has a document_request widget
-  const latestMessage = messages[messages.length - 1];
+  const latestMessage = safeMessages[safeMessages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
 
   return (
-    <div className={`flex flex-col h-full ${fullWidth ? '' : 'border-r border-divider'}`}>
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.map((message, index) => (
-          <ChatMessageItem 
-            key={message.id} 
-            message={message}
-            initiativeId={initiativeId}
-            isLatest={index === messages.length - 1}
-          />
-        ))}
+    <div className={`flex flex-col h-full overflow-hidden ${fullWidth ? '' : 'border-r border-divider'}`}>
+      {/* Messages - use absolute positioning to prevent flex issues */}
+      <div className="flex-1 relative">
+        <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-4">
+        {/* Debug: show message count */}
+        <div className="text-xs text-text-tertiary bg-surface-subtle px-2 py-1 rounded mb-2">
+          Messages: {safeMessages.length}
+        </div>
         
-        <div ref={messagesEndRef} />
+        {safeMessages.length === 0 ? (
+          <div className="text-center text-text-tertiary py-8">
+            No messages yet. Start a conversation!
+          </div>
+        ) : (
+          safeMessages.map((message, index) => (
+            <ErrorBoundary key={message.id || `msg-${index}`}>
+              <ChatMessageItem 
+                message={message}
+                initiativeId={initiativeId}
+                isLatest={index === safeMessages.length - 1}
+              />
+            </ErrorBoundary>
+          ))
+        )}
+        
+        <div ref={messagesEndRef} className="h-1" />
+        </div>
       </div>
 
       {/* Document Request Widget (above input) */}
@@ -98,6 +161,12 @@ function ChatMessageItem({
   initiativeId: string;
   isLatest: boolean;
 }) {
+  // Defensive: ensure message is valid
+  if (!message) {
+    console.warn('ChatMessageItem: received null/undefined message');
+    return null;
+  }
+
   const isUser = message.role === 'user';
   const shouldShowWidget = message.widget_type && 
     message.widget_data && 
@@ -154,18 +223,57 @@ function ChatWidget({
   initiativeId: string;
   isActive: boolean;
 }) {
+  console.log('ChatWidget render:', { type, isActive, hasData: !!data });
+  
+  // Defensive check for missing data
+  if (!data) {
+    console.warn(`ChatWidget: Missing data for widget type "${type}"`);
+    return null;
+  }
+
   switch (type) {
     case 'confirmation':
-      return <ConfirmationWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return (
+        <ErrorBoundary>
+          <ConfirmationWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
     case 'evidence_input':
-      return <EvidenceInputWidget initiativeId={initiativeId} isActive={isActive} />;
+      return (
+        <ErrorBoundary>
+          <EvidenceInputWidget initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
     case 'generate_options':
-      return <GenerateOptionsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return (
+        <ErrorBoundary>
+          <GenerateOptionsWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
     case 'tool_checklist':
-      return <ToolChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return (
+        <ErrorBoundary>
+          <ToolChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
     case 'deliverables_overview':
-      return <DeliverablesOverviewWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return (
+        <ErrorBoundary>
+          <DeliverablesOverviewWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'alignment':
+      if (!data.alignment || !data.tool) {
+        console.warn('ChatWidget: Missing alignment or tool data for alignment widget');
+        return null;
+      }
+      return (
+        <ErrorBoundary>
+          <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
     default:
+      console.warn(`ChatWidget: Unknown widget type "${type}"`);
       return null;
   }
 }

@@ -206,7 +206,7 @@ export default function InitiativePage() {
           </>
         ) : (
           /* No outputs - full width chat */
-          <div className="flex-1">
+          <div className="flex-1 overflow-hidden h-full">
             <ChatPanel
               messages={messages}
               sending={sending}
