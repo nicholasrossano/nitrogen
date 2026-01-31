@@ -65,18 +65,43 @@ body {
   background: var(--color-stroke-subtle);
 }
 
-/* Chat message animation - fast, subtle */
-@keyframes fadeIn {
+/* Chat message animation - fade in with slight rise */
+@keyframes fadeInRise {
   from {
     opacity: 0;
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
+/* User message: fade + rise */
 .message-enter {
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeInRise 0.5s ease-out forwards;
+}
+
+/* Bot message: fade only */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.message-enter-bot {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Widget with user message: rise + fade */
+.message-widget-enter {
+  animation: fadeInRise 0.4s ease-out 0.15s forwards;
+  opacity: 0;
+}
+
+/* Widget with bot message: fade only */
+.message-widget-enter-bot {
+  animation: fadeIn 0.3s ease-out 0.1s forwards;
+  opacity: 0;
 }
 
 /* Loading indicator - simple dots */

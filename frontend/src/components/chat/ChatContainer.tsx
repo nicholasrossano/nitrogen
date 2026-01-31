@@ -13,16 +13,20 @@ interface ChatContainerProps {
 export function ChatContainer({ initiativeId }: ChatContainerProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
+  const lastSeenCountRef = useRef<number>(0);
+  const isInitialLoadRef = useRef<boolean>(true);
   const { messages, sending, generating, stageStatus } = useInitiativeStore();
-  
-  // Debug logging
+
+  // Track which messages to animate (only newly sent/received, not on initial load)
   useEffect(() => {
-    console.log('ChatContainer: sending =', sending, 'generating =', generating);
-  }, [sending, generating]);
+    if (messages.length > 0 && isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+    }
+    lastSeenCountRef.current = messages.length;
+  }, [messages.length]);
 
   // Auto-scroll to bottom only when new messages are added
   useEffect(() => {
-    // Only scroll if message count increased (new message added)
     if (messages.length > prevMessageCountRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -38,12 +42,14 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
             const prevRole = index > 0 ? messages[index - 1].role : null;
             const isUserFollowingBot = prevRole === 'assistant' && message.role === 'user';
             const marginClass = index === 0 ? '' : isUserFollowingBot ? 'mt-1' : 'mt-3';
+            const animate = !isInitialLoadRef.current && index >= lastSeenCountRef.current;
             return (
               <ChatMessage
                 key={message.id}
                 message={message}
                 initiativeId={initiativeId}
                 isLatest={index === messages.length - 1}
+                animate={animate}
                 className={marginClass}
               />
             );
