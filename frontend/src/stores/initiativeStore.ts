@@ -274,7 +274,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await api.exportMemo(id, memoId || undefined);
-      api.downloadExport(response.export_id);
+      await api.downloadExport(response.export_id);
       set({ loading: false });
     } catch (error) {
       set({

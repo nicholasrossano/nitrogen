@@ -158,27 +158,29 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
             <button
               onClick={handleModifyTools}
               disabled={loading || modifying}
-              className="btn-secondary px-4 py-3 rounded-none flex items-center justify-center gap-2"
+              className="btn-secondary px-4 py-3 rounded-none flex items-center justify-center gap-2 min-w-[85px]"
+              style={{ flex: '0 2 auto' }}
             >
               {modifying ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
               ) : null}
-              Change Tools
+              <span className="text-center leading-tight">Change Tools</span>
             </button>
             <button
               onClick={handleGenerate}
               disabled={loading}
-              className="btn-primary flex-1 px-6 py-3 rounded-none flex items-center justify-center gap-2"
+              className="btn-primary px-6 py-3 rounded-none flex items-center justify-center gap-2 min-w-[140px]"
+              style={{ flex: '1 1 auto' }}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating deliverables...
+                  <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+                  <span className="text-center leading-tight">Generating deliverables...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-5 h-5" />
-                  Generate Deliverables
+                  <Sparkles className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-center leading-tight">Generate Deliverables</span>
                 </>
               )}
             </button>
