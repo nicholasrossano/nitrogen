@@ -1,6 +1,6 @@
 'use client';
 
-import { FolderOpen, Trash2 } from 'lucide-react';
+import { LayoutGrid, Trash2 } from 'lucide-react';
 
 export type NavItem = 'projects' | 'trash';
 
@@ -27,16 +27,16 @@ export function SideDrawer({ activeItem, onItemSelect }: SideDrawerProps) {
           onClick={() => onItemSelect('projects')}
           className={`nav-row w-full ${activeItem === 'projects' ? 'nav-row-active' : ''}`}
         >
-          <FolderOpen className="w-5 h-5 flex-shrink-0" />
-          <span className="font-medium">Projects</span>
+          <LayoutGrid className="w-4 h-4 flex-shrink-0" />
+          <span>Projects</span>
         </button>
 
         <button
           onClick={() => onItemSelect('trash')}
           className={`nav-row w-full ${activeItem === 'trash' ? 'nav-row-active' : ''}`}
         >
-          <Trash2 className="w-5 h-5 flex-shrink-0" />
-          <span className="font-medium">Trash</span>
+          <Trash2 className="w-4 h-4 flex-shrink-0" />
+          <span>Trash</span>
         </button>
       </nav>
     </aside>
