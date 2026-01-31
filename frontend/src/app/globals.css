@@ -694,7 +694,7 @@ textarea {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   background-color: var(--color-accent);
   z-index: 1;
 }
