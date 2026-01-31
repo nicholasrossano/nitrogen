@@ -7,9 +7,9 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ProjectHeader, InputOutputBar, EditorPanel, ChatPanel } from '@/components/editor';
 
-const MIN_CHAT_WIDTH_PERCENT = 20;
+const MIN_CHAT_WIDTH_PERCENT = 25;
 const MAX_CHAT_WIDTH_PERCENT = 50;
-const DEFAULT_CHAT_WIDTH_PERCENT = 30;
+const DEFAULT_CHAT_WIDTH_PERCENT = 50;
 
 export default function InitiativePage() {
   const params = useParams();
