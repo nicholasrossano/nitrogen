@@ -592,3 +592,51 @@ textarea {
 .section-divider {
   @apply w-full border-t-2 border-accent;
 }
+
+/* Navigation row - flat spreadsheet style with hover lift */
+.nav-row {
+  @apply flex items-center gap-3 px-4 py-3 text-left text-text-secondary border-b border-accent bg-white;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out, color 200ms ease-out;
+}
+
+.nav-row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.nav-row:hover {
+  @apply text-text-primary shadow-md;
+  transform: translateY(-2px);
+}
+
+.nav-row:hover::before {
+  opacity: 1;
+}
+
+.nav-row:active {
+  @apply shadow-none;
+  transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+}
+
+/* Active nav row state */
+.nav-row-active {
+  @apply text-accent-anchor;
+}
+
+.nav-row-active::before {
+  background-color: var(--color-accent-wash);
+  opacity: 1;
+}
+
+.nav-row-active:hover::before {
+  opacity: 0.8;
+}
