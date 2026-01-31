@@ -137,9 +137,6 @@ async def send_chat_message(
     if user_message_count == 1 and not has_document_request:
         logging.info("STAGE 1: Asking for materials")
         
-        # Get the user's project description
-        user_description = data.content
-        
         # Extract and save project info
         try:
             project_info = await chat_agent.extract_project_info(messages)
@@ -156,8 +153,8 @@ async def send_chat_message(
         except Exception as e:
             logging.error(f"Project extraction failed: {e}")
         
-        # LLM generates the materials request with context-appropriate details
-        assistant_response = await chat_agent.generate_materials_request_v2(user_description)
+        # Scripted materials request (no LLM)
+        assistant_response = "Do you have existing materials you want to upload to streamline the research process?"
         widget_type = "document_request"
         widget_data = {"allow_multiple": True}
     
@@ -190,7 +187,7 @@ async def send_chat_message(
                 preview_text = first_chunk.content[:200].replace('\n', ' ').strip()
             
             doc_names = ", ".join([d.filename for d in docs])
-            confirmation_msg = f"Thanks! I've received and processed {len(docs)} document{'s' if len(docs) > 1 else ''}: {doc_names}."
+            confirmation_msg = f"I received and processed {len(docs)} document{'s' if len(docs) > 1 else ''}: {doc_names}."
             if preview_text:
                 try:
                     summary = await chat_agent.quick_doc_summary(preview_text)
@@ -198,7 +195,7 @@ async def send_chat_message(
                 except:
                     confirmation_msg += " I'll use this to create more accurate outputs."
         else:
-            confirmation_msg = "No problem! I can create documentation based on our conversation. I may need to make some assumptions, but I'll flag those for you."
+            confirmation_msg = "I can create documentation based on our conversation. I may need to make some assumptions, but I'll flag those for you."
         
         # Save the confirmation message FIRST (no widget)
         confirmation_message = ChatMessage(
