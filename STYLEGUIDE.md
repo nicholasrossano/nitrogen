@@ -143,9 +143,10 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ## F) Elevation & Depth
 
 - Flat by default  
-- Shadows only if separation is unclear  
+- Shadows only if separation is unclear or to indicate interactivity
 - Low opacity, tight radius  
-- No glass or blur on core content  
+- No glass or blur on core content
+- **Hover lift**: Buttons and cards may use subtle shadow + translateY on hover to indicate interactivity  
 
 ---
 
@@ -241,6 +242,42 @@ For button and interactive element hover states, use **opacity-based transitions
 - Use opacity fade for significant interactive elements
 - Simple icon buttons can use standard `transition-colors` for subtle states
 - Keep transitions short and purposeful — no decorative motion
+
+### Shadow Lift Pattern (Interactive Elements)
+For buttons and interactive cards, combine the opacity fade with a **subtle lift effect** on hover. This creates a tactile, responsive feel while maintaining the enterprise aesthetic.
+
+**Effect:**
+- Rise 2px on hover (`transform: translateY(-2px)`)
+- Add medium shadow (`shadow-md`)
+- Return to original position on click (tactile feedback)
+- 300ms duration with ease-out easing
+
+**Implementation:**
+```css
+.element {
+  transition: box-shadow 300ms ease-out, transform 300ms ease-out;
+}
+
+.element:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.element:active {
+  transform: translateY(0);
+}
+```
+
+**Applied to:**
+- `.btn-primary` — Primary action buttons
+- `.btn-secondary` — Secondary action buttons  
+- `.card-interactive` — Clickable project cards and similar elements
+
+**Rules**
+- Use for primary interactive elements that benefit from tactile feedback
+- Keep the lift subtle (2px max) to maintain professional feel
+- Always pair with `:active` state that returns to original position
+- Do not apply to small icon buttons or inline interactive elements
 
 ---
 
