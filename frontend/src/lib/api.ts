@@ -21,6 +21,7 @@ export interface Initiative {
   project_type: string | null;
   selected_tools: string[] | null;
   tool_inputs: Record<string, any> | null;
+  tool_alignments: Record<string, ToolAlignment> | null;
   deliverables: Record<string, any> | null;
 }
 
@@ -91,6 +92,42 @@ export interface EvidenceDoc {
   file_type: string | null;
   created_at: string;
   chunk_count: number;
+}
+
+// Alignment types
+export interface AlignmentSection {
+  id: string;
+  title: string;
+  description: string;
+  key_points: string[];
+  include: boolean;
+  order: number;
+}
+
+export interface AlignmentParameter {
+  name: string;
+  label: string;
+  description: string;
+  param_type: 'text' | 'number' | 'select' | 'boolean';
+  value: any;
+  options?: string[] | null;
+  unit?: string | null;
+}
+
+export interface ToolAlignment {
+  tool_id: string;
+  title: string;
+  description: string;
+  sections: AlignmentSection[];
+  parameters: AlignmentParameter[];
+  assumptions: string[];
+  confirmed: boolean;
+  feedback?: string | null;
+}
+
+export interface AlignmentResponse {
+  alignment: ToolAlignment;
+  message: string;
 }
 
 async function fetchApi<T>(
@@ -289,5 +326,41 @@ export const api = {
     fetchApi<{ success: boolean; deliverables: Record<string, any> }>(
       `/api/v1/initiatives/${initiativeId}/generate-all`,
       { method: 'POST' }
+    ),
+
+  // Alignment
+  getAlignment: (initiativeId: string, toolId: string) =>
+    fetchApi<{ alignment: ToolAlignment; tool_id: string }>(
+      `/api/v1/initiatives/${initiativeId}/alignment/${toolId}`
+    ),
+
+  confirmAlignment: (
+    initiativeId: string,
+    toolId: string,
+    sections?: AlignmentSection[],
+    parameters?: AlignmentParameter[]
+  ) =>
+    fetchApi<AlignmentResponse>(
+      `/api/v1/initiatives/${initiativeId}/alignment/confirm`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tool_id: toolId,
+          sections,
+          parameters,
+        }),
+      }
+    ),
+
+  provideFeedback: (initiativeId: string, toolId: string, feedback: string) =>
+    fetchApi<AlignmentResponse>(
+      `/api/v1/initiatives/${initiativeId}/alignment/feedback`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tool_id: toolId,
+          feedback,
+        }),
+      }
     ),
 };
