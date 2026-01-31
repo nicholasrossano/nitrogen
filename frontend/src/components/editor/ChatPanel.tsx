@@ -106,11 +106,6 @@ export function ChatPanel({
       {/* Messages - use absolute positioning to prevent flex issues */}
       <div className="flex-1 relative">
         <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-4">
-        {/* Debug: show message count */}
-        <div className="text-xs text-text-tertiary bg-surface-subtle px-2 py-1 rounded mb-2">
-          Messages: {safeMessages.length}
-        </div>
-        
         {safeMessages.length === 0 ? (
           <div className="text-center text-text-tertiary py-8">
             No messages yet. Start a conversation!
