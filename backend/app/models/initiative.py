@@ -58,6 +58,9 @@ class Initiative(Base):
     stage_1_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     evidence_ready: Mapped[bool] = mapped_column(Boolean, default=False)
     
+    # Archive flag for soft delete
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 

@@ -48,6 +48,7 @@ class InitiativeResponse(BaseModel):
     stage: str
     stage_1_complete: bool
     evidence_ready: bool
+    archived: bool = False
     created_at: datetime
     updated_at: datetime
     # New tool-based fields
