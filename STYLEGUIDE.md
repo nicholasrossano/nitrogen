@@ -4,8 +4,6 @@
 This guide defines the visual language for Wisterion as an enterprise-grade B2B platform.  
 It is prescriptive and concise, prioritizing clarity, restraint, and long-term credibility.
 
----
-
 ## A) Design Principles
 
 - **Calm, institutional, and precise**
@@ -14,18 +12,19 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 - **Restrained geometry**
 - **Minimal depth**
 - **Color used primarily as meaning**
+- **Interaction feedback through subtle motion (web-equivalent haptics)**
 
 **Do**
 - Keep layouts predictable and grid-aligned  
 - Use neutral surfaces by default  
 - Apply accent colors deliberately  
+- Use micro-interactions to confirm intent  
 
 **Don’t**
 - Use large expressive color fills  
 - Introduce playful shapes or motion  
 - Mix multiple visual metaphors  
-
----
+- Allow interactions to feel inert or abrupt  
 
 ## B) Color System (Hex Tokens)
 
@@ -71,8 +70,6 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 - Accent is not a background color  
 - Indicator colors encode meaning only  
 
----
-
 ## C) Typography
 
 ### Fonts
@@ -93,8 +90,6 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 - Urbanist only for select headers  
 - Avoid italics in dense UI  
 
----
-
 ## D) Spacing & Layout
 
 ### Spacing scale
@@ -105,8 +100,6 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 - Section spacing: **16–24**  
 - Card padding: **16–20**  
 - Dense stacks: **8–12**
-
----
 
 ## E) Shape & Corner Radius
 
@@ -120,25 +113,17 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 - Navigation elements
 
 ### Exceptions: Subtle Rounding for Interactive Elements
-**Small radius (4-6px) reserved for:**
+**Small radius (4–6px) reserved for:**
 - Icon-only buttons (edit, delete, close actions)
 - Interactive pill buttons (input/output selection tags)
 - Action icons that need tactile affordance
 - Upload zones with rounded borders
 
-### Why Sharp?
-- Creates clean grid alignment
-- Enhances institutional, precise aesthetic
-- Maintains consistency with data-heavy interfaces
-- Better suits Watershed-inspired hard accent lines
-
 **Rules**
 - Default to **0** (sharp corners) for all containers and buttons
-- Use **4-6px** only for small interactive elements that benefit from softness
+- Use **4–6px** only for small interactive elements that benefit from softness
 - Never use radius > **8px** anywhere in the UI
 - Consistent application: if one button is sharp, all similar buttons are sharp  
-
----
 
 ## F) Elevation & Depth
 
@@ -146,59 +131,37 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 - Shadows only if separation is unclear or to indicate interactivity
 - Low opacity, tight radius  
 - No glass or blur on core content
-- **Hover lift**: Buttons and cards may use subtle shadow + translateY on hover to indicate interactivity  
-
----
 
 ## G) Icons & Imagery
 
 ### Icons
-- **System**: Lucide React (monochromatic, 16-24px stroke)
+- **System**: Lucide React (monochromatic, 16–24px stroke)
 - **Color**: Inherit from context or use accent colors
 - **Usage**: Functional only — enhance meaning, don't decorate
 - **No emojis**: Never use emoji in production UI
-
-**Icon color patterns**
-- Default state: `text-text-secondary` (neutral)
-- Active/selected: `text-accent` (primary accent)
-- Status indicators: `text-indicator-*` (semantic meaning)
-
-**Do**
-```tsx
-<FileText className="w-5 h-5 text-accent" />
-<CheckCircle className="w-4 h-4 text-indicator-green" />
-```
-
-**Don't**
-```tsx
-<span>📄</span> // No emojis
-<Icon className="w-12 h-12" /> // Too large
-<Icon color="#FF5733" /> // Custom colors outside system
-```
 
 ### Imagery
 - Informational imagery only  
 - Match image corners to container (8px standard)
 - No decorative illustrations  
 
----
+## H) Motion & Interaction Feedback (Web-Equivalent Haptics)
 
-## H) Motion & Transitions
+Motion replaces haptics on the web. Feedback should feel **immediate, weighted, and deliberate**, never playful.
 
-### Timing
-- **Default duration**: 200ms for hover states
-- **Easing**: `ease-in-out` for smooth fade effects
-- No expressive or elastic easing
+### Timing & Easing
+- **Hover / focus**: 150–200ms  
+- **Press / active**: 80–120ms  
+- **Easing**: `ease-out` or `ease-in-out`  
+- No spring, bounce, or elastic easing  
 
 ### Opacity Fade Pattern (Preferred)
-For button and interactive element hover states, use **opacity-based transitions** via pseudo-elements. This creates a smooth, professional fade-in/fade-out effect rather than an abrupt color swap.
+Use opacity fades instead of hard color swaps for hover and selection states.
 
-**Implementation:**
 ```css
 .element {
   position: relative;
   overflow: hidden;
-  z-index: 0;
 }
 
 .element::before {
@@ -208,54 +171,25 @@ For button and interactive element hover states, use **opacity-based transitions
   background-color: var(--target-color);
   opacity: 0;
   transition: opacity 200ms ease-in-out;
-  z-index: -1;
 }
 
 .element:hover::before {
   opacity: 1;
 }
-```
 
-**Available CSS classes:**
+Use for
+	•	Buttons (primary, secondary, ghost)
+	•	Selectable rows or list items
+	•	Interactive cards
+	•	Pills and toggle-style controls
 
-*Buttons:*
-- `.btn-primary` — Accent border/text, fills with accent on hover
-- `.btn-secondary` — Subtle border, fills with surface-subtle on hover
-- `.btn-ghost` — No border, fills with surface-subtle on hover
-- `.btn-filled` — For filled buttons that darken on hover (e.g., send button)
-- `.upload-btn` — Dashed border upload/action button
+**Shadow Lift with Press Compression**
 
-*Interactive Elements:*
-- `.selectable-item` — For checkbox/toggle style items (add `.selected` when active)
-- `.checkbox-indicator` — Checkbox square with fade (add `.checked` when active)
-- `.pill-btn` — Pill/tag buttons (add `.selected` when active)
-- `.icon-btn` — Icon-only buttons (variants: `.icon-btn-danger`, `.icon-btn-success`)
-- `.expandable-header` — Collapsible section headers
-- `.card-interactive` — Clickable cards with hover effect
+For primary interactive elements, combine hover lift with press compression. Shadow fades in on hover and fades out on press for tactile feedback.
 
-*Generic Utilities:*
-- `.hover-fade` — Generic utility for surface-subtle hover fade
-- `.hover-fade-accent` — Generic utility for accent-wash hover fade
-
-**Rules**
-- Use opacity fade for all buttons (primary, secondary, ghost)
-- Use opacity fade for significant interactive elements
-- Simple icon buttons can use standard `transition-colors` for subtle states
-- Keep transitions short and purposeful — no decorative motion
-
-### Shadow Lift Pattern (Interactive Elements)
-For buttons and interactive cards, combine the opacity fade with a **subtle lift effect** on hover. This creates a tactile, responsive feel while maintaining the enterprise aesthetic.
-
-**Effect:**
-- Rise 2px on hover (`transform: translateY(-2px)`)
-- Add medium shadow (`shadow-md`)
-- Return to original position on click (tactile feedback)
-- 300ms duration with ease-out easing
-
-**Implementation:**
 ```css
 .element {
-  transition: box-shadow 300ms ease-out, transform 300ms ease-out;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
 }
 
 .element:hover {
@@ -264,32 +198,40 @@ For buttons and interactive cards, combine the opacity fade with a **subtle lift
 }
 
 .element:active {
-  transform: translateY(0);
+  box-shadow: none;
+  transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 ```
 
-**Applied to:**
-- `.btn-primary` — Primary action buttons
-- `.btn-secondary` — Secondary action buttons  
-- `.card-interactive` — Clickable project cards and similar elements
-
 **Rules**
-- Use for primary interactive elements that benefit from tactile feedback
-- Keep the lift subtle (2px max) to maintain professional feel
-- Always pair with `:active` state that returns to original position
-- Do not apply to small icon buttons or inline interactive elements
+- Hover: lift up (-2px) with shadow fade in (200ms)
+- Press: compress (scale 0.98), return to origin, shadow fades out (100ms)
+- Active transition is faster than hover for snappier tactile feel
+- Scale only 1–2%
+- Never combine with bounce or elastic motion
 
----
+**Apply to**
+- Primary action buttons
+- Secondary buttons with shadow
+- Clickable cards
+
+**Do not apply to**
+- Inline links
+- Icon-only buttons
+- Ghost buttons
+- Dense table rows
+
+**Deliberate Micro-Delay**
+
+For high-importance actions, a 30–60ms delay before state change is acceptable to add perceived weight.
 
 ## I) Accessibility (Visual)
-
-- WCAG AA contrast minimum  
-- Color never sole indicator  
-- Focus and selection clearly visible  
-
----
+	•	WCAG AA contrast minimum
+	•	Color never sole indicator
+	•	Focus and selection clearly visible
 
 ## J) Visual North Star
 
-The UI should feel at home next to enterprise dashboards, analytics tools, and compliance software.  
+The UI should feel at home next to enterprise dashboards, analytics tools, and compliance software.
 If it feels playful or brand-forward, it is likely off-spec.
