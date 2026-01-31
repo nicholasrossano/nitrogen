@@ -163,7 +163,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
-  transition: box-shadow 300ms ease-out, transform 300ms ease-out;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
 }
 
 .btn-primary::before {
@@ -172,7 +172,7 @@ textarea {
   inset: 0;
   background-color: var(--color-accent);
   opacity: 0;
-  transition: opacity 300ms ease-in-out;
+  transition: opacity 200ms ease-in-out;
   z-index: -1;
 }
 
@@ -191,7 +191,9 @@ textarea {
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  @apply shadow-none;
+  transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
 .btn-secondary {
@@ -201,7 +203,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
-  transition: box-shadow 300ms ease-out, transform 300ms ease-out;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
 }
 
 .btn-secondary::before {
@@ -225,7 +227,9 @@ textarea {
 }
 
 .btn-secondary:active {
-  transform: translateY(0);
+  @apply shadow-none;
+  transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
 .btn-ghost {
@@ -482,12 +486,18 @@ textarea {
 /* Card hover with shadow lift */
 .card-interactive {
   @apply card cursor-pointer;
-  transition: box-shadow 300ms ease-out, transform 300ms ease-out, border-color 300ms ease-out;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
 }
 
 .card-interactive:hover {
   @apply border-stroke-accent shadow-md;
   transform: translateY(-2px);
+}
+
+.card-interactive:active {
+  @apply shadow-none;
+  transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
 /* Expandable header with opacity fade */
