@@ -68,7 +68,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
           onRestore && (
             <button
               onClick={handleRestore}
-              className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green hover:bg-indicator-green/10 transition-all"
+              className="project-action-btn project-action-btn-success absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity"
               title="Restore project"
             >
               <RotateCcw className="w-4 h-4" />
@@ -78,7 +78,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
           onDelete && (
             <button
               onClick={handleDelete}
-              className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange hover:bg-indicator-orange/10 transition-all"
+              className="project-action-btn project-action-btn-danger absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
               title="Delete project"
             >
               <Trash2 className="w-4 h-4" />
