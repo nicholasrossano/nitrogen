@@ -65,7 +65,7 @@ export function InputOutputBar({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 border border-dashed border-stroke-subtle rounded hover:border-accent hover:bg-accent-wash/30 transition-colors text-sm text-text-secondary"
+                className="upload-btn"
               >
                 <Upload className="w-4 h-4" />
                 Upload documents
@@ -76,13 +76,7 @@ export function InputOutputBar({
                   <button
                     key={doc.id}
                     onClick={() => onSelectItem(doc.id, 'input')}
-                    className={`
-                      flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors
-                      ${selectedItemId === doc.id
-                        ? 'bg-accent-wash border border-stroke-accent text-accent-anchor'
-                        : 'bg-surface-grey border border-transparent text-text-primary hover:border-stroke-subtle'
-                      }
-                    `}
+                    className={`pill-btn ${selectedItemId === doc.id ? 'selected' : ''}`}
                   >
                     <FileText className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate max-w-[120px]">{doc.filename || 'Document'}</span>
@@ -91,7 +85,7 @@ export function InputOutputBar({
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={loading || uploading}
-                  className="w-9 h-9 flex items-center justify-center border border-dashed border-stroke-subtle rounded hover:border-accent hover:bg-accent-wash/30 transition-colors text-text-tertiary"
+                  className="upload-btn w-9 h-9 justify-center"
                 >
                   {uploading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -120,13 +114,7 @@ export function InputOutputBar({
                   <button
                     key={output.id}
                     onClick={() => onSelectItem(output.id, 'output')}
-                    className={`
-                      flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors
-                      ${selectedItemId === output.id
-                        ? 'bg-accent-wash border border-stroke-accent text-accent-anchor'
-                        : 'bg-surface-grey border border-transparent text-text-primary hover:border-stroke-subtle'
-                      }
-                    `}
+                    className={`pill-btn ${selectedItemId === output.id ? 'selected' : ''}`}
                   >
                     <FileText className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate max-w-[120px]">{output.name}</span>
