@@ -87,7 +87,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
         )}
 
         {/* Icon and title */}
-        <div className="flex items-start gap-3 mb-3 pr-6">
+        <div className="flex items-center gap-3 mb-3 pr-6">
           <div className={`w-10 h-10 rounded flex items-center justify-center flex-shrink-0 ${isTrash ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
             <FolderOpen className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
           </div>
@@ -98,13 +98,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
           </div>
         </div>
 
-        {/* Description preview */}
-        {project.project_description && (
-          <p className="text-xs text-text-secondary line-clamp-2 mb-4 flex-1">
-            {project.project_description}
-          </p>
-        )}
-        {!project.project_description && <div className="flex-1" />}
+        <div className="flex-1" />
 
         {/* Stats row */}
         <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-3 border-t border-divider">
