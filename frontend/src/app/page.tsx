@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Menu, Trash2 } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2 } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, NavItem } from '@/components/ui';
@@ -13,7 +13,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<NavItem>('projects');
 
   useEffect(() => {
@@ -75,69 +74,43 @@ export default function HomePage() {
   const isTrashView = activeNav === 'trash';
 
   return (
-    <main className="min-h-full bg-white">
-      {/* Side Drawer */}
+    <div className="min-h-screen h-screen flex">
+      {/* Persistent Sidebar */}
       <SideDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
         activeItem={activeNav}
         onItemSelect={handleNavChange}
       />
 
-      {/* Header */}
-      <header className="px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsDrawerOpen(true)}
-            className="p-2 -ml-2 rounded text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-colors"
-            title="Menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+      {/* Main content area */}
+      <main className="flex-1 bg-white min-h-screen overflow-auto">
+        {/* Header - h-[72px] for consistent alignment with sidebar */}
+        <header className="h-[72px] px-6 flex items-center justify-between">
           <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
             Wisteria
           </h1>
-        </div>
-        {!isTrashView && (
-          <button
-            onClick={handleNewProject}
-            disabled={creating}
-            className="btn-primary text-sm"
-          >
-            {creating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                New Project
-              </>
-            )}
-          </button>
-        )}
-      </header>
+          {!isTrashView && (
+            <button
+              onClick={handleNewProject}
+              disabled={creating}
+              className="btn-primary text-sm"
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  New Project
+                </>
+              )}
+            </button>
+          )}
+        </header>
 
       {/* Accent divider */}
       <div className="divider-accent" />
-
-      {/* View title */}
-      <div className="px-6 pt-6 pb-2">
-        <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-          {isTrashView ? (
-            <>
-              <Trash2 className="w-5 h-5 text-text-tertiary" />
-              Trash
-            </>
-          ) : (
-            <>
-              <FolderOpen className="w-5 h-5 text-accent" />
-              Projects
-            </>
-          )}
-        </h2>
-      </div>
 
       {/* Content */}
       <div className="px-6 py-4">
@@ -208,6 +181,7 @@ export default function HomePage() {
           </div>
         )}
       </div>
-    </main>
+      </main>
+    </div>
   );
 }
