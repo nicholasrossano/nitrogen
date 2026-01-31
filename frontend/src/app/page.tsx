@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2 } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, NavItem } from '@/components/ui';
@@ -14,6 +14,7 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>('projects');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadProjects();
@@ -73,6 +74,15 @@ export default function HomePage() {
 
   const isTrashView = activeNav === 'trash';
 
+  const filteredProjects = projects.filter((p: Initiative) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    const title = (p.title || 'Untitled').toLowerCase();
+    const sector = (p.sector || '').toLowerCase();
+    const desc = (p.project_description || '').toLowerCase();
+    return title.includes(q) || sector.includes(q) || desc.includes(q);
+  });
+
   return (
     <div className="min-h-screen h-screen flex">
       {/* Persistent Sidebar */}
@@ -84,29 +94,42 @@ export default function HomePage() {
       {/* Main content area */}
       <main className="flex-1 bg-white min-h-screen overflow-auto">
         {/* Header - h-[72px] for consistent alignment with sidebar */}
-        <header className="h-[72px] px-6 flex items-center justify-between">
-          <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
+        <header className="h-[72px] px-6 flex items-center justify-between gap-4">
+          <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight shrink-0">
             Wisteria
           </h1>
-          {!isTrashView && (
-            <button
-              onClick={handleNewProject}
-              disabled={creating}
-              className="btn-primary text-sm"
-            >
-              {creating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  New Project
-                </>
-              )}
-            </button>
-          )}
+          <div className="flex items-center gap-3 flex-1 max-w-md justify-end">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary pointer-events-none shrink-0" />
+              <input
+                type="search"
+                placeholder={isTrashView ? 'Search trash...' : 'Search projects...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 pl-[2.75rem] pr-4 py-2.5 text-sm rounded-none bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+                aria-label={isTrashView ? 'Search trash' : 'Search projects'}
+              />
+            </div>
+            {!isTrashView && (
+              <button
+                onClick={handleNewProject}
+                disabled={creating}
+                className="btn-primary text-sm shrink-0"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    New Project
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </header>
 
       {/* Accent divider */}
@@ -128,8 +151,8 @@ export default function HomePage() {
               Try again
             </button>
           </div>
-        ) : projects.length === 0 ? (
-          /* Empty state */
+        ) : filteredProjects.length === 0 ? (
+          /* Empty state or no search matches */
           <div className="flex flex-col items-center justify-center py-20 max-w-md mx-auto text-center">
             <div className={`w-16 h-16 rounded-lg flex items-center justify-center mb-6 ${isTrashView ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
               {isTrashView ? (
@@ -139,14 +162,20 @@ export default function HomePage() {
               )}
             </div>
             <h2 className="text-lg font-semibold text-text-primary mb-2">
-              {isTrashView ? 'Trash is empty' : 'No projects yet'}
+              {searchQuery.trim()
+                ? 'No matches'
+                : isTrashView
+                  ? 'Trash is empty'
+                  : 'No projects yet'}
             </h2>
             <p className="text-text-secondary text-sm mb-6">
-              {isTrashView 
-                ? 'Projects you delete will appear here.'
-                : 'Create your first project to get started with investment memos and due diligence.'}
+              {searchQuery.trim()
+                ? 'Try a different search.'
+                : isTrashView
+                  ? 'Projects you delete will appear here.'
+                  : 'Create your first project to get started with investment memos and due diligence.'}
             </p>
-            {!isTrashView && (
+            {!isTrashView && !searchQuery.trim() && (
               <button
                 onClick={handleNewProject}
                 disabled={creating}
@@ -169,7 +198,7 @@ export default function HomePage() {
         ) : (
           /* Project grid */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {projects.map((project) => (
+            {filteredProjects.map((project) => (
               <ProjectCard 
                 key={project.id} 
                 project={project} 
