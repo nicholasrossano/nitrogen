@@ -155,34 +155,376 @@ textarea {
   scrollbar-width: none;
 }
 
-/* Button base styles */
+/* Button base styles - with opacity fade effect */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
-  @apply bg-accent text-white font-medium;
-  @apply hover:bg-accent-anchor active:bg-accent-anchor;
-  @apply transition-colors duration-150;
+  @apply border border-accent text-accent bg-white font-medium;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-accent);
+  opacity: 0;
+  transition: opacity 300ms ease-in-out;
+  z-index: -1;
+}
+
+.btn-primary:hover::before {
+  opacity: 1;
+}
+
+.btn-primary:hover {
+  @apply text-white;
+}
+
+.btn-primary:active::before {
+  opacity: 1;
+  background-color: var(--color-accent-anchor);
 }
 
 .btn-secondary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
   @apply bg-white text-text-primary font-medium border border-stroke-subtle;
-  @apply hover:bg-surface-subtle active:bg-surface-subtle;
-  @apply transition-colors duration-150;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.btn-secondary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.btn-secondary:hover::before,
+.btn-secondary:active::before {
+  opacity: 1;
 }
 
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2;
   @apply text-text-secondary font-medium;
-  @apply hover:bg-surface-subtle active:bg-surface-subtle;
-  @apply transition-colors duration-150;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.btn-ghost::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.btn-ghost:hover::before,
+.btn-ghost:active::before {
+  opacity: 1;
 }
 
 /* Focus ring utility */
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-accent/20 focus:ring-offset-2 focus:ring-offset-white;
+}
+
+/* Hover fade utility - for elements that need opacity-based hover transitions */
+.hover-fade {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.hover-fade::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.hover-fade:hover::before {
+  opacity: 1;
+}
+
+/* Hover fade with accent color */
+.hover-fade-accent {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.hover-fade-accent::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-accent-wash);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.hover-fade-accent:hover::before {
+  opacity: 0.3;
+}
+
+/* Selectable item - for checkbox/radio style selections with opacity fade */
+.selectable-item {
+  @apply border cursor-pointer;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.selectable-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.selectable-item:hover::before {
+  opacity: 1;
+}
+
+.selectable-item:hover {
+  border-color: var(--color-accent-tint);
+}
+
+/* Selected state */
+.selectable-item.selected {
+  @apply border-accent;
+}
+
+.selectable-item.selected::before {
+  background-color: var(--color-accent-wash);
+  opacity: 0.3;
+}
+
+.selectable-item.selected:hover::before {
+  opacity: 0.5;
+}
+
+/* Checkbox indicator with opacity fade */
+.checkbox-indicator {
+  @apply w-5 h-5 border-2 flex items-center justify-center flex-shrink-0;
+  position: relative;
+  overflow: hidden;
+}
+
+.checkbox-indicator::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-accent);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+}
+
+.checkbox-indicator:not(.checked) {
+  @apply border-stroke-subtle;
+}
+
+.checkbox-indicator:not(.checked):hover::before {
+  opacity: 0.15;
+}
+
+.checkbox-indicator.checked {
+  @apply border-accent;
+}
+
+.checkbox-indicator.checked::before {
+  opacity: 1;
+}
+
+/* Icon button with opacity fade */
+.icon-btn {
+  @apply p-2 rounded;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.icon-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.icon-btn:hover::before {
+  opacity: 1;
+}
+
+/* Icon button - danger variant */
+.icon-btn-danger::before {
+  background-color: rgba(185, 122, 93, 0.1); /* indicator-orange/10 */
+}
+
+/* Icon button - success variant */
+.icon-btn-success::before {
+  background-color: rgba(157, 170, 155, 0.1); /* indicator-green/10 */
+}
+
+/* Pill button (for input/output tags) with opacity fade */
+.pill-btn {
+  @apply flex items-center gap-2 px-3 py-2 rounded text-sm border border-transparent text-text-primary;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  background-color: transparent;
+}
+
+/* Base background layer */
+.pill-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0.6;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.pill-btn:hover::before {
+  opacity: 1;
+}
+
+.pill-btn:hover {
+  @apply border-stroke-subtle;
+}
+
+/* Selected state */
+.pill-btn.selected {
+  @apply border-stroke-accent text-accent-anchor;
+}
+
+.pill-btn.selected::before {
+  background-color: var(--color-accent-wash);
+  opacity: 1;
+}
+
+.pill-btn.selected:hover::before {
+  opacity: 0.8;
+}
+
+/* Upload/dashed button with opacity fade */
+.upload-btn {
+  @apply flex items-center gap-2 px-3 py-2 border border-dashed border-stroke-subtle rounded text-sm text-text-secondary;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.upload-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-accent-wash);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.upload-btn:hover {
+  border-color: var(--color-accent);
+}
+
+.upload-btn:hover::before {
+  opacity: 0.3;
+}
+
+.upload-btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.upload-btn:disabled:hover::before {
+  opacity: 0;
+}
+
+/* Card hover with shadow lift */
+.card-interactive {
+  @apply card cursor-pointer;
+  transition: box-shadow 300ms ease-out, transform 300ms ease-out, border-color 300ms ease-out;
+}
+
+.card-interactive:hover {
+  @apply border-stroke-accent shadow-md;
+  transform: translateY(-2px);
+}
+
+/* Expandable header with opacity fade */
+.expandable-header {
+  @apply w-full flex items-center justify-between px-4 py-3 text-left;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.expandable-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface-subtle);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.expandable-header:hover::before {
+  opacity: 0.5;
+}
+
+/* Filled button (stays filled, darkens on hover) */
+.btn-filled {
+  @apply rounded;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.btn-filled::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: 1;
+}
+
+.btn-filled:hover::before {
+  opacity: 1;
+}
+
+.btn-filled:disabled::before {
+  opacity: 0;
+}
+
+.btn-filled > * {
+  position: relative;
+  z-index: 2;
 }
 
 /* Status badge utilities */
