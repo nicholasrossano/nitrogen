@@ -126,7 +126,7 @@ export function ChatPanel({
         </div>
       </div>
 
-      {/* Document Request Widget (above input) */}
+      {/* Document Request Widget (above input) - when visible, hide text input */}
       {showDocumentRequest && (
         <DocumentRequestWidget
           initiativeId={initiativeId}
@@ -135,14 +135,16 @@ export function ChatPanel({
         />
       )}
 
-      {/* Input */}
-      <div className="flex-shrink-0 p-4 border-t border-divider">
-        <ChatInput
-          onSend={onSendMessage}
-          disabled={sending || generating}
-          placeholder="Ask a question or describe what you need..."
-        />
-      </div>
+      {/* Input - hidden while document request (upload / no documents) is shown */}
+      {!showDocumentRequest && (
+        <div className="flex-shrink-0 p-4 border-t border-divider">
+          <ChatInput
+            onSend={onSendMessage}
+            disabled={sending || generating}
+            placeholder="Ask anything"
+          />
+        </div>
+      )}
     </div>
   );
 }
