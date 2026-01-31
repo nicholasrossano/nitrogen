@@ -158,7 +158,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
             <button
               onClick={handleModifyTools}
               disabled={loading || modifying}
-              className="px-4 py-3 border border-stroke-subtle bg-white text-text-primary rounded-none font-medium hover:bg-surface-subtle transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="btn-secondary px-4 py-3 rounded-none flex items-center justify-center gap-2"
             >
               {modifying ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -168,7 +168,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
             <button
               onClick={handleGenerate}
               disabled={loading}
-              className="flex-1 px-6 py-3 bg-accent text-white rounded-none font-medium hover:bg-accent-anchor transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="btn-primary flex-1 px-6 py-3 rounded-none flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>

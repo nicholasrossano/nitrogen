@@ -77,7 +77,7 @@ export function ChatInput({
       <button
         type="submit"
         disabled={disabled || !input.trim()}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded bg-accent text-white hover:bg-accent-anchor disabled:bg-stroke-subtle disabled:text-text-tertiary disabled:cursor-not-allowed transition-colors duration-150"
+        className="btn-filled absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-accent text-white disabled:bg-stroke-subtle disabled:text-text-tertiary disabled:cursor-not-allowed"
       >
         <Send className="w-4 h-4" />
       </button>

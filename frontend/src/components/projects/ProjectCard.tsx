@@ -49,12 +49,12 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
   return (
     <Link href={`/initiatives/${project.id}`}>
-      <div className="card p-5 hover:border-stroke-accent transition-colors duration-150 cursor-pointer h-full flex flex-col relative group">
+      <div className="card-interactive p-5 h-full flex flex-col relative group">
         {/* Delete button */}
         {onDelete && (
           <button
             onClick={handleDelete}
-            className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-indicator-orange/10 text-text-tertiary hover:text-indicator-orange transition-all"
+            className="absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange hover:bg-indicator-orange/10 transition-all"
             title="Delete project"
           >
             <Trash2 className="w-4 h-4" />

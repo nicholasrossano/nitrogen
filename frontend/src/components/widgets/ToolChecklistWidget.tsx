@@ -106,22 +106,13 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
             <label
               key={toolId}
               className={`
-                flex items-start gap-3 p-3 border cursor-pointer transition-colors duration-150
-                ${isSelected 
-                  ? 'border-accent bg-accent-wash/30' 
-                  : 'border-stroke-subtle hover:border-accent-tint hover:bg-surface-subtle'
-                }
+                selectable-item flex items-start gap-3 p-3
+                ${isSelected ? 'selected' : 'border-stroke-subtle'}
                 ${!isActive ? 'pointer-events-none opacity-60' : ''}
               `}
             >
-              <div className={`
-                w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors
-                ${isSelected 
-                  ? 'border-accent bg-accent' 
-                  : 'border-stroke-subtle'
-                }
-              `}>
-                {isSelected && <Check className="w-3 h-3 text-white" />}
+              <div className={`checkbox-indicator mt-0.5 ${isSelected ? 'checked' : ''}`}>
+                {isSelected && <Check className="w-3 h-3 text-white relative z-10" />}
               </div>
               
               <input

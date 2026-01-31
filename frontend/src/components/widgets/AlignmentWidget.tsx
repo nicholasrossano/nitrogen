@@ -138,7 +138,7 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
                 {/* Section header */}
                 <div 
                   className={`
-                    px-5 py-3 flex items-center gap-3 cursor-pointer hover:bg-surface-subtle transition-colors
+                    hover-fade px-5 py-3 flex items-center gap-3 cursor-pointer
                     ${isActive ? '' : 'pointer-events-none'}
                   `}
                   onClick={() => toggleSection(section.id)}
@@ -149,15 +149,9 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
                       e.stopPropagation();
                       if (isActive) toggleInclude(section.id);
                     }}
-                    className={`
-                      w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 transition-colors
-                      ${section.include 
-                        ? 'border-accent bg-accent' 
-                        : 'border-stroke-subtle hover:border-accent-tint'
-                      }
-                    `}
+                    className={`checkbox-indicator ${section.include ? 'checked' : ''}`}
                   >
-                    {section.include && <Check className="w-3 h-3 text-white" />}
+                    {section.include && <Check className="w-3 h-3 text-white relative z-10" />}
                   </button>
                   
                   {/* Expand/collapse */}
