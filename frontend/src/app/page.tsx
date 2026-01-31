@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
-import { SideDrawer, NavItem } from '@/components/ui';
+import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
 
 export default function HomePage() {
   const router = useRouter();
@@ -84,17 +84,11 @@ export default function HomePage() {
   });
 
   return (
-    <div className="min-h-screen h-screen flex">
-      {/* Persistent Sidebar */}
-      <SideDrawer
-        activeItem={activeNav}
-        onItemSelect={handleNavChange}
-      />
-
-      {/* Main content area */}
-      <main className="flex-1 bg-white min-h-screen overflow-auto">
-        {/* Header - h-[72px] for consistent alignment with sidebar */}
-        <header className="h-[72px] px-6 flex items-center justify-between gap-4">
+    <div className="min-h-screen h-screen flex flex-col">
+      {/* Shared header row - one continuous line below */}
+      <div className="flex h-[72px] shrink-0">
+        <SideDrawerHeader />
+        <header className="flex-1 px-6 flex items-center justify-between gap-4 bg-white">
           <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight shrink-0">
             Wisteria
           </h1>
@@ -131,10 +125,19 @@ export default function HomePage() {
             )}
           </div>
         </header>
+      </div>
 
-      {/* Accent divider */}
-      <div className="divider-accent" />
+      {/* Single full-width accent divider */}
+      <div className="divider-accent shrink-0" />
 
+      {/* Content row: sidebar nav + main */}
+      <div className="flex flex-1 min-h-0">
+        <SideDrawer
+          activeItem={activeNav}
+          onItemSelect={handleNavChange}
+          includeHeader={false}
+        />
+        <main className="flex-1 bg-white min-h-0 overflow-auto">
       {/* Content */}
       <div className="px-6 py-4">
         {loading ? (
@@ -210,7 +213,8 @@ export default function HomePage() {
           </div>
         )}
       </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

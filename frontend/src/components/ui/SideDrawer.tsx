@@ -7,20 +7,28 @@ export type NavItem = 'projects' | 'trash';
 interface SideDrawerProps {
   activeItem: NavItem;
   onItemSelect: (item: NavItem) => void;
+  /** When false, header is rendered by parent for alignment; only nav is shown */
+  includeHeader?: boolean;
 }
 
-export function SideDrawer({ activeItem, onItemSelect }: SideDrawerProps) {
+/** Renders just the Account header cell for use in a shared header row */
+export function SideDrawerHeader() {
+  return (
+    <div className="w-56 h-[72px] px-4 pb-2 flex items-end shrink-0 bg-white border-r border-accent">
+      <div className="flex items-center gap-2.5">
+        <div className="w-6 h-6 rounded-full bg-accent-wash border border-accent-tint flex items-center justify-center flex-shrink-0">
+          <span className="text-xs font-medium text-accent-anchor">A</span>
+        </div>
+        <span className="text-sm text-text-secondary">Account</span>
+      </div>
+    </div>
+  );
+}
+
+export function SideDrawer({ activeItem, onItemSelect, includeHeader = true }: SideDrawerProps) {
   return (
     <aside className="w-56 bg-white border-r border-accent min-h-screen flex flex-col flex-shrink-0">
-      {/* Account - top left, bottom-aligned within header cell */}
-      <div className="h-[72px] px-4 pb-2 flex items-end border-b border-accent shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-full bg-accent-wash border border-accent-tint flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-medium text-accent-anchor">A</span>
-          </div>
-          <span className="text-sm text-text-secondary">Account</span>
-        </div>
-      </div>
+      {includeHeader && <SideDrawerHeader />}
 
       {/* Navigation items */}
       <nav className="flex-1 bg-white">
