@@ -258,8 +258,23 @@ export const api = {
       }
     ),
 
-  downloadExport: (memoId: string) => {
-    window.open(`${API_URL}/api/v1/exports/${memoId}`, '_blank');
+  downloadExport: async (memoId: string) => {
+    const response = await fetch(`${API_URL}/api/v1/exports/${memoId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to download export');
+    }
+    
+    // Download the file
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'investment_memo.docx';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   },
 
   getEvidence: (initiativeId: string) =>

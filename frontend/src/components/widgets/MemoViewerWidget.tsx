@@ -9,7 +9,8 @@ import {
   AlertCircle,
   PauseCircle,
   BookOpen,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import { MemoContent, Citation } from '@/lib/api';
 
@@ -105,12 +106,17 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
   return (
     <div className="card-elevated overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider flex items-start justify-between gap-4">
-        <div>
-          <h3 className="font-semibold text-text-primary">Investment Memo</h3>
-          <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
+      <div className="px-6 pt-6 pb-4 bg-surface-header border-b border-divider flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
+            <FileText className="w-5 h-5 text-accent" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-text-primary">Investment Memo</h3>
+            <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
+          </div>
         </div>
-        <p className="text-sm text-text-secondary whitespace-nowrap">{formatHeaderDate(content.date)}</p>
+        <p className="text-sm text-text-secondary whitespace-nowrap self-start">{formatHeaderDate(content.date)}</p>
       </div>
 
       {/* Content */}
