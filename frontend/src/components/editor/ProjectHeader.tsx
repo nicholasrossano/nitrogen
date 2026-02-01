@@ -81,27 +81,28 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
         {/* Editable title */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {isEditing ? (
-            <div className="flex items-center gap-2 flex-1">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
               <input
                 ref={inputRef}
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="flex-1 px-2 py-1 text-lg font-semibold text-text-primary bg-surface-subtle border border-stroke-accent rounded focus:outline-none focus:ring-1 focus:ring-accent"
+                style={{ width: `${Math.max(title.length + 2, 12)}ch` }}
+                className="min-w-0 px-0 py-1 text-lg font-semibold text-text-primary bg-transparent border-0 border-b-2 border-accent rounded-none focus:outline-none focus:ring-0"
                 disabled={saving}
               />
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="icon-btn icon-btn-success p-1.5 text-indicator-green"
+                className="icon-btn icon-btn-success p-1.5 text-indicator-green flex-shrink-0"
               >
                 <Check className="w-4 h-4" />
               </button>
               <button
                 onClick={handleCancel}
                 disabled={saving}
-                className="icon-btn p-1.5 text-text-tertiary"
+                className="icon-btn p-1.5 text-text-tertiary flex-shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
