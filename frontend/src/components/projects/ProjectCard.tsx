@@ -68,7 +68,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
           onRestore && (
             <button
               onClick={handleRestore}
-              className="project-action-btn project-action-btn-success absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity"
+              className="project-action-btn project-action-btn-success absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity"
               title="Restore project"
             >
               <RotateCcw className="w-4 h-4" />
@@ -78,7 +78,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
           onDelete && (
             <button
               onClick={handleDelete}
-              className="project-action-btn project-action-btn-danger absolute top-3 right-3 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
+              className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
               title="Delete project"
             >
               <Trash2 className="w-4 h-4" />
@@ -101,7 +101,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
         <div className="flex-1" />
 
         {/* Stats row */}
-        <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-3 border-t border-divider">
+        <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-4 mt-1 border-t border-divider">
           <div className="flex items-center gap-3">
             {outputCount > 0 && (
               <span className="flex items-center gap-1">
