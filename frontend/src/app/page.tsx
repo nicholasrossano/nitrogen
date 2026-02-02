@@ -2,19 +2,27 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search, LogOut } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { useAuth } from '@/lib/auth';
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
   const [projects, setProjects] = useState<Initiative[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>('projects');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+  };
 
   useEffect(() => {
     loadProjects();
@@ -92,7 +100,7 @@ export default function HomePage() {
           <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight shrink-0">
             Nitrogen AI
           </h1>
-          <div className="flex items-center gap-3 flex-1 max-w-md justify-end">
+          <div className="flex items-center gap-3 flex-1 max-w-xl justify-end">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary pointer-events-none shrink-0" />
               <input
@@ -123,6 +131,13 @@ export default function HomePage() {
                 )}
               </button>
             )}
+            <button
+              onClick={handleSignOut}
+              className="icon-btn text-text-secondary hover:text-text-primary"
+              title={user?.email || 'Sign out'}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
       </div>
@@ -216,5 +231,13 @@ export default function HomePage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <ProtectedRoute>
+      <HomePageContent />
+    </ProtectedRoute>
   );
 }

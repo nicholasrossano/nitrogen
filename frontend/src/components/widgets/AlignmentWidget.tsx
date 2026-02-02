@@ -24,11 +24,7 @@ interface ToolInfo {
 }
 
 interface AlignmentWidgetProps {
-  data: {
-    alignment: ToolAlignment;
-    tool: ToolInfo;
-    pending_tools: ToolInfo[];
-  };
+  data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
 }
@@ -37,14 +33,14 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
   const { confirmAlignment, provideFeedback, alignmentLoading } = useInitiativeStore();
   
   // Defensive: ensure we have valid data
-  const alignment = data?.alignment;
-  const tool = data?.tool;
-  const pendingTools = data?.pending_tools || [];
-  const sections = alignment?.sections || [];
+  const alignment = data?.alignment as ToolAlignment | undefined;
+  const tool = data?.tool as ToolInfo | undefined;
+  const pendingTools = (data?.pending_tools || []) as ToolInfo[];
+  const sections = (alignment?.sections || []) as AlignmentSection[];
   
   // All hooks must be called before any early returns (React rules of hooks)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => 
-    new Set(sections.filter(s => s.include).slice(0, 3).map(s => s.id))
+    new Set(sections.filter((s: AlignmentSection) => s.include).slice(0, 3).map((s: AlignmentSection) => s.id))
   );
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [feedback, setFeedback] = useState('');

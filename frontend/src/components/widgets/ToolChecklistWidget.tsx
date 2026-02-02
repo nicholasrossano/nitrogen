@@ -19,17 +19,14 @@ interface ToolRecommendation {
 }
 
 interface ToolChecklistWidgetProps {
-  data: {
-    recommendations: ToolRecommendation[];
-    project_type: string | null;
-  };
+  data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
 }
 
 export function ToolChecklistWidget({ data, initiativeId, isActive = true }: ToolChecklistWidgetProps) {
   // Defensive: ensure recommendations is an array
-  const recommendations = data?.recommendations || [];
+  const recommendations = (data?.recommendations || []) as ToolRecommendation[];
   
   // Debug logging
   console.log('ToolChecklistWidget render:', { 
@@ -39,7 +36,11 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
   });
   
   const [selectedTools, setSelectedTools] = useState<Set<string>>(() => {
-    const initial = new Set(recommendations.filter(r => r?.recommended).map(r => r?.tool?.id).filter(Boolean));
+    const ids = recommendations
+      .filter(r => r?.recommended)
+      .map(r => r?.tool?.id)
+      .filter((id): id is string => typeof id === 'string');
+    const initial = new Set<string>(ids);
     console.log('ToolChecklistWidget: initial selectedTools', Array.from(initial));
     return initial;
   });

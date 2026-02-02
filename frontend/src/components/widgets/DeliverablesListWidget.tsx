@@ -11,15 +11,13 @@ interface DeliverableItem {
 }
 
 interface DeliverablesListWidgetProps {
-  data: {
-    deliverables: DeliverableItem[];
-  };
+  data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
 }
 
 export function DeliverablesListWidget({ data, initiativeId, isActive = true }: DeliverablesListWidgetProps) {
-  const deliverables = data?.deliverables || [];
+  const deliverables = (data?.deliverables || []) as DeliverableItem[];
   
   if (deliverables.length === 0) {
     return (

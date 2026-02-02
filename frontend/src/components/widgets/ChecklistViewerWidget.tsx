@@ -27,23 +27,7 @@ interface ChecklistCategory {
 }
 
 interface ChecklistViewerWidgetProps {
-  data: {
-    content: {
-      title: string;
-      date: string;
-      project_summary: {
-        title: string;
-        type: string;
-        geography: string;
-        stage: string;
-      };
-      categories: ChecklistCategory[];
-      overall_risk_rating: 'low' | 'medium' | 'high';
-      priority_items: string[];
-      next_steps: string[];
-    };
-    tool_name?: string;
-  };
+  data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
 }
@@ -118,13 +102,28 @@ function formatHeaderDate(isoDate: string): string {
   });
 }
 
+interface ChecklistContent {
+  title: string;
+  date: string;
+  project_summary: {
+    title: string;
+    type: string;
+    geography: string;
+    stage: string;
+  };
+  categories: ChecklistCategory[];
+  overall_risk_rating: 'low' | 'medium' | 'high';
+  priority_items: string[];
+  next_steps: string[];
+}
+
 export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: ChecklistViewerWidgetProps) {
   const initiative = useInitiativeStore((s) => s.initiative);
-  const content = data.content;
+  const content = data.content as ChecklistContent | undefined;
   const [exporting, setExporting] = useState(false);
   const projectName =
     initiative?.title ??
-    (content.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
+    (content?.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
     'Project';
   
   const handleExport = async () => {

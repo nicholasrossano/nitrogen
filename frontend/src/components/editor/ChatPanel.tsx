@@ -142,7 +142,7 @@ export function ChatPanel({
         <DocumentRequestWidget
           initiativeId={initiativeId}
           isActive={true}
-          data={latestMessage.widget_data}
+          data={latestMessage.widget_data ?? undefined}
         />
       )}
 
