@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search, LogOut } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
@@ -116,7 +116,7 @@ function HomePageContent() {
               <button
                 onClick={handleNewProject}
                 disabled={creating}
-                className="btn-primary text-sm shrink-0"
+                className="btn-primary text-sm shrink-0 h-10"
               >
                 {creating ? (
                   <>
@@ -131,13 +131,6 @@ function HomePageContent() {
                 )}
               </button>
             )}
-            <button
-              onClick={handleSignOut}
-              className="icon-btn text-text-secondary hover:text-text-primary"
-              title={user?.email || 'Sign out'}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
           </div>
         </header>
       </div>
@@ -151,6 +144,8 @@ function HomePageContent() {
           activeItem={activeNav}
           onItemSelect={handleNavChange}
           includeHeader={false}
+          onSignOut={handleSignOut}
+          userEmail={user?.email}
         />
         <main className="flex-1 bg-white min-h-0 overflow-auto">
       {/* Content */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutGrid, Trash2 } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut } from 'lucide-react';
 
 export type NavItem = 'projects' | 'trash';
 
@@ -9,6 +9,8 @@ interface SideDrawerProps {
   onItemSelect: (item: NavItem) => void;
   /** When false, header is rendered by parent for alignment; only nav is shown */
   includeHeader?: boolean;
+  onSignOut?: () => void;
+  userEmail?: string | null;
 }
 
 /** Renders just the Account header cell for use in a shared header row */
@@ -25,7 +27,7 @@ export function SideDrawerHeader() {
   );
 }
 
-export function SideDrawer({ activeItem, onItemSelect, includeHeader = true }: SideDrawerProps) {
+export function SideDrawer({ activeItem, onItemSelect, includeHeader = true, onSignOut, userEmail }: SideDrawerProps) {
   return (
     <aside className="w-56 bg-white border-r border-accent min-h-screen flex flex-col flex-shrink-0">
       {includeHeader && <SideDrawerHeader />}
@@ -53,6 +55,17 @@ export function SideDrawer({ activeItem, onItemSelect, includeHeader = true }: S
           />
           <span>Trash</span>
         </button>
+
+        {onSignOut && (
+          <button
+            onClick={onSignOut}
+            className="nav-row w-full"
+            title={userEmail || 'Log out'}
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            <span>Log out</span>
+          </button>
+        )}
       </nav>
     </aside>
   );
