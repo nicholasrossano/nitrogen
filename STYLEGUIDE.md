@@ -51,6 +51,14 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 | `AccentTint` | `#5a699a` | Hover / pressed fills |
 | `AccentWash` | `#cfd4e8` | Subtle highlight |
 
+### Secondary accent
+| Token | Hex | Usage |
+| --- | --- | --- |
+| `AccentSecondaryAnchor` | `#4a3812` | Strong secondary emphasis |
+| `AccentSecondary` | `#6e5a1a` | Secondary borders, highlights, CTAs |
+| `AccentSecondaryTint` | `#9a8a5a` | Secondary hover / pressed fills |
+| `AccentSecondaryWash` | `#e8e4cf` | Secondary subtle highlight |
+
 ### Semantic indicators
 | Token | Hex | Usage |
 | --- | --- | --- |

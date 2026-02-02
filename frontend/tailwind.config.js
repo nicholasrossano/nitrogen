@@ -33,6 +33,13 @@ module.exports = {
           tint: '#5a699a',
           wash: '#cfd4e8',
         },
+        // Secondary Accent
+        'accent-secondary': {
+          anchor: '#4a3812',
+          DEFAULT: '#6e5a1a',
+          tint: '#9a8a5a',
+          wash: '#e8e4cf',
+        },
         // Semantic Indicators (meaning only)
         indicator: {
           orange: '#B97A5D',
