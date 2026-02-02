@@ -15,7 +15,7 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
   const prevMessageCountRef = useRef<number>(0);
   const lastSeenCountRef = useRef<number>(0);
   const isInitialLoadRef = useRef<boolean>(true);
-  const { messages, sending, generating, stageStatus } = useInitiativeStore();
+  const { messages, sending, generating, stageStatus, streamingMessageId } = useInitiativeStore();
 
   // Track which messages to animate (only newly sent/received, not on initial load)
   useEffect(() => {
@@ -43,6 +43,7 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
             const isUserFollowingBot = prevRole === 'assistant' && message.role === 'user';
             const marginClass = index === 0 ? '' : isUserFollowingBot ? 'mt-1' : 'mt-3';
             const animate = !isInitialLoadRef.current && index >= lastSeenCountRef.current;
+            const isStreaming = message.id === streamingMessageId;
             return (
               <ChatMessage
                 key={message.id}
@@ -50,6 +51,7 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
                 initiativeId={initiativeId}
                 isLatest={index === messages.length - 1}
                 animate={animate}
+                isStreaming={isStreaming}
                 className={marginClass}
               />
             );

@@ -1,10 +1,13 @@
 """Chat API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 import logging
+import json
+import asyncio
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
@@ -53,6 +56,113 @@ def build_stage_status(initiative: Initiative) -> StageStatus:
         evidence_ready=initiative.evidence_ready,
         required_fields_complete=len(missing) == 0,
         missing_fields=missing,
+    )
+
+
+@router.post("/initiatives/{initiative_id}/chat/stream")
+async def send_chat_message_stream(
+    initiative_id: UUID,
+    data: ChatMessageCreate,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Send a chat message and get streaming assistant response."""
+    
+    async def generate_stream():
+        try:
+            # Get initiative
+            result = await db.execute(
+                select(Initiative).where(
+                    Initiative.id == initiative_id,
+                    Initiative.user_id == user.uid,
+                )
+            )
+            initiative = result.scalar_one_or_none()
+            
+            if not initiative:
+                yield f"data: {json.dumps({'error': 'Initiative not found'})}\n\n"
+                return
+            
+            # Save user message
+            user_message = ChatMessage(
+                initiative_id=initiative.id,
+                role="user",
+                content=data.content,
+            )
+            db.add(user_message)
+            await db.commit()
+            
+            # Get chat history
+            history_result = await db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.initiative_id == initiative_id)
+                .order_by(ChatMessage.created_at)
+            )
+            messages = list(history_result.scalars().all())
+            
+            # Process message (simplified version of main endpoint logic)
+            chat_agent = ChatAgentService()
+            widget_type = None
+            widget_data = None
+            assistant_response = None
+            
+            # Generate response using chat agent
+            assistant_response = await chat_agent.generate_response(
+                messages=messages,
+                initiative=initiative,
+                widget_type=widget_type,
+            )
+            
+            # Stream the response word by word
+            words = assistant_response.split()
+            for i, word in enumerate(words):
+                chunk_data = {
+                    "type": "word",
+                    "content": word,
+                    "is_last": i == len(words) - 1
+                }
+                yield f"data: {json.dumps(chunk_data)}\n\n"
+                await asyncio.sleep(0.03)  # 30ms delay between words (faster pace)
+            
+            # Save assistant message to database
+            assistant_message = ChatMessage(
+                initiative_id=initiative.id,
+                role="assistant",
+                content=assistant_response,
+                widget_type=widget_type,
+                widget_data=widget_data,
+            )
+            db.add(assistant_message)
+            await db.commit()
+            await db.refresh(assistant_message)
+            
+            # Send final metadata
+            final_data = {
+                "type": "complete",
+                "message": {
+                    "id": str(assistant_message.id),
+                    "role": assistant_message.role,
+                    "content": assistant_message.content,
+                    "widget_type": assistant_message.widget_type,
+                    "widget_data": assistant_message.widget_data,
+                    "created_at": assistant_message.created_at.isoformat(),
+                },
+                "stage_status": build_stage_status(initiative).__dict__,
+            }
+            yield f"data: {json.dumps(final_data)}\n\n"
+            
+        except Exception as e:
+            logging.error(f"Stream error: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
     )
 
 

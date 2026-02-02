@@ -208,6 +208,30 @@ export const api = {
       body: JSON.stringify({ content }),
     }),
 
+  sendMessageStream: async (
+    initiativeId: string,
+    content: string,
+    onWord: (word: string) => void,
+    onComplete: (message: ChatMessage, stageStatus: any) => void
+  ) => {
+    // Call the regular API since backend doesn't support streaming yet
+    const response = await fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+
+    // Simulate word-by-word streaming for better UX
+    const words = response.message.content.split(' ');
+    for (let i = 0; i < words.length; i++) {
+      onWord(words[i]);
+      // Small delay between words for streaming effect
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+
+    // Call completion callback
+    onComplete(response.message, response.stage_status);
+  },
+
   // Evidence
   uploadEvidence: async (initiativeId: string, file: File) => {
     const formData = new FormData();

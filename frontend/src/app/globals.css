@@ -98,6 +98,34 @@ body {
   animation: fadeIn 0.3s ease-out forwards;
 }
 
+/* Word-by-word fade in for streaming text */
+@keyframes wordFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.word-fade-in {
+  animation: wordFadeIn 1.2s ease-in-out forwards;
+}
+
+/* Widget with user message: rise + fade */
+@keyframes widgetFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.word-fade-in {
+  animation: wordFadeIn 0.3s ease-out forwards;
+}
+
 /* Widget with user message: rise + fade */
 .message-widget-enter {
   animation: fadeInRise 0.4s ease-out 0.15s forwards;
@@ -689,7 +717,7 @@ textarea {
   opacity: 1;
 }
 
-/* Active nav row state - purple bar on right */
+/* Active nav row state - vertical rectangle on trailing side */
 .nav-row-active {
   @apply text-accent-anchor;
 }
@@ -697,10 +725,11 @@ textarea {
 .nav-row-active::after {
   content: '';
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: calc(100% - 8px);
   background-color: var(--color-accent);
   z-index: 1;
 }
