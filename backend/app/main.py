@@ -1,13 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
+import os
 
 from app.config import get_settings
 from app.core.database import engine, Base
 from app.api import initiatives, chat, evidence, generate, exports, corpus, tools
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# Log CORS configuration at startup
+logger.info(f"CORS_ORIGINS env var: {os.environ.get('CORS_ORIGINS', 'NOT SET')}")
+logger.info(f"Parsed cors_origins: {settings.cors_origins}")
+logger.info(f"cors_origins type: {type(settings.cors_origins)}")
 
 
 @asynccontextmanager
@@ -55,3 +64,13 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+@app.get("/debug/cors")
+async def debug_cors():
+    """Debug endpoint to check CORS configuration"""
+    return {
+        "cors_origins_env": os.environ.get('CORS_ORIGINS', 'NOT SET'),
+        "cors_origins_parsed": settings.cors_origins,
+        "cors_origins_type": str(type(settings.cors_origins)),
+    }
