@@ -459,6 +459,39 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
         except:
             return "I'll use this to create more accurate outputs."
     
+    async def select_project_icon(self, title: str, description: str = "") -> str:
+        """Select an appropriate icon for the project based on title and description."""
+        context = title
+        if description:
+            context += f". {description[:300]}"
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Select the best icon for this project. Return ONLY the icon name, nothing else.
+
+Available icons: Sun, Droplet, Droplets, Zap, Sprout, Factory, Heart, School, Building, Building2, Wind, Lightbulb, TreePine, Trees, Fish, Truck, Store, Home, Users, DollarSign, Recycle, Flame, Battery, BatteryCharging, Plug, Plug2, Leaf, Waves, CloudRain, Mountain, Wheat, Apple, Carrot, Milk, Beef, ShoppingCart, Package, Warehouse, Ship, Plane, Bus, Train, Car, Bike, Footprints, Radio, Smartphone, Wifi, Globe, MapPin, Map, Compass, Navigation, Briefcase, Calculator, BarChart3, TrendingUp, PiggyBank, CreditCard, Banknote, Coins, Wallet, Receipt, Target, Award, Trophy, Medal, Flag, Rocket, Sparkles, Star, Stethoscope, Pill, Utensils, Shovel, Gem, Power, PowerOff, Antenna, Signal, Satellite, Network, Handshake, HeartHandshake, Scale, Tractor, CircleDollarSign, BadgeDollarSign, GraduationCap, Library, BookOpen
+
+Examples: solar/energy → Sun, water/sanitation → Droplet, agriculture/farming → Sprout or Tractor, health/medical → Stethoscope or Heart, education → GraduationCap or School, cooking/fuel → Flame, wind energy → Wind, finance → DollarSign"""
+                    },
+                    {
+                        "role": "user",
+                        "content": context
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=10,
+            )
+            icon_name = response.choices[0].message.content.strip()
+            return icon_name
+        except Exception as e:
+            import logging
+            logging.error(f"Icon selection failed: {e}")
+            return "FolderOpen"  # Fallback
+    
     async def generate_materials_request_v2(self, user_description: str) -> str:
         """Generate a contextual materials request based on user's project description."""
         try:

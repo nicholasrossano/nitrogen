@@ -164,6 +164,8 @@ async def update_initiative(
     
     if data.title is not None:
         initiative.title = data.title
+    if data.icon is not None:
+        initiative.icon = data.icon
     
     await db.commit()
     await db.refresh(initiative)

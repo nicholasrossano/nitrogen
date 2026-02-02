@@ -36,7 +36,10 @@ export function SideDrawer({ activeItem, onItemSelect, includeHeader = true }: S
           onClick={() => onItemSelect('projects')}
           className={`nav-row w-full ${activeItem === 'projects' ? 'nav-row-active' : ''}`}
         >
-          <LayoutGrid className="w-4 h-4 flex-shrink-0" />
+          <LayoutGrid
+            className="w-4 h-4 flex-shrink-0"
+            {...(activeItem === 'projects' && { fill: 'currentColor' })}
+          />
           <span>Projects</span>
         </button>
 
@@ -44,7 +47,10 @@ export function SideDrawer({ activeItem, onItemSelect, includeHeader = true }: S
           onClick={() => onItemSelect('trash')}
           className={`nav-row w-full ${activeItem === 'trash' ? 'nav-row-active' : ''}`}
         >
-          <Trash2 className="w-4 h-4 flex-shrink-0" />
+          <Trash2
+            className="w-4 h-4 flex-shrink-0"
+            {...(activeItem === 'trash' && { fill: 'currentColor' })}
+          />
           <span>Trash</span>
         </button>
       </nav>

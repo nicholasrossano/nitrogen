@@ -34,6 +34,7 @@ class Initiative(Base):
     
     # Legacy fields (kept for backward compatibility)
     title: Mapped[str | None] = mapped_column(String(255))
+    icon: Mapped[str | None] = mapped_column(String(50))  # lucide-react icon name
     sector: Mapped[str] = mapped_column(String(100), default="general")
     geography: Mapped[str | None] = mapped_column(String(255))
     target_population: Mapped[str | None] = mapped_column(Text)

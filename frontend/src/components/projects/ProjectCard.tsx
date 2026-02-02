@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, FolderOpen, Clock, Trash2, RotateCcw } from 'lucide-react';
+import { FileText, Clock, Trash2, RotateCcw } from 'lucide-react';
 import { Initiative } from '@/lib/api';
+import { getIconByName } from '@/lib/icons';
 
 interface ProjectCardProps {
   project: Initiative;
@@ -40,6 +41,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
   const title = project.title || 'Untitled';
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
+  const IconComponent = getIconByName(project.icon);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -89,7 +91,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
         {/* Icon and title */}
         <div className="flex items-center gap-3 mb-3 pr-6">
           <div className={`w-10 h-10 rounded flex items-center justify-center flex-shrink-0 ${isTrash ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
-            <FolderOpen className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
+            <IconComponent className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className={`font-semibold text-sm line-clamp-2 ${isTrash ? 'text-text-secondary' : 'text-text-primary'}`}>
