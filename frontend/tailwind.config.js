@@ -28,10 +28,10 @@ module.exports = {
         },
         // Primary Accent (use sparingly)
         accent: {
-          anchor: '#2E2749',
-          DEFAULT: '#3E355F',
-          tint: '#7B739D',
-          wash: '#D5D2E8',
+          anchor: '#121f4a',
+          DEFAULT: '#1a2f6e',
+          tint: '#5a699a',
+          wash: '#cfd4e8',
         },
         // Semantic Indicators (meaning only)
         indicator: {
@@ -42,7 +42,7 @@ module.exports = {
         // Strokes & Dividers
         stroke: {
           subtle: '#D5D5DB',
-          accent: '#3E355F',
+          accent: '#1a2f6e',
         },
         divider: '#DADADF',
       },
