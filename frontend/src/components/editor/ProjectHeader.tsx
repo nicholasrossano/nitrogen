@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Check, X, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Pencil, Check, X } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
+import { getIconByName } from '@/lib/icons';
 
 interface ProjectHeaderProps {
   initiative: Initiative;
@@ -17,6 +18,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
   );
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const IconComponent = getIconByName(initiative.icon);
 
   // Update local title state when initiative changes (e.g., switching projects or title is generated)
   useEffect(() => {
@@ -75,7 +77,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
 
         {/* Project icon */}
         <div className="w-8 h-8 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
-          <FolderOpen className="w-4 h-4 text-accent" />
+          <IconComponent className="w-4 h-4 text-accent" />
         </div>
 
         {/* Editable title */}

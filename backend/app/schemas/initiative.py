@@ -12,6 +12,7 @@ class InitiativeCreate(BaseModel):
 class InitiativeUpdate(BaseModel):
     """Schema for updating initiative fields"""
     title: Optional[str] = None
+    icon: Optional[str] = None
     sector: Optional[str] = None
     geography: Optional[str] = None
     target_population: Optional[str] = None
@@ -38,6 +39,7 @@ class InitiativeResponse(BaseModel):
     id: UUID
     user_id: str
     title: Optional[str] = None
+    icon: Optional[str] = None
     sector: str
     geography: Optional[str] = None
     target_population: Optional[str] = None
