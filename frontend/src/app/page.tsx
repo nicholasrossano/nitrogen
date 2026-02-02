@@ -90,7 +90,7 @@ export default function HomePage() {
         <SideDrawerHeader />
         <header className="flex-1 px-6 flex items-center justify-between gap-4 bg-white">
           <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight shrink-0">
-            Wisteria
+            Nitrogen AI
           </h1>
           <div className="flex items-center gap-3 flex-1 max-w-md justify-end">
             <div className="relative flex-1 min-w-0">
