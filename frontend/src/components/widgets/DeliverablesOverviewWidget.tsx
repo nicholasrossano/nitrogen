@@ -22,22 +22,7 @@ interface SDGInfo {
 }
 
 interface DeliverablesOverviewWidgetProps {
-  data: {
-    project_summary: {
-      title?: string;
-      project_description?: string;
-      geography?: string;
-      target_population?: string;
-      goal?: string;
-      budget_range?: string;
-      timeline?: string;
-      tool_inputs?: {
-        sdg?: SDGInfo;
-      };
-    };
-    selected_tools: ToolInfo[];
-    tool_inputs: Record<string, any>;
-  };
+  data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
 }
@@ -71,8 +56,8 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
 
   // Defensive checks
   const summary = data?.project_summary || {};
-  const selectedTools = data?.selected_tools || [];
-  const sdg = data?.tool_inputs?.sdg || summary?.tool_inputs?.sdg;
+  const selectedTools = (data?.selected_tools || []) as ToolInfo[];
+  const sdg = (data?.tool_inputs?.sdg || summary?.tool_inputs?.sdg) as SDGInfo | undefined;
 
   return (
     <div className="card-elevated overflow-hidden">
