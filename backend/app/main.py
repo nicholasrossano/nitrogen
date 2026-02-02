@@ -33,9 +33,7 @@ def get_cors_origins():
     return settings.cors_origins
 
 cors_origins = get_cors_origins()
-# TEMPORARY: Add wildcard to debug CORS issues
-cors_origins = ["*"]
-logger.info(f"Final CORS origins (using wildcard for debug): {cors_origins}")
+logger.info(f"Final CORS origins: {cors_origins}")
 
 
 @asynccontextmanager
@@ -57,12 +55,10 @@ app = FastAPI(
 )
 
 # CORS - use directly parsed origins
-# Note: allow_credentials must be False when using wildcard "*"
-use_credentials = cors_origins != ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=use_credentials,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
