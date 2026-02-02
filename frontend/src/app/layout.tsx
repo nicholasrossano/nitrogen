@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Wisteria',
+  title: 'Nitrogen',
   description: 'Generate investment memos through conversational AI',
 };
 
