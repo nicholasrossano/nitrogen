@@ -177,16 +177,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           const finalMessages = chatHistory?.messages || [];
           console.log('sendMessage: setting final messages', { count: finalMessages.length });
           set({ messages: finalMessages });
-        },
-        // onError
-        (error: string) => {
-          console.error('sendMessage: stream error', error);
-          set(state => ({
-            messages: state.messages.filter(m => m.id !== streamingMessageId && m.id !== userMessage.id),
-            error,
-            sending: false,
-            streamingMessageId: null,
-          }));
         }
       );
     } catch (error) {

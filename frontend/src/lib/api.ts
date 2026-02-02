@@ -1,5 +1,21 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Get the current user's ID token for API requests
+async function getAuthToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const { getAuth } = await import('firebase/auth');
+    const { app } = await import('./firebase');
+    const auth = getAuth(app);
+    const user = auth.currentUser;
+    if (!user) return null;
+    return await user.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
 export interface Initiative {
   id: string;
   user_id: string;
@@ -138,12 +154,22 @@ async function fetchApi<T>(
 ): Promise<T> {
   const url = `${API_URL}${endpoint}`;
   
+  // Get auth token
+  const token = await getAuthToken();
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+  
+  // Add auth header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -176,9 +202,14 @@ export const api = {
 
   deleteInitiative: async (id: string) => {
     const url = `${API_URL}/api/v1/initiatives/${id}`;
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
@@ -237,11 +268,18 @@ export const api = {
   uploadEvidence: async (initiativeId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
+    
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     const response = await fetch(
       `${API_URL}/api/v1/initiatives/${initiativeId}/evidence`,
       {
         method: 'POST',
+        headers,
         body: formData,
       }
     );
@@ -284,7 +322,12 @@ export const api = {
     ),
 
   downloadExport: async (memoId: string) => {
-    const response = await fetch(`${API_URL}/api/v1/exports/${memoId}`);
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${API_URL}/api/v1/exports/${memoId}`, { headers });
     
     if (!response.ok) {
       throw new Error('Failed to download export');
@@ -315,11 +358,16 @@ export const api = {
     }>(`/api/v1/evidence/${evidenceId}/content`),
 
   exportChecklist: async (initiativeId: string, content: any) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     const response = await fetch(
       `${API_URL}/api/v1/initiatives/${initiativeId}/export-checklist`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ content }),
       }
     );

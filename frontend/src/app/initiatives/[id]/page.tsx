@@ -6,12 +6,13 @@ import Link from 'next/link';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ProjectHeader, InputOutputBar, EditorPanel, ChatPanel } from '@/components/editor';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 const MIN_CHAT_WIDTH_PERCENT = 25;
 const MAX_CHAT_WIDTH_PERCENT = 50;
 const DEFAULT_CHAT_WIDTH_PERCENT = 50;
 
-export default function InitiativePage() {
+function InitiativePageContent() {
   const params = useParams();
   const initiativeId = params.id as string;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -244,5 +245,13 @@ export default function InitiativePage() {
         className="hidden"
       />
     </div>
+  );
+}
+
+export default function InitiativePage() {
+  return (
+    <ProtectedRoute>
+      <InitiativePageContent />
+    </ProtectedRoute>
   );
 }
