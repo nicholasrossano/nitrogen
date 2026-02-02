@@ -16,6 +16,7 @@ interface InitiativeState {
   generating: boolean;
   alignmentLoading: boolean;
   error: string | null;
+  streamingMessageId: string | null;
   
   // Actions
   loadInitiative: (id: string) => Promise<void>;
@@ -48,6 +49,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   generating: false,
   alignmentLoading: false,
   error: null,
+  streamingMessageId: null,
 
   // Load initiative details
   loadInitiative: async (id: string) => {
@@ -87,7 +89,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Send a message
+  // Send a message with streaming
   sendMessage: async (id: string, content: string) => {
     const { messages } = get();
     console.log('sendMessage: starting', { id, content, currentMessageCount: messages?.length });
@@ -96,11 +98,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     set({ 
       sending: true,
       error: null,
+      streamingMessageId: null,
     });
     
     // Optimistic update - add user message immediately
     const userMessage: ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-user-${Date.now()}`,
       role: 'user',
       content,
       widget_type: null,
@@ -114,48 +117,86 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     });
     console.log('sendMessage: optimistic update done', { newCount: currentMessages.length + 1 });
 
-    try {
-      console.log('sendMessage: calling API');
-      const response = await api.sendMessage(id, content);
-      console.log('sendMessage: API response', { 
-        hasMessage: !!response?.message,
-        messageContent: response?.message?.content?.substring(0, 50)
-      });
-      
-      // Replace temp message with real one and add assistant response
-      set(state => {
-        const filtered = (state.messages || []).filter(m => m.id !== userMessage.id);
-        const newMessages = [
-          ...filtered,
-          { ...userMessage, id: `user-${Date.now()}` },
-          response.message,
-        ];
-        console.log('sendMessage: updating messages after API', { newCount: newMessages.length });
-        return {
-          messages: newMessages,
-          stageStatus: response.stage_status,
-          sending: false,
-        };
-      });
+    // Create a placeholder assistant message for streaming
+    const streamingMessageId = `streaming-${Date.now()}`;
+    const streamingMessage: ChatMessage = {
+      id: streamingMessageId,
+      role: 'assistant',
+      content: '',
+      widget_type: null,
+      widget_data: null,
+      created_at: new Date().toISOString(),
+    };
 
-      // Reload initiative to get updated fields
-      console.log('sendMessage: reloading initiative');
-      const initiative = await api.getInitiative(id);
-      set({ initiative });
+    try {
+      console.log('sendMessage: calling streaming API');
       
-      // Reload chat history to get any additional messages the backend added
-      console.log('sendMessage: reloading chat history');
-      const chatHistory = await api.getChatHistory(id);
-      const finalMessages = chatHistory?.messages || [];
-      console.log('sendMessage: setting final messages', { count: finalMessages.length });
-      set({ messages: finalMessages });
+      // Add the streaming message and mark it as streaming
+      set(state => ({
+        messages: [...state.messages, streamingMessage],
+        streamingMessageId: streamingMessageId,
+      }));
+      
+      const words: string[] = [];
+      
+      await api.sendMessageStream(
+        id,
+        content,
+        // onWord
+        (word: string) => {
+          words.push(word);
+          
+          set(state => {
+            const updatedMessages = state.messages.map(m =>
+              m.id === streamingMessageId
+                ? { ...m, content: words.join(' ') }
+                : m
+            );
+            return { messages: updatedMessages };
+          });
+        },
+        // onComplete
+        async (message: ChatMessage, stageStatus: any) => {
+          console.log('sendMessage: stream complete');
+          
+          // Clear streaming state
+          set({ 
+            streamingMessageId: null,
+            sending: false,
+            stageStatus,
+          });
+
+          // Reload initiative to get updated fields
+          console.log('sendMessage: reloading initiative');
+          const initiative = await api.getInitiative(id);
+          set({ initiative });
+          
+          // Reload chat history to get any additional messages the backend added
+          console.log('sendMessage: reloading chat history');
+          const chatHistory = await api.getChatHistory(id);
+          const finalMessages = chatHistory?.messages || [];
+          console.log('sendMessage: setting final messages', { count: finalMessages.length });
+          set({ messages: finalMessages });
+        },
+        // onError
+        (error: string) => {
+          console.error('sendMessage: stream error', error);
+          set(state => ({
+            messages: state.messages.filter(m => m.id !== streamingMessageId && m.id !== userMessage.id),
+            error,
+            sending: false,
+            streamingMessageId: null,
+          }));
+        }
+      );
     } catch (error) {
       console.error('sendMessage: error', error);
-      // Remove optimistic update on error
+      // Remove optimistic updates on error
       set(state => ({
-        messages: (state.messages || []).filter(m => m.id !== userMessage.id),
+        messages: state.messages.filter(m => m.id !== userMessage.id && m.id !== streamingMessageId),
         error: error instanceof Error ? error.message : 'Failed to send message',
         sending: false,
+        streamingMessageId: null,
       }));
     }
   },
@@ -423,6 +464,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       generating: false,
       alignmentLoading: false,
       error: null,
+      streamingMessageId: null,
     });
   },
 }));
