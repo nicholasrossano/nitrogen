@@ -1,7 +1,8 @@
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from functools import lru_cache
 import json
+from typing import Self
 
 
 class Settings(BaseSettings):
@@ -23,9 +24,16 @@ class Settings(BaseSettings):
     firebase_project_id: str = ""
     google_application_credentials: str = ""
     
-    # App
-    debug: bool = False
+    # App - debug defaults to True if database_url points to localhost
+    debug: bool | None = None
     cors_origins: list[str] = ["http://localhost:3000"]
+    
+    @model_validator(mode='after')
+    def set_debug_default(self) -> Self:
+        """Auto-enable debug mode when running against localhost database"""
+        if self.debug is None:
+            self.debug = 'localhost' in self.database_url or '127.0.0.1' in self.database_url
+        return self
     
     # RAG settings
     chunk_size: int = 500

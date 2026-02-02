@@ -91,6 +91,11 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # In debug mode, accept mock token from localhost frontend
+    if settings.debug and credentials.credentials == 'dev-mock-token':
+        logger.debug("Debug mode: accepting mock token")
+        return AuthUser(uid="dev-user-001", email="dev@nitrogen.local")
+    
     # Try to initialize Firebase
     if not _init_firebase():
         # Firebase not available, fall back to mock user in dev
