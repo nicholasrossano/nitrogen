@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import os
+import json
 
 from app.config import get_settings
 from app.core.database import engine, Base
@@ -13,10 +14,26 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Log CORS configuration at startup
-logger.info(f"CORS_ORIGINS env var: {os.environ.get('CORS_ORIGINS', 'NOT SET')}")
-logger.info(f"Parsed cors_origins: {settings.cors_origins}")
-logger.info(f"cors_origins type: {type(settings.cors_origins)}")
+# Parse CORS origins directly from env var to avoid pydantic issues
+def get_cors_origins():
+    cors_env = os.environ.get('CORS_ORIGINS', '')
+    if cors_env:
+        try:
+            parsed = json.loads(cors_env)
+            if isinstance(parsed, list):
+                logger.info(f"CORS origins from env: {parsed}")
+                return parsed
+        except json.JSONDecodeError:
+            # Try comma-separated
+            origins = [o.strip() for o in cors_env.split(',') if o.strip()]
+            logger.info(f"CORS origins (comma-sep): {origins}")
+            return origins
+    # Fallback to settings
+    logger.info(f"CORS origins from settings: {settings.cors_origins}")
+    return settings.cors_origins
+
+cors_origins = get_cors_origins()
+logger.info(f"Final CORS origins: {cors_origins}")
 
 
 @asynccontextmanager
@@ -37,10 +54,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS - use directly parsed origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,6 +88,6 @@ async def debug_cors():
     """Debug endpoint to check CORS configuration"""
     return {
         "cors_origins_env": os.environ.get('CORS_ORIGINS', 'NOT SET'),
-        "cors_origins_parsed": settings.cors_origins,
-        "cors_origins_type": str(type(settings.cors_origins)),
+        "cors_origins_used": cors_origins,
+        "cors_origins_type": str(type(cors_origins)),
     }
