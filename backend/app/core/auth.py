@@ -13,7 +13,7 @@ class MockUser:
     """Mock user for development without Firebase"""
     def __init__(self, uid: str = "dev-user-001"):
         self.uid = uid
-        self.email = "dev@wisterion.local"
+        self.email = "dev@nitrogen.local"
 
 
 async def get_current_user(

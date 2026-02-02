@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/wisterion"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/nitrogen"
     
     # OpenAI
     openai_api_key: str = ""

@@ -1,10 +1,10 @@
-# Wisterion
+# Nitrogen
 
 Chat-first decision packet studio. Generate investment memos grounded in evidence through conversational AI.
 
 ## Overview
 
-Wisterion helps users create structured decision documents by:
+Nitrogen helps users create structured decision documents by:
 1. **Conversational Intake** - Chat with an AI assistant to define your initiative
 2. **Evidence Upload** - Upload a document or paste text as supporting evidence
 3. **Memo Generation** - Generate an investment memo with citations from both your evidence and a curated case study corpus
@@ -28,7 +28,7 @@ Wisterion helps users create structured decision documents by:
 
 1. Clone and configure:
 ```bash
-cd Wisterion
+cd Nitrogen
 cp .env.example .env
 # Edit .env with your OPENAI_API_KEY
 ```
@@ -76,7 +76,7 @@ npm run dev
 ## Project Structure
 
 ```
-Wisterion/
+Nitrogen/
 ├── docker-compose.yml
 ├── frontend/           # Next.js app
 │   ├── src/

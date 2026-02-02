@@ -3,11 +3,11 @@ version: '3.8'
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: wisterion-db
+    container_name: nitrogen-db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: wisterion
+      POSTGRES_DB: nitrogen
     ports:
       - "5432:5432"
     volumes:
@@ -23,9 +23,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: wisterion-backend
+    container_name: nitrogen-backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/wisterion
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/nitrogen
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       STORAGE_TYPE: local
       EXPORTS_DIR: /app/exports
@@ -43,7 +43,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: wisterion-frontend
+    container_name: nitrogen-frontend
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:

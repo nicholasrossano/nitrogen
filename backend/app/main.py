@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Wisterion API",
+    title="Nitrogen API",
     description="Chat-first decision packet studio",
     version="0.1.0",
     lifespan=lifespan,
@@ -49,7 +49,7 @@ app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
 
 @app.get("/")
 async def root():
-    return {"message": "Wisterion API", "version": "0.1.0"}
+    return {"message": "Nitrogen API", "version": "0.1.0"}
 
 
 @app.get("/health")

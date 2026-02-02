@@ -54,7 +54,7 @@ Example: "I have everything I need - here's what I'll prepare for you:" """
         # Default flexible prompt for general conversation
         context = self._build_context(initiative)
         
-        return f"""You are a helpful assistant for Wisterion, a platform that helps development professionals create project documentation like investment memos and due diligence checklists.
+        return f"""You are a helpful assistant for Nitrogen, a platform that helps development professionals create project documentation like investment memos and due diligence checklists.
 
 Current project state:
 {context if context else "No project details yet."}

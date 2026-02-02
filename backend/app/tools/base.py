@@ -1,4 +1,4 @@
-"""Base classes for Wisterion tools."""
+"""Base classes for Nitrogen tools."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -177,7 +177,7 @@ class ToolDefinition:
 
 
 class BaseTool(ABC):
-    """Abstract base class for all Wisterion tools."""
+    """Abstract base class for all Nitrogen tools."""
     
     @property
     @abstractmethod

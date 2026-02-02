@@ -1,10 +1,10 @@
 ---
-description: Wisterion UI style guide - colors, typography, and design principles
+description: Nitrogen UI style guide - colors, typography, and design principles
 globs: **/*.{tsx,ts,css}
 alwaysApply: false
 ---
 
-# Wisterion UI Style Guide
+# Nitrogen UI Style Guide
 
 Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
 
