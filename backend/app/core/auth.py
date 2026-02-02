@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import os
+import json
 import logging
 
 from app.config import get_settings
@@ -33,13 +34,29 @@ def _init_firebase():
         except ValueError:
             pass
         
-        # Initialize with service account if available
-        if settings.google_application_credentials and os.path.exists(settings.google_application_credentials):
+        cred = None
+        
+        # Option 1: Service account JSON content as env var (for Railway/cloud)
+        firebase_sa_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON', '')
+        if firebase_sa_json:
+            try:
+                sa_dict = json.loads(firebase_sa_json)
+                cred = credentials.Certificate(sa_dict)
+                logger.info("Using Firebase credentials from FIREBASE_SERVICE_ACCOUNT_JSON env var")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+        
+        # Option 2: Service account file path (for local dev)
+        if not cred and settings.google_application_credentials and os.path.exists(settings.google_application_credentials):
             cred = credentials.Certificate(settings.google_application_credentials)
+            logger.info("Using Firebase credentials from file")
+        
+        # Option 3: Project ID only (works on GCP with default credentials)
+        if cred:
             firebase_admin.initialize_app(cred)
         else:
-            # Initialize with project ID only (works with default credentials)
             firebase_admin.initialize_app(options={'projectId': settings.firebase_project_id})
+            logger.info("Using Firebase with project ID only (no service account)")
         
         _firebase_initialized = True
         logger.info("Firebase Admin SDK initialized successfully")
