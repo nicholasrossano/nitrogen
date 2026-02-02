@@ -256,6 +256,12 @@ async def send_chat_message(
                 initiative.project_type = project_info["project_type"]
             if project_info.get("title") and not initiative.title:
                 initiative.title = project_info["title"]
+                # Always select an icon when we set the title
+                icon = await chat_agent.select_project_icon(
+                    project_info["title"],
+                    project_info.get("project_description", "")
+                )
+                initiative.icon = icon
             if project_info.get("geography") and not initiative.geography:
                 initiative.geography = project_info["geography"]
             await db.commit()
@@ -399,6 +405,12 @@ async def send_chat_message(
                 info_updated = True
             if analysis.get("title") and not initiative.title:
                 initiative.title = analysis["title"]
+                # Always select an icon when we set the title
+                icon = await chat_agent.select_project_icon(
+                    analysis["title"],
+                    analysis.get("project_description", "")
+                )
+                initiative.icon = icon
                 info_updated = True
             if analysis.get("geography") and not initiative.geography:
                 initiative.geography = analysis["geography"]

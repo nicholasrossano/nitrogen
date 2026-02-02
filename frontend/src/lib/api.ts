@@ -4,6 +4,7 @@ export interface Initiative {
   id: string;
   user_id: string;
   title: string | null;
+  icon: string | null;
   sector: string;
   geography: string | null;
   target_population: string | null;
