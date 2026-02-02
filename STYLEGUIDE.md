@@ -1,7 +1,7 @@
-# Wisterion UI Style Guide  
+# Nitrogen UI Style Guide  
 **Enterprise Visual System (Aesthetic-Only)**
 
-This guide defines the visual language for Wisterion as an enterprise-grade B2B platform.  
+This guide defines the visual language for Nitrogen as an enterprise-grade B2B platform.  
 It is prescriptive and concise, prioritizing clarity, restraint, and long-term credibility.
 
 ## A) Design Principles
@@ -46,10 +46,10 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ### Primary accent (use sparingly)
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `AccentAnchor` | `#2E2749` | Rare strong emphasis |
-| `AccentPrimary` | `#3E355F` | Borders, focus, selection, links |
-| `AccentTint` | `#7B739D` | Hover / pressed fills |
-| `AccentWash` | `#D5D2E8` | Subtle highlight |
+| `AccentAnchor` | `#121f4a` | Rare strong emphasis |
+| `AccentPrimary` | `#1a2f6e` | Borders, focus, selection, links |
+| `AccentTint` | `#5a699a` | Hover / pressed fills |
+| `AccentWash` | `#cfd4e8` | Subtle highlight |
 
 ### Semantic indicators
 | Token | Hex | Usage |
@@ -63,7 +63,7 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 | --- | --- | --- |
 | `Divider` | `#DADADF` | Separators |
 | `StrokeSubtle` | `#D5D5DB` | Borders |
-| `StrokeAccent` | `#3E355F` | Focus / selected border |
+| `StrokeAccent` | `#1a2f6e` | Focus / selected border |
 
 **Rules**
 - Default UI should read neutral  
@@ -221,6 +221,55 @@ For primary interactive elements, combine hover lift with press compression. Sha
 - Icon-only buttons
 - Ghost buttons
 - Dense table rows
+
+---
+
+### 3D Depth Effect (Marketing Pages Only)
+
+For marketing/landing pages and promotional materials, use a bolder 3D depth effect that creates a "raised button" appearance. This style is more expressive and should **not** be used in the core application UI.
+
+**Behavior**
+- **Default**: Flat, no shadow (2D appearance)
+- **Hover**: Button lifts up-left, revealing solid 3D depth shadow
+- **Press**: Button compresses back to origin, shadow disappears
+
+```css
+/* Marketing button - 3D depth on hover */
+.btn-marketing {
+  position: relative;
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+  box-shadow: none;
+}
+
+.btn-marketing:hover {
+  transform: translate(-4px, -4px);
+  box-shadow: 4px 4px 0 0 var(--shadow-color);
+}
+
+.btn-marketing:active {
+  transform: translate(0, 0);
+  box-shadow: none;
+  transition: transform 50ms ease-out, box-shadow 50ms ease-out;
+}
+```
+
+**Shadow Color Rules**
+- If button fills with accent color on hover: use light grey (`StrokeSubtle` / `#D5D5DB`)
+- If button stays neutral/white on hover: use accent color (`AccentPrimary` / `#1a2f6e`)
+
+**Apply to (marketing only)**
+- Hero CTAs on landing pages
+- Promotional banners
+- Marketing page buttons
+- Not-yet-built home page elements
+
+**Do not apply to**
+- Core application UI (project pages, editors, forms)
+- Dense UI with multiple buttons
+- Navigation elements
+- Any in-app workflows
+
+---
 
 **Deliberate Micro-Delay**
 

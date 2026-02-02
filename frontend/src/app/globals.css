@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  /* Wisterion Enterprise Design Tokens */
+  /* Nitrogen Enterprise Design Tokens */
   /* Surfaces */
   --color-background: #F5F5F7;
   --color-background-tinted: #E8E3DB;
@@ -18,10 +18,10 @@
   --color-text-tertiary: #7A7A82;
   
   /* Accent */
-  --color-accent-anchor: #2E2749;
-  --color-accent: #3E355F;
-  --color-accent-tint: #7B739D;
-  --color-accent-wash: #D5D2E8;
+  --color-accent-anchor: #121f4a;
+  --color-accent: #1a2f6e;
+  --color-accent-tint: #5a699a;
+  --color-accent-wash: #cfd4e8;
   
   /* Semantic Indicators */
   --color-indicator-orange: #B97A5D;
@@ -31,7 +31,7 @@
   /* Strokes */
   --color-divider: #DADADF;
   --color-stroke-subtle: #D5D5DB;
-  --color-stroke-accent: #3E355F;
+  --color-stroke-accent: #1a2f6e;
 }
 
 html {
