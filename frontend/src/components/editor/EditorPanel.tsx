@@ -35,7 +35,7 @@ export function EditorPanel({
         </div>
         {!hasInputs && !hasOutputs ? (
           <>
-            <h3 className="text-lg font-semibold text-text-primary mb-2">
+            <h3 className="text-sm font-semibold text-text-primary mb-2">
               Get started
             </h3>
             <p className="text-sm text-text-secondary max-w-sm mb-6">
@@ -50,7 +50,7 @@ export function EditorPanel({
           </>
         ) : (
           <>
-            <h3 className="text-base font-medium text-text-primary mb-1">
+            <h3 className="text-sm font-medium text-text-primary mb-1">
               Select an item
             </h3>
             <p className="text-sm text-text-secondary">
@@ -107,8 +107,8 @@ export function EditorPanel({
     return (
       <div className="flex-1 overflow-auto p-6 pb-6">
         <div className="card p-6">
-          <h3 className="font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
-          <pre className="text-xs text-text-secondary bg-surface-subtle p-4 rounded overflow-auto">
+          <h3 className="text-sm font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
+          <pre className="text-sm text-text-secondary bg-surface-subtle p-4 rounded overflow-auto">
             {JSON.stringify(widgetData, null, 2)}
           </pre>
         </div>
@@ -183,7 +183,7 @@ function EvidenceDocumentViewer({
             <FileText className="w-5 h-5 text-accent" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-text-primary">{cleanFilename(doc.filename)}</h3>
+            <h3 className="text-sm font-semibold text-text-primary">{cleanFilename(doc.filename)}</h3>
             <p className="text-sm text-text-tertiary">
               {doc.file_type?.toUpperCase()} • {doc.chunk_count} sections
             </p>

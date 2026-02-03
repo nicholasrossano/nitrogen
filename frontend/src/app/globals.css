@@ -158,21 +158,19 @@ body {
 }
 
 .prose-memo h1 {
-  @apply text-2xl font-semibold text-text-primary mb-4;
-  font-family: 'Urbanist', 'Inter', system-ui, sans-serif;
+  @apply text-sm font-semibold text-text-primary mb-3;
 }
 
 .prose-memo h2 {
-  @apply text-lg font-semibold text-text-primary mt-6 mb-3;
-  font-family: 'Urbanist', 'Inter', system-ui, sans-serif;
+  @apply text-sm font-semibold text-text-primary mb-3;
 }
 
 .prose-memo p {
-  @apply mb-4;
+  @apply text-sm text-text-secondary leading-relaxed;
 }
 
 .prose-memo ul {
-  @apply list-disc pl-6 mb-4;
+  @apply list-disc pl-6 text-sm;
 }
 
 .prose-memo li {
@@ -652,27 +650,27 @@ textarea {
 
 /* Status badge utilities */
 .badge-success {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
   @apply bg-indicator-green/10 text-indicator-green;
 }
 
 .badge-warning {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
   @apply bg-indicator-orange/10 text-indicator-orange;
 }
 
 .badge-pending {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
   @apply bg-indicator-yellow/10 text-indicator-yellow;
 }
 
 .badge-neutral {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium;
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
   @apply bg-surface-subtle text-text-secondary;
 }
 
 .badge-accent {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md;
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium rounded-md;
   @apply bg-accent-wash text-accent-anchor;
 }
 

@@ -112,7 +112,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
             <FileText className="w-5 h-5 text-accent" />
           </div>
           <div>
-            <h3 className="font-semibold text-text-primary">Investment Memo</h3>
+            <h3 className="text-sm font-semibold text-text-primary">Investment Memo</h3>
             <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
           </div>
         </div>
@@ -194,7 +194,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
                       )}
                     >
                       <div className="flex items-start gap-3">
-                        <span className="font-semibold text-text-primary">[{citation.number}]</span>
+                        <span className="text-sm font-semibold text-text-primary">[{citation.number}]</span>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             {citation.source_type === 'corpus' ? (
@@ -202,15 +202,15 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
                             ) : (
                               <ExternalLink className="w-4 h-4 text-text-secondary" />
                             )}
-                            <span className={`text-xs uppercase font-semibold tracking-wide ${
+                            <span className={`text-sm uppercase font-semibold tracking-wide ${
                               citation.source_type === 'corpus' ? 'text-accent' : 'text-text-secondary'
                             }`}>
                               {citation.source_type === 'corpus' ? 'Case Study' : 'Your Evidence'}
                             </span>
                           </div>
-                          <p className="font-medium text-text-primary mt-1">{citation.source_title}</p>
+                          <p className="text-sm font-medium text-text-primary mt-1">{citation.source_title}</p>
                           {selectedCitation?.number === citation.number && (
-                            <p className="text-text-secondary mt-3 border-l border-divider pl-3">
+                            <p className="text-sm text-text-secondary mt-3 border-l border-divider pl-3">
                               "{citation.excerpt}"
                             </p>
                           )}
