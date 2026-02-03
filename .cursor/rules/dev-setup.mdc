@@ -1,0 +1,70 @@
+---
+description: Nitrogen development setup and common issues
+globs: **/*
+alwaysApply: true
+---
+
+# Nitrogen Development Setup
+
+## Standard Ports (DO NOT CHANGE)
+
+- **Frontend**: `http://localhost:3000`
+- **Backend**: `http://localhost:8000`
+- **Database**: Neon cloud (configured in backend/.env)
+
+## Starting Development Servers
+
+### Backend (Terminal 1)
+```bash
+cd backend
+python3 -m uvicorn app.main:app --reload --port 8000
+```
+
+### Frontend (Terminal 2)
+```bash
+cd frontend
+npm run dev
+```
+
+## Common Issues
+
+### CORS Errors
+If you see "Access-Control-Allow-Origin" errors:
+1. Check `backend/.env` has: `CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]`
+2. Restart the backend server after changing .env
+
+### Port Already in Use
+If port 3000 is busy, Next.js will try 3001. This is fine - CORS allows both.
+
+### Next.js Cache Corruption
+If you see module errors like "Cannot find module './vendor-chunks/...":
+```bash
+cd frontend
+rm -rf .next
+npm run dev
+```
+
+### Backend Won't Start
+Check Python path: `/Library/Frameworks/Python.framework/Versions/3.12/bin/python3`
+Or use: `python3 -m uvicorn app.main:app --reload --port 8000`
+
+## Environment Files
+
+### backend/.env (required)
+```
+DATABASE_URL=postgresql+asyncpg://...  # Neon connection string
+OPENAI_API_KEY=sk-...
+CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
+```
+
+### frontend/.env.local (optional)
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## Architecture Notes
+
+- Backend uses FastAPI with async SQLAlchemy
+- Frontend uses Next.js 14 App Router with Zustand for state
+- Chat orchestration is LLM-driven (see backend/app/services/orchestration.py)
+- RAG uses tiered retrieval: corpus → web search → LLM fallback

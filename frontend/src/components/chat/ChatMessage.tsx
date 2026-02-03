@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ChatMessage as ChatMessageType } from '@/lib/api';
+import { ChatMessage as ChatMessageType, SourceCitation } from '@/lib/api';
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
@@ -12,6 +12,8 @@ import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOve
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
+import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
+import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -100,6 +102,11 @@ export function ChatMessage({ message, initiativeId, isLatest, animate = false, 
           </div>
         )}
 
+        {/* Sources/Citations - show for assistant messages with sources */}
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <SourcesDisplay sources={message.sources} />
+        )}
+
         {/* Widget - always show, pass isLatest to control buttons */}
         {message.widget_type && message.widget_data && (
           <div className={`mt-2 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
@@ -112,6 +119,94 @@ export function ChatMessage({ message, initiativeId, isLatest, animate = false, 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SourcesDisplay({ sources }: { sources: SourceCitation[] }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Filter out llm_estimate sources for display
+  const verifiedSources = sources.filter(s => s.source_type !== 'llm_estimate');
+  const hasUnverified = sources.some(s => s.source_type === 'llm_estimate');
+  
+  if (verifiedSources.length === 0 && !hasUnverified) {
+    return null;
+  }
+
+  const getSourceIcon = (type: string) => {
+    switch (type) {
+      case 'corpus':
+        return <BookOpen className="w-3 h-3" />;
+      case 'evidence':
+        return <FileText className="w-3 h-3" />;
+      case 'web':
+        return <Globe className="w-3 h-3" />;
+      default:
+        return <AlertCircle className="w-3 h-3" />;
+    }
+  };
+
+  const getSourceLabel = (type: string) => {
+    switch (type) {
+      case 'corpus':
+        return 'Case Study';
+      case 'evidence':
+        return 'Uploaded';
+      case 'web':
+        return 'Web';
+      default:
+        return 'Estimate';
+    }
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+      >
+        {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        <span>
+          {verifiedSources.length > 0 
+            ? `${verifiedSources.length} source${verifiedSources.length > 1 ? 's' : ''}`
+            : 'Sources'}
+        </span>
+        {hasUnverified && (
+          <span className="text-yellow-600 ml-1">(includes estimates)</span>
+        )}
+      </button>
+      
+      {isExpanded && (
+        <div className="mt-2 space-y-1.5 pl-2 border-l border-stroke-subtle">
+          {verifiedSources.map((source, idx) => (
+            <div key={idx} className="flex items-start gap-2 text-xs text-text-secondary">
+              <span className="flex items-center gap-1 text-text-tertiary shrink-0">
+                {getSourceIcon(source.source_type)}
+                <span className="text-[10px] uppercase tracking-wide">{getSourceLabel(source.source_type)}</span>
+              </span>
+              {source.source_url ? (
+                <a 
+                  href={source.source_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline truncate"
+                >
+                  {source.source_title}
+                </a>
+              ) : (
+                <span className="truncate">{source.source_title}</span>
+              )}
+            </div>
+          ))}
+          {hasUnverified && (
+            <div className="flex items-center gap-2 text-xs text-yellow-600">
+              <AlertCircle className="w-3 h-3 shrink-0" />
+              <span>Some information is based on general knowledge and should be verified</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -132,6 +227,8 @@ function MessageWidget({
       return <ConfirmationWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'evidence_input':
       return <EvidenceInputWidget initiativeId={initiativeId} isActive={isActive} />;
+    case 'document_request':
+      return <DocumentRequestWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'generate_options':
       return <GenerateOptionsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'memo_viewer':

@@ -5,6 +5,8 @@ from app.services.embeddings import EmbeddingsService
 from app.services.rag import RAGService
 from app.services.memo_generator import MemoGeneratorService
 from app.services.docx_exporter import DocxExporterService
+from app.services.tiered_retrieval import TieredRetrievalService, SourceType, RetrievedFact
+from app.services.orchestration import OrchestrationService
 
 __all__ = [
     "ChatAgentService",
@@ -14,4 +16,8 @@ __all__ = [
     "RAGService",
     "MemoGeneratorService",
     "DocxExporterService",
+    "TieredRetrievalService",
+    "SourceType",
+    "RetrievedFact",
+    "OrchestrationService",
 ]
