@@ -28,10 +28,10 @@ module.exports = {
         },
         // Primary Accent (use sparingly)
         accent: {
-          anchor: '#121f4a',
-          DEFAULT: '#1a2f6e',
-          tint: '#5a699a',
-          wash: '#cfd4e8',
+          anchor: '#005bb5',
+          DEFAULT: '#0865b8',
+          tint: '#4d9de8',
+          wash: '#edf7ff',
         },
         // Secondary Accent
         'accent-secondary': {
@@ -49,7 +49,7 @@ module.exports = {
         // Strokes & Dividers
         stroke: {
           subtle: '#D5D5DB',
-          accent: '#1a2f6e',
+          accent: '#0865b8',
         },
         divider: '#DADADF',
       },
