@@ -62,23 +62,40 @@ docker-compose exec backend python scripts/seed_corpus.py
 
 ### Local Development (without Docker)
 
+**Prerequisites:**
+- Python 3.11+ 
+- Node.js 18+
+- PostgreSQL with pgvector (or use Neon cloud database)
+
 **Backend:**
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate
 pip install -r requirements.txt
+
+# Set up environment (copy from .env.example or use existing .env)
+# Required: DATABASE_URL, OPENAI_API_KEY
+
+# Run migrations
 alembic upgrade head
-python scripts/seed_corpus.py
-uvicorn app.main:app --reload
+
+# Start server on port 8000
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
 **Frontend:**
 ```bash
 cd frontend
 npm install
+
+# Start server on port 3000
 npm run dev
 ```
+
+**Important:** 
+- Frontend runs on `http://localhost:3000`
+- Backend runs on `http://localhost:8000`
+- CORS is configured to allow localhost:3000 and localhost:3001
+- If you get CORS errors, check that backend/.env has the correct CORS_ORIGINS
 
 ## Project Structure
 

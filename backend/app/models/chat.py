@@ -43,6 +43,9 @@ class ChatMessage(Base):
     widget_type: Mapped[str | None] = mapped_column(String(50))
     widget_data: Mapped[dict | None] = mapped_column(JSONB)
     
+    # Source citations (for RAG-informed responses)
+    sources: Mapped[list | None] = mapped_column(JSONB)
+    
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
