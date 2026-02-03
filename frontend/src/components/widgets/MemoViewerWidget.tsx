@@ -32,6 +32,51 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const { exportMemo, loading, initiative } = useInitiativeStore();
 
+  // State for editable content and headers
+  const [editableContent, setEditableContent] = useState<Record<string, string>>(() => {
+    const content = data.content as MemoContent;
+    const initial: Record<string, string> = {};
+    if ((content as any).sections) {
+      (content as any).sections.forEach((section: { id: string; title: string; content: string }, index: number) => {
+        const sectionId = section.id || `section-${index}`;
+        initial[sectionId] = section.content;
+        initial[`${sectionId}-title`] = section.title;
+      });
+    } else {
+      initial['executive_summary'] = content.executive_summary || '';
+      initial['recommendation_rationale'] = content.recommendation_rationale || '';
+      initial['evidence_summary'] = content.evidence_summary || '';
+      initial['risks_and_assumptions'] = content.risks_and_assumptions || '';
+      initial['executive_summary-title'] = 'Executive Summary';
+      initial['recommendation_rationale-title'] = 'Recommendation Rationale';
+      initial['evidence_summary-title'] = 'Evidence Summary';
+      initial['risks_and_assumptions-title'] = 'Risks and Assumptions';
+      initial['open_questions-title'] = 'Open Questions';
+      // Store open questions
+      if (content.open_questions) {
+        content.open_questions.forEach((q, i) => {
+          initial[`open_question-${i}`] = q;
+        });
+      }
+    }
+    return initial;
+  });
+
+  const handleContentEdit = (sectionId: string, e: React.FormEvent<HTMLParagraphElement>) => {
+    const newContent = e.currentTarget.textContent || '';
+    setEditableContent(prev => ({ ...prev, [sectionId]: newContent }));
+  };
+
+  const handleTitleEdit = (sectionId: string, e: React.FormEvent<HTMLHeadingElement>) => {
+    const newTitle = e.currentTarget.textContent || '';
+    setEditableContent(prev => ({ ...prev, [`${sectionId}-title`]: newTitle }));
+  };
+
+  const handleQuestionEdit = (questionIdx: number, e: React.FormEvent<HTMLLIElement>) => {
+    const newQuestion = e.currentTarget.textContent || '';
+    setEditableContent(prev => ({ ...prev, [`open_question-${questionIdx}`]: newQuestion }));
+  };
+
   const content = data.content as MemoContent;
   const projectName =
     initiative?.title ??
@@ -125,47 +170,135 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
             {(content as any).sections ? (
               // Dynamic sections format
               <>
-                {(content as any).sections.map((section: { id: string; title: string; content: string }, index: number) => (
-                  <section key={section.id || index}>
-                    <h2>{section.title}</h2>
-                    <p>{renderWithCitations(section.content)}</p>
-                  </section>
-                ))}
+                {(content as any).sections.map((section: { id: string; title: string; content: string }, index: number) => {
+                  const sectionId = section.id || `section-${index}`;
+                  return (
+                    <section key={sectionId}>
+                      <h2
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) => handleTitleEdit(sectionId, e)}
+                        className="editable-content"
+                      >
+                        {editableContent[`${sectionId}-title`] || section.title}
+                      </h2>
+                      <p
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) => handleContentEdit(sectionId, e)}
+                        className="editable-content"
+                      >
+                        {editableContent[sectionId] || section.content}
+                      </p>
+                    </section>
+                  );
+                })}
               </>
             ) : (
               // Legacy hardcoded format
               <>
                 {/* Executive Summary */}
                 <section>
-                  <h2>Executive Summary</h2>
-                  <p>{renderWithCitations(content.executive_summary)}</p>
+                  <h2
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleTitleEdit('executive_summary', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['executive_summary-title']}
+                  </h2>
+                  <p
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleContentEdit('executive_summary', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['executive_summary']}
+                  </p>
                 </section>
 
                 {/* Recommendation Rationale */}
                 <section>
-                  <h2>Recommendation Rationale</h2>
-                  <p>{renderWithCitations(content.recommendation_rationale)}</p>
+                  <h2
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleTitleEdit('recommendation_rationale', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['recommendation_rationale-title']}
+                  </h2>
+                  <p
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleContentEdit('recommendation_rationale', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['recommendation_rationale']}
+                  </p>
                 </section>
 
                 {/* Evidence Summary */}
                 <section>
-                  <h2>Evidence Summary</h2>
-                  <p>{renderWithCitations(content.evidence_summary)}</p>
+                  <h2
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleTitleEdit('evidence_summary', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['evidence_summary-title']}
+                  </h2>
+                  <p
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleContentEdit('evidence_summary', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['evidence_summary']}
+                  </p>
                 </section>
 
                 {/* Risks and Assumptions */}
                 <section>
-                  <h2>Risks and Assumptions</h2>
-                  <p>{renderWithCitations(content.risks_and_assumptions)}</p>
+                  <h2
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleTitleEdit('risks_and_assumptions', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['risks_and_assumptions-title']}
+                  </h2>
+                  <p
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleContentEdit('risks_and_assumptions', e)}
+                    className="editable-content"
+                  >
+                    {editableContent['risks_and_assumptions']}
+                  </p>
                 </section>
 
                 {/* Open Questions */}
                 {content.open_questions?.length > 0 && (
                   <section>
-                    <h2>Open Questions</h2>
+                    <h2
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={(e) => handleTitleEdit('open_questions', e)}
+                      className="editable-content"
+                    >
+                      {editableContent['open_questions-title']}
+                    </h2>
                     <ul>
                       {content.open_questions.map((q, i) => (
-                        <li key={i}>{q}</li>
+                        <li 
+                          key={i}
+                          contentEditable
+                          suppressContentEditableWarning
+                          onBlur={(e) => handleQuestionEdit(i, e)}
+                          className="editable-content"
+                        >
+                          {editableContent[`open_question-${i}`] || q}
+                        </li>
                       ))}
                     </ul>
                   </section>
