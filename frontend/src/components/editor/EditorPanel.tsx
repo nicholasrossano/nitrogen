@@ -23,13 +23,6 @@ export function EditorPanel({
   onUploadClick,
   onDeleteEvidence,
 }: EditorPanelProps) {
-  // Wrapper for all content to ensure proper height
-  const Wrapper = ({ children }: { children: React.ReactNode }) => (
-    <div className="h-full flex flex-col">
-      {children}
-    </div>
-  );
-
   // No selection - show empty state
   if (!selectedItemId || !selectedItemType) {
     const hasInputs = evidenceDocs.length > 0;
@@ -75,9 +68,9 @@ export function EditorPanel({
     if (!doc) return null;
 
     return (
-      <Wrapper>
+      <div className="h-full flex flex-col">
         <EvidenceDocumentViewer doc={doc} onDelete={onDeleteEvidence} />
-      </Wrapper>
+      </div>
     );
   }
 
@@ -92,31 +85,31 @@ export function EditorPanel({
     // Render appropriate widget based on type
     if (widgetType === 'memo_viewer' || selectedItemId.includes('memo')) {
       return (
-        <Wrapper>
+        <div className="h-full flex flex-col">
           <MemoViewerWidget
             data={widgetData as MemoContent}
             isActive={true}
             initiativeId={initiative.id}
           />
-        </Wrapper>
+        </div>
       );
     }
 
     if (widgetType === 'checklist_viewer' || selectedItemId.includes('checklist')) {
       return (
-        <Wrapper>
+        <div className="h-full flex flex-col">
           <ChecklistViewerWidget
             data={widgetData}
             isActive={true}
             initiativeId={initiative.id}
           />
-        </Wrapper>
+        </div>
       );
     }
 
     // Default: show raw data
     return (
-      <Wrapper>
+      <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto">
           <div className="card p-6">
             <h3 className="text-sm font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
@@ -125,7 +118,7 @@ export function EditorPanel({
             </pre>
           </div>
         </div>
-      </Wrapper>
+      </div>
     );
   }
 
@@ -188,10 +181,9 @@ function EvidenceDocumentViewer({
     : content;
 
   return (
-    <Wrapper>
-      <div className="card-elevated flex flex-col overflow-hidden group flex-1 rounded-none">
-        {/* Header */}
-        <div className="relative flex items-center gap-3 px-4 pt-4 pb-3 bg-surface-header border-b border-divider">
+    <div className="card-elevated flex flex-col overflow-hidden group flex-1 rounded-none">
+      {/* Header */}
+      <div className="relative flex items-center gap-3 px-4 pt-4 pb-3 bg-surface-header border-b border-divider">
           <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
             <FileText className="w-5 h-5 text-accent" />
           </div>
@@ -245,7 +237,6 @@ function EvidenceDocumentViewer({
             </p>
           </div>
         )}
-      </div>
-    </Wrapper>
+    </div>
   );
 }
