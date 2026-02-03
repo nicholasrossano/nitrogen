@@ -66,24 +66,24 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
 
   return (
     <header className="flex-shrink-0 bg-white">
-      <div className="px-4 py-3 flex items-center gap-3">
+      <div className="px-4 py-2 flex items-center gap-2">
         {/* Back button */}
         <Link 
           href="/" 
           className="icon-btn"
         >
-          <ArrowLeft className="w-5 h-5 text-text-secondary" />
+          <ArrowLeft className="w-4 h-4 text-text-secondary" />
         </Link>
 
         {/* Project icon */}
-        <div className="w-8 h-8 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
-          <IconComponent className="w-4 h-4 text-accent" />
+        <div className="w-6 h-6 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
+          <IconComponent className="w-3 h-3 text-accent" />
         </div>
 
         {/* Editable title */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           {isEditing ? (
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-1 flex-1 min-w-0">
               <input
                 ref={inputRef}
                 type="text"
@@ -91,34 +91,34 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
                 style={{ width: `${Math.max(title.length + 2, 12)}ch` }}
-                className="min-w-0 px-0 py-1 text-lg font-semibold text-text-primary bg-transparent border-0 border-b border-accent rounded-none focus:outline-none focus:ring-0"
+                className="min-w-0 px-0 py-0.5 text-sm font-semibold text-text-primary bg-transparent border-0 border-b border-accent rounded-none focus:outline-none focus:ring-0"
                 disabled={saving}
               />
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="icon-btn icon-btn-success p-1.5 text-indicator-green flex-shrink-0"
+                className="icon-btn icon-btn-success p-1 text-indicator-green flex-shrink-0"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={handleCancel}
                 disabled={saving}
-                className="icon-btn p-1.5 text-text-tertiary flex-shrink-0"
+                className="icon-btn p-1 text-text-tertiary flex-shrink-0"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 min-w-0 group">
-              <h1 className="text-lg font-semibold text-text-primary truncate">
+            <div className="flex items-center gap-1.5 min-w-0 group">
+              <h1 className="text-sm font-semibold text-text-primary truncate">
                 {title}
               </h1>
               <button
                 onClick={() => setIsEditing(true)}
-                className="icon-btn p-1.5 opacity-0 group-hover:opacity-100 text-text-tertiary"
+                className="icon-btn p-1 opacity-0 group-hover:opacity-100 text-text-tertiary"
               >
-                <Pencil className="w-4 h-4" />
+                <Pencil className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
