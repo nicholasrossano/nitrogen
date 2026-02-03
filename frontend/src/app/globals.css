@@ -18,10 +18,10 @@
   --color-text-tertiary: #7A7A82;
   
   /* Accent */
-  --color-accent-anchor: #121f4a;
-  --color-accent: #1a2f6e;
-  --color-accent-tint: #5a699a;
-  --color-accent-wash: #cfd4e8;
+  --color-accent-anchor: #005bb5;
+  --color-accent: #0865b8;
+  --color-accent-tint: #4d9de8;
+  --color-accent-wash: #edf7ff;
   
   /* Secondary Accent */
   --color-accent-secondary-anchor: #4a3812;
@@ -37,7 +37,7 @@
   /* Strokes */
   --color-divider: #DADADF;
   --color-stroke-subtle: #D5D5DB;
-  --color-stroke-accent: #1a2f6e;
+  --color-stroke-accent: #0865b8;
 }
 
 html {
