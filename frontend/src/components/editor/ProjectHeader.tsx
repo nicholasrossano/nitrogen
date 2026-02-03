@@ -91,7 +91,7 @@ export function ProjectHeader({ initiative, onTitleUpdate }: ProjectHeaderProps)
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
                 style={{ width: `${Math.max(title.length + 2, 12)}ch` }}
-                className="min-w-0 px-0 py-1 text-lg font-semibold text-text-primary bg-transparent border-0 border-b-2 border-accent rounded-none focus:outline-none focus:ring-0"
+                className="min-w-0 px-0 py-1 text-lg font-semibold text-text-primary bg-transparent border-0 border-b border-accent rounded-none focus:outline-none focus:ring-0"
                 disabled={saving}
               />
               <button

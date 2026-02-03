@@ -16,9 +16,9 @@ interface SideDrawerProps {
 /** Renders just the Account header cell for use in a shared header row */
 export function SideDrawerHeader() {
   return (
-    <div className="w-56 h-[72px] px-4 pb-2 flex items-end shrink-0 bg-white border-r border-accent">
+    <div className="w-56 h-[72px] px-4 pb-2 flex items-end shrink-0 bg-white border-r-1 border-accent">
       <div className="flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-full bg-accent-wash border border-accent-tint flex items-center justify-center flex-shrink-0">
+        <div className="w-6 h-6 rounded-full bg-accent-wash border-1 border-accent-tint flex items-center justify-center flex-shrink-0">
           <span className="text-xs font-medium text-accent-anchor">A</span>
         </div>
         <span className="text-sm text-text-secondary">Account</span>
@@ -29,7 +29,7 @@ export function SideDrawerHeader() {
 
 export function SideDrawer({ activeItem, onItemSelect, includeHeader = true, onSignOut, userEmail }: SideDrawerProps) {
   return (
-    <aside className="w-56 bg-white border-r border-accent min-h-screen flex flex-col flex-shrink-0">
+    <aside className="w-56 bg-white border-r-1 border-accent min-h-screen flex flex-col flex-shrink-0">
       {includeHeader && <SideDrawerHeader />}
 
       {/* Navigation items */}

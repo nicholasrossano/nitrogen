@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sql_delete
 from uuid import UUID
 from typing import Optional
 
@@ -244,3 +244,49 @@ async def get_evidence_content(
         "content": full_content,
         "chunk_count": len(chunks),
     }
+
+
+@router.delete("/evidence/{evidence_id}")
+async def delete_evidence(
+    evidence_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete an evidence document and its chunks"""
+    # Get evidence doc
+    result = await db.execute(
+        select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
+    )
+    evidence_doc = result.scalar_one_or_none()
+    
+    if not evidence_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence document not found",
+        )
+    
+    # Verify user owns the initiative
+    initiative_result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == evidence_doc.initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = initiative_result.scalar_one_or_none()
+    
+    if not initiative:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initiative not found",
+        )
+    
+    # Delete all chunks first
+    await db.execute(
+        sql_delete(EvidenceChunk).where(EvidenceChunk.evidence_doc_id == evidence_id)
+    )
+    
+    # Delete the evidence doc
+    await db.delete(evidence_doc)
+    await db.commit()
+    
+    return {"success": True, "message": "Evidence document deleted"}

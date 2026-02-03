@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Plus, FileText, Upload, Loader2 } from 'lucide-react';
+import { Plus, FileText, Upload, Loader2, Trash2 } from 'lucide-react';
 import { EvidenceDoc, Initiative } from '@/lib/api';
 
 interface InputOutputBarProps {
@@ -10,6 +10,7 @@ interface InputOutputBarProps {
   selectedItemId: string | null;
   onSelectItem: (id: string, type: 'input' | 'output') => void;
   onUploadEvidence: (file: File) => Promise<void>;
+  onDeleteEvidence?: (evidenceId: string) => Promise<void>;
   loading?: boolean;
 }
 
@@ -19,9 +20,11 @@ export function InputOutputBar({
   selectedItemId,
   onSelectItem,
   onUploadEvidence,
+  onDeleteEvidence,
   loading = false,
 }: InputOutputBarProps) {
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,6 +41,20 @@ export function InputOutputBar({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, evidenceId: string) => {
+    e.stopPropagation();
+    if (!onDeleteEvidence) return;
+    
+    setDeleting(evidenceId);
+    try {
+      await onDeleteEvidence(evidenceId);
+    } catch (error) {
+      console.error('Failed to delete:', error);
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -73,14 +90,30 @@ export function InputOutputBar({
             ) : (
               <>
                 {evidenceDocs.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => onSelectItem(doc.id, 'input')}
-                    className={`pill-btn ${selectedItemId === doc.id ? 'selected' : ''}`}
-                  >
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate max-w-[120px]">{doc.filename || 'Document'}</span>
-                  </button>
+                  <div key={doc.id} className="relative group">
+                    <button
+                      onClick={() => onSelectItem(doc.id, 'input')}
+                      className={`pill-btn ${selectedItemId === doc.id ? 'selected' : ''}`}
+                      disabled={deleting === doc.id}
+                    >
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate max-w-[120px]">{doc.filename || 'Document'}</span>
+                    </button>
+                    {onDeleteEvidence && (
+                      <button
+                        onClick={(e) => handleDelete(e, doc.id)}
+                        disabled={deleting === doc.id}
+                        className="project-action-btn project-action-btn-danger absolute -top-1 -right-1 p-1 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity bg-surface-subtle border border-stroke-subtle shadow-sm"
+                        title="Delete document"
+                      >
+                        {deleting === doc.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3 h-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 ))}
                 <button
                   onClick={() => fileInputRef.current?.click()}

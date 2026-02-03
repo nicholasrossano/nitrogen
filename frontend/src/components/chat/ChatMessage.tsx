@@ -91,7 +91,7 @@ export function ChatMessage({ message, initiativeId, isLatest, animate = false, 
                   code: ({ children }) => <code className="text-xs bg-surface-subtle px-1.5 py-0.5 rounded-sm border border-stroke-subtle">{children}</code>,
                   pre: ({ children }) => <pre className="text-xs bg-surface-subtle p-3 rounded border border-stroke-subtle overflow-x-auto mb-2">{children}</pre>,
                   a: ({ href, children }) => <a href={href} className="text-accent hover:text-accent-anchor hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-                  blockquote: ({ children }) => <blockquote className="border-l-2 border-divider pl-3 text-text-secondary mb-2">{children}</blockquote>,
+                  blockquote: ({ children }) => <blockquote className="border-l border-divider pl-3 text-text-secondary mb-2">{children}</blockquote>,
                 }}
               >
                 {message.content}
