@@ -26,6 +26,7 @@ interface InitiativeState {
   confirmIntake: (id: string) => Promise<void>;
   uploadEvidence: (id: string, file: File) => Promise<void>;
   pasteEvidence: (id: string, content: string, title?: string) => Promise<void>;
+  deleteEvidence: (evidenceId: string) => Promise<void>;
   generateMemo: (id: string, includeCorpus?: boolean) => Promise<void>;
   exportMemo: (id: string) => Promise<void>;
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
@@ -236,12 +237,17 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         stageStatus: stage_status,
         evidenceDocs,
         loading: false,
+        error: null,
       });
     } catch (error) {
+      console.error('Failed to upload evidence:', error);
+      // Don't persist upload errors - just log them and clear loading state
       set({
-        error: error instanceof Error ? error.message : 'Failed to upload',
         loading: false,
+        error: null,
       });
+      // Re-throw so the UI can handle it with a toast or inline message
+      throw error;
     }
   },
 
@@ -268,6 +274,30 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         error: error instanceof Error ? error.message : 'Failed to save text',
         loading: false,
       });
+    }
+  },
+
+  // Delete evidence document
+  deleteEvidence: async (evidenceId: string) => {
+    set({ loading: true, error: null });
+    try {
+      await api.deleteEvidence(evidenceId);
+      
+      // Reload evidence list
+      const evidenceDocs = get().evidenceDocs;
+      const updatedDocs = evidenceDocs.filter(doc => doc.id !== evidenceId);
+      
+      set({
+        evidenceDocs: updatedDocs,
+        loading: false,
+      });
+    } catch (error) {
+      console.error('Failed to delete evidence:', error);
+      set({
+        loading: false,
+        error: null, // Don't show persistent error for delete failures
+      });
+      throw error;
     }
   },
 

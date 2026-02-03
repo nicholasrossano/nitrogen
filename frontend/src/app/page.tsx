@@ -108,7 +108,7 @@ function HomePageContent() {
                 placeholder={isTrashView ? 'Search trash' : 'Search projects'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-[2.75rem] pr-4 py-2.5 text-sm rounded-none bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+                className="w-full h-10 pl-[2.75rem] pr-4 py-2.5 text-sm rounded-none bg-white border-1 border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
                 aria-label={isTrashView ? 'Search trash' : 'Search projects'}
               />
             </div>

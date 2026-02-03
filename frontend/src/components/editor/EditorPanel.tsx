@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Upload } from 'lucide-react';
+import { FileText, Upload, Trash2, Loader2 } from 'lucide-react';
 import { Initiative, EvidenceDoc, MemoContent, api } from '@/lib/api';
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
@@ -12,6 +12,7 @@ interface EditorPanelProps {
   selectedItemType: 'input' | 'output' | null;
   evidenceDocs: EvidenceDoc[];
   onUploadClick?: () => void;
+  onDeleteEvidence?: (evidenceId: string) => Promise<void>;
 }
 
 export function EditorPanel({
@@ -20,6 +21,7 @@ export function EditorPanel({
   selectedItemType,
   evidenceDocs,
   onUploadClick,
+  onDeleteEvidence,
 }: EditorPanelProps) {
   // No selection - show empty state
   if (!selectedItemId || !selectedItemType) {
@@ -65,7 +67,7 @@ export function EditorPanel({
     const doc = evidenceDocs.find(d => d.id === selectedItemId);
     if (!doc) return null;
 
-    return <EvidenceDocumentViewer doc={doc} />;
+    return <EvidenceDocumentViewer doc={doc} onDelete={onDeleteEvidence} />;
   }
 
   // Show selected output (deliverable)
@@ -118,15 +120,34 @@ export function EditorPanel({
 }
 
 // Helper component to display evidence document with content preview
-function EvidenceDocumentViewer({ doc }: { doc: EvidenceDoc }) {
+function EvidenceDocumentViewer({ 
+  doc, 
+  onDelete 
+}: { 
+  doc: EvidenceDoc;
+  onDelete?: (evidenceId: string) => Promise<void>;
+}) {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFull, setShowFull] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Clean filename - remove "...: Untitled Project" pattern
   const cleanFilename = (filename: string | null) => {
     if (!filename) return 'Document';
     return filename.replace(/\.\.\.:\s*Untitled Project$/i, '');
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    
+    setDeleting(true);
+    try {
+      await onDelete(doc.id);
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      setDeleting(false);
+    }
   };
 
   useEffect(() => {
@@ -155,18 +176,32 @@ function EvidenceDocumentViewer({ doc }: { doc: EvidenceDoc }) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-6 pb-6">
-      <div className="card-elevated flex flex-col overflow-hidden">
+      <div className="card-elevated flex flex-col overflow-hidden group">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 pt-6 pb-4 bg-surface-header border-b border-divider">
+        <div className="relative flex items-center gap-3 px-6 pt-6 pb-4 bg-surface-header border-b border-divider">
           <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
             <FileText className="w-5 h-5 text-accent" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-text-primary">{cleanFilename(doc.filename)}</h3>
             <p className="text-sm text-text-tertiary">
               {doc.file_type?.toUpperCase()} • {doc.chunk_count} sections
             </p>
           </div>
+          {onDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="absolute top-2 right-2 project-action-btn project-action-btn-danger p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
+              title="Delete document"
+            >
+              {deleting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
+          )}
         </div>
 
         {/* Content */}

@@ -32,7 +32,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
       <div className="p-5 space-y-4 bg-white">
         {/* Memo option (always selected) */}
         <div className="flex items-start gap-3 p-4 bg-accent-wash/50 border border-accent-tint rounded">
-          <div className="w-5 h-5 rounded-sm border-2 border-accent bg-accent flex items-center justify-center flex-shrink-0 mt-0.5">
+          <div className="w-5 h-5 rounded-sm border border-accent bg-accent flex items-center justify-center flex-shrink-0 mt-0.5">
             <Check className="w-3 h-3 text-white" />
           </div>
           <div>

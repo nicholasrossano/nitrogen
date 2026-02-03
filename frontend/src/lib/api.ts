@@ -290,21 +290,29 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(
-      `${API_URL}/api/v1/initiatives/${initiativeId}/evidence`,
-      {
-        method: 'POST',
-        headers,
-        body: formData,
+    try {
+      const response = await fetch(
+        `${API_URL}/api/v1/initiatives/${initiativeId}/evidence`,
+        {
+          method: 'POST',
+          headers,
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: `Upload failed with status ${response.status}` }));
+        throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
       }
-    );
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(error.detail);
+      return response.json();
+    } catch (error) {
+      // Provide more detailed error messages
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error('Cannot reach the backend server. Please check if the backend is running on port 8000.');
+      }
+      throw error;
     }
-
-    return response.json();
   },
 
   pasteEvidence: (initiativeId: string, content: string, title?: string) =>
@@ -371,6 +379,23 @@ export const api = {
       content: string;
       chunk_count: number;
     }>(`/api/v1/evidence/${evidenceId}/content`),
+
+  deleteEvidence: async (evidenceId: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
+      throw new Error(error.detail);
+    }
+    return response.json();
+  },
 
   exportChecklist: async (initiativeId: string, content: any) => {
     const token = await getAuthToken();

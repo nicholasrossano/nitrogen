@@ -190,11 +190,11 @@ body {
 
 /* Card base style - white surface with subtle stroke */
 .card {
-  @apply bg-surface border border-stroke-subtle;
+  @apply bg-surface border-1 border-stroke-subtle;
 }
 
 .card-elevated {
-  @apply bg-surface border border-stroke-subtle shadow-subtle;
+  @apply bg-surface border border-stroke-subtle shadow-subtle rounded;
 }
 
 /* Clamp text to two lines */
@@ -412,7 +412,7 @@ textarea {
 
 /* Checkbox indicator with opacity fade */
 .checkbox-indicator {
-  @apply w-5 h-5 border-2 flex items-center justify-center flex-shrink-0;
+  @apply w-5 h-5 border flex items-center justify-center flex-shrink-0;
   position: relative;
   overflow: hidden;
 }
@@ -582,7 +582,7 @@ textarea {
 
 /* Card hover with shadow lift */
 .card-interactive {
-  @apply card cursor-pointer;
+  @apply card cursor-pointer border-1;
   transition: box-shadow 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
 }
 
@@ -687,12 +687,12 @@ textarea {
 
 /* Section divider with spacing */
 .section-divider {
-  @apply w-full border-t-2 border-accent;
+  @apply w-full border-t-1 border-accent;
 }
 
 /* Navigation row - flat spreadsheet style */
 .nav-row {
-  @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary bg-white border-b border-accent;
+  @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary bg-white border-b-1 border-accent;
   position: relative;
   overflow: hidden;
   z-index: 0;
