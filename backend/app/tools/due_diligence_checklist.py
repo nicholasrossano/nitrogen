@@ -375,29 +375,19 @@ Create categories and focus areas tailored to this specific project type and con
         # Build current structure for LLM
         current_structure = {
             "categories": [s.to_dict() for s in current_alignment.sections],
-            "assumptions": current_alignment.assumptions,
         }
         
-        # Get parameters
-        detail_level = "standard"
-        risk_focus = "balanced"
-        for param in current_alignment.parameters:
-            if param.name == "detail_level":
-                detail_level = param.value
-            elif param.name == "risk_focus":
-                risk_focus = param.value
-        
-        system_prompt = """You are helping refine a due diligence checklist based on user feedback.
+        system_prompt = """You are refining a due diligence checklist based on user feedback.
 
-Given the current structure and user feedback, update it to address their requests.
-You can:
-- Add new categories
-- Remove categories (set include=false)
-- Modify focus areas within categories
-- Update assumptions
-- Change detail level or risk focus
+Given the current checklist and the user's feedback, return an updated checklist that incorporates their requested changes while keeping everything else as close to the original as possible.
 
-Preserve parts that the user didn't mention changing."""
+The user might ask to:
+- Change a specific category (rename it, adjust its focus areas, etc.)
+- Add or remove categories
+- Shift emphasis across the whole checklist
+- Or anything else
+
+Apply their feedback thoughtfully. If they ask to change one thing, change that thing. If they ask for broader changes, make broader changes. Keep the rest intact."""
 
         try:
             response = await self.client.chat.completions.create(
@@ -406,25 +396,20 @@ Preserve parts that the user didn't mention changing."""
                     {"role": "system", "content": system_prompt},
                     {
                         "role": "user",
-                        "content": f"""Current structure:
+                        "content": f"""Current checklist:
 {json.dumps(current_structure, indent=2)}
 
-Current settings:
-- Detail level: {detail_level}
-- Risk focus: {risk_focus}
+User's feedback: "{feedback}"
 
-User feedback:
-{feedback}
-
-Update the structure based on this feedback.
+Return the updated checklist.
 """
                     }
                 ],
                 tools=[{
                     "type": "function",
                     "function": {
-                        "name": "update_alignment",
-                        "description": "Update checklist alignment based on feedback",
+                        "name": "update_checklist",
+                        "description": "Return the updated checklist",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -442,22 +427,19 @@ Update the structure based on this feedback.
                                         "required": ["id", "title", "description", "focus_areas", "include"]
                                     }
                                 },
-                                "assumptions": {"type": "array", "items": {"type": "string"}},
-                                "detail_level": {"type": "string", "enum": ["brief", "standard", "detailed"]},
-                                "risk_focus": {"type": "string", "enum": ["opportunity-focused", "balanced", "risk-focused"]},
                             },
-                            "required": ["categories", "assumptions", "detail_level", "risk_focus"]
+                            "required": ["categories"]
                         }
                     }
                 }],
-                tool_choice={"type": "function", "function": {"name": "update_alignment"}},
-                temperature=0.7,
+                tool_choice={"type": "function", "function": {"name": "update_checklist"}},
+                temperature=0.4,
             )
             
             tool_call = response.choices[0].message.tool_calls[0]
             updated_data = json.loads(tool_call.function.arguments)
             
-            # Build updated alignment
+            # Build sections from LLM response
             sections = []
             for i, category_data in enumerate(updated_data.get("categories", [])):
                 sections.append(AlignmentSection(
@@ -469,28 +451,7 @@ Update the structure based on this feedback.
                     order=i,
                 ))
             
-            parameters = [
-                AlignmentParameter(
-                    name="detail_level",
-                    label="Detail Level",
-                    description="How detailed should each checklist item be",
-                    param_type="select",
-                    value=updated_data.get("detail_level", detail_level),
-                    options=["brief", "standard", "detailed"],
-                ),
-                AlignmentParameter(
-                    name="risk_focus",
-                    label="Risk Focus",
-                    description="Emphasis on risk identification",
-                    param_type="select",
-                    value=updated_data.get("risk_focus", risk_focus),
-                    options=["opportunity-focused", "balanced", "risk-focused"],
-                ),
-            ]
-            
             current_alignment.sections = sections
-            current_alignment.parameters = parameters
-            current_alignment.assumptions = updated_data.get("assumptions", current_alignment.assumptions)
             current_alignment.feedback = None
             
             return current_alignment
