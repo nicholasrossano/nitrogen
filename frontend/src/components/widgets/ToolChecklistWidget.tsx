@@ -84,7 +84,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
     <div className="card-elevated overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">Available Tools</h3>
+        <h3 className="text-sm font-semibold text-text-primary">Available Tools</h3>
         <p className="text-sm text-text-secondary">
           Select the deliverables you'd like to prepare
         </p>
@@ -120,12 +120,12 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
                   <Icon className="w-4 h-4 text-accent" />
                   <span className="font-medium text-text-primary text-sm">{rec.tool.name || 'Unknown Tool'}</span>
                   {(rec.confidence || 0) > 0.5 && (
-                    <span className="badge-accent text-xs">
+                    <span className="badge-accent text-sm">
                       Recommended
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-text-secondary leading-relaxed">
+                <p className="text-sm text-text-secondary leading-relaxed">
                   {rec.tool.description || 'No description available'}
                 </p>
               </div>

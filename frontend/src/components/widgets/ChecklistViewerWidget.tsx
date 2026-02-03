@@ -40,7 +40,7 @@ function RiskBadge({ level }: { level: 'low' | 'medium' | 'high' }) {
   };
   
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-sm font-medium ${colors[level]}`}>
+    <span className={`text-sm px-2 py-0.5 rounded-sm font-medium ${colors[level]}`}>
       {level}
     </span>
   );
@@ -56,8 +56,8 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
         className="expandable-header bg-surface-header"
       >
         <div>
-          <h4 className="font-semibold text-text-primary">{category.name}</h4>
-          <p className="text-xs text-text-secondary">{category.description}</p>
+          <h4 className="text-sm font-semibold text-text-primary">{category.name}</h4>
+          <p className="text-sm text-text-secondary">{category.description}</p>
         </div>
         {isOpen ? (
           <ChevronDown className="w-5 h-5 text-text-tertiary" />
@@ -73,7 +73,7 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
               <Circle className="w-4 h-4 text-divider mt-1 flex-shrink-0" />
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm text-text-primary font-medium">{item.item}</p>
+                  <p className="text-sm font-medium text-text-primary">{item.item}</p>
                   <RiskBadge level={item.risk_level} />
                 </div>
                 {item.questions && item.questions.length > 0 && (
@@ -154,7 +154,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             <CheckSquare className="w-5 h-5 text-accent" />
           </div>
           <div>
-            <h3 className="font-semibold text-text-primary">Due Diligence Checklist</h3>
+            <h3 className="text-sm font-semibold text-text-primary">Due Diligence Checklist</h3>
             <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
           </div>
         </div>
@@ -166,7 +166,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             {/* Priority Items */}
             {content.priority_items && content.priority_items.length > 0 && (
               <section>
-                <h2 className="text-lg font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-indicator-orange" />
                   Priority Items
                 </h2>
@@ -183,7 +183,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             
             {/* Categories */}
             <section>
-              <h2 className="text-lg font-semibold text-text-primary mb-3">Checklist Categories</h2>
+              <h2 className="text-sm font-semibold text-text-primary mb-3">Checklist Categories</h2>
               <div className="space-y-3">
                 {content.categories.map((category, idx) => (
                   <CategorySection key={idx} category={category} defaultOpen={idx === 0} />
@@ -194,7 +194,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             {/* Next Steps */}
             {content.next_steps && content.next_steps.length > 0 && (
               <section>
-                <h2 className="text-lg font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-indicator-green" />
                   Recommended Next Steps
                 </h2>

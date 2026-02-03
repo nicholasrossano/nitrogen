@@ -24,7 +24,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
     <div className="card-elevated overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">Initiative Summary</h3>
+        <h3 className="text-sm font-semibold text-text-primary">Initiative Summary</h3>
         <p className="text-sm text-text-secondary">Please review and confirm</p>
       </div>
 
@@ -37,7 +37,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
               <Target className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Title</p>
+              <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Title</p>
               <p className="text-sm font-medium text-text-primary">{data.title}</p>
             </div>
           </div>
@@ -51,7 +51,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
                 <Flame className="w-4 h-4 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Sector</p>
+                <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Sector</p>
                 <p className="text-sm text-text-primary capitalize">{data.sector.replace('_', ' ')}</p>
               </div>
             </div>
@@ -63,7 +63,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
                 <MapPin className="w-4 h-4 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Geography</p>
+                <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Geography</p>
                 <p className="text-sm text-text-primary">{data.geography}</p>
               </div>
             </div>
@@ -77,7 +77,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
               <Users className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Target Population</p>
+              <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Target Population</p>
               <p className="text-sm text-text-primary">{data.target_population}</p>
             </div>
           </div>
@@ -90,7 +90,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
               <Target className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Goal</p>
+              <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Goal</p>
               <p className="text-sm text-text-primary">{data.goal}</p>
             </div>
           </div>
@@ -105,7 +105,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
                   <DollarSign className="w-4 h-4 text-accent" />
                 </div>
                 <div>
-                  <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Budget</p>
+                  <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Budget</p>
                   <p className="text-sm text-text-primary">{data.budget_range}</p>
                 </div>
               </div>
@@ -117,7 +117,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
                   <Clock className="w-4 h-4 text-accent" />
                 </div>
                 <div>
-                  <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Timeline</p>
+                  <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Timeline</p>
                   <p className="text-sm text-text-primary">{data.timeline}</p>
                 </div>
               </div>
@@ -132,7 +132,7 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
               <AlertCircle className="w-4 h-4 text-indicator-orange" />
             </div>
             <div>
-              <p className="text-xs text-text-tertiary uppercase tracking-wide font-medium">Constraints</p>
+              <p className="text-sm text-text-tertiary uppercase tracking-wide font-medium">Constraints</p>
               <ul className="text-sm text-text-primary list-disc list-inside">
                 {data.constraints.map((c: string, i: number) => (
                   <li key={i}>{c}</li>

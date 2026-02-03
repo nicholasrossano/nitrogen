@@ -22,7 +22,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
   if (deliverables.length === 0) {
     return (
       <div className="card-elevated p-6">
-        <p className="text-text-secondary">No deliverables generated</p>
+        <p className="text-sm text-text-secondary">No deliverables generated</p>
       </div>
     );
   }
@@ -54,7 +54,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           return (
             <div key={idx} className="card-elevated overflow-hidden">
               <div className="px-5 py-4 bg-surface-header border-b border-divider">
-                <h3 className="font-semibold text-text-primary">{deliverable.tool_name}</h3>
+                <h3 className="text-sm font-semibold text-text-primary">{deliverable.tool_name}</h3>
               </div>
               <div className="p-5 bg-white">
                 <pre className="text-sm text-text-secondary whitespace-pre-wrap">

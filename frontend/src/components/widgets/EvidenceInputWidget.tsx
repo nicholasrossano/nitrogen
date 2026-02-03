@@ -51,7 +51,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
     <div className="card-elevated overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">Add Evidence</h3>
+        <h3 className="text-sm font-semibold text-text-primary">Add Evidence</h3>
         <p className="text-sm text-text-secondary">Upload a document or paste text</p>
       </div>
 
@@ -120,7 +120,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
                 <p className="text-sm font-medium text-text-primary">
                   Drop your file here or click to browse
                 </p>
-                <p className="text-xs text-text-tertiary">
+                <p className="text-sm text-text-tertiary">
                   PDF or DOCX, max 10MB
                 </p>
               </div>

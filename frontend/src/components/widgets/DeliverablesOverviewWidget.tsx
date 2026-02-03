@@ -63,7 +63,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
     <div className="card-elevated overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">Project Overview</h3>
+        <h3 className="text-sm font-semibold text-text-primary">Project Overview</h3>
         <p className="text-sm text-text-secondary">
           Review your project details and deliverables
         </p>
@@ -71,7 +71,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
 
       {/* Project Summary */}
       <div className="p-5 space-y-4 bg-white border-b border-divider">
-        <h4 className="text-sm font-semibold text-text-tertiary uppercase tracking-wide">
+        <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wide">
           Project Details
         </h4>
         
@@ -82,7 +82,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
                 <Target className="w-4 h-4 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-text-tertiary uppercase tracking-wide">Project</p>
+                <p className="text-sm text-text-tertiary uppercase tracking-wide">Project</p>
                 <p className="text-sm font-medium text-text-primary">{summary.title}</p>
               </div>
             </div>
@@ -94,8 +94,8 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
                 <MapPin className="w-4 h-4 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-text-tertiary uppercase tracking-wide">Location</p>
-                <p className="text-sm text-text-primary">{summary.geography}</p>
+                <p className="text-sm text-text-tertiary uppercase tracking-wide">Location</p>
+                <p className="text-sm font-medium text-text-primary">{summary.geography}</p>
               </div>
             </div>
           )}
@@ -106,7 +106,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
                 <Globe className="w-4 h-4 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-text-tertiary uppercase tracking-wide">Sustainable Development Goal</p>
+                <p className="text-sm text-text-tertiary uppercase tracking-wide">Sustainable Development Goal</p>
                 <p className="text-sm font-medium text-text-primary">{sdg.display}</p>
               </div>
             </div>
@@ -116,7 +116,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
 
       {/* Deliverables */}
       <div className="p-5 space-y-4 bg-white">
-        <h4 className="text-sm font-semibold text-text-tertiary uppercase tracking-wide">
+        <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wide">
           What We'll Generate
         </h4>
         
@@ -172,7 +172,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
           </div>
           
           {loading && (
-            <p className="text-xs text-center text-text-tertiary mt-2">
+            <p className="text-sm text-center text-text-tertiary mt-2">
               This may take a minute or two...
             </p>
           )}
