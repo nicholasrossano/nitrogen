@@ -174,7 +174,7 @@ body {
 }
 
 .prose-memo li {
-  @apply mb-2;
+  @apply mb-2 text-text-secondary leading-relaxed;
 }
 
 /* Citation styling - accent color */
@@ -738,4 +738,21 @@ textarea {
 
 .nav-row-active:hover::before {
   opacity: 1;
+}
+
+/* Editable content styles */
+.editable-content {
+  outline: none;
+  transition: all 150ms ease;
+  cursor: text;
+  border-radius: 2px;
+}
+
+.editable-content:hover {
+  background-color: rgba(237, 247, 255, 0.3);
+}
+
+.editable-content:focus {
+  background-color: rgba(237, 247, 255, 0.6);
+  box-shadow: 0 0 0 2px var(--color-accent-tint);
 }
