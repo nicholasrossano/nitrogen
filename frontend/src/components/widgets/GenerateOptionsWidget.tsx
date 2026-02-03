@@ -22,7 +22,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
     <div className="card-elevated overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="font-semibold text-text-primary">Generate Memo</h3>
+        <h3 className="text-sm font-semibold text-text-primary">Generate Memo</h3>
         <p className="text-sm text-text-secondary">
           Evidence received: {data.chunk_count || 0} sections processed
         </p>
@@ -36,7 +36,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
             <Check className="w-3 h-3 text-white" />
           </div>
           <div>
-            <p className="font-medium text-text-primary">Investment Memo</p>
+            <p className="text-sm font-medium text-text-primary">Investment Memo</p>
             <p className="text-sm text-text-secondary leading-relaxed">
               Generate a recommendation memo with executive summary, rationale, 
               risks, and citations from your evidence.
@@ -57,7 +57,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
               <div>
                 <div className="flex items-center gap-2">
                   <Library className="w-4 h-4 text-accent" />
-                  <p className="font-medium text-text-primary">Include Case Study Library</p>
+                  <p className="text-sm font-medium text-text-primary">Include Case Study Library</p>
                 </div>
                 <p className="text-sm text-text-secondary leading-relaxed">
                   Draw on our curated corpus of clean cooking case studies for 
@@ -86,7 +86,7 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
             </button>
 
             {generating && (
-              <p className="text-xs text-center text-text-tertiary">
+              <p className="text-sm text-center text-text-tertiary">
                 This may take 30-60 seconds...
               </p>
             )}
