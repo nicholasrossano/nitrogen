@@ -81,7 +81,7 @@ export function EditorPanel({
     // Render appropriate widget based on type
     if (widgetType === 'memo_viewer' || selectedItemId.includes('memo')) {
       return (
-        <div className="flex-1 overflow-auto p-6 pb-6">
+        <div className="flex-1 overflow-auto p-3">
           <MemoViewerWidget
             data={widgetData as MemoContent}
             isActive={true}
@@ -93,7 +93,7 @@ export function EditorPanel({
 
     if (widgetType === 'checklist_viewer' || selectedItemId.includes('checklist')) {
       return (
-        <div className="flex-1 overflow-auto p-6 pb-6">
+        <div className="flex-1 overflow-auto p-3">
           <ChecklistViewerWidget
             data={widgetData}
             isActive={true}
@@ -105,7 +105,7 @@ export function EditorPanel({
 
     // Default: show raw data
     return (
-      <div className="flex-1 overflow-auto p-6 pb-6">
+      <div className="flex-1 overflow-auto p-3">
         <div className="card p-6">
           <h3 className="text-sm font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
           <pre className="text-sm text-text-secondary bg-surface-subtle p-4 rounded overflow-auto">
@@ -175,8 +175,8 @@ function EvidenceDocumentViewer({
     : content;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden p-6 pb-6">
-      <div className="card-elevated flex flex-col overflow-hidden group">
+    <div className="flex-1 flex flex-col p-3">
+      <div className="card-elevated flex flex-col overflow-hidden group flex-1">
         {/* Header */}
         <div className="relative flex items-center gap-3 px-6 pt-6 pb-4 bg-surface-header border-b border-divider">
           <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
