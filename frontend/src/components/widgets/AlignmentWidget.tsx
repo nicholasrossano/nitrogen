@@ -9,11 +9,10 @@ import {
   ChevronRight,
   MessageSquare,
   Pencil,
-  AlertCircle,
   ListChecks,
 } from 'lucide-react';
 import { getIconByName } from '@/lib/icons';
-import type { AlignmentSection, AlignmentParameter, ToolAlignment } from '@/lib/api';
+import type { AlignmentSection, ToolAlignment } from '@/lib/api';
 
 interface ToolInfo {
   id: string;
@@ -162,30 +161,25 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
                     <span className="font-medium text-text-primary text-sm">
                       {section.title}
                     </span>
-                    {!isExpanded && (
-                      <span className="text-xs text-text-tertiary ml-2">
-                        {section.key_points.length} points
-                      </span>
+                    {!isExpanded && section.description && (
+                      <p className="text-xs text-text-tertiary mt-0.5 line-clamp-1">
+                        {section.description}
+                      </p>
                     )}
                   </div>
                 </div>
                 
-                {/* Expanded content */}
-                {isExpanded && (
+                {/* Expanded content - just the bullet points */}
+                {isExpanded && section.key_points.length > 0 && (
                   <div className="px-5 pb-3 pl-14">
-                    <p className="text-sm text-text-secondary mb-2">
-                      {section.description}
-                    </p>
-                    {section.key_points.length > 0 && (
-                      <ul className="space-y-1">
-                        {section.key_points.map((point, idx) => (
-                          <li key={idx} className="text-sm text-text-primary flex items-start gap-2">
-                            <span className="text-accent mt-1.5">•</span>
-                            <span>{point}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <ul className="space-y-1">
+                      {section.key_points.map((point, idx) => (
+                        <li key={idx} className="text-sm text-text-primary flex items-start gap-2">
+                          <span className="text-accent mt-1.5">•</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -193,44 +187,6 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
           })}
         </div>
       </div>
-
-      {/* Assumptions */}
-      {alignment.assumptions.length > 0 && (
-        <div className="px-5 py-3 bg-indicator-orange/5 border-t border-divider">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-indicator-orange mt-0.5 flex-shrink-0" />
-            <div>
-              <span className="text-xs font-medium text-text-primary">Key Assumptions</span>
-              <ul className="mt-1 space-y-0.5">
-                {alignment.assumptions.map((assumption, idx) => (
-                  <li key={idx} className="text-xs text-text-secondary">
-                    • {assumption}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Parameters (if any) */}
-      {alignment.parameters.length > 0 && (
-        <div className="px-5 py-3 border-t border-divider bg-surface-subtle">
-          <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
-            Settings
-          </span>
-          <div className="mt-2 flex flex-wrap gap-3">
-            {alignment.parameters.map((param) => (
-              <div key={param.name} className="flex items-center gap-2">
-                <span className="text-xs text-text-secondary">{param.label}:</span>
-                <span className="text-xs font-medium text-text-primary bg-white px-2 py-0.5 border border-stroke-subtle rounded">
-                  {param.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Pending tools indicator */}
       {pendingTools.length > 0 && (

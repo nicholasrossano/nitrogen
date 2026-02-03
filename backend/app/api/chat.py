@@ -32,6 +32,13 @@ from app.services.chat_agent import ChatAgentService
 from app.services.sdg_classifier import classify_sdg
 from app.tools import get_tool_registry
 from app.tools.base import ToolAlignment
+from app.api.alignment_helpers import (
+    get_or_generate_alignment,
+    build_alignment_widget_data,
+    build_deliverables_overview_data,
+    get_alignment_intro_message,
+    get_deliverables_overview_message,
+)
 
 router = APIRouter()
 
@@ -471,76 +478,21 @@ async def send_chat_message(
                         tool = registry.get_tool(tool_id)
                         
                         if tool and tool.requires_alignment:
-                            # Check if alignment already exists but just needs confirmation
-                            existing_alignment = initiative.get_alignment_for_tool(tool_id)
-                            
-                            if existing_alignment:
-                                # Show existing alignment for review
-                                alignment_data = existing_alignment
-                            else:
-                                # Generate new alignment
-                                try:
-                                    alignment_obj = await tool.generate_alignment(
-                                        db=db,
-                                        initiative_id=initiative_id,
-                                        inputs=initiative.tool_inputs or {},
-                                    )
-                                    alignment_data = alignment_obj.to_dict()
-                                    
-                                    # Save alignment to initiative
-                                    initiative.set_alignment_for_tool(tool_id, alignment_data)
-                                    await db.commit()
-                                    await db.refresh(initiative)
-                                except Exception as e:
-                                    logging.error(f"Failed to generate alignment for {tool_id}: {e}")
-                                    alignment_data = None
+                            alignment_data = await get_or_generate_alignment(db, initiative, tool_id)
                             
                             if alignment_data:
                                 widget_type = "alignment"
-                                widget_data = {
-                                    "alignment": alignment_data,
-                                    "tool": tool.definition.to_dict(),
-                                    "pending_tools": [
-                                        registry.get_tool(tid).definition.to_dict() 
-                                        for tid in pending_alignment_tools[1:] 
-                                        if registry.get_tool(tid)
-                                    ],
-                                }
-                                assistant_response = f"Before generating the {tool.definition.name}, let me share the proposed outline. Please review and let me know if you'd like any adjustments."
+                                widget_data = build_alignment_widget_data(
+                                    tool_id=tool_id,
+                                    alignment_data=alignment_data,
+                                    pending_tool_ids=pending_alignment_tools[1:],
+                                )
+                                assistant_response = get_alignment_intro_message(tool.definition.name)
                     
                     # If no pending alignments (or alignment generation failed), show deliverables overview
                     if widget_type is None:
                         widget_type = "deliverables_overview"
-                        tools_info = []
-                        for tool_id in (initiative.selected_tools or []):
-                            tool = registry.get_tool(tool_id)
-                            if tool:
-                                tools_info.append({
-                                    "id": tool.definition.id,
-                                    "name": tool.definition.name,
-                                    "description": tool.definition.description,
-                                    "icon": tool.definition.icon,
-                                    "output_type": tool.definition.output_type,
-                                })
-                        
-                        # Build tool_inputs with SDG classification
-                        tool_inputs = initiative.tool_inputs or {}
-                        
-                        # Classify SDG based on project description
-                        if initiative.project_description:
-                            sdg_info = classify_sdg(
-                                project_description=initiative.project_description,
-                                project_type=initiative.project_type
-                            )
-                            if sdg_info:
-                                tool_inputs["sdg"] = sdg_info
-                        
-                        widget_data = {
-                            "project_summary": initiative.to_summary_dict(),
-                            "selected_tools": tools_info,
-                            "tool_inputs": tool_inputs,
-                            "alignments": initiative.tool_alignments,  # Include confirmed alignments
-                        }
+                        widget_data = build_deliverables_overview_data(initiative)
     
     # Generate assistant response ONLY if not already set by deterministic stages
     if assistant_response is None:
@@ -711,20 +663,47 @@ async def confirm_alignment(
     
     # Check if there are more alignments needed
     pending = initiative.get_pending_alignment_tools()
+    widget_type = None
+    widget_data = None
+    
     if pending:
-        next_tool = registry.get_tool(pending[0])
-        next_tool_name = next_tool.definition.name if next_tool else pending[0]
-        message = f"Great, I've confirmed the {tool_name} outline. Let's review the {next_tool_name} next."
-    else:
-        message = f"Perfect! The {tool_name} outline is confirmed. We're ready to generate your deliverables."
+        # Show alignment widget for the next tool
+        next_tool_id = pending[0]
+        next_tool = registry.get_tool(next_tool_id)
+        
+        if next_tool and next_tool.requires_alignment:
+            next_alignment_data = await get_or_generate_alignment(db, initiative, next_tool_id)
+            
+            if next_alignment_data:
+                widget_type = "alignment"
+                widget_data = build_alignment_widget_data(
+                    tool_id=next_tool_id,
+                    alignment_data=next_alignment_data,
+                    pending_tool_ids=pending[1:],
+                )
+                message = f"Great, I've confirmed the {tool_name} outline. {get_alignment_intro_message(next_tool.definition.name)}"
+            else:
+                # Alignment generation failed, fall through to deliverables overview
+                pending = []
+        
+        if not widget_type:
+            next_tool_name = next_tool.definition.name if next_tool else pending[0]
+            message = f"Great, I've confirmed the {tool_name} outline. Let's review the {next_tool_name} next."
+    
+    # If no pending alignments, show deliverables overview
+    if not pending:
+        widget_type = "deliverables_overview"
+        widget_data = build_deliverables_overview_data(initiative)
+        tool_names = [registry.get_tool(tid).definition.name for tid in (initiative.selected_tools or []) if registry.get_tool(tid)]
+        message = f"Perfect! The {tool_name} outline is confirmed. {get_deliverables_overview_message(tool_names)}"
     
     # Save assistant message
     assistant_message = ChatMessage(
         initiative_id=initiative.id,
         role="assistant",
         content=message,
-        widget_type=None,
-        widget_data=None,
+        widget_type=widget_type,
+        widget_data=widget_data,
     )
     db.add(assistant_message)
     await db.commit()
@@ -810,16 +789,20 @@ async def provide_alignment_feedback(
     
     # Save assistant response
     tool_name = tool.definition.name
+    pending = initiative.get_pending_alignment_tools()
+    # Remove current tool from pending list for widget
+    pending_others = [tid for tid in pending if tid != data.tool_id]
+    
     assistant_message = ChatMessage(
         initiative_id=initiative.id,
         role="assistant",
         content=f"I've updated the {tool_name} outline based on your feedback. Please review the changes.",
         widget_type="alignment",
-        widget_data={
-            "alignment": updated_data,
-            "tool": tool.definition.to_dict(),
-            "pending_tools": [],
-        },
+        widget_data=build_alignment_widget_data(
+            tool_id=data.tool_id,
+            alignment_data=updated_data,
+            pending_tool_ids=pending_others,
+        ),
     )
     db.add(assistant_message)
     await db.commit()

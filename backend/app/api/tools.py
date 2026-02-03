@@ -12,6 +12,13 @@ from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
 from app.tools import get_tool_registry
 from app.services.sdg_classifier import classify_sdg
+from app.api.alignment_helpers import (
+    get_or_generate_alignment,
+    build_alignment_widget_data,
+    build_deliverables_overview_data,
+    get_alignment_intro_message,
+    get_deliverables_overview_message,
+)
 
 router = APIRouter()
 
@@ -192,46 +199,53 @@ async def select_tools(
     tool_names = [registry.get_tool(tid).definition.name for tid in valid_tools]
     
     if not missing:
-        # All inputs available - go straight to review
+        # All inputs available - check for pending alignments first
         initiative.stage = InitiativeStage.REVIEW.value
         await db.commit()
+        await db.refresh(initiative)
         
-        # Build deliverables overview
-        tools_info = []
-        for tool_id in valid_tools:
+        # Check for tools that need alignment
+        pending_alignment_tools = initiative.get_pending_alignment_tools()
+        
+        if pending_alignment_tools:
+            # Show alignment widget for the first tool needing alignment
+            tool_id = pending_alignment_tools[0]
             tool = registry.get_tool(tool_id)
-            if tool:
-                tools_info.append({
-                    "id": tool.definition.id,
-                    "name": tool.definition.name,
-                    "description": tool.definition.description,
-                    "icon": tool.definition.icon,
-                    "output_type": tool.definition.output_type,
-                })
+            
+            if tool and tool.requires_alignment:
+                alignment_data = await get_or_generate_alignment(db, initiative, tool_id)
+                
+                if alignment_data:
+                    widget_data = build_alignment_widget_data(
+                        tool_id=tool_id,
+                        alignment_data=alignment_data,
+                        pending_tool_ids=pending_alignment_tools[1:],
+                    )
+                    message = ChatMessage(
+                        initiative_id=initiative_id,
+                        role="assistant",
+                        content=get_alignment_intro_message(tool.definition.name),
+                        widget_type="alignment",
+                        widget_data=widget_data,
+                    )
+                    db.add(message)
+                    await db.commit()
+                else:
+                    # Alignment generation failed, fall through to deliverables overview
+                    pending_alignment_tools = []
         
-        # Build tool_inputs with SDG classification
-        tool_inputs = initiative.tool_inputs or {}
-        if initiative.project_description:
-            sdg_info = classify_sdg(
-                project_description=initiative.project_description,
-                project_type=initiative.project_type
+        # If no pending alignments (or alignment generation failed), show deliverables overview
+        if not pending_alignment_tools:
+            widget_data = build_deliverables_overview_data(initiative)
+            message = ChatMessage(
+                initiative_id=initiative_id,
+                role="assistant",
+                content=get_deliverables_overview_message(tool_names),
+                widget_type="deliverables_overview",
+                widget_data=widget_data,
             )
-            if sdg_info:
-                tool_inputs["sdg"] = sdg_info
-        
-        message = ChatMessage(
-            initiative_id=initiative_id,
-            role="assistant",
-            content=f"I have everything I need to prepare your **{', '.join(tool_names)}**. Here's an overview:",
-            widget_type="deliverables_overview",
-            widget_data={
-                "project_summary": initiative.to_summary_dict(),
-                "selected_tools": tools_info,
-                "tool_inputs": tool_inputs,
-            },
-        )
-        db.add(message)
-        await db.commit()
+            db.add(message)
+            await db.commit()
     else:
         # Need to gather more inputs - ask first question
         # Get the first missing input to ask about

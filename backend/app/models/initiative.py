@@ -139,6 +139,9 @@ class Initiative(Base):
         if self.tool_alignments is None:
             self.tool_alignments = {}
         self.tool_alignments[tool_id] = alignment
+        # Force SQLAlchemy to detect the JSONB change by reassigning the dict
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(self, "tool_alignments")
     
     def has_confirmed_alignments(self) -> bool:
         """Check if all selected tools have confirmed alignments."""

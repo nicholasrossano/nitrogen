@@ -121,40 +121,56 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
 
       {/* Content */}
           <div className="p-6 space-y-6 prose-memo max-h-[500px] overflow-y-auto bg-white">
-            {/* Executive Summary */}
-            <section>
-              <h2>Executive Summary</h2>
-              <p>{renderWithCitations(content.executive_summary)}</p>
-            </section>
+            {/* Dynamic sections from alignment OR legacy hardcoded sections */}
+            {(content as any).sections ? (
+              // Dynamic sections format
+              <>
+                {(content as any).sections.map((section: { id: string; title: string; content: string }, index: number) => (
+                  <section key={section.id || index}>
+                    <h2>{section.title}</h2>
+                    <p>{renderWithCitations(section.content)}</p>
+                  </section>
+                ))}
+              </>
+            ) : (
+              // Legacy hardcoded format
+              <>
+                {/* Executive Summary */}
+                <section>
+                  <h2>Executive Summary</h2>
+                  <p>{renderWithCitations(content.executive_summary)}</p>
+                </section>
 
-            {/* Recommendation Rationale */}
-            <section>
-              <h2>Recommendation Rationale</h2>
-              <p>{renderWithCitations(content.recommendation_rationale)}</p>
-            </section>
+                {/* Recommendation Rationale */}
+                <section>
+                  <h2>Recommendation Rationale</h2>
+                  <p>{renderWithCitations(content.recommendation_rationale)}</p>
+                </section>
 
-            {/* Evidence Summary */}
-            <section>
-              <h2>Evidence Summary</h2>
-              <p>{renderWithCitations(content.evidence_summary)}</p>
-            </section>
+                {/* Evidence Summary */}
+                <section>
+                  <h2>Evidence Summary</h2>
+                  <p>{renderWithCitations(content.evidence_summary)}</p>
+                </section>
 
-            {/* Risks and Assumptions */}
-            <section>
-              <h2>Risks and Assumptions</h2>
-              <p>{renderWithCitations(content.risks_and_assumptions)}</p>
-            </section>
+                {/* Risks and Assumptions */}
+                <section>
+                  <h2>Risks and Assumptions</h2>
+                  <p>{renderWithCitations(content.risks_and_assumptions)}</p>
+                </section>
 
-            {/* Open Questions */}
-            {content.open_questions.length > 0 && (
-              <section>
-                <h2>Open Questions</h2>
-                <ul>
-                  {content.open_questions.map((q, i) => (
-                    <li key={i}>{q}</li>
-                  ))}
-                </ul>
-              </section>
+                {/* Open Questions */}
+                {content.open_questions?.length > 0 && (
+                  <section>
+                    <h2>Open Questions</h2>
+                    <ul>
+                      {content.open_questions.map((q, i) => (
+                        <li key={i}>{q}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </>
             )}
 
             {/* Citations */}
