@@ -386,29 +386,19 @@ Create a structured outline with sections tailored to this specific project type
         # Build current outline for LLM
         current_outline = {
             "sections": [s.to_dict() for s in current_alignment.sections],
-            "assumptions": current_alignment.assumptions,
         }
         
-        # Get parameters
-        tone = "balanced"
-        detail_level = "standard"
-        for param in current_alignment.parameters:
-            if param.name == "tone":
-                tone = param.value
-            elif param.name == "detail_level":
-                detail_level = param.value
-        
-        system_prompt = """You are helping refine an investment memo outline based on user feedback.
+        system_prompt = """You are refining an investment memo outline based on user feedback.
 
-Given the current outline and user feedback, update the outline to address their requests.
-You can:
-- Add new sections
-- Remove sections (set include=false)
-- Modify key points within sections
-- Update assumptions
-- Change tone or detail level
+Given the current outline and the user's feedback, return an updated outline that incorporates their requested changes while keeping everything else as close to the original as possible.
 
-Preserve parts of the outline that the user didn't mention changing."""
+The user might ask to:
+- Change a specific section (rename it, adjust its focus, etc.)
+- Add or remove sections
+- Shift emphasis across the whole outline
+- Or anything else
+
+Apply their feedback thoughtfully. If they ask to change one thing, change that thing. If they ask for broader changes, make broader changes. Keep the rest intact."""
 
         try:
             response = await self.client.chat.completions.create(
@@ -420,14 +410,9 @@ Preserve parts of the outline that the user didn't mention changing."""
                         "content": f"""Current outline:
 {json.dumps(current_outline, indent=2)}
 
-Current settings:
-- Tone: {tone}
-- Detail level: {detail_level}
+User's feedback: "{feedback}"
 
-User feedback:
-{feedback}
-
-Update the outline based on this feedback.
+Return the updated outline.
 """
                     }
                 ],
@@ -435,7 +420,7 @@ Update the outline based on this feedback.
                     "type": "function",
                     "function": {
                         "name": "update_outline",
-                        "description": "Update the memo outline based on feedback",
+                        "description": "Return the updated outline",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -453,22 +438,19 @@ Update the outline based on this feedback.
                                         "required": ["id", "title", "description", "key_points", "include"]
                                     }
                                 },
-                                "assumptions": {"type": "array", "items": {"type": "string"}},
-                                "tone": {"type": "string", "enum": ["conservative", "balanced", "optimistic"]},
-                                "detail_level": {"type": "string", "enum": ["concise", "standard", "comprehensive"]},
                             },
-                            "required": ["sections", "assumptions", "tone", "detail_level"]
+                            "required": ["sections"]
                         }
                     }
                 }],
                 tool_choice={"type": "function", "function": {"name": "update_outline"}},
-                temperature=0.7,
+                temperature=0.4,
             )
             
             tool_call = response.choices[0].message.tool_calls[0]
             updated_data = json.loads(tool_call.function.arguments)
             
-            # Build updated alignment
+            # Build sections from LLM response
             sections = []
             for i, section_data in enumerate(updated_data.get("sections", [])):
                 sections.append(AlignmentSection(
@@ -480,29 +462,8 @@ Update the outline based on this feedback.
                     order=i,
                 ))
             
-            parameters = [
-                AlignmentParameter(
-                    name="tone",
-                    label="Tone",
-                    description="Writing style for the memo",
-                    param_type="select",
-                    value=updated_data.get("tone", tone),
-                    options=["conservative", "balanced", "optimistic"],
-                ),
-                AlignmentParameter(
-                    name="detail_level",
-                    label="Detail Level",
-                    description="How detailed should the memo be",
-                    param_type="select",
-                    value=updated_data.get("detail_level", detail_level),
-                    options=["concise", "standard", "comprehensive"],
-                ),
-            ]
-            
             current_alignment.sections = sections
-            current_alignment.parameters = parameters
-            current_alignment.assumptions = updated_data.get("assumptions", current_alignment.assumptions)
-            current_alignment.feedback = None  # Clear feedback after processing
+            current_alignment.feedback = None
             
             return current_alignment
             
@@ -579,8 +540,11 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
         if alignment:
             alignment_instructions = self._build_alignment_instructions(alignment)
         
+        # Get valid citation numbers (only cite what we actually have)
+        valid_citations = list(citation_map.values()) if citation_map else []
+        
         # Generate memo content
-        memo_data = await self._generate_content(project_summary, context, alignment_instructions)
+        memo_data = await self._generate_content(project_summary, context, alignment_instructions, alignment, valid_citations)
         
         # Build citations list
         citations = [
@@ -594,18 +558,29 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
             for chunk in all_chunks
         ]
         
-        # Build full memo content
-        memo_content = {
-            "title": f"Investment Memo: {inputs.get('project_title', 'Untitled Project')}",
-            "date": date.today().isoformat(),
-            "executive_summary": memo_data["executive_summary"],
-            "recommendation": memo_data["recommendation"],
-            "recommendation_rationale": memo_data["recommendation_rationale"],
-            "evidence_summary": memo_data["evidence_summary"],
-            "risks_and_assumptions": memo_data["risks_and_assumptions"],
-            "open_questions": memo_data.get("open_questions", []),
-            "citations": citations,
-        }
+        # Build full memo content - support both dynamic sections and legacy format
+        if "sections" in memo_data:
+            # Dynamic sections from alignment
+            memo_content = {
+                "title": f"Investment Memo: {inputs.get('project_title', 'Untitled Project')}",
+                "date": date.today().isoformat(),
+                "recommendation": memo_data.get("recommendation", "hold"),
+                "sections": memo_data["sections"],
+                "citations": citations,
+            }
+        else:
+            # Legacy hardcoded format
+            memo_content = {
+                "title": f"Investment Memo: {inputs.get('project_title', 'Untitled Project')}",
+                "date": date.today().isoformat(),
+                "executive_summary": memo_data["executive_summary"],
+                "recommendation": memo_data["recommendation"],
+                "recommendation_rationale": memo_data["recommendation_rationale"],
+                "evidence_summary": memo_data["evidence_summary"],
+                "risks_and_assumptions": memo_data["risks_and_assumptions"],
+                "open_questions": memo_data.get("open_questions", []),
+                "citations": citations,
+            }
         
         # Save to database
         memo_version = MemoVersion(
@@ -691,23 +666,32 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
         
         return "\n".join(instructions)
     
-    async def _generate_content(self, project_summary: str, context: str, alignment_instructions: str | None = None) -> dict:
+    async def _generate_content(self, project_summary: str, context: str, alignment_instructions: str | None = None, alignment: "ToolAlignment | None" = None, valid_citations: list[int] | None = None) -> dict:
         """Generate memo content using GPT."""
         
-        base_system_prompt = """You are an expert analyst generating investment memos for development initiatives.
+        # Build citation rules based on what's actually available
+        if valid_citations and len(valid_citations) > 0:
+            citation_list = ", ".join(f"[{n}]" for n in sorted(valid_citations))
+            citation_rules = f"""CITATION RULES - CRITICAL:
+- You may ONLY use these citation numbers: {citation_list}
+- Do NOT invent or hallucinate citations. If you cite [X], it MUST be one of the numbers above.
+- If making a claim that isn't supported by the provided evidence, do NOT add a citation - instead phrase it as analysis or recommendation.
+- Every citation number you use must correspond to evidence provided below."""
+        else:
+            citation_rules = """CITATION RULES:
+- No evidence citations are available for this memo.
+- Do NOT use citation numbers like [1], [2], etc.
+- Clearly state when claims are based on general knowledge vs. specific evidence."""
+        
+        base_system_prompt = f"""You are an expert analyst generating investment memos for development initiatives.
 
 Your task is to generate a structured memo that:
 1. Provides a clear recommendation (proceed, hold, or reject)
-2. Grounds all claims in the provided evidence
-3. Uses citation numbers [1], [2], etc. to reference specific evidence
-4. Maintains a professional, objective tone
-5. Highlights both opportunities and risks
+2. Grounds claims in the provided evidence WHERE AVAILABLE
+3. Maintains a professional, objective tone
+4. Highlights both opportunities and risks
 
-CITATION RULES:
-- Every factual claim should have a citation
-- Use the format [1], [2], etc. inline
-- Distinguish between user-provided evidence and case study corpus findings
-- If evidence is limited, acknowledge uncertainty"""
+{citation_rules}"""
         
         # Add alignment instructions if provided
         if alignment_instructions:
@@ -716,7 +700,7 @@ CITATION RULES:
 USER-SPECIFIED STRUCTURE AND PREFERENCES:
 {alignment_instructions}
 
-Follow the user's specified structure and preferences closely."""
+Follow the user's specified structure and preferences closely. Generate content for EACH section specified."""
         else:
             system_prompt = f"""{base_system_prompt}
 
@@ -734,59 +718,104 @@ PROJECT DETAILS:
 EVIDENCE AND CONTEXT:
 {context}
 
-Generate a structured memo with the following sections. Use citation numbers [1], [2], etc. to reference evidence."""
+Generate a structured memo. Use citation numbers [1], [2], etc. to reference evidence."""
         
         if alignment_instructions:
-            user_message += "\n\nFollow the specified structure and key points from the alignment instructions."
+            user_message += "\n\nGenerate content for EACH section from the alignment. Return a 'sections' array with content for each section."
         
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "generate_memo",
-                    "description": "Generate structured investment memo",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "executive_summary": {
-                                "type": "string",
-                                "description": "2-3 paragraph executive summary of the project and recommendation"
+        # Build dynamic schema based on alignment sections if provided
+        if alignment and alignment.sections:
+            # Dynamic schema based on user's custom sections
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "generate_memo",
+                        "description": "Generate structured investment memo with custom sections",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "recommendation": {
+                                    "type": "string",
+                                    "enum": ["proceed", "hold", "reject"],
+                                    "description": "Overall recommendation"
+                                },
+                                "sections": {
+                                    "type": "array",
+                                    "description": "Content for each section in the outline",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string", "description": "Section ID from the outline"},
+                                            "title": {"type": "string", "description": "Section title"},
+                                            "content": {"type": "string", "description": "Full content for this section with citations"}
+                                        },
+                                        "required": ["id", "title", "content"]
+                                    }
+                                }
                             },
-                            "recommendation": {
-                                "type": "string",
-                                "enum": ["proceed", "hold", "reject"],
-                                "description": "Overall recommendation"
-                            },
-                            "recommendation_rationale": {
-                                "type": "string",
-                                "description": "Detailed rationale for the recommendation with citations"
-                            },
-                            "evidence_summary": {
-                                "type": "string",
-                                "description": "Summary of supporting evidence with citations"
-                            },
-                            "risks_and_assumptions": {
-                                "type": "string",
-                                "description": "Key risks and assumptions with citations where relevant"
-                            },
-                            "open_questions": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "List of open questions that need to be addressed"
-                            }
-                        },
-                        "required": ["executive_summary", "recommendation", "recommendation_rationale", "evidence_summary", "risks_and_assumptions", "open_questions"]
+                            "required": ["recommendation", "sections"]
+                        }
                     }
-                }
-            }],
-            tool_choice={"type": "function", "function": {"name": "generate_memo"}},
-            temperature=0.7,
-        )
+                }],
+                tool_choice={"type": "function", "function": {"name": "generate_memo"}},
+                temperature=0.7,
+            )
+        else:
+            # Default hardcoded schema
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "generate_memo",
+                        "description": "Generate structured investment memo",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "executive_summary": {
+                                    "type": "string",
+                                    "description": "2-3 paragraph executive summary of the project and recommendation"
+                                },
+                                "recommendation": {
+                                    "type": "string",
+                                    "enum": ["proceed", "hold", "reject"],
+                                    "description": "Overall recommendation"
+                                },
+                                "recommendation_rationale": {
+                                    "type": "string",
+                                    "description": "Detailed rationale for the recommendation with citations"
+                                },
+                                "evidence_summary": {
+                                    "type": "string",
+                                    "description": "Summary of supporting evidence with citations"
+                                },
+                                "risks_and_assumptions": {
+                                    "type": "string",
+                                    "description": "Key risks and assumptions with citations where relevant"
+                                },
+                                "open_questions": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "List of open questions that need to be addressed"
+                                }
+                            },
+                            "required": ["executive_summary", "recommendation", "recommendation_rationale", "evidence_summary", "risks_and_assumptions", "open_questions"]
+                        }
+                    }
+                }],
+                tool_choice={"type": "function", "function": {"name": "generate_memo"}},
+                temperature=0.7,
+            )
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
