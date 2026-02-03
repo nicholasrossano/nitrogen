@@ -29,7 +29,7 @@ module.exports = {
         // Primary Accent (use sparingly)
         accent: {
           anchor: '#005bb5',
-          DEFAULT: '#0865b8',
+          DEFAULT: '#004d91',
           tint: '#4d9de8',
           wash: '#edf7ff',
         },
@@ -49,7 +49,7 @@ module.exports = {
         // Strokes & Dividers
         stroke: {
           subtle: '#D5D5DB',
-          accent: '#0865b8',
+          accent: '#004d91',
         },
         divider: '#DADADF',
       },

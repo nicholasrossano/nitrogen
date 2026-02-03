@@ -19,7 +19,7 @@
   
   /* Accent */
   --color-accent-anchor: #005bb5;
-  --color-accent: #0865b8;
+  --color-accent: #004d91;
   --color-accent-tint: #4d9de8;
   --color-accent-wash: #edf7ff;
   
@@ -37,7 +37,7 @@
   /* Strokes */
   --color-divider: #DADADF;
   --color-stroke-subtle: #D5D5DB;
-  --color-stroke-accent: #0865b8;
+  --color-stroke-accent: #004d91;
 }
 
 html {
