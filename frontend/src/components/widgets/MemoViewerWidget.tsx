@@ -149,9 +149,9 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
   };
 
   return (
-    <div className="card-elevated overflow-hidden">
+    <div className="card-elevated overflow-hidden h-full rounded-none flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-6 pb-4 bg-surface-header border-b border-divider flex items-center justify-between gap-4">
+      <div className="px-4 pt-4 pb-3 bg-surface-header border-b border-divider flex items-center justify-between gap-4 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
             <FileText className="w-5 h-5 text-accent" />
@@ -165,7 +165,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
       </div>
 
       {/* Content */}
-          <div className="p-6 space-y-6 prose-memo max-h-[500px] overflow-y-auto bg-white">
+          <div className="p-6 space-y-6 prose-memo flex-1 min-h-0 overflow-y-auto bg-white">
             {/* Dynamic sections from alignment OR legacy hardcoded sections */}
             {(content as any).sections ? (
               // Dynamic sections format
@@ -357,11 +357,11 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
           </div>
 
           {/* Actions */}
-          <div className="px-5 py-4 bg-surface-header border-t border-divider">
+          <div className="flex-shrink-0 p-4 border-t border-divider bg-surface-header">
             <button
               onClick={handleExport}
               disabled={loading}
-              className="btn-primary w-full"
+              className="btn-primary w-full !py-3"
             >
               {loading ? (
                 <>
