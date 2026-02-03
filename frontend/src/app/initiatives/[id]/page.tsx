@@ -281,7 +281,7 @@ function InitiativePageContent() {
             </div>
 
             {/* Editor Panel - Right side */}
-            <div className="flex-1 bg-surface-subtle overflow-hidden">
+            <div className="flex-1 overflow-hidden">
               <EditorPanel
                 initiative={initiative}
                 selectedItemId={selectedItemId}

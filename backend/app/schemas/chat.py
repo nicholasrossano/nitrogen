@@ -15,6 +15,15 @@ class WidgetData(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class SourceCitation(BaseModel):
+    """Citation for a fact used in a message"""
+    source_type: str  # corpus, evidence, web, llm_estimate
+    source_title: str
+    source_url: Optional[str] = None
+    chunk_id: Optional[str] = None
+    confidence: float = 1.0
+
+
 class ChatMessageResponse(BaseModel):
     """Response for a single chat message"""
     id: UUID
@@ -22,6 +31,7 @@ class ChatMessageResponse(BaseModel):
     content: str
     widget_type: Optional[str] = None
     widget_data: Optional[dict[str, Any]] = None
+    sources: Optional[list[SourceCitation]] = None  # Citations used in this message
     created_at: datetime
     
     class Config:

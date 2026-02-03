@@ -67,12 +67,21 @@ export interface ToolDefinition {
   category: string;
 }
 
+export interface SourceCitation {
+  source_type: 'corpus' | 'evidence' | 'web' | 'llm_estimate';
+  source_title: string;
+  source_url?: string | null;
+  chunk_id?: string | null;
+  confidence: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   widget_type: string | null;
   widget_data: Record<string, any> | null;
+  sources?: SourceCitation[] | null;
   created_at: string;
 }
 
