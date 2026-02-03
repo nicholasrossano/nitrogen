@@ -23,6 +23,13 @@ export function EditorPanel({
   onUploadClick,
   onDeleteEvidence,
 }: EditorPanelProps) {
+  // Wrapper for all content to ensure proper height
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <div className="h-full flex flex-col">
+      {children}
+    </div>
+  );
+
   // No selection - show empty state
   if (!selectedItemId || !selectedItemType) {
     const hasInputs = evidenceDocs.length > 0;
@@ -67,7 +74,11 @@ export function EditorPanel({
     const doc = evidenceDocs.find(d => d.id === selectedItemId);
     if (!doc) return null;
 
-    return <EvidenceDocumentViewer doc={doc} onDelete={onDeleteEvidence} />;
+    return (
+      <Wrapper>
+        <EvidenceDocumentViewer doc={doc} onDelete={onDeleteEvidence} />
+      </Wrapper>
+    );
   }
 
   // Show selected output (deliverable)
@@ -81,38 +92,40 @@ export function EditorPanel({
     // Render appropriate widget based on type
     if (widgetType === 'memo_viewer' || selectedItemId.includes('memo')) {
       return (
-        <div className="flex-1 overflow-auto p-3">
+        <Wrapper>
           <MemoViewerWidget
             data={widgetData as MemoContent}
             isActive={true}
             initiativeId={initiative.id}
           />
-        </div>
+        </Wrapper>
       );
     }
 
     if (widgetType === 'checklist_viewer' || selectedItemId.includes('checklist')) {
       return (
-        <div className="flex-1 overflow-auto p-3">
+        <Wrapper>
           <ChecklistViewerWidget
             data={widgetData}
             isActive={true}
             initiativeId={initiative.id}
           />
-        </div>
+        </Wrapper>
       );
     }
 
     // Default: show raw data
     return (
-      <div className="flex-1 overflow-auto p-3">
-        <div className="card p-6">
-          <h3 className="text-sm font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
-          <pre className="text-sm text-text-secondary bg-surface-subtle p-4 rounded overflow-auto">
-            {JSON.stringify(widgetData, null, 2)}
-          </pre>
+      <Wrapper>
+        <div className="flex-1 overflow-auto">
+          <div className="card p-6">
+            <h3 className="text-sm font-semibold text-text-primary mb-4">{deliverable.name || selectedItemId}</h3>
+            <pre className="text-sm text-text-secondary bg-surface-subtle p-4 rounded overflow-auto">
+              {JSON.stringify(widgetData, null, 2)}
+            </pre>
+          </div>
         </div>
-      </div>
+      </Wrapper>
     );
   }
 
@@ -175,10 +188,10 @@ function EvidenceDocumentViewer({
     : content;
 
   return (
-    <div className="flex-1 flex flex-col p-3">
-      <div className="card-elevated flex flex-col overflow-hidden group flex-1">
+    <Wrapper>
+      <div className="card-elevated flex flex-col overflow-hidden group flex-1 rounded-none">
         {/* Header */}
-        <div className="relative flex items-center gap-3 px-6 pt-6 pb-4 bg-surface-header border-b border-divider">
+        <div className="relative flex items-center gap-3 px-4 pt-4 pb-3 bg-surface-header border-b border-divider">
           <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
             <FileText className="w-5 h-5 text-accent" />
           </div>
@@ -233,6 +246,6 @@ function EvidenceDocumentViewer({
           </div>
         )}
       </div>
-    </div>
+    </Wrapper>
   );
 }
