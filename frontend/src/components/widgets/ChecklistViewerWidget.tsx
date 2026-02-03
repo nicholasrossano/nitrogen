@@ -46,7 +46,15 @@ function RiskBadge({ level }: { level: 'low' | 'medium' | 'high' }) {
   );
 }
 
-function CategorySection({ category, defaultOpen = false }: { category: ChecklistCategory; defaultOpen?: boolean }) {
+function CategorySection({ 
+  category, 
+  defaultOpen = false,
+  onItemEdit
+}: { 
+  category: ChecklistCategory; 
+  defaultOpen?: boolean;
+  onItemEdit: (categoryName: string, itemIdx: number, field: 'item' | 'question', questionIdx: number | null, e: React.FormEvent<HTMLElement>) => void;
+}) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
   return (
@@ -73,13 +81,26 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
               <Circle className="w-4 h-4 text-divider mt-1 flex-shrink-0" />
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-text-primary">{item.item}</p>
+                  <p 
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => onItemEdit(category.name, idx, 'item', null, e)}
+                    className="text-sm font-medium text-text-primary editable-content flex-1"
+                  >
+                    {item.item}
+                  </p>
                   <RiskBadge level={item.risk_level} />
                 </div>
                 {item.questions && item.questions.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {item.questions.map((q, qIdx) => (
-                      <li key={qIdx} className="text-xs text-text-secondary pl-2 border-l border-divider">
+                      <li 
+                        key={qIdx} 
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) => onItemEdit(category.name, idx, 'question', qIdx, e)}
+                        className="text-xs text-text-secondary pl-2 border-l border-divider editable-content"
+                      >
                         {q}
                       </li>
                     ))}
@@ -125,6 +146,41 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
     initiative?.title ??
     (content?.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
     'Project';
+
+  // State for editable items
+  const [editableItems, setEditableItems] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    if (content?.priority_items) {
+      content.priority_items.forEach((item, idx) => {
+        initial[`priority-${idx}`] = item;
+      });
+    }
+    if (content?.next_steps) {
+      content.next_steps.forEach((step, idx) => {
+        initial[`nextstep-${idx}`] = step;
+      });
+    }
+    return initial;
+  });
+
+  const handleItemEdit = (itemId: string, e: React.FormEvent<HTMLLIElement>) => {
+    const newContent = e.currentTarget.textContent || '';
+    setEditableItems(prev => ({ ...prev, [itemId]: newContent }));
+  };
+
+  const handleCategoryItemEdit = (
+    categoryName: string, 
+    itemIdx: number, 
+    field: 'item' | 'question', 
+    questionIdx: number | null, 
+    e: React.FormEvent<HTMLElement>
+  ) => {
+    const newContent = e.currentTarget.textContent || '';
+    const key = questionIdx !== null 
+      ? `${categoryName}-${itemIdx}-question-${questionIdx}`
+      : `${categoryName}-${itemIdx}-item`;
+    setEditableItems(prev => ({ ...prev, [key]: newContent }));
+  };
   
   const handleExport = async () => {
     setExporting(true);
@@ -171,12 +227,25 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
                   Priority Items
                 </h2>
                 <ul className="space-y-2">
-                  {content.priority_items.map((item, idx) => (
-                    <li key={idx} className="text-sm text-text-secondary flex items-start gap-2">
-                      <span className="text-indicator-orange font-bold">{idx + 1}.</span>
-                      {item}
-                    </li>
-                  ))}
+                  {content.priority_items.map((item, idx) => {
+                    const itemId = `priority-${idx}`;
+                    return (
+                      <li 
+                        key={idx} 
+                        className="text-sm text-text-secondary flex items-start gap-2"
+                      >
+                        <span className="text-indicator-orange font-bold">{idx + 1}.</span>
+                        <span
+                          contentEditable
+                          suppressContentEditableWarning
+                          onBlur={(e) => handleItemEdit(itemId, e)}
+                          className="editable-content flex-1"
+                        >
+                          {editableItems[itemId] || item}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             )}
@@ -186,7 +255,12 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
               <h2 className="text-sm font-semibold text-text-primary mb-3">Checklist Categories</h2>
               <div className="space-y-3">
                 {content.categories.map((category, idx) => (
-                  <CategorySection key={idx} category={category} defaultOpen={idx === 0} />
+                  <CategorySection 
+                    key={idx} 
+                    category={category} 
+                    defaultOpen={idx === 0}
+                    onItemEdit={handleCategoryItemEdit}
+                  />
                 ))}
               </div>
             </section>
@@ -199,9 +273,20 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
                   Recommended Next Steps
                 </h2>
                 <ol className="space-y-2 list-decimal list-inside">
-                  {content.next_steps.map((step, idx) => (
-                    <li key={idx} className="text-sm text-text-secondary">{step}</li>
-                  ))}
+                  {content.next_steps.map((step, idx) => {
+                    const itemId = `nextstep-${idx}`;
+                    return (
+                      <li 
+                        key={idx} 
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) => handleItemEdit(itemId, e)}
+                        className="text-sm text-text-secondary editable-content"
+                      >
+                        {editableItems[itemId] || step}
+                      </li>
+                    );
+                  })}
                 </ol>
               </section>
             )}
