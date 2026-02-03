@@ -27,6 +27,9 @@ export function DocumentRequestWidget({
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ];
     
+    let successCount = 0;
+    let failedFiles: string[] = [];
+    
     // Upload files
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -34,13 +37,27 @@ export function DocumentRequestWidget({
         alert(`${file.name} is not a PDF or DOCX file. Skipping.`);
         continue;
       }
-      await uploadEvidence(initiativeId, file);
+      
+      try {
+        await uploadEvidence(initiativeId, file);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
+        failedFiles.push(file.name);
+      }
     }
     
-    // Auto-continue after upload completes
-    setTimeout(() => {
-      sendMessage(initiativeId, "I've uploaded my documents.");
-    }, 500);
+    // Show results and auto-continue if at least one file succeeded
+    if (failedFiles.length > 0) {
+      alert(`Failed to upload: ${failedFiles.join(', ')}`);
+    }
+    
+    if (successCount > 0) {
+      // Auto-continue after upload completes
+      setTimeout(() => {
+        sendMessage(initiativeId, "I've uploaded my documents.");
+      }, 500);
+    }
   };
 
   const handleNoDocuments = () => {

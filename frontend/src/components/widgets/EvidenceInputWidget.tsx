@@ -61,7 +61,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
           onClick={() => setMode('upload')}
           className={`flex-1 px-4 py-3 text-sm font-medium transition-colors duration-150 ${
             mode === 'upload' 
-              ? 'text-accent border-b-2 border-accent bg-accent-wash/30' 
+              ? 'text-accent border-b border-accent bg-accent-wash/30' 
               : 'text-text-secondary hover:text-text-primary hover:bg-surface-subtle'
           }`}
         >
@@ -72,7 +72,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
           onClick={() => setMode('paste')}
           className={`flex-1 px-4 py-3 text-sm font-medium transition-colors duration-150 ${
             mode === 'paste' 
-              ? 'text-accent border-b-2 border-accent bg-accent-wash/30' 
+              ? 'text-accent border-b border-accent bg-accent-wash/30' 
               : 'text-text-secondary hover:text-text-primary hover:bg-surface-subtle'
           }`}
         >
@@ -91,7 +91,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
             className={`
-              border-2 border-dashed rounded p-10 text-center cursor-pointer transition-colors duration-150
+              border border-dashed rounded p-10 text-center cursor-pointer transition-colors duration-150
               ${dragActive 
                 ? 'border-accent bg-accent-wash/30' 
                 : 'border-stroke-subtle hover:border-accent hover:bg-surface-subtle'
