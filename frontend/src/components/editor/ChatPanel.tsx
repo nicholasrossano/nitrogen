@@ -107,9 +107,13 @@ export function ChatPanel({
     lastSeenCountRef.current = safeMessages.length;
   }, [safeMessages.length]);
 
-  // Check if the latest message has a document_request widget
+  // Check if the latest message has a widget that should hide the text input
   const latestMessage = safeMessages[safeMessages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
+  const showAlignmentWidget = latestMessage?.widget_type === 'alignment';
+  
+  // Hide input when document request or alignment widget is active (to prevent branching conversation)
+  const hideTextInput = showDocumentRequest || showAlignmentWidget;
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${fullWidth ? '' : 'border-r border-divider'}`}>
@@ -146,8 +150,8 @@ export function ChatPanel({
         />
       )}
 
-      {/* Input - hidden while document request (upload / no documents) is shown */}
-      {!showDocumentRequest && (
+      {/* Input - hidden while document request or alignment widget is shown */}
+      {!hideTextInput && (
         <div className="flex-shrink-0 p-4 border-t border-divider">
           <ChatInput
             onSend={onSendMessage}
