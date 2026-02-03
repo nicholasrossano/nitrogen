@@ -79,7 +79,7 @@ function CategorySection({ category, defaultOpen = false }: { category: Checklis
                 {item.questions && item.questions.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {item.questions.map((q, qIdx) => (
-                      <li key={qIdx} className="text-xs text-text-secondary pl-2 border-l-2 border-divider">
+                      <li key={qIdx} className="text-xs text-text-secondary pl-2 border-l border-divider">
                         {q}
                       </li>
                     ))}

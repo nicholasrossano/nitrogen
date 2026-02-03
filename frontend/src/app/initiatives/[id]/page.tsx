@@ -22,11 +22,13 @@ function InitiativePageContent() {
   const [selectedItemType, setSelectedItemType] = useState<'input' | 'output' | null>(null);
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   const { 
     initiative, 
     messages,
     evidenceDocs,
+    stageStatus,
     loading, 
     sending,
     generating,
@@ -36,6 +38,7 @@ function InitiativePageContent() {
     loadEvidence,
     sendMessage,
     uploadEvidence,
+    deleteEvidence,
     updateTitle,
   } = useInitiativeStore();
 
@@ -103,7 +106,30 @@ function InitiativePageContent() {
   };
 
   const handleUploadEvidence = async (file: File) => {
-    await uploadEvidence(initiativeId, file);
+    try {
+      setUploadError(null);
+      await uploadEvidence(initiativeId, file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to upload document';
+      setUploadError(message);
+      // Clear error after 5 seconds
+      setTimeout(() => setUploadError(null), 5000);
+    }
+  };
+
+  const handleDeleteEvidence = async (evidenceId: string) => {
+    try {
+      await deleteEvidence(evidenceId);
+      // If the deleted doc was selected, deselect it
+      if (selectedItemId === evidenceId) {
+        setSelectedItemId(null);
+        setSelectedItemType(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete document';
+      setUploadError(message);
+      setTimeout(() => setUploadError(null), 5000);
+    }
   };
 
   const handleSendMessage = (content: string) => {
@@ -130,24 +156,24 @@ function InitiativePageContent() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-white">
-        <div className="card p-8 text-center max-w-md">
-          <p className="text-indicator-orange mb-4">{error}</p>
-          <Link 
-            href="/" 
-            className="btn-secondary inline-flex"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to projects
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   if (!initiative) {
+    // Only show error page if there's no initiative and there's an error
+    if (error) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-white">
+          <div className="card p-8 text-center max-w-md">
+            <p className="text-indicator-orange mb-4">{error}</p>
+            <Link 
+              href="/" 
+              className="btn-secondary inline-flex"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to projects
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -158,23 +184,73 @@ function InitiativePageContent() {
   // Show editor if: there are outputs OR an input document is selected
   const shouldShowEditor = hasOutputs || (selectedItemType === 'input' && selectedItemId !== null);
 
+  // Check if we've passed the document request stage
+  // Look for messages that indicate we're past the initial document upload question
+  const hasPassedDocumentRequest = messages.some(msg => 
+    msg.role === 'user' && (
+      msg.content.toLowerCase().includes("don't have any documents") ||
+      msg.content.toLowerCase().includes("uploaded my documents") ||
+      msg.content.toLowerCase().includes("no documents")
+    )
+  );
+  
+  // Check if tool selection widget has appeared (indicates we're past document stage)
+  const hasToolSelectionWidget = messages.some(msg => 
+    msg.widget_type === 'tool_checklist' || msg.widget_type === 'deliverables_list'
+  );
+  
+  // Only show InputOutputBar after initial project description (describe stage)
+  // Show if:
+  // 1. stage_1_complete is true, OR
+  // 2. We're past the describe stage, OR
+  // 3. Tools have been selected, OR
+  // 4. User has responded to document request, OR
+  // 5. Tool selection widget is showing
+  const shouldShowInputOutputBar = 
+    stageStatus?.stage_1_complete === true ||
+    (stageStatus?.stage && stageStatus.stage !== 'describe' && stageStatus.stage !== 'intake') ||
+    (initiative?.selected_tools && initiative.selected_tools.length > 0) ||
+    hasPassedDocumentRequest ||
+    hasToolSelectionWidget;
+
+  // Debug: log the stage status
+  console.log('🔍 InputOutputBar Debug:', {
+    stageStatus,
+    stage: stageStatus?.stage,
+    stage_1_complete: stageStatus?.stage_1_complete,
+    shouldShowInputOutputBar,
+    evidenceDocsCount: evidenceDocs.length,
+  });
+
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
+      {/* Upload Error Toast */}
+      {uploadError && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2">
+          <div className="bg-indicator-orange/10 border border-indicator-orange/30 rounded px-4 py-3 shadow-lg max-w-md">
+            <p className="text-sm text-indicator-orange font-medium">{uploadError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Project Header */}
       <ProjectHeader 
         initiative={initiative} 
         onTitleUpdate={handleTitleUpdate}
       />
 
-      {/* Input/Output Bar */}
-      <InputOutputBar
-        initiative={initiative}
-        evidenceDocs={evidenceDocs}
-        selectedItemId={selectedItemId}
-        onSelectItem={handleSelectItem}
-        onUploadEvidence={handleUploadEvidence}
-        loading={loading}
-      />
+      {/* Input/Output Bar - only show after intake stage */}
+      {shouldShowInputOutputBar && (
+        <InputOutputBar
+          initiative={initiative}
+          evidenceDocs={evidenceDocs}
+          selectedItemId={selectedItemId}
+          onSelectItem={handleSelectItem}
+          onUploadEvidence={handleUploadEvidence}
+          onDeleteEvidence={handleDeleteEvidence}
+          loading={loading}
+        />
+      )}
 
       {/* Main content: Chat + Editor split (or just Chat if no outputs) */}
       <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
@@ -212,6 +288,7 @@ function InitiativePageContent() {
                 selectedItemType={selectedItemType}
                 evidenceDocs={evidenceDocs}
                 onUploadClick={() => fileInputRef.current?.click()}
+                onDeleteEvidence={handleDeleteEvidence}
               />
             </div>
           </>
