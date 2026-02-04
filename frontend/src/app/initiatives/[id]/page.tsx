@@ -52,16 +52,16 @@ function InitiativePageContent() {
 
   // Auto-select most recent output when outputs are available
   useEffect(() => {
-    if (initiative?.deliverables) {
+    if (initiative?.deliverables && !selectedItemId) {
       const outputs = Object.keys(initiative.deliverables);
-      if (outputs.length > 0 && !selectedItemId) {
+      if (outputs.length > 0) {
         // Select the last output (most recent)
         const mostRecentOutput = outputs[outputs.length - 1];
         setSelectedItemId(mostRecentOutput);
         setSelectedItemType('output');
       }
     }
-  }, [initiative?.deliverables, selectedItemId]);
+  }, [initiative?.deliverables]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing || !containerRef.current) return;
