@@ -34,8 +34,8 @@ const isAccessCodeBypassEnabled = () => {
 
 // Mock user for development bypass
 const createMockUser = (): User => ({
-  uid: 'dev-user-123',
-  email: 'dev@localhost.com',
+  uid: 'shared-user',
+  email: 'shared@nitrogen.ai',
   emailVerified: true,
   displayName: 'Dev User',
   isAnonymous: false,
