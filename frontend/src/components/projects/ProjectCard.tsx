@@ -21,6 +21,19 @@ function formatRelativeTime(dateString: string): string {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
+  // Debug: Log first 3 calculations
+  if (Math.random() < 0.1) { // Only log occasionally to avoid spam
+    console.log('Time calc:', {
+      dateString,
+      parsedDate: date.toISOString(),
+      now: now.toISOString(),
+      diffMs,
+      diffMins,
+      diffHours,
+      diffDays
+    });
+  }
+
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
