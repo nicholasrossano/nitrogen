@@ -69,6 +69,7 @@ async def generate_memo(
     
     # Update initiative stage
     initiative.stage = "complete"
+    initiative.touch()  # Update the initiative's updated_at timestamp
     await db.commit()
     
     # Add memo viewer message

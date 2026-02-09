@@ -34,6 +34,12 @@ function HomePageContent() {
     try {
       const isTrash = activeNav === 'trash';
       const data = await api.listInitiatives(20, 0, isTrash);
+      // Debug: Log the timestamps
+      console.log('Projects with timestamps:', data.map(p => ({
+        title: p.title,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      })));
       setProjects(data);
     } catch (err) {
       setError('Failed to load projects');

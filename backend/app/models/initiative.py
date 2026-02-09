@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import String, Text, Boolean, ARRAY, DateTime
+from datetime import datetime, timezone
+from sqlalchemy import String, Text, Boolean, ARRAY, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import enum
@@ -65,12 +65,13 @@ class Initiative(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        default=datetime.utcnow
+        server_default=func.now(),
+        nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow
+        server_default=func.now(),
+        nullable=False
     )
     
     # Relationships
@@ -179,6 +180,10 @@ class Initiative(Base):
                 if not alignment or not alignment.get("confirmed"):
                     pending.append(tool_id)
         return pending
+    
+    def touch(self):
+        """Update the updated_at timestamp to mark this initiative as recently modified."""
+        self.updated_at = datetime.now(timezone.utc)
     
     # Legacy methods (for backward compatibility)
     def is_intake_complete(self) -> bool:

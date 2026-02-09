@@ -370,6 +370,7 @@ async def send_chat_message(
         content=data.content,
     )
     db.add(user_message)
+    initiative.touch()  # Update the initiative's updated_at timestamp
     await db.commit()
     
     # Get chat history
@@ -432,6 +433,7 @@ async def send_chat_message(
         sources=[s.to_dict() for s in sources] if sources else None,
     )
     db.add(assistant_message)
+    initiative.touch()  # Update the initiative's updated_at timestamp
     await db.commit()
     await db.refresh(assistant_message)
     

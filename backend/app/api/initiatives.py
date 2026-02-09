@@ -132,7 +132,7 @@ async def list_initiatives(
             Initiative.user_id == user.uid,
             Initiative.archived == archived,
         )
-        .order_by(Initiative.updated_at.desc())
+        .order_by(Initiative.updated_at.desc(), Initiative.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
