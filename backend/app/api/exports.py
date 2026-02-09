@@ -78,16 +78,25 @@ async def export_memo(
                 detail="No memo found to export",
             )
         
-        logger.info(f"Found memo {memo.id}, generating DOCX...")
+        logger.info(f"Found memo {memo.id} with keys: {list(memo.content.keys())}")
         
-        # Generate DOCX
+        # Generate DOCX - Handle both old flat structure and new sections structure
         exporter = DocxExporterService()
-        memo_content = MemoContent(**memo.content)
         
-        docx_bytes = exporter.generate(
-            memo_content=memo_content,
-            initiative_title=initiative.title or "Untitled Initiative",
-        )
+        # Check if memo uses new sections format
+        if "sections" in memo.content:
+            logger.info("Memo uses new sections format, generating with sections")
+            docx_bytes = exporter.generate_from_sections(
+                memo_content=memo.content,
+                initiative_title=initiative.title or "Untitled Initiative",
+            )
+        else:
+            logger.info("Memo uses legacy format, generating with MemoContent schema")
+            memo_content = MemoContent(**memo.content)
+            docx_bytes = exporter.generate(
+                memo_content=memo_content,
+                initiative_title=initiative.title or "Untitled Initiative",
+            )
         
         logger.info(f"DOCX generated ({len(docx_bytes)} bytes), saving to storage...")
         
