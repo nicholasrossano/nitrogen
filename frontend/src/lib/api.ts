@@ -246,6 +246,23 @@ export const api = {
     }
   },
 
+  permanentlyDeleteInitiative: async (id: string) => {
+    const url = `${API_URL}/api/v1/initiatives/${id}/permanent`;
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Permanent delete failed' }));
+      throw new Error(error.detail);
+    }
+  },
+
   restoreInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}/restore`, {
       method: 'POST',
