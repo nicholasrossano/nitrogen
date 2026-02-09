@@ -189,6 +189,7 @@ async def select_tools(
     if initiative.goal:
         tool_inputs.setdefault("project_goal", initiative.goal)
     initiative.tool_inputs = tool_inputs
+    initiative.touch()  # Update the initiative's updated_at timestamp
     
     await db.commit()
     await db.refresh(initiative)
