@@ -52,11 +52,41 @@ That's it! Firebase auth will work exactly as before.
 
 ## Backend Compatibility
 
-The backend already supports mock users in development mode, so it will accept the `REDACTED_DEV_TOKEN` from the access code bypass without any changes needed.
+The backend accepts the `REDACTED_DEV_TOKEN` from the access code bypass and uses a shared user ID (`shared-user`) for all projects.
+
+### Migrating Existing Production Data
+
+If you had projects created with real Firebase authentication, you need to migrate them to the shared user ID:
+
+```bash
+cd backend
+python -m scripts.migrate_to_shared_user
+```
+
+This will:
+- Find all initiatives with non-shared user IDs
+- Update them to use `user_id="shared-user"`
+- Make them visible in shared access code mode
+
+**You only need to run this once** when switching from Firebase to access code mode.
 
 ## User Experience
 
-- **Shared Workspace**: All users see the same projects (user_id = "dev-user-123")
+- **Shared Workspace**: All users see the same projects (user_id = "shared-user")
 - **No Personal Data**: Everything is collaborative
 - **Simple Access Control**: One code for everyone
 - **Clean UI**: Matches your existing login page design
+
+## Troubleshooting
+
+**Problem: "Failed to load projects" in production**
+
+This happens when:
+1. Frontend and backend are using different user IDs (now fixed to "shared-user")
+2. Existing projects have old Firebase user IDs
+
+**Solution:** Run the migration script:
+```bash
+cd backend
+python -m scripts.migrate_to_shared_user
+```

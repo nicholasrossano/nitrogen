@@ -81,8 +81,8 @@ async def get_current_user(
     """
     # If no Firebase project configured, use mock user
     if not settings.firebase_project_id:
-        logger.debug("No Firebase project configured, using mock user")
-        return AuthUser(uid="dev-user-001", email="dev@nitrogen.local")
+        logger.debug("No Firebase project configured, using shared user")
+        return AuthUser(uid="shared-user", email="shared@nitrogen.ai")
     
     if not credentials:
         raise HTTPException(
@@ -94,14 +94,14 @@ async def get_current_user(
     # In debug mode, accept mock token from localhost frontend
     if settings.debug and credentials.credentials == 'REDACTED_DEV_TOKEN':
         logger.debug("Debug mode: accepting mock token")
-        return AuthUser(uid="dev-user-001", email="dev@nitrogen.local")
+        return AuthUser(uid="shared-user", email="shared@nitrogen.ai")
     
     # Try to initialize Firebase
     if not _init_firebase():
         # Firebase not available, fall back to mock user in dev
         if settings.debug:
-            logger.warning("Firebase not initialized, using mock user in debug mode")
-            return AuthUser(uid="dev-user-001", email="dev@nitrogen.local")
+            logger.warning("Firebase not initialized, using shared user in debug mode")
+            return AuthUser(uid="shared-user", email="shared@nitrogen.ai")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Authentication service unavailable",
