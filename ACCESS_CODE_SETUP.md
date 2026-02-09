@@ -52,7 +52,9 @@ That's it! Firebase auth will work exactly as before.
 
 ## Backend Compatibility
 
-The backend accepts the `REDACTED_DEV_TOKEN` from the access code bypass and uses a shared user ID (`shared-user`) for all projects.
+The backend accepts the `REDACTED_DEV_TOKEN` from the access code bypass in both development and production. All projects use a shared user ID (`shared-user`).
+
+**Note:** The backend has been updated to accept mock tokens regardless of debug mode, enabling shared access code authentication in production.
 
 ### Migrating Existing Production Data
 
