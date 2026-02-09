@@ -297,6 +297,45 @@ textarea {
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
+  @apply border border-indicator-orange text-indicator-orange bg-white font-medium text-sm;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+}
+
+.btn-danger::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-indicator-orange);
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  z-index: -1;
+}
+
+.btn-danger:hover::before {
+  opacity: 1;
+}
+
+.btn-danger:hover {
+  @apply text-white shadow-md;
+  transform: translateY(-2px);
+}
+
+.btn-danger:active::before {
+  opacity: 1;
+}
+
+.btn-danger:active {
+  @apply shadow-none;
+  transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+}
+
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2;
   @apply text-text-secondary font-medium;
