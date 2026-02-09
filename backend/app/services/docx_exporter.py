@@ -17,11 +17,20 @@ class DocxExporterService:
         initiative_title: str,
     ) -> bytes:
         """Generate DOCX from memo content"""
-        # Check if we have a template
-        if self.template_path.exists():
-            return self._generate_from_template(memo_content, initiative_title)
-        else:
-            return self._generate_basic(memo_content, initiative_title)
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Check if we have a template
+            if self.template_path.exists():
+                logger.info(f"Using template at {self.template_path}")
+                return self._generate_from_template(memo_content, initiative_title)
+            else:
+                logger.info("Template not found, using basic DOCX generation")
+                return self._generate_basic(memo_content, initiative_title)
+        except Exception as e:
+            logger.error(f"Failed to generate DOCX: {str(e)}", exc_info=True)
+            raise
     
     def _generate_from_template(
         self,
