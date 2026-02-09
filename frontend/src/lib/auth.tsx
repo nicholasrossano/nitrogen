@@ -26,6 +26,12 @@ const isDevBypassEnabled = () => {
   );
 };
 
+// Check if access code bypass is enabled (production demo mode)
+const isAccessCodeBypassEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('nitrogen_access_granted') === 'true';
+};
+
 // Mock user for development bypass
 const createMockUser = (): User => ({
   uid: 'dev-user-123',
@@ -67,6 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Dev bypass mode - skip Firebase auth entirely
     if (isDevBypassEnabled()) {
       console.log('🔓 Dev auth bypass enabled - using mock user');
+      setUser(createMockUser());
+      setLoading(false);
+      return;
+    }
+
+    // Access code bypass mode - skip Firebase auth entirely
+    if (isAccessCodeBypassEnabled()) {
+      console.log('🔓 Access code bypass enabled - using shared user');
       setUser(createMockUser());
       setLoading(false);
       return;
@@ -124,6 +138,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       return;
     }
+    // In access code bypass mode, clear the access code
+    if (isAccessCodeBypassEnabled()) {
+      localStorage.removeItem('nitrogen_access_granted');
+      setUser(null);
+      // Force a page reload to show the access code gate again
+      window.location.href = '/';
+      return;
+    }
     if (!auth) throw new Error('Auth not initialized');
     const { signOut: firebaseSignOut } = await import('firebase/auth');
     await firebaseSignOut(auth);
@@ -139,6 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return null;
     // In dev bypass mode, return a mock token
     if (isDevBypassEnabled()) {
+      return 'dev-mock-token';
+    }
+    // In access code bypass mode, return a mock token
+    if (isAccessCodeBypassEnabled()) {
       return 'dev-mock-token';
     }
     return user.getIdToken();

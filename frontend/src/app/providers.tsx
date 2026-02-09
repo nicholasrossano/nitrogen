@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react';
 import { AuthProvider } from '@/lib/auth';
+import { AccessCodeGate } from '@/components/AccessCodeGate';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -9,8 +10,10 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <AuthProvider>
-      {children}
-    </AuthProvider>
+    <AccessCodeGate>
+      <AuthProvider>
+        {children}
+      </AuthProvider>
+    </AccessCodeGate>
   );
 }
