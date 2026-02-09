@@ -54,11 +54,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - use directly parsed origins + allow all Vercel preview deployments
+# CORS - use directly parsed origins + allow all Vercel deployments
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*-nitrogen-ai\.vercel\.app",
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
