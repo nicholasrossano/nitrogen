@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { FileText, Clock, Trash2, RotateCcw } from 'lucide-react';
 import { Initiative } from '@/lib/api';
@@ -38,6 +39,7 @@ function getOutputCount(project: Initiative): number {
 }
 
 export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: ProjectCardProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const title = project.title || 'Untitled';
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
@@ -46,9 +48,28 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // For trash view, show confirmation for permanent delete
+    if (isTrash) {
+      setShowDeleteConfirm(true);
+    } else if (onDelete) {
+      onDelete(project.id);
+    }
+  };
+
+  const handleConfirmDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (onDelete) {
       onDelete(project.id);
     }
+    setShowDeleteConfirm(false);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowDeleteConfirm(false);
   };
 
   const handleRestore = (e: React.MouseEvent) => {
@@ -65,17 +86,30 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
   return (
     <CardWrapper {...cardProps as any}>
       <div className={`p-5 h-full flex flex-col relative group border-1 ${isTrash ? 'card cursor-default' : 'card-interactive'}`}>
-        {/* Action button */}
+        {/* Action buttons */}
         {isTrash ? (
-          onRestore && (
-            <button
-              onClick={handleRestore}
-              className="project-action-btn project-action-btn-success absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity"
-              title="Restore project"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          )
+          <>
+            {/* Restore button (left of trash button in top right) */}
+            {onRestore && (
+              <button
+                onClick={handleRestore}
+                className="project-action-btn project-action-btn-success absolute top-2 right-11 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity"
+                title="Restore project"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            )}
+            {/* Permanent delete button (far right) */}
+            {onDelete && (
+              <button
+                onClick={handleDelete}
+                className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
+                title="Permanently delete"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </>
         ) : (
           onDelete && (
             <button
@@ -117,6 +151,30 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
             {lastModified}
           </span>
         </div>
+
+        {/* Confirmation overlay */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 bg-white flex flex-col items-center justify-center gap-3 p-5 rounded border-1 border-divider">
+            <div className="text-center">
+              <p className="text-sm font-semibold text-text-primary mb-1">Permanently delete?</p>
+              <p className="text-xs text-text-secondary">This action cannot be undone.</p>
+            </div>
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={handleCancelDelete}
+                className="btn-secondary flex-1 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="btn-danger flex-1 py-2 text-sm"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </CardWrapper>
   );

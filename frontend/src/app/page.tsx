@@ -67,6 +67,16 @@ function HomePageContent() {
     }
   };
 
+  const handlePermanentDelete = async (id: string) => {
+    // Confirmation is handled in ProjectCard component
+    try {
+      await api.permanentlyDeleteInitiative(id);
+      setProjects(projects.filter(p => p.id !== id));
+    } catch (error) {
+      console.error('Failed to permanently delete project:', error);
+    }
+  };
+
   const handleRestoreProject = async (id: string) => {
     try {
       await api.restoreInitiative(id);
@@ -215,7 +225,7 @@ function HomePageContent() {
               <ProjectCard 
                 key={project.id} 
                 project={project} 
-                onDelete={isTrashView ? undefined : handleDeleteProject}
+                onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
                 onRestore={isTrashView ? handleRestoreProject : undefined}
                 isTrash={isTrashView}
               />
