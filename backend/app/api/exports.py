@@ -31,69 +31,96 @@ async def export_memo(
     user: MockUser = Depends(get_current_user),
 ):
     """Export memo to DOCX"""
-    # Verify access
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
+    import logging
+    logger = logging.getLogger(__name__)
     
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    
-    # Get memo version
-    if data.memo_version_id:
-        memo_result = await db.execute(
-            select(MemoVersion).where(
-                MemoVersion.id == data.memo_version_id,
-                MemoVersion.initiative_id == initiative_id,
+    try:
+        logger.info(f"Export request for initiative {initiative_id} by user {user.uid}")
+        
+        # Verify access
+        result = await db.execute(
+            select(Initiative).where(
+                Initiative.id == initiative_id,
+                Initiative.user_id == user.uid,
             )
         )
-    else:
-        memo_result = await db.execute(
-            select(MemoVersion)
-            .where(MemoVersion.initiative_id == initiative_id)
-            .order_by(MemoVersion.created_at.desc())
-            .limit(1)
+        initiative = result.scalar_one_or_none()
+        
+        if not initiative:
+            logger.warning(f"Initiative {initiative_id} not found for user {user.uid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Initiative not found",
+            )
+        
+        # Get memo version
+        if data.memo_version_id:
+            memo_result = await db.execute(
+                select(MemoVersion).where(
+                    MemoVersion.id == data.memo_version_id,
+                    MemoVersion.initiative_id == initiative_id,
+                )
+            )
+        else:
+            memo_result = await db.execute(
+                select(MemoVersion)
+                .where(MemoVersion.initiative_id == initiative_id)
+                .order_by(MemoVersion.created_at.desc())
+                .limit(1)
+            )
+        
+        memo = memo_result.scalar_one_or_none()
+        
+        if not memo:
+            logger.warning(f"No memo found for initiative {initiative_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No memo found to export",
+            )
+        
+        logger.info(f"Found memo {memo.id}, generating DOCX...")
+        
+        # Generate DOCX
+        exporter = DocxExporterService()
+        memo_content = MemoContent(**memo.content)
+        
+        docx_bytes = exporter.generate(
+            memo_content=memo_content,
+            initiative_title=initiative.title or "Untitled Initiative",
+        )
+        
+        logger.info(f"DOCX generated ({len(docx_bytes)} bytes), saving to storage...")
+        
+        # Save to storage
+        storage = get_storage()
+        filename = f"memo_{initiative.title or 'untitled'}_{memo.id}.docx".replace(" ", "_")
+        export_path = await storage.save(docx_bytes, filename, folder="exports")
+        
+        logger.info(f"Saved to {export_path}, updating memo record...")
+        
+        # Update memo with export path
+        memo.export_path = export_path
+        await db.commit()
+        
+        logger.info(f"Export complete for memo {memo.id}")
+        
+        return ExportResponse(
+            success=True,
+            export_id=memo.id,
+            download_url=f"/api/v1/exports/{memo.id}",
+            filename=filename,
         )
     
-    memo = memo_result.scalar_one_or_none()
-    
-    if not memo:
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Log and wrap unexpected errors
+        logger.error(f"Export failed for initiative {initiative_id}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No memo found to export",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Export failed: {str(e)}",
         )
-    
-    # Generate DOCX
-    exporter = DocxExporterService()
-    memo_content = MemoContent(**memo.content)
-    
-    docx_bytes = exporter.generate(
-        memo_content=memo_content,
-        initiative_title=initiative.title or "Untitled Initiative",
-    )
-    
-    # Save to storage
-    storage = get_storage()
-    filename = f"memo_{initiative.title or 'untitled'}_{memo.id}.docx".replace(" ", "_")
-    export_path = await storage.save(docx_bytes, filename, folder="exports")
-    
-    # Update memo with export path
-    memo.export_path = export_path
-    await db.commit()
-    
-    return ExportResponse(
-        success=True,
-        export_id=memo.id,
-        download_url=f"/api/v1/exports/{memo.id}",
-        filename=filename,
-    )
 
 
 @router.get("/exports/{memo_id}")

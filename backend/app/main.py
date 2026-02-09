@@ -92,3 +92,19 @@ async def debug_cors():
         "cors_origins_used": cors_origins,
         "cors_origins_type": str(type(cors_origins)),
     }
+
+
+@app.get("/debug/config")
+async def debug_config():
+    """Debug endpoint to check application configuration"""
+    return {
+        "storage_type": settings.storage_type,
+        "exports_dir": settings.exports_dir,
+        "uploads_dir": settings.uploads_dir,
+        "exports_dir_exists": os.path.exists(settings.exports_dir),
+        "uploads_dir_exists": os.path.exists(settings.uploads_dir),
+        "debug_mode": settings.debug,
+        "database_host": "***" if settings.database_url else None,  # Don't expose full URL
+        "openai_configured": bool(settings.openai_api_key),
+        "firebase_configured": bool(settings.firebase_project_id),
+    }
