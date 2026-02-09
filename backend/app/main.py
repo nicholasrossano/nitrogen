@@ -108,3 +108,65 @@ async def debug_config():
         "openai_configured": bool(settings.openai_api_key),
         "firebase_configured": bool(settings.firebase_project_id),
     }
+
+
+@app.get("/debug/test-export/{initiative_id}")
+async def debug_test_export(initiative_id: str):
+    """Debug endpoint to test export without auth - REMOVE IN PRODUCTION"""
+    from sqlalchemy import select
+    from app.core.database import get_db
+    from app.models.initiative import Initiative
+    from app.models.memo import MemoVersion
+    from uuid import UUID
+    
+    try:
+        initiative_uuid = UUID(initiative_id)
+    except ValueError:
+        return {"error": "Invalid initiative ID format"}
+    
+    db_gen = get_db()
+    db = await anext(db_gen)
+    
+    try:
+        # Check initiative exists
+        result = await db.execute(
+            select(Initiative).where(Initiative.id == initiative_uuid)
+        )
+        initiative = result.scalar_one_or_none()
+        
+        if not initiative:
+            return {"error": "Initiative not found", "initiative_id": initiative_id}
+        
+        # Check memo exists
+        memo_result = await db.execute(
+            select(MemoVersion)
+            .where(MemoVersion.initiative_id == initiative_uuid)
+            .order_by(MemoVersion.created_at.desc())
+            .limit(1)
+        )
+        memo = memo_result.scalar_one_or_none()
+        
+        if not memo:
+            return {
+                "error": "No memo found for this initiative",
+                "initiative_id": initiative_id,
+                "initiative_user_id": str(initiative.user_id),
+                "initiative_title": initiative.title,
+            }
+        
+        # Check memo content structure
+        return {
+            "initiative_found": True,
+            "initiative_id": str(initiative.id),
+            "initiative_user_id": str(initiative.user_id),
+            "initiative_title": initiative.title,
+            "memo_found": True,
+            "memo_id": str(memo.id),
+            "memo_content_keys": list(memo.content.keys()) if memo.content else [],
+            "memo_has_citations": "citations" in (memo.content or {}),
+            "export_path": memo.export_path,
+        }
+    except Exception as e:
+        return {"error": str(e), "error_type": type(e).__name__}
+    finally:
+        await db.close()
