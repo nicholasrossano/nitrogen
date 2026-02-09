@@ -115,6 +115,7 @@ async def upload_evidence(
     
     # Update initiative
     initiative.evidence_ready = True
+    initiative.touch()  # Update the initiative's updated_at timestamp
     await db.commit()
     
     # Get chunk count
