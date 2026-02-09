@@ -19,6 +19,11 @@ async function getAuthToken(): Promise<string | null> {
     return 'REDACTED_DEV_TOKEN';
   }
   
+  // In access code bypass mode (production), return mock token
+  if (localStorage.getItem('nitrogen_access_granted') === 'true') {
+    return 'REDACTED_DEV_TOKEN';
+  }
+  
   try {
     const { getAuth } = await import('firebase/auth');
     const { app } = await import('./firebase');
