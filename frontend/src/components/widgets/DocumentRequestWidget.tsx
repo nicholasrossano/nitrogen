@@ -126,7 +126,7 @@ export function DocumentRequestWidget({
                 onClick={handleNoDocuments}
                 className="upload-btn border-solid"
               >
-                I don't have any documents
+                I don&apos;t have any documents
               </button>
             </>
           )}

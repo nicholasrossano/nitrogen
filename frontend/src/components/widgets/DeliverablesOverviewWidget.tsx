@@ -117,7 +117,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
       {/* Deliverables */}
       <div className="p-5 space-y-4 bg-white">
         <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wide">
-          What We'll Generate
+          What We&apos;ll Generate
         </h4>
         
         <div className="flex flex-wrap items-center gap-2">

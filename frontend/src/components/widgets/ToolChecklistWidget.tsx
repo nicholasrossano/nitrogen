@@ -86,7 +86,7 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
         <h3 className="text-sm font-semibold text-text-primary">Available Tools</h3>
         <p className="text-sm text-text-secondary">
-          Select the deliverables you'd like to prepare
+          Select the deliverables you&apos;d like to prepare
         </p>
       </div>
 
