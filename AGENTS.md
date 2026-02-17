@@ -22,27 +22,11 @@
 - If you see improvements, list them as optional follow-ups instead of doing them.
 
 **Learning & iteration:**
-- When you give feedback or correction (e.g., "don't do X", "prefer Y approach"), I may propose adding it as a best practice to this file.
+- When I receive feedback or correction from you, interpret whether it reflects a reusable pattern or preference.
+- If it seems fundamental enough (not just a one-off fix), add it to AGENTS.md automatically.
 - Keep additions lightweight and actionable. Avoid overly broad rules.
 - Organize new practices under relevant sections (General Workflow, UI/Design, or create domain-specific sections like Backend, Testing, etc.).
-- After significant corrections, ask: "Should I capture this as a rule in AGENTS.md?"
+- Mention the update briefly: "Added to AGENTS.md: [rule]"
 
 ## UI/Design
-Follow `Docs/STYLEGUIDE.md` and `shared/design/DesignTokens.swift` as the source of truth.
-
-**Codex Guardrails**
-- Make surgical UI changes only; avoid sweeping restyles.
-- Reuse existing tokens and components before introducing anything new.
-- Do not invent new colors, fonts, or radii without explicit request.
-- Prefer `DesignTokens` for new UI work; keep legacy values untouched unless scoped.
-- No renaming of existing types/files unless explicitly requested.
-- No style changes outside the feature being edited.
-- Preserve current glass/material usage patterns; do not add new glass effects by default.
-- Keep Avenir as the default body font and Didot for hero moments only.
-- Respect the existing spacing scale; avoid odd/new padding values.
-- Maintain rounded corners (18–25 for cards/pills, 50 for capsules).
-- Keep shadows subtle; avoid heavy or colored shadows outside onboarding glow.
-- Use SF Symbols for icons; don't add new icon packs.
-- Ensure tap targets stay accessible (aim ≥44pt for primary actions).
-- Support Dynamic Type where existing views already do.
-- Match existing haptic patterns (mostly light; medium/heavy for emphasis).
+Follow `Docs/STYLEGUIDE.md` as the source of truth.
