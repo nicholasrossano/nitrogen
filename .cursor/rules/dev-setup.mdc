@@ -12,7 +12,25 @@ alwaysApply: true
 - **Backend**: `http://localhost:8000`
 - **Database**: Neon cloud (configured in backend/.env)
 
-## Starting Development Servers
+## Local emulator (full stack) — do this every time
+
+All three steps are required for the app to work (e.g. projects will not load without the backend).
+
+1. **Backend** (Terminal 1):
+   ```bash
+   cd backend
+   python3 -m uvicorn app.main:app --reload --port 8000
+   ```
+2. **Frontend** (Terminal 2):
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+3. **Browser**: open `http://localhost:3000` (e.g. `open http://localhost:3000` on macOS).
+
+When asked to "start the local emulator" or "run the app locally", start backend and frontend (both in background if appropriate), then open the app URL in the default browser.
+
+## Starting Development Servers (reference)
 
 ### Backend (Terminal 1)
 ```bash

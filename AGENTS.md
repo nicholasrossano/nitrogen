@@ -30,3 +30,6 @@
 
 ## UI/Design
 Follow `Docs/STYLEGUIDE.md` as the source of truth.
+
+## Dev / local run
+When starting the "local emulator" or running the app locally, follow `.cursor/rules/dev-setup.mdc`: start **backend** (port 8000), **frontend** (port 3000), and **open** `http://localhost:3000` in the browser. All three are required (e.g. projects won’t load without the backend).
