@@ -344,7 +344,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
                           <p className="text-sm font-medium text-text-primary mt-1">{citation.source_title}</p>
                           {selectedCitation?.number === citation.number && (
                             <p className="text-sm text-text-secondary mt-3 border-l border-divider pl-3">
-                              "{citation.excerpt}"
+                              &quot;{citation.excerpt}&quot;
                             </p>
                           )}
                         </div>
