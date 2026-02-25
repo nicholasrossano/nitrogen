@@ -32,4 +32,34 @@
 Follow `Docs/STYLEGUIDE.md` as the source of truth.
 
 ## Dev / local run
-When starting the "local emulator" or running the app locally, follow `.cursor/rules/dev-setup.mdc`: start **backend** (port 8000), **frontend** (port 3000), and **open** `http://localhost:3000` in the browser. All three are required (e.g. projects won’t load without the backend).
+When starting the "local emulator" or running the app locally, follow `.cursor/rules/dev-setup.mdc`: start **backend** (port 8000), **frontend** (port 3000), and **open** `http://localhost:3000` in the browser. All three are required (e.g. projects won't load without the backend).
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | Port | Command |
+|---------|------|---------|
+| PostgreSQL (pgvector) | 5432 | `sudo docker start nitrogen-db` (container already exists) |
+| Backend (FastAPI) | 8000 | `cd backend && python3 -m uvicorn app.main:app --reload --port 8000` |
+| Frontend (Next.js) | 3000 | `cd frontend && npm run dev` |
+
+### Running services
+- **Database**: PostgreSQL with pgvector runs in a Docker container named `nitrogen-db`. Start with `sudo docker start nitrogen-db`. Verify with `sudo docker exec nitrogen-db pg_isready -U postgres`.
+- **Backend**: See `.cursor/rules/dev-setup.mdc` for standard commands. Ensure `PATH` includes `/home/ubuntu/.local/bin` (pip install location).
+- **Frontend**: See `.cursor/rules/dev-setup.mdc`. If you see module errors (`Cannot find module './vendor-chunks/...'`), clear the Next.js cache: `cd frontend && rm -rf .next && npm run dev`.
+
+### Auth in dev mode
+- Firebase is **not configured** in the Cloud VM. The backend automatically falls back to a "shared-user" mock auth when `FIREBASE_PROJECT_ID` is unset.
+- The frontend uses an **access code** bypass (code: `REDACTED_ACCESS_CODE`) — enter this on the login page to proceed without Firebase.
+
+### Key commands
+- **Lint**: `cd frontend && npx next lint`
+- **Tests**: `cd backend && python3 -m pytest tests/ -v`
+- **Build**: `cd frontend && npx next build`
+- **Migrations**: `cd backend && alembic upgrade head`
+
+### Gotchas
+- `OPENAI_API_KEY` is set to a placeholder in `backend/.env`. AI chat replies will fail with an OpenAI error unless a real key is provided via the `OPENAI_API_KEY` secret. Non-chat features (project CRUD, exports template) still work.
+- The backend reads `.env` from its own directory (`backend/.env`), not the repo root.
+- Python pip installs to `/home/ubuntu/.local/bin`; ensure this is on `PATH`.
