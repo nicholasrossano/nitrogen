@@ -180,8 +180,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           const initiative = await api.getInitiative(id);
           set({ initiative });
 
-          // If a project plan was just generated, update the store
-          if (initiative.project_plan && !get().projectPlan) {
+          // Sync the project plan from the initiative (covers both initial generation and chat-driven updates)
+          if (initiative.project_plan) {
             set({ projectPlan: initiative.project_plan });
           }
 
@@ -191,8 +191,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           const finalMessages = chatHistory?.messages || [];
           console.log('sendMessage: setting final messages', { count: finalMessages.length });
           set({ messages: finalMessages });
-
-          get()._refreshPlanInBackground(id);
         }
       );
     } catch (error) {

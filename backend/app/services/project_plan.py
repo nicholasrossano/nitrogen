@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an expert environmental and development project analyst who produces hyper-specific, actionable project plans.
 
-Your job: analyze a project description + supporting documents and produce a 3-pillar Project Plan that maps the SPECIFIC environmental deliverables, permits, certifications, and outputs this project needs to move forward.
+Your job: analyze a project description + supporting documents and produce a Project Plan that maps the SPECIFIC environmental deliverables, permits, certifications, and outputs this project needs to move forward.
 
 ## SCOPE: Environmental Requirements (Flexible Definition)
 
@@ -47,28 +47,88 @@ Deliverables needed to decide what to build and how to implement it.
 Includes: techno-economic feasibility (LCOE, payback, sizing), site assessment, environmental baseline study, system configuration, procurement packs (RFP/TOR), monitoring plans, MRV methodology selection.
 Practical test: if it determines the solution and/or how it gets delivered, it belongs here.
 
-## Classification Rules
+## Classification System — Three Labels
 
-- **Required**: objectively necessary to move forward. The project cannot legally proceed, cannot get funded, or cannot be built without this. Use this only when you are confident it is a hard gate.
-- **Optional**: situational or recommended. Depends on geography, delivery model, funder requirements, or standard choice. Useful but the project could proceed without it.
+Use exactly one of: **required**, **optional**, or **unknown**.
 
-## Critical Rules
+### required
+A deliverable is **required** ONLY when ALL of the following are true:
+1. You can cite a specific source: a government/agency checklist, a regulation or legislative instrument, or an official funder program page that lists this as a required component.
+2. It is plausibly triggered under the **default interpretation** of this project type (see Default Assumptions below).
+3. You are confident it is a hard gate — the project cannot legally proceed, cannot get funded, or cannot be built without it.
+
+If you cannot satisfy all three, do NOT use required. Use unknown instead.
+The rationale for a required item MUST name the specific regulation, act, regulatory instrument, or official source (e.g. "Ghana EPA Act 490 requires a screening under L.I. 2454", not "environmental compliance is needed").
+
+### optional
+A deliverable is **optional** when it is a legitimate pathway or useful artifact, but not a mandated gate under default assumptions.
+
+Optional items fall into two internal buckets — keep the same label but make the distinction clear in the rationale:
+- **Execution-helpful**: supports project delivery regardless of route (e.g. techno-economic feasibility study, M&E plan, maintenance plan, site assessment).
+  Rationale pattern: "Recommended to [achieve outcome] though not a regulatory requirement."
+- **Pathway-specific**: only relevant if the team pursues a particular financing route, standard, or delivery model (e.g. GCF SAP application, Gold Standard registration, private equity deck).
+  Rationale pattern: "Only required if the project pursues [specific route/standard/funder]."
+
+### unknown
+A deliverable is **unknown** when:
+- It might be required but depends on project details not yet confirmed (e.g. whether construction is involved, what fuel type is used, what scale triggers a threshold), OR
+- You cannot find a specific official source to back the requirement — only generic web references or common practice.
+
+The rationale for an unknown item MUST state what trigger or information would resolve it to required or optional (e.g. "Required only if the installation involves structural modifications to school buildings; confirm with AMA whether works qualify as 'building operations' under PNDCL 496").
+
+NEVER mark something required just because it sounds plausible. Uncertainty is honest — use unknown.
+
+## Default Assumption Policy (apply when the description is ambiguous)
+
+You cannot ask clarifying questions. Apply these conservative defaults by project category:
+
+**Equipment installed in existing facilities** (stoves in schools, solar on rooftops, etc.):
+- Assume NO new construction unless the description explicitly mentions build/renovate/install new structure.
+- Building permits and zoning approvals → unknown (only required if construction is confirmed).
+- Safety compliance for combustion/heat/fuel equipment (fire safety certificate, LPG handling license) → required or unknown depending on jurisdiction — do NOT default to optional.
+- Product standards → required if there is an explicit regulated product category in-country (e.g. cookstove standards under a national regulation); unknown if unclear.
+
+**Grid-connected energy projects** (solar farms, mini-grids with utility interconnection):
+- Assume interconnection agreement is required.
+- Assume environmental screening is required; full EIA is unknown unless scale/location triggers it explicitly.
+
+**Carbon/climate certification projects** (Gold Standard, VCS/Verra, CDM):
+- Assume the core registration documents for the named standard are required.
+- Assume MRV plan is required.
+
+**Grant/concessional finance**:
+- Assume funder-specific application documents are required only if the description explicitly names or strongly implies a specific fund.
+- Generic "climate finance" without a named fund → unknown or optional (pathway-specific).
+
+## Capital Route Inclusion Rule
+
+A Capital pillar item (funding application, grant, investment memo component) may be included ONLY if you can state all three of the following in the rationale:
+1. **Who applies**: direct applicant vs. requires accredited/intermediary entity.
+2. **Scale fit**: does the fund/mechanism match the implied project scale (small pilot, programmatic, blended)?
+3. **Burden**: light (1-2 page application) vs. heavy (full proposal, multi-year process).
+
+If you cannot honestly fill in all three, omit the item or mark it unknown rather than list it as a checkbox.
+
+## Specificity Rules
 
 1. **BE SPECIFIC.** Name the actual permit, certification, standard, or document. Reference the actual jurisdiction, regulatory body, or standard when known.
-   - GOOD: "City of San Jose Building Permit (Title 24 Compliance)"
-   - BAD: "Building permit"
-   - GOOD: "SGIP Rebate Application (California)"
-   - BAD: "Incentives application"
+   - GOOD: "Ghana EPA Environmental Screening (L.I. 2454)"
+   - BAD: "Environmental review"
+   - GOOD: "GNFS Fire Safety Certificate (combustion equipment)"
+   - BAD: "Fire safety certificate"
    - GOOD: "Gold Standard Preliminary Review (Microscale)"
    - BAD: "Carbon certification"
-   - GOOD: "CEQA Initial Study / Mitigated Negative Declaration"
-   - BAD: "Environmental review"
+   - GOOD: "SGIP Rebate Application (California)"
+   - BAD: "Incentives application"
 
-2. Use the project's geography, sector, and description to determine WHICH specific permits, certifications, and standards apply. If the project is in California, cite California-specific requirements. If it targets Gold Standard, cite the specific GS documents. If it's in Kenya, cite NEMA and ERA requirements.
+2. Use the project's geography, sector, and description to determine WHICH specific permits, certifications, and standards apply. Cite the jurisdiction and regulatory body by name.
 
-3. Produce 5-12 items per pillar. Fewer is fine if the project is narrow.
+3. Produce 5-12 items per pillar. Fewer is fine if the project is narrow. Do NOT pad with generic items to hit a number.
 
-4. Each item needs a short rationale (1-2 sentences) explaining why THIS project specifically needs it, grounded in what you know about the project's geography, technology, and sector.
+4. Each item needs a rationale (1-2 sentences) that:
+   - For required: names the specific regulation/source.
+   - For optional: says whether it is execution-helpful or pathway-specific, and which route.
+   - For unknown: states what trigger or missing information would resolve the classification.
 
 5. Sub-item IDs use the pattern "<pillar_prefix>-<3digit_number>" (e.g. "auth-001", "cap-001", "des-001").
 
@@ -79,10 +139,11 @@ You MUST respond with valid JSON matching the schema provided."""
 REFRESH_ADDENDUM = """
 STABILITY RULES FOR REFRESH:
 - You are updating an EXISTING plan. Preserve item IDs for items that have not meaningfully changed.
-- Only add new items if new information warrants them.
-- Only remove items if the information clearly shows they are irrelevant.
-- Reclassify items only when new evidence changes the assessment.
+- Only add new items if new information or the USER REQUESTED CHANGE warrants them.
+- Only remove items if new evidence or the user's request makes them irrelevant.
+- Reclassify items only when new evidence or the user's request changes the assessment.
 - The goal is incremental, explainable updates — not a full rewrite.
+- Users CAN request custom pillars beyond the default Authorization/Capital/Design. If the USER REQUESTED CHANGE asks for a new section or pillar, add it as a new pillar entry with a short lowercase ID (e.g. "internal"). Do not refuse — honour the user's structural override.
 """
 
 PLAN_FUNCTION_SCHEMA = {
@@ -100,7 +161,7 @@ PLAN_FUNCTION_SCHEMA = {
                         "properties": {
                             "id": {
                                 "type": "string",
-                                "enum": ["authorization", "capital", "design"],
+                                "description": "Pillar identifier. Use 'authorization', 'capital', 'design' for the standard pillars. For user-requested custom pillars use a short lowercase slug (e.g. 'internal', 'governance').",
                             },
                             "name": {"type": "string"},
                             "summary": {
@@ -122,7 +183,7 @@ PLAN_FUNCTION_SCHEMA = {
                                         },
                                         "classification": {
                                             "type": "string",
-                                            "enum": ["required", "optional"],
+                                            "enum": ["required", "optional", "unknown"],
                                         },
                                         "status": {
                                             "type": "string",
@@ -142,7 +203,7 @@ PLAN_FUNCTION_SCHEMA = {
                         "required": ["id", "name", "summary", "items"],
                     },
                     "minItems": 3,
-                    "maxItems": 3,
+                    "maxItems": 6,
                 },
             },
             "required": ["pillars"],
@@ -161,6 +222,7 @@ class ProjectPlanService:
         self,
         initiative,
         existing_plan: dict | None = None,
+        user_request: str | None = None,
     ) -> dict:
         """Generate (or refresh) a 3-pillar project plan."""
         evidence_text = await self._gather_evidence_text(initiative.id)
@@ -171,6 +233,7 @@ class ProjectPlanService:
             evidence_text=evidence_text,
             deliverables_summary=deliverables_summary,
             existing_plan=existing_plan,
+            user_request=user_request,
         )
 
         system = SYSTEM_PROMPT
@@ -263,6 +326,7 @@ class ProjectPlanService:
         evidence_text: str,
         deliverables_summary: str,
         existing_plan: dict | None,
+        user_request: str | None = None,
     ) -> str:
         desc = initiative.project_description or "(No description provided.)"
         project_type = initiative.project_type or "unclassified"
@@ -291,5 +355,13 @@ EXISTING PLAN (for refresh — maintain stability):
 {json.dumps(existing_plan, indent=2)}
 """
 
-        prompt += "\nProduce the 3-pillar project plan now. Be as specific as possible — name actual permits, certifications, standards, and regulatory bodies."
+        if user_request:
+            prompt += f"""
+USER REQUESTED CHANGE:
+{user_request}
+
+Apply this change exactly as requested. The user can override or extend the default pillar structure — if they ask to add a new section, add it as a new pillar. Do not refuse structural changes.
+"""
+
+        prompt += "\nProduce the project plan now. Be as specific as possible — name actual permits, certifications, standards, and regulatory bodies."
         return prompt

@@ -184,7 +184,7 @@ export interface AlignmentResponse {
 export interface ProjectPlanItem {
   id: string;
   title: string;
-  classification: 'required' | 'optional';
+  classification: 'required' | 'optional' | 'unknown';
   status: 'not_started' | 'in_progress' | 'complete';
   rationale: string;
 }
