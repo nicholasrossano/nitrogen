@@ -23,11 +23,13 @@ class ToolRegistry:
         from app.tools.investment_memo import InvestmentMemoTool
         from app.tools.due_diligence_checklist import DueDiligenceChecklistTool
         from app.tools.lcoe_tool import LCOETool
+        from app.tools.carbon_tool import CarbonTool
         
         tools = [
             InvestmentMemoTool(),
             DueDiligenceChecklistTool(),
             LCOETool(),
+            CarbonTool(),
         ]
         
         for tool in tools:
@@ -116,6 +118,20 @@ class ToolRegistry:
             "discount rate": ["lcoe_model"],
             "capacity factor": ["lcoe_model"],
             "tariff": ["lcoe_model"],
+            
+            # Carbon / emissions
+            "carbon": ["carbon_model"],
+            "emissions": ["carbon_model"],
+            "tco2": ["carbon_model"],
+            "tco2e": ["carbon_model"],
+            "emission reductions": ["carbon_model"],
+            "carbon credits": ["carbon_model"],
+            "fnrb": ["carbon_model"],
+            "baseline emissions": ["carbon_model"],
+            "er calculation": ["carbon_model"],
+            "leakage": ["carbon_model"],
+            "gold standard": ["carbon_model"],
+            "emission factor": ["carbon_model"],
         }
         
         # Calculate scores for each tool

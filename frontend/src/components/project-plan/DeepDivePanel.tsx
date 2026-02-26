@@ -256,8 +256,8 @@ export function DeepDivePanel({
               {/* No sources note */}
               {result.sources.length === 0 && !loading && (
                 <p className="text-xs text-text-tertiary italic">
-                  No authoritative sources were retrieved for this item. Elements marked
-                  Unknown require independent verification against official sources.
+                  The provided information was derived from generally available information.
+                  Validate requirements against official sources.
                 </p>
               )}
 

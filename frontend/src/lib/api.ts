@@ -668,6 +668,34 @@ export const api = {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    const processLine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) return;
+      const json_str = trimmed.slice(6);
+      if (!json_str) return;
+
+      try {
+        const event = JSON.parse(json_str);
+        switch (event.type) {
+          case 'thinking':
+            onThinking(event.text);
+            break;
+          case 'word':
+            onWord(event.content);
+            break;
+          case 'complete':
+            console.log('[SSE] complete event received, widget_type:', event.widget_type);
+            onComplete(event);
+            break;
+          case 'error':
+            onError(event.message);
+            break;
+        }
+      } catch (e) {
+        console.warn('[SSE] Failed to parse:', json_str.slice(0, 100), e);
+      }
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -677,31 +705,14 @@ export const api = {
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const json_str = trimmed.slice(6);
-        if (!json_str) continue;
-
-        try {
-          const event = JSON.parse(json_str);
-          switch (event.type) {
-            case 'thinking':
-              onThinking(event.text);
-              break;
-            case 'word':
-              onWord(event.content);
-              break;
-            case 'complete':
-              onComplete(event);
-              break;
-            case 'error':
-              onError(event.message);
-              break;
-          }
-        } catch {
-          // ignore malformed chunks
-        }
+        processLine(line);
       }
+    }
+
+    // Flush remaining buffer after stream closes
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      processLine(buffer);
     }
   },
 
@@ -749,6 +760,55 @@ export const api = {
 
   async exportLCOEExcel(inputs: Record<string, any>): Promise<Blob> {
     const url = `${API_URL}/api/v1/lcoe/export`;
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ inputs }),
+    });
+    if (!resp.ok) throw new Error('Export failed');
+    return resp.blob();
+  },
+
+  // Carbon endpoints
+  async recalculateCarbon(inputs: Record<string, any>): Promise<any> {
+    return fetchApi('/api/v1/carbon/recalculate', {
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
+    });
+  },
+
+  async updateCarbonInput(
+    inputs: Record<string, any>,
+    fieldName: string,
+    value: any,
+  ): Promise<any> {
+    return fetchApi('/api/v1/carbon/update-input', {
+      method: 'POST',
+      body: JSON.stringify({
+        inputs,
+        field_name: fieldName,
+        value,
+        source: 'user',
+        status: 'confirmed',
+      }),
+    });
+  },
+
+  async getCarbonSensitivity(
+    inputs: Record<string, any>,
+    params?: string[],
+  ): Promise<any> {
+    return fetchApi('/api/v1/carbon/sensitivity', {
+      method: 'POST',
+      body: JSON.stringify({ inputs, params }),
+    });
+  },
+
+  async exportCarbonExcel(inputs: Record<string, any>): Promise<Blob> {
+    const url = `${API_URL}/api/v1/carbon/export`;
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
