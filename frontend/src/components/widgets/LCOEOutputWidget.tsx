@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   Calculator,
   TrendingUp,
@@ -70,32 +70,9 @@ export function LCOEOutputWidget({
   const [isRecalculating, setIsRecalculating] = useState(false);
 
   const result = data?.result;
-  const inputs = data?.inputs || {};
+  const inputs = useMemo(() => data?.inputs || {}, [data]);
   const sensitivity: any[] = data?.sensitivity || [];
   const isUnruly = data?.is_unruly ?? false;
-
-  if (!result) return null;
-
-  const currency = result.currency || 'USD';
-  const qualityStyle = QUALITY_STYLES[result.quality_label] || QUALITY_STYLES.moderate;
-  const QualityIcon = qualityStyle.icon;
-
-  const cashFlows = result.cash_flows || [];
-  const displayCashFlows = cashFlows.slice(0, isUnruly ? 10 : cashFlows.length);
-
-  const sensitivityByParam = sensitivity.reduce((acc: Record<string, any[]>, p: any) => {
-    if (!acc[p.param_name]) acc[p.param_name] = [];
-    acc[p.param_name].push(p);
-    return acc;
-  }, {});
-
-  const groupedInputs = CATEGORY_ORDER.map((cat) => ({
-    category: cat,
-    label: CATEGORY_LABELS[cat] || cat,
-    inputs: Object.values(inputs).filter(
-      (i: any) => (i.category || 'general') === cat
-    ),
-  })).filter((g) => g.inputs.length > 0);
 
   const handleExport = useCallback(async () => {
     setIsExporting(true);
@@ -147,6 +124,29 @@ export function LCOEOutputWidget({
     },
     [commitEdit, cancelEdit]
   );
+
+  if (!result) return null;
+
+  const currency = result.currency || 'USD';
+  const qualityStyle = QUALITY_STYLES[result.quality_label] || QUALITY_STYLES.moderate;
+  const QualityIcon = qualityStyle.icon;
+
+  const cashFlows = result.cash_flows || [];
+  const displayCashFlows = cashFlows.slice(0, isUnruly ? 10 : cashFlows.length);
+
+  const sensitivityByParam = sensitivity.reduce((acc: Record<string, any[]>, p: any) => {
+    if (!acc[p.param_name]) acc[p.param_name] = [];
+    acc[p.param_name].push(p);
+    return acc;
+  }, {});
+
+  const groupedInputs = CATEGORY_ORDER.map((cat) => ({
+    category: cat,
+    label: CATEGORY_LABELS[cat] || cat,
+    inputs: Object.values(inputs).filter(
+      (i: any) => (i.category || 'general') === cat
+    ),
+  })).filter((g) => g.inputs.length > 0);
 
   return (
     <div className="card-elevated overflow-hidden">

@@ -59,9 +59,12 @@ export function ChatPanel({
   useEffect(() => { ensureGroup(initiativeId); }, [initiativeId, ensureGroup]);
 
   const group = useChatTabsStore((s) => s.groups[initiativeId]);
-  const tabs = group?.tabs ?? [
-    { id: ONBOARDING_TAB_ID, title: 'Onboarding', createdAt: 0, isOnboarding: true, messages: [] as ChatMessage[] },
-  ];
+  const tabs = useMemo(
+    () => group?.tabs ?? [
+      { id: ONBOARDING_TAB_ID, title: 'Onboarding', createdAt: 0, isOnboarding: true, messages: [] as ChatMessage[] },
+    ],
+    [group?.tabs],
+  );
   const activeTabId = group?.activeTabId ?? ONBOARDING_TAB_ID;
   const closedTabs = group?.closedTabs ?? [];
 
