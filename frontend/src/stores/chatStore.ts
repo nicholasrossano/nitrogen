@@ -16,6 +16,8 @@ export interface ComplianceChatMessage {
   sources?: SourceCitation[] | null;
   thinkingLines?: string[];
   completionMeta?: CompletionMeta;
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
 }
 
 export interface ChatSession {
@@ -121,6 +123,8 @@ export const useChatStore = create<ChatState>()(
                 sources: payload.sources,
                 thinkingLines,
                 completionMeta: meta,
+                widget_type: payload.widget_type || null,
+                widget_data: payload.widget_data || null,
               };
 
               set((s) => ({

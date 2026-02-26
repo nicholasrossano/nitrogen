@@ -22,10 +22,12 @@ class ToolRegistry:
         # Import tools here to avoid circular imports
         from app.tools.investment_memo import InvestmentMemoTool
         from app.tools.due_diligence_checklist import DueDiligenceChecklistTool
+        from app.tools.lcoe_tool import LCOETool
         
         tools = [
             InvestmentMemoTool(),
             DueDiligenceChecklistTool(),
+            LCOETool(),
         ]
         
         for tool in tools:
@@ -100,6 +102,20 @@ class ToolRegistry:
             "review": ["due_diligence_checklist"],
             "audit": ["due_diligence_checklist"],
             "compliance": ["due_diligence_checklist"],
+            
+            # LCOE / economics
+            "lcoe": ["lcoe_model"],
+            "levelized": ["lcoe_model"],
+            "cost of energy": ["lcoe_model"],
+            "cost per kwh": ["lcoe_model"],
+            "economics": ["lcoe_model"],
+            "feasibility": ["lcoe_model"],
+            "capex": ["lcoe_model"],
+            "opex": ["lcoe_model"],
+            "wacc": ["lcoe_model"],
+            "discount rate": ["lcoe_model"],
+            "capacity factor": ["lcoe_model"],
+            "tariff": ["lcoe_model"],
         }
         
         # Calculate scores for each tool
