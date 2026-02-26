@@ -27,7 +27,12 @@ const DEFAULT_VISIBLE = 10;
 
 export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
-  const items = pillar.items || [];
+  const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
+  const items = (pillar.items || []).slice().sort((a, b) => {
+    const aOrder = CLASSIFICATION_ORDER[a.classification ?? 'optional'] ?? 1;
+    const bOrder = CLASSIFICATION_ORDER[b.classification ?? 'optional'] ?? 1;
+    return aOrder - bOrder;
+  });
   const visibleItems = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
   const hiddenCount = items.length - DEFAULT_VISIBLE;
   const requiredCount = items.filter(i => i.classification === 'required').length;

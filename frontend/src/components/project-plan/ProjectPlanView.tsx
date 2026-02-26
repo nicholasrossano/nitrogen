@@ -152,8 +152,8 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
       {/* Main row: pillar grid + deep dive panel side by side */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* 3-column pillar tree — squishes when panel is open */}
-        <div className="flex-1 overflow-y-auto p-4 pt-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="@container flex-1 overflow-y-auto p-4 pt-5">
+          <div className="grid grid-cols-1 @[32rem]:grid-cols-2 @[52rem]:grid-cols-3 gap-6">
             {pillars.map(pillar => (
               <PillarColumn
                 key={pillar.id}

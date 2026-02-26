@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/container-queries": "^0.1.1",
     "clsx": "^2.1.0",
     "firebase": "^9.23.0",
     "lucide-react": "^0.323.0",
