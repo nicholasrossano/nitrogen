@@ -203,7 +203,7 @@ export function DeepDivePanel({
               {result.dependencies.length > 0 && (
                 <section>
                   <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                    Dependencies &amp; triggers
+                    Dependencies
                   </h3>
                   <div className="space-y-2">
                     {result.dependencies.map((dep, i) => (
