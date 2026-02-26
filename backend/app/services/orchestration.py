@@ -148,6 +148,23 @@ ORCHESTRATION_ACTIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_carbon_tool",
+            "description": "Run the Carbon Emissions Calculator to estimate emission reductions (tCO₂e). Use this when the user asks about carbon credits, emission reductions, baseline vs project emissions, cookstove methodology, fNRB, leakage, tCO₂e, or Gold Standard ER calculations. Also use when discussing fuel consumption savings from clean cooking or improved stove programs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Brief message (1-2 sentences) telling the user you're building their carbon emissions model."
+                    }
+                },
+                "required": ["message"]
+            }
+        }
+    },
 ]
 
 
@@ -226,6 +243,12 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 
 **Rule 9: User uploads a document and asks "is this viable?" or "what's the cost?" for an energy project**
 → Use **run_lcoe_tool** — the tool will extract inputs from docs and fill gaps with assumptions
+
+**Rule 10: User asks about carbon credits, emission reductions, tCO₂e, baseline vs project emissions, cookstove methodology, fNRB, leakage, or Gold Standard ER calculations**
+→ Use **run_carbon_tool** — extract what you can from conversation and build the carbon model
+
+**Rule 11: User discusses a clean cooking or cookstove project and asks about carbon credits, fuel savings impact, or emission reduction potential**
+→ Use **run_carbon_tool** — the tool will extract inputs and fill gaps with methodology-aligned assumptions
 
 ## Style
 - Be proactive and directive — move toward the plan quickly

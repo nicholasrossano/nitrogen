@@ -1,0 +1,583 @@
+'use client';
+
+import { useState, useCallback, useMemo } from 'react';
+import {
+  Leaf,
+  TrendingUp,
+  Download,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  Pencil,
+  AlertCircle,
+  MessageSquare,
+  FileText,
+  User,
+  HelpCircle,
+} from 'lucide-react';
+import { api } from '@/lib/api';
+
+interface CarbonOutputWidgetProps {
+  data: Record<string, any>;
+  initiativeId: string;
+  isActive?: boolean;
+}
+
+const SOURCE_ICONS: Record<string, typeof MessageSquare> = {
+  chat: MessageSquare,
+  doc: FileText,
+  user: User,
+  assumption: Sparkles,
+};
+
+const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
+  inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
+  assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
+  missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
+};
+
+const APPLIES_TO_STYLES: Record<string, { bg: string; text: string }> = {
+  baseline: { bg: 'bg-orange-50', text: 'text-orange-700' },
+  project: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  leakage: { bg: 'bg-purple-50', text: 'text-purple-700' },
+  general: { bg: 'bg-gray-50', text: 'text-gray-600' },
+};
+
+const QUALITY_STYLES: Record<string, { bg: string; text: string; icon: typeof CheckCircle2 }> = {
+  high: { bg: 'bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
+  moderate: { bg: 'bg-yellow-50', text: 'text-yellow-700', icon: AlertTriangle },
+  low: { bg: 'bg-red-50', text: 'text-red-700', icon: AlertTriangle },
+};
+
+const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'leakage', 'general'];
+const CATEGORY_LABELS: Record<string, string> = {
+  activity: 'Activity',
+  baseline: 'Baseline Scenario',
+  project: 'Project Scenario',
+  emissions: 'Emission Factors',
+  leakage: 'Leakage',
+  general: 'General',
+};
+
+export function CarbonOutputWidget({
+  data: initialData,
+  initiativeId,
+  isActive = true,
+}: CarbonOutputWidgetProps) {
+  const [data, setData] = useState(initialData);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [showSensitivity, setShowSensitivity] = useState(false);
+  const [showInputs, setShowInputs] = useState(false);
+  const [showAssumptions, setShowAssumptions] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  const result = data?.result;
+  const inputs = useMemo(() => data?.inputs || {}, [data]);
+  const sensitivity: any[] = data?.sensitivity || [];
+  const isUnruly = data?.is_unruly ?? false;
+
+  const assumptions = useMemo(() => {
+    return Object.values(inputs).filter((i: any) => i.status === 'assumed');
+  }, [inputs]);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const blob = await api.exportCarbonExcel(inputs);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'carbon_er_model.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail
+    } finally {
+      setIsExporting(false);
+    }
+  }, [inputs]);
+
+  const startEdit = useCallback((fieldName: string, currentValue: any) => {
+    setEditingField(fieldName);
+    setEditValue(currentValue?.toString() ?? '');
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingField(null);
+    setEditValue('');
+  }, []);
+
+  const commitEdit = useCallback(async () => {
+    if (!editingField) return;
+    const parsed = editValue === '' ? null : isNaN(Number(editValue)) ? editValue : Number(editValue);
+    setIsRecalculating(true);
+    try {
+      const newData = await api.updateCarbonInput(inputs, editingField, parsed);
+      setData(newData);
+    } catch {
+      // keep old values
+    } finally {
+      setEditingField(null);
+      setEditValue('');
+      setIsRecalculating(false);
+    }
+  }, [editingField, editValue, inputs]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') commitEdit();
+      if (e.key === 'Escape') cancelEdit();
+    },
+    [commitEdit, cancelEdit]
+  );
+
+  if (!result) return null;
+
+  const qualityStyle = QUALITY_STYLES[result.quality_label] || QUALITY_STYLES.moderate;
+  const QualityIcon = qualityStyle.icon;
+
+  const erSchedule = result.er_schedule || [];
+  const displaySchedule = erSchedule.slice(0, isUnruly ? 10 : erSchedule.length);
+
+  const sensitivityByParam = sensitivity.reduce((acc: Record<string, any[]>, p: any) => {
+    if (!acc[p.param_name]) acc[p.param_name] = [];
+    acc[p.param_name].push(p);
+    return acc;
+  }, {});
+
+  const groupedInputs = CATEGORY_ORDER.map((cat) => ({
+    category: cat,
+    label: CATEGORY_LABELS[cat] || cat,
+    inputs: Object.values(inputs).filter(
+      (i: any) => (i.category || 'general') === cat
+    ),
+  })).filter((g) => g.inputs.length > 0);
+
+  const baselineEmissions = result.baseline_emissions_tco2e;
+  const projectEmissions = result.project_emissions_tco2e;
+  const leakageEmissions = result.leakage_tco2e;
+  const netER = result.net_er_tco2e;
+
+  return (
+    <div className="card-elevated overflow-hidden">
+      {/* Results headline */}
+      <div className="px-5 py-5 bg-surface-header border-b border-divider">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Leaf className="w-4 h-4 text-emerald-600" />
+              <h3 className="text-sm font-semibold text-text-primary">
+                Net Emission Reductions
+              </h3>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-text-primary tabular-nums">
+                {netER.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-sm text-text-secondary">tCO₂e / year</span>
+            </div>
+            <p className="text-[10px] text-text-tertiary mt-1">
+              Baseline – Project – Leakage = Net
+            </p>
+          </div>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${qualityStyle.bg}`}>
+            <QualityIcon className={`w-3 h-3 ${qualityStyle.text}`} />
+            <span className={`text-[10px] font-medium uppercase tracking-wider ${qualityStyle.text}`}>
+              {result.quality_label} confidence
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-text-tertiary mt-2">
+          {result.assumption_count} assumption{result.assumption_count !== 1 ? 's' : ''} used
+          &middot; {result.period_years}-year crediting period
+        </p>
+        {isRecalculating && (
+          <p className="text-xs text-accent mt-1">Recalculating…</p>
+        )}
+      </div>
+
+      {/* Emissions breakdown */}
+      <div className="px-5 py-4 bg-white border-b border-divider">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-3">
+          Emissions Breakdown (Annual)
+        </h4>
+        <div className="space-y-2">
+          {[
+            { label: 'Baseline', value: baselineEmissions, share: result.baseline_share, color: 'bg-orange-400' },
+            { label: 'Project', value: projectEmissions, share: result.project_share, color: 'bg-emerald-500' },
+            { label: 'Leakage', value: leakageEmissions, share: result.leakage_share, color: 'bg-purple-400' },
+          ].map((c) => (
+            <div key={c.label} className="flex items-center gap-3">
+              <span className="text-xs text-text-secondary w-16">{c.label}</span>
+              <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${c.color}`}
+                  style={{ width: `${(c.share * 100).toFixed(1)}%` }}
+                />
+              </div>
+              <span className="text-xs font-mono tabular-nums text-text-primary w-24 text-right">
+                {c.value.toLocaleString(undefined, { maximumFractionDigits: 2 })} t
+              </span>
+            </div>
+          ))}
+
+          <div className="flex items-center gap-3 pt-2 border-t border-stroke-subtle">
+            <span className="text-xs font-semibold text-text-primary w-16">Net ERs</span>
+            <div className="flex-1" />
+            <span className="text-xs font-bold font-mono tabular-nums text-emerald-700 w-24 text-right">
+              {netER.toLocaleString(undefined, { maximumFractionDigits: 2 })} t
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Editable Inputs Table (collapsible) */}
+      <div className="border-b border-divider">
+        <button
+          onClick={() => setShowInputs(!showInputs)}
+          className="w-full px-5 py-2.5 flex items-center justify-between bg-white hover:bg-surface-subtle transition-colors"
+        >
+          <span className="text-xs font-medium text-text-primary">
+            Inputs Table
+          </span>
+          {showInputs ? (
+            <ChevronUp className="w-3.5 h-3.5 text-text-tertiary" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 text-text-tertiary" />
+          )}
+        </button>
+        {showInputs && (
+          <div className="divide-y divide-divider">
+            {groupedInputs.map((group) => (
+              <div key={group.category}>
+                <div className="px-5 py-2 bg-surface-subtle">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    {group.label}
+                  </span>
+                </div>
+                <div className="divide-y divide-stroke-subtle">
+                  {group.inputs.map((inp: any) => {
+                    const isMissing = inp.status === 'missing';
+                    const isEditing = editingField === inp.field_name;
+                    const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
+                    const appliesToStyle = APPLIES_TO_STYLES[inp.applies_to] || APPLIES_TO_STYLES.general;
+                    const SourceIcon = SOURCE_ICONS[inp.source] || HelpCircle;
+
+                    return (
+                      <div
+                        key={inp.field_name}
+                        className={`px-5 py-2.5 flex items-center gap-3 ${
+                          isMissing ? 'bg-red-50/40' : 'bg-white'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium text-text-primary truncate">
+                              {inp.label}
+                            </span>
+                            {inp.unit && (
+                              <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
+                            )}
+                          </div>
+                          {inp.rationale && inp.status === 'assumed' && (
+                            <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
+                              {inp.rationale}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="w-16 flex justify-end">
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${appliesToStyle.bg} ${appliesToStyle.text}`}
+                          >
+                            {inp.applies_to}
+                          </span>
+                        </div>
+
+                        <div className="w-28 text-right">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={handleKeyDown}
+                              onBlur={commitEdit}
+                              autoFocus
+                              className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => isActive && startEdit(inp.field_name, inp.value)}
+                              disabled={!isActive}
+                              className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
+                            >
+                              {isMissing ? (
+                                <span className="text-red-500 italic">—</span>
+                              ) : (
+                                <span>
+                                  {typeof inp.value === 'number'
+                                    ? inp.value.toLocaleString(undefined, {
+                                        maximumFractionDigits: 6,
+                                      })
+                                    : inp.value}
+                                </span>
+                              )}
+                              {isActive && (
+                                <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="w-16 flex justify-end">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
+                          >
+                            {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                            {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
+                            {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
+                            {statusStyle.label}
+                          </span>
+                        </div>
+
+                        <div className="w-5 flex justify-center" title={`Source: ${inp.source}`}>
+                          <SourceIcon className="w-3 h-3 text-text-tertiary" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Assumptions (collapsible) */}
+      {assumptions.length > 0 && (
+        <div className="border-b border-divider">
+          <button
+            onClick={() => setShowAssumptions(!showAssumptions)}
+            className="w-full px-5 py-2.5 flex items-center justify-between bg-white hover:bg-surface-subtle transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-yellow-600" />
+              <span className="text-xs font-medium text-text-primary">
+                Assumptions ({assumptions.length})
+              </span>
+            </div>
+            {showAssumptions ? (
+              <ChevronUp className="w-3.5 h-3.5 text-text-tertiary" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-text-tertiary" />
+            )}
+          </button>
+          {showAssumptions && (
+            <div className="divide-y divide-stroke-subtle">
+              {assumptions.map((inp: any) => (
+                <div
+                  key={inp.field_name}
+                  className="px-5 py-2.5 flex items-center gap-3 bg-yellow-50/30"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-text-primary">
+                        {inp.label}
+                      </span>
+                      {inp.unit && (
+                        <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
+                      )}
+                    </div>
+                    {inp.rationale && (
+                      <p className="text-[10px] text-yellow-700 mt-0.5">
+                        {inp.rationale}
+                      </p>
+                    )}
+                  </div>
+                  <div className="w-28 text-right">
+                    <button
+                      onClick={() => isActive && startEdit(inp.field_name, inp.value)}
+                      disabled={!isActive}
+                      className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
+                    >
+                      <span>
+                        {typeof inp.value === 'number'
+                          ? inp.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                          : inp.value}
+                      </span>
+                      {isActive && (
+                        <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sensitivity (collapsible) */}
+      {sensitivity.length > 0 && (
+        <div className="border-b border-divider">
+          <button
+            onClick={() => setShowSensitivity(!showSensitivity)}
+            className="w-full px-5 py-2.5 flex items-center justify-between bg-white hover:bg-surface-subtle transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5 text-accent" />
+              <span className="text-xs font-medium text-text-primary">Sensitivity Analysis</span>
+            </div>
+            {showSensitivity ? (
+              <ChevronUp className="w-3.5 h-3.5 text-text-tertiary" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-text-tertiary" />
+            )}
+          </button>
+          {showSensitivity && (
+            <div className="px-5 py-3 space-y-4">
+              {Object.entries(sensitivityByParam).map(([param, points]: [string, any[]]) => {
+                const sorted = [...points].sort((a, b) => a.test_value - b.test_value);
+                const baseVal = points[0]?.base_value;
+                const baseNetER = netER;
+
+                return (
+                  <div key={param}>
+                    <h5 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
+                      {points[0]?.param_label || param}
+                    </h5>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-stroke-subtle">
+                            <th className="text-left py-1 pr-4 font-medium text-text-secondary">Value</th>
+                            <th className="text-right py-1 pr-4 font-medium text-text-secondary">Net ERs (tCO₂e)</th>
+                            <th className="text-right py-1 font-medium text-text-secondary">Δ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sorted.map((pt, i) => {
+                            const isBase = Math.abs(pt.test_value - baseVal) < baseVal * 0.001;
+                            const delta = baseNetER !== 0 ? ((pt.net_er - baseNetER) / baseNetER) * 100 : 0;
+                            return (
+                              <tr
+                                key={i}
+                                className={`border-b border-stroke-subtle/50 ${
+                                  isBase ? 'bg-accent-wash font-medium' : ''
+                                }`}
+                              >
+                                <td className="py-1 pr-4 tabular-nums">
+                                  {pt.test_value < 1
+                                    ? (pt.test_value * 100).toFixed(1) + '%'
+                                    : pt.test_value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  {isBase && (
+                                    <span className="ml-1 text-[10px] text-accent">(base)</span>
+                                  )}
+                                </td>
+                                <td className="py-1 pr-4 text-right tabular-nums">
+                                  {pt.net_er.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                </td>
+                                <td
+                                  className={`py-1 text-right tabular-nums ${
+                                    delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-600' : ''
+                                  }`}
+                                >
+                                  {isBase ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}%`}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ER Schedule (collapsible) */}
+      <div className="border-b border-divider">
+        <button
+          onClick={() => setShowSchedule(!showSchedule)}
+          className="w-full px-5 py-2.5 flex items-center justify-between bg-white hover:bg-surface-subtle transition-colors"
+        >
+          <span className="text-xs font-medium text-text-primary">
+            ER Schedule ({erSchedule.length} years)
+          </span>
+          {showSchedule ? (
+            <ChevronUp className="w-3.5 h-3.5 text-text-tertiary" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 text-text-tertiary" />
+          )}
+        </button>
+        {showSchedule && (
+          <div className="px-5 py-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-stroke-subtle">
+                  <th className="text-left py-1 pr-3 font-medium text-text-secondary">Year</th>
+                  <th className="text-right py-1 pr-3 font-medium text-text-secondary">Devices</th>
+                  <th className="text-right py-1 pr-3 font-medium text-text-secondary">Baseline (tCO₂e)</th>
+                  <th className="text-right py-1 pr-3 font-medium text-text-secondary">Project (tCO₂e)</th>
+                  <th className="text-right py-1 pr-3 font-medium text-text-secondary">Leakage (tCO₂e)</th>
+                  <th className="text-right py-1 font-medium text-text-secondary">Net ERs (tCO₂e)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displaySchedule.map((row: any) => (
+                  <tr key={row.year} className="border-b border-stroke-subtle/50">
+                    <td className="py-1 pr-3 tabular-nums">{row.year}</td>
+                    <td className="py-1 pr-3 text-right tabular-nums">
+                      {row.devices_active.toLocaleString()}
+                    </td>
+                    <td className="py-1 pr-3 text-right tabular-nums">
+                      {row.baseline_emissions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1 pr-3 text-right tabular-nums">
+                      {row.project_emissions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1 pr-3 text-right tabular-nums">
+                      {row.leakage.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1 text-right tabular-nums font-medium text-emerald-700">
+                      {row.net_er.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {isUnruly && erSchedule.length > displaySchedule.length && (
+              <p className="text-[10px] text-text-tertiary mt-2 text-center">
+                Showing first {displaySchedule.length} of {erSchedule.length} years — export for full schedule
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
+        <p className="text-[10px] text-text-tertiary">
+          Edit any input above to recalculate instantly
+        </p>
+        <button
+          onClick={handleExport}
+          disabled={isExporting}
+          className="btn-primary !text-xs !px-4 !py-1.5"
+        >
+          <Download className="w-3 h-3" />
+          {isExporting ? 'Exporting…' : 'Export to Excel'}
+        </button>
+      </div>
+    </div>
+  );
+}

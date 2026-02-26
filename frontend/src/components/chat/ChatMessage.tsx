@@ -16,6 +16,8 @@ import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidge
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
+import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
+import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ChatMessageProps {
@@ -252,6 +254,10 @@ function MessageWidget({
       return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'lcoe_output':
       return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'carbon_inputs':
+      return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'carbon_output':
+      return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:
       return null;
   }

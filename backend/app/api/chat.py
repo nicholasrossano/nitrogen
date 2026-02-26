@@ -151,6 +151,8 @@ async def send_chat_message_stream(
                 yield f"data: {json.dumps({'type': 'thinking', 'content': 'Generating your project plan...'})}\n\n"
             elif action_result.action == "run_lcoe_tool":
                 yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your LCOE model...'})}\n\n"
+            elif action_result.action == "run_carbon_tool":
+                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your carbon emissions model...'})}\n\n"
 
             # Execute the action
             widget_type, widget_data, assistant_response, sources = await execute_action(
@@ -285,6 +287,9 @@ async def execute_action(
             )
             assistant_response = research_result.content
             sources = research_result.sources
+            if research_result.widget_type:
+                widget_type = research_result.widget_type
+                widget_data = research_result.widget_data
         except Exception as e:
             logger.error(f"Research pipeline failed for send_message, falling back: {e}")
             # Fall back to the orchestration-generated message
@@ -427,6 +432,54 @@ async def execute_action(
         except Exception as e:
             logger.error(f"LCOE tool failed: {e}", exc_info=True)
             assistant_response = "I wasn't able to build the LCOE model right now. Could you provide more details about the project costs and capacity?"
+            widget_type = None
+            widget_data = None
+
+    elif action == "run_carbon_tool":
+        from app.tools.carbon_tool import CarbonTool
+        carbon_tool = CarbonTool()
+        try:
+            yield_msg = params.get("message", "Building your carbon emissions model…")
+            tool_output = await carbon_tool.execute(
+                db=db,
+                initiative_id=initiative.id,
+                inputs=initiative.tool_inputs or {},
+            )
+            content = tool_output.content
+            computable = content.get("computable", False)
+
+            if computable and content.get("result"):
+                net_er = content["result"]["net_er_tco2e"]
+                assumption_count = content["result"].get("assumption_count", 0)
+                quality = content["result"].get("quality_label", "moderate")
+
+                widget_type = "carbon_output"
+                widget_data = content
+                assistant_response = (
+                    f"{yield_msg}\n\n"
+                    f"**Net Emission Reductions: {net_er:,.2f} tCO₂e/year** "
+                    f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                    f"{quality} confidence). "
+                    "Review the inputs below — you can edit any value and I'll recalculate instantly."
+                )
+            else:
+                missing = content.get("missing_essentials", [])
+                widget_type = "carbon_inputs"
+                widget_data = content
+                missing_labels = {
+                    "devices_households": "number of devices/households",
+                    "baseline_fuel_consumption_kg_yr": "baseline fuel consumption (kg/yr)",
+                }
+                nice_names = [missing_labels.get(m, m) for m in missing]
+                assistant_response = (
+                    f"{yield_msg}\n\n"
+                    f"I've pre-filled what I could from our conversation. "
+                    f"To calculate emission reductions I still need: **{', '.join(nice_names)}**. "
+                    "Can you provide these?"
+                )
+        except Exception as e:
+            logger.error(f"Carbon tool failed: {e}", exc_info=True)
+            assistant_response = "I wasn't able to build the carbon emissions model right now. Could you provide more details about the project?"
             widget_type = None
             widget_data = None
 
