@@ -45,7 +45,15 @@ class Settings(BaseSettings):
             self.debug = 'localhost' in self.database_url or '127.0.0.1' in self.database_url
         return self
     
+    # OpenAlex
+    openalex_email: str = ""
+    openalex_base_url: str = "https://api.openalex.org"
+    
+    # Web search (optional)
+    tavily_api_key: str = ""
+    
     # RAG settings
+    enable_corpus_rag: bool = False
     chunk_size: int = 500
     chunk_overlap: int = 50
     retrieval_top_k: int = 5
