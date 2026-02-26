@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
@@ -24,11 +24,7 @@ function HomePageContent() {
     router.push('/login');
   };
 
-  useEffect(() => {
-    loadProjects();
-  }, [activeNav]);
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -47,7 +43,11 @@ function HomePageContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeNav]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   const handleNewProject = async () => {
     setCreating(true);
