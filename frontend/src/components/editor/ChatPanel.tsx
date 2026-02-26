@@ -291,7 +291,7 @@ function TabBar({
   activeTabId: string;
   closedTabs: ClosedChatTab[];
   showHistory: boolean;
-  historyRef: React.RefObject<HTMLDivElement | null>;
+  historyRef: React.RefObject<HTMLDivElement>;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewTab: () => void;
