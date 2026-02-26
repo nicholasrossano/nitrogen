@@ -1,10 +1,14 @@
 'use client';
 
-import { ProjectPlanItem } from '@/lib/api';
+import { useState } from 'react';
+import { ChevronRight, ChevronDown } from 'lucide-react';
+import { DeepDiveResult, ProjectPlanItem } from '@/lib/api';
 
 interface PlanSubItemProps {
   item: ProjectPlanItem;
   isLast: boolean;
+  deepDiveResult?: DeepDiveResult | null;
+  onDeepDive?: (item: ProjectPlanItem) => void;
 }
 
 type Classification = 'required' | 'optional' | 'unknown';
@@ -35,36 +39,101 @@ const CLASSIFICATION_STYLES: Record<Classification, {
   },
 };
 
-export function PlanSubItem({ item, isLast }: PlanSubItemProps) {
+const ELEMENT_STYLE = {
+  dot: 'bg-accent',
+  card: 'border-stroke-subtle bg-white',
+};
+
+export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSubItemProps) {
+  const [elementsExpanded, setElementsExpanded] = useState(true);
   const cls = (item.classification as Classification) ?? 'optional';
   const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
+  const isClickable = Boolean(onDeepDive);
+
+  const elements = deepDiveResult?.elements ?? [];
+  const hasElements = Boolean(deepDiveResult) && elements.length > 0;
+  const showElements = hasElements && elementsExpanded;
 
   return (
-    <div className="flex items-stretch">
-      {/* Branch gutter — dot centered on the vertical line */}
-      <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
-        <div className="w-px bg-stroke-subtle flex-1" />
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
-        {!isLast ? <div className="w-px bg-stroke-subtle flex-1" /> : <div className="flex-1" />}
-        {/* Horizontal arm from dot's right edge to gutter edge */}
-        <div className="absolute top-1/2 right-0 w-[calc(50%-4px)] h-px bg-stroke-subtle -translate-y-[0.5px]" />
-      </div>
+    <>
+      {/* Main item row */}
+      <div className="flex items-stretch">
+        {/* Branch gutter */}
+        <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
+          <div className="w-px bg-stroke-subtle flex-1" />
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
+          {(!isLast || showElements)
+            ? <div className="w-px bg-stroke-subtle flex-1" />
+            : <div className="flex-1" />}
+          <div className="absolute top-1/2 right-0 w-[calc(50%-4px)] h-px bg-stroke-subtle -translate-y-[0.5px]" />
+        </div>
 
-      {/* Node card */}
-      <div className="flex-1 min-w-0 py-1.5 pr-0">
-        <div className={`px-3 py-2.5 border transition-colors ${styles.card}`}>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text-primary leading-snug flex-1 min-w-0">
-              {item.title}
-            </span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none flex-shrink-0 ${styles.badge}`}
-            >
-              {styles.label}
-            </span>
+        {/* Node card */}
+        <div className="flex-1 min-w-0 py-1.5 pr-0">
+          <div
+            className={`px-3 py-2.5 border ${styles.card} ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`}
+            onClick={isClickable ? () => onDeepDive!(item) : undefined}
+            role={isClickable ? 'button' : undefined}
+            tabIndex={isClickable ? 0 : undefined}
+            onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDeepDive!(item); } } : undefined}
+            aria-label={isClickable ? `Deep dive: ${item.title}` : undefined}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-text-primary leading-snug flex-1 min-w-0">
+                {item.title}
+              </span>
+              {hasElements && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setElementsExpanded(!elementsExpanded); }}
+                  className="w-4 h-4 flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0"
+                  aria-label={elementsExpanded ? 'Collapse elements' : 'Expand elements'}
+                >
+                  {elementsExpanded
+                    ? <ChevronDown className="w-3 h-3" />
+                    : <ChevronRight className="w-3 h-3" />}
+                </button>
+              )}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none flex-shrink-0 ${styles.badge}`}>
+                {styles.label}
+              </span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Element sub-nodes — third layer */}
+      {showElements && elements.map((el, i) => {
+        const isLastEl = i === elements.length - 1;
+        const elStyles = ELEMENT_STYLE;
+
+        return (
+          <div key={i} className="flex items-stretch">
+            {/* Col A: parent branch continuation */}
+            <div className="w-8 flex-shrink-0 flex items-center justify-center">
+              {!isLast && <div className="w-px bg-stroke-subtle h-full" />}
+            </div>
+
+            {/* Col B: element sub-branch gutter */}
+            <div className="w-6 flex flex-col items-center flex-shrink-0 relative">
+              <div className="w-px bg-stroke-subtle flex-1" />
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${elStyles.dot}`} />
+              {!isLastEl
+                ? <div className="w-px bg-stroke-subtle flex-1" />
+                : <div className="flex-1" />}
+              <div className="absolute top-1/2 right-0 w-[calc(50%-3px)] h-px bg-stroke-subtle -translate-y-[0.5px]" />
+            </div>
+
+            {/* Col C: element card */}
+            <div className="flex-1 min-w-0 py-1 pr-0">
+              <div className={`px-2.5 py-2 border ${elStyles.card}`}>
+                <span className="text-xs font-medium text-text-primary leading-snug">
+                  {el.title}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
