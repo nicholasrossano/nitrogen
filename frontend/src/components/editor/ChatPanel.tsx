@@ -200,7 +200,7 @@ function ChatMessageItem({
           className={`
             rounded-lg px-3 py-2 text-sm
             ${isUser
-              ? 'bg-accent text-white'
+              ? 'bg-zinc-700 text-white'
               : 'bg-white text-text-primary'
             }
           `}
