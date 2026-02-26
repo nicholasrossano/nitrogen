@@ -145,9 +145,11 @@ async def send_chat_message_stream(
                 initiative=initiative,
             )
 
-            # Send a thinking indicator if plan generation will happen
+            # Send a thinking indicator for heavy actions
             if action_result.action == "generate_project_plan":
                 yield f"data: {json.dumps({'type': 'thinking', 'content': 'Generating your project plan...'})}\n\n"
+            elif action_result.action == "run_lcoe_tool":
+                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your LCOE model...'})}\n\n"
 
             # Execute the action
             widget_type, widget_data, assistant_response, sources = await execute_action(
@@ -322,6 +324,56 @@ async def execute_action(
         except Exception as e:
             logger.error(f"Project plan update failed: {e}", exc_info=True)
             assistant_response = "I wasn't able to update the project plan right now. Please try again."
+            widget_type = None
+            widget_data = None
+
+    elif action == "run_lcoe_tool":
+        from app.tools.lcoe_tool import LCOETool
+        lcoe_tool = LCOETool()
+        try:
+            yield_msg = params.get("message", "Building your LCOE model…")
+            tool_output = await lcoe_tool.execute(
+                db=db,
+                initiative_id=initiative.id,
+                inputs=initiative.tool_inputs or {},
+            )
+            content = tool_output.content
+            computable = content.get("computable", False)
+
+            if computable and content.get("result"):
+                lcoe_val = content["result"]["lcoe"]
+                currency = content["result"].get("currency", "USD")
+                assumption_count = content["result"].get("assumption_count", 0)
+                quality = content["result"].get("quality_label", "moderate")
+
+                widget_type = "lcoe_output"
+                widget_data = content
+                assistant_response = (
+                    f"{yield_msg}\n\n"
+                    f"**LCOE: {currency} {lcoe_val:.4f}/kWh** "
+                    f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                    f"{quality} confidence). "
+                    "Review the inputs below — you can edit any value and I'll recalculate instantly."
+                )
+            else:
+                missing = content.get("missing_essentials", [])
+                widget_type = "lcoe_inputs"
+                widget_data = content
+                missing_labels = {
+                    "net_capacity_kw": "net capacity (kW)",
+                    "total_capex": "total CAPEX",
+                    "annual_opex": "annual O&M cost",
+                }
+                nice_names = [missing_labels.get(m, m) for m in missing]
+                assistant_response = (
+                    f"{yield_msg}\n\n"
+                    f"I've pre-filled what I could from our conversation. "
+                    f"To calculate the LCOE I still need: **{', '.join(nice_names)}**. "
+                    "Can you provide these?"
+                )
+        except Exception as e:
+            logger.error(f"LCOE tool failed: {e}", exc_info=True)
+            assistant_response = "I wasn't able to build the LCOE model right now. Could you provide more details about the project costs and capacity?"
             widget_type = None
             widget_data = None
 

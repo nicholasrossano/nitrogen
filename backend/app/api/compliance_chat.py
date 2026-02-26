@@ -91,6 +91,8 @@ async def compliance_chat_stream(
                 "tiers_used": result.tiers_used,
                 "citation_count": len([s for s in result.sources if s.source_type.value != "llm_estimate"]),
                 "latency_ms": result.latency_ms,
+                "widget_type": result.widget_type,
+                "widget_data": result.widget_data,
             }
             yield f"data: {json.dumps(complete)}\n\n"
 

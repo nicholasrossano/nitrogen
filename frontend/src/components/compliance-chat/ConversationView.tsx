@@ -16,6 +16,8 @@ import {
 import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
+import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
+import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { track } from '@/lib/analytics';
 
 export function ConversationView() {
@@ -390,12 +392,38 @@ function MessageBubble({
           </div>
         )}
 
+        {!isUser && message.widget_type && message.widget_data && (
+          <div className="mt-3 w-full">
+            <ComplianceChatWidget
+              type={message.widget_type}
+              data={message.widget_data}
+            />
+          </div>
+        )}
+
         {!isUser && message.sources && message.sources.length > 0 && (
           <CitationsDisplay sources={message.sources} />
         )}
       </div>
     </div>
   );
+}
+
+function ComplianceChatWidget({
+  type,
+  data,
+}: {
+  type: string;
+  data: Record<string, any>;
+}) {
+  switch (type) {
+    case 'lcoe_inputs':
+      return <LCOEInputsWidget data={data} initiativeId="" isActive />;
+    case 'lcoe_output':
+      return <LCOEOutputWidget data={data} initiativeId="" isActive />;
+    default:
+      return null;
+  }
 }
 
 function CitationsDisplay({ sources }: { sources: SourceCitation[] }) {

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { X, ExternalLink, Loader2, AlertCircle, Zap } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, ExternalLink, Loader2, AlertCircle, Zap, ChevronDown } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 
 interface DeepDivePanelProps {
@@ -16,6 +16,23 @@ interface DeepDivePanelProps {
 }
 
 type Classification = 'required' | 'optional' | 'unknown';
+
+function InlineBold({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('**') && part.endsWith('**') ? (
+          <strong key={i} className="font-semibold text-text-primary">
+            {part.slice(2, -2)}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
 
 const CLS_BADGE: Record<Classification, { badge: string; label: string }> = {
   required: { badge: 'bg-accent/10 text-accent', label: 'REQ' },
@@ -58,6 +75,15 @@ export function DeepDivePanel({
   useEffect(() => {
     panelRef.current?.focus();
   }, []);
+
+  const [expandedElements, setExpandedElements] = useState<Set<number>>(new Set());
+
+  const toggleElement = (i: number) =>
+    setExpandedElements((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
 
   const pillarLabel =
     result?.pillar_name ?? pillar.name;
@@ -129,14 +155,9 @@ export function DeepDivePanel({
                   <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
                     What this is
                   </h3>
-                  <ul className="space-y-1.5">
-                    {result.what_this_is.map((bullet, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-text-secondary leading-snug">
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-stroke-subtle flex-shrink-0" />
-                        {bullet}
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-sm text-text-secondary leading-snug">
+                    <InlineBold text={result.what_this_is.join(' ')} />
+                  </p>
                 </section>
               )}
 
@@ -147,22 +168,33 @@ export function DeepDivePanel({
                     Elements
                   </h3>
                   <div className="space-y-2">
-                    {result.elements.map((el, i) => (
-                      <div
-                        key={i}
-                        className="border border-stroke-subtle rounded px-3 py-2.5"
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-stroke-subtle" />
-                          <span className="text-sm font-medium text-text-primary flex-1 min-w-0 leading-snug">
-                            {el.title}
-                          </span>
+                    {result.elements.map((el, i) => {
+                      const open = expandedElements.has(i);
+                      return (
+                        <div
+                          key={i}
+                          className="border border-stroke-subtle rounded overflow-hidden"
+                        >
+                          <button
+                            onClick={() => toggleElement(i)}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                          >
+                            <span className="w-2 h-2 rounded-full flex-shrink-0 bg-stroke-subtle" />
+                            <span className="text-sm font-medium text-text-primary flex-1 min-w-0 leading-snug">
+                              {el.title}
+                            </span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-text-tertiary flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+                          {open && (
+                            <p className="text-xs text-text-secondary leading-relaxed px-3 pb-2.5 pl-7">
+                              {el.description}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-xs text-text-secondary leading-relaxed pl-4">
-                          {el.description}
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}
