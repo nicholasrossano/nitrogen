@@ -75,7 +75,7 @@ export function ProjectPlanWidget({ data }: ProjectPlanWidgetProps) {
 
       <div className="px-5 py-3 bg-surface-header border-t border-divider">
         <p className="text-xs text-text-tertiary text-center">
-          View the full plan in the panel on the right
+           You can edit this as needed in the diagram directly.
         </p>
       </div>
     </div>

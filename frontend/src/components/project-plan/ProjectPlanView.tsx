@@ -1,12 +1,22 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, LayoutGrid } from 'lucide-react';
+import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
+import { DeepDivePanel } from './DeepDivePanel';
 
 interface ProjectPlanViewProps {
   initiativeId: string;
+}
+
+interface DeepDiveState {
+  item: ProjectPlanItem;
+  pillar: ProjectPlanPillar;
+  result: DeepDiveResult | null;
+  loading: boolean;
+  error: string | null;
 }
 
 export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
@@ -19,10 +29,24 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
   } = useInitiativeStore();
 
   const hasTriggeredGenerate = useRef(false);
+  const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
+  const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
 
   useEffect(() => {
     loadProjectPlan(initiativeId);
   }, [initiativeId, loadProjectPlan]);
+
+  // Seed local cache from persisted deep_dives when plan loads
+  useEffect(() => {
+    if (projectPlan?.deep_dives) {
+      setLocalCache((prev) => ({ ...prev, ...projectPlan.deep_dives }));
+    }
+  }, [projectPlan?.deep_dives]);
+
+  // Merged cache: persisted + local
+  const deepDiveCache = useMemo<Record<string, DeepDiveResult>>(() => {
+    return { ...(projectPlan?.deep_dives ?? {}), ...localCache };
+  }, [projectPlan?.deep_dives, localCache]);
 
   // Auto-generate when opened and no plan exists
   useEffect(() => {
@@ -31,6 +55,51 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
       generateProjectPlan(initiativeId);
     }
   }, [projectPlan, projectPlanLoading, initiativeId, generateProjectPlan]);
+
+  const runDeepDive = useCallback(
+    async (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
+      // Return cached result immediately (opens the panel with data)
+      const cached = deepDiveCache[item.id];
+      if (cached) {
+        setDeepDive({ item, pillar, result: cached, loading: false, error: null });
+        return;
+      }
+
+      setDeepDive({ item, pillar, result: null, loading: true, error: null });
+      try {
+        const result = await api.deepDiveItem(initiativeId, item.id, {
+          item_title: item.title,
+          item_classification: item.classification,
+          item_rationale: item.rationale ?? '',
+          pillar_name: pillar.name,
+        });
+        setLocalCache((prev) => ({ ...prev, [item.id]: result }));
+        setDeepDive((prev) =>
+          prev ? { ...prev, result, loading: false } : null
+        );
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Deep dive failed. Please try again.';
+        setDeepDive((prev) =>
+          prev ? { ...prev, loading: false, error: message } : null
+        );
+      }
+    },
+    [initiativeId, deepDiveCache]
+  );
+
+  const handleDeepDive = useCallback(
+    (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
+      runDeepDive(item, pillar);
+    },
+    [runDeepDive]
+  );
+
+  const handleClosePanel = useCallback(() => setDeepDive(null), []);
+
+  const handleRetry = useCallback(() => {
+    if (deepDive) runDeepDive(deepDive.item, deepDive.pillar);
+  }, [deepDive, runDeepDive]);
 
   // Loading state during generation
   if (projectPlanLoading && !projectPlan) {
@@ -80,13 +149,35 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
         </div>
       )}
 
-      {/* 3-column pillar tree */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 pt-5">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {pillars.map(pillar => (
-            <PillarColumn key={pillar.id} pillar={pillar} />
-          ))}
+      {/* Main row: pillar grid + deep dive panel side by side */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* 3-column pillar tree — squishes when panel is open */}
+        <div className="flex-1 overflow-y-auto p-4 pt-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pillars.map(pillar => (
+              <PillarColumn
+                key={pillar.id}
+                pillar={pillar}
+                deepDiveCache={deepDiveCache}
+                onDeepDive={handleDeepDive}
+              />
+            ))}
+          </div>
         </div>
+
+        {/* Deep Dive panel — inline, respects header */}
+        {deepDive && (
+          <DeepDivePanel
+            initiativeId={initiativeId}
+            item={deepDive.item}
+            pillar={deepDive.pillar}
+            result={deepDive.result}
+            loading={deepDive.loading}
+            error={deepDive.error}
+            onClose={handleClosePanel}
+            onRetry={handleRetry}
+          />
+        )}
       </div>
     </div>
   );

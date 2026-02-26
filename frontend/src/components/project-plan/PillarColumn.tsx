@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { Shield, Banknote, Compass, ChevronDown } from 'lucide-react';
-import { ProjectPlanPillar } from '@/lib/api';
+import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { PlanSubItem } from './PlanSubItem';
 
 interface PillarColumnProps {
   pillar: ProjectPlanPillar;
+  deepDiveCache?: Record<string, DeepDiveResult>;
+  onDeepDive?: (item: ProjectPlanItem, pillar: ProjectPlanPillar) => void;
 }
 
 const PILLAR_ICONS: Record<string, React.ReactNode> = {
@@ -23,7 +25,7 @@ const PILLAR_NAMES: Record<string, string> = {
 
 const DEFAULT_VISIBLE = 10;
 
-export function PillarColumn({ pillar }: PillarColumnProps) {
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const items = pillar.items || [];
   const visibleItems = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
@@ -57,6 +59,8 @@ export function PillarColumn({ pillar }: PillarColumnProps) {
             key={item.id}
             item={item}
             isLast={idx === visibleItems.length - 1 && (showAll || hiddenCount <= 0)}
+            deepDiveResult={deepDiveCache[item.id] ?? null}
+            onDeepDive={onDeepDive ? (item) => onDeepDive(item, pillar) : undefined}
           />
         ))}
 
