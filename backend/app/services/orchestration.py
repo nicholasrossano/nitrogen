@@ -110,6 +110,27 @@ ORCHESTRATION_ACTIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_project_plan",
+            "description": "Update the existing project plan based on the user's requested changes. Use this when a project plan already exists and the user asks to add, remove, rename, or modify sections, pillars, or items — including adding entirely new sections the user requests.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Brief message (1 sentence) confirming what changes you'll apply."
+                    },
+                    "user_request": {
+                        "type": "string",
+                        "description": "Clear, concise summary of exactly what the user wants changed in the plan."
+                    }
+                },
+                "required": ["message", "user_request"]
+            }
+        }
+    },
 ]
 
 
@@ -177,8 +198,11 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 **Rule 5: User asks a general question or makes conversation**
 → Use **send_message** to answer, then steer back toward plan generation
 
-**Rule 6: Project plan already exists and user is asking follow-up questions**
-→ Use **send_message** to answer their questions about the plan
+**Rule 6: Project plan already exists and user wants to change, add, or remove something**
+→ Use **update_project_plan** — users can override and extend the default structure, including adding new sections beyond the standard three pillars
+
+**Rule 7: Project plan already exists and user is asking a question (not requesting changes)**
+→ Use **send_message** to answer their question about the plan
 
 ## Style
 - Be proactive and directive — move toward the plan quickly

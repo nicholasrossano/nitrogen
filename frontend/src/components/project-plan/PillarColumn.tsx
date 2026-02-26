@@ -29,6 +29,8 @@ export function PillarColumn({ pillar }: PillarColumnProps) {
   const visibleItems = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
   const hiddenCount = items.length - DEFAULT_VISIBLE;
   const requiredCount = items.filter(i => i.classification === 'required').length;
+  const unknownCount = items.filter(i => i.classification === 'unknown').length;
+  const optionalCount = items.length - requiredCount - unknownCount;
 
   return (
     <div className="flex flex-col min-h-0">
@@ -42,7 +44,8 @@ export function PillarColumn({ pillar }: PillarColumnProps) {
             {PILLAR_NAMES[pillar.id] ?? pillar.name}
           </h3>
           <p className="text-[11px] text-text-tertiary mt-0.5">
-            {requiredCount} required &middot; {items.length - requiredCount} optional
+            {requiredCount} required &middot; {optionalCount} optional
+            {unknownCount > 0 && <> &middot; <span className="text-indicator-orange">{unknownCount} unknown</span></>}
           </p>
         </div>
       </div>
