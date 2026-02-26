@@ -271,14 +271,17 @@ function splitOnCitations(
   const parts: React.ReactNode[] = [];
   const re = new RegExp(INLINE_CITATION_RE.source, 'g');
   let last = 0;
+  let partIdx = 0;
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m.index > last) {
+      parts.push(<span key={`${keyPrefix}-t${partIdx++}`}>{text.slice(last, m.index)}</span>);
+    }
     const [, sourceType, title] = m;
     parts.push(
       <CitationChip
-        key={`${keyPrefix}-${m.index}`}
+        key={`${keyPrefix}-c${m.index}`}
         sourceType={sourceType}
         title={title}
         sources={sources}
@@ -286,7 +289,9 @@ function splitOnCitations(
     );
     last = re.lastIndex;
   }
-  if (last < text.length) parts.push(text.slice(last));
+  if (last < text.length) {
+    parts.push(<span key={`${keyPrefix}-t${partIdx}`}>{text.slice(last)}</span>);
+  }
   if (parts.length === 0) return text;
   if (parts.length === 1) return parts[0];
   return <>{parts}</>;

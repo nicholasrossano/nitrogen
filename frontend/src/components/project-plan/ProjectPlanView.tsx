@@ -9,6 +9,8 @@ import { DeepDivePanel } from './DeepDivePanel';
 
 interface ProjectPlanViewProps {
   initiativeId: string;
+  showInspector?: boolean;
+  onInspectorChange?: (open: boolean, hasItem: boolean) => void;
 }
 
 interface DeepDiveState {
@@ -19,7 +21,7 @@ interface DeepDiveState {
   error: string | null;
 }
 
-export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
+export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange }: ProjectPlanViewProps) {
   const {
     projectPlan,
     projectPlanLoading,
@@ -91,11 +93,19 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
   const handleDeepDive = useCallback(
     (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
       runDeepDive(item, pillar);
+      onInspectorChange?.(true, true);
     },
-    [runDeepDive]
+    [runDeepDive, onInspectorChange]
   );
 
-  const handleClosePanel = useCallback(() => setDeepDive(null), []);
+  const handleClosePanel = useCallback(() => {
+    if (onInspectorChange) {
+      // Parent controls visibility; preserve deepDive for last-item restoration
+      onInspectorChange(false, true);
+    } else {
+      setDeepDive(null);
+    }
+  }, [onInspectorChange]);
 
   const handleRetry = useCallback(() => {
     if (deepDive) runDeepDive(deepDive.item, deepDive.pillar);
@@ -139,6 +149,10 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
 
   const pillars = projectPlan.pillars || [];
 
+  // When showInspector prop is provided, it controls panel visibility.
+  // deepDive is preserved as "last viewed item" so it can be restored on reopen.
+  const inspectorVisible = showInspector !== undefined ? showInspector : deepDive !== null;
+
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden">
       {/* Updating indicator */}
@@ -166,7 +180,7 @@ export function ProjectPlanView({ initiativeId }: ProjectPlanViewProps) {
         </div>
 
         {/* Deep Dive panel — inline, respects header */}
-        {deepDive && (
+        {inspectorVisible && deepDive && (
           <DeepDivePanel
             initiativeId={initiativeId}
             item={deepDive.item}

@@ -150,9 +150,23 @@ export function ChatPanel({
     [tabs, messages, initiativeId, closeTab],
   );
 
+  // Fire-and-forget: generate an AI title in the background after the first message
+  const autoNameTab = useCallback(
+    (tabId: string, content: string, isFirst: boolean) => {
+      if (!isFirst) return;
+      api.generateChatTitle(content)
+        .then(({ title }) => { if (title) setTabTitle(initiativeId, tabId, title); })
+        .catch(() => {/* silently ignore title failures */});
+    },
+    [initiativeId, setTabTitle],
+  );
+
   const handleSend = useCallback(
     async (content: string) => {
       if (isOnboardingTab) {
+        // Auto-name the onboarding tab after its first user message
+        const isFirst = (messages || []).filter((m) => m.role === 'user').length === 0;
+        autoNameTab(activeTab.id, content, isFirst);
         onSendMessage(content);
         return;
       }
@@ -171,10 +185,8 @@ export function ChatPanel({
 
       addMessage(initiativeId, tabId, userMsg);
 
-      if (!activeTab.messages || activeTab.messages.length === 0) {
-        const truncated = content.length > 30 ? content.slice(0, 30) + '…' : content;
-        setTabTitle(initiativeId, tabId, truncated);
-      }
+      const isFirst = !activeTab.messages || activeTab.messages.length === 0;
+      autoNameTab(tabId, content, isFirst);
 
       try {
         const response = await api.sendMessage(initiativeId, content);
@@ -185,7 +197,7 @@ export function ChatPanel({
         setTabSending(false);
       }
     },
-    [isOnboardingTab, activeTab, initiativeId, onSendMessage, addMessage, removeMessage, setTabTitle],
+    [isOnboardingTab, activeTab, messages, initiativeId, onSendMessage, addMessage, removeMessage, autoNameTab],
   );
 
   const latestMessage = safeMessages[safeMessages.length - 1];

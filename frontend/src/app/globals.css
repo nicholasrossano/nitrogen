@@ -299,8 +299,8 @@ textarea {
 }
 
 .btn-primary:hover {
-  @apply text-white shadow-md;
-  transform: translateY(-2px);
+  @apply text-white;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.18), 0 4px 8px -2px rgba(0, 0, 0, 0.12);
 }
 
 .btn-primary:active::before {
@@ -310,7 +310,7 @@ textarea {
 
 .btn-primary:active {
   @apply shadow-none;
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
@@ -340,13 +340,12 @@ textarea {
 }
 
 .btn-secondary:hover {
-  @apply shadow-md;
-  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.14), 0 4px 8px -2px rgba(0, 0, 0, 0.09);
 }
 
 .btn-secondary:active {
   @apply shadow-none;
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
@@ -375,8 +374,8 @@ textarea {
 }
 
 .btn-danger:hover {
-  @apply text-white shadow-md;
-  transform: translateY(-2px);
+  @apply text-white;
+  box-shadow: 0 8px 24px -4px rgba(185, 122, 93, 0.28), 0 4px 8px -2px rgba(185, 122, 93, 0.18);
 }
 
 .btn-danger:active::before {
@@ -385,7 +384,7 @@ textarea {
 
 .btn-danger:active {
   @apply shadow-none;
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
@@ -677,13 +676,13 @@ textarea {
 }
 
 .card-interactive:hover {
-  @apply border-stroke-accent shadow-md;
-  transform: translateY(-2px);
+  @apply border-stroke-accent;
+  box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.14), 0 4px 10px -3px rgba(0, 0, 0, 0.09);
 }
 
 .card-interactive:active {
   @apply shadow-none;
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
@@ -693,12 +692,11 @@ textarea {
 }
 
 .plan-item-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  box-shadow: 0 8px 20px -4px rgb(0 0 0 / 0.12), 0 3px 8px -2px rgb(0 0 0 / 0.08);
 }
 
 .plan-item-lift:active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
   box-shadow: none;
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
