@@ -32,7 +32,7 @@ What to EXCLUDE: generic project management tasks (hiring, budgeting, scheduling
 
 ## The Three Pillars
 
-**Pillar 1 — Authorization (includes Certification)**
+**Pillar 1 — Authorization**
 Deliverables needed to obtain legal/regulatory permission and/or formal certification.
 Includes: specific permits by name (e.g. "CEQA Initial Study" not "environmental clearance"), specific certifications (e.g. "Gold Standard Preliminary Review" not "carbon certification"), zoning approvals, interconnection agreements, operating licenses, EIA/ESIA artifacts, environmental compliance filings.
 Practical test: if skipping it blocks building, operating, or obtaining a required credential, it belongs here.
@@ -42,7 +42,7 @@ Deliverables whose audience is a funding decision-maker and whose purpose is to 
 Includes: investment committee memo, due diligence checklist, capital stack summary, specific incentive applications (e.g. "ITC Step-Up Documentation" not "incentives"), grant applications by program name (e.g. "GCF Simplified Approval Process Application"), loan application packs.
 Practical test: if the artifact exists so someone can approve/price funding, it belongs here.
 
-**Pillar 3 — Design (includes Execution)**
+**Pillar 3 — Design**
 Deliverables needed to decide what to build and how to implement it.
 Includes: techno-economic feasibility (LCOE, payback, sizing), site assessment, environmental baseline study, system configuration, procurement packs (RFP/TOR), monitoring plans, MRV methodology selection.
 Practical test: if it determines the solution and/or how it gets delivered, it belongs here.
@@ -190,6 +190,16 @@ class ProjectPlanService:
 
         tool_call = response.choices[0].message.tool_calls[0]
         plan_data = json.loads(tool_call.function.arguments)
+
+        # Canonical pillar names — never let the LLM drift these
+        PILLAR_NAMES = {
+            "authorization": "Authorization",
+            "capital": "Capital",
+            "design": "Design",
+        }
+        for pillar in plan_data.get("pillars", []):
+            if pillar.get("id") in PILLAR_NAMES:
+                pillar["name"] = PILLAR_NAMES[pillar["id"]]
 
         return {
             "generated_at": datetime.now(timezone.utc).isoformat(),
