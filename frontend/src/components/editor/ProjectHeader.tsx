@@ -72,7 +72,7 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
 
   return (
     <header className="flex-shrink-0 bg-white">
-      <div className="px-4 py-2 flex items-center relative">
+      <div className="px-4 py-[7px] flex items-center relative">
         {/* Back button */}
         <Link 
           href="/" 

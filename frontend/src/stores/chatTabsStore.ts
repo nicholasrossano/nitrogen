@@ -113,19 +113,25 @@ export const useChatTabsStore = create<ChatTabsStore>()(
                   : finalTabs[Math.min(finalTabs.indexOf(tab as any) || 0, finalTabs.length - 1)]?.id || finalTabs[finalTabs.length - 1]?.id
                 : g.activeTabId;
 
-            const closed: ClosedChatTab = {
-              id: tab.id,
-              title: tab.title,
-              createdAt: tab.createdAt,
-              closedAt: Date.now(),
-              // Use snapshot if provided (for onboarding tab), else stored messages
-              messages: messagesSnapshot ?? tab.messages,
-            };
+            const effectiveMessages = messagesSnapshot ?? tab.messages;
+            const hasMessages = effectiveMessages.length > 0;
+
+            const closed: ClosedChatTab | null = hasMessages
+              ? {
+                  id: tab.id,
+                  title: tab.title,
+                  createdAt: tab.createdAt,
+                  closedAt: Date.now(),
+                  messages: effectiveMessages,
+                }
+              : null;
 
             return {
               tabs: finalTabs,
               activeTabId: newActiveId,
-              closedTabs: [closed, ...g.closedTabs].slice(0, 30),
+              closedTabs: closed
+                ? [closed, ...g.closedTabs].slice(0, 30)
+                : g.closedTabs,
             };
           }),
         ),
