@@ -379,7 +379,7 @@ function MessageBubble({
         )}
 
         {isUser ? (
-          <div className="px-4 py-3 rounded-2xl bg-accent text-white">
+          <div className="px-4 py-3 rounded-2xl bg-zinc-700 text-white">
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (

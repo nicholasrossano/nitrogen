@@ -69,7 +69,7 @@ export function ChatMessage({ message, initiativeId, isLatest, animate = false, 
       <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
         {isUser ? (
           // User message - accent background
-          <div className="px-4 py-1.5 rounded-2xl bg-accent text-white">
+          <div className="px-4 py-1.5 rounded-2xl bg-zinc-700 text-white">
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (
