@@ -20,6 +20,12 @@ const PILLAR_ICONS: Record<string, typeof Shield> = {
   design: Compass,
 };
 
+const PILLAR_NAMES: Record<string, string> = {
+  authorization: 'Authorization',
+  capital: 'Capital',
+  design: 'Design',
+};
+
 export function ProjectPlanWidget({ data }: ProjectPlanWidgetProps) {
   const summary = data?.summary as { total_items: number; pillars: PillarSummary[] } | undefined;
   const plan = data?.plan as { pillars: any[] } | undefined;
@@ -56,7 +62,7 @@ export function ProjectPlanWidget({ data }: ProjectPlanWidgetProps) {
                 <Icon className="w-3.5 h-3.5 text-accent" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-text-primary">{pillar.name}</p>
+                <p className="text-sm font-medium text-text-primary">{PILLAR_NAMES[pillar.id] ?? pillar.name}</p>
                 <p className="text-xs text-text-tertiary">
                   {pillar.item_count} items{reqCount > 0 && <> &middot; {reqCount} required</>}
                 </p>

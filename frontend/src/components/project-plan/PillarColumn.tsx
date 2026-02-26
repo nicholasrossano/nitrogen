@@ -15,6 +15,12 @@ const PILLAR_ICONS: Record<string, React.ReactNode> = {
   design: <Compass className="w-5 h-5" />,
 };
 
+const PILLAR_NAMES: Record<string, string> = {
+  authorization: 'Authorization',
+  capital: 'Capital',
+  design: 'Design',
+};
+
 const DEFAULT_VISIBLE = 10;
 
 export function PillarColumn({ pillar }: PillarColumnProps) {
@@ -33,7 +39,7 @@ export function PillarColumn({ pillar }: PillarColumnProps) {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-text-primary leading-tight">
-            {pillar.name}
+            {PILLAR_NAMES[pillar.id] ?? pillar.name}
           </h3>
           <p className="text-[11px] text-text-tertiary mt-0.5">
             {requiredCount} required &middot; {items.length - requiredCount} optional
