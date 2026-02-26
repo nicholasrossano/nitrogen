@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan } from '@/lib/api';
 
 interface InitiativeState {
   // Data
@@ -9,12 +9,14 @@ interface InitiativeState {
   memo: MemoContent | null;
   memoId: string | null;
   evidenceDocs: EvidenceDoc[];
+  projectPlan: ProjectPlan | null;
   
   // UI State
   loading: boolean;
   sending: boolean;
   generating: boolean;
   alignmentLoading: boolean;
+  projectPlanLoading: boolean;
   error: string | null;
   streamingMessageId: string | null;
   
@@ -34,6 +36,10 @@ interface InitiativeState {
   updateTitle: (id: string, title: string) => Promise<void>;
   confirmAlignment: (id: string, toolId: string, sections?: AlignmentSection[], parameters?: AlignmentParameter[]) => Promise<void>;
   provideFeedback: (id: string, toolId: string, feedback: string) => Promise<void>;
+  _refreshPlanInBackground: (id: string) => Promise<void>;
+  loadProjectPlan: (id: string) => Promise<void>;
+  generateProjectPlan: (id: string) => Promise<void>;
+  updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   reset: () => void;
 }
 
@@ -45,10 +51,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   memo: null,
   memoId: null,
   evidenceDocs: [],
+  projectPlan: null,
   loading: false,
   sending: false,
   generating: false,
   alignmentLoading: false,
+  projectPlanLoading: false,
   error: null,
   streamingMessageId: null,
 
@@ -171,13 +179,20 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           console.log('sendMessage: reloading initiative');
           const initiative = await api.getInitiative(id);
           set({ initiative });
-          
+
+          // If a project plan was just generated, update the store
+          if (initiative.project_plan && !get().projectPlan) {
+            set({ projectPlan: initiative.project_plan });
+          }
+
           // Reload chat history to get any additional messages the backend added
           console.log('sendMessage: reloading chat history');
           const chatHistory = await api.getChatHistory(id);
           const finalMessages = chatHistory?.messages || [];
           console.log('sendMessage: setting final messages', { count: finalMessages.length });
           set({ messages: finalMessages });
+
+          get()._refreshPlanInBackground(id);
         }
       );
     } catch (error) {
@@ -239,6 +254,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         loading: false,
         error: null,
       });
+
+      get()._refreshPlanInBackground(id);
     } catch (error) {
       console.error('Failed to upload evidence:', error);
       // Don't persist upload errors - just log them and clear loading state
@@ -291,6 +308,9 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         evidenceDocs: updatedDocs,
         loading: false,
       });
+
+      const initiative = get().initiative;
+      if (initiative) get()._refreshPlanInBackground(initiative.id);
     } catch (error) {
       console.error('Failed to delete evidence:', error);
       set({
@@ -400,6 +420,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         stageStatus: stage_status,
         generating: false,
       });
+
+      get()._refreshPlanInBackground(id);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to generate deliverables',
@@ -470,6 +492,66 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
+  // Silently refresh the project plan in the background (if one already exists)
+  _refreshPlanInBackground: async (id: string) => {
+    const { projectPlan } = get();
+    if (!projectPlan) return;
+    try {
+      set({ projectPlanLoading: true });
+      const response = await api.generateProjectPlan(id);
+      set({ projectPlan: response.project_plan, projectPlanLoading: false });
+    } catch {
+      set({ projectPlanLoading: false });
+    }
+  },
+
+  // Load project plan
+  loadProjectPlan: async (id: string) => {
+    try {
+      const response = await api.getProjectPlan(id);
+      set({ projectPlan: response.project_plan });
+    } catch (error) {
+      console.error('Failed to load project plan:', error);
+    }
+  },
+
+  // Generate (or refresh) project plan
+  generateProjectPlan: async (id: string) => {
+    set({ projectPlanLoading: true, error: null });
+    try {
+      const response = await api.generateProjectPlan(id);
+      set({ projectPlan: response.project_plan, projectPlanLoading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to generate project plan',
+        projectPlanLoading: false,
+      });
+    }
+  },
+
+  // Update a single plan item status (optimistic)
+  updatePlanItemStatus: async (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => {
+    const { projectPlan } = get();
+    if (!projectPlan) return;
+
+    // Optimistic update
+    const updatedPillars = projectPlan.pillars.map(pillar => ({
+      ...pillar,
+      items: pillar.items.map(item =>
+        item.id === itemId ? { ...item, status } : item
+      ),
+    }));
+    set({ projectPlan: { ...projectPlan, pillars: updatedPillars } });
+
+    try {
+      await api.updatePlanItemStatus(id, itemId, status);
+    } catch (error) {
+      // Revert on failure
+      set({ projectPlan });
+      console.error('Failed to update plan item status:', error);
+    }
+  },
+
   // Reset state
   reset: () => {
     set({
@@ -479,10 +561,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       memo: null,
       memoId: null,
       evidenceDocs: [],
+      projectPlan: null,
       loading: false,
       sending: false,
       generating: false,
       alignmentLoading: false,
+      projectPlanLoading: false,
       error: null,
       streamingMessageId: null,
     });

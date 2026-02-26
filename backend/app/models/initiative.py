@@ -11,11 +11,14 @@ from app.core.database import Base
 class InitiativeStage(str, enum.Enum):
     """Stages of the initiative workflow."""
     DESCRIBE = "describe"           # User describes their project
-    SELECT_TOOLS = "select_tools"   # User selects which tools to use
-    GATHER_INPUTS = "gather_inputs" # Gather tool-specific inputs
-    REVIEW = "review"               # Review deliverables overview
-    GENERATE = "generate"           # Generate outputs
-    COMPLETE = "complete"           # All outputs generated
+    PLAN = "plan"                   # Project plan generated, user reviewing
+    EXECUTE = "execute"             # User working through plan items
+    # Legacy stages kept for DB backward compatibility
+    SELECT_TOOLS = "select_tools"
+    GATHER_INPUTS = "gather_inputs"
+    REVIEW = "review"
+    GENERATE = "generate"
+    COMPLETE = "complete"
 
 
 class Initiative(Base):
@@ -48,6 +51,7 @@ class Initiative(Base):
     tool_inputs: Mapped[dict | None] = mapped_column(JSONB)  # Tool-specific inputs
     tool_alignments: Mapped[dict | None] = mapped_column(JSONB)  # Tool alignments (outline, params) keyed by tool_id
     deliverables: Mapped[dict | None] = mapped_column(JSONB)  # Generated output references
+    project_plan: Mapped[dict | None] = mapped_column(JSONB)  # 3-pillar needs map
     
     # Stage tracking
     stage: Mapped[str] = mapped_column(
