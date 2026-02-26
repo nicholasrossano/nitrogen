@@ -21,14 +21,14 @@ interface ProjectHeaderProps {
 export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onToggleProjectPlan, hasProjectPlan = false, showChatPanel = true, onToggleChatPanel, showInspector = false, hasInspectorItem = false, onToggleInspector }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(
-    initiative.title || 'Untitled'
+    initiative.title || 'New Project'
   );
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Update local title state when initiative changes (e.g., switching projects or title is generated)
   useEffect(() => {
-    setTitle(initiative.title || 'Untitled');
+    setTitle(initiative.title || 'New Project');
   }, [initiative.id, initiative.title]);
 
   useEffect(() => {
@@ -39,8 +39,8 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
   }, [isEditing]);
 
   const handleSave = async () => {
-    if (!title.trim()) {
-      setTitle(initiative.title || 'Untitled');
+      if (!title.trim()) {
+      setTitle(initiative.title || 'New Project');
       setIsEditing(false);
       return;
     }
@@ -58,7 +58,7 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
   };
 
   const handleCancel = () => {
-    setTitle(initiative.title || 'Untitled');
+    setTitle(initiative.title || 'New Project');
     setIsEditing(false);
   };
 
@@ -150,12 +150,11 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
             </>
           )}
 
-          {/* Project Plan toggle */}
-          {onToggleProjectPlan && (
+          {/* Project Plan toggle — only shown once a plan exists */}
+          {onToggleProjectPlan && hasProjectPlan && (
             <button
-              onClick={hasProjectPlan ? onToggleProjectPlan : undefined}
-              disabled={!hasProjectPlan}
-              className={`pill-btn !px-2.5 !py-1.5 !text-xs ml-1 ${showProjectPlan ? 'selected' : ''} ${!hasProjectPlan ? 'opacity-40 cursor-not-allowed' : ''}`}
+              onClick={onToggleProjectPlan}
+              className={`pill-btn !px-2.5 !py-1.5 !text-xs ml-1 ${showProjectPlan ? 'selected' : ''}`}
             >
               <Map className="w-3.5 h-3.5" />
               Project Plan
