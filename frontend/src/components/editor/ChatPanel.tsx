@@ -14,6 +14,7 @@ import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidge
 import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
+import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -32,6 +33,7 @@ const CHAT_WIDGET_TYPES = [
   'tool_checklist',
   'deliverables_overview',
   'alignment',
+  'project_plan',
 ];
 
 // Widget that should render above the input bar
@@ -286,6 +288,12 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'project_plan':
+      return (
+        <ErrorBoundary>
+          <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
     default:
