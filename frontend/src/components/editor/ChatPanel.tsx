@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
-import { ChatMessage } from '@/lib/api';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { ChatMessage, api } from '@/lib/api';
 import { ChatInput } from '@/components/chat/ChatInput';
 import ReactMarkdown from 'react-markdown';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useChatTabsStore, ChatTab, ClosedChatTab, ONBOARDING_TAB_ID } from '@/stores/chatTabsStore';
+import { X, Plus, Clock, Trash2, MessageSquare } from 'lucide-react';
 
-// Interactive widgets that should appear in chat
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
@@ -15,6 +16,8 @@ import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
+import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
+import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -25,18 +28,18 @@ interface ChatPanelProps {
   fullWidth?: boolean;
 }
 
-// Widget types that should render in the chat (interactive/decisioning)
 const CHAT_WIDGET_TYPES = [
   'confirmation',
-  'evidence_input', 
+  'evidence_input',
   'generate_options',
   'tool_checklist',
   'deliverables_overview',
   'alignment',
   'project_plan',
+  'lcoe_inputs',
+  'lcoe_output',
 ];
 
-// Widget that should render above the input bar
 const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
 
 export function ChatPanel({
@@ -47,6 +50,48 @@ export function ChatPanel({
   onSendMessage,
   fullWidth = false,
 }: ChatPanelProps) {
+  const {
+    ensureGroup, setActiveTab, createTab, closeTab,
+    reopenTab, deleteClosedTab, addMessage,
+    removeMessage, setTabTitle,
+  } = useChatTabsStore();
+
+  useEffect(() => { ensureGroup(initiativeId); }, [initiativeId, ensureGroup]);
+
+  const group = useChatTabsStore((s) => s.groups[initiativeId]);
+  const tabs = group?.tabs ?? [
+    { id: ONBOARDING_TAB_ID, title: 'Onboarding', createdAt: 0, isOnboarding: true, messages: [] as ChatMessage[] },
+  ];
+  const activeTabId = group?.activeTabId ?? ONBOARDING_TAB_ID;
+  const closedTabs = group?.closedTabs ?? [];
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
+  const isOnboardingTab = activeTab?.isOnboarding ?? false;
+
+  const activeMessages = useMemo(
+    () => (isOnboardingTab ? messages || [] : activeTab?.messages || []),
+    [isOnboardingTab, messages, activeTab?.messages],
+  );
+
+  const [tabSending, setTabSending] = useState(false);
+  const effectiveSending = isOnboardingTab ? sending : tabSending;
+  const effectiveGenerating = isOnboardingTab ? generating : false;
+
+  const [showHistory, setShowHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showHistory) return;
+    const handler = (e: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showHistory]);
+
+  // Scroll management
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
@@ -54,54 +99,25 @@ export function ChatPanel({
   const lastSeenCountRef = useRef<number>(0);
   const isInitialLoadRef = useRef<boolean>(true);
 
-  // Ensure messages is always an array
-  const safeMessages = useMemo(() => messages || [], [messages]);
-  
-  // Debug logging
-  useEffect(() => {
-    console.log('ChatPanel: mounted/messages changed', { 
-      count: safeMessages.length,
-      lastMessage: safeMessages[safeMessages.length - 1]?.content?.substring(0, 50)
-    });
-    
-    return () => {
-      console.log('ChatPanel: UNMOUNTING!');
-    };
-  }, [safeMessages]);
-  
-  // Log every render
-  console.log('ChatPanel: rendering', { messageCount: safeMessages.length });
+  const safeMessages = useMemo(() => activeMessages || [], [activeMessages]);
 
-  // Scroll to bottom when messages change (new message added or content reloaded)
   useEffect(() => {
     const lastMessage = safeMessages[safeMessages.length - 1];
     const lastMessageId = lastMessage?.id || null;
-    
-    // Scroll if message count increased OR if the last message ID changed (content reload)
-    const shouldScroll = 
+    const shouldScroll =
       safeMessages.length > prevMessageCountRef.current ||
       (lastMessageId && lastMessageId !== prevLastMessageIdRef.current);
-    
     if (shouldScroll && scrollContainerRef.current) {
-      // Use setTimeout to ensure DOM has fully rendered
       setTimeout(() => {
         if (scrollContainerRef.current) {
-          // Scroll to bottom of container
           scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-          console.log('ChatPanel: scrolled to bottom', {
-            scrollTop: scrollContainerRef.current.scrollTop,
-            scrollHeight: scrollContainerRef.current.scrollHeight,
-            clientHeight: scrollContainerRef.current.clientHeight
-          });
         }
       }, 100);
     }
-    
     prevMessageCountRef.current = safeMessages.length;
     prevLastMessageIdRef.current = lastMessageId;
   }, [safeMessages]);
 
-  // Track which messages to animate (only newly sent/received, not on initial load)
   useEffect(() => {
     if (safeMessages.length > 0 && isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
@@ -109,41 +125,114 @@ export function ChatPanel({
     lastSeenCountRef.current = safeMessages.length;
   }, [safeMessages.length]);
 
-  // Check if the latest message has a widget that should hide the text input
+  // Reset scroll tracking on tab switch
+  useEffect(() => {
+    prevMessageCountRef.current = 0;
+    prevLastMessageIdRef.current = null;
+    isInitialLoadRef.current = true;
+    lastSeenCountRef.current = 0;
+    if (scrollContainerRef.current) {
+      setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [activeTabId]);
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      const tab = tabs.find((t) => t.id === tabId);
+      // Pass current initiative messages as snapshot so history is populated
+      const snapshot = tab?.isOnboarding ? messages : undefined;
+      closeTab(initiativeId, tabId, snapshot);
+    },
+    [tabs, messages, initiativeId, closeTab],
+  );
+
+  const handleSend = useCallback(
+    async (content: string) => {
+      if (isOnboardingTab) {
+        onSendMessage(content);
+        return;
+      }
+
+      const tabId = activeTab.id;
+      setTabSending(true);
+
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content,
+        widget_type: null,
+        widget_data: null,
+        created_at: new Date().toISOString(),
+      };
+
+      addMessage(initiativeId, tabId, userMsg);
+
+      if (!activeTab.messages || activeTab.messages.length === 0) {
+        const truncated = content.length > 30 ? content.slice(0, 30) + '…' : content;
+        setTabTitle(initiativeId, tabId, truncated);
+      }
+
+      try {
+        const response = await api.sendMessage(initiativeId, content);
+        addMessage(initiativeId, tabId, response.message);
+      } catch {
+        removeMessage(initiativeId, tabId, userMsg.id);
+      } finally {
+        setTabSending(false);
+      }
+    },
+    [isOnboardingTab, activeTab, initiativeId, onSendMessage, addMessage, removeMessage, setTabTitle],
+  );
+
   const latestMessage = safeMessages[safeMessages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
   const showAlignmentWidget = latestMessage?.widget_type === 'alignment';
-  
-  // Hide input when document request or alignment widget is active (to prevent branching conversation)
   const hideTextInput = showDocumentRequest || showAlignmentWidget;
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${fullWidth ? '' : 'border-r border-divider'}`}>
-      {/* Messages - use absolute positioning to prevent flex issues */}
+      {/* Tab bar */}
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        closedTabs={closedTabs}
+        showHistory={showHistory}
+        historyRef={historyRef}
+        onSelectTab={(id) => setActiveTab(initiativeId, id)}
+        onCloseTab={handleCloseTab}
+        onNewTab={() => createTab(initiativeId)}
+        onToggleHistory={() => setShowHistory((p) => !p)}
+        onReopenTab={(id) => { reopenTab(initiativeId, id); setShowHistory(false); }}
+        onDeleteClosedTab={(id) => deleteClosedTab(initiativeId, id)}
+      />
+
+      {/* Messages */}
       <div className="flex-1 relative">
         <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-4">
-        {safeMessages.length === 0 ? (
-          <div className="text-center text-text-tertiary py-8">
-            No messages yet. Start a conversation!
-          </div>
-        ) : (
-          safeMessages.map((message, index) => (
-            <ErrorBoundary key={message.id || `msg-${index}`}>
-              <ChatMessageItem 
-                message={message}
-                initiativeId={initiativeId}
-                isLatest={index === safeMessages.length - 1}
-                animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
-              />
-            </ErrorBoundary>
-          ))
-        )}
-        
-        <div ref={messagesEndRef} className="h-1" />
+          {safeMessages.length === 0 ? (
+            <div className="text-center text-text-tertiary py-8">
+              No messages yet. Start a conversation!
+            </div>
+          ) : (
+            safeMessages.map((message, index) => (
+              <ErrorBoundary key={message.id || `msg-${index}`}>
+                <ChatMessageItem
+                  message={message}
+                  initiativeId={initiativeId}
+                  isLatest={index === safeMessages.length - 1}
+                  animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
+                />
+              </ErrorBoundary>
+            ))
+          )}
+          <div ref={messagesEndRef} className="h-1" />
         </div>
       </div>
 
-      {/* Document Request Widget (above input) - when visible, hide text input */}
       {showDocumentRequest && (
         <DocumentRequestWidget
           initiativeId={initiativeId}
@@ -152,12 +241,11 @@ export function ChatPanel({
         />
       )}
 
-      {/* Input - hidden while document request or alignment widget is shown */}
       {!hideTextInput && (
         <div className="flex-shrink-0 p-4 border-t border-divider">
           <ChatInput
-            onSend={onSendMessage}
-            disabled={sending || generating}
+            onSend={handleSend}
+            disabled={effectiveSending || effectiveGenerating}
             placeholder="Ask anything"
           />
         </div>
@@ -166,29 +254,221 @@ export function ChatPanel({
   );
 }
 
-function ChatMessageItem({ 
+/* ─── Tab bar ─────────────────────────────────────────────────────── */
+
+const ACTIVE_TAB_WIDTH = 136;
+const INACTIVE_TAB_MIN_WIDTH = 72;
+
+function TabBar({
+  tabs,
+  activeTabId,
+  closedTabs,
+  showHistory,
+  historyRef,
+  onSelectTab,
+  onCloseTab,
+  onNewTab,
+  onToggleHistory,
+  onReopenTab,
+  onDeleteClosedTab,
+}: {
+  tabs: ChatTab[];
+  activeTabId: string;
+  closedTabs: ClosedChatTab[];
+  showHistory: boolean;
+  historyRef: React.RefObject<HTMLDivElement | null>;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onNewTab: () => void;
+  onToggleHistory: () => void;
+  onReopenTab: (id: string) => void;
+  onDeleteClosedTab: (id: string) => void;
+}) {
+  return (
+    <div className="flex-shrink-0 flex items-stretch border-b border-divider bg-surface-subtle/50 h-[36px]">
+      {/*
+        Scrollable tab area — flex-1 so it fills available width.
+        Right controls are flex-shrink-0 and stay pinned.
+      */}
+      <div
+        className="flex-1 flex items-stretch overflow-x-auto min-w-0"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTabId;
+          return (
+            <TabButton
+              key={tab.id}
+              tab={tab}
+              isActive={isActive}
+              activeWidth={ACTIVE_TAB_WIDTH}
+              inactiveMinWidth={INACTIVE_TAB_MIN_WIDTH}
+              onClick={() => onSelectTab(tab.id)}
+              onClose={() => onCloseTab(tab.id)}
+            />
+          );
+        })}
+      </div>
+
+      {/* Fixed right controls */}
+      <div className="flex-shrink-0 flex items-center gap-0.5 px-1.5 border-l border-divider">
+        <div className="relative" ref={historyRef}>
+          <button
+            onClick={onToggleHistory}
+            className={`
+              flex items-center justify-center w-7 h-7 rounded transition-colors
+              ${showHistory
+                ? 'text-accent bg-accent-wash'
+                : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle'}
+            `}
+            title="Chat history"
+          >
+            <Clock className="w-3.5 h-3.5" />
+          </button>
+          {showHistory && (
+            <HistoryDropdown
+              closedTabs={closedTabs}
+              onReopen={onReopenTab}
+              onDelete={onDeleteClosedTab}
+            />
+          )}
+        </div>
+        <button
+          onClick={onNewTab}
+          className="flex items-center justify-center w-7 h-7 rounded text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
+          title="New chat"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Individual tab button ───────────────────────────────────────── */
+
+function TabButton({
+  tab,
+  isActive,
+  activeWidth,
+  inactiveMinWidth,
+  onClick,
+  onClose,
+}: {
+  tab: ChatTab;
+  isActive: boolean;
+  activeWidth: number;
+  inactiveMinWidth: number;
+  onClick: () => void;
+  onClose: () => void;
+}) {
+  const style: React.CSSProperties = isActive
+    ? { flexShrink: 0, width: activeWidth }
+    : { flex: '1 1 0', minWidth: inactiveMinWidth };
+
+  return (
+    <button
+      onClick={onClick}
+      style={style}
+      className={`
+        group relative flex items-center gap-1 px-2.5
+        text-xs whitespace-nowrap transition-colors
+        border-r border-divider last:border-r-0
+        ${isActive
+          ? 'bg-white text-text-primary font-medium shadow-subtle z-10'
+          : 'text-text-tertiary hover:text-text-secondary hover:bg-white/60'}
+      `}
+    >
+      <span className="flex-1 truncate text-left">{tab.title}</span>
+      <span
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        className="
+          opacity-0 group-hover:opacity-100 transition-opacity
+          p-0.5 rounded hover:bg-black/10 flex-shrink-0
+          flex items-center justify-center
+        "
+      >
+        <X className="w-3 h-3" />
+      </span>
+    </button>
+  );
+}
+
+/* ─── History dropdown ────────────────────────────────────────────── */
+
+function HistoryDropdown({
+  closedTabs,
+  onReopen,
+  onDelete,
+}: {
+  closedTabs: ClosedChatTab[];
+  onReopen: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-divider rounded-lg shadow-lg z-50 overflow-hidden">
+      <div className="px-3 py-2 border-b border-divider">
+        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          Chat History
+        </h3>
+      </div>
+      <div className="max-h-64 overflow-y-auto">
+        {closedTabs.length === 0 ? (
+          <div className="px-3 py-6 text-xs text-text-tertiary text-center">
+            No chat history
+          </div>
+        ) : (
+          closedTabs.map((tab) => (
+            <div
+              key={tab.id}
+              className="group flex items-center gap-2 px-3 py-2.5 hover:bg-surface-subtle cursor-pointer border-b border-divider last:border-b-0 transition-colors"
+              onClick={() => onReopen(tab.id)}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-text-primary truncate">{tab.title}</p>
+                <p className="text-[10px] text-text-tertiary mt-0.5">
+                  {tab.messages.length} message{tab.messages.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(tab.id); }}
+                className="
+                  opacity-0 group-hover:opacity-100 transition-opacity
+                  p-1 rounded hover:bg-red-50 text-text-tertiary hover:text-red-500 flex-shrink-0
+                "
+                title="Delete permanently"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Chat message item ───────────────────────────────────────────── */
+
+function ChatMessageItem({
   message,
   initiativeId,
   isLatest,
-  animate = false
-}: { 
+  animate = false,
+}: {
   message: ChatMessage;
   initiativeId: string;
   isLatest: boolean;
   animate?: boolean;
 }) {
-  // Defensive: ensure message is valid
-  if (!message) {
-    console.warn('ChatMessageItem: received null/undefined message');
-    return null;
-  }
+  if (!message) return null;
 
   const isUser = message.role === 'user';
-  const shouldShowWidget = message.widget_type && 
-    message.widget_data && 
+  const shouldShowWidget =
+    message.widget_type &&
+    message.widget_data &&
     CHAT_WIDGET_TYPES.includes(message.widget_type);
-
-  // Show message but not widget for document_request (widget shown above input instead)
   const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
 
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -199,10 +479,7 @@ function ChatMessageItem({
         <div
           className={`
             rounded-lg px-3 py-2 text-sm
-            ${isUser
-              ? 'bg-zinc-700 text-white'
-              : 'bg-white text-text-primary'
-            }
+            ${isUser ? 'bg-zinc-700 text-white' : 'bg-white text-text-primary'}
           `}
         >
           {isUser ? (
@@ -214,10 +491,9 @@ function ChatMessageItem({
           )}
         </div>
 
-        {/* Interactive widgets render in chat (but not document_request) */}
         {shouldShowWidget && !isDocumentRequest && (
           <div className={`mt-3 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
-            <ChatWidget 
+            <ChatWidget
               type={message.widget_type!}
               data={message.widget_data!}
               initiativeId={initiativeId}
@@ -230,24 +506,20 @@ function ChatMessageItem({
   );
 }
 
-function ChatWidget({ 
-  type, 
-  data, 
+/* ─── Chat widget renderer ────────────────────────────────────────── */
+
+function ChatWidget({
+  type,
+  data,
   initiativeId,
-  isActive
-}: { 
-  type: string; 
+  isActive,
+}: {
+  type: string;
   data: Record<string, any>;
   initiativeId: string;
   isActive: boolean;
 }) {
-  console.log('ChatWidget render:', { type, isActive, hasData: !!data });
-  
-  // Defensive check for missing data
-  if (!data) {
-    console.warn(`ChatWidget: Missing data for widget type "${type}"`);
-    return null;
-  }
+  if (!data) return null;
 
   switch (type) {
     case 'confirmation':
@@ -281,10 +553,7 @@ function ChatWidget({
         </ErrorBoundary>
       );
     case 'alignment':
-      if (!data.alignment || !data.tool) {
-        console.warn('ChatWidget: Missing alignment or tool data for alignment widget');
-        return null;
-      }
+      if (!data.alignment || !data.tool) return null;
       return (
         <ErrorBoundary>
           <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />
@@ -296,8 +565,19 @@ function ChatWidget({
           <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
+    case 'lcoe_inputs':
+      return (
+        <ErrorBoundary>
+          <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'lcoe_output':
+      return (
+        <ErrorBoundary>
+          <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
     default:
-      console.warn(`ChatWidget: Unknown widget type "${type}"`);
       return null;
   }
 }
