@@ -56,7 +56,7 @@ export function ProjectPlanWidget({ data }: ProjectPlanWidgetProps) {
           return (
             <div
               key={pillar.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded border border-stroke-subtle bg-surface-subtle"
+              className="flex items-center gap-3 px-3 py-2.5 rounded border border-stroke-subtle bg-white"
             >
               <div className="w-7 h-7 rounded bg-accent-wash flex items-center justify-center flex-shrink-0">
                 <Icon className="w-3.5 h-3.5 text-accent" />
