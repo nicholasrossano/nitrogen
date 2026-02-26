@@ -5,12 +5,13 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { ProjectHeader, InputOutputBar, EditorPanel, ChatPanel } from '@/components/editor';
+import { ProjectHeader, EditorPanel, ChatPanel } from '@/components/editor';
+import { ProjectPlanView } from '@/components/project-plan';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
-const MIN_CHAT_WIDTH_PERCENT = 25;
-const MAX_CHAT_WIDTH_PERCENT = 50;
-const DEFAULT_CHAT_WIDTH_PERCENT = 50;
+const MIN_CHAT_WIDTH_PERCENT = 20;
+const MAX_CHAT_WIDTH_PERCENT = 40;
+const DEFAULT_CHAT_WIDTH_PERCENT = 30;
 
 function InitiativePageContent() {
   const params = useParams();
@@ -23,11 +24,13 @@ function InitiativePageContent() {
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showProjectPlan, setShowProjectPlan] = useState(false);
   
   const { 
     initiative, 
     messages,
     evidenceDocs,
+    projectPlan,
     stageStatus,
     loading, 
     sending,
@@ -36,6 +39,7 @@ function InitiativePageContent() {
     loadInitiative, 
     loadChatHistory,
     loadEvidence,
+    loadProjectPlan,
     sendMessage,
     uploadEvidence,
     deleteEvidence,
@@ -47,8 +51,19 @@ function InitiativePageContent() {
       loadInitiative(initiativeId);
       loadChatHistory(initiativeId);
       loadEvidence(initiativeId);
+      loadProjectPlan(initiativeId);
     }
-  }, [initiativeId, loadInitiative, loadChatHistory, loadEvidence]);
+  }, [initiativeId, loadInitiative, loadChatHistory, loadEvidence, loadProjectPlan]);
+
+  // Auto-open project plan when it first becomes available
+  const prevPlanRef = useRef<boolean>(false);
+  useEffect(() => {
+    const hasPlan = !!projectPlan;
+    if (hasPlan && !prevPlanRef.current) {
+      setShowProjectPlan(true);
+    }
+    prevPlanRef.current = hasPlan;
+  }, [projectPlan]);
 
   // Auto-select most recent output when outputs are available
   useEffect(() => {
@@ -95,14 +110,24 @@ function InitiativePageContent() {
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const handleSelectItem = (id: string, type: 'input' | 'output') => {
-    // If clicking the same item, deselect it
     if (selectedItemId === id && selectedItemType === type) {
       setSelectedItemId(null);
       setSelectedItemType(null);
     } else {
       setSelectedItemId(id);
       setSelectedItemType(type);
+      setShowProjectPlan(false);
     }
+  };
+
+  const handleToggleProjectPlan = () => {
+    setShowProjectPlan(prev => {
+      if (!prev) {
+        setSelectedItemId(null);
+        setSelectedItemType(null);
+      }
+      return !prev;
+    });
   };
 
   const handleUploadEvidence = async (file: File) => {
@@ -177,50 +202,8 @@ function InitiativePageContent() {
     return null;
   }
 
-  // Check if there are any outputs
-  const hasOutputs = initiative.deliverables && Object.keys(initiative.deliverables).length > 0;
-  
-  // Determine if editor should be shown
-  // Show editor if: there are outputs OR an input document is selected
-  const shouldShowEditor = hasOutputs || (selectedItemType === 'input' && selectedItemId !== null);
-
-  // Check if we've passed the document request stage
-  // Look for messages that indicate we're past the initial document upload question
-  const hasPassedDocumentRequest = messages.some(msg => 
-    msg.role === 'user' && (
-      msg.content.toLowerCase().includes("don't have any documents") ||
-      msg.content.toLowerCase().includes("uploaded my documents") ||
-      msg.content.toLowerCase().includes("no documents")
-    )
-  );
-  
-  // Check if tool selection widget has appeared (indicates we're past document stage)
-  const hasToolSelectionWidget = messages.some(msg => 
-    msg.widget_type === 'tool_checklist' || msg.widget_type === 'deliverables_list'
-  );
-  
-  // Only show InputOutputBar after initial project description (describe stage)
-  // Show if:
-  // 1. stage_1_complete is true, OR
-  // 2. We're past the describe stage, OR
-  // 3. Tools have been selected, OR
-  // 4. User has responded to document request, OR
-  // 5. Tool selection widget is showing
-  const shouldShowInputOutputBar = 
-    stageStatus?.stage_1_complete === true ||
-    (stageStatus?.stage && stageStatus.stage !== 'describe' && stageStatus.stage !== 'intake') ||
-    (initiative?.selected_tools && initiative.selected_tools.length > 0) ||
-    hasPassedDocumentRequest ||
-    hasToolSelectionWidget;
-
-  // Debug: log the stage status
-  console.log('🔍 InputOutputBar Debug:', {
-    stageStatus,
-    stage: stageStatus?.stage,
-    stage_1_complete: stageStatus?.stage_1_complete,
-    shouldShowInputOutputBar,
-    evidenceDocsCount: evidenceDocs.length,
-  });
+  // Show split view when project plan is open; full-width chat otherwise
+  const shouldShowEditor = showProjectPlan;
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
@@ -237,20 +220,10 @@ function InitiativePageContent() {
       <ProjectHeader 
         initiative={initiative} 
         onTitleUpdate={handleTitleUpdate}
+        showProjectPlan={showProjectPlan}
+        onToggleProjectPlan={handleToggleProjectPlan}
+        hasProjectPlan={!!initiative.project_plan}
       />
-
-      {/* Input/Output Bar - only show after intake stage */}
-      {shouldShowInputOutputBar && (
-        <InputOutputBar
-          initiative={initiative}
-          evidenceDocs={evidenceDocs}
-          selectedItemId={selectedItemId}
-          onSelectItem={handleSelectItem}
-          onUploadEvidence={handleUploadEvidence}
-          onDeleteEvidence={handleDeleteEvidence}
-          loading={loading}
-        />
-      )}
 
       {/* Main content: Chat + Editor split (or just Chat if no outputs) */}
       <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
@@ -280,16 +253,20 @@ function InitiativePageContent() {
               />
             </div>
 
-            {/* Editor Panel - Right side */}
+            {/* Editor Panel / Project Plan - Right side */}
             <div className="flex-1 overflow-hidden">
-              <EditorPanel
-                initiative={initiative}
-                selectedItemId={selectedItemId}
-                selectedItemType={selectedItemType}
-                evidenceDocs={evidenceDocs}
-                onUploadClick={() => fileInputRef.current?.click()}
-                onDeleteEvidence={handleDeleteEvidence}
-              />
+              {showProjectPlan ? (
+                <ProjectPlanView initiativeId={initiativeId} />
+              ) : (
+                <EditorPanel
+                  initiative={initiative}
+                  selectedItemId={selectedItemId}
+                  selectedItemType={selectedItemType}
+                  evidenceDocs={evidenceDocs}
+                  onUploadClick={() => fileInputRef.current?.click()}
+                  onDeleteEvidence={handleDeleteEvidence}
+                />
+              )}
             </div>
           </>
         ) : (

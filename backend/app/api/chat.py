@@ -31,6 +31,7 @@ from app.schemas.chat import (
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
+from app.services.project_plan import ProjectPlanService
 from app.tools import get_tool_registry
 from app.tools.base import ToolAlignment
 from app.api.alignment_helpers import (
@@ -128,19 +129,31 @@ async def send_chat_message_stream(
                 .order_by(ChatMessage.created_at)
             )
             messages = list(history_result.scalars().all())
-            
+
             # Use orchestration service
             orchestration = OrchestrationService(db)
+
+            # Extract inputs from the user's message first
+            extracted = await orchestration.extract_inputs_from_message(
+                message=data.content,
+                initiative=initiative,
+            )
+            await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+
             action_result = await orchestration.get_next_action(
                 messages=messages,
                 initiative=initiative,
             )
-            
+
+            # Send a thinking indicator if plan generation will happen
+            if action_result.action == "generate_project_plan":
+                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Generating your project plan...'})}\n\n"
+
             # Execute the action
             widget_type, widget_data, assistant_response, sources = await execute_action(
                 db, initiative, action_result, orchestration
             )
-            
+
             # Stream the response word by word
             words = assistant_response.split()
             for i, word in enumerate(words):
@@ -204,83 +217,74 @@ async def execute_action(
 ) -> tuple[str | None, dict | None, str, list]:
     """
     Execute an orchestration action and return widget/response.
-    
+
     Returns:
         (widget_type, widget_data, assistant_response, sources)
     """
     action = action_result.action
     params = action_result.parameters
     sources = action_result.sources_used
-    
-    registry = get_tool_registry()
+
     widget_type = None
     widget_data = None
     assistant_response = params.get("message", "")
-    
+
     logger.info(f"Executing action: {action}")
-    
-    # Extract any inputs from the user's last message
-    # (do this for most actions to keep project state updated)
-    if action not in ["proceed_to_generation"]:
-        extracted = await orchestration.extract_inputs_from_message(
-            message=params.get("message", ""),
-            initiative=initiative,
-        )
-        await update_initiative_from_inputs(db, initiative, extracted, orchestration)
-    
+
     if action == "send_message":
-        # Just a message, no widget
         pass
-    
+
     elif action == "ask_for_documents":
         widget_type = "document_request"
         widget_data = {
             "allow_multiple": True,
             "suggested_types": params.get("suggested_types", []),
         }
-    
-    elif action == "show_tool_recommendations":
-        widget_type = "tool_checklist"
-        tool_ids = params.get("tool_ids", [])
-        widget_data = build_tool_recommendations(registry, tool_ids, initiative)
-    
-    elif action == "show_tool_selection":
-        # Re-show tool selection (user wants to go back)
-        widget_type = "tool_checklist"
-        # Clear existing alignments since tools may change
-        initiative.tool_alignments = None
-        await db.commit()
-        await db.refresh(initiative)
-        
-        # Build recommendations with current selections pre-checked
-        selected_ids = set(initiative.selected_tools or [])
-        widget_data = build_tool_recommendations(registry, list(selected_ids), initiative)
-    
+
     elif action == "ask_clarifying_questions":
-        # Just the message with questions, no special widget
-        pass
-    
-    elif action == "proceed_to_alignment":
-        tool_id = params.get("tool_id")
-        if tool_id:
-            tool = registry.get_tool(tool_id)
-            if tool and tool.requires_alignment:
-                alignment_data = await get_or_generate_alignment(db, initiative, tool_id)
-                if alignment_data:
-                    pending = initiative.get_pending_alignment_tools()
-                    pending_others = [t for t in pending if t != tool_id]
-                    
-                    widget_type = "alignment"
-                    widget_data = build_alignment_widget_data(
-                        tool_id=tool_id,
-                        alignment_data=alignment_data,
-                        pending_tool_ids=pending_others,
-                    )
-    
-    elif action == "proceed_to_generation":
-        widget_type = "deliverables_overview"
-        widget_data = build_deliverables_overview_data(initiative)
-    
+        widget_type = "clarifying_questions"
+        widget_data = {
+            "fields_needed": params.get("fields_needed", []),
+        }
+
+    elif action == "generate_project_plan":
+        plan_service = ProjectPlanService(db)
+        existing_plan = initiative.project_plan
+        try:
+            plan_data = await plan_service.generate(
+                initiative=initiative,
+                existing_plan=existing_plan,
+            )
+            initiative.project_plan = plan_data
+            if initiative.stage in (InitiativeStage.DESCRIBE,):
+                initiative.stage = InitiativeStage.PLAN
+            await db.commit()
+            await db.refresh(initiative)
+
+            total_items = sum(
+                len(p.get("items", [])) for p in plan_data.get("pillars", [])
+            )
+            widget_type = "project_plan"
+            widget_data = {
+                "plan": plan_data,
+                "summary": {
+                    "total_items": total_items,
+                    "pillars": [
+                        {
+                            "id": p["id"],
+                            "name": p["name"],
+                            "item_count": len(p.get("items", [])),
+                        }
+                        for p in plan_data.get("pillars", [])
+                    ],
+                },
+            }
+        except Exception as e:
+            logger.error(f"Project plan generation failed: {e}", exc_info=True)
+            assistant_response = "I wasn't able to generate the project plan right now. Could you provide a bit more detail about your project so I can try again?"
+            widget_type = None
+            widget_data = None
+
     return widget_type, widget_data, assistant_response, sources
 
 
@@ -293,13 +297,11 @@ async def update_initiative_from_inputs(
     """Update initiative with extracted inputs from conversation."""
     if not extracted:
         return
-    
+
     updated = False
-    
-    # Update basic project fields
+
     if extracted.get("project_title") and not initiative.title:
         initiative.title = extracted["project_title"]
-        # Select icon for new title
         chat_agent = ChatAgentService()
         icon = await chat_agent.select_project_icon(
             extracted["project_title"],
@@ -307,34 +309,27 @@ async def update_initiative_from_inputs(
         )
         initiative.icon = icon
         updated = True
-    
+
     if extracted.get("geography") and not initiative.geography:
         initiative.geography = extracted["geography"]
         updated = True
-    
+
     if extracted.get("project_description") and not initiative.project_description:
         initiative.project_description = extracted["project_description"]
         updated = True
-    
+
+    if extracted.get("project_type") and not initiative.project_type:
+        initiative.project_type = extracted["project_type"]
+        updated = True
+
     if extracted.get("target_beneficiaries") and not initiative.target_population:
         initiative.target_population = extracted["target_beneficiaries"]
         updated = True
-    
+
     if extracted.get("project_goal") and not initiative.goal:
         initiative.goal = extracted["project_goal"]
         updated = True
-    
-    # Update tool-specific inputs if tools are selected
-    if initiative.selected_tools:
-        current_inputs = initiative.tool_inputs or {}
-        for key, value in extracted.items():
-            if value and key not in ["project_title", "geography", "project_description", "target_beneficiaries", "project_goal"]:
-                current_inputs[key] = value
-                updated = True
-        
-        if updated:
-            initiative.tool_inputs = current_inputs
-    
+
     if updated:
         await db.commit()
         await db.refresh(initiative)
@@ -510,7 +505,7 @@ async def get_chat_history(
         greeting = ChatMessage(
             initiative_id=initiative_id,
             role="assistant",
-            content="I help create investment memos and due diligence checklists for development projects. Briefly describe what you're working on.",
+            content="Describe your project and I'll map out the specific permits, certifications, and deliverables you'll need to move forward.",
         )
         db.add(greeting)
         await db.commit()
