@@ -71,16 +71,16 @@ export function ChatInput({
         placeholder={placeholder}
         disabled={disabled}
         rows={1}
-        className="w-full resize-none rounded-none border border-stroke-subtle bg-white px-4 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary transition-colors duration-150 overflow-hidden"
+        className="w-full resize-none rounded-[20px] border border-stroke-subtle bg-white px-4 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary transition-colors duration-150 overflow-hidden"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       />
-      <div className="absolute right-2 top-0 bottom-0 flex items-center py-2 pointer-events-none [&>*]:pointer-events-auto">
+      <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
         <button
           type="submit"
           disabled={disabled || !input.trim()}
-          className="btn-filled h-full max-h-full aspect-square min-h-[1.75rem] rounded-full flex items-center justify-center p-1.5 bg-accent text-white disabled:bg-stroke-subtle disabled:text-text-tertiary disabled:cursor-not-allowed"
+          className="flex items-center justify-center text-text-tertiary enabled:text-accent transition-colors duration-150 disabled:cursor-default"
         >
-          <Send className="w-4 h-4 flex-shrink-0" />
+          <Send className="w-[18px] h-[18px]" />
         </button>
       </div>
     </form>
