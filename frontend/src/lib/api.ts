@@ -61,6 +61,7 @@ export interface Initiative {
   tool_inputs: Record<string, any> | null;
   tool_alignments: Record<string, ToolAlignment> | null;
   deliverables: Record<string, any> | null;
+  project_plan: ProjectPlan | null;
 }
 
 export interface ToolDefinition {
@@ -73,11 +74,13 @@ export interface ToolDefinition {
 }
 
 export interface SourceCitation {
-  source_type: 'corpus' | 'evidence' | 'web' | 'llm_estimate';
+  source_type: 'corpus' | 'evidence' | 'openalex' | 'web' | 'llm_estimate';
   source_title: string;
   source_url?: string | null;
   chunk_id?: string | null;
   confidence: number;
+  /** Journal name (OpenAlex) or domain (web) — used in citation chips */
+  publisher?: string | null;
 }
 
 export interface ChatMessage {
@@ -175,6 +178,27 @@ export interface ToolAlignment {
 export interface AlignmentResponse {
   alignment: ToolAlignment;
   message: string;
+}
+
+// Project Plan types
+export interface ProjectPlanItem {
+  id: string;
+  title: string;
+  classification: 'required' | 'optional';
+  status: 'not_started' | 'in_progress' | 'complete';
+  rationale: string;
+}
+
+export interface ProjectPlanPillar {
+  id: string;
+  name: string;
+  summary: string;
+  items: ProjectPlanItem[];
+}
+
+export interface ProjectPlan {
+  generated_at: string;
+  pillars: ProjectPlanPillar[];
 }
 
 async function fetchApi<T>(
@@ -528,4 +552,103 @@ export const api = {
         }),
       }
     ),
+
+  // Project Plan
+  getProjectPlan: (initiativeId: string) =>
+    fetchApi<{ project_plan: ProjectPlan | null }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan`
+    ),
+
+  generateProjectPlan: (initiativeId: string) =>
+    fetchApi<{ project_plan: ProjectPlan }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan`,
+      { method: 'POST' }
+    ),
+
+  updatePlanItemStatus: (
+    initiativeId: string,
+    itemId: string,
+    status: 'not_started' | 'in_progress' | 'complete',
+  ) =>
+    fetchApi<{ success: boolean; item_id: string; status: string }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/status`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }
+    ),
+
+  // Compliance chat (standalone, not initiative-bound)
+  sendComplianceChatStream: async (
+    history: { role: string; content: string }[],
+    content: string,
+    onThinking: (text: string) => void,
+    onWord: (word: string) => void,
+    onComplete: (payload: {
+      content: string;
+      sources: SourceCitation[];
+      tiers_used: string[];
+      citation_count: number;
+      latency_ms: number;
+    }) => void,
+    onError: (message: string) => void,
+  ) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content, history }),
+    });
+
+    if (!response.ok || !response.body) {
+      const err = await response.json().catch(() => ({ detail: 'Stream failed' }));
+      onError(err.detail || `HTTP ${response.status}`);
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const json_str = trimmed.slice(6);
+        if (!json_str) continue;
+
+        try {
+          const event = JSON.parse(json_str);
+          switch (event.type) {
+            case 'thinking':
+              onThinking(event.text);
+              break;
+            case 'word':
+              onWord(event.content);
+              break;
+            case 'complete':
+              onComplete(event);
+              break;
+            case 'error':
+              onError(event.message);
+              break;
+          }
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+  },
 };

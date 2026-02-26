@@ -153,6 +153,47 @@ body {
 .loading-dot:nth-child(3) { animation-delay: 0.4s; }
 
 /* Prose styling for memo viewer - clean, institutional */
+.prose-chat {
+  @apply text-text-primary;
+}
+
+.prose-chat p,
+.prose-chat ul,
+.prose-chat ol,
+.prose-chat pre,
+.prose-chat blockquote {
+  margin-top: 0;
+  margin-bottom: 0.625rem;
+}
+
+.prose-chat h1,
+.prose-chat h2 {
+  margin-top: 0;
+  margin-bottom: 0.625rem;
+}
+
+.prose-chat h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.prose-chat > :last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat ul,
+.prose-chat ol {
+  padding-left: 1.25rem;
+}
+
+.prose-chat li + li {
+  margin-top: 0.25rem;
+}
+
+.prose-chat li p {
+  margin-bottom: 0;
+}
+
 .prose-memo {
   @apply text-text-primary leading-relaxed;
 }
@@ -222,7 +263,7 @@ textarea {
 
 /* Button base styles - with opacity fade effect */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
   @apply border border-accent text-accent bg-white font-medium text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
@@ -794,4 +835,36 @@ textarea {
 .editable-content:focus {
   background-color: rgba(237, 247, 255, 0.6);
   box-shadow: 0 0 0 2px var(--color-accent-tint);
+}
+
+/* ============================================================
+   Compliance Chat — animations & transitions
+   ============================================================ */
+
+/* Thinking-stage timeline entry */
+@keyframes thinkingStageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.thinking-stage-enter {
+  animation: thinkingStageEnter 200ms ease-out forwards;
+}
+
+/* Reduced-motion: disable all chat-specific animations */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-stage-enter,
+  .message-enter,
+  .message-enter-bot,
+  .word-fade-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

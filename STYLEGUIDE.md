@@ -114,24 +114,27 @@ It is prescriptive and concise, prioritizing clarity, restraint, and long-term c
 ### Default: Sharp Edges
 **Most UI elements use no border radius (0px) for a precise, architectural feel:**
 - Cards & panels
-- Buttons (primary, secondary, ghost)
-- Input fields & text areas
 - Badges & status indicators
 - Data tables & list items
 - Navigation elements
 
-### Exceptions: Subtle Rounding for Interactive Elements
-**Small radius (4–6px) reserved for:**
-- Icon-only buttons (edit, delete, close actions)
-- Interactive pill buttons (input/output selection tags)
-- Action icons that need tactile affordance
-- Upload zones with rounded borders
+### Exceptions by Context
+
+| Element | Radius | Token |
+| --- | --- | --- |
+| Icon-only action buttons (edit, delete, close) | 4–6px | `rounded-sm` / `rounded` |
+| Interactive pill tags (selection, toggle) | 4–6px | `rounded` |
+| Ghost row hovers (history items, nav rows) | 8–12px | `rounded-lg` / `rounded-xl` |
+| Primary / secondary buttons (`btn-primary`) | 20px | `rounded-[20px]` |
+| Search inputs | 20px | `rounded-[20px]` |
+| Chat composer textarea | 28px | `rounded-[28px]` |
+| Message bubbles (user) | 16px | `rounded-2xl` |
 
 **Rules**
-- Default to **0** (sharp corners) for all containers and buttons
-- Use **4–6px** only for small interactive elements that benefit from softness
-- Never use radius > **8px** anywhere in the UI
-- Consistent application: if one button is sharp, all similar buttons are sharp  
+- Default to **0** (sharp corners) for containers, cards, and data surfaces
+- Chat and messaging surfaces use **pill-style rounding** (20–28px) for a conversational feel — this is the approved exception to the sharp-edge default
+- Never exceed **28px** anywhere in the UI
+- Consistent application within a surface: all inputs on the same page should share a radius tier
 
 ## F) Elevation & Depth
 
@@ -283,12 +286,157 @@ For marketing/landing pages and promotional materials, use a bolder 3D depth eff
 
 For high-importance actions, a 30–60ms delay before state change is acceptable to add perceived weight.
 
-## I) Accessibility (Visual)
-	•	WCAG AA contrast minimum
-	•	Color never sole indicator
-	•	Focus and selection clearly visible
+## I) Chat & Messaging Patterns
 
-## J) Visual North Star
+These are the approved patterns for all chat and compliance-chat surfaces. Follow them exactly.
+
+### Chat Composer (Textarea Input)
+
+```tsx
+// Pill-shaped, auto-resize, hidden scrollbar
+<textarea
+  className="w-full resize-none rounded-[28px] border border-stroke-subtle bg-white
+             px-5 py-3.5 pr-12 text-sm text-text-primary
+             placeholder:text-text-tertiary
+             focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none
+             disabled:bg-surface-subtle disabled:text-text-tertiary
+             transition-colors duration-150 overflow-hidden"
+  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+/>
+```
+
+**Rules**
+- `rounded-[28px]` — pill shape is the approved chat input radius
+- `border-stroke-subtle` default → `border-accent` + `ring-1 ring-accent/20` on focus
+- `py-3.5` for the landing/full-page composer; `py-3` for the in-conversation composer
+- Auto-resize capped at `150px` (`Math.min(textarea.scrollHeight, 150)`)
+- Placeholder clears when the textarea is focused (`focused ? '' : placeholder`)
+- Hidden scrollbar via inline style (Tailwind cannot suppress it cross-browser)
+
+### Send Button
+
+```tsx
+// Inline icon-only, positioned absolute right-3, vertically centered
+<button
+  type="submit"
+  disabled={disabled || !input.trim()}
+  className="flex items-center justify-center
+             text-text-tertiary enabled:text-accent
+             transition-colors duration-150 disabled:cursor-default"
+>
+  <Send className="w-[18px] h-[18px]" />
+</button>
+```
+
+**Rules**
+- No background, no border — icon color carries the full state signal
+- `text-text-tertiary` (idle/disabled) → `text-accent` (enabled)
+- `disabled:cursor-default` (not `not-allowed`) so the empty-input state feels natural
+
+### New Chat Button
+
+```tsx
+// Ghost text button, top-right of conversation panel
+<button
+  className="flex items-center gap-1.5 text-xs text-text-tertiary
+             hover:text-text-secondary disabled:opacity-40
+             transition-colors duration-150
+             px-2 py-1.5 rounded-lg hover:bg-surface-subtle"
+>
+  <SquarePen className="w-3.5 h-3.5" />
+  New chat
+</button>
+```
+
+**Rules**
+- `SquarePen` icon (Lucide) — never a `Plus` or `RefreshCw`
+- Ghost pattern: no background at rest, `surface-subtle` fill on hover
+- `text-xs` — kept lightweight to not compete with message content
+
+### Message Bubbles
+
+**User messages**
+```tsx
+<div className="px-4 py-3 rounded-2xl bg-accent text-white">
+  <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+</div>
+// Alignment: justify-end, max-w-[75%] items-end
+```
+
+**Assistant messages**
+```tsx
+// No bubble — prose rendered directly on the canvas
+<div className="text-text-primary prose-chat">
+  <ReactMarkdown components={markdownComponents}>
+    {content}
+  </ReactMarkdown>
+</div>
+// Alignment: justify-start, max-w-[90%] items-start
+```
+
+**Markdown component defaults (prose-chat)**
+| Tag | Classes |
+| --- | --- |
+| `p` | `text-sm leading-relaxed mb-2 last:mb-0` |
+| `ul` / `ol` | `text-sm list-disc/decimal pl-5 mb-2 space-y-1` |
+| `li` | `leading-relaxed` |
+| `h1` | `text-lg font-semibold mb-2` |
+| `h2` | `text-base font-semibold mb-2` |
+| `h3` | `text-sm font-semibold mb-1` |
+| `code` | `text-xs bg-surface-subtle px-1.5 py-0.5 rounded-sm border border-stroke-subtle` |
+| `pre` | `text-xs bg-surface-subtle p-3 border border-stroke-subtle overflow-x-auto mb-2` |
+| `a` | `text-accent hover:text-accent-anchor hover:underline` |
+| `blockquote` | `border-l border-divider pl-3 text-text-secondary mb-2` |
+
+### Session History Rows
+
+```tsx
+<div className="group flex items-center gap-3 px-3 py-2.5
+                rounded-xl hover:bg-surface-subtle
+                transition-colors duration-100 cursor-pointer">
+  <MessageSquare className="w-4 h-4 text-text-tertiary shrink-0" />
+  <span className="flex-1 text-sm text-text-secondary truncate">{title}</span>
+  <span className="text-xs text-text-tertiary shrink-0 tabular-nums">{relativeTime}</span>
+  {/* Delete — visible on hover only */}
+  <button className="shrink-0 p-0.5 rounded transition-all duration-100
+                     text-text-tertiary hover:text-red-400
+                     opacity-0 group-hover:opacity-100">
+    <Trash2 className="w-3.5 h-3.5" />
+  </button>
+</div>
+```
+
+**Rules**
+- Delete icon hidden at rest (`opacity-0`), revealed on row hover via Tailwind `group-hover`
+- `tabular-nums` on relative timestamps to prevent layout shift
+- Section label above the list: `text-xs font-medium text-text-tertiary uppercase tracking-wider`
+
+### Primary Button (`btn-primary`)
+
+Defined as a global CSS class — do not replicate inline.
+
+```css
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply border border-accent text-accent bg-white font-medium text-sm;
+  /* Opacity-fade fill on hover (accent bg), lift + compress motion */
+}
+```
+
+- `rounded-[20px]` — slightly softer than data surfaces, appropriate for action buttons
+- Hover: accent fill fades in (`opacity 200ms`), button lifts `translateY(-2px)` with `shadow-md`
+- Active: `scale(0.98)`, shadow collapses (`100ms`)
+- Disabled: `opacity-50 cursor-not-allowed`
+- Leading icon size: `w-4 h-4`; use `Loader2 animate-spin` during loading state
+
+---
+
+## J) Accessibility (Visual)
+- WCAG AA contrast minimum
+- Color never sole indicator
+- Focus and selection clearly visible
+
+## K) Visual North Star
 
 The UI should feel at home next to enterprise dashboards, analytics tools, and compliance software.
 If it feels playful or brand-forward, it is likely off-spec.

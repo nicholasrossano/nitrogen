@@ -60,6 +60,7 @@ class InitiativeResponse(BaseModel):
     tool_inputs: Optional[dict] = None
     tool_alignments: Optional[dict] = None
     deliverables: Optional[dict] = None
+    project_plan: Optional[dict] = None
     
     class Config:
         from_attributes = True

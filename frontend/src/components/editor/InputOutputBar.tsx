@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Plus, FileText, Upload, Loader2, Trash2 } from 'lucide-react';
+import { Plus, FileText, Upload, Loader2, Trash2, Map } from 'lucide-react';
 import { EvidenceDoc, Initiative } from '@/lib/api';
 
 interface InputOutputBarProps {
@@ -12,6 +12,8 @@ interface InputOutputBarProps {
   onUploadEvidence: (file: File) => Promise<void>;
   onDeleteEvidence?: (evidenceId: string) => Promise<void>;
   loading?: boolean;
+  showProjectPlan?: boolean;
+  onToggleProjectPlan?: () => void;
 }
 
 export function InputOutputBar({
@@ -22,6 +24,8 @@ export function InputOutputBar({
   onUploadEvidence,
   onDeleteEvidence,
   loading = false,
+  showProjectPlan = false,
+  onToggleProjectPlan,
 }: InputOutputBarProps) {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -132,28 +136,41 @@ export function InputOutputBar({
         </div>
 
         {/* Divider and Outputs section */}
-        {hasOutputs && (
+        {(hasOutputs || onToggleProjectPlan) && (
           <>
             {/* Divider */}
             <div className="w-px bg-divider" />
 
             {/* Outputs section */}
             <div className="flex-1 min-w-0 px-4 py-3">
-              <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
-                Outputs
-              </h3>
-              <div className="flex items-center gap-2 flex-wrap">
-                {outputs.map((output) => (
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+                  Outputs
+                </h3>
+                {onToggleProjectPlan && (
                   <button
-                    key={output.id}
-                    onClick={() => onSelectItem(output.id, 'output')}
-                    className={`pill-btn ${selectedItemId === output.id ? 'selected' : ''}`}
+                    onClick={onToggleProjectPlan}
+                    className={`pill-btn !px-2.5 !py-1.5 !text-xs ${showProjectPlan ? 'selected' : ''}`}
                   >
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate max-w-[120px]">{output.name}</span>
+                    <Map className="w-3.5 h-3.5" />
+                    Project Plan
                   </button>
-                ))}
+                )}
               </div>
+              {hasOutputs && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {outputs.map((output) => (
+                    <button
+                      key={output.id}
+                      onClick={() => onSelectItem(output.id, 'output')}
+                      className={`pill-btn ${selectedItemId === output.id && !showProjectPlan ? 'selected' : ''}`}
+                    >
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate max-w-[120px]">{output.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}
