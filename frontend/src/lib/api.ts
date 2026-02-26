@@ -199,6 +199,38 @@ export interface ProjectPlanPillar {
 export interface ProjectPlan {
   generated_at: string;
   pillars: ProjectPlanPillar[];
+  deep_dives?: Record<string, DeepDiveResult>;
+}
+
+// Deep Dive types
+export interface DeepDiveElement {
+  title: string;
+  description: string;
+  classification: 'required' | 'optional' | 'unknown';
+}
+
+export interface DeepDiveDependency {
+  condition: string;
+  effect: string;
+}
+
+export interface DeepDiveSource {
+  title: string;
+  url: string | null;
+  source_type: string;
+  publisher: string | null;
+}
+
+export interface DeepDiveResult {
+  item_id: string;
+  item_title: string;
+  pillar_name: string;
+  what_this_is: string[];
+  elements: DeepDiveElement[];
+  dependencies: DeepDiveDependency[];
+  sources: DeepDiveSource[];
+  generated_at: string;
+  latency_ms: number;
 }
 
 async function fetchApi<T>(
@@ -575,6 +607,25 @@ export const api = {
       {
         method: 'PATCH',
         body: JSON.stringify({ status }),
+      }
+    ),
+
+  // Project plan deep dive
+  deepDiveItem: (
+    initiativeId: string,
+    itemId: string,
+    body: {
+      item_title: string;
+      item_classification: string;
+      item_rationale: string;
+      pillar_name: string;
+    }
+  ) =>
+    fetchApi<DeepDiveResult>(
+      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/deep-dive`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
       }
     ),
 

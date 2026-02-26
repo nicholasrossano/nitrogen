@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Check, X, Map } from 'lucide-react';
+import { ArrowLeft, Pencil, Check, X, Map, PanelLeft, PanelRight } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 
 interface ProjectHeaderProps {
@@ -11,9 +11,11 @@ interface ProjectHeaderProps {
   showProjectPlan?: boolean;
   onToggleProjectPlan?: () => void;
   hasProjectPlan?: boolean;
+  showChatPanel?: boolean;
+  onToggleChatPanel?: () => void;
 }
 
-export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onToggleProjectPlan, hasProjectPlan = false }: ProjectHeaderProps) {
+export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onToggleProjectPlan, hasProjectPlan = false, showChatPanel = true, onToggleChatPanel }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(
     initiative.title || 'Untitled'
@@ -122,19 +124,41 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
           </div>
         </div>
 
-        {/* Project Plan toggle — top right */}
-        {onToggleProjectPlan && (
-          <div className="ml-auto">
+        {/* Right controls */}
+        <div className="ml-auto flex items-center gap-1">
+          {/* Panel toggle buttons — shown when in split view */}
+          {showProjectPlan && (
+            <>
+              <button
+                onClick={onToggleChatPanel}
+                title={showChatPanel ? 'Hide chat panel' : 'Show chat panel'}
+                className={`icon-btn p-1.5 ${showChatPanel ? 'text-accent' : 'text-text-tertiary'}`}
+              >
+                <PanelLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={hasProjectPlan ? onToggleProjectPlan : undefined}
+                disabled={!hasProjectPlan}
+                title="Hide project plan"
+                className={`icon-btn p-1.5 text-accent ${!hasProjectPlan ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <PanelRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+
+          {/* Project Plan toggle */}
+          {onToggleProjectPlan && (
             <button
               onClick={hasProjectPlan ? onToggleProjectPlan : undefined}
               disabled={!hasProjectPlan}
-              className={`pill-btn !px-2.5 !py-1.5 !text-xs ${showProjectPlan ? 'selected' : ''} ${!hasProjectPlan ? 'opacity-40 cursor-not-allowed' : ''}`}
+              className={`pill-btn !px-2.5 !py-1.5 !text-xs ml-1 ${showProjectPlan ? 'selected' : ''} ${!hasProjectPlan ? 'opacity-40 cursor-not-allowed' : ''}`}
             >
               <Map className="w-3.5 h-3.5" />
               Project Plan
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Accent divider */}

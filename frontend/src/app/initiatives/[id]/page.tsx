@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { ProjectHeader, EditorPanel, ChatPanel } from '@/components/editor';
+import { ProjectHeader, ChatPanel } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
@@ -16,22 +16,18 @@ const DEFAULT_CHAT_WIDTH_PERCENT = 30;
 function InitiativePageContent() {
   const params = useParams();
   const initiativeId = params.id as string;
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [selectedItemType, setSelectedItemType] = useState<'input' | 'output' | null>(null);
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showProjectPlan, setShowProjectPlan] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(true);
   
   const { 
     initiative, 
     messages,
-    evidenceDocs,
     projectPlan,
-    stageStatus,
     loading, 
     sending,
     generating,
@@ -41,8 +37,6 @@ function InitiativePageContent() {
     loadEvidence,
     loadProjectPlan,
     sendMessage,
-    uploadEvidence,
-    deleteEvidence,
     updateTitle,
   } = useInitiativeStore();
 
@@ -64,19 +58,6 @@ function InitiativePageContent() {
     }
     prevPlanRef.current = hasPlan;
   }, [projectPlan]);
-
-  // Auto-select most recent output when outputs are available
-  useEffect(() => {
-    if (initiative?.deliverables && !selectedItemId) {
-      const outputs = Object.keys(initiative.deliverables);
-      if (outputs.length > 0) {
-        // Select the last output (most recent)
-        const mostRecentOutput = outputs[outputs.length - 1];
-        setSelectedItemId(mostRecentOutput);
-        setSelectedItemType('output');
-      }
-    }
-  }, [initiative?.deliverables, selectedItemId]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing || !containerRef.current) return;
@@ -109,52 +90,17 @@ function InitiativePageContent() {
     };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
-  const handleSelectItem = (id: string, type: 'input' | 'output') => {
-    if (selectedItemId === id && selectedItemType === type) {
-      setSelectedItemId(null);
-      setSelectedItemType(null);
-    } else {
-      setSelectedItemId(id);
-      setSelectedItemType(type);
-      setShowProjectPlan(false);
-    }
-  };
-
   const handleToggleProjectPlan = () => {
     setShowProjectPlan(prev => {
       if (!prev) {
-        setSelectedItemId(null);
-        setSelectedItemType(null);
+        setShowChatPanel(true); // always restore chat when re-opening plan
       }
       return !prev;
     });
   };
 
-  const handleUploadEvidence = async (file: File) => {
-    try {
-      setUploadError(null);
-      await uploadEvidence(initiativeId, file);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to upload document';
-      setUploadError(message);
-      // Clear error after 5 seconds
-      setTimeout(() => setUploadError(null), 5000);
-    }
-  };
-
-  const handleDeleteEvidence = async (evidenceId: string) => {
-    try {
-      await deleteEvidence(evidenceId);
-      // If the deleted doc was selected, deselect it
-      if (selectedItemId === evidenceId) {
-        setSelectedItemId(null);
-        setSelectedItemType(null);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete document';
-      setUploadError(message);
-      setTimeout(() => setUploadError(null), 5000);
-    }
+  const handleToggleChatPanel = () => {
+    setShowChatPanel(prev => !prev);
   };
 
   const handleSendMessage = (content: string) => {
@@ -202,9 +148,6 @@ function InitiativePageContent() {
     return null;
   }
 
-  // Show split view when project plan is open; full-width chat otherwise
-  const shouldShowEditor = showProjectPlan;
-
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
       {/* Upload Error Toast */}
@@ -223,54 +166,47 @@ function InitiativePageContent() {
         showProjectPlan={showProjectPlan}
         onToggleProjectPlan={handleToggleProjectPlan}
         hasProjectPlan={!!initiative.project_plan}
+        showChatPanel={showChatPanel}
+        onToggleChatPanel={handleToggleChatPanel}
       />
 
-      {/* Main content: Chat + Editor split (or just Chat if no outputs) */}
+      {/* Main content area */}
       <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
-        {shouldShowEditor ? (
+        {showProjectPlan ? (
           <>
-            {/* Chat Panel - Left side (resizable) */}
-            <div 
-              className="flex-shrink-0 relative"
-              style={{ width: `${chatWidthPercent}%` }}
-            >
-              <ChatPanel
-                messages={messages}
-                sending={sending}
-                generating={generating}
-                initiativeId={initiativeId}
-                onSendMessage={handleSendMessage}
-              />
-              
-              {/* Resize handle */}
-              <div
-                onMouseDown={handleResizeStart}
-                className={`
-                  absolute top-0 right-0 w-1 h-full cursor-col-resize
-                  hover:bg-accent/30 transition-colors
-                  ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
-                `}
-              />
-            </div>
-
-            {/* Editor Panel / Project Plan - Right side */}
-            <div className="flex-1 overflow-hidden">
-              {showProjectPlan ? (
-                <ProjectPlanView initiativeId={initiativeId} />
-              ) : (
-                <EditorPanel
-                  initiative={initiative}
-                  selectedItemId={selectedItemId}
-                  selectedItemType={selectedItemType}
-                  evidenceDocs={evidenceDocs}
-                  onUploadClick={() => fileInputRef.current?.click()}
-                  onDeleteEvidence={handleDeleteEvidence}
+            {/* Chat Panel - Left side (resizable, collapsible) */}
+            {showChatPanel && (
+              <div 
+                className="flex-shrink-0 relative"
+                style={{ width: `${chatWidthPercent}%` }}
+              >
+                <ChatPanel
+                  messages={messages}
+                  sending={sending}
+                  generating={generating}
+                  initiativeId={initiativeId}
+                  onSendMessage={handleSendMessage}
                 />
-              )}
+                
+                {/* Resize handle */}
+                <div
+                  onMouseDown={handleResizeStart}
+                  className={`
+                    absolute top-0 right-0 w-1 h-full cursor-col-resize
+                    hover:bg-accent/30 transition-colors
+                    ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
+                  `}
+                />
+              </div>
+            )}
+
+            {/* Project Plan - Right side */}
+            <div className="flex-1 overflow-hidden">
+              <ProjectPlanView initiativeId={initiativeId} />
             </div>
           </>
         ) : (
-          /* No outputs - full width chat */
+          /* Full-width chat */
           <div className="flex-1 overflow-hidden h-full">
             <ChatPanel
               messages={messages}
@@ -284,20 +220,6 @@ function InitiativePageContent() {
         )}
       </div>
 
-      {/* Hidden file input for upload button in EditorPanel */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            await handleUploadEvidence(file);
-            e.target.value = '';
-          }
-        }}
-        className="hidden"
-      />
     </div>
   );
 }

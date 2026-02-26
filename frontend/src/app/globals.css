@@ -71,6 +71,18 @@ body {
   background: var(--color-stroke-subtle);
 }
 
+/* Side panel slide-in from right */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Chat message animation - fade in with slight rise */
 @keyframes fadeInRise {
   from {
@@ -672,6 +684,22 @@ textarea {
 .card-interactive:active {
   @apply shadow-none;
   transform: translateY(0) scale(0.98);
+  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+}
+
+/* Clickable plan sub-items — lift on hover without overriding classification colours */
+.plan-item-lift {
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+}
+
+.plan-item-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+}
+
+.plan-item-lift:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: none;
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 

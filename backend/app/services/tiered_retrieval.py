@@ -282,10 +282,20 @@ class TieredRetrievalService:
             logger.error(f"OpenAlex search failed: {e}")
             return []
     
-    async def search_web(self, query: str) -> list[RetrievedFact]:
+    async def search_web(
+        self,
+        query: str,
+        max_results: int = 5,
+        max_content_length: int = 400,
+    ) -> list[RetrievedFact]:
         """
         Search the web for authoritative sources.
         Uses Tavily API if configured, otherwise skips.
+
+        Args:
+            query: Search query string.
+            max_results: Max results to return from Tavily (default 5, up to 10).
+            max_content_length: Max characters to keep per result content (default 400).
         """
         if not settings.tavily_api_key:
             logger.debug(f"Web search skipped (no API key): {query[:50]}...")
@@ -300,7 +310,7 @@ class TieredRetrievalService:
                         "api_key": settings.tavily_api_key,
                         "query": query,
                         "search_depth": "advanced",
-                        "max_results": 5,
+                        "max_results": max_results,
                         "include_domains": [],
                         "exclude_domains": [
                             "reddit.com", "quora.com", "medium.com",
@@ -328,7 +338,7 @@ class TieredRetrievalService:
                         pass
                 facts.append(
                     RetrievedFact(
-                        content=content[:400],
+                        content=content[:max_content_length],
                         source_type=SourceType.WEB,
                         source_title=title,
                         source_url=url,
