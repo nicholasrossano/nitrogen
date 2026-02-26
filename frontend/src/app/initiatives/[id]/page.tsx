@@ -202,6 +202,7 @@ function InitiativePageContent() {
                   generating={generating}
                   initiativeId={initiativeId}
                   onSendMessage={handleSendMessage}
+                  hasProjectPlan={!!projectPlan}
                 />
                 
                 {/* Resize handle */}
@@ -235,6 +236,7 @@ function InitiativePageContent() {
               initiativeId={initiativeId}
               onSendMessage={handleSendMessage}
               fullWidth={true}
+              hasProjectPlan={!!projectPlan}
             />
           </div>
         )}

@@ -18,6 +18,8 @@ import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
+import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
+import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -26,6 +28,7 @@ interface ChatPanelProps {
   initiativeId: string;
   onSendMessage: (content: string) => void;
   fullWidth?: boolean;
+  hasProjectPlan?: boolean;
 }
 
 const CHAT_WIDGET_TYPES = [
@@ -38,6 +41,8 @@ const CHAT_WIDGET_TYPES = [
   'project_plan',
   'lcoe_inputs',
   'lcoe_output',
+  'carbon_inputs',
+  'carbon_output',
 ];
 
 const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
@@ -49,6 +54,7 @@ export function ChatPanel({
   initiativeId,
   onSendMessage,
   fullWidth = false,
+  hasProjectPlan = false,
 }: ChatPanelProps) {
   const {
     ensureGroup, setActiveTab, createTab, closeTab,
@@ -210,20 +216,22 @@ export function ChatPanel({
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${fullWidth ? '' : 'border-r border-divider'}`}>
-      {/* Tab bar */}
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        closedTabs={closedTabs}
-        showHistory={showHistory}
-        historyRef={historyRef}
-        onSelectTab={(id) => setActiveTab(initiativeId, id)}
-        onCloseTab={handleCloseTab}
-        onNewTab={() => createTab(initiativeId)}
-        onToggleHistory={() => setShowHistory((p) => !p)}
-        onReopenTab={(id) => { reopenTab(initiativeId, id); setShowHistory(false); }}
-        onDeleteClosedTab={(id) => deleteClosedTab(initiativeId, id)}
-      />
+      {/* Tab bar — only shown once a project plan exists */}
+      {hasProjectPlan && (
+        <TabBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          closedTabs={closedTabs}
+          showHistory={showHistory}
+          historyRef={historyRef}
+          onSelectTab={(id) => setActiveTab(initiativeId, id)}
+          onCloseTab={handleCloseTab}
+          onNewTab={() => createTab(initiativeId)}
+          onToggleHistory={() => setShowHistory((p) => !p)}
+          onReopenTab={(id) => { reopenTab(initiativeId, id); setShowHistory(false); }}
+          onDeleteClosedTab={(id) => deleteClosedTab(initiativeId, id)}
+        />
+      )}
 
       {/* Messages */}
       <div className="flex-1 relative">
@@ -590,6 +598,18 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'carbon_inputs':
+      return (
+        <ErrorBoundary>
+          <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'carbon_output':
+      return (
+        <ErrorBoundary>
+          <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
     default:
