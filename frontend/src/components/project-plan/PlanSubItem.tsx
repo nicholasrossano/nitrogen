@@ -57,7 +57,7 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
   return (
     <>
       {/* Main item row */}
-      <div className="flex items-stretch">
+      <div className="flex items-stretch relative">
         {/* Branch gutter */}
         <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
           <div className="w-px bg-stroke-subtle flex-1" />
@@ -68,35 +68,36 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
           <div className="absolute top-1/2 right-0 w-[calc(50%-4px)] h-px bg-stroke-subtle -translate-y-[0.5px]" />
         </div>
 
+        {/* Bridges the pb-1.5 gap so Col B's line touches the card bottom */}
+        {showElements && <div className="absolute bottom-0 left-11 w-px h-1.5 bg-stroke-subtle" />}
+
         {/* Node card */}
         <div className="flex-1 min-w-0 py-1.5 pr-0">
           <div
-            className={`px-3 py-2.5 border ${styles.card} ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`}
+            className={`px-3 py-2.5 border ${styles.card} ${isClickable ? 'plan-item-lift cursor-pointer' : ''} relative`}
             onClick={isClickable ? () => onDeepDive!(item) : undefined}
             role={isClickable ? 'button' : undefined}
             tabIndex={isClickable ? 0 : undefined}
             onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDeepDive!(item); } } : undefined}
             aria-label={isClickable ? `Deep dive: ${item.title}` : undefined}
           >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-text-primary leading-snug flex-1 min-w-0">
-                {item.title}
-              </span>
-              {hasElements && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setElementsExpanded(!elementsExpanded); }}
-                  className="w-4 h-4 flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0"
-                  aria-label={elementsExpanded ? 'Collapse elements' : 'Expand elements'}
-                >
-                  {elementsExpanded
-                    ? <ChevronDown className="w-3 h-3" />
-                    : <ChevronRight className="w-3 h-3" />}
-                </button>
-              )}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none flex-shrink-0 ${styles.badge}`}>
-                {styles.label}
-              </span>
-            </div>
+            <span className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none ${styles.badge}`}>
+              {styles.label}
+            </span>
+            <span className="text-sm font-medium text-text-primary leading-snug block pr-10">
+              {item.title}
+            </span>
+            {hasElements && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setElementsExpanded(!elementsExpanded); }}
+                className="absolute bottom-2 right-2 w-4 h-4 flex items-center justify-center text-text-tertiary hover:text-text-secondary transition-colors"
+                aria-label={elementsExpanded ? 'Collapse elements' : 'Expand elements'}
+              >
+                {elementsExpanded
+                  ? <ChevronDown className="w-3 h-3" />
+                  : <ChevronRight className="w-3 h-3" />}
+              </button>
+            )}
           </div>
         </div>
       </div>
