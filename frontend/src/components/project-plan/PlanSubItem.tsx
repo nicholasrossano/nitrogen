@@ -26,13 +26,13 @@ const CLASSIFICATION_STYLES: Record<Classification, {
     label: 'REQ',
   },
   optional: {
-    dot: 'bg-stroke-subtle',
+    dot: 'bg-accent',
     card: 'border-stroke-subtle bg-white',
     badge: 'bg-surface-subtle text-text-tertiary',
     label: 'OPT',
   },
   unknown: {
-    dot: 'bg-indicator-orange/60',
+    dot: 'bg-accent',
     card: 'border-indicator-orange/20 bg-indicator-orange/5',
     badge: 'bg-indicator-orange/10 text-indicator-orange',
     label: 'UNK',
@@ -108,19 +108,22 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
 
         return (
           <div key={i} className="flex items-stretch">
-            {/* Col A: parent branch continuation */}
-            <div className="w-8 flex-shrink-0 flex items-center justify-center">
-              {!isLast && <div className="w-px bg-stroke-subtle h-full" />}
+            {/* Col A: parent branch continuation + L-bend to Col B */}
+            <div className="w-8 flex-shrink-0 flex items-center justify-center relative">
+              {(!isLast || !isLastEl)
+                ? <div className="w-px bg-stroke-subtle h-full" />
+                : <div className="w-px bg-stroke-subtle h-1/2 self-start" />}
+              <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle -translate-y-[0.5px]" />
             </div>
 
             {/* Col B: element sub-branch gutter */}
             <div className="w-6 flex flex-col items-center flex-shrink-0 relative">
               <div className="w-px bg-stroke-subtle flex-1" />
-              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${elStyles.dot}`} />
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 relative z-10 ${elStyles.dot}`} />
               {!isLastEl
                 ? <div className="w-px bg-stroke-subtle flex-1" />
                 : <div className="flex-1" />}
-              <div className="absolute top-1/2 right-0 w-[calc(50%-3px)] h-px bg-stroke-subtle -translate-y-[0.5px]" />
+              <div className="absolute top-1/2 left-0 right-0 h-px bg-stroke-subtle -translate-y-[0.5px]" />
             </div>
 
             {/* Col C: element card */}
