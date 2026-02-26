@@ -10,3 +10,5 @@ export { DeliverablesListWidget } from './DeliverablesListWidget';
 export { AlignmentWidget } from './AlignmentWidget';
 export { LCOEInputsWidget } from './LCOEInputsWidget';
 export { LCOEOutputWidget } from './LCOEOutputWidget';
+export { CarbonInputsWidget } from './CarbonInputsWidget';
+export { CarbonOutputWidget } from './CarbonOutputWidget';

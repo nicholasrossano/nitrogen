@@ -109,12 +109,11 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
 
         return (
           <div key={i} className="flex items-stretch">
-            {/* Col A: parent branch continuation + L-bend to Col B */}
+            {/* Col A: parent branch continuation only, no horizontal connector */}
             <div className="w-8 flex-shrink-0 flex items-center justify-center relative">
               {(!isLast || !isLastEl)
                 ? <div className="w-px bg-stroke-subtle h-full" />
                 : <div className="w-px bg-stroke-subtle h-1/2 self-start" />}
-              <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle -translate-y-[0.5px]" />
             </div>
 
             {/* Col B: element sub-branch gutter */}
@@ -124,7 +123,7 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
               {!isLastEl
                 ? <div className="w-px bg-stroke-subtle flex-1" />
                 : <div className="flex-1" />}
-              <div className="absolute top-1/2 left-0 right-0 h-px bg-stroke-subtle -translate-y-[0.5px]" />
+              <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle -translate-y-[0.5px]" />
             </div>
 
             {/* Col C: element card */}

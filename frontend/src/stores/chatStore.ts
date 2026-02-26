@@ -118,6 +118,7 @@ export const useChatStore = create<ChatState>()(
               });
             },
             (payload) => {
+              console.log('[chatStore] onComplete, widget_type:', payload.widget_type, 'has_widget_data:', !!payload.widget_data);
               const thinkingLines = get().thinkingLines;
 
               const meta: CompletionMeta = {

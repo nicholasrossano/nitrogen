@@ -121,6 +121,34 @@ SEARCH_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_carbon_model",
+            "description": (
+                "Build a Carbon Emissions model to estimate emission reductions (tCO₂e). "
+                "ALWAYS use this when the user asks about: carbon credits, emission reductions, "
+                "tCO₂e, baseline vs project emissions, cookstove methodology, fNRB, leakage, "
+                "Gold Standard ER calculations, fuel consumption savings from clean cooking, "
+                "or 'how many credits will this project generate'. "
+                "Extract any numbers mentioned in the conversation as inputs."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "method_pack": {
+                        "type": "string",
+                        "description": "Methodology pack: cookstoves or other. Infer from conversation.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "One sentence explaining why the carbon tool is appropriate here.",
+                    },
+                },
+                "required": ["reason"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -138,6 +166,14 @@ ALWAYS call run_lcoe_model when the user:
 - Mentions capex, opex, discount rate, WACC, or capacity factor in a project costing context
 - Asks "what would the cost of energy be" for solar, wind, battery, mini-grid, or clean cooking projects
 This takes priority over search tools when the user wants a numerical economic model.
+
+ALWAYS call run_carbon_model when the user:
+- Asks about carbon credits, emission reductions, or tCO₂e
+- Asks about baseline vs project emissions, cookstove methodology, fNRB, or leakage
+- Asks "how many credits" or "what are the emission reductions" for a project
+- Discusses fuel consumption savings from clean cooking or improved stove programs
+- Mentions Gold Standard ER calculations or carbon credit methodology
+This takes priority over search tools when the user wants a numerical carbon/emissions model.
 
 ALWAYS call search_scholarly_literature when the user:
 - Asks what projects, programs, or initiatives have been done in a specific city, country, or region
@@ -306,6 +342,17 @@ class ComplianceChatService:
                     logger.error(f"LCOE tool failed: {e}", exc_info=True)
                     await _think("LCOE model encountered an error — falling back to text response")
 
+            elif fn_name == "run_carbon_model":
+                await _think("Building carbon emissions model...")
+                tiers_used.append("carbon")
+                try:
+                    widget_type, widget_data = await self._run_carbon(
+                        user_message, history, args, _think
+                    )
+                except Exception as e:
+                    logger.error(f"Carbon tool failed: {e}", exc_info=True)
+                    await _think("Carbon model encountered an error — falling back to text response")
+
         # Step 4: generate answer — LLM only sees what was actually retrieved
         ranked_facts = self._rank_facts(all_facts)
         source_count = len([f for f in ranked_facts if f.source_type != SourceType.LLM_ESTIMATE])
@@ -315,7 +362,11 @@ class ComplianceChatService:
         else:
             await _think("Generating response from general knowledge...")
 
-        if widget_type and widget_data:
+        if widget_type and widget_data and widget_type.startswith("carbon_"):
+            content = await self._generate_carbon_answer(
+                user_message, history, widget_data, ranked_facts
+            )
+        elif widget_type and widget_data and widget_type.startswith("lcoe_"):
             content = await self._generate_lcoe_answer(
                 user_message, history, widget_data, ranked_facts
             )
@@ -447,6 +498,193 @@ class ComplianceChatService:
         except Exception as e:
             logger.error(f"LCOE input extraction failed: {e}")
             return {}
+
+    async def _run_carbon(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        planner_args: dict,
+        on_thinking: Callable[[str], Awaitable[None]],
+    ) -> tuple[str, dict]:
+        """Run the carbon engine from within the compliance chat."""
+        from app.services.carbon_engine import CarbonEngine, CarbonInput
+
+        method_pack = planner_args.get("method_pack")
+
+        conversation_text = "\n".join(
+            f"{m['role']}: {m['content']}" for m in (history[-20:] if len(history) > 20 else history)
+        )
+        conversation_text += f"\nuser: {user_message}"
+
+        await on_thinking("Extracting carbon inputs from conversation...")
+
+        extracted = await self._extract_carbon_inputs(conversation_text, method_pack)
+
+        if not method_pack and extracted.get("method_pack"):
+            method_pack = extracted.pop("method_pack", None)
+
+        engine_inputs = CarbonEngine.build_default_inputs(
+            method_pack=method_pack,
+            known_values=extracted,
+        )
+
+        missing = CarbonEngine.get_missing_essentials(engine_inputs)
+        computable = CarbonEngine.is_computable(engine_inputs)
+
+        widget_data: dict = {
+            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
+            "missing_essentials": missing,
+            "computable": computable,
+            "method_pack": method_pack,
+        }
+
+        if computable:
+            await on_thinking("Calculating emission reductions...")
+            result = CarbonEngine.calculate(engine_inputs)
+            widget_data["result"] = result.to_dict()
+
+            await on_thinking("Running sensitivity analysis...")
+            sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
+            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
+            widget_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
+
+            widget_type = "carbon_output"
+            await on_thinking(
+                f"Net ERs: {result.net_er_tco2e:,.2f} tCO₂e/yr "
+                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
+            )
+        else:
+            widget_type = "carbon_inputs"
+            await on_thinking(f"Need {len(missing)} more inputs to compute — showing input table")
+
+        return widget_type, widget_data
+
+    async def _extract_carbon_inputs(
+        self,
+        conversation_text: str,
+        method_pack: str | None,
+    ) -> dict:
+        """LLM extraction of carbon inputs from conversation text."""
+        from app.tools.carbon_tool import INPUT_EXTRACTION_SCHEMA
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a carbon project analyst specialising in cookstove and "
+                            "clean-cooking methodologies. Extract any carbon-ER-relevant "
+                            "numeric inputs from the conversation below. "
+                            "Only include values that are explicitly stated or clearly implied. "
+                            "Convert units where needed (e.g. tonnes → kg). "
+                            "For rates (usage_rate, adoption_rate, fnrb, efficiencies), return as decimals (0-1). "
+                            "If the project clearly involves cookstoves, set method_pack to 'cookstoves'."
+                        ),
+                    },
+                    {"role": "user", "content": conversation_text},
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "extract_carbon_inputs",
+                        "description": "Extract carbon emissions model inputs from conversation",
+                        "parameters": INPUT_EXTRACTION_SCHEMA,
+                    },
+                }],
+                tool_choice={"type": "function", "function": {"name": "extract_carbon_inputs"}},
+                temperature=0,
+            )
+            tool_call = resp.choices[0].message.tool_calls[0]
+            extracted = json.loads(tool_call.function.arguments)
+            return {k: v for k, v in extracted.items() if v is not None}
+        except Exception as e:
+            logger.error(f"Carbon input extraction failed: {e}")
+            return {}
+
+    async def _generate_carbon_answer(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        widget_data: dict,
+        facts: list[RetrievedFact],
+    ) -> str:
+        """Generate a short text answer to accompany the carbon widget."""
+        result = widget_data.get("result")
+        missing = widget_data.get("missing_essentials", [])
+        computable = widget_data.get("computable", False)
+
+        if computable and result:
+            net_er = result["net_er_tco2e"]
+            assumption_count = result.get("assumption_count", 0)
+            quality = result.get("quality_label", "moderate")
+
+            carbon_context = (
+                f"I've built a carbon emissions model based on what you've shared. "
+                f"The result is **{net_er:,.2f} tCO₂e/year** in net emission reductions "
+                f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                f"{quality} confidence).\n\n"
+                "The full inputs table, emissions breakdown, sensitivity analysis, and ER schedule "
+                "are shown below. You can click any input value to edit it and I'll recalculate instantly."
+            )
+
+            if assumption_count >= 5:
+                carbon_context += (
+                    "\n\n⚠️ **High assumption load** — many values are using defaults. "
+                    "Providing actual project numbers for devices, fuel consumption, and fNRB "
+                    "will significantly improve accuracy."
+                )
+        else:
+            missing_labels = {
+                "devices_households": "number of devices/households",
+                "baseline_fuel_consumption_kg_yr": "baseline fuel consumption (kg/yr)",
+            }
+            nice_names = [missing_labels.get(m, m) for m in missing]
+            carbon_context = (
+                "I've started building your carbon emissions model and pre-filled what I could "
+                "from our conversation with methodology-appropriate defaults.\n\n"
+                f"To calculate emission reductions I still need: **{', '.join(nice_names)}**. "
+                "Can you provide these? You can also edit any value in the table below."
+            )
+
+        if facts:
+            evidence_lines = []
+            for f in facts[:5]:
+                evidence_lines.append(f"{f.to_citation_string()}\n{f.content[:300]}")
+            evidence_block = "\n\nRELEVANT CONTEXT:\n" + "\n\n".join(evidence_lines)
+        else:
+            evidence_block = ""
+
+        messages: list[dict] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert carbon project advisor. The user asked for a carbon emissions model. "
+                    "A carbon widget with full inputs and outputs has been generated and will be "
+                    "displayed alongside your message. Write a SHORT (2-4 sentence) contextual "
+                    "introduction. Do NOT reproduce the numbers in detail — the widget shows those. "
+                    "Focus on: what methodology/context this models, any caveats about the assumptions, "
+                    "and what the user should look at or edit next."
+                    + evidence_block
+                ),
+            },
+        ]
+        for msg in (history[-6:] if len(history) > 6 else history):
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "assistant", "content": carbon_context})
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_generation_model,
+                messages=messages,
+                temperature=0.4,
+                max_tokens=400,
+            )
+            return resp.choices[0].message.content or carbon_context
+        except Exception:
+            return carbon_context
 
     async def _generate_lcoe_answer(
         self,
