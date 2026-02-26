@@ -295,11 +295,13 @@ function splitOnCitations(
 /* ------------------------------------------------------------------ */
 
 function makeMarkdownComponents(sources: SourceCitation[]) {
-  const wrap =
-    (Tag: string, className: string) =>
-    ({ children }: any) =>
+  const wrap = (Tag: string, className: string) => {
+    const Wrapped = ({ children }: any) =>
       // @ts-expect-error dynamic tag
       <Tag className={className}>{injectCitationChips(children, sources)}</Tag>;
+    Wrapped.displayName = `Wrapped_${Tag}`;
+    return Wrapped;
+  };
 
   return {
     p: ({ children }: any) => (

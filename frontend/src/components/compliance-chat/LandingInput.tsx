@@ -131,7 +131,7 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
     <div className="flex flex-col items-center justify-center flex-1 px-4">
       <div className="w-full max-w-2xl">
         <h1 className="text-2xl font-display font-semibold text-text-primary mb-8 text-center">
-          Let's build a better world.
+          Let&apos;s build a better world.
         </h1>
 
         <form onSubmit={handleSubmit} className="relative flex items-center">
