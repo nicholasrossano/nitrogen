@@ -76,7 +76,7 @@ function InitiativePageContent() {
         setSelectedItemType('output');
       }
     }
-  }, [initiative?.deliverables]);
+  }, [initiative?.deliverables, selectedItemId]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing || !containerRef.current) return;

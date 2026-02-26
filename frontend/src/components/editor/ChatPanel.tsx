@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ChatMessage } from '@/lib/api';
 import { ChatInput } from '@/components/chat/ChatInput';
 import ReactMarkdown from 'react-markdown';
@@ -55,7 +55,7 @@ export function ChatPanel({
   const isInitialLoadRef = useRef<boolean>(true);
 
   // Ensure messages is always an array
-  const safeMessages = messages || [];
+  const safeMessages = useMemo(() => messages || [], [messages]);
   
   // Debug logging
   useEffect(() => {
