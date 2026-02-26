@@ -4,16 +4,19 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from openai import AsyncOpenAI
 import json
 import asyncio
 import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
+from app.config import get_settings
 from app.services.compliance_chat import ComplianceChatService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class ChatHistoryMessage(BaseModel):
@@ -24,6 +27,10 @@ class ChatHistoryMessage(BaseModel):
 class ComplianceChatRequest(BaseModel):
     content: str
     history: list[ChatHistoryMessage] = []
+
+
+class TitleRequest(BaseModel):
+    message: str
 
 
 @router.post("/chat/stream")
@@ -109,3 +116,34 @@ async def compliance_chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/chat/title")
+async def generate_chat_title(
+    data: TitleRequest,
+    user: MockUser = Depends(get_current_user),
+):
+    """Generate a brief 3-5 word title for a chat based on the first message."""
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.openai_orchestration_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Generate a concise 3-5 word title for a chat conversation based on "
+                        "the user's first message. The title should capture the core topic. "
+                        "Return ONLY the title — no quotes, no punctuation at the end, no explanation."
+                    ),
+                },
+                {"role": "user", "content": data.message},
+            ],
+            temperature=0,
+            max_tokens=20,
+        )
+        title = (resp.choices[0].message.content or "").strip().strip('"').strip("'")
+        return {"title": title or data.message[:40]}
+    except Exception as e:
+        logger.warning(f"Title generation failed: {e}")
+        return {"title": data.message[:40]}

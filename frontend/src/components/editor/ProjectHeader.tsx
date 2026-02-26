@@ -13,9 +13,12 @@ interface ProjectHeaderProps {
   hasProjectPlan?: boolean;
   showChatPanel?: boolean;
   onToggleChatPanel?: () => void;
+  showInspector?: boolean;
+  hasInspectorItem?: boolean;
+  onToggleInspector?: () => void;
 }
 
-export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onToggleProjectPlan, hasProjectPlan = false, showChatPanel = true, onToggleChatPanel }: ProjectHeaderProps) {
+export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onToggleProjectPlan, hasProjectPlan = false, showChatPanel = true, onToggleChatPanel, showInspector = false, hasInspectorItem = false, onToggleInspector }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(
     initiative.title || 'Untitled'
@@ -137,10 +140,10 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
                 <PanelLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={hasProjectPlan ? onToggleProjectPlan : undefined}
-                disabled={!hasProjectPlan}
-                title="Hide project plan"
-                className={`icon-btn p-1.5 text-accent ${!hasProjectPlan ? 'opacity-40 cursor-not-allowed' : ''}`}
+                onClick={hasInspectorItem ? onToggleInspector : undefined}
+                disabled={!hasInspectorItem}
+                title={showInspector ? 'Hide inspector' : 'Show inspector'}
+                className={`icon-btn p-1.5 ${showInspector ? 'text-accent' : 'text-text-tertiary'} ${!hasInspectorItem ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <PanelRight className="w-4 h-4" />
               </button>

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { api, SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
 
+
 export interface CompletionMeta {
   latency_ms: number;
   citation_count: number;
@@ -35,6 +36,7 @@ interface ChatState {
   streamingContent: string;
   error: string | null;
   sessions: ChatSession[];
+  pendingSessionTitle: string | null;
 
   sendMessage: (content: string) => Promise<void>;
   reset: () => void;
@@ -53,6 +55,7 @@ const BLANK_TRANSIENT = {
   thinkingLines: [] as string[],
   streamingContent: '',
   error: null,
+  pendingSessionTitle: null as string | null,
 };
 
 export const useChatStore = create<ChatState>()(
@@ -68,6 +71,13 @@ export const useChatStore = create<ChatState>()(
         if (state.sending) return;
 
         const isFirst = state.messages.length === 0;
+
+        // Fire-and-forget: generate AI title in background for first message
+        if (isFirst) {
+          api.generateChatTitle(content)
+            .then(({ title }) => { if (title) set({ pendingSessionTitle: title }); })
+            .catch(() => {/* silently ignore */});
+        }
 
         const userMsg: ComplianceChatMessage = {
           id: nextId(),
@@ -154,13 +164,13 @@ export const useChatStore = create<ChatState>()(
       },
 
       reset: () => {
-        const { messages, sessions } = get();
+        const { messages, sessions, pendingSessionTitle } = get();
         const firstUser = messages.find((m) => m.role === 'user');
 
         if (firstUser) {
           const session: ChatSession = {
             id: `session-${Date.now()}`,
-            title: firstUser.content.slice(0, 80),
+            title: pendingSessionTitle || firstUser.content.slice(0, 80),
             createdAt: Date.now(),
             messages,
           };
@@ -189,7 +199,11 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'nitrogen-chat-sessions',
-      partialize: (state) => ({ sessions: state.sessions }),
+      partialize: (state) => ({
+        sessions: state.sessions,
+        messages: state.messages,
+        phase: state.phase,
+      }),
     },
   ),
 );

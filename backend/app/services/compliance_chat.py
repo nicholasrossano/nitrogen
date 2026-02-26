@@ -230,6 +230,8 @@ class ComplianceChatService:
         user_message: str,
         history: list[dict[str, str]],
         on_thinking: ThinkingCallback | None = None,
+        *,
+        project_context: str | None = None,
     ) -> ComplianceChatResponse:
         start = time.time()
 
@@ -318,7 +320,9 @@ class ComplianceChatService:
                 user_message, history, widget_data, ranked_facts
             )
         else:
-            content = await self._generate_answer(user_message, history, ranked_facts)
+            content = await self._generate_answer(
+                user_message, history, ranked_facts, project_context=project_context
+            )
 
         # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)
@@ -625,6 +629,8 @@ class ComplianceChatService:
         user_message: str,
         history: list[dict[str, str]],
         facts: list[RetrievedFact],
+        *,
+        project_context: str | None = None,
     ) -> str:
         """Generate the final answer grounded only in the retrieved evidence."""
         if facts:
@@ -637,8 +643,16 @@ class ComplianceChatService:
         else:
             evidence_block = "\n\nNo external sources were retrieved. Answer from general knowledge and flag uncertainty explicitly.\n"
 
+        context_prefix = ""
+        if project_context:
+            context_prefix = (
+                f"## Active Project Context\n{project_context}\n\n"
+                "Ground your answer in this project's specific details where relevant. "
+                "The user is working on this project and expects responses tailored to it.\n\n"
+            )
+
         messages: list[dict] = [
-            {"role": "system", "content": SYSTEM_PROMPT + evidence_block},
+            {"role": "system", "content": context_prefix + SYSTEM_PROMPT + evidence_block},
         ]
         for msg in (history[-10:] if len(history) > 10 else history):
             messages.append({"role": msg["role"], "content": msg["content"]})

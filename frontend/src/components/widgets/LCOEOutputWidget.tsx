@@ -174,7 +174,7 @@ export function LCOEOutputWidget({
         </div>
         <p className="text-xs text-text-tertiary mt-2">
           {result.assumption_count} assumption{result.assumption_count !== 1 ? 's' : ''} used
-          &middot; {result.lifetime_energy_kwh.toLocaleString()} kWh lifetime energy
+          &middot; {result.lifetime_energy_kwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh total production
         </p>
         {isRecalculating && (
           <p className="text-xs text-accent mt-1">Recalculating…</p>
@@ -212,18 +212,26 @@ export function LCOEOutputWidget({
 
         <div className="mt-3 pt-3 border-t border-stroke-subtle grid grid-cols-2 gap-4">
           <div>
-            <span className="text-[10px] text-text-tertiary">NPV Total Costs</span>
+            <span className="text-[10px] text-text-tertiary">Discounted Costs (NPV)</span>
             <p className="text-xs font-medium text-text-primary">
               {currency} {result.npv_total_costs.toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div>
-            <span className="text-[10px] text-text-tertiary">NPV Total Energy</span>
+            <span
+              className="text-[10px] text-text-tertiary cursor-help border-b border-dotted border-text-tertiary"
+              title="Energy discounted to year 0 — the denominator in the LCOE formula. Lower than total production because future kWh are worth less in today's terms."
+            >
+              Discounted Energy (NPV)
+            </span>
             <p className="text-xs font-medium text-text-primary">
               {result.npv_total_energy.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh
             </p>
           </div>
         </div>
+        <p className="text-[10px] text-text-tertiary mt-2">
+          LCOE = Discounted Costs ÷ Discounted Energy &middot; Total production (undiscounted): {result.lifetime_energy_kwh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh
+        </p>
       </div>
 
       {/* Editable Inputs Table (collapsible) */}
@@ -488,10 +496,10 @@ export function LCOEOutputWidget({
         <button
           onClick={handleExport}
           disabled={isExporting}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-accent bg-accent-wash hover:bg-blue-100 transition-colors disabled:opacity-50"
+          className="btn-primary !text-xs !px-4 !py-1.5"
         >
           <Download className="w-3 h-3" />
-          {isExporting ? 'Exporting…' : 'Export Excel'}
+          {isExporting ? 'Exporting…' : 'Export to Excel'}
         </button>
       </div>
     </div>

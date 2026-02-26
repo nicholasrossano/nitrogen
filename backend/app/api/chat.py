@@ -31,6 +31,7 @@ from app.schemas.chat import (
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
+from app.services.compliance_chat import ComplianceChatService
 from app.services.project_plan import ProjectPlanService
 from app.tools import get_tool_registry
 from app.tools.base import ToolAlignment
@@ -153,7 +154,7 @@ async def send_chat_message_stream(
 
             # Execute the action
             widget_type, widget_data, assistant_response, sources = await execute_action(
-                db, initiative, action_result, orchestration
+                db, initiative, action_result, orchestration, chat_history=messages
             )
 
             # Stream the response word by word
@@ -211,11 +212,30 @@ async def send_chat_message_stream(
     )
 
 
+def _build_project_context(initiative: Initiative) -> str:
+    """Build a project context string to inject into the research assistant."""
+    parts = []
+    if initiative.title:
+        parts.append(f"- Title: {initiative.title}")
+    if initiative.project_type:
+        parts.append(f"- Project type: {initiative.project_type}")
+    if initiative.project_description:
+        parts.append(f"- Description: {initiative.project_description[:600]}")
+    if initiative.geography:
+        parts.append(f"- Geography: {initiative.geography}")
+    if initiative.selected_tools:
+        parts.append(f"- Selected tools/frameworks: {', '.join(initiative.selected_tools)}")
+    if initiative.goal:
+        parts.append(f"- Goal: {initiative.goal}")
+    return "\n".join(parts) if parts else ""
+
+
 async def execute_action(
     db: AsyncSession,
     initiative: Initiative,
     action_result,
     orchestration: OrchestrationService,
+    chat_history: list | None = None,
 ) -> tuple[str | None, dict | None, str, list]:
     """
     Execute an orchestration action and return widget/response.
@@ -234,7 +254,40 @@ async def execute_action(
     logger.info(f"Executing action: {action}")
 
     if action == "send_message":
-        pass
+        # Run the full research pipeline (RAG + OpenAlex + web) with project context,
+        # giving the project chat the same research capabilities as the central chat.
+        project_context = _build_project_context(initiative)
+        history_dicts = []
+        if chat_history:
+            history_dicts = [
+                {"role": m.role, "content": m.content}
+                for m in chat_history[-20:]
+                if m.role in ("user", "assistant")
+            ]
+        # Drop the last user message from history (it's passed as user_message below)
+        if history_dicts and history_dicts[-1]["role"] == "user":
+            history_dicts = history_dicts[:-1]
+
+        # Extract the actual user message from the most recent user turn
+        user_message = params.get("message", "")
+        if chat_history:
+            for m in reversed(chat_history):
+                if m.role == "user":
+                    user_message = m.content
+                    break
+
+        try:
+            research_service = ComplianceChatService(db)
+            research_result = await research_service.generate_response(
+                user_message=user_message,
+                history=history_dicts,
+                project_context=project_context if project_context else None,
+            )
+            assistant_response = research_result.content
+            sources = research_result.sources
+        except Exception as e:
+            logger.error(f"Research pipeline failed for send_message, falling back: {e}")
+            # Fall back to the orchestration-generated message
 
     elif action == "ask_for_documents":
         widget_type = "document_request"
@@ -495,7 +548,7 @@ async def send_chat_message(
     
     # Execute the action
     widget_type, widget_data, assistant_response, sources = await execute_action(
-        db, initiative, action_result, orchestration
+        db, initiative, action_result, orchestration, chat_history=messages
     )
     
     # Convert sources to citation format

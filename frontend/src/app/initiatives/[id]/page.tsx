@@ -23,6 +23,8 @@ function InitiativePageContent() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showProjectPlan, setShowProjectPlan] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(true);
+  const [showInspector, setShowInspector] = useState(false);
+  const [hasInspectorItem, setHasInspectorItem] = useState(false);
   
   const { 
     initiative, 
@@ -103,6 +105,17 @@ function InitiativePageContent() {
     setShowChatPanel(prev => !prev);
   };
 
+  const handleInspectorChange = useCallback((open: boolean, hasItem: boolean) => {
+    setShowInspector(open);
+    if (hasItem) setHasInspectorItem(true);
+  }, []);
+
+  const handleToggleInspector = () => {
+    if (hasInspectorItem) {
+      setShowInspector(prev => !prev);
+    }
+  };
+
   const handleSendMessage = (content: string) => {
     sendMessage(initiativeId, content);
   };
@@ -168,6 +181,9 @@ function InitiativePageContent() {
         hasProjectPlan={!!initiative.project_plan}
         showChatPanel={showChatPanel}
         onToggleChatPanel={handleToggleChatPanel}
+        showInspector={showInspector}
+        hasInspectorItem={hasInspectorItem}
+        onToggleInspector={handleToggleInspector}
       />
 
       {/* Main content area */}
@@ -202,7 +218,11 @@ function InitiativePageContent() {
 
             {/* Project Plan - Right side */}
             <div className="flex-1 overflow-hidden">
-              <ProjectPlanView initiativeId={initiativeId} />
+              <ProjectPlanView
+                initiativeId={initiativeId}
+                showInspector={showInspector}
+                onInspectorChange={handleInspectorChange}
+              />
             </div>
           </>
         ) : (

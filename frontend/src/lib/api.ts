@@ -705,6 +705,13 @@ export const api = {
     }
   },
 
+  // Generate a brief 3-5 word title for a chat based on the first message
+  generateChatTitle: (message: string) =>
+    fetchApi<{ title: string }>('/api/v1/chat/title', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+
   // LCOE endpoints
   async recalculateLCOE(inputs: Record<string, any>): Promise<any> {
     return fetchApi('/api/v1/lcoe/recalculate', {
