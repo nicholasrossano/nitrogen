@@ -131,6 +131,23 @@ ORCHESTRATION_ACTIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_lcoe_tool",
+            "description": "Run the LCOE (Levelized Cost of Energy) tool to model project economics. Use this when the user asks for LCOE, cost per kWh, project economics, feasibility analysis, or when evaluating whether an energy project is financially viable. Also use when the user mentions capex, opex, discount rate, WACC, or capacity factor in the context of project costing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Brief message (1-2 sentences) telling the user you're building their LCOE model."
+                    }
+                },
+                "required": ["message"]
+            }
+        }
+    },
 ]
 
 
@@ -203,6 +220,12 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 
 **Rule 7: Project plan already exists and user is asking a question (not requesting changes)**
 → Use **send_message** to answer their question about the plan
+
+**Rule 8: User asks for LCOE, project economics, cost per kWh, feasibility check, or mentions capex/opex/discount rate in a costing context**
+→ Use **run_lcoe_tool** — extract what you can from conversation and build the model
+
+**Rule 9: User uploads a document and asks "is this viable?" or "what's the cost?" for an energy project**
+→ Use **run_lcoe_tool** — the tool will extract inputs from docs and fill gaps with assumptions
 
 ## Style
 - Be proactive and directive — move toward the plan quickly

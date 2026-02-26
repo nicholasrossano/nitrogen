@@ -92,6 +92,35 @@ SEARCH_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_lcoe_model",
+            "description": (
+                "Build an LCOE (Levelized Cost of Energy) model to estimate cost per kWh. "
+                "ALWAYS use this when the user asks for: LCOE, levelized cost, cost of energy, "
+                "cost per kWh, project economics, financial feasibility of an energy project, "
+                "or when they mention capex/opex/discount rate/WACC/capacity factor in a project costing context. "
+                "Also use when the user says 'build me an LCOE', 'model the economics', or "
+                "'is this project viable/feasible' for an energy project. "
+                "Extract any numbers mentioned in the conversation as inputs."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "technology_type": {
+                        "type": "string",
+                        "description": "Energy technology: solar_pv, wind, battery, mini_grid, clean_cooking, or other. Infer from conversation.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "One sentence explaining why the LCOE tool is appropriate here.",
+                    },
+                },
+                "required": ["reason"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -100,7 +129,15 @@ SEARCH_TOOLS = [
 
 PLANNING_SYSTEM_PROMPT = """You are a research-planning assistant for an environmental compliance advisor.
 
-Your only job is to decide which search tools (if any) to call before generating a response.
+Your only job is to decide which tools (if any) to call before generating a response.
+
+ALWAYS call run_lcoe_model when the user:
+- Asks for an LCOE, levelized cost of energy, or cost per kWh
+- Asks to "build me an LCOE" or "model the economics" for an energy project
+- Asks about project financial feasibility or viability for an energy project
+- Mentions capex, opex, discount rate, WACC, or capacity factor in a project costing context
+- Asks "what would the cost of energy be" for solar, wind, battery, mini-grid, or clean cooking projects
+This takes priority over search tools when the user wants a numerical economic model.
 
 ALWAYS call search_scholarly_literature when the user:
 - Asks what projects, programs, or initiatives have been done in a specific city, country, or region
@@ -117,7 +154,7 @@ Call NEITHER when:
 - The question asks for step-by-step process advice with no need for citations
 - The conversation already contains a direct answer
 
-You may call both, one, or neither. Do not produce any text — only make tool calls (or no calls)."""
+You may call multiple tools, one, or none. Do not produce any text — only make tool calls (or no calls)."""
 
 SYSTEM_PROMPT = """You are an expert advisor on environmental program design, compliance frameworks, and sustainability standards. You help practitioners design compliant programs, understand regulatory requirements, and navigate complex environmental standards.
 
@@ -163,6 +200,8 @@ class ComplianceChatResponse:
     sources: list[RetrievedFact]
     tiers_used: list[str]
     latency_ms: int
+    widget_type: str | None = None
+    widget_data: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +259,9 @@ class ComplianceChatService:
             await _think(f"Found {len(corpus_facts)} relevant case studies")
 
         # Step 3: execute only the tools the planner requested
+        widget_type: str | None = None
+        widget_data: dict | None = None
+
         for tool_call in tool_calls:
             fn_name = tool_call.function.name
             try:
@@ -251,6 +293,17 @@ class ComplianceChatService:
                 else:
                     await _think("No authoritative web sources found")
 
+            elif fn_name == "run_lcoe_model":
+                await _think("Building LCOE model...")
+                tiers_used.append("lcoe")
+                try:
+                    widget_type, widget_data = await self._run_lcoe(
+                        user_message, history, args, _think
+                    )
+                except Exception as e:
+                    logger.error(f"LCOE tool failed: {e}", exc_info=True)
+                    await _think("LCOE model encountered an error — falling back to text response")
+
         # Step 4: generate answer — LLM only sees what was actually retrieved
         ranked_facts = self._rank_facts(all_facts)
         source_count = len([f for f in ranked_facts if f.source_type != SourceType.LLM_ESTIMATE])
@@ -260,7 +313,12 @@ class ComplianceChatService:
         else:
             await _think("Generating response from general knowledge...")
 
-        content = await self._generate_answer(user_message, history, ranked_facts)
+        if widget_type and widget_data:
+            content = await self._generate_lcoe_answer(
+                user_message, history, widget_data, ranked_facts
+            )
+        else:
+            content = await self._generate_answer(user_message, history, ranked_facts)
 
         # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)
@@ -271,11 +329,205 @@ class ComplianceChatService:
             sources=cited_sources,
             tiers_used=tiers_used,
             latency_ms=elapsed_ms,
+            widget_type=widget_type,
+            widget_data=widget_data,
         )
 
     # -----------------------------------------------------------------------
     # Internal helpers
     # -----------------------------------------------------------------------
+
+    async def _run_lcoe(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        planner_args: dict,
+        on_thinking: Callable[[str], Awaitable[None]],
+    ) -> tuple[str, dict]:
+        """Run the LCOE engine from within the compliance chat.
+
+        Returns (widget_type, widget_data).
+        """
+        from app.services.lcoe_engine import LCOEEngine, LCOEInput
+
+        tech_type = planner_args.get("technology_type")
+
+        conversation_text = "\n".join(
+            f"{m['role']}: {m['content']}" for m in (history[-20:] if len(history) > 20 else history)
+        )
+        conversation_text += f"\nuser: {user_message}"
+
+        await on_thinking("Extracting inputs from conversation...")
+
+        extracted = await self._extract_lcoe_inputs(conversation_text, tech_type)
+
+        if not tech_type and extracted.get("technology_type"):
+            tech_type = extracted.pop("technology_type", None)
+
+        extracted.pop("location", None)
+
+        engine_inputs = LCOEEngine.build_default_inputs(
+            tech_type=tech_type,
+            known_values=extracted,
+        )
+
+        missing = LCOEEngine.get_missing_essentials(engine_inputs)
+        computable = LCOEEngine.is_computable(engine_inputs)
+
+        widget_data: dict = {
+            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
+            "missing_essentials": missing,
+            "computable": computable,
+            "technology_type": tech_type,
+        }
+
+        if computable:
+            await on_thinking("Calculating LCOE...")
+            result = LCOEEngine.calculate(engine_inputs)
+            widget_data["result"] = result.to_dict()
+
+            await on_thinking("Running sensitivity analysis...")
+            sensitivity = LCOEEngine.run_sensitivity(engine_inputs)
+            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
+            widget_data["is_unruly"] = LCOEEngine.is_unruly(engine_inputs)
+
+            widget_type = "lcoe_output"
+            await on_thinking(
+                f"LCOE: {result.currency} {result.lcoe:.4f}/kWh "
+                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
+            )
+        else:
+            widget_type = "lcoe_inputs"
+            await on_thinking(f"Need {len(missing)} more inputs to compute — showing input table")
+
+        return widget_type, widget_data
+
+    async def _extract_lcoe_inputs(
+        self,
+        conversation_text: str,
+        tech_type: str | None,
+    ) -> dict:
+        """LLM extraction of LCOE inputs from conversation text."""
+        from app.tools.lcoe_tool import INPUT_EXTRACTION_SCHEMA
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an energy project analyst. Extract any LCOE-relevant "
+                            "numeric inputs from the conversation below. "
+                            "Only include values that are explicitly stated or clearly implied. "
+                            "Convert units where needed (e.g. MW → kW). "
+                            "For capacity_factor and discount_rate, return as decimals (0-1)."
+                        ),
+                    },
+                    {"role": "user", "content": conversation_text},
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "extract_lcoe_inputs",
+                        "description": "Extract LCOE model inputs from conversation",
+                        "parameters": INPUT_EXTRACTION_SCHEMA,
+                    },
+                }],
+                tool_choice={"type": "function", "function": {"name": "extract_lcoe_inputs"}},
+                temperature=0,
+            )
+            tool_call = resp.choices[0].message.tool_calls[0]
+            extracted = json.loads(tool_call.function.arguments)
+            return {k: v for k, v in extracted.items() if v is not None}
+        except Exception as e:
+            logger.error(f"LCOE input extraction failed: {e}")
+            return {}
+
+    async def _generate_lcoe_answer(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        widget_data: dict,
+        facts: list[RetrievedFact],
+    ) -> str:
+        """Generate a short text answer to accompany the LCOE widget."""
+        result = widget_data.get("result")
+        missing = widget_data.get("missing_essentials", [])
+        computable = widget_data.get("computable", False)
+
+        if computable and result:
+            lcoe_val = result["lcoe"]
+            currency = result.get("currency", "USD")
+            assumption_count = result.get("assumption_count", 0)
+            quality = result.get("quality_label", "moderate")
+
+            lcoe_context = (
+                f"I've built an LCOE model based on what you've shared. "
+                f"The result is **{currency} {lcoe_val:.4f}/kWh** "
+                f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
+                f"{quality} confidence).\n\n"
+                "The full inputs table, cost breakdown, sensitivity analysis, and cash flows "
+                "are shown below. You can click any input value to edit it and I'll recalculate instantly."
+            )
+
+            if assumption_count >= 5:
+                lcoe_context += (
+                    "\n\n⚠️ **High assumption load** — many values are using defaults. "
+                    "Providing actual project numbers for capacity, CAPEX, and O&M "
+                    "will significantly improve accuracy."
+                )
+        else:
+            missing_labels = {
+                "net_capacity_kw": "net capacity (kW)",
+                "total_capex": "total CAPEX",
+                "annual_opex": "annual O&M cost",
+            }
+            nice_names = [missing_labels.get(m, m) for m in missing]
+            lcoe_context = (
+                "I've started building your LCOE model and pre-filled what I could "
+                "from our conversation with technology-appropriate defaults.\n\n"
+                f"To calculate the LCOE I still need: **{', '.join(nice_names)}**. "
+                "Can you provide these? You can also edit any value in the table below."
+            )
+
+        if facts:
+            evidence_lines = []
+            for f in facts[:5]:
+                evidence_lines.append(f"{f.to_citation_string()}\n{f.content[:300]}")
+            evidence_block = "\n\nRELEVANT CONTEXT:\n" + "\n\n".join(evidence_lines)
+        else:
+            evidence_block = ""
+
+        messages: list[dict] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert energy finance advisor. The user asked for an LCOE model. "
+                    "An LCOE widget with full inputs and outputs has been generated and will be "
+                    "displayed alongside your message. Write a SHORT (2-4 sentence) contextual "
+                    "introduction. Do NOT reproduce the numbers in detail — the widget shows those. "
+                    "Focus on: what technology/context this models, any caveats about the assumptions, "
+                    "and what the user should look at or edit next."
+                    + evidence_block
+                ),
+            },
+        ]
+        for msg in (history[-6:] if len(history) > 6 else history):
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "assistant", "content": lcoe_context})
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_generation_model,
+                messages=messages,
+                temperature=0.4,
+                max_tokens=400,
+            )
+            return resp.choices[0].message.content or lcoe_context
+        except Exception:
+            return lcoe_context
 
     async def _plan_tool_calls(
         self,

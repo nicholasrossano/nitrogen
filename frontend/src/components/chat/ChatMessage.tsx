@@ -14,6 +14,8 @@ import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWid
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
+import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
+import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ChatMessageProps {
@@ -246,6 +248,10 @@ function MessageWidget({
       return <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'project_plan':
       return <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'lcoe_inputs':
+      return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'lcoe_output':
+      return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:
       return null;
   }

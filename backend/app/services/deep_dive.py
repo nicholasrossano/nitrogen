@@ -155,8 +155,12 @@ DEEP_DIVE_FUNCTION = {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "2–4 plain-English bullets summarizing what this requirement is "
-                        "and why it exists. Be concrete and specific to the project context."
+                        "2–3 plain-English sentences — no more — summarizing what this requirement "
+                        "is and why it exists. Each sentence must add new information; do not restate "
+                        "or paraphrase a point already made. Be concrete and specific to the project "
+                        "context. Bold the single most important takeaway sentence using **markdown "
+                        "bold** (e.g. '**This permit is required before any ground disturbance.**'). "
+                        "Bold at most one sentence."
                     ),
                 },
                 "elements": {
@@ -175,10 +179,10 @@ DEEP_DIVE_FUNCTION = {
                             "description": {
                                 "type": "string",
                                 "description": (
-                                    "1–2 sentences: what this element must contain, who issues "
-                                    "or receives it, and the specific source/form that requires it. "
-                                    "Be specific — reference form names, sections, or checklist items "
-                                    "from the retrieved sources where possible."
+                                    "1 sentence, 2 maximum. State what this element must contain "
+                                    "and who issues or requires it. Each sentence must add new "
+                                    "information — do not restate the title or repeat a point "
+                                    "already made. Reference specific form names or sections where possible."
                                 ),
                             },
                             "classification": {

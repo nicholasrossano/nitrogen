@@ -8,3 +8,5 @@ export { DeliverablesOverviewWidget } from './DeliverablesOverviewWidget';
 export { ChecklistViewerWidget } from './ChecklistViewerWidget';
 export { DeliverablesListWidget } from './DeliverablesListWidget';
 export { AlignmentWidget } from './AlignmentWidget';
+export { LCOEInputsWidget } from './LCOEInputsWidget';
+export { LCOEOutputWidget } from './LCOEOutputWidget';

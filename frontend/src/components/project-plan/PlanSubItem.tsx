@@ -45,7 +45,7 @@ const ELEMENT_STYLE = {
 };
 
 export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSubItemProps) {
-  const [elementsExpanded, setElementsExpanded] = useState(true);
+  const [elementsExpanded, setElementsExpanded] = useState(false);
   const cls = (item.classification as Classification) ?? 'optional';
   const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
   const isClickable = Boolean(onDeepDive);

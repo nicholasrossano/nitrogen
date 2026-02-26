@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Banknote, Compass, ChevronDown } from 'lucide-react';
+import { Shield, Banknote, Compass, ChevronDown, ChevronRight } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { PlanSubItem } from './PlanSubItem';
 
@@ -27,6 +27,7 @@ const DEFAULT_VISIBLE = 10;
 
 export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
+  const [itemsExpanded, setItemsExpanded] = useState(false);
   const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
   const items = (pillar.items || []).slice().sort((a, b) => {
     const aOrder = CLASSIFICATION_ORDER[a.classification ?? 'optional'] ?? 1;
@@ -42,7 +43,10 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarC
   return (
     <div className="flex flex-col min-h-0">
       {/* Pillar header node — full width, aligned with items */}
-      <div className="border border-accent bg-accent-wash/30 px-4 py-3 flex items-center gap-2.5">
+      <button
+        onClick={() => setItemsExpanded(v => !v)}
+        className="border border-accent bg-accent-wash/30 px-4 py-3 flex items-center gap-2.5 w-full text-left"
+      >
         <div className="w-8 h-8 bg-accent/10 rounded flex items-center justify-center text-accent flex-shrink-0">
           {PILLAR_ICONS[pillar.id] || <Compass className="w-5 h-5" />}
         </div>
@@ -55,10 +59,13 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarC
             {unknownCount > 0 && <> &middot; <span className="text-indicator-orange">{unknownCount} unknown</span></>}
           </p>
         </div>
-      </div>
+        {itemsExpanded
+          ? <ChevronDown className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+          : <ChevronRight className="w-4 h-4 text-text-tertiary flex-shrink-0" />}
+      </button>
 
       {/* Items — branch line connects from header's left edge */}
-      <div className="flex-1 overflow-y-auto">
+      {itemsExpanded && <div className="flex-1 overflow-y-auto min-h-0">
         {visibleItems.map((item, idx) => (
           <PlanSubItem
             key={item.id}
@@ -98,7 +105,7 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarC
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

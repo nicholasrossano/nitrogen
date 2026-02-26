@@ -641,6 +641,8 @@ export const api = {
       tiers_used: string[];
       citation_count: number;
       latency_ms: number;
+      widget_type?: string | null;
+      widget_data?: Record<string, any> | null;
     }) => void,
     onError: (message: string) => void,
   ) => {
@@ -701,5 +703,54 @@ export const api = {
         }
       }
     }
+  },
+
+  // LCOE endpoints
+  async recalculateLCOE(inputs: Record<string, any>): Promise<any> {
+    return fetchApi('/api/v1/lcoe/recalculate', {
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
+    });
+  },
+
+  async updateLCOEInput(
+    inputs: Record<string, any>,
+    fieldName: string,
+    value: any,
+  ): Promise<any> {
+    return fetchApi('/api/v1/lcoe/update-input', {
+      method: 'POST',
+      body: JSON.stringify({
+        inputs,
+        field_name: fieldName,
+        value,
+        source: 'user',
+        status: 'confirmed',
+      }),
+    });
+  },
+
+  async getLCOESensitivity(
+    inputs: Record<string, any>,
+    params?: string[],
+  ): Promise<any> {
+    return fetchApi('/api/v1/lcoe/sensitivity', {
+      method: 'POST',
+      body: JSON.stringify({ inputs, params }),
+    });
+  },
+
+  async exportLCOEExcel(inputs: Record<string, any>): Promise<Blob> {
+    const url = `${API_URL}/api/v1/lcoe/export`;
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ inputs }),
+    });
+    if (!resp.ok) throw new Error('Export failed');
+    return resp.blob();
   },
 };
