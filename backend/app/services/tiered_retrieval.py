@@ -1,15 +1,16 @@
 """
 Tiered Retrieval Service
 
-Implements a four-tier knowledge retrieval system:
-1. Corpus RAG (case studies, uploaded evidence) - highest priority, always cited
-2. OpenAlex (scholarly works) - academic/research sources
-3. Web Search (authoritative institutional sources) - real-time data
-4. LLM Knowledge (training data fallback) - flagged as estimate
+Searches all available data sources in parallel for comprehensive results:
+- Corpus RAG (case studies, uploaded evidence)
+- OpenAlex (scholarly works / academic research)
+- Web Search (authoritative institutional sources)
+- LLM Knowledge (training data fallback — only when nothing else found)
 
 Every fact is tracked with its source for citation.
 """
 
+import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Literal, Optional, Awaitable
@@ -66,7 +67,7 @@ class RetrievedFact:
         if self.source_type == SourceType.WEB:
             return f"[Web: {self.source_title}]"
         elif self.source_type == SourceType.OPENALEX:
-            return f"[OpenAlex: {self.source_title}]"
+            return f"[Scholarly: {self.source_title}]"
         elif self.source_type == SourceType.LLM_ESTIMATE:
             return "[LLM Estimate - unverified]"
         else:
@@ -111,13 +112,9 @@ class RetrievalResult:
 
 class TieredRetrievalService:
     """
-    Retrieves information with tiered fallback:
-    1. Corpus RAG (case studies, project evidence)
-    2. OpenAlex (scholarly works / academic research)
-    3. Web search (authoritative institutional sources)
-    4. LLM knowledge (flagged as estimate)
-    
-    Every claim is tracked with its source for citation.
+    Searches all available data sources in parallel for comprehensive results.
+    Corpus, OpenAlex, and web search all run concurrently; results are merged
+    and ranked. LLM fallback is only added when no other source returned data.
     """
     
     CORPUS_RELEVANCE_THRESHOLD = 0.7
@@ -139,77 +136,78 @@ class TieredRetrievalService:
         on_stage: StageCallback | None = None,
     ) -> RetrievalResult:
         """
-        Retrieve facts for a query using tiered fallback.
+        Retrieve facts from all enabled sources in parallel for comprehensive results.
         
-        The on_stage callback is invoked at each tier for streaming progress.
+        The on_stage callback is invoked at each source for streaming progress.
         """
         result = RetrievalResult(query=query)
-        
-        # TIER 1: Corpus + Evidence RAG (skipped when disabled via config)
-        if settings.enable_corpus_rag:
+
+        # Launch all enabled sources concurrently
+        async def _corpus() -> list[RetrievedFact]:
+            if not settings.enable_corpus_rag:
+                return []
             if on_stage:
                 await on_stage("retrieve_corpus", "running", None)
-            corpus_facts = await self.search_corpus(query, initiative_id)
-            if corpus_facts:
-                result.facts.extend(corpus_facts)
-                result.tiers_used.append("corpus")
-                if on_stage:
-                    await on_stage("retrieve_corpus", "done", f"Found {len(corpus_facts)} results")
-                logger.info(f"Tier 1 (corpus) hit for query: {query[:50]}...")
-                if len(corpus_facts) >= 3:
-                    return result
-            else:
-                if on_stage:
-                    await on_stage("retrieve_corpus", "done", "No matches")
-        else:
-            logger.debug("Corpus RAG disabled via ENABLE_CORPUS_RAG=false")
-        
-        # TIER 2: OpenAlex
-        if include_openalex:
+            facts = await self.search_corpus(query, initiative_id)
+            if on_stage:
+                msg = f"Found {len(facts)} results" if facts else "No matches"
+                await on_stage("retrieve_corpus", "done", msg)
+            if facts:
+                logger.info(f"Corpus hit for query: {query[:50]}...")
+            return facts
+
+        async def _openalex() -> list[RetrievedFact]:
+            if not include_openalex:
+                return []
             if on_stage:
                 await on_stage("retrieve_openalex", "running", None)
-            openalex_facts = await self.search_openalex(query)
-            if openalex_facts:
-                result.facts.extend(openalex_facts)
-                result.tiers_used.append("openalex")
-                if on_stage:
-                    await on_stage("retrieve_openalex", "done", f"Found {len(openalex_facts)} scholarly works")
-                logger.info(f"Tier 2 (openalex) hit for query: {query[:50]}...")
-                if len(result.facts) >= 3:
-                    return result
-            else:
-                if on_stage:
-                    await on_stage("retrieve_openalex", "done", "No relevant scholarly works")
-        
-        # TIER 3: Web Search
-        if include_web_search:
+            facts = await self.search_openalex(query)
+            if on_stage:
+                msg = f"Found {len(facts)} scholarly works" if facts else "No relevant scholarly works"
+                await on_stage("retrieve_openalex", "done", msg)
+            if facts:
+                logger.info(f"OpenAlex hit for query: {query[:50]}...")
+            return facts
+
+        async def _web() -> list[RetrievedFact]:
+            if not include_web_search:
+                return []
             if on_stage:
                 await on_stage("retrieve_web", "running", None)
-            web_facts = await self.search_web(query)
-            if web_facts:
-                result.facts.extend(web_facts)
-                result.tiers_used.append("web")
-                if on_stage:
-                    await on_stage("retrieve_web", "done", f"Found {len(web_facts)} web sources")
-                logger.info(f"Tier 3 (web) hit for query: {query[:50]}...")
-                return result
-            else:
-                if on_stage:
-                    await on_stage("retrieve_web", "done", "No authoritative web sources found")
-        
-        # TIER 4: LLM Knowledge Fallback
-        if include_llm_fallback and not require_citation:
-            if not result.facts:
-                result.facts.append(
-                    RetrievedFact(
-                        content=f"No verified data found for: {query}. Any information provided will be based on general knowledge and should be verified.",
-                        source_type=SourceType.LLM_ESTIMATE,
-                        source_title="LLM Estimate",
-                        confidence=0.5,
-                    )
+            facts = await self.search_web(query)
+            if on_stage:
+                msg = f"Found {len(facts)} web sources" if facts else "No authoritative web sources found"
+                await on_stage("retrieve_web", "done", msg)
+            if facts:
+                logger.info(f"Web hit for query: {query[:50]}...")
+            return facts
+
+        corpus_facts, openalex_facts, web_facts = await asyncio.gather(
+            _corpus(), _openalex(), _web()
+        )
+
+        if corpus_facts:
+            result.facts.extend(corpus_facts)
+            result.tiers_used.append("corpus")
+        if openalex_facts:
+            result.facts.extend(openalex_facts)
+            result.tiers_used.append("openalex")
+        if web_facts:
+            result.facts.extend(web_facts)
+            result.tiers_used.append("web")
+
+        # LLM fallback only when nothing else returned data
+        if include_llm_fallback and not require_citation and not result.facts:
+            result.facts.append(
+                RetrievedFact(
+                    content=f"No verified data found for: {query}. Any information provided will be based on general knowledge and should be verified.",
+                    source_type=SourceType.LLM_ESTIMATE,
+                    source_title="LLM Estimate",
+                    confidence=0.5,
                 )
+            )
             result.tiers_used.append("llm_fallback")
-            logger.info(f"Tier 4 (LLM fallback) for query: {query[:50]}...")
+            logger.info(f"LLM fallback for query: {query[:50]}...")
         
         return result
     
@@ -289,64 +287,69 @@ class TieredRetrievalService:
         max_content_length: int = 400,
     ) -> list[RetrievedFact]:
         """
-        Search the web for authoritative sources.
-        Uses Tavily API if configured, otherwise skips.
+        Search the web using OpenAI's built-in web_search tool.
 
-        Args:
-            query: Search query string.
-            max_results: Max results to return from Tavily (default 5, up to 10).
-            max_content_length: Max characters to keep per result content (default 400).
+        Makes a Responses API call with web_search enabled, then extracts
+        cited sources as RetrievedFact objects for the evidence pipeline.
         """
-        if not settings.tavily_api_key:
-            logger.debug(f"Web search skipped (no API key): {query[:50]}...")
-            return []
-        
         try:
-            import httpx
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": settings.tavily_api_key,
-                        "query": query,
-                        "search_depth": "advanced",
-                        "max_results": max_results,
-                        "include_domains": [],
-                        "exclude_domains": [
-                            "reddit.com", "quora.com", "medium.com",
-                            "pinterest.com", "facebook.com", "twitter.com",
-                        ],
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-            
-            facts = []
-            for item in data.get("results", []):
-                title = item.get("title", "")
-                content = item.get("content", "")
-                url = item.get("url", "")
-                if not title or not content:
+            from urllib.parse import urlparse
+
+            resp = await self.client.responses.create(
+                model=settings.openai_generation_model,
+                tools=[{"type": "web_search"}],
+                input=(
+                    f"Search the web for the most relevant and authoritative information about: {query}\n\n"
+                    "Provide a detailed summary with inline citations."
+                ),
+            )
+
+            # Extract message content and URL citations from the response
+            facts: list[RetrievedFact] = []
+            seen_urls: set[str] = set()
+
+            for item in resp.output:
+                if getattr(item, "type", None) != "message":
                     continue
-                # Extract clean domain for display (e.g. "goldstandard.org")
-                domain: str | None = None
-                if url:
-                    try:
-                        from urllib.parse import urlparse
-                        domain = urlparse(url).netloc.lstrip("www.") or None
-                    except Exception:
-                        pass
-                facts.append(
-                    RetrievedFact(
-                        content=content[:max_content_length],
-                        source_type=SourceType.WEB,
-                        source_title=title,
-                        source_url=url,
-                        confidence=0.7,
-                        publisher=domain,
-                    )
-                )
-            return facts
+                for block in item.content:
+                    text = getattr(block, "text", "") or ""
+                    annotations = getattr(block, "annotations", []) or []
+                    for ann in annotations:
+                        if getattr(ann, "type", None) != "url_citation":
+                            continue
+                        url = getattr(ann, "url", "") or ""
+                        title = getattr(ann, "title", "") or "Web Source"
+                        if not url or url in seen_urls:
+                            continue
+                        seen_urls.add(url)
+
+                        # Extract the sentence(s) around this citation
+                        start = getattr(ann, "start_index", 0)
+                        end = getattr(ann, "end_index", start)
+                        snippet_start = text.rfind(".", 0, max(0, start - 300))
+                        snippet_start = snippet_start + 1 if snippet_start >= 0 else max(0, start - 300)
+                        snippet_end = text.find(".", end, end + 300)
+                        snippet_end = snippet_end + 1 if snippet_end >= 0 else min(len(text), end + 300)
+                        snippet = text[snippet_start:snippet_end].strip()
+
+                        domain: str | None = None
+                        try:
+                            domain = urlparse(url).netloc.lstrip("www.") or None
+                        except Exception:
+                            pass
+
+                        facts.append(
+                            RetrievedFact(
+                                content=snippet[:max_content_length] if snippet else title,
+                                source_type=SourceType.WEB,
+                                source_title=title,
+                                source_url=url,
+                                confidence=0.7,
+                                publisher=domain,
+                            )
+                        )
+
+            return facts[:max_results]
         except Exception as e:
             logger.error(f"Web search failed: {e}")
             return []
