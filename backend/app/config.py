@@ -49,9 +49,6 @@ class Settings(BaseSettings):
     openalex_email: str = ""
     openalex_base_url: str = "https://api.openalex.org"
     
-    # Web search (optional)
-    tavily_api_key: str = ""
-    
     # RAG settings
     enable_corpus_rag: bool = False
     chunk_size: int = 500

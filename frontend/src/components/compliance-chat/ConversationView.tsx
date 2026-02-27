@@ -88,7 +88,7 @@ export function ConversationView() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
         <div className="max-w-3xl mx-auto space-y-4">
           {messages.map((msg, idx) => (
             <MessageBubble
@@ -494,7 +494,7 @@ function CitationsDisplay({ sources }: { sources: SourceCitation[] }) {
       {expanded && (
         <div className="mt-2 space-y-1.5 pl-2 border-l border-stroke-subtle">
           {verified.map((source, idx) => (
-            <div key={idx} className="flex items-start gap-2 text-xs text-text-secondary">
+            <div key={idx} className="flex items-start gap-2 text-xs text-text-secondary min-w-0">
               <span className="flex items-center gap-1 text-text-tertiary shrink-0">
                 {getIcon(source.source_type)}
                 <span className="text-[10px] uppercase tracking-wide">
