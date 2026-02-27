@@ -684,7 +684,6 @@ export const api = {
             onWord(event.content);
             break;
           case 'complete':
-            console.log('[SSE] complete event received, widget_type:', event.widget_type);
             onComplete(event);
             break;
           case 'error':

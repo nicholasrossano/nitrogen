@@ -4,11 +4,16 @@ Carbon Emissions Calculation Engine
 Pure-math service for computing emission reductions (tCO₂e).
 Handles: baseline vs project comparison, leakage, ER schedules, sensitivity.
 
-General formula:
-  Baseline emissions = devices × baseline_fuel_consumption × NCV × EF × fNRB
-  Project emissions  = devices × project_fuel_consumption × NCV_project × EF_project
-  Leakage            = leakage_factor × (Baseline − Project)
-  Net ER             = Baseline − Project − Leakage
+General formula (Gold Standard simplified cookstoves, biomass-to-biomass):
+  ER_y = (B_y − P_y) × fNRB × EF_fuel
+  where B_y and P_y are fuel consumption in tonnes/year.
+
+Dual emission-factor pathways:
+  1. Direct: fuel_kg × EF_kgCO₂/kg  (preferred, aligns with GS formula)
+  2. NCV chain: fuel_kg × NCV_MJ/kg ÷ 1e6 × EF_tCO₂/TJ  (fallback)
+
+fNRB is applied symmetrically to both baseline and project when
+project_is_biomass is True (default for cookstoves).
 
 Designed as methodology-agnostic with swappable "method packs".
 v1 ships with a cookstoves pack aligned to Gold Standard patterns.
@@ -149,19 +154,22 @@ class SensitivityPoint:
 METHOD_PACK_DEFAULTS: dict[str, dict[str, Any]] = {
     "cookstoves": {
         "baseline_fuel_type": "wood",
-        "baseline_fuel_consumption_kg_yr": None,  # must be provided
-        "baseline_ncv_mj_kg": 15.6,               # IPCC default for air-dried wood
-        "baseline_efficiency": 0.10,               # typical 3-stone fire ~10%
+        "baseline_fuel_consumption_kg_yr": None,     # must be provided
+        "baseline_ncv_mj_kg": 15.6,                  # IPCC default for air-dried wood
+        "baseline_efficiency": 0.10,                  # typical 3-stone fire ~10%
         "project_fuel_type": "improved_biomass",
-        "project_fuel_consumption_kg_yr": None,    # must be provided or derived
+        "project_fuel_consumption_kg_yr": None,       # must be provided or derived
         "project_ncv_mj_kg": 15.6,
-        "project_efficiency": 0.30,                # typical improved stove ~30%
-        "emission_factor_tco2_per_tj": 112.0,      # IPCC default for wood fuel
-        "fnrb": 0.70,                              # conservative default
+        "project_efficiency": 0.30,                   # typical improved stove ~30%
+        "emission_factor_tco2_per_tj": 112.0,         # IPCC default for wood fuel
+        "emission_factor_kgco2_per_kg": 1.747,        # IPCC: 15.6 MJ/kg × 112 tCO₂/TJ
+        "fnrb": 0.70,                                 # conservative default
         "leakage_factor": 0.0,
-        "devices_households": None,                # must be provided
-        "usage_rate": 1.0,                         # 100% usage by default
-        "adoption_rate": 1.0,                      # 100% adoption year-1
+        "fuel_savings_pct": None,                     # derive from efficiency ratio if absent
+        "project_is_biomass": True,                   # improved stoves still burn biomass
+        "devices_households": None,                   # must be provided
+        "usage_rate": 1.0,                            # 100% usage by default
+        "adoption_rate": 1.0,                         # 100% adoption year-1
         "crediting_period_years": 10,
     },
     "default": {
@@ -174,8 +182,11 @@ METHOD_PACK_DEFAULTS: dict[str, dict[str, Any]] = {
         "project_ncv_mj_kg": 15.6,
         "project_efficiency": 0.30,
         "emission_factor_tco2_per_tj": 112.0,
+        "emission_factor_kgco2_per_kg": None,         # not assumed for generic
         "fnrb": 0.50,
         "leakage_factor": 0.0,
+        "fuel_savings_pct": None,
+        "project_is_biomass": True,
         "devices_households": None,
         "usage_rate": 1.0,
         "adoption_rate": 1.0,
@@ -228,22 +239,43 @@ class CarbonEngine:
         pj_eff = _val("project_efficiency", 0.30)
 
         ef_tco2_per_tj = _val("emission_factor_tco2_per_tj", 112.0)
+        ef_kgco2_per_kg = _val("emission_factor_kgco2_per_kg", 0.0)
         fnrb = _val("fnrb", 0.70)
         leakage_factor = _val("leakage_factor", 0.0)
+        fuel_savings_pct = _val("fuel_savings_pct", 0.0)
         crediting_years = int(_val("crediting_period_years", 10))
+
+        project_is_biomass = _str("project_is_biomass", "true").lower() in (
+            "true", "yes", "1",
+        )
 
         if devices <= 0:
             raise ValueError("Number of devices/households must be > 0")
         if crediting_years <= 0:
             raise ValueError("Crediting period must be > 0")
 
-        # If project fuel consumption not given, derive from efficiency ratio
-        if pj_fuel_kg == 0 and bl_fuel_kg > 0 and bl_eff > 0 and pj_eff > 0:
-            pj_fuel_kg = bl_fuel_kg * (bl_eff / pj_eff)
+        # Project fuel derivation priority:
+        #   1. Explicit project_fuel_consumption_kg_yr (already set)
+        #   2. fuel_savings_pct: pj = bl × (1 − savings%)
+        #   3. Efficiency ratio: pj = bl × (bl_eff / pj_eff)
+        if pj_fuel_kg == 0 and bl_fuel_kg > 0:
+            if fuel_savings_pct > 0:
+                pj_fuel_kg = bl_fuel_kg * (1 - fuel_savings_pct)
+            elif bl_eff > 0 and pj_eff > 0:
+                pj_fuel_kg = bl_fuel_kg * (bl_eff / pj_eff)
 
-        # Unit conversions: kg → TJ  (MJ/kg × kg = MJ, ÷ 1e6 = TJ)
-        bl_energy_tj_per_device = (bl_fuel_kg * bl_ncv) / 1_000_000
-        pj_energy_tj_per_device = (pj_fuel_kg * pj_ncv) / 1_000_000
+        # Emission factor: prefer direct kgCO₂/kg pathway (GS-aligned),
+        # fall back to NCV/TJ chain.
+        if ef_kgco2_per_kg > 0:
+            bl_tco2_per_device = bl_fuel_kg * ef_kgco2_per_kg / 1000
+            pj_tco2_per_device = pj_fuel_kg * ef_kgco2_per_kg / 1000
+        else:
+            bl_tco2_per_device = (bl_fuel_kg * bl_ncv / 1_000_000) * ef_tco2_per_tj
+            pj_tco2_per_device = (pj_fuel_kg * pj_ncv / 1_000_000) * ef_tco2_per_tj
+
+        # fNRB applies symmetrically when project fuel is also biomass;
+        # for non-biomass project fuels, all emissions are anthropogenic (fNRB = 1).
+        fnrb_project = fnrb if project_is_biomass else 1.0
 
         assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
 
@@ -253,12 +285,11 @@ class CarbonEngine:
         total_leak = 0.0
 
         for yr in range(1, crediting_years + 1):
-            # Adoption ramp: linear to 100% over first few years
             yr_adoption = min(adoption_rate * yr, 1.0) if adoption_rate < 1.0 else adoption_rate
             active_devices = int(devices * yr_adoption)
 
-            yr_baseline = active_devices * usage_rate * bl_energy_tj_per_device * ef_tco2_per_tj * fnrb
-            yr_project = active_devices * usage_rate * pj_energy_tj_per_device * ef_tco2_per_tj
+            yr_baseline = active_devices * usage_rate * bl_tco2_per_device * fnrb
+            yr_project = active_devices * usage_rate * pj_tco2_per_device * fnrb_project
             yr_leakage = leakage_factor * max(yr_baseline - yr_project, 0)
             yr_net = yr_baseline - yr_project - yr_leakage
 
@@ -277,10 +308,8 @@ class CarbonEngine:
 
         total_net = total_bl - total_pj - total_leak
 
-        # Annualized = year-1 values (the "default" display)
         yr1 = schedule[0] if schedule else ERScheduleRow(1, 0, 0, 0, 0, 0)
 
-        # Shares for the breakdown bar (based on baseline as denominator)
         bl_abs = yr1.baseline_emissions
         denom = bl_abs if bl_abs > 0 else 1.0
 
@@ -323,7 +352,9 @@ class CarbonEngine:
             "baseline_fuel_consumption_kg_yr": "Baseline Fuel Consumption",
             "project_fuel_consumption_kg_yr": "Project Fuel Consumption",
             "devices_households": "Devices / Households",
-            "emission_factor_tco2_per_tj": "Emission Factor",
+            "emission_factor_tco2_per_tj": "Emission Factor (tCO₂/TJ)",
+            "emission_factor_kgco2_per_kg": "Emission Factor (kgCO₂/kg)",
+            "fuel_savings_pct": "Fuel Savings %",
             "leakage_factor": "Leakage Factor",
             "baseline_efficiency": "Baseline Efficiency",
             "project_efficiency": "Project Efficiency",
@@ -400,8 +431,11 @@ class CarbonEngine:
             ("project_fuel_consumption_kg_yr", "Project Fuel Consumption", defaults.get("project_fuel_consumption_kg_yr"), "kg/yr per device", "project", "project"),
             ("project_ncv_mj_kg", "Project NCV", defaults.get("project_ncv_mj_kg", 15.6), "MJ/kg", "project", "project"),
             ("project_efficiency", "Project Stove Efficiency", defaults.get("project_efficiency", 0.30), "", "project", "project"),
-            ("emission_factor_tco2_per_tj", "Emission Factor", defaults.get("emission_factor_tco2_per_tj", 112.0), "tCO₂/TJ", "emissions", "general"),
-            ("fnrb", "fNRB", defaults.get("fnrb", 0.50), "", "emissions", "baseline"),
+            ("fuel_savings_pct", "Fuel Savings %", defaults.get("fuel_savings_pct"), "", "project", "project"),
+            ("emission_factor_tco2_per_tj", "Emission Factor (tCO₂/TJ)", defaults.get("emission_factor_tco2_per_tj", 112.0), "tCO₂/TJ", "emissions", "general"),
+            ("emission_factor_kgco2_per_kg", "Emission Factor (kgCO₂/kg)", defaults.get("emission_factor_kgco2_per_kg"), "kgCO₂/kg", "emissions", "general"),
+            ("fnrb", "fNRB", defaults.get("fnrb", 0.50), "", "emissions", "general"),
+            ("project_is_biomass", "Project Uses Biomass", defaults.get("project_is_biomass", True), "", "project", "project"),
             ("leakage_factor", "Leakage Factor", defaults.get("leakage_factor", 0.0), "", "leakage", "leakage"),
             ("crediting_period_years", "Crediting Period", defaults.get("crediting_period_years", 10), "years", "general", "general"),
         ]
@@ -461,9 +495,8 @@ class CarbonEngine:
     def is_computable(inputs: dict[str, CarbonInput]) -> bool:
         """Check if we have enough to produce an ER estimate.
 
-        Minimum: devices + baseline fuel consumption (project can be derived
-        from efficiency ratio if baseline efficiency and project efficiency
-        are available).
+        Minimum: devices + baseline fuel consumption + a way to determine
+        project fuel (explicit value, fuel_savings_pct, or efficiency ratio).
         """
         required_numeric = ["devices_households", "baseline_fuel_consumption_kg_yr"]
         for f in required_numeric:
@@ -473,10 +506,14 @@ class CarbonEngine:
             if isinstance(inp.value, (int, float)) and inp.value <= 0:
                 return False
 
-        # Project fuel can be derived if efficiencies are present
         pj_inp = inputs.get("project_fuel_consumption_kg_yr")
         pj_has_value = pj_inp and pj_inp.value is not None and float(pj_inp.value) > 0
         if not pj_has_value:
+            # fuel_savings_pct pathway
+            savings_inp = inputs.get("fuel_savings_pct")
+            if savings_inp and savings_inp.value is not None and float(savings_inp.value) > 0:
+                return True
+            # Efficiency-ratio fallback
             bl_eff = inputs.get("baseline_efficiency")
             pj_eff = inputs.get("project_efficiency")
             can_derive = (

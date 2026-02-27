@@ -88,11 +88,23 @@ INPUT_EXTRACTION_SCHEMA = {
         },
         "emission_factor_tco2_per_tj": {
             "type": "number",
-            "description": "Emission factor in tCO2 per TJ for the fuel",
+            "description": "Emission factor in tCO2 per TJ for the fuel (NCV/TJ pathway)",
+        },
+        "emission_factor_kgco2_per_kg": {
+            "type": "number",
+            "description": "Emission factor in kgCO2 per kg of fuel (direct pathway, preferred). E.g. ~1.747 for wood.",
         },
         "fnrb": {
             "type": "number",
             "description": "Fraction of non-renewable biomass as a decimal (0-1)",
+        },
+        "fuel_savings_pct": {
+            "type": "number",
+            "description": "Percentage of fuel saved by the project as a decimal (0-1). E.g. 0.30 means 30% fuel savings.",
+        },
+        "project_is_biomass": {
+            "type": "boolean",
+            "description": "Whether the project technology still burns biomass. True for improved cookstoves, False for LPG/biogas switch.",
         },
         "leakage_factor": {
             "type": "number",
