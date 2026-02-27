@@ -101,7 +101,6 @@ async def compliance_chat_stream(
                 "widget_type": result.widget_type,
                 "widget_data": result.widget_data,
             }
-            logger.info(f"Complete event widget_type={result.widget_type}, has_widget_data={result.widget_data is not None}")
             yield f"data: {json.dumps(complete)}\n\n"
 
         except Exception as e:
