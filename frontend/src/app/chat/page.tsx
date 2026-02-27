@@ -13,16 +13,16 @@ import { track } from '@/lib/analytics';
 function ChatPageContent() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { phase, sendMessage } = useChatStore();
+  const { phase, sendMessage, reset } = useChatStore();
 
   useEffect(() => {
     track('chat_page_viewed');
   }, []);
 
   const handleNavChange = (item: NavItem) => {
-    if (item === 'projects') {
-      router.push('/');
-    } else if (item === 'trash') {
+    if (item === 'chat') {
+      reset();
+    } else if (item === 'projects' || item === 'trash') {
       router.push('/');
     }
   };
