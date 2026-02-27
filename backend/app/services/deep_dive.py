@@ -7,7 +7,7 @@ identify the key elements needed to complete that requirement.
 Flow:
   1. LLM (gpt-4o-mini) generates 4 precision search queries from item title +
      rationale + geography, targeting government portals and official checklists.
-  2. Fire all 4 queries in parallel via Tavily web search.
+  2. Fire all 4 queries in parallel via web search.
   3. Deduplicate results by URL.
   4. Call main LLM with structured function calling to produce the deep dive output,
      grounded in the retrieved sources.

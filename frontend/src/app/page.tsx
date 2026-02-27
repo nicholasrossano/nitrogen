@@ -8,6 +8,7 @@ import { ProjectCard } from '@/components/projects';
 import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/auth';
+import { useChatStore } from '@/stores/chatStore';
 
 function HomePageContent() {
   const router = useRouter();
@@ -94,6 +95,7 @@ function HomePageContent() {
 
   const handleNavChange = (item: NavItem) => {
     if (item === 'chat') {
+      useChatStore.getState().reset();
       router.push('/chat');
       return;
     }

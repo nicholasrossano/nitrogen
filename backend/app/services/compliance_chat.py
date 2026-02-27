@@ -2,10 +2,11 @@
 Compliance Chat Service
 
 Two-step orchestration:
-  1. A lightweight planning call (function-calling) decides which search
-     tools — if any — are worth invoking for this particular question.
-  2. Only the requested tools run; the answer is generated from exactly
-     that evidence and cites only what it actually used.
+  1. A lightweight planning call (function-calling) decides which data
+     sources to query. The planner is encouraged to use multiple sources
+     (scholarly + web) for comprehensive answers.
+  2. Requested tools run in parallel; the answer is generated from all
+     gathered evidence and cites only what it actually used.
 
 Tools are additive: as more are registered in SEARCH_TOOLS the planner
 will automatically consider them without changes elsewhere.
@@ -45,11 +46,9 @@ SEARCH_TOOLS = [
         "function": {
             "name": "search_scholarly_literature",
             "description": (
-                "Search OpenAlex for peer-reviewed academic papers and research. "
-                "Use when the user asks about precedents or case studies from specific locations, "
-                "research-backed evidence, what has been done before in similar contexts, "
-                "or academic literature on a topic. "
-                "Do NOT use for general conceptual questions, definitions, or step-by-step procedural advice."
+                "Search OpenAlex for peer-reviewed academic papers, research studies, and published evidence. "
+                "Good for: empirical data, case studies, impact evaluations, published methodology comparisons, "
+                "and peer-reviewed analysis of specific topics or regions."
             ),
             "parameters": {
                 "type": "object",
@@ -72,16 +71,17 @@ SEARCH_TOOLS = [
         "function": {
             "name": "search_web_sources",
             "description": (
-                "Search authoritative web sources (NGOs, governments, standards bodies) for current "
-                "regulations, policies, program requirements, or recent developments. "
-                "Use when the user needs up-to-date information not likely captured in academic literature."
+                "Search the web for information from NGOs, governments, standards bodies, news outlets, "
+                "industry reports, and other authoritative sources. Good for: current regulations, policies, "
+                "program requirements, recent developments, market data, country-specific information, "
+                "practical guidance, organizational reports, and real-world project examples."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Focused search query for authoritative web sources (max 20 words).",
+                        "description": "Focused search query for web sources (max 20 words).",
                     },
                     "reason": {
                         "type": "string",
@@ -159,38 +159,27 @@ PLANNING_SYSTEM_PROMPT = """You are a research-planning assistant for an environ
 
 Your only job is to decide which tools (if any) to call before generating a response.
 
-ALWAYS call run_lcoe_model when the user:
-- Asks for an LCOE, levelized cost of energy, or cost per kWh
-- Asks to "build me an LCOE" or "model the economics" for an energy project
-- Asks about project financial feasibility or viability for an energy project
-- Mentions capex, opex, discount rate, WACC, or capacity factor in a project costing context
-- Asks "what would the cost of energy be" for solar, wind, battery, mini-grid, or clean cooking projects
-This takes priority over search tools when the user wants a numerical economic model.
+You have these data sources available — they are all equally valid and complement each other:
+- search_scholarly_literature: peer-reviewed papers, empirical studies, impact evaluations
+- search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
+- run_lcoe_model: builds a Levelized Cost of Energy model when the user wants energy project economics
+- run_carbon_model: builds a carbon emissions model when the user wants emission reduction estimates
 
-ALWAYS call run_carbon_model when the user:
-- Asks about carbon credits, emission reductions, or tCO₂e
-- Asks about baseline vs project emissions, cookstove methodology, fNRB, or leakage
-- Asks "how many credits" or "what are the emission reductions" for a project
-- Discusses fuel consumption savings from clean cooking or improved stove programs
-- Mentions Gold Standard ER calculations or carbon credit methodology
-This takes priority over search tools when the user wants a numerical carbon/emissions model.
+GUIDELINES:
 
-ALWAYS call search_scholarly_literature when the user:
-- Asks what projects, programs, or initiatives have been done in a specific city, country, or region
-- Asks for precedents, examples, or case studies from real places
-- Needs evidence of what has actually been implemented (e.g. "what cookstove programs ran in Accra?")
-- Needs research-backed analysis, academic evidence, or literature on a topic
+For research questions (the majority of user questions), call BOTH search_scholarly_literature AND search_web_sources to give the most comprehensive answer. Academic papers and web sources cover different angles — use both.
 
-ALWAYS call search_web_sources when the user:
-- Needs current regulations, policies, or standards-body requirements
-- Asks about recent developments, certifications, or funding mechanisms
+Call run_lcoe_model when the user wants a numerical energy cost model (LCOE, cost per kWh, project economics, capex/opex/WACC analysis). This can be combined with search tools.
 
-Call NEITHER when:
-- The question is purely conceptual, definitional, or conversational (e.g. "what is MRV?")
-- The question asks for step-by-step process advice with no need for citations
+Call run_carbon_model when the user wants a numerical emissions model (carbon credits, tCO₂e, emission reductions, cookstove methodology, fNRB). This can be combined with search tools.
+
+Call NEITHER search tool only when:
+- The question is purely conversational, definitional, or a simple clarification (e.g. "what is MRV?", "thanks")
 - The conversation already contains a direct answer
 
-You may call multiple tools, one, or none. Do not produce any text — only make tool calls (or no calls)."""
+When in doubt, call both search tools. More context is better than less.
+
+Do not produce any text — only make tool calls (or no calls)."""
 
 SYSTEM_PROMPT = """You are an expert advisor on environmental program design, compliance frameworks, and sustainability standards. You help practitioners design compliant programs, understand regulatory requirements, and navigate complex environmental standards.
 
@@ -248,12 +237,11 @@ class ComplianceChatService:
     """
     Orchestrates compliance chat using a plan-then-retrieve-then-generate loop.
 
-    Step 1  — Corpus search (always; fast, local, no API cost)
-    Step 2  — Tool planning: lightweight LLM call decides which external
-               searches (if any) are worth running for this question
-    Step 3  — Execute only the requested tools in parallel
-    Step 4  — Generate final answer using only the gathered evidence
-    Step 5  — Filter returned sources to only those cited in the answer
+    Step 1  — Corpus search (always; fast, local) + tool planning run in parallel
+    Step 2  — Execute the planner's requested tools (typically both scholarly
+               and web search) in parallel
+    Step 3  — Generate final answer using all gathered evidence
+    Step 4  — Filter returned sources to only those cited in the answer
     """
 
     def __init__(self, db: AsyncSession):
@@ -296,42 +284,62 @@ class ComplianceChatService:
             tiers_used.append("corpus")
             await _think(f"Found {len(corpus_facts)} relevant case studies")
 
-        # Step 3: execute only the tools the planner requested
+        # Step 2: execute requested tools — search tools run in parallel
         widget_type: str | None = None
         widget_data: dict | None = None
 
+        # Parse all tool calls
+        parsed_calls: list[tuple[str, dict]] = []
         for tool_call in tool_calls:
             fn_name = tool_call.function.name
             try:
                 args = json.loads(tool_call.function.arguments)
             except Exception:
                 args = {}
-
-            tool_query = args.get("query", search_query)
             reason = args.get("reason", "")
-            logger.info(f"Tool called: {fn_name} | query={tool_query!r} | reason={reason!r}")
+            logger.info(f"Tool called: {fn_name} | query={args.get('query', '')!r} | reason={reason!r}")
+            parsed_calls.append((fn_name, args))
 
+        # Run search tools (scholarly + web) concurrently
+        async def _run_scholarly(query: str) -> list[RetrievedFact]:
+            await _think(f"Searching scholarly databases: \"{query}\"...")
+            facts = await self.retrieval.search_openalex(query)
+            if facts:
+                await _think(f"Found {len(facts)} scholarly works")
+            else:
+                await _think("No relevant scholarly works found")
+            return facts
+
+        async def _run_web(query: str) -> list[RetrievedFact]:
+            await _think("Searching web sources...")
+            facts = await self.retrieval.search_web(query)
+            if facts:
+                await _think(f"Found {len(facts)} web sources")
+            else:
+                await _think("No web sources found")
+            return facts
+
+        search_tasks = []
+        search_labels = []
+        for fn_name, args in parsed_calls:
+            tool_query = args.get("query", search_query)
             if fn_name == "search_scholarly_literature":
-                await _think(f"Searching scholarly databases: \"{tool_query}\"...")
-                openalex_facts = await self.retrieval.search_openalex(tool_query)
-                if openalex_facts:
-                    all_facts.extend(openalex_facts)
-                    tiers_used.append("openalex")
-                    await _think(f"Found {len(openalex_facts)} scholarly works")
-                else:
-                    await _think("No relevant scholarly works found")
-
+                search_tasks.append(_run_scholarly(tool_query))
+                search_labels.append("openalex")
             elif fn_name == "search_web_sources":
-                await _think("Searching authoritative web sources...")
-                web_facts = await self.retrieval.search_web(tool_query)
-                if web_facts:
-                    all_facts.extend(web_facts)
-                    tiers_used.append("web")
-                    await _think(f"Found {len(web_facts)} web sources")
-                else:
-                    await _think("No authoritative web sources found")
+                search_tasks.append(_run_web(tool_query))
+                search_labels.append("web")
 
-            elif fn_name == "run_lcoe_model":
+        if search_tasks:
+            search_results = await asyncio.gather(*search_tasks)
+            for label, facts in zip(search_labels, search_results):
+                if facts:
+                    all_facts.extend(facts)
+                    tiers_used.append(label)
+
+        # Run model tools (LCOE / carbon) sequentially — they produce widgets
+        for fn_name, args in parsed_calls:
+            if fn_name == "run_lcoe_model":
                 await _think("Building LCOE model...")
                 tiers_used.append("lcoe")
                 try:
@@ -841,7 +849,7 @@ class ComplianceChatService:
             return user_message
 
     def _rank_facts(self, facts: list[RetrievedFact]) -> list[RetrievedFact]:
-        """Rank and deduplicate facts: curated corpus > scholarly > web > LLM estimate."""
+        """Rank and deduplicate facts by source quality and confidence."""
         tier_order = {
             SourceType.CORPUS: 0,
             SourceType.EVIDENCE: 0,
