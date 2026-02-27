@@ -118,7 +118,6 @@ export const useChatStore = create<ChatState>()(
               });
             },
             (payload) => {
-              console.log('[chatStore] onComplete, widget_type:', payload.widget_type, 'has_widget_data:', !!payload.widget_data);
               const thinkingLines = get().thinkingLines;
 
               const meta: CompletionMeta = {
@@ -168,7 +167,15 @@ export const useChatStore = create<ChatState>()(
         const { messages, sessions, pendingSessionTitle } = get();
         const firstUser = messages.find((m) => m.role === 'user');
 
-        if (firstUser) {
+        // Deduplicate: check if the current messages are already saved as a session.
+        // Compare by message IDs so page refreshes or re-opens don't produce new entries.
+        const alreadySaved = firstUser && sessions.some(
+          (s) =>
+            s.messages.length === messages.length &&
+            s.messages.every((m, i) => m.id === messages[i]?.id),
+        );
+
+        if (firstUser && !alreadySaved) {
           const session: ChatSession = {
             id: `session-${Date.now()}`,
             title: pendingSessionTitle || firstUser.content.slice(0, 80),

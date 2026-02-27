@@ -399,12 +399,6 @@ function MessageBubble({
           </div>
         )}
 
-        {(() => {
-          if (!isUser && message.widget_type) {
-            console.log('[MessageBubble] widget_type:', message.widget_type, 'has_data:', !!message.widget_data);
-          }
-          return null;
-        })()}
         {!isUser && message.widget_type && message.widget_data && (
           <div className="mt-3 w-full">
             <ComplianceChatWidget
@@ -429,7 +423,6 @@ function ComplianceChatWidget({
   type: string;
   data: Record<string, any>;
 }) {
-  console.log('[ComplianceChatWidget] type:', type, 'data keys:', Object.keys(data || {}));
   switch (type) {
     case 'lcoe_inputs':
       return <LCOEInputsWidget data={data} initiativeId="" isActive />;
