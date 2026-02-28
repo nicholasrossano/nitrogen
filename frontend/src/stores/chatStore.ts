@@ -158,7 +158,7 @@ export const useChatStore = create<ChatState>()(
               // Back-fill db_id on the user message that was just persisted
               set((s) => ({
                 messages: [
-                  ...s.messages.slice(0, -0).map((m) =>
+                  ...s.messages.map((m) =>
                     m.id === userMsgLocalId ? { ...m, db_id: payload.user_message_id } : m
                   ),
                   assistantMsg,
