@@ -21,7 +21,16 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { sendMessage } = useInitiativeStore();
+  const { sendMessage, draftMessage, setDraftMessage } = useInitiativeStore();
+
+  // Pick up draft message from store (e.g. from Investigate button)
+  useEffect(() => {
+    if (draftMessage) {
+      setInput(draftMessage);
+      setDraftMessage(null);
+      textareaRef.current?.focus();
+    }
+  }, [draftMessage, setDraftMessage]);
 
   // Auto-resize textarea
   useEffect(() => {

@@ -31,6 +31,7 @@ from app.schemas.chat import (
     TruncateChatRequest,
     TruncateChatResponse,
     RetryResponse,
+    MessageFeedbackRequest,
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
@@ -641,6 +642,7 @@ async def send_chat_message(
             widget_type=assistant_message.widget_type,
             widget_data=assistant_message.widget_data,
             sources=source_citations,
+            feedback=assistant_message.feedback,
             created_at=assistant_message.created_at,
         ),
         extracted_fields=None,
@@ -724,12 +726,48 @@ async def get_chat_history(
                 sources=[
                     SourceCitation(**s) for s in msg.sources
                 ] if msg.sources else None,
+                feedback=msg.feedback,
                 created_at=msg.created_at,
             )
             for msg in messages
         ],
         stage_status=build_stage_status(initiative),
     )
+
+
+@router.patch("/initiatives/{initiative_id}/chat/{message_id}/feedback")
+async def set_message_feedback(
+    initiative_id: UUID,
+    message_id: UUID,
+    data: MessageFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Set or clear like/dislike feedback on a message."""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    if not initiative:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+
+    msg_result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.initiative_id == initiative_id,
+        )
+    )
+    msg = msg_result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    msg.feedback = data.feedback
+    await db.commit()
+
+    return {"message_id": str(message_id), "feedback": data.feedback}
 
 
 @router.delete("/initiatives/{initiative_id}/chat/truncate", response_model=TruncateChatResponse)
@@ -798,6 +836,7 @@ async def truncate_chat(
                 widget_type=m.widget_type,
                 widget_data=m.widget_data,
                 sources=[SourceCitation(**s) for s in m.sources] if m.sources else None,
+                feedback=m.feedback,
                 created_at=m.created_at,
             )
             for m in remaining
@@ -894,6 +933,7 @@ async def retry_assistant_message(
             widget_type=new_message.widget_type,
             widget_data=new_message.widget_data,
             sources=source_citations,
+            feedback=new_message.feedback,
             created_at=new_message.created_at,
         ),
         stage_status=build_stage_status(initiative),

@@ -136,21 +136,14 @@ export function ChatMessage({
 
   return (
     <div
-      className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
+      className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
     >
       {/* Message content */}
       <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
 
-        {/* Floating toolbar — shown on group hover, hidden while streaming or editing */}
+        {/* Floating toolbar — hidden while streaming or editing */}
         {!isStreaming && !isEditing && (
-          <div
-            className={`
-              absolute z-10 flex items-center
-              opacity-0 group-hover:opacity-100 focus-within:opacity-100
-              transition-opacity duration-150
-              ${isUser ? 'right-0 -top-7' : 'left-0 -top-7'}
-            `}
-          >
+          <div className={`absolute z-10 flex items-center ${isUser ? 'right-0 -bottom-7' : 'left-0 -bottom-7'}`}>
             {isUser ? (
               <UserMessageToolbar
                 content={message.content}

@@ -31,7 +31,8 @@ class ChatMessageResponse(BaseModel):
     content: str
     widget_type: Optional[str] = None
     widget_data: Optional[dict[str, Any]] = None
-    sources: Optional[list[SourceCitation]] = None  # Citations used in this message
+    sources: Optional[list[SourceCitation]] = None
+    feedback: Optional[str] = None
     created_at: datetime
     
     class Config:
@@ -125,6 +126,11 @@ class AlignmentResponse(BaseModel):
     """Response containing alignment data"""
     alignment: ToolAlignmentSchema
     message: str
+
+
+class MessageFeedbackRequest(BaseModel):
+    """Request to set like/dislike feedback on a message"""
+    feedback: Optional[str] = Field(None, pattern=r'^(like|dislike)$', description="'like', 'dislike', or null to clear")
 
 
 class TruncateChatRequest(BaseModel):

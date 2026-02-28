@@ -37,8 +37,13 @@ interface ChatState {
   error: string | null;
   sessions: ChatSession[];
   pendingSessionTitle: string | null;
+  messageFeedback: Record<string, 'like' | 'dislike' | null>;
+  retryingMessageId: string | null;
 
   sendMessage: (content: string) => Promise<void>;
+  editMessage: (messageId: string, newContent: string) => Promise<void>;
+  retryMessage: (messageId: string) => Promise<void>;
+  setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   reset: () => void;
   loadSession: (session: ChatSession) => void;
   deleteSession: (id: string) => void;
@@ -56,6 +61,7 @@ const BLANK_TRANSIENT = {
   streamingContent: '',
   error: null,
   pendingSessionTitle: null as string | null,
+  retryingMessageId: null as string | null,
 };
 
 export const useChatStore = create<ChatState>()(
@@ -64,6 +70,7 @@ export const useChatStore = create<ChatState>()(
       messages: [],
       phase: 'landing',
       sessions: [],
+      messageFeedback: {},
       ...BLANK_TRANSIENT,
 
       sendMessage: async (content: string) => {
@@ -161,6 +168,36 @@ export const useChatStore = create<ChatState>()(
             streamingContent: '',
           });
         }
+      },
+
+      // Edit: truncate from that message onward, then re-send with new content
+      editMessage: async (messageId: string, newContent: string) => {
+        const { messages } = get();
+        const idx = messages.findIndex(m => m.id === messageId);
+        if (idx === -1) return;
+        // Keep messages before the edited one
+        set({ messages: messages.slice(0, idx) });
+        await get().sendMessage(newContent);
+      },
+
+      // Retry: remove the last assistant message and re-send the preceding user message
+      retryMessage: async (messageId: string) => {
+        const { messages } = get();
+        const idx = messages.findIndex(m => m.id === messageId);
+        if (idx === -1 || messages[idx].role !== 'assistant') return;
+        // Find the user message that preceded this assistant message
+        const preceding = messages.slice(0, idx);
+        const lastUserMsg = [...preceding].reverse().find(m => m.role === 'user');
+        if (!lastUserMsg) return;
+        set({ messages: preceding, retryingMessageId: messageId });
+        await get().sendMessage(lastUserMsg.content);
+        set({ retryingMessageId: null });
+      },
+
+      setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => {
+        set(state => ({
+          messageFeedback: { ...state.messageFeedback, [messageId]: feedback },
+        }));
       },
 
       reset: () => {

@@ -6,7 +6,10 @@ import { ChatInput } from '@/components/chat/ChatInput';
 import ReactMarkdown from 'react-markdown';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useChatTabsStore, ChatTab, ClosedChatTab, ONBOARDING_TAB_ID } from '@/stores/chatTabsStore';
+import { useInitiativeStore } from '@/stores/initiativeStore';
 import { X, Plus, Clock, Trash2, MessageSquare } from 'lucide-react';
+import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
+import { MessageVariants } from '@/components/chat/MessageVariants';
 
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
@@ -235,7 +238,7 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 relative">
-        <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-4">
+        <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-8">
           {safeMessages.length === 0 ? (
             <div className="text-center text-text-tertiary py-8">
               No messages yet. Start a conversation!
@@ -506,26 +509,121 @@ function ChatMessageItem({
     message.widget_data &&
     CHAT_WIDGET_TYPES.includes(message.widget_type);
   const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
-
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
+
+  const {
+    messageFeedback,
+    messageVariants,
+    retryingMessageId,
+    editMessage,
+    retryMessage,
+    setMessageFeedback,
+    setVariantIndex,
+  } = useInitiativeStore();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(message.content);
+  const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  const feedback = messageFeedback[message.id] ?? null;
+  const isRetrying = retryingMessageId === message.id;
+  const variantEntry = messageVariants[message.id] ?? null;
+
+  const handleEditStart = useCallback(() => {
+    if (bubbleRef.current) {
+      setBubbleWidth(bubbleRef.current.offsetWidth);
+    }
+    setEditValue(message.content);
+    setIsEditing(true);
+  }, [message.content]);
+
+  const handleEditSave = useCallback(async () => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === message.content) { setIsEditing(false); return; }
+    setIsEditing(false);
+    await editMessage(initiativeId, message.id, trimmed);
+  }, [editValue, message.content, message.id, initiativeId, editMessage]);
+
+  const handleEditCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditValue(message.content);
+  }, [message.content]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [isEditing]);
 
   return (
     <div className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex flex-col ${isUser ? 'max-w-[90%] items-end' : 'w-full items-start'}`}>
-        <div
-          className={`
-            rounded-lg px-3 py-2 text-sm
-            ${isUser ? 'bg-zinc-700 text-white' : 'bg-white text-text-primary'}
-          `}
-        >
-          {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
-          ) : (
-            <div className="prose-sm prose-memo">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+      <div className={`relative flex flex-col ${isUser ? 'max-w-[90%] items-end' : 'w-full items-start'}`}>
+
+        {/* Floating toolbar */}
+        {!isEditing && (
+          <div className={`absolute z-10 flex items-center ${isUser ? 'right-0 -bottom-7' : 'left-3 -bottom-7'}`}>
+            {isUser ? (
+              <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
+            ) : (
+              <AssistantMessageToolbar
+                content={message.content}
+                feedback={feedback}
+                onFeedback={(f) => setMessageFeedback(message.id, f)}
+                onRetry={() => retryMessage(initiativeId, message.id)}
+                retrying={isRetrying}
+              />
+            )}
+          </div>
+        )}
+
+        {isUser && isEditing ? (
+          <div style={bubbleWidth ? { minWidth: bubbleWidth } : undefined}>
+            <textarea
+              ref={textareaRef}
+              value={editValue}
+              onChange={e => {
+                setEditValue(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditSave(); }
+                if (e.key === 'Escape') handleEditCancel();
+              }}
+              className="w-full text-sm leading-relaxed px-3 py-2 rounded-lg border border-zinc-400 bg-transparent text-text-primary resize-none outline-none focus:border-zinc-500"
+            />
+            <div className="flex items-center gap-2 mt-1.5 justify-end">
+              <button onClick={handleEditCancel} className="text-xs text-text-tertiary hover:text-text-secondary transition-colors">Cancel</button>
+              <button onClick={handleEditSave} className="text-xs text-accent hover:text-accent-anchor font-medium transition-colors">Save & regenerate</button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div ref={isUser ? bubbleRef : undefined} className={`rounded-lg px-3 py-2 text-sm ${isUser ? 'bg-zinc-700 text-white' : 'bg-white text-text-primary'}`}>
+            {isUser ? (
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            ) : (
+              <div className="prose-sm prose-memo">
+                <ReactMarkdown>{message.content}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Variant switcher for retried assistant messages */}
+        {!isUser && variantEntry && variantEntry.versions.length > 1 && (
+          <MessageVariants
+            currentIndex={variantEntry.currentIndex}
+            total={variantEntry.versions.length}
+            onPrev={() => setVariantIndex(message.id, variantEntry.currentIndex - 1)}
+            onNext={() => setVariantIndex(message.id, variantEntry.currentIndex + 1)}
+          />
+        )}
 
         {shouldShowWidget && !isDocumentRequest && (
           <div className={`mt-3 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
