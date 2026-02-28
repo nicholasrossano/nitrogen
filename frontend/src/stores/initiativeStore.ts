@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan } from '@/lib/api';
 
+interface MessageVariantEntry {
+  versions: ChatMessage[];
+  currentIndex: number;
+}
+
 interface InitiativeState {
   // Data
   initiative: Initiative | null;
@@ -19,12 +24,21 @@ interface InitiativeState {
   projectPlanLoading: boolean;
   error: string | null;
   streamingMessageId: string | null;
+
+  // Message toolbar state
+  messageFeedback: Record<string, 'like' | 'dislike' | null>;
+  messageVariants: Record<string, MessageVariantEntry>;
+  retryingMessageId: string | null;
   
   // Actions
   loadInitiative: (id: string) => Promise<void>;
   loadChatHistory: (id: string) => Promise<void>;
   loadEvidence: (id: string) => Promise<void>;
   sendMessage: (id: string, content: string) => Promise<void>;
+  editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
+  retryMessage: (id: string, messageId: string) => Promise<void>;
+  setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
+  setVariantIndex: (originalMessageId: string, index: number) => void;
   confirmIntake: (id: string) => Promise<void>;
   uploadEvidence: (id: string, file: File) => Promise<void>;
   pasteEvidence: (id: string, content: string, title?: string) => Promise<void>;
@@ -40,6 +54,7 @@ interface InitiativeState {
   loadProjectPlan: (id: string) => Promise<void>;
   generateProjectPlan: (id: string) => Promise<void>;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
+  deletePlanItem: (id: string, itemId: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -59,6 +74,9 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   projectPlanLoading: false,
   error: null,
   streamingMessageId: null,
+  messageFeedback: {},
+  messageVariants: {},
+  retryingMessageId: null,
 
   // Load initiative details
   loadInitiative: async (id: string) => {
@@ -203,6 +221,96 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         streamingMessageId: null,
       }));
     }
+  },
+
+  // Edit a user message: truncate from that message and re-send with new content
+  editMessage: async (id: string, messageId: string, newContent: string) => {
+    set({ sending: true, error: null });
+    try {
+      await api.truncateChatFrom(id, messageId);
+      // sendMessage will handle the rest (optimistic UI, streaming, reload)
+      await get().sendMessage(id, newContent);
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to edit message',
+        sending: false,
+      });
+    }
+  },
+
+  // Retry an assistant message: delete it and regenerate
+  retryMessage: async (id: string, messageId: string) => {
+    set({ retryingMessageId: messageId, error: null });
+    try {
+      // Resolve the real DB ID in case this message has already been retried
+      // (the display keeps the original stable ID but the variant entry tracks real IDs)
+      const { messageVariants } = get();
+      const existing = messageVariants[messageId];
+      const realDbId = existing
+        ? existing.versions[existing.currentIndex].id
+        : messageId;
+
+      const response = await api.retryAssistantMessage(id, realDbId);
+      const newMessage = response.message;
+
+      set(state => {
+        // Keep the original message ID stable in the flat list so variant lookups stay consistent
+        const stableMessage = { ...newMessage, id: messageId };
+        const updatedMessages = state.messages.map(m =>
+          m.id === messageId ? stableMessage : m
+        );
+
+        // Track variants: seed with original message if first retry
+        const prevEntry = state.messageVariants[messageId];
+        const originalMsg = state.messages.find(m => m.id === messageId);
+        const prevVersions = prevEntry ? prevEntry.versions : (originalMsg ? [originalMsg] : []);
+        const versions = [...prevVersions, newMessage];
+
+        return {
+          messages: updatedMessages,
+          stageStatus: response.stage_status,
+          retryingMessageId: null,
+          messageVariants: {
+            ...state.messageVariants,
+            [messageId]: { versions, currentIndex: versions.length - 1 },
+          },
+        };
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to retry message',
+        retryingMessageId: null,
+      });
+    }
+  },
+
+  // Toggle like/dislike feedback for a message
+  setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => {
+    set(state => ({
+      messageFeedback: { ...state.messageFeedback, [messageId]: feedback },
+    }));
+  },
+
+  // Navigate between retry variants
+  setVariantIndex: (originalMessageId: string, index: number) => {
+    set(state => {
+      const entry = state.messageVariants[originalMessageId];
+      if (!entry) return state;
+      const clampedIndex = Math.max(0, Math.min(index, entry.versions.length - 1));
+      // Keep the stable display ID while swapping content to the selected variant
+      const selectedVariant = entry.versions[clampedIndex];
+      const stableMessage = { ...selectedVariant, id: originalMessageId };
+      const updatedMessages = state.messages.map(m =>
+        m.id === originalMessageId ? stableMessage : m
+      );
+      return {
+        messages: updatedMessages,
+        messageVariants: {
+          ...state.messageVariants,
+          [originalMessageId]: { ...entry, currentIndex: clampedIndex },
+        },
+      };
+    });
   },
 
   // Confirm intake
@@ -550,6 +658,25 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
+  // Delete a single plan item (optimistic)
+  deletePlanItem: async (id: string, itemId: string) => {
+    const { projectPlan } = get();
+    if (!projectPlan) return;
+
+    const updatedPillars = projectPlan.pillars.map(pillar => ({
+      ...pillar,
+      items: pillar.items.filter(item => item.id !== itemId),
+    }));
+    set({ projectPlan: { ...projectPlan, pillars: updatedPillars } });
+
+    try {
+      await api.deletePlanItem(id, itemId);
+    } catch (error) {
+      set({ projectPlan });
+      console.error('Failed to delete plan item:', error);
+    }
+  },
+
   // Reset state
   reset: () => {
     set({
@@ -567,6 +694,9 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       projectPlanLoading: false,
       error: null,
       streamingMessageId: null,
+      messageFeedback: {},
+      messageVariants: {},
+      retryingMessageId: null,
     });
   },
 }));

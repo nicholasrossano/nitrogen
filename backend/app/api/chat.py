@@ -28,6 +28,9 @@ from app.schemas.chat import (
     AlignmentConfirmRequest,
     AlignmentResponse,
     SourceCitation,
+    TruncateChatRequest,
+    TruncateChatResponse,
+    RetryResponse,
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
@@ -725,6 +728,174 @@ async def get_chat_history(
             )
             for msg in messages
         ],
+        stage_status=build_stage_status(initiative),
+    )
+
+
+@router.delete("/initiatives/{initiative_id}/chat/truncate", response_model=TruncateChatResponse)
+async def truncate_chat(
+    initiative_id: UUID,
+    data: TruncateChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete a message and all messages after it (used by the Edit flow)."""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    if not initiative:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+
+    # Fetch the target message to get its created_at timestamp
+    from uuid import UUID as UUIDType
+    try:
+        target_id = UUIDType(data.from_message_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message ID")
+
+    msg_result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == target_id,
+            ChatMessage.initiative_id == initiative_id,
+        )
+    )
+    target_msg = msg_result.scalar_one_or_none()
+    if not target_msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    # Delete the target message and everything after it (by created_at)
+    all_msgs_result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.initiative_id == initiative_id)
+        .order_by(ChatMessage.created_at)
+    )
+    all_msgs = all_msgs_result.scalars().all()
+
+    to_delete = [m for m in all_msgs if m.created_at >= target_msg.created_at]
+    for m in to_delete:
+        await db.delete(m)
+    await db.commit()
+
+    # Return remaining messages
+    remaining_result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.initiative_id == initiative_id)
+        .order_by(ChatMessage.created_at)
+    )
+    remaining = remaining_result.scalars().all()
+
+    return TruncateChatResponse(
+        deleted_count=len(to_delete),
+        messages=[
+            ChatMessageResponse(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                widget_type=m.widget_type,
+                widget_data=m.widget_data,
+                sources=[SourceCitation(**s) for s in m.sources] if m.sources else None,
+                created_at=m.created_at,
+            )
+            for m in remaining
+        ],
+    )
+
+
+@router.post("/initiatives/{initiative_id}/chat/retry/{message_id}", response_model=RetryResponse)
+async def retry_assistant_message(
+    initiative_id: UUID,
+    message_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete an assistant message and regenerate it from the same preceding context."""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    if not initiative:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+
+    # Fetch the target assistant message
+    msg_result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.initiative_id == initiative_id,
+        )
+    )
+    target_msg = msg_result.scalar_one_or_none()
+    if not target_msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    if target_msg.role != "assistant":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can only retry assistant messages")
+
+    # Get full history up to (but not including) the target message
+    all_msgs_result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.initiative_id == initiative_id)
+        .order_by(ChatMessage.created_at)
+    )
+    all_msgs = list(all_msgs_result.scalars().all())
+    history_before = [m for m in all_msgs if m.created_at < target_msg.created_at]
+
+    # Delete the target message and all messages after it
+    to_delete = [m for m in all_msgs if m.created_at >= target_msg.created_at]
+    for m in to_delete:
+        await db.delete(m)
+    await db.commit()
+
+    # Re-run orchestration from the same history
+    orchestration = OrchestrationService(db)
+    action_result = await orchestration.get_next_action(
+        messages=history_before,
+        initiative=initiative,
+    )
+
+    widget_type, widget_data, assistant_response, sources = await execute_action(
+        db, initiative, action_result, orchestration, chat_history=history_before
+    )
+
+    source_citations = [
+        SourceCitation(
+            source_type=s.source_type.value,
+            source_title=s.source_title,
+            source_url=s.source_url,
+            chunk_id=s.chunk_id,
+            confidence=s.confidence,
+        )
+        for s in sources
+    ] if sources else None
+
+    new_message = ChatMessage(
+        initiative_id=initiative.id,
+        role="assistant",
+        content=assistant_response,
+        widget_type=widget_type,
+        widget_data=widget_data,
+        sources=[s.to_dict() for s in sources] if sources else None,
+    )
+    db.add(new_message)
+    initiative.touch()
+    await db.commit()
+    await db.refresh(new_message)
+
+    return RetryResponse(
+        message=ChatMessageResponse(
+            id=new_message.id,
+            role=new_message.role,
+            content=new_message.content,
+            widget_type=new_message.widget_type,
+            widget_data=new_message.widget_data,
+            sources=source_citations,
+            created_at=new_message.created_at,
+        ),
         stage_status=build_stage_status(initiative),
     )
 

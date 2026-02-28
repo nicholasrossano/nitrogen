@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ChatMessage as ChatMessageType, SourceCitation } from '@/lib/api';
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
@@ -19,6 +19,9 @@ import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
+import { MessageVariants } from './MessageVariants';
+import { useInitiativeStore } from '@/stores/initiativeStore';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -27,6 +30,8 @@ interface ChatMessageProps {
   animate?: boolean;
   isStreaming?: boolean;
   className?: string;
+  hasOutputWidget?: boolean;
+  variantEntry?: { versions: ChatMessageType[]; currentIndex: number } | null;
 }
 
 function StreamingText({ content }: { content: string }) {
@@ -34,7 +39,6 @@ function StreamingText({ content }: { content: string }) {
   const words = content.split(' ').filter(w => w.length > 0);
 
   useEffect(() => {
-    // Add any new words that aren't already rendered
     if (words.length > renderedWords.length) {
       const newWords = words.slice(renderedWords.length).map((word, idx) => ({
         word,
@@ -60,24 +64,155 @@ function StreamingText({ content }: { content: string }) {
   );
 }
 
-export function ChatMessage({ message, initiativeId, isLatest, animate = false, isStreaming = false, className = '' }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  initiativeId,
+  isLatest,
+  animate = false,
+  isStreaming = false,
+  className = '',
+  hasOutputWidget = false,
+  variantEntry = null,
+}: ChatMessageProps) {
   const isUser = message.role === 'user';
-
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
+
+  const {
+    messageFeedback,
+    retryingMessageId,
+    editMessage,
+    retryMessage,
+    setMessageFeedback,
+    setVariantIndex,
+  } = useInitiativeStore();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(message.content);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const feedback = messageFeedback[message.id] ?? null;
+  const isRetrying = retryingMessageId === message.id;
+
+  const handleEditStart = useCallback(() => {
+    setEditValue(message.content);
+    setIsEditing(true);
+  }, [message.content]);
+
+  const handleEditSave = useCallback(async () => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === message.content) {
+      setIsEditing(false);
+      return;
+    }
+    setIsEditing(false);
+    await editMessage(initiativeId, message.id, trimmed);
+  }, [editValue, message.content, message.id, initiativeId, editMessage]);
+
+  const handleEditCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditValue(message.content);
+  }, [message.content]);
+
+  const handleRetry = useCallback(() => {
+    retryMessage(initiativeId, message.id);
+  }, [initiativeId, message.id, retryMessage]);
+
+  const handleFeedback = useCallback((f: 'like' | 'dislike' | null) => {
+    setMessageFeedback(message.id, f);
+  }, [message.id, setMessageFeedback]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [isEditing]);
+
+  const originalMessageId = variantEntry
+    ? variantEntry.versions[0]?.id
+    : null;
 
   return (
     <div
-      className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
+      className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
     >
       {/* Message content */}
-      <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
-        {isUser ? (
-          // User message - accent background
-          <div className="px-4 py-1.5 rounded-2xl bg-zinc-700 text-white">
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+      <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
+
+        {/* Floating toolbar — shown on group hover, hidden while streaming or editing */}
+        {!isStreaming && !isEditing && (
+          <div
+            className={`
+              absolute z-10 flex items-center
+              opacity-0 group-hover:opacity-100 focus-within:opacity-100
+              transition-opacity duration-150
+              ${isUser ? 'right-0 -top-7' : 'left-0 -top-7'}
+            `}
+          >
+            {isUser ? (
+              <UserMessageToolbar
+                content={message.content}
+                onEdit={handleEditStart}
+              />
+            ) : (
+              <AssistantMessageToolbar
+                content={message.content}
+                feedback={feedback}
+                onFeedback={handleFeedback}
+                onRetry={handleRetry}
+                retrying={isRetrying}
+              />
+            )}
           </div>
+        )}
+
+        {isUser ? (
+          isEditing ? (
+            // Inline edit mode
+            <div className="w-full">
+              <textarea
+                ref={textareaRef}
+                value={editValue}
+                onChange={e => {
+                  setEditValue(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleEditSave();
+                  }
+                  if (e.key === 'Escape') handleEditCancel();
+                }}
+                className="w-full text-sm leading-relaxed px-4 py-1.5 rounded-2xl bg-zinc-700 text-white resize-none outline-none focus:ring-1 focus:ring-accent min-w-[200px]"
+                rows={1}
+              />
+              <div className="flex items-center gap-2 mt-1.5 justify-end">
+                <button
+                  onClick={handleEditCancel}
+                  className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  className="text-xs text-accent hover:text-accent-anchor font-medium transition-colors"
+                >
+                  Save & regenerate
+                </button>
+              </div>
+            </div>
+          ) : (
+            // Normal user bubble
+            <div className="px-4 py-1.5 rounded-2xl bg-zinc-700 text-white">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+            </div>
+          )
         ) : (
-          // Bot message - no bubble, markdown rendered with streaming text
+          // Bot message
           <div className="prose-chat">
             {isStreaming ? (
               <p className="text-sm leading-relaxed">
@@ -107,19 +242,30 @@ export function ChatMessage({ message, initiativeId, isLatest, animate = false, 
           </div>
         )}
 
-        {/* Sources/Citations - show for assistant messages with sources */}
+        {/* Variant switcher (shown for retried assistant messages) */}
+        {!isUser && variantEntry && variantEntry.versions.length > 1 && originalMessageId && (
+          <MessageVariants
+            currentIndex={variantEntry.currentIndex}
+            total={variantEntry.versions.length}
+            onPrev={() => setVariantIndex(originalMessageId, variantEntry.currentIndex - 1)}
+            onNext={() => setVariantIndex(originalMessageId, variantEntry.currentIndex + 1)}
+          />
+        )}
+
+        {/* Sources/Citations */}
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourcesDisplay sources={message.sources} />
         )}
 
-        {/* Widget - always show, pass isLatest to control buttons */}
+        {/* Widget */}
         {message.widget_type && message.widget_data && (
           <div className={`mt-2 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
-            <MessageWidget 
+            <MessageWidget
               type={message.widget_type}
               data={message.widget_data}
               initiativeId={initiativeId}
               isActive={isLatest}
+              hasOutputWidget={hasOutputWidget}
             />
           </div>
         )}
@@ -131,7 +277,6 @@ export function ChatMessage({ message, initiativeId, isLatest, animate = false, 
 function SourcesDisplay({ sources }: { sources: SourceCitation[] }) {
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Filter out llm_estimate sources for display
   const verifiedSources = sources.filter(s => s.source_type !== 'llm_estimate');
   const hasUnverified = sources.some(s => s.source_type === 'llm_estimate');
   
@@ -173,7 +318,7 @@ function SourcesDisplay({ sources }: { sources: SourceCitation[] }) {
       >
         {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         <span>
-          {verifiedSources.length > 0 
+          {verifiedSources.length > 0
             ? `${verifiedSources.length} source${verifiedSources.length > 1 ? 's' : ''}`
             : 'Sources'}
         </span>
@@ -191,9 +336,9 @@ function SourcesDisplay({ sources }: { sources: SourceCitation[] }) {
                 <span className="text-[10px] uppercase tracking-wide">{getSourceLabel(source.source_type)}</span>
               </span>
               {source.source_url ? (
-                <a 
-                  href={source.source_url} 
-                  target="_blank" 
+                <a
+                  href={source.source_url}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent hover:underline truncate"
                 >
@@ -216,16 +361,18 @@ function SourcesDisplay({ sources }: { sources: SourceCitation[] }) {
   );
 }
 
-function MessageWidget({ 
-  type, 
-  data, 
+function MessageWidget({
+  type,
+  data,
   initiativeId,
-  isActive
-}: { 
-  type: string; 
+  isActive,
+  hasOutputWidget = false,
+}: {
+  type: string;
   data: Record<string, any>;
   initiativeId: string;
   isActive: boolean;
+  hasOutputWidget?: boolean;
 }) {
   switch (type) {
     case 'confirmation':
@@ -251,11 +398,11 @@ function MessageWidget({
     case 'project_plan':
       return <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'lcoe_inputs':
-      return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'lcoe_output':
       return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'carbon_inputs':
-      return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:

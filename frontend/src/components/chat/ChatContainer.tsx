@@ -15,7 +15,7 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
   const prevMessageCountRef = useRef<number>(0);
   const lastSeenCountRef = useRef<number>(0);
   const isInitialLoadRef = useRef<boolean>(true);
-  const { messages, sending, generating, stageStatus, streamingMessageId } = useInitiativeStore();
+  const { messages, sending, generating, stageStatus, streamingMessageId, messageVariants } = useInitiativeStore();
 
   // Track which messages to animate (only newly sent/received, not on initial load)
   useEffect(() => {
@@ -44,6 +44,16 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
             const marginClass = index === 0 ? '' : isUserFollowingBot ? 'mt-1' : 'mt-3';
             const animate = !isInitialLoadRef.current && index >= lastSeenCountRef.current;
             const isStreaming = message.id === streamingMessageId;
+            const hasOutputWidget =
+              (message.widget_type === 'lcoe_inputs' &&
+                messages.slice(index + 1).some(m => m.widget_type === 'lcoe_output')) ||
+              (message.widget_type === 'carbon_inputs' &&
+                messages.slice(index + 1).some(m => m.widget_type === 'carbon_output'));
+
+            // For messages that are the "current" variant of a retry, find its variant entry
+            // The variant entry is keyed by the original (first) message ID
+            const variantEntry = messageVariants[message.id] ?? null;
+
             return (
               <ChatMessage
                 key={message.id}
@@ -53,6 +63,8 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
                 animate={animate}
                 isStreaming={isStreaming}
                 className={marginClass}
+                hasOutputWidget={hasOutputWidget}
+                variantEntry={variantEntry}
               />
             );
           })}

@@ -172,6 +172,68 @@ def _serialize_deep_dive(result) -> dict:
     }
 
 
+@router.delete("/initiatives/{initiative_id}/project-plan/items/{item_id}")
+async def delete_plan_item(
+    initiative_id: UUID,
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Remove a single item from the project plan."""
+    initiative = await _get_initiative(initiative_id, user, db)
+
+    if not initiative.project_plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+
+    found = False
+    for pillar in initiative.project_plan.get("pillars", []):
+        before = len(pillar.get("items", []))
+        pillar["items"] = [item for item in pillar.get("items", []) if item.get("id") != item_id]
+        if len(pillar["items"]) < before:
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Item '{item_id}' not found in plan")
+
+    flag_modified(initiative, "project_plan")
+    initiative.touch()
+    await db.commit()
+
+    return {"success": True, "item_id": item_id}
+
+
+@router.delete("/initiatives/{initiative_id}/project-plan/items/{item_id}/elements/{element_index}")
+async def delete_plan_element(
+    initiative_id: UUID,
+    item_id: str,
+    element_index: int,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Remove an element by index from a deep-dive result cached in the project plan."""
+    initiative = await _get_initiative(initiative_id, user, db)
+
+    if not initiative.project_plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+
+    deep_dives = initiative.project_plan.get("deep_dives", {})
+    dive = deep_dives.get(item_id)
+    if not dive:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No deep dive found for item '{item_id}'")
+
+    elements = dive.get("elements", [])
+    if element_index < 0 or element_index >= len(elements):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Element index {element_index} out of range")
+
+    dive["elements"] = [el for i, el in enumerate(elements) if i != element_index]
+    flag_modified(initiative, "project_plan")
+    initiative.touch()
+    await db.commit()
+
+    return {"success": True, "item_id": item_id, "element_index": element_index}
+
+
 @router.post("/initiatives/{initiative_id}/project-plan/items/{item_id}/deep-dive")
 async def deep_dive_plan_item(
     initiative_id: UUID,
