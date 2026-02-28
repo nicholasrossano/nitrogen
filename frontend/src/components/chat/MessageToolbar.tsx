@@ -38,9 +38,10 @@ function ToolbarIcon({ icon, label, onClick, active = false, disabled = false, s
 interface UserMessageToolbarProps {
   content: string;
   onEdit: () => void;
+  hideEdit?: boolean;
 }
 
-export function UserMessageToolbar({ content, onEdit }: UserMessageToolbarProps) {
+export function UserMessageToolbar({ content, onEdit, hideEdit = false }: UserMessageToolbarProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -66,11 +67,13 @@ export function UserMessageToolbar({ content, onEdit }: UserMessageToolbarProps)
         onClick={handleCopy}
         active={copied}
       />
-      <ToolbarIcon
-        icon={<Pencil className="w-3.5 h-3.5" />}
-        label="Edit message"
-        onClick={onEdit}
-      />
+      {!hideEdit && (
+        <ToolbarIcon
+          icon={<Pencil className="w-3.5 h-3.5" />}
+          label="Edit message"
+          onClick={onEdit}
+        />
+      )}
     </div>
   );
 }
@@ -81,6 +84,7 @@ interface AssistantMessageToolbarProps {
   onFeedback: (f: 'like' | 'dislike' | null) => void;
   onRetry: () => void;
   retrying: boolean;
+  hideRetry?: boolean;
 }
 
 export function AssistantMessageToolbar({
@@ -89,6 +93,7 @@ export function AssistantMessageToolbar({
   onFeedback,
   onRetry,
   retrying,
+  hideRetry = false,
 }: AssistantMessageToolbarProps) {
   const [copied, setCopied] = useState(false);
 
@@ -123,25 +128,46 @@ export function AssistantMessageToolbar({
         onClick={handleCopy}
         active={copied}
       />
-      <ToolbarIcon
-        icon={<ThumbsUp className="w-3.5 h-3.5" />}
-        label="Helpful"
-        onClick={handleLike}
-        active={feedback === 'like'}
-      />
-      <ToolbarIcon
-        icon={<ThumbsDown className="w-3.5 h-3.5" />}
-        label="Not helpful"
-        onClick={handleDislike}
-        active={feedback === 'dislike'}
-      />
-      <ToolbarIcon
-        icon={<RefreshCw className="w-3.5 h-3.5" />}
-        label={retrying ? 'Retrying…' : 'Retry'}
-        onClick={onRetry}
-        disabled={retrying}
-        spinning={retrying}
-      />
+
+      {/* Like — hidden when dislike is active */}
+      {feedback !== 'dislike' && (
+        <button
+          title={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
+          aria-label={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
+          onClick={handleLike}
+          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+        >
+          <ThumbsUp
+            className="w-3.5 h-3.5"
+            {...(feedback === 'like' ? { style: { fill: 'currentColor', strokeWidth: 0 } } : {})}
+          />
+        </button>
+      )}
+
+      {/* Dislike — hidden when like is active */}
+      {feedback !== 'like' && (
+        <button
+          title={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
+          aria-label={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
+          onClick={handleDislike}
+          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+        >
+          <ThumbsDown
+            className="w-3.5 h-3.5"
+            {...(feedback === 'dislike' ? { style: { fill: 'currentColor', strokeWidth: 0 } } : {})}
+          />
+        </button>
+      )}
+
+      {!hideRetry && (
+        <ToolbarIcon
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
+          label={retrying ? 'Retrying…' : 'Retry'}
+          onClick={onRetry}
+          disabled={retrying}
+          spinning={retrying}
+        />
+      )}
     </div>
   );
 }
