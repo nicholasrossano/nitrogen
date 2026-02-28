@@ -180,13 +180,18 @@ body {
 
 .prose-chat h1,
 .prose-chat h2 {
-  margin-top: 0;
-  margin-bottom: 0.625rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .prose-chat h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.375rem;
+}
+
+.prose-chat > :first-child,
+.prose-chat > :first-child > :first-child {
   margin-top: 0;
-  margin-bottom: 0.5rem;
 }
 
 .prose-chat > :last-child {
@@ -207,27 +212,43 @@ body {
 }
 
 .prose-memo {
-  @apply text-text-primary leading-relaxed;
+  @apply text-text-primary leading-relaxed font-sans;
 }
 
 .prose-memo h1 {
-  @apply text-sm font-semibold text-text-primary mb-3;
+  @apply text-base font-semibold text-text-primary mt-4 mb-1;
 }
 
 .prose-memo h2 {
-  @apply text-sm font-semibold text-text-primary mb-3;
+  @apply text-sm font-semibold text-text-primary mt-3 mb-1;
+}
+
+.prose-memo h3 {
+  @apply text-sm font-semibold text-text-primary mt-3 mb-1;
+}
+
+.prose-memo > :first-child {
+  margin-top: 0;
 }
 
 .prose-memo p {
-  @apply text-sm text-text-secondary leading-relaxed;
+  @apply text-sm text-text-secondary leading-relaxed mb-2;
 }
 
 .prose-memo ul {
-  @apply list-disc pl-6 text-sm;
+  @apply list-disc pl-6 text-sm mb-2;
+}
+
+.prose-memo ol {
+  @apply list-decimal pl-6 text-sm mb-2;
 }
 
 .prose-memo li {
-  @apply mb-2 text-text-secondary leading-relaxed;
+  @apply mb-1 text-text-secondary leading-relaxed;
+}
+
+.prose-memo strong {
+  @apply font-semibold text-text-primary;
 }
 
 /* Citation styling - accent color */
