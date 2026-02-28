@@ -28,6 +28,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     error,
     loadProjectPlan,
     generateProjectPlan,
+    deletePlanItem,
   } = useInitiativeStore();
 
   const hasTriggeredGenerate = useRef(false);
@@ -111,6 +112,36 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     if (deepDive) runDeepDive(deepDive.item, deepDive.pillar);
   }, [deepDive, runDeepDive]);
 
+  const handleDeleteItem = useCallback(
+    (itemId: string) => {
+      deletePlanItem(initiativeId, itemId);
+      if (deepDive?.item.id === itemId) {
+        handleClosePanel();
+      }
+    },
+    [initiativeId, deletePlanItem, deepDive, handleClosePanel]
+  );
+
+  const handleDeleteElement = useCallback(
+    (itemId: string, elementIndex: number) => {
+      setLocalCache((prev) => {
+        const cached = prev[itemId] ?? deepDiveCache[itemId];
+        if (!cached) return prev;
+        return {
+          ...prev,
+          [itemId]: {
+            ...cached,
+            elements: cached.elements.filter((_, i) => i !== elementIndex),
+          },
+        };
+      });
+      api.deletePlanElement(initiativeId, itemId, elementIndex).catch((err) => {
+        console.error('Failed to delete plan element:', err);
+      });
+    },
+    [initiativeId, deepDiveCache]
+  );
+
   // Loading state during generation
   if (projectPlanLoading && !projectPlan) {
     return (
@@ -174,24 +205,31 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                 pillar={pillar}
                 deepDiveCache={deepDiveCache}
                 onDeepDive={handleDeepDive}
+                onDeleteItem={handleDeleteItem}
+                onDeleteElement={handleDeleteElement}
               />
             ))}
           </div>
         </div>
 
         {/* Deep Dive panel — inline, respects header */}
-        {inspectorVisible && deepDive && (
-          <DeepDivePanel
-            initiativeId={initiativeId}
-            item={deepDive.item}
-            pillar={deepDive.pillar}
-            result={deepDive.result}
-            loading={deepDive.loading}
-            error={deepDive.error}
-            onClose={handleClosePanel}
-            onRetry={handleRetry}
-          />
-        )}
+        <div
+          className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+          style={{ width: inspectorVisible && deepDive ? 420 : 0 }}
+        >
+          {deepDive && (
+            <DeepDivePanel
+              initiativeId={initiativeId}
+              item={deepDive.item}
+              pillar={deepDive.pillar}
+              result={deepDive.result}
+              loading={deepDive.loading}
+              error={deepDive.error}
+              onClose={handleClosePanel}
+              onRetry={handleRetry}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

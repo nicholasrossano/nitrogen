@@ -235,6 +235,124 @@ For primary interactive elements, combine hover lift with press compression. Sha
 
 ---
 
+### Hover-Reveal Action Button (Fade + Scale Pop)
+
+Use when a contextual action (delete, edit, copy, etc.) should stay hidden at rest and appear in place of — or overlaid on — a static indicator (dot, icon, badge) when the user hovers over a row or node.
+
+**Behavior**
+- **Rest**: static indicator visible; action button invisible and compressed (`scale-50 opacity-0`)
+- **Hover**: indicator fades out; button expands and fades in (`scale-100 opacity-100`)
+- **Leave**: both reverse simultaneously
+- **Timing**: `duration-200 ease-out` — medium speed, snappy arrival
+
+**Implementation (Tailwind)**
+
+Use Tailwind named groups (`group/{name}`) so nested rows don't bleed hover state into each other.
+
+```tsx
+{/* Parent row — owns the hover scope */}
+<div className="flex items-stretch relative group/row">
+
+  {/* Static indicator wrapper */}
+  <div className="relative w-2 h-2 flex-shrink-0">
+
+    {/* Indicator — fades out on row hover */}
+    <div className="w-2 h-2 rounded-full transition-opacity duration-200 ease-in-out
+                    group-hover/row:opacity-0 bg-accent" />
+
+    {/* Action button — pops in on row hover, centered over the indicator */}
+    <button
+      onClick={(e) => { e.stopPropagation(); onAction(); }}
+      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                 w-4 h-4 rounded-full flex items-center justify-center
+                 opacity-0 scale-50
+                 group-hover/row:opacity-100 group-hover/row:scale-100
+                 transition-all duration-200 ease-out z-20
+                 bg-red-500 hover:bg-red-600"
+      aria-label="Delete"
+    >
+      <Minus className="w-2.5 h-2.5 text-white" />
+    </button>
+
+  </div>
+
+  {/* Rest of row content */}
+</div>
+```
+
+**Sizing guide**
+
+| Indicator size | Button size | Icon size |
+| --- | --- | --- |
+| `w-2 h-2` (8px dot) | `w-4 h-4` | `w-2.5 h-2.5` |
+| `w-1.5 h-1.5` (6px dot) | `w-3.5 h-3.5` | `w-2 h-2` |
+| `w-4 h-4` (icon) | `w-6 h-6` | `w-3.5 h-3.5` |
+
+**Rules**
+- Always use named groups (`group/{name}`) when multiple hover scopes exist in the same component
+- Use `e.stopPropagation()` on the button click to avoid triggering the parent row's click handler
+- Button background: `bg-red-500` for destructive actions; use accent tones for non-destructive actions
+- The button size should be at least 2× the indicator size for a comfortable hit area
+- Indicator transition uses `ease-in-out`; button appearance uses `ease-out` (snappier pop-in)
+- Never add bounce or spring — the scale pop is already the maximum expressiveness for core UI
+
+**Apply to**
+- Tree/graph node dots (project plan, requirement nodes)
+- List row inline actions revealed on hover
+- Any static indicator that doubles as a delete/action trigger
+
+**Do not apply to**
+- Primary action buttons (use Shadow Lift pattern instead)
+- Buttons that are always visible
+- Dense tables where hover state is already used for row highlighting
+
+---
+
+### Panel Slide (Width Collapse / Expand)
+
+Use when a side panel — sidebar, chat panel, inspector — should open or close with a smooth horizontal slide rather than an abrupt show/hide.
+
+**Behavior**
+- **Open → Close**: panel width animates from its natural size to `0`, content clips via `overflow-hidden`
+- **Close → Open**: reverses smoothly
+- **Timing**: `300ms ease-in-out` — deliberate but not sluggish
+- **Border**: attach the panel's divider border to the outer wrapper so it disappears with the panel (don't leave an orphaned line)
+- **Resize interactions**: disable transition (`transition: none`) while actively dragging a resize handle so motion stays 1:1 with the cursor
+
+**Implementation (Tailwind + inline style for dynamic widths)**
+
+```tsx
+{/* Fixed-width panel (e.g. sidebar, inspector) */}
+<div className={`overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0
+                 ${open ? 'w-44 border-r border-accent' : 'w-0'}`}>
+  <PanelContent />
+</div>
+
+{/* Dynamic / resizable panel */}
+<div
+  className="flex-shrink-0 overflow-hidden"
+  style={{
+    width: open ? `${widthPercent}%` : 0,
+    transition: isResizing ? 'none' : 'width 300ms ease-in-out',
+  }}
+>
+  <div className="absolute inset-0">
+    <PanelContent />
+  </div>
+</div>
+```
+
+**Apply to**
+- Navigation sidebar (home, chat pages)
+- Chat panel in split project view
+- Inspector / deep-dive panel in project plan view
+
+**Do not apply to**
+- Modals or overlays (use opacity/scale instead)
+- Inline content that reflows (use height animation or `display: none`)
+
+---
+
 ### 3D Depth Effect (Marketing Pages Only)
 
 For marketing/landing pages and promotional materials, use a bolder 3D depth effect that creates a "raised button" appearance. This style is more expressive and should **not** be used in the core application UI.
