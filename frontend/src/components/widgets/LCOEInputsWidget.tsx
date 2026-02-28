@@ -9,7 +9,6 @@ import {
   Pencil,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useInitiativeStore } from '@/stores/initiativeStore';
 
 interface LCOEInput {
   field_name: string;
@@ -60,7 +59,9 @@ export function LCOEInputsWidget({
 }: LCOEInputsWidgetProps) {
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
-  const setDraftMessage = useInitiativeStore((s) => s.setDraftMessage);
+  const investigate = useCallback((label: string) => {
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Help me figure out ${label}` } }));
+  }, []);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
@@ -325,7 +326,7 @@ export function LCOEInputsWidget({
             onClick={() => {
               const label = hoveredRow.label;
               setHoveredRow(null);
-              setDraftMessage(`Help me figure out ${label}`);
+              investigate(label);
             }}
             className="absolute left-2 -translate-y-1/2 text-[11px] font-medium text-accent hover:text-accent-anchor px-2.5 py-1 rounded-md border border-accent/20 bg-white hover:bg-accent-wash shadow-sm transition-all whitespace-nowrap cursor-pointer"
             style={{ top: hoveredRow.top }}
