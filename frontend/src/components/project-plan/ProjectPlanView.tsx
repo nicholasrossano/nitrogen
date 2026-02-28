@@ -6,6 +6,38 @@ import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/a
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
 import { DeepDivePanel } from './DeepDivePanel';
+import { SurveyPopup, SurveyConfig, SurveyResponse } from '@/components/survey/SurveyPopup';
+
+const DELETE_ITEM_SURVEY: SurveyConfig = {
+  id: 'project_plan_item_deleted',
+  title: 'Why did you remove this item?',
+  options: [
+    { id: 'not_applicable', label: 'Not applicable to my project' },
+    { id: 'already_done', label: 'Already completed' },
+    { id: 'duplicate', label: 'Duplicate of another item' },
+    { id: 'too_complex', label: 'Skipping for now' },
+    { id: 'other', label: 'Other reason' },
+  ],
+  commentPlaceholder: 'Any additional context? (optional)',
+};
+
+const DELETE_ELEMENT_SURVEY: SurveyConfig = {
+  id: 'project_plan_element_deleted',
+  title: 'Why did you remove this requirement?',
+  options: [
+    { id: 'not_applicable', label: 'Not applicable to my project' },
+    { id: 'already_done', label: 'Already completed' },
+    { id: 'duplicate', label: 'Duplicate of another requirement' },
+    { id: 'too_complex', label: 'Skipping for now' },
+    { id: 'other', label: 'Other reason' },
+  ],
+  commentPlaceholder: 'Any additional context? (optional)',
+};
+
+interface ActiveSurvey {
+  config: SurveyConfig;
+  contextData: Record<string, unknown>;
+}
 
 interface ProjectPlanViewProps {
   initiativeId: string;
@@ -34,6 +66,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const hasTriggeredGenerate = useRef(false);
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
+  const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
 
   useEffect(() => {
     loadProjectPlan(initiativeId);
@@ -114,16 +147,46 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
   const handleDeleteItem = useCallback(
     (itemId: string) => {
+      const item = projectPlan?.pillars
+        .flatMap((p) => p.items)
+        .find((i) => i.id === itemId);
+
       deletePlanItem(initiativeId, itemId);
+
       if (deepDive?.item.id === itemId) {
         handleClosePanel();
       }
+
+      setActiveSurvey({
+        config: DELETE_ITEM_SURVEY,
+        contextData: {
+          itemId,
+          itemTitle: item?.title ?? '',
+          itemClassification: item?.classification ?? '',
+          initiativeId,
+        },
+      });
     },
-    [initiativeId, deletePlanItem, deepDive, handleClosePanel]
+    [initiativeId, deletePlanItem, deepDive, handleClosePanel, projectPlan]
   );
+
+  const handleSurveySubmit = useCallback((response: SurveyResponse) => {
+    // TODO: POST response to /api/v1/survey when backend endpoint is ready
+    console.info('[Survey]', response);
+    setActiveSurvey(null);
+  }, []);
+
+  const handleSurveyDismiss = useCallback(() => {
+    setActiveSurvey(null);
+  }, []);
 
   const handleDeleteElement = useCallback(
     (itemId: string, elementIndex: number) => {
+      const element = (deepDiveCache[itemId]?.elements ?? [])[elementIndex];
+      const parentItem = projectPlan?.pillars
+        .flatMap((p) => p.items)
+        .find((i) => i.id === itemId);
+
       setLocalCache((prev) => {
         const cached = prev[itemId] ?? deepDiveCache[itemId];
         if (!cached) return prev;
@@ -138,8 +201,19 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
       api.deletePlanElement(initiativeId, itemId, elementIndex).catch((err) => {
         console.error('Failed to delete plan element:', err);
       });
+
+      setActiveSurvey({
+        config: DELETE_ELEMENT_SURVEY,
+        contextData: {
+          itemId,
+          elementIndex,
+          elementTitle: element?.title ?? '',
+          parentItemTitle: parentItem?.title ?? '',
+          initiativeId,
+        },
+      });
     },
-    [initiativeId, deepDiveCache]
+    [initiativeId, deepDiveCache, projectPlan]
   );
 
   // Loading state during generation
@@ -231,6 +305,15 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           )}
         </div>
       </div>
+
+      {activeSurvey && (
+        <SurveyPopup
+          config={activeSurvey.config}
+          contextData={activeSurvey.contextData}
+          onSubmit={handleSurveySubmit}
+          onDismiss={handleSurveyDismiss}
+        />
+      )}
     </div>
   );
 }

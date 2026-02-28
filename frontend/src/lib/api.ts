@@ -667,6 +667,24 @@ export const api = {
     ),
 
   // Compliance chat (standalone, not initiative-bound)
+  setCoreChatMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) =>
+    fetchApi<{ message_id: string; feedback: string | null }>(
+      `/api/v1/chat/messages/${messageId}/feedback`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ feedback }),
+      }
+    ),
+
+  updateChatSessionTitle: (sessionId: string, title: string) =>
+    fetchApi<{ session_id: string; title: string }>(
+      `/api/v1/chat/sessions/${sessionId}/title`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      }
+    ),
+
   sendComplianceChatStream: async (
     history: { role: string; content: string }[],
     content: string,
@@ -680,8 +698,12 @@ export const api = {
       latency_ms: number;
       widget_type?: string | null;
       widget_data?: Record<string, any> | null;
+      session_id: string;
+      user_message_id: string;
+      assistant_message_id: string;
     }) => void,
     onError: (message: string) => void,
+    session_id?: string | null,
   ) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -692,7 +714,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content, history }),
+      body: JSON.stringify({ content, history, session_id: session_id ?? null }),
     });
 
     if (!response.ok || !response.body) {

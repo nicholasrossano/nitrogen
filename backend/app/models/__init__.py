@@ -3,6 +3,7 @@ from app.models.chat import ChatMessage
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
+from app.models.core_chat import CoreChatSession, CoreChatMessage
 
 __all__ = [
     "Initiative",
@@ -13,4 +14,6 @@ __all__ = [
     "Citation",
     "CorpusDocument",
     "CorpusChunk",
+    "CoreChatSession",
+    "CoreChatMessage",
 ]
