@@ -80,8 +80,9 @@ export function ConversationView() {
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
-        <div className="max-w-3xl mx-auto space-y-8">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
+        <div className="max-w-[52rem] mx-auto">
+        <div className="w-[95%] mx-auto space-y-8">
           {messages.map((msg, idx) => (
             <MessageBubble
               key={msg.id}
@@ -126,11 +127,11 @@ export function ConversationView() {
 
           <div ref={messagesEndRef} />
         </div>
+        </div>
       </div>
 
       {/* Composer */}
-      <div className="flex-shrink-0 pb-4">
-        <div className="max-w-[52rem] mx-auto">
+      <div className="max-w-[52rem] mx-auto w-full pb-4">
           <form onSubmit={handleSubmit} className="relative flex items-center">
             <textarea
               ref={textareaRef}
@@ -153,7 +154,6 @@ export function ConversationView() {
               </button>
             </div>
           </form>
-        </div>
       </div>
     </div>
   );
@@ -324,9 +324,9 @@ function makeMarkdownComponents(sources: SourceCitation[]) {
     em: ({ children }: any) => <em className="italic">{children}</em>,
     ul: ({ children }: any) => <ul className="text-sm list-disc">{children}</ul>,
     ol: ({ children }: any) => <ol className="text-sm list-decimal">{children}</ol>,
-    h1: ({ children }: any) => <h1 className="text-lg font-semibold">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-base font-semibold">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-sm font-semibold">{children}</h3>,
+    h1: ({ children }: any) => <h1 className="text-xl font-semibold leading-snug">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-lg font-semibold leading-snug">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-base font-semibold leading-snug">{children}</h3>,
     code: ({ children }: any) => (
       <code className="text-xs bg-surface-subtle px-1.5 py-0.5 rounded-sm border border-stroke-subtle">
         {children}
