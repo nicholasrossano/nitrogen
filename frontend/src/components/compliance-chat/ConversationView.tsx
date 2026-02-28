@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
   Send,
@@ -20,6 +20,7 @@ import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { track } from '@/lib/analytics';
+import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 
 export function ConversationView() {
   const {
@@ -29,6 +30,11 @@ export function ConversationView() {
     streamingContent,
     error,
     sendMessage,
+    editMessage,
+    retryMessage,
+    messageFeedback,
+    setMessageFeedback: storeSetFeedback,
+    retryingMessageId,
     reset,
   } = useChatStore();
 
@@ -75,12 +81,17 @@ export function ConversationView() {
     <div className="flex flex-col h-full">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
-        <div className="max-w-3xl mx-auto space-y-4">
+        <div className="max-w-3xl mx-auto space-y-8">
           {messages.map((msg, idx) => (
             <MessageBubble
               key={msg.id}
               message={msg}
               animate={idx >= messages.length - 2}
+              feedback={messageFeedback[msg.id] ?? null}
+              onFeedback={(f) => storeSetFeedback(msg.id, f)}
+              onEdit={(newContent) => editMessage(msg.id, newContent)}
+              onRetry={() => retryMessage(msg.id)}
+              retrying={retryingMessageId === msg.id}
             />
           ))}
 
@@ -350,9 +361,19 @@ const streamingMarkdownComponents = makeMarkdownComponents([]);
 function MessageBubble({
   message,
   animate,
+  feedback,
+  onFeedback,
+  onEdit,
+  onRetry,
+  retrying,
 }: {
   message: ComplianceChatMessage;
   animate: boolean;
+  feedback: 'like' | 'dislike' | null;
+  onFeedback: (f: 'like' | 'dislike' | null) => void;
+  onEdit: (newContent: string) => void;
+  onRetry: () => void;
+  retrying: boolean;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -360,9 +381,63 @@ function MessageBubble({
     ? streamingMarkdownComponents
     : makeMarkdownComponents(message.sources ?? []);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(message.content);
+  const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  const handleEditStart = useCallback(() => {
+    if (bubbleRef.current) {
+      setBubbleWidth(bubbleRef.current.offsetWidth);
+    }
+    setEditValue(message.content);
+    setIsEditing(true);
+  }, [message.content]);
+
+  const handleEditSave = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === message.content) { setIsEditing(false); return; }
+    setIsEditing(false);
+    onEdit(trimmed);
+  }, [editValue, message.content, onEdit]);
+
+  const handleEditCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditValue(message.content);
+  }, [message.content]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [isEditing]);
+
   return (
     <div className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
+      <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
+
+        {/* Floating toolbar */}
+        {!isEditing && (
+          <div className={`absolute z-10 flex items-center ${isUser ? 'right-0 -bottom-7' : 'left-0 -bottom-7'}`}>
+            {isUser ? (
+              <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
+            ) : (
+              <AssistantMessageToolbar
+                content={message.content}
+                feedback={feedback}
+                onFeedback={onFeedback}
+                onRetry={onRetry}
+                retrying={retrying}
+              />
+            )}
+          </div>
+        )}
+
         {/* Thinking log sits above the assistant message it belongs to */}
         {!isUser && message.thinkingLines && message.thinkingLines.length > 0 && (
           <ThinkingLogs
@@ -373,8 +448,29 @@ function MessageBubble({
           />
         )}
 
-        {isUser ? (
-          <div className="px-4 py-3 rounded-2xl bg-zinc-700 text-white">
+        {isUser && isEditing ? (
+          <div style={bubbleWidth ? { minWidth: bubbleWidth } : undefined}>
+            <textarea
+              ref={textareaRef}
+              value={editValue}
+              onChange={e => {
+                setEditValue(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditSave(); }
+                if (e.key === 'Escape') handleEditCancel();
+              }}
+              className="w-full text-sm leading-relaxed px-4 py-3 rounded-2xl border border-zinc-400 bg-transparent text-text-primary resize-none outline-none focus:border-zinc-500"
+            />
+            <div className="flex items-center gap-2 mt-1.5 justify-end">
+              <button onClick={handleEditCancel} className="text-xs text-text-tertiary hover:text-text-secondary transition-colors">Cancel</button>
+              <button onClick={handleEditSave} className="text-xs text-accent hover:text-accent-anchor font-medium transition-colors">Save & regenerate</button>
+            </div>
+          </div>
+        ) : isUser ? (
+          <div ref={bubbleRef} className="px-4 py-3 rounded-2xl bg-zinc-700 text-white">
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (

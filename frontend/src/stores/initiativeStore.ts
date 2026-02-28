@@ -29,6 +29,10 @@ interface InitiativeState {
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
   messageVariants: Record<string, MessageVariantEntry>;
   retryingMessageId: string | null;
+
+  // Chat input draft (pre-fill without sending)
+  draftMessage: string | null;
+  setDraftMessage: (msg: string | null) => void;
   
   // Actions
   loadInitiative: (id: string) => Promise<void>;
@@ -77,6 +81,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   messageFeedback: {},
   messageVariants: {},
   retryingMessageId: null,
+  draftMessage: null,
+  setDraftMessage: (msg) => set({ draftMessage: msg }),
 
   // Load initiative details
   loadInitiative: async (id: string) => {
@@ -100,7 +106,14 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       const messages = response?.messages || [];
       const stage_status = response?.stage_status;
       console.log('loadChatHistory: setting messages', { count: messages.length });
-      set({ messages, stageStatus: stage_status });
+      // Hydrate feedback map from persisted message data
+      const feedbackMap: Record<string, 'like' | 'dislike' | null> = {};
+      for (const msg of messages) {
+        if (msg.feedback) {
+          feedbackMap[msg.id] = msg.feedback as 'like' | 'dislike';
+        }
+      }
+      set({ messages, stageStatus: stage_status, messageFeedback: feedbackMap });
     } catch (error) {
       console.error('Failed to load chat history:', error);
     }
@@ -284,11 +297,21 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Toggle like/dislike feedback for a message
+  // Toggle like/dislike feedback for a message (optimistic + persist)
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => {
+    const prev = get().messageFeedback[messageId] ?? null;
     set(state => ({
       messageFeedback: { ...state.messageFeedback, [messageId]: feedback },
     }));
+    const initiative = get().initiative;
+    if (initiative) {
+      api.setMessageFeedback(initiative.id, messageId, feedback).catch(() => {
+        // Revert on failure
+        set(state => ({
+          messageFeedback: { ...state.messageFeedback, [messageId]: prev },
+        }));
+      });
+    }
   },
 
   // Navigate between retry variants

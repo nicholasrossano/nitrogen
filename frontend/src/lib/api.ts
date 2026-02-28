@@ -90,6 +90,7 @@ export interface ChatMessage {
   widget_type: string | null;
   widget_data: Record<string, any> | null;
   sources?: SourceCitation[] | null;
+  feedback?: 'like' | 'dislike' | null;
   created_at: string;
 }
 
@@ -365,6 +366,15 @@ export const api = {
     // Call completion callback
     onComplete(response.message, response.stage_status);
   },
+
+  setMessageFeedback: (initiativeId: string, messageId: string, feedback: 'like' | 'dislike' | null) =>
+    fetchApi<{ message_id: string; feedback: string | null }>(
+      `/api/v1/initiatives/${initiativeId}/chat/${messageId}/feedback`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ feedback }),
+      }
+    ),
 
   truncateChatFrom: (initiativeId: string, fromMessageId: string) =>
     fetchApi<{ deleted_count: number; messages: ChatMessage[] }>(

@@ -45,6 +45,9 @@ class ChatMessage(Base):
     
     # Source citations (for RAG-informed responses)
     sources: Mapped[list | None] = mapped_column(JSONB)
+
+    # User feedback: "like", "dislike", or null
+    feedback: Mapped[str | None] = mapped_column(String(20), default=None)
     
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
