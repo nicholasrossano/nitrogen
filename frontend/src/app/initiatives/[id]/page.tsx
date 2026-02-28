@@ -191,11 +191,14 @@ function InitiativePageContent() {
         {showProjectPlan ? (
           <>
             {/* Chat Panel - Left side (resizable, collapsible) */}
-            {showChatPanel && (
-              <div 
-                className="flex-shrink-0 relative"
-                style={{ width: `${chatWidthPercent}%` }}
-              >
+            <div
+              className="flex-shrink-0 relative overflow-hidden"
+              style={{
+                width: showChatPanel ? `${chatWidthPercent}%` : 0,
+                transition: isResizing ? 'none' : 'width 300ms ease-in-out',
+              }}
+            >
+              <div className="absolute inset-0">
                 <ChatPanel
                   messages={messages}
                   sending={sending}
@@ -204,8 +207,10 @@ function InitiativePageContent() {
                   onSendMessage={handleSendMessage}
                   hasProjectPlan={!!projectPlan}
                 />
-                
-                {/* Resize handle */}
+              </div>
+
+              {/* Resize handle */}
+              {showChatPanel && (
                 <div
                   onMouseDown={handleResizeStart}
                   className={`
@@ -214,8 +219,8 @@ function InitiativePageContent() {
                     ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
                   `}
                 />
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Project Plan - Right side */}
             <div className="flex-1 overflow-hidden">

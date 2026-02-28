@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useChatStore } from '@/stores/chatStore';
-import { SideDrawer, NavItem } from '@/components/ui';
+import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
+import { PanelLeft, SquarePen } from 'lucide-react';
 import { LandingInput } from '@/components/compliance-chat/LandingInput';
 import { ConversationView } from '@/components/compliance-chat/ConversationView';
 import { useAuth } from '@/lib/auth';
@@ -14,6 +15,7 @@ function ChatPageContent() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { phase, sendMessage, reset } = useChatStore();
+  const [showSidebar, setShowSidebar] = useState(true);
 
   useEffect(() => {
     track('chat_page_viewed');
@@ -33,16 +35,45 @@ function ChatPageContent() {
   };
 
   return (
-    <div className="min-h-screen h-screen flex">
-      {/* Self-contained sidebar: Account header (with bottom border) + nav */}
-      <SideDrawer
-        activeItem="chat"
-        onItemSelect={handleNavChange}
-        includeHeader
-        headerBottomBorder
-        onSignOut={handleSignOut}
-        userEmail={user?.email}
-      />
+    <div className="min-h-screen h-screen flex flex-col">
+      {/* Shared header row */}
+      <div className="flex shrink-0">
+        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
+          <SideDrawerHeader />
+        </div>
+        <header className="flex-1 px-4 py-[7px] flex items-center justify-between bg-white">
+          <button
+            onClick={() => setShowSidebar(p => !p)}
+            title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+            className={`icon-btn p-1.5 ${showSidebar ? 'text-accent' : 'text-text-tertiary'}`}
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
+          {phase === 'conversation' && (
+            <button
+              onClick={reset}
+              title="New chat"
+              className="flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors duration-150 px-2 py-1.5 rounded-lg hover:bg-surface-subtle"
+            >
+              <SquarePen className="w-3.5 h-3.5" />
+              New chat
+            </button>
+          )}
+        </header>
+      </div>
+      <div className="divider-accent shrink-0" />
+
+      {/* Content row: sidebar + main */}
+      <div className="flex flex-1 min-h-0">
+      <div className={`overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0 bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
+        <SideDrawer
+          activeItem="chat"
+          onItemSelect={handleNavChange}
+          includeHeader={false}
+          onSignOut={handleSignOut}
+          userEmail={user?.email}
+        />
+      </div>
 
       <main className="flex-1 bg-white min-h-0 relative">
           {/* Landing state */}
@@ -67,6 +98,7 @@ function ChatPageContent() {
             <ConversationView />
           </div>
       </main>
+      </div>
     </div>
   );
 }

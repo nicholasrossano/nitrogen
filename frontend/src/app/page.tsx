@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search, PanelLeft } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
@@ -19,6 +19,7 @@ function HomePageContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>('projects');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSidebar, setShowSidebar] = useState(true);
 
   const handleSignOut = async () => {
     await signOut();
@@ -116,21 +117,27 @@ function HomePageContent() {
   return (
     <div className="min-h-screen h-screen flex flex-col">
       {/* Shared header row - one continuous line below */}
-      <div className="flex h-[72px] shrink-0">
-        <SideDrawerHeader />
-        <header className="flex-1 px-6 flex items-center justify-between gap-4 bg-white">
-          <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight shrink-0">
-            Nitrogen AI
-          </h1>
+      <div className="flex shrink-0">
+        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
+          <SideDrawerHeader />
+        </div>
+        <header className="flex-1 px-4 py-[7px] flex items-center justify-between gap-4 bg-white">
+          <button
+            onClick={() => setShowSidebar(p => !p)}
+            title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+            className={`icon-btn p-1.5 shrink-0 ${showSidebar ? 'text-accent' : 'text-text-tertiary'}`}
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
           <div className="flex items-center gap-3 flex-1 max-w-xl justify-end">
             <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary pointer-events-none shrink-0" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none shrink-0" />
               <input
                 type="search"
                 placeholder={isTrashView ? 'Search trash' : 'Search projects'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-[2.75rem] pr-4 py-2.5 text-sm rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+                className="w-full pl-[2.25rem] pr-4 py-1.5 text-xs rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
                 aria-label={isTrashView ? 'Search trash' : 'Search projects'}
               />
             </div>
@@ -138,16 +145,16 @@ function HomePageContent() {
               <button
                 onClick={handleNewProject}
                 disabled={creating}
-                className="btn-primary text-sm shrink-0 h-10"
+                className="btn-primary shrink-0 !text-xs !px-4 !py-1.5"
               >
                 {creating ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3 h-3 animate-spin" />
                     Creating...
                   </>
                 ) : (
                   <>
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-3 h-3" />
                     New Project
                   </>
                 )}
@@ -162,13 +169,15 @@ function HomePageContent() {
 
       {/* Content row: sidebar nav + main */}
       <div className="flex flex-1 min-h-0">
-        <SideDrawer
-          activeItem={activeNav}
-          onItemSelect={handleNavChange}
-          includeHeader={false}
-          onSignOut={handleSignOut}
-          userEmail={user?.email}
-        />
+        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0 bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
+          <SideDrawer
+            activeItem={activeNav}
+            onItemSelect={handleNavChange}
+            includeHeader={false}
+            onSignOut={handleSignOut}
+            userEmail={user?.email}
+          />
+        </div>
         <main className="flex-1 bg-white min-h-0 overflow-auto">
       {/* Content */}
       <div className="px-6 py-4">

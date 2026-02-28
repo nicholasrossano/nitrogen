@@ -11,7 +11,6 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  SquarePen,
 } from 'lucide-react';
 import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
@@ -74,19 +73,6 @@ export function ConversationView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Top bar */}
-      <div className="flex-shrink-0 flex justify-end px-4 pt-3 pb-1">
-        <button
-          onClick={reset}
-          disabled={sending}
-          title="New chat"
-          className="flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary disabled:opacity-40 transition-colors duration-150 px-2 py-1.5 rounded-lg hover:bg-surface-subtle"
-        >
-          <SquarePen className="w-3.5 h-3.5" />
-          New chat
-        </button>
-      </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
         <div className="max-w-3xl mx-auto space-y-4">
