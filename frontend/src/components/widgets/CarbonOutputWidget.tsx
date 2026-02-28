@@ -13,9 +13,6 @@ import {
   Pencil,
   AlertCircle,
   MessageSquare,
-  FileText,
-  User,
-  HelpCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -25,12 +22,6 @@ interface CarbonOutputWidgetProps {
   isActive?: boolean;
 }
 
-const SOURCE_ICONS: Record<string, typeof MessageSquare> = {
-  chat: MessageSquare,
-  doc: FileText,
-  user: User,
-  assumption: Sparkles,
-};
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
@@ -76,6 +67,8 @@ export function CarbonOutputWidget({
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [confirmingFields, setConfirmingFields] = useState<Set<string>>(new Set());
+  const [preConfirmStatuses, setPreConfirmStatuses] = useState<Record<string, string>>({});
 
   const result = data?.result;
   const inputs = useMemo(() => data?.inputs || {}, [data]);
@@ -136,6 +129,39 @@ export function CarbonOutputWidget({
     },
     [commitEdit, cancelEdit]
   );
+
+  const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
+    const isConfirmed = currentStatus === 'confirmed';
+    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'confirmed';
+
+    if (!isConfirmed) {
+      setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
+    }
+
+    setData(prev => ({
+      ...prev,
+      inputs: {
+        ...prev?.inputs,
+        [fieldName]: { ...prev?.inputs?.[fieldName], status: newStatus },
+      },
+    }));
+    setConfirmingFields(prev => new Set(prev).add(fieldName));
+
+    try {
+      const newData = await api.updateCarbonInput(inputs, fieldName, currentValue, newStatus);
+      setData(newData);
+    } catch {
+      setData(prev => ({
+        ...prev,
+        inputs: {
+          ...prev?.inputs,
+          [fieldName]: { ...prev?.inputs?.[fieldName], status: currentStatus },
+        },
+      }));
+    } finally {
+      setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
+    }
+  }, [inputs, preConfirmStatuses]);
 
   if (!result) return null;
 
@@ -267,7 +293,6 @@ export function CarbonOutputWidget({
                     const isEditing = editingField === inp.field_name;
                     const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
                     const appliesToStyle = APPLIES_TO_STYLES[inp.applies_to] || APPLIES_TO_STYLES.general;
-                    const SourceIcon = SOURCE_ICONS[inp.source] || HelpCircle;
 
                     return (
                       <div
@@ -340,14 +365,25 @@ export function CarbonOutputWidget({
                             className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                           >
                             {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                            {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
                             {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                             {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
                             {statusStyle.label}
                           </span>
                         </div>
 
-                        <div className="w-5 flex justify-center" title={`Source: ${inp.source}`}>
-                          <SourceIcon className="w-3 h-3 text-text-tertiary" />
+                        {/* Confirm checkbox */}
+                        <div className="w-5 flex justify-center">
+                          {isActive && (
+                            <input
+                              type="checkbox"
+                              checked={inp.status === 'confirmed'}
+                              disabled={isMissing || confirmingFields.has(inp.field_name)}
+                              onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
+                              title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                              className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                            />
+                          )}
                         </div>
                       </div>
                     );

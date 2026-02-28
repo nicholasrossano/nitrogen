@@ -4,10 +4,7 @@ import { useState, useCallback } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  HelpCircle,
   MessageSquare,
-  FileText,
-  User,
   Sparkles,
   Pencil,
 } from 'lucide-react';
@@ -29,15 +26,11 @@ interface LCOEInputsWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  hasOutputWidget?: boolean;
   onRecalculated?: (newData: Record<string, any>) => void;
+  onSendMessage?: (content: string) => void;
 }
 
-const SOURCE_ICONS: Record<string, typeof MessageSquare> = {
-  chat: MessageSquare,
-  doc: FileText,
-  user: User,
-  assumption: Sparkles,
-};
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
@@ -60,7 +53,9 @@ export function LCOEInputsWidget({
   data,
   initiativeId,
   isActive = true,
+  hasOutputWidget = false,
   onRecalculated,
+  onSendMessage,
 }: LCOEInputsWidgetProps) {
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
@@ -68,9 +63,12 @@ export function LCOEInputsWidget({
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
   );
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [confirmingFields, setConfirmingFields] = useState<Set<string>>(new Set());
+  const [preConfirmStatuses, setPreConfirmStatuses] = useState<Record<string, string>>({});
 
   const groupedInputs = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -116,6 +114,34 @@ export function LCOEInputsWidget({
     },
     [commitEdit, cancelEdit]
   );
+
+  const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
+    const isConfirmed = currentStatus === 'confirmed';
+    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'confirmed';
+
+    if (!isConfirmed) {
+      setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
+    }
+
+    setLocalInputs(prev => ({
+      ...prev,
+      [fieldName]: { ...prev[fieldName], status: newStatus },
+    }));
+    setConfirmingFields(prev => new Set(prev).add(fieldName));
+
+    try {
+      const result = await api.updateLCOEInput(localInputs, fieldName, currentValue, newStatus);
+      setLocalInputs(result.inputs || localInputs);
+      onRecalculated?.(result);
+    } catch {
+      setLocalInputs(prev => ({
+        ...prev,
+        [fieldName]: { ...prev[fieldName], status: currentStatus },
+      }));
+    } finally {
+      setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
+    }
+  }, [localInputs, preConfirmStatuses, onRecalculated]);
 
   return (
     <div className="card-elevated overflow-hidden">
@@ -163,11 +189,12 @@ export function LCOEInputsWidget({
                 const isMissing = inp.status === 'missing';
                 const isEditing = editingField === inp.field_name;
                 const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
-                const SourceIcon = SOURCE_ICONS[inp.source] || HelpCircle;
 
                 return (
                   <div
                     key={inp.field_name}
+                    onMouseEnter={() => setHoveredRow(inp.field_name)}
+                    onMouseLeave={() => setHoveredRow(null)}
                     className={`px-5 py-2.5 flex items-center gap-3 ${
                       isMissing ? 'bg-red-50/40' : 'bg-white'
                     }`}
@@ -231,16 +258,40 @@ export function LCOEInputsWidget({
                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                       >
                         {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                        {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
                         {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                         {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
                         {statusStyle.label}
                       </span>
                     </div>
 
-                    {/* Source icon */}
-                    <div className="w-5 flex justify-center" title={`Source: ${inp.source}`}>
-                      <SourceIcon className="w-3 h-3 text-text-tertiary" />
+                    {/* Confirm checkbox */}
+                    <div className="w-5 flex justify-center">
+                      {isActive && !hasOutputWidget && (
+                        <input
+                          type="checkbox"
+                          checked={inp.status === 'confirmed'}
+                          disabled={isMissing || confirmingFields.has(inp.field_name)}
+                          onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
+                          title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                          className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      )}
                     </div>
+
+                    {/* Investigate button */}
+                    {onSendMessage && (
+                      <div className="w-20 flex justify-end">
+                        <button
+                          onClick={() => onSendMessage(`Help me figure out ${inp.label}`)}
+                          className={`transition-opacity text-[10px] font-medium text-accent hover:text-accent-anchor px-2 py-1 rounded hover:bg-accent-wash whitespace-nowrap ${
+                            hoveredRow === inp.field_name ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        >
+                          Investigate
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

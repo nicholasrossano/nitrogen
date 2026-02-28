@@ -241,16 +241,25 @@ export function ChatPanel({
               No messages yet. Start a conversation!
             </div>
           ) : (
-            safeMessages.map((message, index) => (
-              <ErrorBoundary key={message.id || `msg-${index}`}>
-                <ChatMessageItem
-                  message={message}
-                  initiativeId={initiativeId}
-                  isLatest={index === safeMessages.length - 1}
-                  animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
-                />
-              </ErrorBoundary>
-            ))
+            safeMessages.map((message, index) => {
+              const hasOutputWidget =
+                (message.widget_type === 'lcoe_inputs' &&
+                  safeMessages.slice(index + 1).some(m => m.widget_type === 'lcoe_output')) ||
+                (message.widget_type === 'carbon_inputs' &&
+                  safeMessages.slice(index + 1).some(m => m.widget_type === 'carbon_output'));
+              return (
+                <ErrorBoundary key={message.id || `msg-${index}`}>
+                  <ChatMessageItem
+                    message={message}
+                    initiativeId={initiativeId}
+                    isLatest={index === safeMessages.length - 1}
+                    animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
+                    hasOutputWidget={hasOutputWidget}
+                    onSendMessage={onSendMessage}
+                  />
+                </ErrorBoundary>
+              );
+            })
           )}
           <div ref={messagesEndRef} className="h-1" />
         </div>
@@ -479,11 +488,15 @@ function ChatMessageItem({
   initiativeId,
   isLatest,
   animate = false,
+  hasOutputWidget = false,
+  onSendMessage,
 }: {
   message: ChatMessage;
   initiativeId: string;
   isLatest: boolean;
   animate?: boolean;
+  hasOutputWidget?: boolean;
+  onSendMessage?: (content: string) => void;
 }) {
   if (!message) return null;
 
@@ -521,6 +534,8 @@ function ChatMessageItem({
               data={message.widget_data!}
               initiativeId={initiativeId}
               isActive={isLatest}
+              hasOutputWidget={hasOutputWidget}
+              onSendMessage={onSendMessage}
             />
           </div>
         )}
@@ -536,11 +551,15 @@ function ChatWidget({
   data,
   initiativeId,
   isActive,
+  hasOutputWidget = false,
+  onSendMessage,
 }: {
   type: string;
   data: Record<string, any>;
   initiativeId: string;
   isActive: boolean;
+  hasOutputWidget?: boolean;
+  onSendMessage?: (content: string) => void;
 }) {
   if (!data) return null;
 
@@ -591,7 +610,7 @@ function ChatWidget({
     case 'lcoe_inputs':
       return (
         <ErrorBoundary>
-          <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} onSendMessage={onSendMessage} />
         </ErrorBoundary>
       );
     case 'lcoe_output':
@@ -603,7 +622,7 @@ function ChatWidget({
     case 'carbon_inputs':
       return (
         <ErrorBoundary>
-          <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} onSendMessage={onSendMessage} />
         </ErrorBoundary>
       );
     case 'carbon_output':

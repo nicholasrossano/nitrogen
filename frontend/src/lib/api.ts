@@ -366,6 +366,21 @@ export const api = {
     onComplete(response.message, response.stage_status);
   },
 
+  truncateChatFrom: (initiativeId: string, fromMessageId: string) =>
+    fetchApi<{ deleted_count: number; messages: ChatMessage[] }>(
+      `/api/v1/initiatives/${initiativeId}/chat/truncate`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify({ from_message_id: fromMessageId }),
+      }
+    ),
+
+  retryAssistantMessage: (initiativeId: string, messageId: string) =>
+    fetchApi<{ message: ChatMessage; stage_status: StageStatus }>(
+      `/api/v1/initiatives/${initiativeId}/chat/retry/${messageId}`,
+      { method: 'POST' }
+    ),
+
   // Evidence
   uploadEvidence: async (initiativeId: string, file: File) => {
     const formData = new FormData();
@@ -610,6 +625,18 @@ export const api = {
       }
     ),
 
+  deletePlanItem: (initiativeId: string, itemId: string) =>
+    fetchApi<{ success: boolean; item_id: string }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}`,
+      { method: 'DELETE' }
+    ),
+
+  deletePlanElement: (initiativeId: string, itemId: string, elementIndex: number) =>
+    fetchApi<{ success: boolean; item_id: string; element_index: number }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/elements/${elementIndex}`,
+      { method: 'DELETE' }
+    ),
+
   // Project plan deep dive
   deepDiveItem: (
     initiativeId: string,
@@ -734,6 +761,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
+    status: string = 'confirmed',
   ): Promise<any> {
     return fetchApi('/api/v1/lcoe/update-input', {
       method: 'POST',
@@ -742,7 +770,7 @@ export const api = {
         field_name: fieldName,
         value,
         source: 'user',
-        status: 'confirmed',
+        status,
       }),
     });
   },
@@ -783,6 +811,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
+    status: string = 'confirmed',
   ): Promise<any> {
     return fetchApi('/api/v1/carbon/update-input', {
       method: 'POST',
@@ -791,7 +820,7 @@ export const api = {
         field_name: fieldName,
         value,
         source: 'user',
-        status: 'confirmed',
+        status,
       }),
     });
   },

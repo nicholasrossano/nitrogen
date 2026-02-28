@@ -125,3 +125,20 @@ class AlignmentResponse(BaseModel):
     """Response containing alignment data"""
     alignment: ToolAlignmentSchema
     message: str
+
+
+class TruncateChatRequest(BaseModel):
+    """Request to truncate chat from a given message onward"""
+    from_message_id: str = Field(..., description="Delete this message and all messages after it")
+
+
+class TruncateChatResponse(BaseModel):
+    """Response after truncating chat"""
+    deleted_count: int
+    messages: list[ChatMessageResponse]
+
+
+class RetryResponse(BaseModel):
+    """Response after retrying an assistant message"""
+    message: ChatMessageResponse
+    stage_status: StageStatus

@@ -9,6 +9,8 @@ interface PillarColumnProps {
   pillar: ProjectPlanPillar;
   deepDiveCache?: Record<string, DeepDiveResult>;
   onDeepDive?: (item: ProjectPlanItem, pillar: ProjectPlanPillar) => void;
+  onDeleteItem?: (itemId: string) => void;
+  onDeleteElement?: (itemId: string, elementIndex: number) => void;
 }
 
 const PILLAR_ICONS: Record<string, React.ReactNode> = {
@@ -25,7 +27,7 @@ const PILLAR_NAMES: Record<string, string> = {
 
 const DEFAULT_VISIBLE = 10;
 
-export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarColumnProps) {
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
@@ -73,6 +75,8 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive }: PillarC
             isLast={idx === visibleItems.length - 1 && (showAll || hiddenCount <= 0)}
             deepDiveResult={deepDiveCache[item.id] ?? null}
             onDeepDive={onDeepDive ? (item) => onDeepDive(item, pillar) : undefined}
+            onDelete={onDeleteItem ? () => onDeleteItem(item.id) : undefined}
+            onDeleteElement={onDeleteElement ? (elIdx) => onDeleteElement(item.id, elIdx) : undefined}
           />
         ))}
 
