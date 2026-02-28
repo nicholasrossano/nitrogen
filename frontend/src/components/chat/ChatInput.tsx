@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Send } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 
 interface ChatInputProps {
   initiativeId?: string;
@@ -21,16 +21,20 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { sendMessage, draftMessage, setDraftMessage } = useInitiativeStore();
+  const { sendMessage } = useInitiativeStore();
 
-  // Pick up draft message from store (e.g. from Investigate button)
+  // Listen for "investigate" events from input widgets
   useEffect(() => {
-    if (draftMessage) {
-      setInput(draftMessage);
-      setDraftMessage(null);
-      textareaRef.current?.focus();
-    }
-  }, [draftMessage, setDraftMessage]);
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent).detail?.text;
+      if (text) {
+        setInput(text);
+        setTimeout(() => textareaRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener('nitrogen:draft', handler);
+    return () => window.removeEventListener('nitrogen:draft', handler);
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -80,16 +84,16 @@ export function ChatInput({
         placeholder={placeholder}
         disabled={disabled}
         rows={1}
-        className="w-full resize-none rounded-[20px] border border-stroke-subtle bg-white px-4 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary transition-colors duration-150 overflow-hidden"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        className="w-full resize-none rounded-[10px] border border-stroke-subtle bg-white px-4 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
       />
       <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
         <button
           type="submit"
           disabled={disabled || !input.trim()}
-          className="flex items-center justify-center text-text-tertiary enabled:text-accent transition-colors duration-150 disabled:cursor-default"
+          className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
         >
-          <Send className="w-[18px] h-[18px]" />
+          <ArrowUp className="w-[11px] h-[11px] text-white" />
         </button>
       </div>
     </form>
