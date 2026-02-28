@@ -231,6 +231,10 @@ body {
   margin-top: 0;
 }
 
+.prose-memo > :last-child {
+  margin-bottom: 0;
+}
+
 .prose-memo p {
   @apply text-sm text-text-secondary leading-relaxed mb-2;
 }

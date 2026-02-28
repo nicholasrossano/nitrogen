@@ -42,7 +42,7 @@ class OpenAlexService:
     async def search_works(
         self,
         query: str,
-        per_page: int = 5,
+        per_page: int = 10,
     ) -> list[OpenAlexWork]:
         """
         Search OpenAlex for scholarly works matching the query.

@@ -20,7 +20,7 @@ function ToolbarIcon({ icon, label, onClick, active = false, disabled = false, s
       onClick={onClick}
       disabled={disabled}
       className={[
-        'p-1 rounded transition-colors',
+        'p-0.5 rounded transition-colors',
         active
           ? 'text-accent'
           : 'text-text-tertiary hover:text-text-primary',
@@ -62,14 +62,14 @@ export function UserMessageToolbar({ content, onEdit, hideEdit = false }: UserMe
         </span>
       )}
       <ToolbarIcon
-        icon={copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        icon={copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         label="Copy message"
         onClick={handleCopy}
         active={copied}
       />
       {!hideEdit && (
         <ToolbarIcon
-          icon={<Pencil className="w-3.5 h-3.5" />}
+          icon={<Pencil className="w-3 h-3" />}
           label="Edit message"
           onClick={onEdit}
         />
@@ -123,7 +123,7 @@ export function AssistantMessageToolbar({
         </span>
       )}
       <ToolbarIcon
-        icon={copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        icon={copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         label="Copy response"
         onClick={handleCopy}
         active={copied}
@@ -135,10 +135,10 @@ export function AssistantMessageToolbar({
           title={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
           aria-label={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
           onClick={handleLike}
-          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+          className="p-0.5 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
         >
           <ThumbsUp
-            className="w-3.5 h-3.5"
+            className="w-3 h-3"
             {...(feedback === 'like' ? { style: { fill: 'currentColor', strokeWidth: 0 } } : {})}
           />
         </button>
@@ -150,10 +150,10 @@ export function AssistantMessageToolbar({
           title={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
           aria-label={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
           onClick={handleDislike}
-          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+          className="p-0.5 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
         >
           <ThumbsDown
-            className="w-3.5 h-3.5"
+            className="w-3 h-3"
             {...(feedback === 'dislike' ? { style: { fill: 'currentColor', strokeWidth: 0 } } : {})}
           />
         </button>
@@ -161,7 +161,7 @@ export function AssistantMessageToolbar({
 
       {!hideRetry && (
         <ToolbarIcon
-          icon={<RefreshCw className="w-3.5 h-3.5" />}
+          icon={<RefreshCw className="w-3 h-3" />}
           label={retrying ? 'Retrying…' : 'Retry'}
           onClick={onRetry}
           disabled={retrying}

@@ -562,12 +562,12 @@ function ChatMessageItem({
   }, [isEditing]);
 
   return (
-    <div className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`relative flex flex-col ${isUser ? 'max-w-[90%] items-end' : 'w-full items-start'}`}>
 
         {/* Floating toolbar */}
         {!isEditing && (
-          <div className={`absolute z-10 flex items-center ${isUser ? 'right-0 -bottom-7' : 'left-3 -bottom-7'}`}>
+          <div className={`absolute z-10 flex items-center transition-opacity ${isUser ? 'right-0 -bottom-5 opacity-0 group-hover:opacity-100' : 'left-3 -bottom-5'}`}>
             {isUser ? (
               <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
             ) : (
