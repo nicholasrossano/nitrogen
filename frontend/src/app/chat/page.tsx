@@ -6,8 +6,8 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useChatStore } from '@/stores/chatStore';
 import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
 import { PanelLeft, SquarePen } from 'lucide-react';
-import { LandingInput } from '@/components/compliance-chat/LandingInput';
-import { ConversationView } from '@/components/compliance-chat/ConversationView';
+import { LandingInput } from '@/components/core-chat/LandingInput';
+import { ConversationView } from '@/components/core-chat/ConversationView';
 import { useAuth } from '@/lib/auth';
 import { track } from '@/lib/analytics';
 

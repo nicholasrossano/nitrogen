@@ -166,7 +166,7 @@ body {
 
 /* Prose styling for memo viewer - clean, institutional */
 .prose-chat {
-  @apply text-text-primary;
+  @apply text-text-primary font-sans;
 }
 
 .prose-chat p,
