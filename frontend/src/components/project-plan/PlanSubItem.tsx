@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight, ChevronDown, Minus } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem } from '@/lib/api';
 
 interface PlanSubItemProps {
@@ -9,6 +9,8 @@ interface PlanSubItemProps {
   isLast: boolean;
   deepDiveResult?: DeepDiveResult | null;
   onDeepDive?: (item: ProjectPlanItem) => void;
+  onDelete?: () => void;
+  onDeleteElement?: (elementIndex: number) => void;
 }
 
 type Classification = 'required' | 'optional' | 'unknown';
@@ -44,7 +46,7 @@ const ELEMENT_STYLE = {
   card: 'border-stroke-subtle bg-white',
 };
 
-export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSubItemProps) {
+export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive, onDelete, onDeleteElement }: PlanSubItemProps) {
   const [elementsExpanded, setElementsExpanded] = useState(false);
   const cls = (item.classification as Classification) ?? 'optional';
   const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
@@ -57,11 +59,22 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
   return (
     <>
       {/* Main item row */}
-      <div className="flex items-stretch relative">
+      <div className="flex items-stretch relative group/item">
         {/* Branch gutter */}
         <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
           <div className="w-px bg-stroke-subtle flex-1" />
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
+          <div className="relative flex-shrink-0 w-2 h-2">
+            <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ease-in-out ${onDelete ? 'group-hover/item:opacity-0' : ''} ${styles.dot}`} />
+            {onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/item:opacity-100 group-hover/item:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
+                aria-label="Delete item"
+              >
+                <Minus className="w-2.5 h-2.5 text-white" />
+              </button>
+            )}
+          </div>
           {(!isLast || showElements)
             ? <div className="w-px bg-stroke-subtle flex-1" />
             : <div className="flex-1" />}
@@ -108,7 +121,7 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
         const elStyles = ELEMENT_STYLE;
 
         return (
-          <div key={i} className="flex items-stretch">
+          <div key={i} className="flex items-stretch group/element">
             {/* Col A: parent branch continuation only, no horizontal connector */}
             <div className="w-8 flex-shrink-0 flex items-center justify-center relative">
               {(!isLast || !isLastEl)
@@ -119,7 +132,18 @@ export function PlanSubItem({ item, isLast, deepDiveResult, onDeepDive }: PlanSu
             {/* Col B: element sub-branch gutter */}
             <div className="w-6 flex flex-col items-center flex-shrink-0 relative">
               <div className="w-px bg-stroke-subtle flex-1" />
-              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 relative z-10 ${elStyles.dot}`} />
+              <div className="relative flex-shrink-0 w-1.5 h-1.5 z-10">
+                <div className={`w-1.5 h-1.5 rounded-full transition-opacity duration-200 ease-in-out ${onDeleteElement ? 'group-hover/element:opacity-0' : ''} ${elStyles.dot}`} />
+                {onDeleteElement && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteElement(i); }}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 opacity-0 scale-50 group-hover/element:opacity-100 group-hover/element:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
+                    aria-label="Delete element"
+                  >
+                    <Minus className="w-2 h-2 text-white" />
+                  </button>
+                )}
+              </div>
               {!isLastEl
                 ? <div className="w-px bg-stroke-subtle flex-1" />
                 : <div className="flex-1" />}
