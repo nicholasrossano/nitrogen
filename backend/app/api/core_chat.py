@@ -12,7 +12,7 @@ import logging
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.config import get_settings
-from app.services.compliance_chat import ComplianceChatService
+from app.services.core_chat import ComplianceChatService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

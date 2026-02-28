@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MessageSquare, Trash2 } from 'lucide-react';
+import { ArrowUp, MessageSquare, Trash2 } from 'lucide-react';
 import { useChatStore, ChatSession } from '@/stores/chatStore';
 
 const EXAMPLE_PROMPTS = [
@@ -151,16 +151,16 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
             placeholder={focused ? '' : placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full resize-none rounded-[28px] border border-stroke-subtle bg-white px-5 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary transition-colors duration-150 overflow-hidden"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            className="w-full resize-none rounded-[10px] border border-stroke-subtle bg-white px-5 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
           />
           <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
             <button
               type="submit"
               disabled={disabled || !input.trim()}
-              className="flex items-center justify-center text-text-tertiary enabled:text-accent transition-colors duration-150 disabled:cursor-default"
+              className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
             >
-              <Send className="w-[18px] h-[18px]" />
+              <ArrowUp className="w-[11px] h-[11px] text-white" />
             </button>
           </div>
         </form>
