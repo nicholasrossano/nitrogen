@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useInitiativeStore } from '@/stores/initiativeStore';
 
 interface LCOEInput {
   field_name: string;
@@ -59,11 +60,13 @@ export function LCOEInputsWidget({
 }: LCOEInputsWidgetProps) {
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
+  const setDraftMessage = useInitiativeStore((s) => s.setDraftMessage);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
   );
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; top: number } | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -143,174 +146,193 @@ export function LCOEInputsWidget({
     }
   }, [localInputs, preConfirmStatuses, onRecalculated]);
 
+  const handleRowHover = useCallback((e: React.MouseEvent, inp: LCOEInput) => {
+    if (!cardRef.current) return;
+    const rowRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const cardRect = cardRef.current.getBoundingClientRect();
+    setHoveredRow({
+      field_name: inp.field_name,
+      label: inp.label,
+      top: rowRect.top - cardRect.top + rowRect.height / 2,
+    });
+  }, []);
+
   return (
-    <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">LCOE Model Inputs</h3>
-        <p className="text-xs text-text-secondary mt-0.5">
-          {Object.keys(localInputs).length} fields
-          {missingEssentials.length > 0 && (
-            <span className="text-red-600 ml-2">
-              &middot; {missingEssentials.length} critical input{missingEssentials.length !== 1 ? 's' : ''} missing
-            </span>
-          )}
-        </p>
-      </div>
-
-      {/* Missing essentials banner */}
-      {missingEssentials.length > 0 && (
-        <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-          <span className="text-xs text-red-700">
-            Missing to compute LCOE:{' '}
-            {missingEssentials
-              .map((f) => {
-                const inp = localInputs[f] as LCOEInput | undefined;
-                return inp?.label || f;
-              })
-              .join(', ')}
-          </span>
-        </div>
-      )}
-
-      {/* Input table grouped by category */}
-      <div className="divide-y divide-divider">
-        {groupedInputs.map((group) => (
-          <div key={group.category}>
-            <div className="px-5 py-2 bg-surface-subtle">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                {group.label}
+    <div
+      ref={cardRef}
+      className="relative flex items-start gap-0"
+      onMouseLeave={() => setHoveredRow(null)}
+    >
+      <div className="flex-1 min-w-0 card-elevated overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 bg-surface-header border-b border-divider">
+          <h3 className="text-sm font-semibold text-text-primary">LCOE Model Inputs</h3>
+          <p className="text-xs text-text-secondary mt-0.5">
+            {Object.keys(localInputs).length} fields
+            {missingEssentials.length > 0 && (
+              <span className="text-red-600 ml-2">
+                &middot; {missingEssentials.length} critical input{missingEssentials.length !== 1 ? 's' : ''} missing
               </span>
-            </div>
+            )}
+          </p>
+        </div>
 
-            <div className="divide-y divide-stroke-subtle">
-              {group.inputs.map((inp) => {
-                const isMissing = inp.status === 'missing';
-                const isEditing = editingField === inp.field_name;
-                const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
+        {/* Missing essentials banner */}
+        {missingEssentials.length > 0 && (
+          <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+            <span className="text-xs text-red-700">
+              Missing to compute LCOE:{' '}
+              {missingEssentials
+                .map((f) => {
+                  const inp = localInputs[f] as LCOEInput | undefined;
+                  return inp?.label || f;
+                })
+                .join(', ')}
+            </span>
+          </div>
+        )}
 
-                return (
-                  <div
-                    key={inp.field_name}
-                    onMouseEnter={() => setHoveredRow(inp.field_name)}
-                    onMouseLeave={() => setHoveredRow(null)}
-                    className={`px-5 py-2.5 flex items-center gap-3 ${
-                      isMissing ? 'bg-red-50/40' : 'bg-white'
-                    }`}
-                  >
-                    {/* Label */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-text-primary truncate">
-                          {inp.label}
-                        </span>
-                        {inp.unit && (
-                          <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
+        {/* Input table grouped by category */}
+        <div className="divide-y divide-divider">
+          {groupedInputs.map((group) => (
+            <div key={group.category}>
+              <div className="px-5 py-2 bg-surface-subtle">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                  {group.label}
+                </span>
+              </div>
+
+              <div className="divide-y divide-stroke-subtle">
+                {group.inputs.map((inp) => {
+                  const isMissing = inp.status === 'missing';
+                  const isEditing = editingField === inp.field_name;
+                  const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
+
+                  return (
+                    <div
+                      key={inp.field_name}
+                      onMouseEnter={(e) => handleRowHover(e, inp)}
+                      className={`px-5 py-2.5 flex items-center gap-3 ${
+                        isMissing ? 'bg-red-50/40' : 'bg-white'
+                      } ${hoveredRow?.field_name === inp.field_name ? 'bg-gray-50/60' : ''}`}
+                    >
+                      {/* Label */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-text-primary truncate">
+                            {inp.label}
+                          </span>
+                          {inp.unit && (
+                            <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
+                          )}
+                        </div>
+                        {inp.rationale && inp.status === 'assumed' && (
+                          <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
+                            {inp.rationale}
+                          </p>
                         )}
                       </div>
-                      {inp.rationale && inp.status === 'assumed' && (
-                        <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
-                          {inp.rationale}
-                        </p>
-                      )}
-                    </div>
 
-                    {/* Value (editable) */}
-                    <div className="w-28 text-right">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          onBlur={commitEdit}
-                          autoFocus
-                          className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => isActive && startEdit(inp.field_name, inp.value)}
-                          disabled={!isActive}
-                          className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
-                        >
-                          {isMissing ? (
-                            <span className="text-red-500 italic">—</span>
-                          ) : (
-                            <span>
-                              {typeof inp.value === 'number'
-                                ? inp.value.toLocaleString(undefined, {
-                                    maximumFractionDigits: 6,
-                                  })
-                                : inp.value}
-                            </span>
-                          )}
-                          {isActive && (
-                            <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
-                          )}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Status badge */}
-                    <div className="w-16 flex justify-end">
-                      <span
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                      >
-                        {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
-                        {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
-                        {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
-                        {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
-                        {statusStyle.label}
-                      </span>
-                    </div>
-
-                    {/* Confirm checkbox */}
-                    <div className="w-5 flex justify-center">
-                      {isActive && !hasOutputWidget && (
-                        <input
-                          type="checkbox"
-                          checked={inp.status === 'confirmed'}
-                          disabled={isMissing || confirmingFields.has(inp.field_name)}
-                          onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                          title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
-                          className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                        />
-                      )}
-                    </div>
-
-                    {/* Investigate button */}
-                    {onSendMessage && (
-                      <div className="w-20 flex justify-end">
-                        <button
-                          onClick={() => onSendMessage(`Help me figure out ${inp.label}`)}
-                          className={`transition-opacity text-[10px] font-medium text-accent hover:text-accent-anchor px-2 py-1 rounded hover:bg-accent-wash whitespace-nowrap ${
-                            hoveredRow === inp.field_name ? 'opacity-100' : 'opacity-0'
-                          }`}
-                        >
-                          Investigate
-                        </button>
+                      {/* Value (editable) */}
+                      <div className="w-28 text-right">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            onBlur={commitEdit}
+                            autoFocus
+                            className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => isActive && startEdit(inp.field_name, inp.value)}
+                            disabled={!isActive}
+                            className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
+                          >
+                            {isMissing ? (
+                              <span className="text-red-500 italic">—</span>
+                            ) : (
+                              <span>
+                                {typeof inp.value === 'number'
+                                  ? inp.value.toLocaleString(undefined, {
+                                      maximumFractionDigits: 6,
+                                    })
+                                  : inp.value}
+                              </span>
+                            )}
+                            {isActive && (
+                              <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                            )}
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {/* Status badge */}
+                      <div className="w-16 flex justify-end">
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
+                        >
+                          {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                          {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
+                          {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
+                          {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
+                          {statusStyle.label}
+                        </span>
+                      </div>
+
+                      {/* Confirm checkbox */}
+                      <div className="w-5 flex justify-center">
+                        {isActive && !hasOutputWidget && (
+                          <input
+                            type="checkbox"
+                            checked={inp.status === 'confirmed'}
+                            disabled={isMissing || confirmingFields.has(inp.field_name)}
+                            onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
+                            title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                            className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        {isRecalculating && (
+          <div className="px-5 py-2.5 bg-accent-wash border-t border-divider text-center">
+            <span className="text-xs text-accent">Recalculating…</span>
           </div>
-        ))}
+        )}
+
+        <div className="px-5 py-3 bg-surface-header border-t border-divider">
+          <p className="text-[10px] text-text-tertiary text-center">
+            Click any value to edit &middot; Yellow = assumed value &middot; Red = missing
+          </p>
+        </div>
       </div>
 
-      {/* Footer */}
-      {isRecalculating && (
-        <div className="px-5 py-2.5 bg-accent-wash border-t border-divider text-center">
-          <span className="text-xs text-accent">Recalculating…</span>
-        </div>
-      )}
-
-      <div className="px-5 py-3 bg-surface-header border-t border-divider">
-        <p className="text-[10px] text-text-tertiary text-center">
-          Click any value to edit &middot; Yellow = assumed value &middot; Red = missing
-        </p>
+      {/* Right gutter — holds Investigate button aligned with hovered row */}
+      <div className="relative w-[90px] flex-shrink-0 self-stretch">
+        {hoveredRow && (
+          <button
+            onClick={() => {
+              const label = hoveredRow.label;
+              setHoveredRow(null);
+              setDraftMessage(`Help me figure out ${label}`);
+            }}
+            className="absolute left-2 -translate-y-1/2 text-[11px] font-medium text-accent hover:text-accent-anchor px-2.5 py-1 rounded-md border border-accent/20 bg-white hover:bg-accent-wash shadow-sm transition-all whitespace-nowrap cursor-pointer"
+            style={{ top: hoveredRow.top }}
+          >
+            Investigate
+          </button>
+        )}
       </div>
     </div>
   );
