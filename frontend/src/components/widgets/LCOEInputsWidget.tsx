@@ -60,7 +60,7 @@ export function LCOEInputsWidget({
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
   const investigate = useCallback((label: string) => {
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Help me figure out ${label}` } }));
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Can you help me investigate and estimate a value for ${label}?`, label } }));
   }, []);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
@@ -293,7 +293,7 @@ export function LCOEInputsWidget({
                             disabled={isMissing || confirmingFields.has(inp.field_name)}
                             onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
                             title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
-                            className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                            className="w-3 h-3 rounded-full accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                           />
                         )}
                       </div>
