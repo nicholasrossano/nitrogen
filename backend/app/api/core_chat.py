@@ -1,18 +1,23 @@
 """Standalone compliance & program design chat endpoint with SSE streaming."""
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from openai import AsyncOpenAI
+import uuid
 import json
 import asyncio
 import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from openai import AsyncOpenAI
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.config import get_settings
 from app.services.core_chat import ComplianceChatService
+from app.models.core_chat import CoreChatSession, CoreChatMessage
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -27,10 +32,43 @@ class ChatHistoryMessage(BaseModel):
 class ComplianceChatRequest(BaseModel):
     content: str
     history: list[ChatHistoryMessage] = []
+    session_id: Optional[str] = None  # UUID of existing session, or null to start a new one
 
 
 class TitleRequest(BaseModel):
     message: str
+
+
+class FeedbackRequest(BaseModel):
+    feedback: Optional[str] = None  # "like" | "dislike" | null to clear
+
+
+async def _get_or_create_session(
+    db: AsyncSession,
+    user_id: str,
+    session_id: Optional[str],
+) -> CoreChatSession:
+    """Return an existing session or create a new one."""
+    if session_id:
+        try:
+            sid = uuid.UUID(session_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid session_id format")
+        result = await db.execute(
+            select(CoreChatSession).where(
+                CoreChatSession.id == sid,
+                CoreChatSession.user_id == user_id,
+            )
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return session
+
+    session = CoreChatSession(user_id=user_id)
+    db.add(session)
+    await db.flush()
+    return session
 
 
 @router.post("/chat/stream")
@@ -45,14 +83,27 @@ async def compliance_chat_stream(
     Event types:
       - thinking: natural-language progress text
       - word: response tokens
-      - complete: final payload with citations and metadata
+      - complete: final payload with citations, metadata, and DB IDs for persistence
     """
 
     async def generate():
         try:
+            # Persist session + user message upfront
+            session = await _get_or_create_session(db, user.uid, data.session_id)
+
+            user_msg = CoreChatMessage(
+                session_id=session.id,
+                role="user",
+                content=data.content,
+            )
+            db.add(user_msg)
+            await db.flush()
+
             thinking_queue: asyncio.Queue[str] = asyncio.Queue()
+            thinking_lines: list[str] = []
 
             async def on_thinking(text: str):
+                thinking_lines.append(text)
                 event = {"type": "thinking", "text": text}
                 await thinking_queue.put(json.dumps(event))
 
@@ -80,17 +131,32 @@ async def compliance_chat_stream(
 
             result = generation_task.result()
 
-            # Stream response token-by-token, preserving newlines embedded in tokens
-            # split(' ') keeps '\n' attached to adjacent words so markdown structure
-            # (headers, bullets, paragraphs) is preserved during streaming.
+            # Stream response token-by-token
             tokens = [t for t in result.content.split(' ') if t]
             for i, token in enumerate(tokens):
                 chunk = {"type": "word", "content": token, "is_last": i == len(tokens) - 1}
                 yield f"data: {json.dumps(chunk)}\n\n"
                 await asyncio.sleep(0.02)
 
-            # Final complete event
+            # Persist assistant message
             sources_list = [s.to_dict() for s in result.sources]
+            assistant_msg = CoreChatMessage(
+                session_id=session.id,
+                role="assistant",
+                content=result.content,
+                sources=sources_list,
+                thinking_lines=thinking_lines,
+                completion_meta={
+                    "latency_ms": result.latency_ms,
+                    "citation_count": len([s for s in result.sources if s.source_type.value != "llm_estimate"]),
+                    "tiers_used": result.tiers_used,
+                },
+                widget_type=result.widget_type,
+                widget_data=result.widget_data,
+            )
+            db.add(assistant_msg)
+            await db.commit()
+
             complete = {
                 "type": "complete",
                 "content": result.content,
@@ -100,11 +166,19 @@ async def compliance_chat_stream(
                 "latency_ms": result.latency_ms,
                 "widget_type": result.widget_type,
                 "widget_data": result.widget_data,
+                # IDs for the frontend to track for feedback / retry
+                "session_id": str(session.id),
+                "user_message_id": str(user_msg.id),
+                "assistant_message_id": str(assistant_msg.id),
             }
             yield f"data: {json.dumps(complete)}\n\n"
 
         except Exception as e:
             logger.error(f"Compliance chat stream error: {e}", exc_info=True)
+            try:
+                await db.rollback()
+            except Exception:
+                pass
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(
@@ -116,6 +190,67 @@ async def compliance_chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.patch("/chat/messages/{message_id}/feedback")
+async def set_compliance_message_feedback(
+    message_id: str,
+    data: FeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Persist like / dislike feedback on a compliance chat message."""
+    try:
+        mid = uuid.UUID(message_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid message_id")
+
+    result = await db.execute(
+        select(CoreChatMessage)
+        .join(CoreChatSession)
+        .where(
+            CoreChatMessage.id == mid,
+            CoreChatSession.user_id == user.uid,
+        )
+    )
+    msg = result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if data.feedback not in (None, "like", "dislike"):
+        raise HTTPException(status_code=422, detail="feedback must be 'like', 'dislike', or null")
+
+    msg.feedback = data.feedback
+    await db.commit()
+    return {"message_id": str(msg.id), "feedback": msg.feedback}
+
+
+@router.patch("/chat/sessions/{session_id}/title")
+async def update_session_title(
+    session_id: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Update the AI-generated title on a session."""
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    result = await db.execute(
+        select(CoreChatSession).where(
+            CoreChatSession.id == sid,
+            CoreChatSession.user_id == user.uid,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.title = data.get("title", "")
+    await db.commit()
+    return {"session_id": str(session.id), "title": session.title}
 
 
 @router.post("/chat/title")

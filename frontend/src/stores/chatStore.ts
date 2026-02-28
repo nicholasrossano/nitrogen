@@ -10,8 +10,10 @@ export interface CompletionMeta {
   tiers_used: string[];
 }
 
-export interface ComplianceChatMessage {
+export interface CoreChatMessage {
   id: string;
+  /** DB UUID — set after the stream completes and backend has persisted the message */
+  db_id?: string;
   role: 'user' | 'assistant';
   content: string;
   sources?: SourceCitation[] | null;
@@ -21,15 +23,18 @@ export interface ComplianceChatMessage {
   widget_data?: Record<string, any> | null;
 }
 
+/** @deprecated Use CoreChatMessage */
+export type ComplianceChatMessage = CoreChatMessage;
+
 export interface ChatSession {
   id: string;
   title: string;
   createdAt: number;
-  messages: ComplianceChatMessage[];
+  messages: CoreChatMessage[];
 }
 
 interface ChatState {
-  messages: ComplianceChatMessage[];
+  messages: CoreChatMessage[];
   phase: 'landing' | 'conversation';
   sending: boolean;
   thinkingLines: string[];
@@ -39,6 +44,8 @@ interface ChatState {
   pendingSessionTitle: string | null;
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
   retryingMessageId: string | null;
+  /** DB session UUID — persisted across messages in the same conversation */
+  currentDbSessionId: string | null;
 
   sendMessage: (content: string) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
@@ -62,6 +69,7 @@ const BLANK_TRANSIENT = {
   error: null,
   pendingSessionTitle: null as string | null,
   retryingMessageId: null as string | null,
+  currentDbSessionId: null as string | null,
 };
 
 export const useChatStore = create<ChatState>()(
@@ -71,6 +79,7 @@ export const useChatStore = create<ChatState>()(
       phase: 'landing',
       sessions: [],
       messageFeedback: {},
+      currentDbSessionId: null,
       ...BLANK_TRANSIENT,
 
       sendMessage: async (content: string) => {
@@ -86,8 +95,9 @@ export const useChatStore = create<ChatState>()(
             .catch(() => {/* silently ignore */});
         }
 
-        const userMsg: ComplianceChatMessage = {
-          id: nextId(),
+        const userMsgLocalId = nextId();
+        const userMsg: CoreChatMessage = {
+          id: userMsgLocalId,
           role: 'user',
           content,
         };
@@ -108,7 +118,7 @@ export const useChatStore = create<ChatState>()(
           content: m.content,
         }));
 
-        const assistantId = nextId();
+        const assistantLocalId = nextId();
 
         try {
           await api.sendComplianceChatStream(
@@ -133,8 +143,9 @@ export const useChatStore = create<ChatState>()(
                 tiers_used: payload.tiers_used,
               };
 
-              const assistantMsg: ComplianceChatMessage = {
-                id: assistantId,
+              const assistantMsg: CoreChatMessage = {
+                id: assistantLocalId,
+                db_id: payload.assistant_message_id,
                 role: 'assistant',
                 content: payload.content,
                 sources: payload.sources,
@@ -144,12 +155,26 @@ export const useChatStore = create<ChatState>()(
                 widget_data: payload.widget_data || null,
               };
 
+              // Back-fill db_id on the user message that was just persisted
               set((s) => ({
-                messages: [...s.messages, assistantMsg],
+                messages: [
+                  ...s.messages.slice(0, -0).map((m) =>
+                    m.id === userMsgLocalId ? { ...m, db_id: payload.user_message_id } : m
+                  ),
+                  assistantMsg,
+                ],
                 sending: false,
                 streamingContent: '',
                 thinkingLines: [],
+                currentDbSessionId: payload.session_id,
               }));
+
+              // Persist AI-generated title to the session once we have a session_id
+              const pendingTitle = get().pendingSessionTitle;
+              if (pendingTitle && payload.session_id) {
+                api.updateChatSessionTitle(payload.session_id, pendingTitle).catch(() => {});
+                set({ pendingSessionTitle: null });
+              }
 
               track('response_completed', {
                 latency: payload.latency_ms,
@@ -160,6 +185,7 @@ export const useChatStore = create<ChatState>()(
             (message) => {
               set({ sending: false, error: message, streamingContent: '' });
             },
+            get().currentDbSessionId,
           );
         } catch (err: any) {
           set({
@@ -195,9 +221,23 @@ export const useChatStore = create<ChatState>()(
       },
 
       setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => {
+        // Optimistic local update
         set(state => ({
           messageFeedback: { ...state.messageFeedback, [messageId]: feedback },
         }));
+
+        // Persist to backend if we have a DB ID for this message
+        const msg = get().messages.find(m => m.id === messageId);
+        const dbId = msg?.db_id;
+        if (dbId) {
+          api.setCoreChatMessageFeedback(dbId, feedback).catch((err) => {
+            console.warn('[chatStore] Failed to persist feedback:', err);
+            // Revert on failure
+            set(state => ({
+              messageFeedback: { ...state.messageFeedback, [messageId]: null },
+            }));
+          });
+        }
       },
 
       reset: () => {
@@ -223,10 +263,11 @@ export const useChatStore = create<ChatState>()(
             sessions: [session, ...sessions].slice(0, 20),
             messages: [],
             phase: 'landing',
+            currentDbSessionId: null,
             ...BLANK_TRANSIENT,
           });
         } else {
-          set({ messages: [], phase: 'landing', ...BLANK_TRANSIENT });
+          set({ messages: [], phase: 'landing', currentDbSessionId: null, ...BLANK_TRANSIENT });
         }
       },
 
