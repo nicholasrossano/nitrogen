@@ -250,7 +250,7 @@ class TieredRetrievalService:
     async def search_openalex(self, query: str) -> list[RetrievedFact]:
         """Search OpenAlex for scholarly works."""
         try:
-            works = await self.openalex.search_works(query, per_page=5)
+            works = await self.openalex.search_works(query, per_page=10)
             if not works:
                 return []
             
@@ -283,7 +283,7 @@ class TieredRetrievalService:
     async def search_web(
         self,
         query: str,
-        max_results: int = 5,
+        max_results: int = 10,
         max_content_length: int = 400,
     ) -> list[RetrievedFact]:
         """
@@ -300,7 +300,8 @@ class TieredRetrievalService:
                 tools=[{"type": "web_search"}],
                 input=(
                     f"Search the web for the most relevant and authoritative information about: {query}\n\n"
-                    "Provide a detailed summary with inline citations."
+                    "Provide a comprehensive summary citing as many distinct, authoritative sources as possible "
+                    "(aim for at least 5–8 inline citations from different domains)."
                 ),
             )
 

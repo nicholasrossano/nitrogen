@@ -11,6 +11,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  X,
 } from 'lucide-react';
 import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
@@ -39,6 +40,7 @@ export function ConversationView() {
   } = useChatStore();
 
   const [input, setInput] = useState('');
+  const [draftTag, setDraftTag] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevCount = useRef(0);
@@ -49,6 +51,21 @@ export function ConversationView() {
     }
     prevCount.current = messages.length;
   }, [messages.length, streamingContent]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail ?? {};
+      const text = detail.text;
+      const label = detail.label ?? null;
+      if (text) {
+        setInput(text);
+        setDraftTag(label);
+        setTimeout(() => textareaRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener('nitrogen:draft', handler);
+    return () => window.removeEventListener('nitrogen:draft', handler);
+  }, []);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -63,6 +80,7 @@ export function ConversationView() {
     if (!input.trim() || sending) return;
     sendMessage(input.trim());
     setInput('');
+    setDraftTag(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -132,28 +150,50 @@ export function ConversationView() {
 
       {/* Composer */}
       <div className="max-w-[52rem] mx-auto w-full pb-4">
-          <form onSubmit={handleSubmit} className="relative flex items-center">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything"
-              disabled={sending}
-              rows={1}
-              className="w-full resize-none rounded-[10px] border border-stroke-subtle bg-white px-5 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
-            />
-            <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
-              <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
-              >
-                <ArrowUp className="w-[11px] h-[11px] text-white" />
-              </button>
+        <form onSubmit={handleSubmit} className="relative">
+          <div
+            className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
+            style={{ boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
+          >
+            {draftTag && (
+              <div className="px-4 pt-2.5 pb-1 flex items-center">
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
+                  {draftTag}
+                  <button
+                    type="button"
+                    onClick={() => { setDraftTag(null); setInput(''); }}
+                    className="hover:opacity-60 transition-opacity"
+                    aria-label="Remove"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              </div>
+            )}
+            <div className="relative flex items-center">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything"
+                disabled={sending}
+                rows={1}
+                className="w-full resize-none bg-transparent px-5 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              />
+              <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
+                <button
+                  type="submit"
+                  disabled={sending || !input.trim()}
+                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+                >
+                  <ArrowUp className="w-[11px] h-[11px] text-white" />
+                </button>
+              </div>
             </div>
-          </form>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -418,12 +458,12 @@ function MessageBubble({
   }, [isEditing]);
 
   return (
-    <div className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
 
         {/* Floating toolbar */}
         {!isEditing && (
-          <div className={`absolute z-10 flex items-center ${isUser ? 'right-0 -bottom-7' : 'left-0 -bottom-7'}`}>
+          <div className={`absolute z-10 flex items-center transition-opacity ${isUser ? 'right-0 -bottom-5 opacity-0 group-hover:opacity-100' : 'left-0 -bottom-5'}`}>
             {isUser ? (
               <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
             ) : (
