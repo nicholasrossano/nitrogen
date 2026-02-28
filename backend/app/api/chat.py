@@ -35,7 +35,7 @@ from app.schemas.chat import (
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
-from app.services.compliance_chat import ComplianceChatService
+from app.services.core_chat import ComplianceChatService
 from app.services.project_plan import ProjectPlanService
 from app.tools import get_tool_registry
 from app.tools.base import ToolAlignment
