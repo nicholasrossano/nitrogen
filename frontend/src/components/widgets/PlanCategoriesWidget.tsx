@@ -13,11 +13,14 @@ interface PlanCategoriesWidgetProps {
 }
 
 export function PlanCategoriesWidget({ data, initiativeId, isActive = true }: PlanCategoriesWidgetProps) {
-  const { confirmPlanCategories, projectPlanLoading } = useInitiativeStore();
+  const { confirmPlanCategories, projectPlanLoading, projectPlan } = useInitiativeStore();
 
   const categories = (data?.categories || []) as ProposedCategory[];
   const [localCategories, setLocalCategories] = useState<ProposedCategory[]>(categories);
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmedLocal, setConfirmedLocal] = useState(false);
+
+  // Treat as confirmed if the plan already exists (survives page refresh)
+  const confirmed = confirmedLocal || !!projectPlan;
 
   if (!categories.length) {
     return (
@@ -33,7 +36,7 @@ export function PlanCategoriesWidget({ data, initiativeId, isActive = true }: Pl
   };
 
   const handleConfirm = async () => {
-    setConfirmed(true);
+    setConfirmedLocal(true);
     await confirmPlanCategories(initiativeId, localCategories);
   };
 
@@ -114,7 +117,7 @@ export function PlanCategoriesWidget({ data, initiativeId, isActive = true }: Pl
       {confirmed && !isLoading && (
         <div className="px-5 py-3 bg-surface-header border-t border-divider">
           <p className="text-xs text-text-tertiary text-center">
-            Plan generated — view it in the Project Plan tab.
+            Plan generated. View it in the Project Plan tab.
           </p>
         </div>
       )}
