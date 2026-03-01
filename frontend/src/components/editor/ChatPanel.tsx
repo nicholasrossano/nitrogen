@@ -285,6 +285,7 @@ export function ChatPanel({
             onSend={handleSend}
             disabled={effectiveSending || effectiveGenerating}
             placeholder="Ask anything"
+            noShadow
           />
         </div>
       )}
