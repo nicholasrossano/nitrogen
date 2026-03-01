@@ -95,7 +95,7 @@ export function DeepDivePanel({
       role="dialog"
       aria-modal="true"
       aria-label={`Deep dive: ${item.title}`}
-      className="w-[420px] flex-shrink-0 bg-white border-l border-divider flex flex-col outline-none"
+      className="w-[420px] h-full flex-shrink-0 bg-white border-l border-divider flex flex-col outline-none"
       style={{ animation: 'slideInRight 0.2s ease-out forwards' }}
     >
         {/* Header */}

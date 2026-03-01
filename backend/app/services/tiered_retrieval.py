@@ -296,8 +296,8 @@ class TieredRetrievalService:
             from urllib.parse import urlparse
 
             resp = await self.client.responses.create(
-                model=settings.openai_generation_model,
-                tools=[{"type": "web_search"}],
+                model=settings.openai_orchestration_model,
+                tools=[{"type": "web_search", "search_context_size": "high"}],
                 input=(
                     f"Search the web for the most relevant and authoritative information about: {query}\n\n"
                     "Provide a comprehensive summary citing as many distinct, authoritative sources as possible "
@@ -305,9 +305,10 @@ class TieredRetrievalService:
                 ),
             )
 
-            # Extract message content and URL citations from the response
             facts: list[RetrievedFact] = []
             seen_urls: set[str] = set()
+            total_annotations = 0
+            total_url_citations = 0
 
             for item in resp.output:
                 if getattr(item, "type", None) != "message":
@@ -315,16 +316,17 @@ class TieredRetrievalService:
                 for block in item.content:
                     text = getattr(block, "text", "") or ""
                     annotations = getattr(block, "annotations", []) or []
+                    total_annotations += len(annotations)
                     for ann in annotations:
                         if getattr(ann, "type", None) != "url_citation":
                             continue
+                        total_url_citations += 1
                         url = getattr(ann, "url", "") or ""
                         title = getattr(ann, "title", "") or "Web Source"
                         if not url or url in seen_urls:
                             continue
                         seen_urls.add(url)
 
-                        # Extract the sentence(s) around this citation
                         start = getattr(ann, "start_index", 0)
                         end = getattr(ann, "end_index", start)
                         snippet_start = text.rfind(".", 0, max(0, start - 300))
@@ -350,9 +352,20 @@ class TieredRetrievalService:
                             )
                         )
 
+            logger.info(
+                "search_web query=%r  annotations=%d  url_citations=%d  unique_facts=%d",
+                query[:80], total_annotations, total_url_citations, len(facts),
+            )
+            if not facts:
+                output_types = [getattr(item, "type", "unknown") for item in resp.output]
+                logger.warning(
+                    "search_web returned 0 facts for query=%r  output_types=%r",
+                    query[:80], output_types,
+                )
+
             return facts[:max_results]
         except Exception as e:
-            logger.error(f"Web search failed: {e}")
+            logger.error(f"Web search failed for query={query[:80]!r}: {e}", exc_info=True)
             return []
     
     async def retrieve_for_context(

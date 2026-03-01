@@ -1,5 +1,6 @@
 """Service for generating 3-pillar project plans using LLM analysis."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.evidence import EvidenceChunk, EvidenceDoc
+from app.services.tiered_retrieval import TieredRetrievalService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -146,6 +148,75 @@ STABILITY RULES FOR REFRESH:
 - Users CAN request custom pillars beyond the default Authorization/Capital/Design. If the USER REQUESTED CHANGE asks for a new section or pillar, add it as a new pillar entry with a short lowercase ID (e.g. "internal"). Do not refuse — honour the user's structural override.
 """
 
+CATEGORY_PROPOSAL_SYSTEM_PROMPT = """You are an expert environmental and development project analyst.
+
+Your job: given a project description and any uploaded documents, propose the most relevant HIGH-LEVEL CATEGORIES (pillars) for this project's needs map.
+
+## Rules
+- Do NOT produce individual items or deliverables — only the category structure.
+- Adapt categories to the project type, geography, and the user's likely role.
+- The classic defaults (Authorization, Capital, Design) are a starting point but you MUST tailor them. For example:
+  - A clean cooking carbon project might have: Regulatory & Certification, Carbon Methodology & MRV, Funding & Finance, Implementation & Procurement
+  - A solar farm might have: Permitting & Environmental, Grid Interconnection, Capital & Incentives, Engineering & Procurement
+  - A reforestation project might have: Land Rights & Authorization, Carbon Standard Registration, Monitoring & Verification, Funding & Partnerships
+- Each category should represent a distinct workstream with at least 3–5 potential deliverables.
+- Propose 3–5 categories.
+- Give each a short, clear name (2–4 words) and a 1–2 sentence summary of what it covers for THIS specific project.
+
+You MUST respond with valid JSON matching the schema provided."""
+
+
+CATEGORY_PROPOSAL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "propose_plan_categories",
+        "description": "Propose high-level project plan categories tailored to this project",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "Short lowercase slug (e.g. 'permitting', 'carbon_mrv', 'funding')",
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Human-readable name (2-4 words)",
+                            },
+                            "summary": {
+                                "type": "string",
+                                "description": "1-2 sentence summary of what this category covers for this specific project",
+                            },
+                            "icon": {
+                                "type": "string",
+                                "description": (
+                                    "A lucide-react icon name that best represents this category. "
+                                    "Choose from: Shield, Scale, Lock, FileText, BookOpen, Flag, "
+                                    "Banknote, DollarSign, PiggyBank, TrendingUp, Coins, Wallet, CircleDollarSign, "
+                                    "Compass, Wrench, Hammer, Settings, Target, Rocket, "
+                                    "Leaf, TreePine, Sprout, Recycle, Waves, CloudRain, Mountain, "
+                                    "Zap, Sun, Battery, BatteryCharging, Plug, Wind, "
+                                    "Users, Handshake, HeartHandshake, Globe, MapPin, Map, Navigation, "
+                                    "BarChart3, Database, Network, Satellite, Award, CheckCircle"
+                                ),
+                            },
+                        },
+                        "required": ["id", "name", "summary", "icon"],
+                    },
+                    "minItems": 3,
+                    "maxItems": 5,
+                },
+            },
+            "required": ["categories"],
+        },
+    },
+}
+
+
 PLAN_FUNCTION_SCHEMA = {
     "type": "function",
     "function": {
@@ -202,8 +273,8 @@ PLAN_FUNCTION_SCHEMA = {
                         },
                         "required": ["id", "name", "summary", "items"],
                     },
-                    "minItems": 3,
-                    "maxItems": 6,
+                    "minItems": 2,
+                    "maxItems": 7,
                 },
             },
             "required": ["pillars"],
@@ -217,15 +288,65 @@ class ProjectPlanService:
         self.db = db
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_orchestration_model
+        self.retrieval = TieredRetrievalService(db)
+
+    async def propose_categories(self, initiative) -> list[dict]:
+        """Propose high-level plan categories adapted to the project (lightweight LLM call)."""
+        evidence_text = await self._gather_evidence_text(initiative.id)
+        deliverables_summary = self._summarize_deliverables(initiative.deliverables)
+
+        desc = initiative.project_description or "(No description provided.)"
+        project_type = initiative.project_type or "unclassified"
+        geography = initiative.geography or "unspecified"
+        title = initiative.title or "Untitled Project"
+
+        user_content = f"""Propose plan categories for the following project.
+
+PROJECT: {title}
+TYPE: {project_type}
+GEOGRAPHY: {geography}
+
+DESCRIPTION:
+{desc}
+
+UPLOADED DOCUMENTS:
+{evidence_text}
+
+EXISTING GENERATED OUTPUTS:
+{deliverables_summary}
+"""
+
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": CATEGORY_PROPOSAL_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            tools=[CATEGORY_PROPOSAL_SCHEMA],
+            tool_choice={"type": "function", "function": {"name": "propose_plan_categories"}},
+            temperature=0.4,
+        )
+
+        tool_call = response.choices[0].message.tool_calls[0]
+        result = json.loads(tool_call.function.arguments)
+        return result.get("categories", [])
 
     async def generate(
         self,
         initiative,
         existing_plan: dict | None = None,
         user_request: str | None = None,
+        approved_categories: list[dict] | None = None,
     ) -> dict:
-        """Generate (or refresh) a 3-pillar project plan."""
-        evidence_text = await self._gather_evidence_text(initiative.id)
+        """Generate (or refresh) a project plan.
+
+        When *approved_categories* is provided the LLM is instructed to produce
+        items ONLY for those categories instead of the default three pillars.
+        """
+        evidence_text, web_research = await asyncio.gather(
+            self._gather_evidence_text(initiative.id),
+            self._gather_web_research(initiative, approved_categories=approved_categories),
+        )
         deliverables_summary = self._summarize_deliverables(initiative.deliverables)
 
         user_content = self._build_user_prompt(
@@ -234,9 +355,24 @@ class ProjectPlanService:
             deliverables_summary=deliverables_summary,
             existing_plan=existing_plan,
             user_request=user_request,
+            web_research=web_research,
+            approved_categories=approved_categories,
         )
 
         system = SYSTEM_PROMPT
+        if approved_categories:
+            cats_desc = "\n".join(
+                f"- **{c['name']}** (`{c['id']}`): {c.get('summary', '')}"
+                for c in approved_categories
+            )
+            system += f"""
+
+## APPROVED CATEGORIES (use these instead of the default three pillars)
+The user has confirmed the following categories. Produce items ONLY for these pillars,
+using the exact IDs and names below. Do NOT add or remove pillars.
+
+{cats_desc}
+"""
         if existing_plan:
             system += "\n\n" + REFRESH_ADDENDUM
 
@@ -254,15 +390,16 @@ class ProjectPlanService:
         tool_call = response.choices[0].message.tool_calls[0]
         plan_data = json.loads(tool_call.function.arguments)
 
-        # Canonical pillar names — never let the LLM drift these
-        PILLAR_NAMES = {
-            "authorization": "Authorization",
-            "capital": "Capital",
-            "design": "Design",
-        }
-        for pillar in plan_data.get("pillars", []):
-            if pillar.get("id") in PILLAR_NAMES:
-                pillar["name"] = PILLAR_NAMES[pillar["id"]]
+        if not approved_categories:
+            # Legacy path: enforce canonical names for the default pillars
+            PILLAR_NAMES = {
+                "authorization": "Authorization",
+                "capital": "Capital",
+                "design": "Design",
+            }
+            for pillar in plan_data.get("pillars", []):
+                if pillar.get("id") in PILLAR_NAMES:
+                    pillar["name"] = PILLAR_NAMES[pillar["id"]]
 
         return {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -309,6 +446,62 @@ class ProjectPlanService:
 
         return "\n".join(parts)
 
+    async def _gather_web_research(
+        self, initiative, approved_categories: list[dict] | None = None,
+    ) -> str:
+        """Run web searches for each pillar area to ground plan items in authoritative sources."""
+        geography = initiative.geography or ""
+        project_type = initiative.project_type or ""
+        desc_snippet = (initiative.project_description or "")[:200]
+
+        geo_tag = f" in {geography}" if geography else ""
+        type_tag = f" {project_type}" if project_type else ""
+
+        if approved_categories:
+            queries = [
+                f"{cat['name']}{type_tag} requirements deliverables{geo_tag}"
+                for cat in approved_categories[:4]
+            ]
+        else:
+            queries = [
+                f"environmental permits regulatory approvals{type_tag} projects{geo_tag} official requirements",
+                f"climate finance funding mechanisms grants{type_tag}{geo_tag} application requirements",
+                f"environmental impact assessment feasibility study requirements{type_tag}{geo_tag}",
+            ]
+        if desc_snippet:
+            queries.append(
+                f"{desc_snippet}{geo_tag} permit certification requirements"
+            )
+
+        try:
+            results = await asyncio.gather(
+                *[self.retrieval.search_web(q, max_results=10, max_content_length=600) for q in queries]
+            )
+
+            pillar_labels = (
+                [c["name"] for c in approved_categories] if approved_categories
+                else ["Authorization", "Capital", "Design"]
+            )
+            sections: list[str] = []
+            for i, facts in enumerate(results):
+                if not facts:
+                    continue
+                label = pillar_labels[i] if i < len(pillar_labels) else "General"
+                lines = []
+                for f in facts[:8]:
+                    url_ref = f" ({f.source_url})" if f.source_url else ""
+                    lines.append(f"- [{f.source_title}{url_ref}]: {f.content[:500]}")
+                sections.append(f"### {label} Research\n" + "\n".join(lines))
+
+            if not sections:
+                return "(No web research results retrieved.)"
+
+            return "\n\n".join(sections)
+
+        except Exception as exc:
+            logger.warning("Web research for plan generation failed: %s", exc)
+            return "(Web research unavailable.)"
+
     def _summarize_deliverables(self, deliverables: dict | None) -> str:
         if not deliverables:
             return "(No outputs generated yet.)"
@@ -327,13 +520,16 @@ class ProjectPlanService:
         deliverables_summary: str,
         existing_plan: dict | None,
         user_request: str | None = None,
+        web_research: str = "",
+        approved_categories: list[dict] | None = None,
     ) -> str:
         desc = initiative.project_description or "(No description provided.)"
         project_type = initiative.project_type or "unclassified"
         geography = initiative.geography or "unspecified"
         title = initiative.title or "Untitled Project"
 
-        prompt = f"""Analyze the following project and produce a 3-pillar Project Plan.
+        n_pillars = len(approved_categories) if approved_categories else 3
+        prompt = f"""Analyze the following project and produce a {n_pillars}-pillar Project Plan.
 
 PROJECT: {title}
 TYPE: {project_type}
@@ -347,6 +543,11 @@ UPLOADED DOCUMENTS:
 
 EXISTING GENERATED OUTPUTS:
 {deliverables_summary}
+
+WEB RESEARCH (authoritative sources retrieved from the web — use these to ground
+item titles, classifications, and rationales; cite specific regulations, agencies,
+and standards found here):
+{web_research or "(No web research available.)"}
 """
 
         if existing_plan:

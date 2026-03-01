@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -57,6 +57,7 @@ interface InitiativeState {
   _refreshPlanInBackground: (id: string) => Promise<void>;
   loadProjectPlan: (id: string) => Promise<void>;
   generateProjectPlan: (id: string) => Promise<void>;
+  confirmPlanCategories: (id: string, categories: ProposedCategory[]) => Promise<void>;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
   reset: () => void;
@@ -636,6 +637,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
 
   // Load project plan
   loadProjectPlan: async (id: string) => {
+    set({ projectPlan: null });
     try {
       const response = await api.getProjectPlan(id);
       set({ projectPlan: response.project_plan });
@@ -650,6 +652,25 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     try {
       const response = await api.generateProjectPlan(id);
       set({ projectPlan: response.project_plan, projectPlanLoading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to generate project plan',
+        projectPlanLoading: false,
+      });
+    }
+  },
+
+  // Confirm proposed categories and generate the full plan
+  confirmPlanCategories: async (id: string, categories: ProposedCategory[]) => {
+    set({ projectPlanLoading: true, error: null });
+    try {
+      const response = await api.confirmPlanCategories(id, categories);
+      const initiative = await api.getInitiative(id);
+      set({
+        projectPlan: response.project_plan,
+        initiative,
+        projectPlanLoading: false,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to generate project plan',

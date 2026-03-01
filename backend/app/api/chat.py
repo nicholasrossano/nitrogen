@@ -313,39 +313,13 @@ async def execute_action(
 
     elif action == "generate_project_plan":
         plan_service = ProjectPlanService(db)
-        existing_plan = initiative.project_plan
         try:
-            plan_data = await plan_service.generate(
-                initiative=initiative,
-                existing_plan=existing_plan,
-            )
-            initiative.project_plan = plan_data
-            if initiative.stage in (InitiativeStage.DESCRIBE,):
-                initiative.stage = InitiativeStage.PLAN
-            await db.commit()
-            await db.refresh(initiative)
-
-            total_items = sum(
-                len(p.get("items", [])) for p in plan_data.get("pillars", [])
-            )
-            widget_type = "project_plan"
-            widget_data = {
-                "plan": plan_data,
-                "summary": {
-                    "total_items": total_items,
-                    "pillars": [
-                        {
-                            "id": p["id"],
-                            "name": p["name"],
-                            "item_count": len(p.get("items", [])),
-                        }
-                        for p in plan_data.get("pillars", [])
-                    ],
-                },
-            }
+            categories = await plan_service.propose_categories(initiative=initiative)
+            widget_type = "plan_categories"
+            widget_data = {"categories": categories}
         except Exception as e:
-            logger.error(f"Project plan generation failed: {e}", exc_info=True)
-            assistant_response = "I wasn't able to generate the project plan right now. Could you provide a bit more detail about your project so I can try again?"
+            logger.error(f"Category proposal failed: {e}", exc_info=True)
+            assistant_response = "I wasn't able to analyze the project right now. Could you provide a bit more detail so I can try again?"
             widget_type = None
             widget_data = None
 
