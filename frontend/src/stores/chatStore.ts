@@ -79,7 +79,6 @@ export const useChatStore = create<ChatState>()(
       phase: 'landing',
       sessions: [],
       messageFeedback: {},
-      currentDbSessionId: null,
       ...BLANK_TRANSIENT,
 
       sendMessage: async (content: string) => {
