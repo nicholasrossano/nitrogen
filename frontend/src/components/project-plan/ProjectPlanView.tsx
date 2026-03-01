@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, LayoutGrid } from 'lucide-react';
+import { Loader2, LayoutGrid, MessageSquare } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
@@ -59,11 +59,9 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     projectPlanLoading,
     error,
     loadProjectPlan,
-    generateProjectPlan,
     deletePlanItem,
   } = useInitiativeStore();
 
-  const hasTriggeredGenerate = useRef(false);
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
@@ -83,14 +81,6 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const deepDiveCache = useMemo<Record<string, DeepDiveResult>>(() => {
     return { ...(projectPlan?.deep_dives ?? {}), ...localCache };
   }, [projectPlan?.deep_dives, localCache]);
-
-  // Auto-generate when opened and no plan exists
-  useEffect(() => {
-    if (!projectPlanLoading && !projectPlan && !hasTriggeredGenerate.current) {
-      hasTriggeredGenerate.current = true;
-      generateProjectPlan(initiativeId);
-    }
-  }, [projectPlan, projectPlanLoading, initiativeId, generateProjectPlan]);
 
   const runDeepDive = useCallback(
     async (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
@@ -216,41 +206,33 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     [initiativeId, deepDiveCache, projectPlan]
   );
 
-  // Loading state during generation
+  // Loading state during generation (triggered via confirm-categories)
   if (projectPlanLoading && !projectPlan) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8 bg-white">
         <Loader2 className="w-6 h-6 animate-spin text-accent mb-3" />
-        <p className="text-sm text-text-secondary">Analyzing project...</p>
+        <p className="text-sm text-text-secondary">Building your project plan...</p>
         <p className="text-xs text-text-tertiary mt-1">
-          Building your project needs map
+          This usually takes 15–30 seconds
         </p>
       </div>
     );
   }
 
-  // Error state with no plan to show
-  if (!projectPlan && error) {
+  // No plan yet — prompt user to go through the chat flow
+  if (!projectPlan) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8 bg-white">
         <div className="w-14 h-14 bg-surface-subtle rounded flex items-center justify-center mb-4">
-          <LayoutGrid className="w-7 h-7 text-text-tertiary" />
+          <MessageSquare className="w-7 h-7 text-text-tertiary" />
         </div>
-        <p className="text-sm text-text-secondary mb-1">
-          Couldn&apos;t generate the project plan
+        <p className="text-sm text-text-secondary mb-1">No project plan yet</p>
+        <p className="text-xs text-text-tertiary text-center max-w-xs">
+          Describe your project in the chat and confirm the proposed categories to generate your plan.
         </p>
-        <p className="text-xs text-indicator-orange">{error}</p>
-        <button
-          onClick={() => generateProjectPlan(initiativeId)}
-          className="btn-secondary text-xs mt-4"
-        >
-          Try again
-        </button>
       </div>
     );
   }
-
-  if (!projectPlan) return null;
 
   const pillars = projectPlan.pillars || [];
 

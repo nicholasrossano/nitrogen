@@ -23,7 +23,7 @@ const CLASSIFICATION_STYLES: Record<Classification, {
 }> = {
   required: {
     dot: 'bg-accent',
-    card: 'border-accent/30 bg-accent-wash/20',
+    card: 'border-stroke-subtle bg-white',
     badge: 'bg-accent/10 text-accent',
     label: 'REQ',
   },
@@ -35,7 +35,7 @@ const CLASSIFICATION_STYLES: Record<Classification, {
   },
   unknown: {
     dot: 'bg-accent',
-    card: 'border-indicator-orange/20 bg-indicator-orange/5',
+    card: 'border-stroke-subtle bg-white',
     badge: 'bg-indicator-orange/10 text-indicator-orange',
     label: 'UNK',
   },

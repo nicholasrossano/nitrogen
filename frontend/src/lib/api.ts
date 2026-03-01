@@ -181,6 +181,14 @@ export interface AlignmentResponse {
   message: string;
 }
 
+// Plan category proposal types (approval stage)
+export interface ProposedCategory {
+  id: string;
+  name: string;
+  summary: string;
+  icon?: string;
+}
+
 // Project Plan types
 export interface ProjectPlanItem {
   id: string;
@@ -620,6 +628,15 @@ export const api = {
     fetchApi<{ project_plan: ProjectPlan }>(
       `/api/v1/initiatives/${initiativeId}/project-plan`,
       { method: 'POST' }
+    ),
+
+  confirmPlanCategories: (initiativeId: string, categories: ProposedCategory[]) =>
+    fetchApi<{ project_plan: ProjectPlan }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan/confirm-categories`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ categories }),
+      }
     ),
 
   updatePlanItemStatus: (

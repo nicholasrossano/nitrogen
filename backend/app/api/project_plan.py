@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import MockUser, get_current_user
 from app.core.database import get_db
-from app.models.initiative import Initiative
+from app.models.initiative import Initiative, InitiativeStage
 from app.services.deep_dive import DeepDiveService
 from app.services.project_plan import ProjectPlanService
 
@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 class StatusUpdate(BaseModel):
     status: str  # not_started | in_progress | complete
+
+
+class ConfirmCategoriesRequest(BaseModel):
+    categories: list[dict]  # [{id, name, summary}, ...]
 
 
 class DeepDiveRequest(BaseModel):
@@ -89,6 +93,70 @@ async def generate_project_plan(
         )
 
     initiative.project_plan = plan
+    flag_modified(initiative, "project_plan")
+    initiative.touch()
+    await db.commit()
+
+    return {"project_plan": plan}
+
+
+@router.post("/initiatives/{initiative_id}/project-plan/propose-categories")
+async def propose_plan_categories(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Propose high-level plan categories adapted to the project."""
+    initiative = await _get_initiative(initiative_id, user, db)
+
+    if not initiative.project_description and not initiative.title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project needs a description before categories can be proposed.",
+        )
+
+    service = ProjectPlanService(db)
+    try:
+        categories = await service.propose_categories(initiative=initiative)
+    except Exception:
+        logger.exception("Category proposal failed for %s", initiative_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Category proposal failed. Please try again.",
+        )
+
+    return {"categories": categories}
+
+
+@router.post("/initiatives/{initiative_id}/project-plan/confirm-categories")
+async def confirm_plan_categories(
+    initiative_id: UUID,
+    body: ConfirmCategoriesRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Accept confirmed categories and generate the full project plan."""
+    initiative = await _get_initiative(initiative_id, user, db)
+
+    service = ProjectPlanService(db)
+    existing_plan = initiative.project_plan
+
+    try:
+        plan = await service.generate(
+            initiative=initiative,
+            existing_plan=existing_plan,
+            approved_categories=body.categories,
+        )
+    except Exception:
+        logger.exception("Plan generation (with categories) failed for %s", initiative_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Plan generation failed. Please try again.",
+        )
+
+    initiative.project_plan = plan
+    if initiative.stage in (InitiativeStage.DESCRIBE,):
+        initiative.stage = InitiativeStage.PLAN
     flag_modified(initiative, "project_plan")
     initiative.touch()
     await db.commit()

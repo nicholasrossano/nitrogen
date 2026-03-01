@@ -178,7 +178,7 @@ function InitiativePageContent() {
         onTitleUpdate={handleTitleUpdate}
         showProjectPlan={showProjectPlan}
         onToggleProjectPlan={handleToggleProjectPlan}
-        hasProjectPlan={!!initiative.project_plan}
+        hasProjectPlan={!!projectPlan}
         showChatPanel={showChatPanel}
         onToggleChatPanel={handleToggleChatPanel}
         showInspector={showInspector}

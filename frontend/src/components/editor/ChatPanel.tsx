@@ -10,6 +10,7 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { X, Plus, Clock, Trash2, MessageSquare } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 import { MessageVariants } from '@/components/chat/MessageVariants';
+import { Loader2 } from 'lucide-react';
 
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
@@ -19,6 +20,7 @@ import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
+import { PlanCategoriesWidget } from '@/components/widgets/PlanCategoriesWidget';
 import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
@@ -42,6 +44,7 @@ const CHAT_WIDGET_TYPES = [
   'deliverables_overview',
   'alignment',
   'project_plan',
+  'plan_categories',
   'lcoe_inputs',
   'lcoe_output',
   'carbon_inputs',
@@ -501,55 +504,44 @@ function ChatMessageItem({
   hasOutputWidget?: boolean;
   onSendMessage?: (content: string) => void;
 }) {
-  if (!message) return null;
-
-  const isUser = message.role === 'user';
-  const shouldShowWidget =
-    message.widget_type &&
-    message.widget_data &&
-    CHAT_WIDGET_TYPES.includes(message.widget_type);
-  const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
-  const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
-
   const {
     messageFeedback,
     messageVariants,
     retryingMessageId,
+    streamingMessageId,
     editMessage,
     retryMessage,
     setMessageFeedback,
     setVariantIndex,
   } = useInitiativeStore();
 
+  const isStreaming = message.id === streamingMessageId;
+
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(message.content);
+  const [editValue, setEditValue] = useState(message?.content ?? '');
   const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
-
-  const feedback = messageFeedback[message.id] ?? null;
-  const isRetrying = retryingMessageId === message.id;
-  const variantEntry = messageVariants[message.id] ?? null;
 
   const handleEditStart = useCallback(() => {
     if (bubbleRef.current) {
       setBubbleWidth(bubbleRef.current.offsetWidth);
     }
-    setEditValue(message.content);
+    setEditValue(message?.content ?? '');
     setIsEditing(true);
-  }, [message.content]);
+  }, [message?.content]);
 
   const handleEditSave = useCallback(async () => {
     const trimmed = editValue.trim();
-    if (!trimmed || trimmed === message.content) { setIsEditing(false); return; }
+    if (!trimmed || trimmed === message?.content) { setIsEditing(false); return; }
     setIsEditing(false);
     await editMessage(initiativeId, message.id, trimmed);
-  }, [editValue, message.content, message.id, initiativeId, editMessage]);
+  }, [editValue, message?.content, message?.id, initiativeId, editMessage]);
 
   const handleEditCancel = useCallback(() => {
     setIsEditing(false);
-    setEditValue(message.content);
-  }, [message.content]);
+    setEditValue(message?.content ?? '');
+  }, [message?.content]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -561,12 +553,26 @@ function ChatMessageItem({
     }
   }, [isEditing]);
 
+  if (!message) return null;
+
+  const isUser = message.role === 'user';
+  const shouldShowWidget =
+    message.widget_type &&
+    message.widget_data &&
+    CHAT_WIDGET_TYPES.includes(message.widget_type);
+  const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
+  const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
+
+  const feedback = messageFeedback[message.id] ?? null;
+  const isRetrying = retryingMessageId === message.id;
+  const variantEntry = messageVariants[message.id] ?? null;
+
   return (
     <div className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`relative flex flex-col ${isUser ? 'max-w-[90%] items-end' : 'w-full items-start'}`}>
 
-        {/* Floating toolbar */}
-        {!isEditing && (
+        {/* Floating toolbar — hidden while streaming */}
+        {!isEditing && !isStreaming && (
           <div className={`absolute z-10 flex items-center transition-opacity ${isUser ? 'right-0 -bottom-5 opacity-0 group-hover:opacity-100' : 'left-3 -bottom-5'}`}>
             {isUser ? (
               <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
@@ -602,6 +608,11 @@ function ChatMessageItem({
               <button onClick={handleEditCancel} className="text-xs text-text-tertiary hover:text-text-secondary transition-colors">Cancel</button>
               <button onClick={handleEditSave} className="text-xs text-accent hover:text-accent-anchor font-medium transition-colors">Save & regenerate</button>
             </div>
+          </div>
+        ) : !isUser && isStreaming && !message.content ? (
+          <div className="flex items-center gap-2 text-xs text-text-tertiary py-1">
+            <Loader2 className="w-3 h-3 animate-spin text-accent shrink-0" />
+            <span>Thinking...</span>
           </div>
         ) : (
           <div ref={isUser ? bubbleRef : undefined} className={`rounded-lg px-3 py-2 text-sm ${isUser ? 'bg-zinc-700 text-white' : 'bg-white text-text-primary'}`}>
@@ -703,6 +714,12 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'plan_categories':
+      return (
+        <ErrorBoundary>
+          <PlanCategoriesWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
     case 'lcoe_inputs':
