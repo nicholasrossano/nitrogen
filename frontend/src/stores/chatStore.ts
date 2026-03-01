@@ -262,11 +262,10 @@ export const useChatStore = create<ChatState>()(
             sessions: [session, ...sessions].slice(0, 20),
             messages: [],
             phase: 'landing',
-            currentDbSessionId: null,
             ...BLANK_TRANSIENT,
           });
         } else {
-          set({ messages: [], phase: 'landing', currentDbSessionId: null, ...BLANK_TRANSIENT });
+          set({ messages: [], phase: 'landing', ...BLANK_TRANSIENT });
         }
       },
 
