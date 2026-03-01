@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { ArrowUp, X } from 'lucide-react';
+import { ArrowUp, X, Paperclip } from 'lucide-react';
 
 interface ChatInputProps {
   initiativeId?: string;
@@ -10,6 +10,7 @@ interface ChatInputProps {
   stage?: string;
   placeholder?: string;
   onSend?: (content: string) => void;
+  noShadow?: boolean;
 }
 
 export function ChatInput({ 
@@ -18,10 +19,13 @@ export function ChatInput({
   stage,
   placeholder: customPlaceholder,
   onSend,
+  noShadow = false,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { sendMessage } = useInitiativeStore();
 
   useEffect(() => {
@@ -54,12 +58,25 @@ export function ChatInput({
     const message = input.trim();
     setInput('');
     setDraftTag(null);
+    setAttachedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     
     if (onSend) {
       onSend(message);
     } else if (initiativeId) {
       await sendMessage(initiativeId, message);
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...files]);
+    }
+  };
+
+  const removeAttachedFile = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -80,7 +97,7 @@ export function ChatInput({
     <form onSubmit={handleSubmit} className="relative">
       <div
         className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
-        style={{ boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
+        style={noShadow ? undefined : { boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
       >
         {draftTag && (
           <div className="px-3 pt-2.5 pb-1 flex items-center">
@@ -97,7 +114,30 @@ export function ChatInput({
             </span>
           </div>
         )}
-        <div className="relative flex items-center">
+
+        {attachedFiles.length > 0 && (
+          <div className="px-3 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+            {attachedFiles.map((file, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
+              >
+                <Paperclip className="w-2.5 h-2.5 shrink-0" />
+                <span className="truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachedFile(i)}
+                  className="hover:opacity-60 transition-opacity shrink-0"
+                  aria-label="Remove file"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="relative">
           <textarea
             ref={textareaRef}
             value={input}
@@ -106,10 +146,27 @@ export function ChatInput({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+            className="w-full resize-none bg-transparent px-4 py-3 pb-8 pr-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           />
-          <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
+          <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+              aria-label="Attach files"
+            />
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => fileInputRef.current?.click()}
+              className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+              aria-label="Attach files"
+            >
+              <Paperclip className="w-[13px] h-[13px]" />
+            </button>
             <button
               type="submit"
               disabled={disabled || !input.trim()}

@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  Paperclip,
 } from 'lucide-react';
 import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
@@ -41,8 +42,10 @@ export function ConversationView() {
 
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const prevCount = useRef(0);
 
   useEffect(() => {
@@ -81,6 +84,17 @@ export function ConversationView() {
     sendMessage(input.trim());
     setInput('');
     setDraftTag(null);
+    setAttachedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) setAttachedFiles((prev) => [...prev, ...files]);
+  };
+
+  const removeAttachedFile = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -170,7 +184,30 @@ export function ConversationView() {
                 </span>
               </div>
             )}
-            <div className="relative flex items-center">
+
+            {attachedFiles.length > 0 && (
+              <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+                {attachedFiles.map((file, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
+                  >
+                    <Paperclip className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachedFile(i)}
+                      className="hover:opacity-60 transition-opacity shrink-0"
+                      aria-label="Remove file"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -179,10 +216,27 @@ export function ConversationView() {
                 placeholder="Ask anything"
                 disabled={sending}
                 rows={1}
-                className="w-full resize-none bg-transparent px-5 py-3 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+                className="w-full resize-none bg-transparent px-5 py-3 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
-              <div className="absolute right-3 top-0 bottom-0 flex items-center pointer-events-none [&>*]:pointer-events-auto">
+              <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileChange}
+                  aria-label="Attach files"
+                />
+                <button
+                  type="button"
+                  disabled={sending}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                  aria-label="Attach files"
+                >
+                  <Paperclip className="w-[13px] h-[13px]" />
+                </button>
                 <button
                   type="submit"
                   disabled={sending || !input.trim()}
