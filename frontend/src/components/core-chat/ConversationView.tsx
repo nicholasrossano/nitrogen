@@ -2,6 +2,8 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import {
   ArrowUp,
   BookOpen,
@@ -21,8 +23,16 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { CBAInputsWidget } from '@/components/widgets/CBAInputsWidget';
+import { CBAOutputWidget } from '@/components/widgets/CBAOutputWidget';
 import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
+
+function preprocessMath(content: string): string {
+  return content
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, math: string) => `$$${math}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_: string, math: string) => `$${math}$`);
+}
 
 export function ConversationView() {
   const {
@@ -140,8 +150,12 @@ export function ConversationView() {
                 />
                 {streamingContent && (
                   <div className="prose-chat">
-                    <ReactMarkdown components={streamingMarkdownComponents}>
-                      {streamingContent}
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={streamingMarkdownComponents}
+                    >
+                      {preprocessMath(streamingContent)}
                     </ReactMarkdown>
                   </div>
                 )}
@@ -569,8 +583,12 @@ function MessageBubble({
           </div>
         ) : (
           <div className="prose-chat">
-            <ReactMarkdown components={mdComponents}>
-              {message.content}
+            <ReactMarkdown
+              remarkPlugins={[remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+              components={mdComponents}
+            >
+              {preprocessMath(message.content)}
             </ReactMarkdown>
           </div>
         )}
@@ -608,6 +626,10 @@ function ComplianceChatWidget({
       return <CarbonInputsWidget data={data} initiativeId="" isActive />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId="" isActive />;
+    case 'cba_inputs':
+      return <CBAInputsWidget data={data} initiativeId="" isActive />;
+    case 'cba_output':
+      return <CBAOutputWidget data={data} initiativeId="" isActive />;
     default:
       return null;
   }
