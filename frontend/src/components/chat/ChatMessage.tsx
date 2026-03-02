@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { ChatMessage as ChatMessageType, SourceCitation } from '@/lib/api';
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
@@ -18,10 +20,18 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { CBAInputsWidget } from '@/components/widgets/CBAInputsWidget';
+import { CBAOutputWidget } from '@/components/widgets/CBAOutputWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
 import { MessageVariants } from './MessageVariants';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+
+function preprocessMath(content: string): string {
+  return content
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, math: string) => `$$${math}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_: string, math: string) => `$${math}$`);
+}
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -213,6 +223,8 @@ export function ChatMessage({
               </p>
             ) : (
               <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
                 components={{
                   p: ({ children }) => <p className="text-sm leading-relaxed">{children}</p>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
@@ -229,7 +241,7 @@ export function ChatMessage({
                   blockquote: ({ children }) => <blockquote className="border-l border-divider pl-3 text-text-secondary">{children}</blockquote>,
                 }}
               >
-                {message.content}
+                {preprocessMath(message.content)}
               </ReactMarkdown>
             )}
           </div>
@@ -398,6 +410,10 @@ function MessageWidget({
       return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'cba_inputs':
+      return <CBAInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'cba_output':
+      return <CBAOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:
       return null;
   }
