@@ -903,6 +903,14 @@ textarea {
   animation: thinkingStageEnter 200ms ease-out forwards;
 }
 
+/* KaTeX equation sizing — match surrounding body text */
+.katex {
+  font-size: 0.9em !important;
+}
+.katex-display {
+  font-size: 0.9em !important;
+}
+
 /* Reduced-motion: disable all chat-specific animations */
 @media (prefers-reduced-motion: reduce) {
   .thinking-stage-enter,
