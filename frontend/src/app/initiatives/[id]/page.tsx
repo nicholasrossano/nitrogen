@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { ProjectHeader, ChatPanel } from '@/components/editor';
+import { ProjectHeader, ChatPanel, EditorSidePanel, EDITOR_WIDGET_TYPES } from '@/components/editor';
+import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
@@ -21,7 +22,7 @@ function InitiativePageContent() {
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [showProjectPlan, setShowProjectPlan] = useState(false);
+  const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
   const [showChatPanel, setShowChatPanel] = useState(true);
   const [showInspector, setShowInspector] = useState(false);
   const [hasInspectorItem, setHasInspectorItem] = useState(false);
@@ -42,6 +43,29 @@ function InitiativePageContent() {
     updateTitle,
   } = useInitiativeStore();
 
+  const editorWidgets: EditorWidget[] = useMemo(
+    () =>
+      messages
+        .filter(
+          (m) =>
+            m.widget_type &&
+            m.widget_data &&
+            (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
+        )
+        .map((m) => ({
+          type: m.widget_type!,
+          data: m.widget_data!,
+          messageId: m.id,
+        })),
+    [messages],
+  );
+
+  const hasEditorContent = editorWidgets.length > 0;
+  const hasProjectPlan = !!projectPlan;
+  const showProjectPlan = rightPanel === 'project_plan';
+  const showEditor = rightPanel === 'editor';
+  const rightPanelOpen = rightPanel !== 'closed';
+
   useEffect(() => {
     if (initiativeId) {
       loadInitiative(initiativeId);
@@ -56,10 +80,19 @@ function InitiativePageContent() {
   useEffect(() => {
     const hasPlan = !!projectPlan;
     if (hasPlan && !prevPlanRef.current) {
-      setShowProjectPlan(true);
+      setRightPanel('project_plan');
     }
     prevPlanRef.current = hasPlan;
   }, [projectPlan]);
+
+  // Auto-open editor when first widget arrives (only if panel is closed)
+  const prevHadEditor = useRef(false);
+  useEffect(() => {
+    if (hasEditorContent && !prevHadEditor.current && rightPanel === 'closed') {
+      setRightPanel('editor');
+    }
+    prevHadEditor.current = hasEditorContent;
+  }, [hasEditorContent, rightPanel]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing || !containerRef.current) return;
@@ -92,12 +125,19 @@ function InitiativePageContent() {
     };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
-  const handleToggleProjectPlan = () => {
-    setShowProjectPlan(prev => {
-      if (!prev) {
-        setShowChatPanel(true); // always restore chat when re-opening plan
+  const handleToggleRightPanel = () => {
+    setRightPanel((prev) => {
+      if (prev === 'closed') {
+        setShowChatPanel(true);
+        return hasProjectPlan ? 'project_plan' : 'editor';
       }
-      return !prev;
+      if (prev === 'project_plan') {
+        if (hasEditorContent) return 'editor';
+        return 'closed';
+      }
+      // prev === 'editor'
+      if (hasProjectPlan) return 'project_plan';
+      return 'closed';
     });
   };
 
@@ -141,7 +181,6 @@ function InitiativePageContent() {
   }
 
   if (!initiative) {
-    // Only show error page if there's no initiative and there's an error
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-white">
@@ -176,9 +215,10 @@ function InitiativePageContent() {
       <ProjectHeader 
         initiative={initiative} 
         onTitleUpdate={handleTitleUpdate}
-        showProjectPlan={showProjectPlan}
-        onToggleProjectPlan={handleToggleProjectPlan}
-        hasProjectPlan={!!projectPlan}
+        rightPanel={rightPanel}
+        onToggleRightPanel={handleToggleRightPanel}
+        hasProjectPlan={hasProjectPlan}
+        hasEditorContent={hasEditorContent}
         showChatPanel={showChatPanel}
         onToggleChatPanel={handleToggleChatPanel}
         showInspector={showInspector}
@@ -188,7 +228,7 @@ function InitiativePageContent() {
 
       {/* Main content area */}
       <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
-        {showProjectPlan ? (
+        {rightPanelOpen ? (
           <>
             {/* Chat Panel - Left side (resizable, collapsible) */}
             <div
@@ -205,7 +245,7 @@ function InitiativePageContent() {
                   generating={generating}
                   initiativeId={initiativeId}
                   onSendMessage={handleSendMessage}
-                  hasProjectPlan={!!projectPlan}
+                  hasProjectPlan={hasProjectPlan}
                 />
               </div>
 
@@ -222,13 +262,21 @@ function InitiativePageContent() {
               )}
             </div>
 
-            {/* Project Plan - Right side */}
+            {/* Right side: Project Plan or Editor */}
             <div className="flex-1 overflow-hidden">
-              <ProjectPlanView
-                initiativeId={initiativeId}
-                showInspector={showInspector}
-                onInspectorChange={handleInspectorChange}
-              />
+              {showProjectPlan && (
+                <ProjectPlanView
+                  initiativeId={initiativeId}
+                  showInspector={showInspector}
+                  onInspectorChange={handleInspectorChange}
+                />
+              )}
+              {showEditor && (
+                <EditorSidePanel
+                  widgets={editorWidgets}
+                  initiativeId={initiativeId}
+                />
+              )}
             </div>
           </>
         ) : (
@@ -241,7 +289,7 @@ function InitiativePageContent() {
               initiativeId={initiativeId}
               onSendMessage={handleSendMessage}
               fullWidth={true}
-              hasProjectPlan={!!projectPlan}
+              hasProjectPlan={hasProjectPlan}
             />
           </div>
         )}
