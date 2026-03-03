@@ -20,10 +20,6 @@ import { ToolPicker, ToolChip, type ToolOption } from '@/components/chat/ToolPic
 import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
-import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
-import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
-import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
-import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
@@ -637,14 +633,6 @@ function ComplianceChatWidget({
   data: Record<string, any>;
 }) {
   switch (type) {
-    case 'lcoe_inputs':
-      return <LCOEInputsWidget data={data} initiativeId="" isActive />;
-    case 'lcoe_output':
-      return <LCOEOutputWidget data={data} initiativeId="" isActive />;
-    case 'carbon_inputs':
-      return <CarbonInputsWidget data={data} initiativeId="" isActive />;
-    case 'carbon_output':
-      return <CarbonOutputWidget data={data} initiativeId="" isActive />;
     default:
       return null;
   }
