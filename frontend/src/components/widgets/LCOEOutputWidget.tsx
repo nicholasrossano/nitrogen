@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calculator,
   Download,
@@ -57,6 +58,12 @@ export function LCOEOutputWidget({
   const [confirmingFields, setConfirmingFields] = useState<Set<string>>(new Set());
   const [preConfirmStatuses, setPreConfirmStatuses] = useState<Record<string, string>>({});
 
+  const [hoveredRowInp, setHoveredRowInp] = useState<any>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [overInteractive, setOverInteractive] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const result = data?.result;
   const inputs = useMemo(() => data?.inputs || {}, [data]);
   const sensitivity: any[] = data?.sensitivity || [];
@@ -112,6 +119,10 @@ export function LCOEOutputWidget({
     },
     [commitEdit, cancelEdit]
   );
+
+  const investigate = useCallback((label: string) => {
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Can you help me investigate and estimate a value for ${label}?`, label } }));
+  }, []);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
     const isConfirmed = currentStatus === 'confirmed';
@@ -177,6 +188,7 @@ export function LCOEOutputWidget({
   ];
 
   return (
+    <>
     <div className="card-elevated overflow-hidden">
       {/* Header */}
       <div className="px-5 py-5 bg-surface-header border-b border-divider">
@@ -300,6 +312,18 @@ export function LCOEOutputWidget({
                   return (
                     <div
                       key={inp.field_name}
+                      onMouseMove={(e) => {
+                        const isInteractive = !!(e.target as HTMLElement).closest('button, input, a');
+                        setOverInteractive(isInteractive);
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                        setHoveredRowInp(inp);
+                      }}
+                      onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('button, input, a')) return;
+                        investigate(inp.label);
+                      }}
+                      style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto` : undefined }}
                       className={`px-5 py-2.5 flex items-center gap-3 ${
                         isMissing ? 'bg-red-50/40' : 'bg-white'
                       }`}
@@ -512,5 +536,16 @@ export function LCOEOutputWidget({
         </button>
       </div>
     </div>
+
+    {mounted && activeTab === 'inputs' && hoveredRowInp && !overInteractive && mousePos && createPortal(
+      <div
+        className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-accent text-white text-[11px] font-medium shadow-md whitespace-nowrap"
+        style={{ left: mousePos.x + 16, top: mousePos.y - 32 }}
+      >
+        Investigate
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
