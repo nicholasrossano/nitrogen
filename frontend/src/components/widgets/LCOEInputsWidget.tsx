@@ -59,14 +59,19 @@ export function LCOEInputsWidget({
 }: LCOEInputsWidgetProps) {
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
-  const investigate = useCallback((label: string) => {
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Can you help me investigate and estimate a value for ${label}?`, label } }));
+  const investigate = useCallback((label: string, status: string) => {
+    const text =
+      status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
+      `Can you help me investigate and estimate a value for ${label}?`;
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
   }, []);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
   );
-  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; top: number } | null>(null);
+  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; status: string; top: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -154,6 +159,7 @@ export function LCOEInputsWidget({
     setHoveredRow({
       field_name: inp.field_name,
       label: inp.label,
+      status: inp.status,
       top: rowRect.top - cardRect.top + rowRect.height / 2,
     });
   }, []);
@@ -324,9 +330,9 @@ export function LCOEInputsWidget({
         {hoveredRow && (
           <button
             onClick={() => {
-              const label = hoveredRow.label;
+              const { label, status } = hoveredRow;
               setHoveredRow(null);
-              investigate(label);
+              investigate(label, status);
             }}
             className="absolute left-2 -translate-y-1/2 text-[11px] font-medium text-accent hover:text-accent-anchor px-2.5 py-1 rounded-md border border-accent/20 bg-white hover:bg-accent-wash shadow-sm transition-all whitespace-nowrap cursor-pointer"
             style={{ top: hoveredRow.top }}

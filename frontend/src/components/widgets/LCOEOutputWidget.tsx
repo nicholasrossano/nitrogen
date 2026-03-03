@@ -120,8 +120,13 @@ export function LCOEOutputWidget({
     [commitEdit, cancelEdit]
   );
 
-  const investigate = useCallback((label: string) => {
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Can you help me investigate and estimate a value for ${label}?`, label } }));
+  const investigate = useCallback((label: string, status: string) => {
+    const text =
+      status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
+      `Can you help me investigate and estimate a value for ${label}?`;
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
   }, []);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
@@ -321,7 +326,7 @@ export function LCOEOutputWidget({
                       onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('button, input, a')) return;
-                        investigate(inp.label);
+                        investigate(inp.label, inp.status);
                       }}
                       style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto` : undefined }}
                       className={`px-5 py-2.5 flex items-center gap-3 ${

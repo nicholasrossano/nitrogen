@@ -127,7 +127,8 @@ function ChatPageContent() {
         <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
           <SideDrawerHeader />
         </div>
-        <header className="flex-1 px-4 py-[7px] flex items-center justify-end bg-white">
+        <header className="flex-1 px-4 py-[7px] flex items-center justify-between bg-white">
+          {/* Left: panel toggles */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setShowSidebar(p => !p)}
@@ -144,15 +145,16 @@ function ChatPageContent() {
             >
               <PanelRight className="w-4 h-4" />
             </button>
-            <button
-              onClick={reset}
-              title="New chat"
-              disabled={phase !== 'conversation'}
-              className={`icon-btn p-1.5 transition-opacity ${phase === 'conversation' ? 'text-text-tertiary' : 'opacity-30 cursor-not-allowed text-text-tertiary'}`}
-            >
-              <SquarePen className="w-4 h-4" />
-            </button>
           </div>
+          {/* Right: actions */}
+          <button
+            onClick={reset}
+            title="New chat"
+            disabled={phase !== 'conversation'}
+            className={`icon-btn p-1.5 transition-opacity ${phase === 'conversation' ? 'text-text-tertiary' : 'opacity-30 cursor-not-allowed text-text-tertiary'}`}
+          >
+            <SquarePen className="w-4 h-4" />
+          </button>
         </header>
       </div>
       <div className="divider-accent shrink-0" />
@@ -195,23 +197,21 @@ function ChatPageContent() {
 
       {/* Editor side panel */}
       {showEditor && hasEditorContent && (
-        <>
-          {/* Drag handle */}
+        <div
+          ref={editorPanelRef}
+          className="flex-shrink-0 border-l border-divider overflow-hidden relative"
+          style={{ width: editorWidth }}
+        >
+          {/* Drag handle overlaid on the border — invisible until hover */}
           <div
             onMouseDown={handleDragStart}
-            className="flex-shrink-0 w-1 cursor-col-resize bg-divider hover:bg-accent transition-colors z-10"
+            className="absolute left-0 top-0 w-1 h-full cursor-col-resize hover:bg-accent/20 transition-colors z-10"
             title="Drag to resize"
           />
-          <div
-            ref={editorPanelRef}
-            className="flex-shrink-0 border-l border-divider overflow-hidden"
-            style={{ width: editorWidth }}
-          >
-            <div className="h-full w-full">
-              <EditorSidePanel widgets={editorWidgets} />
-            </div>
+          <div className="h-full w-full">
+            <EditorSidePanel widgets={editorWidgets} />
           </div>
-        </>
+        </div>
       )}
       </div>
     </div>
