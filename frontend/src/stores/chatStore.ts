@@ -47,7 +47,7 @@ interface ChatState {
   /** DB session UUID — persisted across messages in the same conversation */
   currentDbSessionId: string | null;
 
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, toolHint?: string) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
@@ -81,7 +81,7 @@ export const useChatStore = create<ChatState>()(
       messageFeedback: {},
       ...BLANK_TRANSIENT,
 
-      sendMessage: async (content: string) => {
+      sendMessage: async (content: string, toolHint?: string) => {
         const state = get();
         if (state.sending) return;
 
@@ -185,6 +185,7 @@ export const useChatStore = create<ChatState>()(
               set({ sending: false, error: message, streamingContent: '' });
             },
             get().currentDbSessionId,
+            toolHint,
           );
         } catch (err: any) {
           set({
