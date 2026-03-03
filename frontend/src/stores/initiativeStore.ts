@@ -223,7 +223,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           const finalMessages = chatHistory?.messages || [];
           console.log('sendMessage: setting final messages', { count: finalMessages.length });
           set({ messages: finalMessages });
-        }
+        },
+        toolHint,
       );
     } catch (error) {
       console.error('sendMessage: error', error);
