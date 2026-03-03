@@ -345,22 +345,23 @@ export const api = {
       `/api/v1/initiatives/${initiativeId}/chat`
     ),
 
-  sendMessage: (initiativeId: string, content: string) =>
+  sendMessage: (initiativeId: string, content: string, toolHint?: string) =>
     fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, tool_hint: toolHint ?? null }),
     }),
 
   sendMessageStream: async (
     initiativeId: string,
     content: string,
     onWord: (word: string) => void,
-    onComplete: (message: ChatMessage, stageStatus: any) => void
+    onComplete: (message: ChatMessage, stageStatus: any) => void,
+    toolHint?: string,
   ) => {
     // Call the regular API since backend doesn't support streaming yet
     const response = await fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, tool_hint: toolHint ?? null }),
     });
 
     // Simulate word-by-word streaming for better UX
@@ -721,6 +722,7 @@ export const api = {
     }) => void,
     onError: (message: string) => void,
     session_id?: string | null,
+    toolHint?: string | null,
   ) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -731,7 +733,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content, history, session_id: session_id ?? null }),
+      body: JSON.stringify({ content, history, session_id: session_id ?? null, tool_hint: toolHint ?? null }),
     });
 
     if (!response.ok || !response.body) {

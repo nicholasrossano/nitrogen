@@ -22,7 +22,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.tools.base import BaseTool, ToolDefinition, ToolInput, ToolOutput
+from app.tools.base import (
+    BaseTool,
+    ExecutionModel,
+    ProgressCallback,
+    RefinementModel,
+    ReviewStrategy,
+    ToolDefinition,
+    ToolInput,
+    ToolOutput,
+)
 from app.models.initiative import Initiative
 from app.models.chat import ChatMessage
 from app.services.lcoe_engine import (
@@ -166,15 +175,64 @@ class LCOETool(BaseTool):
         ]
 
     @property
-    def requires_alignment(self) -> bool:
-        return False
+    def review_strategy(self) -> ReviewStrategy:
+        return ReviewStrategy.INPUT_REVIEW
+
+    @property
+    def execution_model(self) -> ExecutionModel:
+        return ExecutionModel.SYNC_COMPUTATION
+
+    @property
+    def refinement_model(self) -> RefinementModel:
+        return RefinementModel.EDIT_AND_RECOMPUTE
+
+    async def extract_inputs_from_text(
+        self,
+        conversation_text: str,
+        tech_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Extract LCOE inputs from raw conversation text via LLM."""
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        try:
+            resp = await client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an energy project analyst. Extract any LCOE-relevant "
+                            "numeric inputs from the conversation below. "
+                            "Only include values that are explicitly stated or clearly implied. "
+                            "Convert units where needed (e.g. MW → kW). "
+                            "For capacity_factor and discount_rate, return as decimals (0-1)."
+                        ),
+                    },
+                    {"role": "user", "content": conversation_text},
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "extract_lcoe_inputs",
+                        "description": "Extract LCOE model inputs from conversation",
+                        "parameters": INPUT_EXTRACTION_SCHEMA,
+                    },
+                }],
+                tool_choice={"type": "function", "function": {"name": "extract_lcoe_inputs"}},
+                temperature=0,
+            )
+            tool_call = resp.choices[0].message.tool_calls[0]
+            extracted = json.loads(tool_call.function.arguments)
+            return {k: v for k, v in extracted.items() if v is not None}
+        except Exception as e:
+            logger.error(f"LCOE input extraction failed: {e}")
+            return {}
 
     async def extract_inputs_from_context(
         self,
         db: AsyncSession,
         initiative_id: UUID,
     ) -> dict[str, Any]:
-        """Use LLM to extract LCOE-relevant numbers from chat history and project context."""
+        """Extract LCOE inputs from DB-stored chat history and project context."""
         result = await db.execute(
             select(Initiative).where(Initiative.id == initiative_id)
         )
@@ -194,52 +252,15 @@ class LCOETool(BaseTool):
             for m in messages[-20:]
         )
 
-        project_context = f"""
-Project type: {initiative.project_type or 'Unknown'}
-Description: {initiative.project_description or 'N/A'}
-Geography: {initiative.geography or 'Not specified'}
-"""
+        project_context = (
+            f"Project type: {initiative.project_type or 'Unknown'}\n"
+            f"Description: {initiative.project_description or 'N/A'}\n"
+            f"Geography: {initiative.geography or 'Not specified'}"
+        )
 
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-        try:
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an energy project analyst. Extract any LCOE-relevant "
-                            "numeric inputs from the conversation and project context below. "
-                            "Only include values that are explicitly stated or clearly "
-                            "implied. Convert units where needed (e.g. MW → kW). "
-                            "For capacity_factor and discount_rate, return as decimals (0-1)."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}",
-                    },
-                ],
-                tools=[{
-                    "type": "function",
-                    "function": {
-                        "name": "extract_lcoe_inputs",
-                        "description": "Extract LCOE model inputs from the provided context",
-                        "parameters": INPUT_EXTRACTION_SCHEMA,
-                    },
-                }],
-                tool_choice={"type": "function", "function": {"name": "extract_lcoe_inputs"}},
-                temperature=0,
-            )
-
-            tool_call = resp.choices[0].message.tool_calls[0]
-            extracted = json.loads(tool_call.function.arguments)
-            return {k: v for k, v in extracted.items() if v is not None}
-
-        except Exception as e:
-            logger.error(f"LCOE input extraction failed: {e}")
-            return {}
+        return await self.extract_inputs_from_text(
+            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}"
+        )
 
     async def execute(
         self,
@@ -290,6 +311,64 @@ Geography: {initiative.geography or 'Not specified'}
             title="LCOE Analysis",
             content=result_data,
         )
+
+    async def execute_from_conversation(
+        self,
+        conversation_text: str,
+        planner_args: dict | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> tuple[str, dict]:
+        """Run LCOE from conversation text — unified path for both chat contexts."""
+
+        async def _progress(msg: str) -> None:
+            if on_progress:
+                await on_progress(msg)
+
+        planner_args = planner_args or {}
+        tech_type = planner_args.get("technology_type")
+
+        await _progress("Extracting inputs from conversation...")
+        extracted = await self.extract_inputs_from_text(conversation_text, tech_type)
+
+        if not tech_type and extracted.get("technology_type"):
+            tech_type = extracted.pop("technology_type", None)
+        extracted.pop("location", None)
+
+        engine_inputs = LCOEEngine.build_default_inputs(
+            tech_type=tech_type,
+            known_values=extracted,
+        )
+
+        missing = LCOEEngine.get_missing_essentials(engine_inputs)
+        computable = LCOEEngine.is_computable(engine_inputs)
+
+        widget_data: dict = {
+            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
+            "missing_essentials": missing,
+            "computable": computable,
+            "technology_type": tech_type,
+        }
+
+        if computable:
+            await _progress("Calculating LCOE...")
+            result = LCOEEngine.calculate(engine_inputs)
+            widget_data["result"] = result.to_dict()
+
+            await _progress("Running sensitivity analysis...")
+            sensitivity = LCOEEngine.run_sensitivity(engine_inputs)
+            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
+            widget_data["is_unruly"] = LCOEEngine.is_unruly(engine_inputs)
+
+            widget_type = "lcoe_output"
+            await _progress(
+                f"LCOE: {result.currency} {result.lcoe:.4f}/kWh "
+                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
+            )
+        else:
+            widget_type = "lcoe_inputs"
+            await _progress(f"Need {len(missing)} more inputs to compute — showing input table")
+
+        return widget_type, widget_data
 
     async def recalculate(
         self,

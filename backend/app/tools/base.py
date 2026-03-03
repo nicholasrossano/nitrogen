@@ -2,9 +2,35 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from enum import Enum
+from typing import Any, Awaitable, Callable, Literal
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+
+ProgressCallback = Callable[[str], Awaitable[None]]
+
+
+class ReviewStrategy(str, Enum):
+    """How the tool handles pre-execution review.
+
+    Both INPUT_REVIEW and OUTLINE_REVIEW present assumptions for the user
+    to inspect — they're the same UX pattern with different content.
+    """
+    NONE = "none"
+    INPUT_REVIEW = "input_review"
+    OUTLINE_REVIEW = "outline_review"
+
+
+class ExecutionModel(str, Enum):
+    """How the tool runs its core computation."""
+    SYNC_COMPUTATION = "sync_computation"
+    ASYNC_LLM_GENERATION = "async_llm_generation"
+
+
+class RefinementModel(str, Enum):
+    """How the user iterates on tool output."""
+    EDIT_AND_RECOMPUTE = "edit_and_recompute"
+    FEEDBACK_AND_REGENERATE = "feedback_and_regenerate"
 
 
 @dataclass
@@ -202,12 +228,24 @@ class BaseTool(ABC):
         return self.required_inputs + self.optional_inputs
     
     @property
+    def review_strategy(self) -> ReviewStrategy:
+        """How this tool presents its plan for user review before executing."""
+        return ReviewStrategy.NONE
+
+    @property
+    def execution_model(self) -> ExecutionModel:
+        """Whether execution is deterministic computation or LLM generation."""
+        return ExecutionModel.SYNC_COMPUTATION
+
+    @property
+    def refinement_model(self) -> RefinementModel:
+        """How the user iterates on this tool's output."""
+        return RefinementModel.EDIT_AND_RECOMPUTE
+
+    @property
     def requires_alignment(self) -> bool:
-        """Whether this tool requires user alignment before generation.
-        
-        Override in subclass to enable alignment workflow.
-        """
-        return False
+        """Backward-compatible: derived from review_strategy."""
+        return self.review_strategy == ReviewStrategy.OUTLINE_REVIEW
     
     def get_questions_for_chat(self) -> list[str]:
         """Generate conversational questions to gather inputs."""
@@ -272,6 +310,23 @@ class BaseTool(ABC):
         """
         pass
     
+    async def execute_from_conversation(
+        self,
+        conversation_text: str,
+        planner_args: dict | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> tuple[str, dict]:
+        """Execute tool using conversation text directly (no DB round-trip).
+
+        This is the unified entry point for both project chat and research chat.
+        Returns (widget_type, widget_data).
+
+        Override in subclasses that support conversation-based execution.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not support conversation-based execution"
+        )
+
     async def export(
         self,
         output: ToolOutput,

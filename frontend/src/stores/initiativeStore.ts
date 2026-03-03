@@ -131,7 +131,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   },
 
   // Send a message with streaming
-  sendMessage: async (id: string, content: string) => {
+  sendMessage: async (id: string, content: string, toolHint?: string) => {
     const { messages } = get();
     console.log('sendMessage: starting', { id, content, currentMessageCount: messages?.length });
     

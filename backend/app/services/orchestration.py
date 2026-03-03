@@ -284,14 +284,36 @@ class OrchestrationService:
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
         self.retrieval = TieredRetrievalService(db)
 
+    # Maps tool IDs to the orchestration action that runs them
+    _TOOL_HINT_ACTIONS: dict[str, str] = {
+        "lcoe_model": "run_lcoe_tool",
+        "carbon_model": "run_carbon_tool",
+    }
+
+    _TOOL_HINT_MESSAGES: dict[str, str] = {
+        "lcoe_model": "Building your LCOE model…",
+        "carbon_model": "Building your carbon emissions model…",
+    }
+
     async def get_next_action(
         self,
         messages: list[ChatMessage],
         initiative: Initiative,
+        tool_hint: str | None = None,
     ) -> OrchestrationResult:
         """
         Decide what action to take next based on conversation and project state.
+        If tool_hint is provided (user explicitly selected a tool), computational
+        tools bypass the LLM and return the action directly.
         """
+        # Fast path: user explicitly selected a computational tool
+        if tool_hint and tool_hint in self._TOOL_HINT_ACTIONS:
+            return OrchestrationResult(
+                action=self._TOOL_HINT_ACTIONS[tool_hint],
+                parameters={"message": self._TOOL_HINT_MESSAGES[tool_hint]},
+                sources_used=[],
+            )
+
         context_results = await self.retrieval.retrieve_for_context(initiative)
         context_str = self.retrieval.format_context_for_prompt(context_results)
 

@@ -145,9 +145,11 @@ async def send_chat_message_stream(
             )
             await update_initiative_from_inputs(db, initiative, extracted, orchestration)
 
+            tool_hint = data.tool_hint or None
             action_result = await orchestration.get_next_action(
                 messages=messages,
                 initiative=initiative,
+                tool_hint=tool_hint,
             )
 
             # Send a thinking indicator for heavy actions
@@ -160,7 +162,7 @@ async def send_chat_message_stream(
 
             # Execute the action
             widget_type, widget_data, assistant_response, sources = await execute_action(
-                db, initiative, action_result, orchestration, chat_history=messages
+                db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint
             )
 
             # Stream the response word by word
@@ -236,12 +238,19 @@ def _build_project_context(initiative: Initiative) -> str:
     return "\n".join(parts) if parts else ""
 
 
+_ALIGNMENT_TOOL_NAMES: dict[str, str] = {
+    "investment_memo": "Investment Memo",
+    "due_diligence_checklist": "Due Diligence Checklist",
+}
+
+
 async def execute_action(
     db: AsyncSession,
     initiative: Initiative,
     action_result,
     orchestration: OrchestrationService,
     chat_history: list | None = None,
+    tool_hint: str | None = None,
 ) -> tuple[str | None, dict | None, str, list]:
     """
     Execute an orchestration action and return widget/response.
@@ -249,6 +258,37 @@ async def execute_action(
     Returns:
         (widget_type, widget_data, assistant_response, sources)
     """
+    # Shortcut: if the user explicitly selected a document tool via the picker,
+    # skip the tool-checklist widget and go straight to alignment (outline review).
+    if tool_hint and tool_hint in _ALIGNMENT_TOOL_NAMES:
+        registry = get_tool_registry()
+        tool = registry.get_tool(tool_hint)
+        if tool and tool.requires_alignment:
+            # Ensure the tool is added to selected_tools
+            existing = list(initiative.selected_tools or [])
+            if tool_hint not in existing:
+                initiative.selected_tools = existing + [tool_hint]
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(initiative, "selected_tools")
+                await db.commit()
+                await db.refresh(initiative)
+
+            # Generate (or reuse) alignment and return the alignment widget
+            alignment_data = await get_or_generate_alignment(db, initiative, tool_hint)
+            if alignment_data:
+                tool_name = _ALIGNMENT_TOOL_NAMES[tool_hint]
+                pending = initiative.get_pending_alignment_tools()
+                return (
+                    "alignment",
+                    build_alignment_widget_data(
+                        tool_id=tool_hint,
+                        alignment_data=alignment_data,
+                        pending_tool_ids=[t for t in pending if t != tool_hint],
+                    ),
+                    get_alignment_intro_message(tool_name),
+                    [],
+                )
+
     action = action_result.action
     params = action_result.parameters
     sources = action_result.sources_used
@@ -569,17 +609,20 @@ async def send_chat_message(
     )
     await update_initiative_from_inputs(db, initiative, extracted, orchestration)
     
+    tool_hint = data.tool_hint or None
+
     # Get the next action from the orchestration LLM
     action_result = await orchestration.get_next_action(
         messages=messages,
         initiative=initiative,
+        tool_hint=tool_hint,
     )
     
     logger.info(f"Orchestration chose action: {action_result.action}")
     
     # Execute the action
     widget_type, widget_data, assistant_response, sources = await execute_action(
-        db, initiative, action_result, orchestration, chat_history=messages
+        db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint
     )
     
     # Convert sources to citation format
