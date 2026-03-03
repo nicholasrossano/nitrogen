@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check } from 'lucide-react';
 
 export interface ToolOption {
@@ -54,15 +55,42 @@ export function ToolPicker({
   mode = 'project',
 }: ToolPickerProps) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const tools = mode === 'standalone' ? ANALYSIS_TOOLS : ALL_TOOLS;
+
+  // Position the portal dropdown above the trigger button
+  const updatePosition = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: 'fixed',
+      left: rect.left,
+      // Place bottom of dropdown 8px above the top of the trigger
+      top: rect.top - 8,
+      transform: 'translateY(-100%)',
+      width: 224,
+      zIndex: 9999,
+    });
+  };
+
+  const handleOpen = () => {
+    updatePosition();
+    setOpen((v) => !v);
+  };
 
   // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     };
@@ -70,87 +98,92 @@ export function ToolPicker({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => updatePosition();
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('resize', handler);
+    return () => {
+      window.removeEventListener('scroll', handler, true);
+      window.removeEventListener('resize', handler);
+    };
+  }, [open]);
+
   const handleSelect = (tool: ToolOption) => {
     onSelect(selected?.id === tool.id ? null : tool);
     setOpen(false);
   };
 
-  return (
-    <div ref={containerRef} className="relative">
-      {/* Trigger button */}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-        className={[
-          'w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150',
-          disabled
-            ? 'opacity-40 cursor-default text-text-tertiary'
-            : selected
-            ? 'bg-accent text-white hover:bg-accent-anchor'
-            : 'text-text-tertiary hover:text-text-secondary border border-stroke-subtle hover:border-stroke-muted',
-        ].join(' ')}
-        aria-label={selected ? `Tool selected: ${selected.name}` : 'Select a tool'}
-      >
-        {selected ? selected.icon : <Plus className="w-[11px] h-[11px]" />}
-      </button>
-
-      {/* Dropdown (opens upward) */}
-      {open && (
-        <div
-          className="absolute bottom-full left-0 mb-2 w-56 rounded-xl border border-stroke-subtle bg-white shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.08)] overflow-hidden z-50"
-        >
-          <div className="px-3 pt-2.5 pb-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-              Run a tool
-            </p>
-          </div>
-          <div className="pb-1.5">
-            {tools.map((tool) => {
-              const isActive = selected?.id === tool.id;
-              return (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onClick={() => handleSelect(tool)}
+  const dropdown = open && (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="rounded-xl border border-stroke-subtle bg-white shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.08)] overflow-hidden"
+    >
+      <div className="px-3 pt-2.5 pb-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+          Available Tools
+        </p>
+      </div>
+      <div className="pb-1.5">
+        {tools.map((tool) => {
+          const isActive = selected?.id === tool.id;
+          return (
+            <button
+              key={tool.id}
+              type="button"
+              onClick={() => handleSelect(tool)}
+              className={[
+                'w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors duration-100',
+                isActive ? 'bg-accent/[0.06]' : 'hover:bg-surface-subtle',
+              ].join(' ')}
+            >
+              <span
+                className={[
+                  'mt-0.5 shrink-0 transition-colors',
+                  isActive ? 'text-accent' : 'text-text-tertiary',
+                ].join(' ')}
+              >
+                {tool.icon}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span
                   className={[
-                    'w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors duration-100',
-                    isActive
-                      ? 'bg-accent/[0.06]'
-                      : 'hover:bg-surface-subtle',
+                    'block text-xs font-medium leading-snug',
+                    isActive ? 'text-accent' : 'text-text-primary',
                   ].join(' ')}
                 >
-                  <span
-                    className={[
-                      'mt-0.5 shrink-0 transition-colors',
-                      isActive ? 'text-accent' : 'text-text-tertiary',
-                    ].join(' ')}
-                  >
-                    {tool.icon}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span
-                      className={[
-                        'block text-xs font-medium leading-snug',
-                        isActive ? 'text-accent' : 'text-text-primary',
-                      ].join(' ')}
-                    >
-                      {tool.name}
-                    </span>
-                    <span className="block text-[11px] text-text-tertiary leading-snug mt-0.5">
-                      {tool.description}
-                    </span>
-                  </span>
-                  {isActive && (
-                    <Check className="w-3 h-3 text-accent shrink-0 mt-0.5" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                  {tool.name}
+                </span>
+                <span className="block text-[11px] text-text-tertiary leading-snug mt-0.5">
+                  {tool.description}
+                </span>
+              </span>
+              {isActive && <Check className="w-3 h-3 text-accent shrink-0 mt-0.5" />}
+            </button>
+          );
+        })}
+      </div>
     </div>
+  );
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        onClick={handleOpen}
+        className="w-5 h-5 flex items-center justify-center rounded-full border border-stroke-subtle transition-colors duration-150 text-text-tertiary hover:text-text-secondary hover:border-stroke-muted disabled:opacity-40 disabled:cursor-default"
+        aria-label={selected ? `Tool selected: ${selected.name}` : 'Select a tool'}
+      >
+        <Plus className="w-[11px] h-[11px]" />
+      </button>
+      {typeof document !== 'undefined' && dropdown
+        ? createPortal(dropdown, document.body)
+        : null}
+    </>
   );
 }
 
