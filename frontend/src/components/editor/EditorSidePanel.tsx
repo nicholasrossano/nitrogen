@@ -2,12 +2,22 @@
 
 import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
-import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { LCOEModelWidget } from '@/components/widgets/LCOEModelWidget';
+import { CarbonModelWidget } from '@/components/widgets/CarbonModelWidget';
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
-export const EDITOR_WIDGET_TYPES = ['lcoe_output', 'carbon_output'] as const;
+export const EDITOR_WIDGET_TYPES = [
+  'lcoe_inputs', 'lcoe_output',
+  'carbon_inputs', 'carbon_output',
+] as const;
+
+export const WIDGET_MODEL_GROUP: Record<string, string> = {
+  lcoe_inputs: 'lcoe',
+  lcoe_output: 'lcoe',
+  carbon_inputs: 'carbon',
+  carbon_output: 'carbon',
+};
 
 export interface EditorWidget {
   type: string;
@@ -21,7 +31,9 @@ interface EditorSidePanelProps {
 }
 
 const WIDGET_LABELS: Record<string, string> = {
+  lcoe_inputs: 'LCOE Model',
   lcoe_output: 'LCOE Model',
+  carbon_inputs: 'Carbon Calculator',
   carbon_output: 'Carbon Calculator',
 };
 
@@ -35,7 +47,6 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
 
   return (
     <div className="h-full flex flex-col bg-white" style={{ animation: 'slideInRight 0.2s ease-out forwards' }}>
-      {/* Tab bar — only shown when there are multiple widgets */}
       {widgets.length > 1 && (
         <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
           {widgets.map((w, i) => (
@@ -55,10 +66,10 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
         </div>
       )}
 
-      {/* Widget content */}
       <div className="flex-1 overflow-y-auto">
         <ErrorBoundary>
           <EditorWidgetRenderer
+            key={widget.messageId}
             type={widget.type}
             data={widget.data}
             initiativeId={initiativeId}
@@ -79,10 +90,12 @@ function EditorWidgetRenderer({
   initiativeId: string;
 }) {
   switch (type) {
+    case 'lcoe_inputs':
     case 'lcoe_output':
-      return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive />;
+      return <LCOEModelWidget data={data} initiativeId={initiativeId} isActive />;
+    case 'carbon_inputs':
     case 'carbon_output':
-      return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive />;
+      return <CarbonModelWidget data={data} initiativeId={initiativeId} isActive />;
     default:
       return null;
   }

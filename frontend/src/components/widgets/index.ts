@@ -12,3 +12,5 @@ export { LCOEInputsWidget } from './LCOEInputsWidget';
 export { LCOEOutputWidget } from './LCOEOutputWidget';
 export { CarbonInputsWidget } from './CarbonInputsWidget';
 export { CarbonOutputWidget } from './CarbonOutputWidget';
+export { LCOEModelWidget } from './LCOEModelWidget';
+export { CarbonModelWidget } from './CarbonModelWidget';
