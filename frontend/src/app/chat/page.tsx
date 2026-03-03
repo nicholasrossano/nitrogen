@@ -8,7 +8,7 @@ import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
 import { PanelLeft, PanelRight, SquarePen } from 'lucide-react';
 import { LandingInput } from '@/components/core-chat/LandingInput';
 import { ConversationView } from '@/components/core-chat/ConversationView';
-import { EditorSidePanel, EDITOR_WIDGET_TYPES } from '@/components/editor';
+import { EditorSidePanel, EDITOR_WIDGET_TYPES, WIDGET_MODEL_GROUP } from '@/components/editor';
 import type { EditorWidget } from '@/components/editor';
 import { useAuth } from '@/lib/auth';
 import { track } from '@/lib/analytics';
@@ -70,22 +70,27 @@ function ChatPageContent() {
     };
   }, []);
 
-  const editorWidgets: EditorWidget[] = useMemo(
-    () =>
-      messages
-        .filter(
-          (m) =>
-            m.widget_type &&
-            m.widget_data &&
-            (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
-        )
-        .map((m) => ({
-          type: m.widget_type!,
-          data: m.widget_data!,
-          messageId: m.id,
-        })),
-    [messages],
-  );
+  const editorWidgets: EditorWidget[] = useMemo(() => {
+    const all = messages
+      .filter(
+        (m) =>
+          m.widget_type &&
+          m.widget_data &&
+          (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
+      )
+      .map((m) => ({
+        type: m.widget_type!,
+        data: m.widget_data!,
+        messageId: m.id,
+      }));
+
+    const byModel = new Map<string, EditorWidget>();
+    for (const w of all) {
+      const group = WIDGET_MODEL_GROUP[w.type];
+      if (group) byModel.set(group, w);
+    }
+    return Array.from(byModel.values());
+  }, [messages]);
 
   const hasEditorContent = editorWidgets.length > 0;
 
