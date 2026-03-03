@@ -28,12 +28,6 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
 };
 
-const APPLIES_TO_STYLES: Record<string, { bg: string; text: string }> = {
-  baseline: { bg: 'bg-orange-50', text: 'text-orange-700' },
-  project: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  leakage: { bg: 'bg-purple-50', text: 'text-purple-700' },
-  general: { bg: 'bg-gray-50', text: 'text-gray-600' },
-};
 
 const QUALITY_STYLES: Record<string, { bg: string; text: string; icon: typeof CheckCircle2 }> = {
   high: { bg: 'bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
@@ -127,8 +121,13 @@ export function CarbonOutputWidget({
     [commitEdit, cancelEdit]
   );
 
-  const investigate = useCallback((label: string) => {
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Can you help me investigate and estimate a value for ${label}?`, label } }));
+  const investigate = useCallback((label: string, status: string) => {
+    const text =
+      status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
+      `Can you help me investigate and estimate a value for ${label}?`;
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
   }, []);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
@@ -305,7 +304,6 @@ export function CarbonOutputWidget({
                   const isMissing = inp.status === 'missing';
                   const isEditing = editingField === inp.field_name;
                   const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
-                  const appliesToStyle = APPLIES_TO_STYLES[inp.applies_to] || APPLIES_TO_STYLES.general;
 
                   return (
                     <div
@@ -319,7 +317,7 @@ export function CarbonOutputWidget({
                       onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('button, input, a')) return;
-                        investigate(inp.label);
+                        investigate(inp.label, inp.status);
                       }}
                       style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto` : undefined }}
                       className={`px-5 py-2.5 flex items-center gap-3 ${
@@ -340,14 +338,6 @@ export function CarbonOutputWidget({
                             {inp.rationale}
                           </p>
                         )}
-                      </div>
-
-                      <div className="w-16 flex justify-end">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${appliesToStyle.bg} ${appliesToStyle.text}`}
-                        >
-                          {inp.applies_to}
-                        </span>
                       </div>
 
                       <div className="w-28 text-right">

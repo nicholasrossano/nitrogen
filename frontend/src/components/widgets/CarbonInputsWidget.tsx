@@ -40,12 +40,6 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
 };
 
-const APPLIES_TO_STYLES: Record<string, { bg: string; text: string }> = {
-  baseline: { bg: 'bg-orange-50', text: 'text-orange-700' },
-  project: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  leakage: { bg: 'bg-purple-50', text: 'text-purple-700' },
-  general: { bg: 'bg-gray-50', text: 'text-gray-600' },
-};
 
 const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'leakage', 'general'];
 const CATEGORY_LABELS: Record<string, string> = {
@@ -66,14 +60,19 @@ export function CarbonInputsWidget({
   onSendMessage,
 }: CarbonInputsWidgetProps) {
   const missingEssentials: string[] = data?.missing_essentials || [];
-  const investigate = useCallback((label: string) => {
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text: `Can you help me investigate and estimate a value for ${label}?`, label } }));
+  const investigate = useCallback((label: string, status: string) => {
+    const text =
+      status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
+      status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
+      `Can you help me investigate and estimate a value for ${label}?`;
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
   }, []);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
   );
-  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; top: number } | null>(null);
+  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; status: string; top: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -161,6 +160,7 @@ export function CarbonInputsWidget({
     setHoveredRow({
       field_name: inp.field_name,
       label: inp.label,
+      status: inp.status,
       top: rowRect.top - cardRect.top + rowRect.height / 2,
     });
   }, []);
@@ -216,7 +216,6 @@ export function CarbonInputsWidget({
                   const isMissing = inp.status === 'missing';
                   const isEditing = editingField === inp.field_name;
                   const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
-                  const appliesToStyle = APPLIES_TO_STYLES[inp.applies_to] || APPLIES_TO_STYLES.general;
 
                   return (
                     <div
@@ -241,15 +240,6 @@ export function CarbonInputsWidget({
                             {inp.rationale}
                           </p>
                         )}
-                      </div>
-
-                      {/* Applies-to badge */}
-                      <div className="w-16 flex justify-end">
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${appliesToStyle.bg} ${appliesToStyle.text}`}
-                        >
-                          {inp.applies_to}
-                        </span>
                       </div>
 
                       {/* Value (editable) */}
@@ -341,9 +331,9 @@ export function CarbonInputsWidget({
         {hoveredRow && (
           <button
             onClick={() => {
-              const label = hoveredRow.label;
+              const { label, status } = hoveredRow;
               setHoveredRow(null);
-              investigate(label);
+              investigate(label, status);
             }}
             className="absolute left-2 -translate-y-1/2 text-[11px] font-medium text-accent hover:text-accent-anchor px-2.5 py-1 rounded-md border border-accent/20 bg-white hover:bg-accent-wash shadow-sm transition-all whitespace-nowrap cursor-pointer"
             style={{ top: hoveredRow.top }}

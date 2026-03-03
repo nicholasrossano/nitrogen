@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
@@ -36,33 +35,25 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
 
   return (
     <div className="h-full flex flex-col bg-white" style={{ animation: 'slideInRight 0.2s ease-out forwards' }}>
-      {/* Header */}
-      <div className="flex-shrink-0 px-4 py-2.5 border-b border-divider flex items-center gap-2">
-        <h2 className="text-xs font-medium text-text-primary flex-1 truncate">
-          {WIDGET_LABELS[widget.type] ?? 'Output'}
-        </h2>
-        {widgets.length > 1 && (
-          <div className="flex items-center gap-1 text-text-tertiary">
+      {/* Tab bar — only shown when there are multiple widgets */}
+      {widgets.length > 1 && (
+        <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
+          {widgets.map((w, i) => (
             <button
-              onClick={() => setActiveIndex(Math.max(0, displayIndex - 1))}
-              disabled={displayIndex === 0}
-              className="icon-btn p-0.5 disabled:opacity-30"
+              key={w.messageId}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setActiveIndex(i)}
+              className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                displayIndex === i
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-text-secondary hover:text-text-primary'
+              }`}
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              {WIDGET_LABELS[w.type] ?? 'Output'}
             </button>
-            <span className="text-[10px] tabular-nums">
-              {displayIndex + 1}/{widgets.length}
-            </span>
-            <button
-              onClick={() => setActiveIndex(Math.min(widgets.length - 1, displayIndex + 1))}
-              disabled={displayIndex === widgets.length - 1}
-              className="icon-btn p-0.5 disabled:opacity-30"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Widget content */}
       <div className="flex-1 overflow-y-auto">
