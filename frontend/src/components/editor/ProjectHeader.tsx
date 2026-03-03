@@ -2,15 +2,17 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Check, X, Map, PanelLeft, PanelRight } from 'lucide-react';
+import { ArrowLeft, Pencil, Check, X, Map, PanelLeft, PanelRight, SquareCode } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
+import type { RightPanelMode } from './EditorSidePanel';
 
 interface ProjectHeaderProps {
   initiative: Initiative;
   onTitleUpdate?: (title: string) => void;
-  showProjectPlan?: boolean;
-  onToggleProjectPlan?: () => void;
+  rightPanel?: RightPanelMode;
+  onToggleRightPanel?: () => void;
   hasProjectPlan?: boolean;
+  hasEditorContent?: boolean;
   showChatPanel?: boolean;
   onToggleChatPanel?: () => void;
   showInspector?: boolean;
@@ -18,7 +20,7 @@ interface ProjectHeaderProps {
   onToggleInspector?: () => void;
 }
 
-export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onToggleProjectPlan, hasProjectPlan = false, showChatPanel = true, onToggleChatPanel, showInspector = false, hasInspectorItem = false, onToggleInspector }: ProjectHeaderProps) {
+export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed', onToggleRightPanel, hasProjectPlan = false, hasEditorContent = false, showChatPanel = true, onToggleChatPanel, showInspector = false, hasInspectorItem = false, onToggleInspector }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(
     initiative.title || 'New Project'
@@ -129,8 +131,8 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
 
         {/* Right controls */}
         <div className="ml-auto flex items-center gap-1">
-          {/* Panel toggle buttons — shown when in split view */}
-          {showProjectPlan && (
+          {/* Panel toggle buttons — shown when right panel is open */}
+          {rightPanel !== 'closed' && (
             <>
               <button
                 onClick={onToggleChatPanel}
@@ -139,27 +141,61 @@ export function ProjectHeader({ initiative, onTitleUpdate, showProjectPlan, onTo
               >
                 <PanelLeft className="w-4 h-4" />
               </button>
-              <button
-                onClick={hasInspectorItem ? onToggleInspector : undefined}
-                disabled={!hasInspectorItem}
-                title={showInspector ? 'Hide inspector' : 'Show inspector'}
-                className={`icon-btn p-1.5 ${showInspector ? 'text-accent' : 'text-text-tertiary'} ${!hasInspectorItem ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                <PanelRight className="w-4 h-4" />
-              </button>
+              {rightPanel === 'project_plan' && (
+                <button
+                  onClick={hasInspectorItem ? onToggleInspector : undefined}
+                  disabled={!hasInspectorItem}
+                  title={showInspector ? 'Hide inspector' : 'Show inspector'}
+                  className={`icon-btn p-1.5 ${showInspector ? 'text-accent' : 'text-text-tertiary'} ${!hasInspectorItem ? 'opacity-40 cursor-not-allowed' : ''}`}
+                >
+                  <PanelRight className="w-4 h-4" />
+                </button>
+              )}
             </>
           )}
 
-          {/* Project Plan toggle — only shown once a plan exists */}
-          {onToggleProjectPlan && hasProjectPlan && (
-            <button
-              onClick={onToggleProjectPlan}
-              className={`pill-btn !px-2.5 !py-1.5 !text-xs ml-1 ${showProjectPlan ? 'selected' : ''}`}
-            >
-              <Map className="w-3.5 h-3.5" />
-              Project Plan
-            </button>
-          )}
+          {/* Dynamic right-panel pill button */}
+          {onToggleRightPanel && (hasProjectPlan || hasEditorContent) && (() => {
+            let label: string;
+            let icon: React.ReactNode;
+            let isSelected: boolean;
+
+            if (rightPanel === 'closed') {
+              label = hasProjectPlan ? 'Project Plan' : 'Editor';
+              icon = hasProjectPlan ? <Map className="w-3.5 h-3.5" /> : <SquareCode className="w-3.5 h-3.5" />;
+              isSelected = false;
+            } else if (rightPanel === 'project_plan') {
+              if (hasEditorContent) {
+                label = 'Editor';
+                icon = <SquareCode className="w-3.5 h-3.5" />;
+                isSelected = false;
+              } else {
+                label = 'Project Plan';
+                icon = <Map className="w-3.5 h-3.5" />;
+                isSelected = true;
+              }
+            } else {
+              if (hasProjectPlan) {
+                label = 'Project Plan';
+                icon = <Map className="w-3.5 h-3.5" />;
+                isSelected = false;
+              } else {
+                label = 'Editor';
+                icon = <SquareCode className="w-3.5 h-3.5" />;
+                isSelected = true;
+              }
+            }
+
+            return (
+              <button
+                onClick={onToggleRightPanel}
+                className={`pill-btn !px-2.5 !py-1.5 !text-xs ml-1 ${isSelected ? 'selected' : ''}`}
+              >
+                {icon}
+                {label}
+              </button>
+            );
+          })()}
         </div>
       </div>
 
