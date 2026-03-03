@@ -25,6 +25,7 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { EDITOR_WIDGET_TYPES } from './EditorSidePanel';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -557,10 +558,12 @@ function ChatMessageItem({
   if (!message) return null;
 
   const isUser = message.role === 'user';
+  const isEditorWidget = message.widget_type && (EDITOR_WIDGET_TYPES as readonly string[]).includes(message.widget_type);
   const shouldShowWidget =
     message.widget_type &&
     message.widget_data &&
-    CHAT_WIDGET_TYPES.includes(message.widget_type);
+    CHAT_WIDGET_TYPES.includes(message.widget_type) &&
+    !isEditorWidget;
   const isDocumentRequest = message.widget_type === ABOVE_INPUT_WIDGET_TYPE;
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
 

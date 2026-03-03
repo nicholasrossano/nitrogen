@@ -56,7 +56,7 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
     setAnimating(false);
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setPlaceholder('Ask about compliance, program design, standards...');
+    setPlaceholder('Ask anything');
   }, []);
 
   useEffect(() => {
