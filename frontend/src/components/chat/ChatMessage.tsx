@@ -20,8 +20,6 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
-import { CBAInputsWidget } from '@/components/widgets/CBAInputsWidget';
-import { CBAOutputWidget } from '@/components/widgets/CBAOutputWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
 import { MessageVariants } from './MessageVariants';
@@ -410,10 +408,6 @@ function MessageWidget({
       return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
-    case 'cba_inputs':
-      return <CBAInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
-    case 'cba_output':
-      return <CBAOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     default:
       return null;
   }

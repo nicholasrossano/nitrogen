@@ -33,6 +33,7 @@ class ComplianceChatRequest(BaseModel):
     content: str
     history: list[ChatHistoryMessage] = []
     session_id: Optional[str] = None  # UUID of existing session, or null to start a new one
+    tool_hint: Optional[str] = None  # Optional tool ID the user explicitly selected
 
 
 class TitleRequest(BaseModel):
@@ -115,6 +116,7 @@ async def compliance_chat_stream(
                     user_message=data.content,
                     history=history,
                     on_thinking=on_thinking,
+                    tool_hint=data.tool_hint or None,
                 )
             )
 

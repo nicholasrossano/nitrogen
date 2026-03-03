@@ -22,7 +22,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.tools.base import BaseTool, ToolDefinition, ToolInput, ToolOutput
+from app.tools.base import (
+    BaseTool,
+    ExecutionModel,
+    ProgressCallback,
+    RefinementModel,
+    ReviewStrategy,
+    ToolDefinition,
+    ToolInput,
+    ToolOutput,
+)
 from app.models.initiative import Initiative
 from app.models.chat import ChatMessage
 from app.services.carbon_engine import (
@@ -187,15 +196,66 @@ class CarbonTool(BaseTool):
         ]
 
     @property
-    def requires_alignment(self) -> bool:
-        return False
+    def review_strategy(self) -> ReviewStrategy:
+        return ReviewStrategy.INPUT_REVIEW
+
+    @property
+    def execution_model(self) -> ExecutionModel:
+        return ExecutionModel.SYNC_COMPUTATION
+
+    @property
+    def refinement_model(self) -> RefinementModel:
+        return RefinementModel.EDIT_AND_RECOMPUTE
+
+    async def extract_inputs_from_text(
+        self,
+        conversation_text: str,
+        method_pack: str | None = None,
+    ) -> dict[str, Any]:
+        """Extract carbon inputs from raw conversation text via LLM."""
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        try:
+            resp = await client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a carbon project analyst specialising in cookstove and "
+                            "clean-cooking methodologies. Extract any carbon-ER-relevant "
+                            "numeric inputs from the conversation below. "
+                            "Only include values that are explicitly stated or clearly implied. "
+                            "Convert units where needed (e.g. tonnes → kg). "
+                            "For rates (usage_rate, adoption_rate, fnrb, efficiencies), return as decimals (0-1). "
+                            "If the project clearly involves cookstoves, set method_pack to 'cookstoves'."
+                        ),
+                    },
+                    {"role": "user", "content": conversation_text},
+                ],
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "extract_carbon_inputs",
+                        "description": "Extract carbon emissions model inputs from conversation",
+                        "parameters": INPUT_EXTRACTION_SCHEMA,
+                    },
+                }],
+                tool_choice={"type": "function", "function": {"name": "extract_carbon_inputs"}},
+                temperature=0,
+            )
+            tool_call = resp.choices[0].message.tool_calls[0]
+            extracted = json.loads(tool_call.function.arguments)
+            return {k: v for k, v in extracted.items() if v is not None}
+        except Exception as e:
+            logger.error(f"Carbon input extraction failed: {e}")
+            return {}
 
     async def extract_inputs_from_context(
         self,
         db: AsyncSession,
         initiative_id: UUID,
     ) -> dict[str, Any]:
-        """Use LLM to extract carbon-relevant numbers from chat history and project context."""
+        """Extract carbon inputs from DB-stored chat history and project context."""
         result = await db.execute(
             select(Initiative).where(Initiative.id == initiative_id)
         )
@@ -215,54 +275,15 @@ class CarbonTool(BaseTool):
             for m in messages[-20:]
         )
 
-        project_context = f"""
-Project type: {initiative.project_type or 'Unknown'}
-Description: {initiative.project_description or 'N/A'}
-Geography: {initiative.geography or 'Not specified'}
-"""
+        project_context = (
+            f"Project type: {initiative.project_type or 'Unknown'}\n"
+            f"Description: {initiative.project_description or 'N/A'}\n"
+            f"Geography: {initiative.geography or 'Not specified'}"
+        )
 
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-        try:
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a carbon project analyst specialising in cookstove and "
-                            "clean-cooking methodologies. Extract any carbon-ER-relevant "
-                            "numeric inputs from the conversation and project context below. "
-                            "Only include values that are explicitly stated or clearly implied. "
-                            "Convert units where needed (e.g. tonnes → kg). "
-                            "For rates (usage_rate, adoption_rate, fnrb, efficiencies), return as decimals (0-1). "
-                            "If the project clearly involves cookstoves, set method_pack to 'cookstoves'."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}",
-                    },
-                ],
-                tools=[{
-                    "type": "function",
-                    "function": {
-                        "name": "extract_carbon_inputs",
-                        "description": "Extract carbon emissions model inputs from the provided context",
-                        "parameters": INPUT_EXTRACTION_SCHEMA,
-                    },
-                }],
-                tool_choice={"type": "function", "function": {"name": "extract_carbon_inputs"}},
-                temperature=0,
-            )
-
-            tool_call = resp.choices[0].message.tool_calls[0]
-            extracted = json.loads(tool_call.function.arguments)
-            return {k: v for k, v in extracted.items() if v is not None}
-
-        except Exception as e:
-            logger.error(f"Carbon input extraction failed: {e}")
-            return {}
+        return await self.extract_inputs_from_text(
+            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}"
+        )
 
     async def execute(
         self,
@@ -312,6 +333,63 @@ Geography: {initiative.geography or 'Not specified'}
             title="Carbon Emissions Analysis",
             content=result_data,
         )
+
+    async def execute_from_conversation(
+        self,
+        conversation_text: str,
+        planner_args: dict | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> tuple[str, dict]:
+        """Run carbon model from conversation text — unified path for both chat contexts."""
+
+        async def _progress(msg: str) -> None:
+            if on_progress:
+                await on_progress(msg)
+
+        planner_args = planner_args or {}
+        method_pack = planner_args.get("method_pack")
+
+        await _progress("Extracting carbon inputs from conversation...")
+        extracted = await self.extract_inputs_from_text(conversation_text, method_pack)
+
+        if not method_pack and extracted.get("method_pack"):
+            method_pack = extracted.pop("method_pack", None)
+
+        engine_inputs = CarbonEngine.build_default_inputs(
+            method_pack=method_pack,
+            known_values=extracted,
+        )
+
+        missing = CarbonEngine.get_missing_essentials(engine_inputs)
+        computable = CarbonEngine.is_computable(engine_inputs)
+
+        widget_data: dict = {
+            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
+            "missing_essentials": missing,
+            "computable": computable,
+            "method_pack": method_pack,
+        }
+
+        if computable:
+            await _progress("Calculating emission reductions...")
+            result = CarbonEngine.calculate(engine_inputs)
+            widget_data["result"] = result.to_dict()
+
+            await _progress("Running sensitivity analysis...")
+            sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
+            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
+            widget_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
+
+            widget_type = "carbon_output"
+            await _progress(
+                f"Net ERs: {result.net_er_tco2e:,.2f} tCO₂e/yr "
+                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
+            )
+        else:
+            widget_type = "carbon_inputs"
+            await _progress(f"Need {len(missing)} more inputs to compute — showing input table")
+
+        return widget_type, widget_data
 
     async def recalculate(
         self,

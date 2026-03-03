@@ -249,6 +249,12 @@ class ComplianceChatService:
         self.retrieval = TieredRetrievalService(db)
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
 
+    # Forced tool names for computational tools when user explicitly selects them
+    _HINT_TO_PLANNER_TOOL: dict[str, str] = {
+        "lcoe_model": "run_lcoe_model",
+        "carbon_model": "run_carbon_model",
+    }
+
     async def generate_response(
         self,
         user_message: str,
@@ -256,6 +262,7 @@ class ComplianceChatService:
         on_thinking: ThinkingCallback | None = None,
         *,
         project_context: str | None = None,
+        tool_hint: str | None = None,
     ) -> ComplianceChatResponse:
         start = time.time()
 
@@ -271,10 +278,10 @@ class ComplianceChatService:
                 return []
             return await self.retrieval.search_corpus(search_query, None)
 
+        forced_fn = self._HINT_TO_PLANNER_TOOL.get(tool_hint or "")
+
         corpus_task = asyncio.create_task(_corpus_search())
-        plan_task = asyncio.create_task(
-            self._plan_tool_calls(user_message, history)
-        )
+        plan_task = asyncio.create_task(self._plan_tool_calls(user_message, history))
         corpus_facts, tool_calls = await asyncio.gather(corpus_task, plan_task)
 
         all_facts: list[RetrievedFact] = list(corpus_facts)
@@ -299,6 +306,13 @@ class ComplianceChatService:
             reason = args.get("reason", "")
             logger.info(f"Tool called: {fn_name} | query={args.get('query', '')!r} | reason={reason!r}")
             parsed_calls.append((fn_name, args))
+
+        # If user explicitly selected a computational tool, force it into execution
+        # (overrides planner; deduplicate in case planner also picked the same tool)
+        if forced_fn:
+            if not any(fn == forced_fn for fn, _ in parsed_calls):
+                logger.info(f"Injecting forced tool call from tool_hint: {forced_fn}")
+                parsed_calls.append((forced_fn, {"reason": "user explicitly selected this tool"}))
 
         # Run search tools (scholarly + web) concurrently
         async def _run_scholarly(query: str) -> list[RetrievedFact]:
@@ -339,27 +353,32 @@ class ComplianceChatService:
 
         # Run model tools (LCOE / carbon) sequentially — they produce widgets
         for fn_name, args in parsed_calls:
-            if fn_name == "run_lcoe_model":
-                await _think("Building LCOE model...")
-                tiers_used.append("lcoe")
-                try:
-                    widget_type, widget_data = await self._run_lcoe(
-                        user_message, history, args, _think
-                    )
-                except Exception as e:
-                    logger.error(f"LCOE tool failed: {e}", exc_info=True)
-                    await _think("LCOE model encountered an error — falling back to text response")
+            if fn_name in ("run_lcoe_model", "run_carbon_model"):
+                from app.tools.lcoe_tool import LCOETool
+                from app.tools.carbon_tool import CarbonTool
 
-            elif fn_name == "run_carbon_model":
-                await _think("Building carbon emissions model...")
-                tiers_used.append("carbon")
+                is_lcoe = fn_name == "run_lcoe_model"
+                tool = LCOETool() if is_lcoe else CarbonTool()
+                label = "lcoe" if is_lcoe else "carbon"
+
+                await _think(f"Building {'LCOE' if is_lcoe else 'carbon emissions'} model...")
+                tiers_used.append(label)
+
+                conversation_text = "\n".join(
+                    f"{m['role']}: {m['content']}"
+                    for m in (history[-20:] if len(history) > 20 else history)
+                )
+                conversation_text += f"\nuser: {user_message}"
+
                 try:
-                    widget_type, widget_data = await self._run_carbon(
-                        user_message, history, args, _think
+                    widget_type, widget_data = await tool.execute_from_conversation(
+                        conversation_text=conversation_text,
+                        planner_args=args,
+                        on_progress=_think,
                     )
                 except Exception as e:
-                    logger.error(f"Carbon tool failed: {e}", exc_info=True)
-                    await _think("Carbon model encountered an error — falling back to text response")
+                    logger.error(f"{label.upper()} tool failed: {e}", exc_info=True)
+                    await _think(f"{label.upper()} model encountered an error — falling back to text response")
 
         # Step 4: generate answer — LLM only sees what was actually retrieved
         ranked_facts = self._rank_facts(all_facts)
@@ -399,217 +418,6 @@ class ComplianceChatService:
     # -----------------------------------------------------------------------
     # Internal helpers
     # -----------------------------------------------------------------------
-
-    async def _run_lcoe(
-        self,
-        user_message: str,
-        history: list[dict[str, str]],
-        planner_args: dict,
-        on_thinking: Callable[[str], Awaitable[None]],
-    ) -> tuple[str, dict]:
-        """Run the LCOE engine from within the compliance chat.
-
-        Returns (widget_type, widget_data).
-        """
-        from app.services.lcoe_engine import LCOEEngine, LCOEInput
-
-        tech_type = planner_args.get("technology_type")
-
-        conversation_text = "\n".join(
-            f"{m['role']}: {m['content']}" for m in (history[-20:] if len(history) > 20 else history)
-        )
-        conversation_text += f"\nuser: {user_message}"
-
-        await on_thinking("Extracting inputs from conversation...")
-
-        extracted = await self._extract_lcoe_inputs(conversation_text, tech_type)
-
-        if not tech_type and extracted.get("technology_type"):
-            tech_type = extracted.pop("technology_type", None)
-
-        extracted.pop("location", None)
-
-        engine_inputs = LCOEEngine.build_default_inputs(
-            tech_type=tech_type,
-            known_values=extracted,
-        )
-
-        missing = LCOEEngine.get_missing_essentials(engine_inputs)
-        computable = LCOEEngine.is_computable(engine_inputs)
-
-        widget_data: dict = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-            "technology_type": tech_type,
-        }
-
-        if computable:
-            await on_thinking("Calculating LCOE...")
-            result = LCOEEngine.calculate(engine_inputs)
-            widget_data["result"] = result.to_dict()
-
-            await on_thinking("Running sensitivity analysis...")
-            sensitivity = LCOEEngine.run_sensitivity(engine_inputs)
-            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-            widget_data["is_unruly"] = LCOEEngine.is_unruly(engine_inputs)
-
-            widget_type = "lcoe_output"
-            await on_thinking(
-                f"LCOE: {result.currency} {result.lcoe:.4f}/kWh "
-                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
-            )
-        else:
-            widget_type = "lcoe_inputs"
-            await on_thinking(f"Need {len(missing)} more inputs to compute — showing input table")
-
-        return widget_type, widget_data
-
-    async def _extract_lcoe_inputs(
-        self,
-        conversation_text: str,
-        tech_type: str | None,
-    ) -> dict:
-        """LLM extraction of LCOE inputs from conversation text."""
-        from app.tools.lcoe_tool import INPUT_EXTRACTION_SCHEMA
-
-        try:
-            resp = await self.client.chat.completions.create(
-                model=settings.openai_orchestration_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an energy project analyst. Extract any LCOE-relevant "
-                            "numeric inputs from the conversation below. "
-                            "Only include values that are explicitly stated or clearly implied. "
-                            "Convert units where needed (e.g. MW → kW). "
-                            "For capacity_factor and discount_rate, return as decimals (0-1)."
-                        ),
-                    },
-                    {"role": "user", "content": conversation_text},
-                ],
-                tools=[{
-                    "type": "function",
-                    "function": {
-                        "name": "extract_lcoe_inputs",
-                        "description": "Extract LCOE model inputs from conversation",
-                        "parameters": INPUT_EXTRACTION_SCHEMA,
-                    },
-                }],
-                tool_choice={"type": "function", "function": {"name": "extract_lcoe_inputs"}},
-                temperature=0,
-            )
-            tool_call = resp.choices[0].message.tool_calls[0]
-            extracted = json.loads(tool_call.function.arguments)
-            return {k: v for k, v in extracted.items() if v is not None}
-        except Exception as e:
-            logger.error(f"LCOE input extraction failed: {e}")
-            return {}
-
-    async def _run_carbon(
-        self,
-        user_message: str,
-        history: list[dict[str, str]],
-        planner_args: dict,
-        on_thinking: Callable[[str], Awaitable[None]],
-    ) -> tuple[str, dict]:
-        """Run the carbon engine from within the compliance chat."""
-        from app.services.carbon_engine import CarbonEngine, CarbonInput
-
-        method_pack = planner_args.get("method_pack")
-
-        conversation_text = "\n".join(
-            f"{m['role']}: {m['content']}" for m in (history[-20:] if len(history) > 20 else history)
-        )
-        conversation_text += f"\nuser: {user_message}"
-
-        await on_thinking("Extracting carbon inputs from conversation...")
-
-        extracted = await self._extract_carbon_inputs(conversation_text, method_pack)
-
-        if not method_pack and extracted.get("method_pack"):
-            method_pack = extracted.pop("method_pack", None)
-
-        engine_inputs = CarbonEngine.build_default_inputs(
-            method_pack=method_pack,
-            known_values=extracted,
-        )
-
-        missing = CarbonEngine.get_missing_essentials(engine_inputs)
-        computable = CarbonEngine.is_computable(engine_inputs)
-
-        widget_data: dict = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-            "method_pack": method_pack,
-        }
-
-        if computable:
-            await on_thinking("Calculating emission reductions...")
-            result = CarbonEngine.calculate(engine_inputs)
-            widget_data["result"] = result.to_dict()
-
-            await on_thinking("Running sensitivity analysis...")
-            sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
-            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-            widget_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
-
-            widget_type = "carbon_output"
-            await on_thinking(
-                f"Net ERs: {result.net_er_tco2e:,.2f} tCO₂e/yr "
-                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
-            )
-        else:
-            widget_type = "carbon_inputs"
-            await on_thinking(f"Need {len(missing)} more inputs to compute — showing input table")
-
-        return widget_type, widget_data
-
-    async def _extract_carbon_inputs(
-        self,
-        conversation_text: str,
-        method_pack: str | None,
-    ) -> dict:
-        """LLM extraction of carbon inputs from conversation text."""
-        from app.tools.carbon_tool import INPUT_EXTRACTION_SCHEMA
-
-        try:
-            resp = await self.client.chat.completions.create(
-                model=settings.openai_orchestration_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a carbon project analyst specialising in cookstove and "
-                            "clean-cooking methodologies. Extract any carbon-ER-relevant "
-                            "numeric inputs from the conversation below. "
-                            "Only include values that are explicitly stated or clearly implied. "
-                            "Convert units where needed (e.g. tonnes → kg). "
-                            "For rates (usage_rate, adoption_rate, fnrb, efficiencies), return as decimals (0-1). "
-                            "If the project clearly involves cookstoves, set method_pack to 'cookstoves'."
-                        ),
-                    },
-                    {"role": "user", "content": conversation_text},
-                ],
-                tools=[{
-                    "type": "function",
-                    "function": {
-                        "name": "extract_carbon_inputs",
-                        "description": "Extract carbon emissions model inputs from conversation",
-                        "parameters": INPUT_EXTRACTION_SCHEMA,
-                    },
-                }],
-                tool_choice={"type": "function", "function": {"name": "extract_carbon_inputs"}},
-                temperature=0,
-            )
-            tool_call = resp.choices[0].message.tool_calls[0]
-            extracted = json.loads(tool_call.function.arguments)
-            return {k: v for k, v in extracted.items() if v is not None}
-        except Exception as e:
-            logger.error(f"Carbon input extraction failed: {e}")
-            return {}
 
     async def _generate_carbon_answer(
         self,

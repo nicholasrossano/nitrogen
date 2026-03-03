@@ -11,9 +11,12 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.tools.base import (
-    BaseTool, 
-    ToolDefinition, 
-    ToolInput, 
+    BaseTool,
+    ExecutionModel,
+    RefinementModel,
+    ReviewStrategy,
+    ToolDefinition,
+    ToolInput,
     ToolOutput,
     ToolAlignment,
     AlignmentSection,
@@ -114,9 +117,16 @@ class DueDiligenceChecklistTool(BaseTool):
         )
     
     @property
-    def requires_alignment(self) -> bool:
-        """Due diligence checklist requires alignment to confirm categories and focus areas."""
-        return True
+    def review_strategy(self) -> ReviewStrategy:
+        return ReviewStrategy.OUTLINE_REVIEW
+
+    @property
+    def execution_model(self) -> ExecutionModel:
+        return ExecutionModel.ASYNC_LLM_GENERATION
+
+    @property
+    def refinement_model(self) -> RefinementModel:
+        return RefinementModel.FEEDBACK_AND_REGENERATE
     
     @property
     def required_inputs(self) -> list[ToolInput]:

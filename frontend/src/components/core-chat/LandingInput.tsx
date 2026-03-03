@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import { useChatStore, ChatSession } from '@/stores/chatStore';
+import { ToolPicker, ToolChip, type ToolOption } from '@/components/chat/ToolPicker';
 
 const EXAMPLE_PROMPTS = [
   'What MECS standards apply to clean cooking programs?',
@@ -14,7 +15,7 @@ const EXAMPLE_PROMPTS = [
 ];
 
 interface LandingInputProps {
-  onSend: (content: string) => void;
+  onSend: (content: string, toolHint?: string) => void;
   disabled?: boolean;
 }
 
@@ -36,6 +37,7 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
   const [animating, setAnimating] = useState(true);
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [selectedTool, setSelectedTool] = useState<ToolOption | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -118,9 +120,11 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || disabled) return;
-    onSend(input.trim());
+    const toolHint = selectedTool?.id ?? undefined;
+    onSend(input.trim(), toolHint);
     setInput('');
     setAttachedFiles([]);
+    setSelectedTool(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -152,8 +156,11 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
             style={{ boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
           >
-            {attachedFiles.length > 0 && (
+            {(attachedFiles.length > 0 || selectedTool) && (
               <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+                {selectedTool && (
+                  <ToolChip tool={selectedTool} onRemove={() => setSelectedTool(null)} />
+                )}
                 {attachedFiles.map((file, i) => (
                   <span
                     key={i}
@@ -193,6 +200,16 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
                 className="w-full resize-none bg-transparent px-5 py-3.5 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
+              {/* Bottom-left: tool picker */}
+              <div className="absolute left-3 bottom-2.5 pointer-events-none [&>*]:pointer-events-auto">
+                <ToolPicker
+                  selected={selectedTool}
+                  onSelect={setSelectedTool}
+                  disabled={disabled}
+                  mode="standalone"
+                />
+              </div>
+              {/* Bottom-right: attach + send */}
               <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
                 <input
                   ref={fileInputRef}
@@ -228,7 +245,7 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
             <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3 px-1">
               History
             </p>
-            <div className="space-y-1">
+            <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-1">
               {sessions.map((session) => (
                 <HistoryRow
                   key={session.id}

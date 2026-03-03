@@ -35,7 +35,7 @@ function ChatPageContent() {
   };
 
   return (
-    <div className="min-h-screen h-screen flex flex-col">
+    <div className="min-h-screen h-screen flex flex-col overflow-hidden">
       {/* Shared header row */}
       <div className="flex shrink-0">
         <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
@@ -75,7 +75,7 @@ function ChatPageContent() {
         />
       </div>
 
-      <main className="flex-1 bg-white min-h-0 relative">
+      <main className="flex-1 bg-white min-h-0 relative overflow-hidden">
           {/* Landing state */}
           <div
             className={`absolute inset-0 flex transition-all duration-300 ease-out ${
