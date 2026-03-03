@@ -83,6 +83,29 @@ export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed'
           <ArrowLeft className="w-4 h-4 text-text-secondary" />
         </Link>
 
+        {/* Left: panel toggles */}
+        {rightPanel !== 'closed' && (
+          <div className="flex items-center gap-1 ml-1">
+            <button
+              onClick={onToggleChatPanel}
+              title={showChatPanel ? 'Hide chat panel' : 'Show chat panel'}
+              className={`icon-btn p-1.5 ${showChatPanel ? 'text-accent' : 'text-text-tertiary'}`}
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+            {rightPanel === 'project_plan' && (
+              <button
+                onClick={hasInspectorItem ? onToggleInspector : undefined}
+                disabled={!hasInspectorItem}
+                title={showInspector ? 'Hide inspector' : 'Show inspector'}
+                className={`icon-btn p-1.5 ${showInspector ? 'text-accent' : 'text-text-tertiary'} ${!hasInspectorItem ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <PanelRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Editable title — centered */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
@@ -131,29 +154,6 @@ export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed'
 
         {/* Right controls */}
         <div className="ml-auto flex items-center gap-1">
-          {/* Panel toggle buttons — shown when right panel is open */}
-          {rightPanel !== 'closed' && (
-            <>
-              <button
-                onClick={onToggleChatPanel}
-                title={showChatPanel ? 'Hide chat panel' : 'Show chat panel'}
-                className={`icon-btn p-1.5 ${showChatPanel ? 'text-accent' : 'text-text-tertiary'}`}
-              >
-                <PanelLeft className="w-4 h-4" />
-              </button>
-              {rightPanel === 'project_plan' && (
-                <button
-                  onClick={hasInspectorItem ? onToggleInspector : undefined}
-                  disabled={!hasInspectorItem}
-                  title={showInspector ? 'Hide inspector' : 'Show inspector'}
-                  className={`icon-btn p-1.5 ${showInspector ? 'text-accent' : 'text-text-tertiary'} ${!hasInspectorItem ? 'opacity-40 cursor-not-allowed' : ''}`}
-                >
-                  <PanelRight className="w-4 h-4" />
-                </button>
-              )}
-            </>
-          )}
-
           {/* Dynamic right-panel pill button */}
           {onToggleRightPanel && (hasProjectPlan || hasEditorContent) && (() => {
             let label: string;
