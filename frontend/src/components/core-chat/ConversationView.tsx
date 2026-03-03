@@ -24,6 +24,7 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 
@@ -179,7 +180,7 @@ export function ConversationView() {
       </div>
 
       {/* Composer */}
-      <div className="max-w-[52rem] mx-auto w-full pb-4">
+      <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
         <form onSubmit={handleSubmit} className="relative">
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
@@ -610,7 +611,8 @@ function MessageBubble({
           </div>
         )}
 
-        {!isUser && message.widget_type && message.widget_data && (
+        {!isUser && message.widget_type && message.widget_data &&
+          !(EDITOR_WIDGET_TYPES as readonly string[]).includes(message.widget_type) && (
           <div className="mt-3 w-full">
             <ComplianceChatWidget
               type={message.widget_type}
