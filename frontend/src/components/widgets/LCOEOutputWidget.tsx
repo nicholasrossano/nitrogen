@@ -3,7 +3,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
   Calculator,
-  TrendingUp,
   Download,
   AlertTriangle,
   CheckCircle2,
@@ -388,11 +387,7 @@ export function LCOEOutputWidget({
       )}
 
       {activeTab === 'sensitivity' && sensitivity.length > 0 && (
-        <div className="px-5 py-4 space-y-4">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-3.5 h-3.5 text-accent" />
-            <span className="text-xs font-medium text-text-primary">Sensitivity Analysis</span>
-          </div>
+        <div className="bg-white">
           {Object.entries(sensitivityByParam).map(([param, points]: [string, any[]]) => {
             const sorted = [...points].sort((a, b) => a.test_value - b.test_value);
             const baseVal = points[0]?.base_value;
@@ -400,16 +395,18 @@ export function LCOEOutputWidget({
 
             return (
               <div key={param}>
-                <h5 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
-                  {points[0]?.param_label || param}
-                </h5>
-                <div className="overflow-x-auto">
+                <div className="px-5 py-2 bg-surface-subtle border-b border-divider">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    {points[0]?.param_label || param}
+                  </span>
+                </div>
+                <div className="px-5 py-3 overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-stroke-subtle">
-                        <th className="text-left py-1 pr-4 font-medium text-text-secondary">Value</th>
-                        <th className="text-right py-1 pr-4 font-medium text-text-secondary">LCOE</th>
-                        <th className="text-right py-1 font-medium text-text-secondary">Δ</th>
+                        <th className="text-left py-1 pr-4 font-semibold text-text-secondary">Value</th>
+                        <th className="text-right py-1 pr-4 font-semibold text-text-secondary">LCOE</th>
+                        <th className="text-right py-1 font-semibold text-text-secondary">Δ</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -424,7 +421,7 @@ export function LCOEOutputWidget({
                             }`}
                           >
                             <td className="py-1 pr-4 tabular-nums">
-                              {pt.test_value < 1
+                              {baseVal <= 1
                                 ? (pt.test_value * 100).toFixed(1) + '%'
                                 : pt.test_value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               {isBase && (
@@ -454,17 +451,17 @@ export function LCOEOutputWidget({
       )}
 
       {activeTab === 'cashflow' && (
-        <div className="px-5 py-4 overflow-x-auto">
+        <div className="px-5 py-4 overflow-x-auto bg-white">
           <p className="text-[10px] text-text-tertiary mb-3">{cashFlows.length} years</p>
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-stroke-subtle">
-                <th className="text-left py-1 pr-3 font-medium text-text-secondary">Year</th>
-                <th className="text-right py-1 pr-3 font-medium text-text-secondary">CAPEX</th>
-                <th className="text-right py-1 pr-3 font-medium text-text-secondary">O&M</th>
-                <th className="text-right py-1 pr-3 font-medium text-text-secondary">Energy (kWh)</th>
-                <th className="text-right py-1 pr-3 font-medium text-text-secondary">Disc. Cost</th>
-                <th className="text-right py-1 font-medium text-text-secondary">Disc. Energy</th>
+                <th className="text-left py-1 pr-3 font-semibold text-text-secondary">Year</th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">CAPEX</th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">O&M</th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">Energy (kWh)</th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">Disc. Cost</th>
+                <th className="text-right py-1 font-semibold text-text-secondary">Disc. Energy</th>
               </tr>
             </thead>
             <tbody>
