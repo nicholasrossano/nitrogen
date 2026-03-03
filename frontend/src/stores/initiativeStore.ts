@@ -38,7 +38,7 @@ interface InitiativeState {
   loadInitiative: (id: string) => Promise<void>;
   loadChatHistory: (id: string) => Promise<void>;
   loadEvidence: (id: string) => Promise<void>;
-  sendMessage: (id: string, content: string) => Promise<void>;
+  sendMessage: (id: string, content: string, toolHint?: string) => Promise<void>;
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
   retryMessage: (id: string, messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
