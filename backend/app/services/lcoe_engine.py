@@ -350,6 +350,9 @@ class LCOEEngine:
             "project_life_years": "Project Lifetime",
         }
 
+        # Parameters that are fractions (0–1); test values must not exceed 1.0
+        fraction_params = {"discount_rate", "capacity_factor"}
+
         points: list[SensitivityPoint] = []
 
         for param in params:
@@ -362,6 +365,8 @@ class LCOEEngine:
 
             low = base_val * (1 - delta)
             high = base_val * (1 + delta)
+            if param in fraction_params:
+                high = min(high, 1.0)
             total_steps = 2 * steps + 1
             step_size = (high - low) / max(total_steps - 1, 1)
 
