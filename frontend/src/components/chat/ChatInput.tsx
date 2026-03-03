@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ArrowUp, X, Paperclip } from 'lucide-react';
+import { ToolPicker, ToolChip, type ToolOption } from './ToolPicker';
 
 interface ChatInputProps {
   initiativeId?: string;
@@ -24,6 +25,7 @@ export function ChatInput({
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [selectedTool, setSelectedTool] = useState<ToolOption | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { sendMessage } = useInitiativeStore();
@@ -56,15 +58,17 @@ export function ChatInput({
     if (!input.trim() || disabled) return;
 
     const message = input.trim();
+    const toolHint = selectedTool?.id ?? undefined;
     setInput('');
     setDraftTag(null);
     setAttachedFiles([]);
+    setSelectedTool(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     
     if (onSend) {
       onSend(message);
     } else if (initiativeId) {
-      await sendMessage(initiativeId, message);
+      await sendMessage(initiativeId, message, toolHint);
     }
   };
 
@@ -99,19 +103,24 @@ export function ChatInput({
         className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
         style={noShadow ? undefined : { boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
       >
-        {draftTag && (
-          <div className="px-3 pt-2.5 pb-1 flex items-center">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
-              {draftTag}
-              <button
-                type="button"
-                onClick={() => { setDraftTag(null); setInput(''); }}
-                className="hover:opacity-60 transition-opacity"
-                aria-label="Remove"
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </span>
+        {(draftTag || selectedTool) && (
+          <div className="px-3 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
+            {draftTag && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
+                {draftTag}
+                <button
+                  type="button"
+                  onClick={() => { setDraftTag(null); setInput(''); }}
+                  className="hover:opacity-60 transition-opacity"
+                  aria-label="Remove"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+            {selectedTool && (
+              <ToolChip tool={selectedTool} onRemove={() => setSelectedTool(null)} />
+            )}
           </div>
         )}
 
@@ -149,6 +158,16 @@ export function ChatInput({
             className="w-full resize-none bg-transparent px-4 py-3 pb-8 pr-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           />
+          {/* Bottom-left: tool picker */}
+          <div className="absolute left-3 bottom-2.5 pointer-events-none [&>*]:pointer-events-auto">
+            <ToolPicker
+              selected={selectedTool}
+              onSelect={setSelectedTool}
+              disabled={disabled}
+              mode="project"
+            />
+          </div>
+          {/* Bottom-right: attach + send */}
           <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
             <input
               ref={fileInputRef}

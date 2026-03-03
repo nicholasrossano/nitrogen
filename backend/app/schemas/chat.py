@@ -7,6 +7,7 @@ from uuid import UUID
 class ChatMessageCreate(BaseModel):
     """Schema for sending a chat message"""
     content: str = Field(..., min_length=1, max_length=10000)
+    tool_hint: Optional[str] = Field(None, description="Optional tool ID the user explicitly selected (e.g. 'lcoe_model')")
 
 
 class WidgetData(BaseModel):

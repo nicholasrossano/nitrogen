@@ -11,11 +11,14 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.tools.base import (
-    BaseTool, 
-    ToolDefinition, 
-    ToolInput, 
-    ToolOutput, 
-    ToolAlignment, 
+    BaseTool,
+    ExecutionModel,
+    RefinementModel,
+    ReviewStrategy,
+    ToolDefinition,
+    ToolInput,
+    ToolOutput,
+    ToolAlignment,
     AlignmentSection,
     AlignmentParameter,
 )
@@ -114,9 +117,16 @@ class InvestmentMemoTool(BaseTool):
         )
     
     @property
-    def requires_alignment(self) -> bool:
-        """Investment memo requires alignment to confirm outline before generation."""
-        return True
+    def review_strategy(self) -> ReviewStrategy:
+        return ReviewStrategy.OUTLINE_REVIEW
+
+    @property
+    def execution_model(self) -> ExecutionModel:
+        return ExecutionModel.ASYNC_LLM_GENERATION
+
+    @property
+    def refinement_model(self) -> RefinementModel:
+        return RefinementModel.FEEDBACK_AND_REGENERATE
     
     @property
     def required_inputs(self) -> list[ToolInput]:

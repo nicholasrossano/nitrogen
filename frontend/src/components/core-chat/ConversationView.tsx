@@ -16,6 +16,7 @@ import {
   X,
   Paperclip,
 } from 'lucide-react';
+import { ToolPicker, ToolChip, type ToolOption } from '@/components/chat/ToolPicker';
 import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
@@ -23,8 +24,6 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
-import { CBAInputsWidget } from '@/components/widgets/CBAInputsWidget';
-import { CBAOutputWidget } from '@/components/widgets/CBAOutputWidget';
 import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 
@@ -53,6 +52,7 @@ export function ConversationView() {
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [selectedTool, setSelectedTool] = useState<ToolOption | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,10 +91,12 @@ export function ConversationView() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
-    sendMessage(input.trim());
+    const toolHint = selectedTool?.id ?? undefined;
+    sendMessage(input.trim(), toolHint);
     setInput('');
     setDraftTag(null);
     setAttachedFiles([]);
+    setSelectedTool(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -183,19 +185,24 @@ export function ConversationView() {
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
             style={{ boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
           >
-            {draftTag && (
-              <div className="px-4 pt-2.5 pb-1 flex items-center">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
-                  {draftTag}
-                  <button
-                    type="button"
-                    onClick={() => { setDraftTag(null); setInput(''); }}
-                    className="hover:opacity-60 transition-opacity"
-                    aria-label="Remove"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
+            {(draftTag || selectedTool) && (
+              <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
+                {draftTag && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
+                    {draftTag}
+                    <button
+                      type="button"
+                      onClick={() => { setDraftTag(null); setInput(''); }}
+                      className="hover:opacity-60 transition-opacity"
+                      aria-label="Remove"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {selectedTool && (
+                  <ToolChip tool={selectedTool} onRemove={() => setSelectedTool(null)} />
+                )}
               </div>
             )}
 
@@ -233,6 +240,16 @@ export function ConversationView() {
                 className="w-full resize-none bg-transparent px-5 py-3 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
+              {/* Bottom-left: tool picker */}
+              <div className="absolute left-3 bottom-2.5 pointer-events-none [&>*]:pointer-events-auto">
+                <ToolPicker
+                  selected={selectedTool}
+                  onSelect={setSelectedTool}
+                  disabled={sending}
+                  mode="standalone"
+                />
+              </div>
+              {/* Bottom-right: attach + send */}
               <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
                 <input
                   ref={fileInputRef}
@@ -626,10 +643,6 @@ function ComplianceChatWidget({
       return <CarbonInputsWidget data={data} initiativeId="" isActive />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId="" isActive />;
-    case 'cba_inputs':
-      return <CBAInputsWidget data={data} initiativeId="" isActive />;
-    case 'cba_output':
-      return <CBAOutputWidget data={data} initiativeId="" isActive />;
     default:
       return null;
   }
