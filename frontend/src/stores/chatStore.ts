@@ -83,7 +83,13 @@ function buildModelInputsContext(messages: CoreChatMessage[]): string | null {
       const unit = inp.unit || '';
       const inpLabel = inp.label || fieldName;
       const valStr = val != null ? `${val}` : '—';
-      lines.push(`- ${inpLabel} (field_name=${fieldName}): ${valStr} ${unit} [${status}]`);
+      const prov = (inp as any).provenance || {};
+      const derivation: string = prov.derivation || '';
+      const rationale: string = prov.rationale || (inp as any).rationale || '';
+      let provStr = '';
+      if (derivation) provStr += ` derivation=${derivation}`;
+      if (rationale) provStr += ` reason="${rationale}"`;
+      lines.push(`- ${inpLabel} (field_name=${fieldName}): ${valStr} ${unit} [${status}${provStr}]`);
     }
     const missing = (wd as Record<string, any>).missing_essentials as string[] | undefined;
     if (missing && missing.length > 0) {

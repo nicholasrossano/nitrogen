@@ -1,5 +1,7 @@
 """Chat API endpoints with LLM-driven orchestration."""
 
+from typing import Callable, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -152,26 +154,57 @@ async def send_chat_message_stream(
                 tool_hint=tool_hint,
             )
 
+            # Collect thinking lines from the research pipeline
+            thinking_lines: list[str] = []
+            thinking_queue: asyncio.Queue[str] = asyncio.Queue()
+
+            async def on_thinking(text: str):
+                thinking_lines.append(text)
+                await thinking_queue.put(json.dumps({"type": "thinking", "text": text}))
+
             # Send a thinking indicator for heavy actions
             if action_result.action == "generate_project_plan":
-                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Generating your project plan...'})}\n\n"
+                await on_thinking("Generating your project plan...")
             elif action_result.action == "run_lcoe_tool":
-                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your LCOE model...'})}\n\n"
+                await on_thinking("Building your LCOE model...")
             elif action_result.action == "run_carbon_tool":
-                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your carbon emissions model...'})}\n\n"
+                await on_thinking("Building your carbon emissions model...")
             elif action_result.action == "propose_input_value":
-                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Researching a value for this input...'})}\n\n"
+                await on_thinking("Researching a value for this input...")
+
+            # Flush any queued thinking events before execute_action
+            while not thinking_queue.empty():
+                event_json = await thinking_queue.get()
+                yield f"data: {event_json}\n\n"
 
             # Build model inputs context from the latest LCOE/Carbon widget in history
             from app.services.orchestration import OrchestrationService as _OrchestratorRef
             _model_inputs_ctx = _OrchestratorRef._format_model_inputs_from_messages(messages)
 
-            # Execute the action
-            widget_type, widget_data, assistant_response, sources = await execute_action(
-                db, initiative, action_result, orchestration,
-                chat_history=messages, tool_hint=tool_hint,
-                model_inputs_context=_model_inputs_ctx,
+            # Execute the action with on_thinking callback for research pipeline
+            generation_task = asyncio.create_task(
+                execute_action(
+                    db, initiative, action_result, orchestration,
+                    chat_history=messages, tool_hint=tool_hint,
+                    model_inputs_context=_model_inputs_ctx,
+                    on_thinking=on_thinking,
+                )
             )
+
+            # Stream thinking events while the action runs
+            while not generation_task.done():
+                try:
+                    event_json = await asyncio.wait_for(thinking_queue.get(), timeout=0.1)
+                    yield f"data: {event_json}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+
+            # Flush remaining thinking events
+            while not thinking_queue.empty():
+                event_json = await thinking_queue.get()
+                yield f"data: {event_json}\n\n"
+
+            widget_type, widget_data, assistant_response, sources = generation_task.result()
 
             # Stream the response word by word
             words = assistant_response.split()
@@ -183,6 +216,14 @@ async def send_chat_message_stream(
                 }
                 yield f"data: {json.dumps(chunk_data)}\n\n"
                 await asyncio.sleep(0.03)
+
+            # Build completion metadata
+            sources_list = [s.to_dict() for s in sources] if sources else None
+            verified_count = len([s for s in sources if s.source_type.value != "llm_estimate"]) if sources else 0
+            completion_meta = {
+                "citation_count": verified_count,
+                "tiers_used": list({s.source_type.value for s in sources}) if sources else [],
+            }
             
             # Save assistant message to database
             assistant_message = ChatMessage(
@@ -191,7 +232,9 @@ async def send_chat_message_stream(
                 content=assistant_response,
                 widget_type=widget_type,
                 widget_data=widget_data,
-                sources=[s.to_dict() for s in action_result.sources_used] if action_result.sources_used else None,
+                sources=sources_list,
+                thinking_lines=thinking_lines if thinking_lines else None,
+                completion_meta=completion_meta,
             )
             db.add(assistant_message)
             await db.commit()
@@ -207,6 +250,8 @@ async def send_chat_message_stream(
                     "widget_type": assistant_message.widget_type,
                     "widget_data": assistant_message.widget_data,
                     "sources": assistant_message.sources,
+                    "thinking_lines": assistant_message.thinking_lines,
+                    "completion_meta": assistant_message.completion_meta,
                     "created_at": assistant_message.created_at.isoformat(),
                 },
                 "stage_status": build_stage_status(initiative).__dict__,
@@ -260,6 +305,7 @@ async def execute_action(
     chat_history: list | None = None,
     tool_hint: str | None = None,
     model_inputs_context: str | None = None,
+    on_thinking: Optional[Callable] = None,
 ) -> tuple[str | None, dict | None, str, list]:
     """
     Execute an orchestration action and return widget/response.
@@ -338,6 +384,7 @@ async def execute_action(
                 history=history_dicts,
                 project_context=project_context if project_context else None,
                 model_inputs_context=model_inputs_context,
+                on_thinking=on_thinking,
             )
             assistant_response = research_result.content
             sources = research_result.sources
@@ -539,6 +586,7 @@ async def execute_action(
                 history=history_dicts,
                 project_context=project_context if project_context else None,
                 model_inputs_context=model_inputs_context,
+                on_thinking=on_thinking,
             )
             assistant_response = research_result.content
             sources = research_result.sources
@@ -703,6 +751,14 @@ async def send_chat_message(
         )
         for s in sources
     ] if sources else None
+
+    # Build completion metadata
+    sources_list = [s.to_dict() for s in sources] if sources else None
+    verified_count = len([s for s in sources if s.source_type.value != "llm_estimate"]) if sources else 0
+    completion_meta = {
+        "citation_count": verified_count,
+        "tiers_used": list({s.source_type.value for s in sources}) if sources else [],
+    }
     
     # Save assistant message
     assistant_message = ChatMessage(
@@ -711,10 +767,11 @@ async def send_chat_message(
         content=assistant_response,
         widget_type=widget_type,
         widget_data=widget_data,
-        sources=[s.to_dict() for s in sources] if sources else None,
+        sources=sources_list,
+        completion_meta=completion_meta,
     )
     db.add(assistant_message)
-    initiative.touch()  # Update the initiative's updated_at timestamp
+    initiative.touch()
     await db.commit()
     await db.refresh(assistant_message)
     
@@ -726,6 +783,8 @@ async def send_chat_message(
             widget_type=assistant_message.widget_type,
             widget_data=assistant_message.widget_data,
             sources=source_citations,
+            thinking_lines=assistant_message.thinking_lines,
+            completion_meta=assistant_message.completion_meta,
             feedback=assistant_message.feedback,
             created_at=assistant_message.created_at,
         ),
@@ -810,6 +869,8 @@ async def get_chat_history(
                 sources=[
                     SourceCitation(**s) for s in msg.sources
                 ] if msg.sources else None,
+                thinking_lines=msg.thinking_lines,
+                completion_meta=msg.completion_meta,
                 feedback=msg.feedback,
                 created_at=msg.created_at,
             )
@@ -920,6 +981,8 @@ async def truncate_chat(
                 widget_type=m.widget_type,
                 widget_data=m.widget_data,
                 sources=[SourceCitation(**s) for s in m.sources] if m.sources else None,
+                thinking_lines=m.thinking_lines,
+                completion_meta=m.completion_meta,
                 feedback=m.feedback,
                 created_at=m.created_at,
             )
@@ -1000,13 +1063,21 @@ async def retry_assistant_message(
         for s in sources
     ] if sources else None
 
+    sources_list = [s.to_dict() for s in sources] if sources else None
+    verified_count = len([s for s in sources if s.source_type.value != "llm_estimate"]) if sources else 0
+    retry_completion_meta = {
+        "citation_count": verified_count,
+        "tiers_used": list({s.source_type.value for s in sources}) if sources else [],
+    }
+
     new_message = ChatMessage(
         initiative_id=initiative.id,
         role="assistant",
         content=assistant_response,
         widget_type=widget_type,
         widget_data=widget_data,
-        sources=[s.to_dict() for s in sources] if sources else None,
+        sources=sources_list,
+        completion_meta=retry_completion_meta,
     )
     db.add(new_message)
     initiative.touch()
@@ -1021,6 +1092,8 @@ async def retry_assistant_message(
             widget_type=new_message.widget_type,
             widget_data=new_message.widget_data,
             sources=source_citations,
+            thinking_lines=new_message.thinking_lines,
+            completion_meta=new_message.completion_meta,
             feedback=new_message.feedback,
             created_at=new_message.created_at,
         ),

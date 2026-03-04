@@ -25,6 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.initiative import Initiative
+from app.schemas.provenance import (
+    Derivation,
+    ItemProvenance,
+    SourceAttribution,
+    source_attribution_from_retrieved_fact,
+)
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
 
 settings = get_settings()
@@ -189,6 +195,11 @@ DEEP_DIVE_FUNCTION = {
                                 "type": "string",
                                 "enum": ["required", "optional", "unknown"],
                             },
+                            "source_indices": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "1-based indices of the RETRIEVED EVIDENCE sources that support this element.",
+                            },
                         },
                         "required": ["title", "description", "classification"],
                     },
@@ -248,6 +259,7 @@ class DeepDiveElement:
     title: str
     description: str
     classification: str  # "required" | "optional" | "unknown"
+    provenance: dict | None = None
 
 
 @dataclass
@@ -373,20 +385,36 @@ class DeepDiveService:
             if f.source_url
         ]
 
+        # Attach per-element provenance from LLM-emitted source_indices
+        elements: list[DeepDiveElement] = []
+        for el in result_data.get("elements", []):
+            indices = el.get("source_indices") or []
+            source_attrs = []
+            for idx in indices:
+                if 1 <= idx <= len(all_facts):
+                    source_attrs.append(
+                        source_attribution_from_retrieved_fact(all_facts[idx - 1]).model_dump()
+                    )
+            derivation = Derivation.RESEARCHED if source_attrs else Derivation.INFERRED
+            prov = ItemProvenance(
+                derivation=derivation,
+                sources=[SourceAttribution(**sa) for sa in source_attrs],
+                rationale=el.get("description", ""),
+            ).model_dump()
+            elements.append(DeepDiveElement(
+                title=el["title"],
+                description=el["description"],
+                classification=el["classification"],
+                provenance=prov,
+            ))
+
         elapsed_ms = int((time.time() - start) * 1000)
         return DeepDiveResult(
             item_id=item_id,
             item_title=item_title,
             pillar_name=pillar_name,
             what_this_is=result_data.get("what_this_is", []),
-            elements=[
-                DeepDiveElement(
-                    title=el["title"],
-                    description=el["description"],
-                    classification=el["classification"],
-                )
-                for el in result_data.get("elements", [])
-            ],
+            elements=elements,
             dependencies=[
                 DeepDiveDependency(
                     condition=d["condition"],
@@ -462,14 +490,21 @@ class DeepDiveService:
         """Call the LLM with forced function calling to produce the structured result."""
         if facts:
             lines: list[str] = []
-            for f in facts[:12]:
+            for i, f in enumerate(facts[:12], 1):
                 url_ref = f" ({f.source_url})" if f.source_url else ""
-                lines.append(f"[{f.source_title}{url_ref}]\n{f.content[:1000]}")
+                lines.append(f"[S{i}] [{f.source_title}{url_ref}]\n{f.content[:1000]}")
             evidence_block = EVIDENCE_BLOCK_TEMPLATE.format(
                 evidence="\n\n".join(lines)
             )
         else:
             evidence_block = NO_EVIDENCE_BLOCK
+
+        source_cite_instruction = ""
+        if facts:
+            source_cite_instruction = (
+                "\n\nFor each element, include source_indices referencing the [S1], [S2], etc. "
+                "numbered sources above that support it. Required elements MUST cite at least one source."
+            )
 
         user_message = (
             f"PROJECT CONTEXT\n{project_context}\n\n"
@@ -481,7 +516,7 @@ class DeepDiveService:
             f"TASK\nIdentify the key elements the applicant must produce or provide "
             f"to satisfy this requirement. Ground each element in the retrieved sources "
             f"where possible. Use noun-phrase titles (document/permit names), not verb instructions."
-            f"{evidence_block}"
+            f"{evidence_block}{source_cite_instruction}"
         )
 
         messages: list[dict] = [
