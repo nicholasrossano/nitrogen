@@ -23,11 +23,30 @@ import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
+import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 
 function preprocessMath(content: string): string {
-  return content
+  // Convert proper LaTeX block delimiters to KaTeX-compatible $ notation
+  let result = content
     .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, math: string) => `$$${math}$$`)
     .replace(/\\\(([\s\S]*?)\\\)/g, (_: string, math: string) => `$${math}$`);
+
+  // Strip bare LaTeX commands outside of $ delimiters.
+  // Split on properly-delimited math blocks, only touch the non-math segments.
+  const segments = result.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]*?\$)/);
+  return segments.map((seg, i) => {
+    if (i % 2 === 1) return seg; // inside delimiters — leave KaTeX alone
+    return seg
+      .replace(/\\text\{([^}]*)\}/g, '$1')                   // \text{X}  → X
+      .replace(/\\mathrm\{([^}]*)\}/g, '$1')                 // \mathrm{X} → X
+      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2')     // \frac{a}{b} → a/b
+      .replace(/\\times/g, '×')
+      .replace(/\\cdot/g, '·')
+      .replace(/\\,/g, '\u202f')   // thin space
+      .replace(/\\!/g, '')
+      .replace(/\\quad/g, '  ')
+      .replace(/\\:/g, ' ');
+  }).join('');
 }
 
 export function ConversationView() {
@@ -54,13 +73,25 @@ export function ConversationView() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevCount = useRef(0);
+  const wasStreaming = useRef(false);
 
+  // Scroll when a new message bubble is added
   useEffect(() => {
-    if (messages.length > prevCount.current || streamingContent) {
+    if (messages.length > prevCount.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
     prevCount.current = messages.length;
-  }, [messages.length, streamingContent]);
+  }, [messages.length]);
+
+  // Scroll once when streaming begins; do NOT scroll on every word update
+  useEffect(() => {
+    if (sending && !wasStreaming.current) {
+      wasStreaming.current = true;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else if (!sending) {
+      wasStreaming.current = false;
+    }
+  }, [sending]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -613,6 +644,7 @@ function MessageBubble({
             <ComplianceChatWidget
               type={message.widget_type}
               data={message.widget_data}
+              messageId={message.id}
             />
           </div>
         )}
@@ -628,11 +660,15 @@ function MessageBubble({
 function ComplianceChatWidget({
   type,
   data,
+  messageId,
 }: {
   type: string;
   data: Record<string, any>;
+  messageId?: string;
 }) {
   switch (type) {
+    case 'proposed_value':
+      return <ProposedValueWidget data={data as any} messageId={messageId} />;
     default:
       return null;
   }

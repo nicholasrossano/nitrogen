@@ -149,6 +149,46 @@ SEARCH_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_input_value",
+            "description": (
+                "Propose a specific value for a model input field (LCOE or Carbon). "
+                "Use when the user asks to investigate, estimate, or determine a value for a "
+                "specific input (e.g. 'what should net capacity be?', 'investigate Total CAPEX', "
+                "'estimate capacity factor'). The value is shown in a confirmation widget."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "field_name": {
+                        "type": "string",
+                        "description": "Exact field_name from the model inputs (e.g. 'net_capacity_kw').",
+                    },
+                    "proposed_value": {
+                        "type": "number",
+                        "description": "The proposed numeric value.",
+                    },
+                    "model_type": {
+                        "type": "string",
+                        "enum": ["lcoe", "carbon"],
+                        "description": "Which model this input belongs to.",
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["high", "moderate", "low"],
+                        "description": "Confidence in this estimate.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "One sentence explaining the proposal.",
+                    },
+                },
+                "required": ["field_name", "proposed_value", "model_type", "confidence", "reason"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -164,6 +204,7 @@ You have these data sources available — they are all equally valid and complem
 - search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
 - run_lcoe_model: builds a Levelized Cost of Energy model when the user wants energy project economics
 - run_carbon_model: builds a carbon emissions model when the user wants emission reduction estimates
+- propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE or Carbon model input field
 
 GUIDELINES:
 
@@ -173,11 +214,15 @@ Call run_lcoe_model when the user wants a numerical energy cost model (LCOE, cos
 
 Call run_carbon_model when the user wants a numerical emissions model (carbon credits, tCO₂e, emission reductions, cookstove methodology, fNRB). This can be combined with search tools.
 
+Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia"). Combine with search tools (scholarly + web) to ground the proposal in evidence.
+
 Call NEITHER search tool only when:
 - The question is purely conversational, definitional, or a simple clarification (e.g. "what is MRV?", "thanks")
 - The conversation already contains a direct answer
 
 When in doubt, call both search tools. More context is better than less.
+
+{model_inputs_context}
 
 Do not produce any text — only make tool calls (or no calls)."""
 
@@ -203,12 +248,15 @@ RESPONSE RULES:
 - Be explicit about uncertainty, assumptions, and jurisdictional variability.
 - Structure longer answers with clear headings and bullet points.
 - Keep answers focused and actionable.
-- Never fabricate specific regulations, statistics, or citations."""
+- Never fabricate specific regulations, statistics, or citations.
+- For calculations and formulas, use plain text arithmetic (e.g. "200,000 × 0.02 = 4,000 USD"). Do NOT use LaTeX \\text{}, \\times, or \\frac{} commands."""
 
 EVIDENCE_BLOCK_TEMPLATE = """
 
-RETRIEVED EVIDENCE (use these to ground your response; only cite what you actually used):
+RETRIEVED EVIDENCE (use these to ground your response):
 {evidence}
+
+CITATION REMINDER: You MUST cite at least one source from the evidence above using the format [Scholarly: Title] or [Web: Title]. If you reference data, ranges, or cost estimates, include the citation inline next to the claim. Do not omit citations.
 """
 
 # Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title]
@@ -263,6 +311,7 @@ class ComplianceChatService:
         *,
         project_context: str | None = None,
         tool_hint: str | None = None,
+        model_inputs_context: str | None = None,
     ) -> ComplianceChatResponse:
         start = time.time()
 
@@ -281,7 +330,9 @@ class ComplianceChatService:
         forced_fn = self._HINT_TO_PLANNER_TOOL.get(tool_hint or "")
 
         corpus_task = asyncio.create_task(_corpus_search())
-        plan_task = asyncio.create_task(self._plan_tool_calls(user_message, history))
+        plan_task = asyncio.create_task(
+            self._plan_tool_calls(user_message, history, model_inputs_context=model_inputs_context)
+        )
         corpus_facts, tool_calls = await asyncio.gather(corpus_task, plan_task)
 
         all_facts: list[RetrievedFact] = list(corpus_facts)
@@ -380,6 +431,29 @@ class ComplianceChatService:
                     logger.error(f"{label.upper()} tool failed: {e}", exc_info=True)
                     await _think(f"{label.upper()} model encountered an error — falling back to text response")
 
+            elif fn_name == "propose_input_value":
+                await _think(f"Proposing value for {args.get('field_name', 'field')}...")
+                widget_type = "proposed_value"
+                widget_data = {
+                    "field_name": args.get("field_name", ""),
+                    "label": "",
+                    "unit": "",
+                    "proposed_value": args.get("proposed_value"),
+                    "model_type": args.get("model_type", "lcoe"),
+                    "confidence": args.get("confidence", "moderate"),
+                    "explanation": args.get("reason", ""),
+                }
+                if model_inputs_context:
+                    widget_data = self._enrich_proposal_from_context(widget_data, model_inputs_context)
+
+        # Track propose intent (field_name set by planner if it called propose_input_value)
+        propose_field_name: str | None = None
+        propose_model_type: str = "lcoe"
+        for fn_name, args in parsed_calls:
+            if fn_name == "propose_input_value":
+                propose_field_name = args.get("field_name") or None
+                propose_model_type = args.get("model_type", "lcoe")
+
         # Step 4: generate answer — LLM only sees what was actually retrieved
         ranked_facts = self._rank_facts(all_facts)
         source_count = len([f for f in ranked_facts if f.source_type != SourceType.LLM_ESTIMATE])
@@ -388,6 +462,13 @@ class ComplianceChatService:
             await _think(f"Generating response from {source_count} sources...")
         else:
             await _think("Generating response from general knowledge...")
+
+        # For propose requests: use the full research context to generate the answer,
+        # then extract the concrete proposal from the text afterward.
+        is_propose_request = (
+            widget_type == "proposed_value"
+            or self._is_investigate_request(user_message)
+        )
 
         if widget_type and widget_data and widget_type.startswith("carbon_"):
             content = await self._generate_carbon_answer(
@@ -398,9 +479,26 @@ class ComplianceChatService:
                 user_message, history, widget_data, ranked_facts
             )
         else:
+            combined_context = project_context or ""
+            if model_inputs_context:
+                combined_context = f"{combined_context}\n\n## Current Model Inputs\n{model_inputs_context}" if combined_context else f"## Current Model Inputs\n{model_inputs_context}"
             content = await self._generate_answer(
-                user_message, history, ranked_facts, project_context=project_context
+                user_message, history, ranked_facts, project_context=combined_context or None
             )
+
+        # Step 4b: if this was an investigate/propose request, extract a structured
+        # proposal from the generated text so we can show a confirm widget.
+        if is_propose_request and model_inputs_context and not widget_type:
+            proposal = await self._extract_value_proposal(
+                answer_text=content,
+                user_message=user_message,
+                model_inputs_context=model_inputs_context,
+                hint_field_name=propose_field_name,
+                hint_model_type=propose_model_type,
+            )
+            if proposal:
+                widget_type = "proposed_value"
+                widget_data = proposal
 
         # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)
@@ -591,12 +689,19 @@ class ComplianceChatService:
         self,
         user_message: str,
         history: list[dict[str, str]],
+        model_inputs_context: str | None = None,
     ) -> list:
         """
         Ask a fast LLM which search tools (if any) to invoke.
         Returns a list of OpenAI tool_call objects (may be empty).
         """
-        messages: list[dict] = [{"role": "system", "content": PLANNING_SYSTEM_PROMPT}]
+        inputs_block = ""
+        if model_inputs_context:
+            inputs_block = f"\nCurrent model inputs state:\n{model_inputs_context}\n"
+        planning_prompt = PLANNING_SYSTEM_PROMPT.format(
+            model_inputs_context=inputs_block,
+        )
+        messages: list[dict] = [{"role": "system", "content": planning_prompt}]
         for msg in (history[-6:] if len(history) > 6 else history):
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
@@ -656,6 +761,137 @@ class ComplianceChatService:
             logger.warning(f"Query rewrite failed, using raw message: {e}")
             return user_message
 
+    @staticmethod
+    def _is_investigate_request(user_message: str) -> bool:
+        """Return True if the message is asking to investigate/propose a value for a model input."""
+        lower = user_message.lower()
+        investigate_keywords = [
+            "investigate", "propose", "suggest a value", "estimate a value",
+            "what should", "what value", "help me find", "research the value",
+            "propose a specific", "estimate for", "validate the value",
+        ]
+        return any(k in lower for k in investigate_keywords)
+
+    async def _extract_value_proposal(
+        self,
+        answer_text: str,
+        user_message: str,
+        model_inputs_context: str,
+        hint_field_name: str | None = None,
+        hint_model_type: str = "lcoe",
+    ) -> dict | None:
+        """
+        After the main answer is generated, extract a concrete numeric proposal from it.
+        Returns a dict matching the proposed_value widget schema, or None if not applicable.
+        """
+        extraction_prompt = (
+            "You are extracting a structured value proposal from a research response.\n\n"
+            f"## Current Model Inputs\n{model_inputs_context}\n\n"
+            f"## User Request\n{user_message}\n\n"
+            f"## Research Answer\n{answer_text}\n\n"
+            "Does this answer propose a specific numeric value for a model input field? "
+            "If yes, extract it. If the answer discusses ranges, choose the most appropriate single value. "
+            "If no concrete numeric value is proposed, return nothing."
+        )
+        tool_def = {
+            "type": "function",
+            "function": {
+                "name": "extract_proposal",
+                "description": "Extract a proposed numeric value for a model input field from the answer text.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "field_name": {
+                            "type": "string",
+                            "description": "Exact field_name from model inputs (e.g. 'net_capacity_kw', 'capacity_factor'). Match to the inputs list above.",
+                        },
+                        "label": {
+                            "type": "string",
+                            "description": "Human-readable label for the field, exactly as shown in the model inputs (e.g. 'Annual O&M', 'Net Capacity', 'Capacity Factor'). Copy from the inputs list.",
+                        },
+                        "unit": {
+                            "type": "string",
+                            "description": "Unit for the value, exactly as shown in the model inputs (e.g. 'USD', 'kW', 'USD/yr'). Copy from the inputs list. Empty string if unitless.",
+                        },
+                        "proposed_value": {
+                            "type": "number",
+                            "description": "The single best numeric value being proposed.",
+                        },
+                        "model_type": {
+                            "type": "string",
+                            "enum": ["lcoe", "carbon"],
+                            "description": "Which model this field belongs to.",
+                        },
+                        "confidence": {
+                            "type": "string",
+                            "enum": ["high", "moderate", "low"],
+                        },
+                        "explanation": {
+                            "type": "string",
+                            "description": "1-2 sentence summary of why this value is proposed (for the widget).",
+                        },
+                    },
+                    "required": ["field_name", "label", "unit", "proposed_value", "model_type", "confidence", "explanation"],
+                },
+            },
+        }
+        if hint_field_name:
+            extraction_prompt += f"\n\nHint: the field being investigated is likely '{hint_field_name}' ({hint_model_type} model)."
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=[{"role": "user", "content": extraction_prompt}],
+                tools=[tool_def],
+                tool_choice={"type": "function", "function": {"name": "extract_proposal"}},
+                temperature=0,
+                max_tokens=300,
+            )
+            tool_calls = resp.choices[0].message.tool_calls
+            if not tool_calls:
+                return None
+            import json as _json
+            result = _json.loads(tool_calls[0].function.arguments)
+            if result.get("proposed_value") is not None and result.get("field_name"):
+                # Ensure label and unit are populated from the model inputs context
+                if not result.get("label") or not result.get("unit"):
+                    result = self._enrich_proposal_from_context(result, model_inputs_context)
+                return result
+            return None
+        except Exception as e:
+            logger.warning(f"Value proposal extraction failed: {e}")
+            return None
+
+    @staticmethod
+    def _enrich_proposal_from_context(proposal: dict, model_inputs_context: str) -> dict:
+        """Fill in label/unit from the model inputs context if the extraction missed them."""
+        field_name = proposal.get("field_name", "")
+        if not field_name:
+            return proposal
+        # Parse lines like:
+        #   "- Total CAPEX (field_name=total_capex): — USD [missing]"
+        #   "- Annual O&M (field_name=annual_opex): 0 USD/yr [assumed]"
+        #   "- Capacity Factor (field_name=capacity_factor): 0.2  [assumed]"
+        import re
+        pattern = re.compile(
+            r"- (.+?) \(field_name=" + re.escape(field_name) + r"\): ([^\[]*)\[",
+        )
+        match = pattern.search(model_inputs_context)
+        if match:
+            label_str = match.group(1).strip()
+            value_unit_str = match.group(2).strip()
+            if not proposal.get("label") and label_str:
+                proposal["label"] = label_str
+            if not proposal.get("unit"):
+                # value_unit_str is like "— USD" or "0 USD/yr" or "0.2 "
+                # The unit is everything after the numeric/dash part
+                unit_match = re.search(r'[\d.—\-]+\s*(.*)', value_unit_str)
+                if unit_match:
+                    unit = unit_match.group(1).strip()
+                    if unit and unit != "—":
+                        proposal["unit"] = unit
+        return proposal
+
     def _rank_facts(self, facts: list[RetrievedFact]) -> list[RetrievedFact]:
         """Rank and deduplicate facts by source quality and confidence."""
         tier_order = {
@@ -703,6 +939,8 @@ class ComplianceChatService:
                 f"## Active Project Context\n{project_context}\n\n"
                 "Ground your answer in this project's specific details where relevant. "
                 "The user is working on this project and expects responses tailored to it.\n\n"
+                "IMPORTANT: You MUST still cite sources inline using [Source Type: Title] format "
+                "when referencing evidence. Do not skip citations even when discussing model inputs.\n\n"
             )
 
         messages: list[dict] = [

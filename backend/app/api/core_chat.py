@@ -34,6 +34,7 @@ class ComplianceChatRequest(BaseModel):
     history: list[ChatHistoryMessage] = []
     session_id: Optional[str] = None  # UUID of existing session, or null to start a new one
     tool_hint: Optional[str] = None  # Optional tool ID the user explicitly selected
+    model_inputs_context: Optional[str] = None  # Current LCOE/Carbon model inputs for context
 
 
 class TitleRequest(BaseModel):
@@ -117,6 +118,7 @@ async def compliance_chat_stream(
                     history=history,
                     on_thinking=on_thinking,
                     tool_hint=data.tool_hint or None,
+                    model_inputs_context=data.model_inputs_context or None,
                 )
             )
 

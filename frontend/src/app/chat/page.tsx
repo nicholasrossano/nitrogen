@@ -36,6 +36,10 @@ function ChatPageContent() {
     dragStartWidthRef.current = editorWidth;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+    // Disable CSS transition during drag so width updates are instant
+    if (editorPanelRef.current) {
+      editorPanelRef.current.style.transition = 'none';
+    }
   }, [editorWidth]);
 
   useEffect(() => {
@@ -58,6 +62,10 @@ function ChatPageContent() {
       isDraggingRef.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      // Re-enable CSS transition after drag ends
+      if (editorPanelRef.current) {
+        editorPanelRef.current.style.transition = '';
+      }
       // Commit final width to React state once
       const delta = dragStartXRef.current - e.clientX;
       setEditorWidth(clamp(dragStartWidthRef.current + delta));
@@ -129,9 +137,13 @@ function ChatPageContent() {
     <div className="min-h-screen h-screen flex flex-col overflow-hidden">
       {/* Shared header row */}
       <div className="flex shrink-0">
-        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
+        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44' : 'w-0'}`}>
           <SideDrawerHeader />
         </div>
+        <div
+          className="flex-shrink-0 bg-accent"
+          style={{ width: showSidebar ? 1 : 0, transition: 'width 300ms ease-in-out' }}
+        />
         <header className="flex-1 px-4 py-[7px] flex items-center justify-between bg-white">
           {/* Left: panel toggles */}
           <div className="flex items-center gap-1">
@@ -166,7 +178,7 @@ function ChatPageContent() {
 
       {/* Content row: sidebar + main + editor */}
       <div className="flex flex-1 min-h-0">
-      <div className={`overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0 bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
+      <div className={`overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0 bg-white ${showSidebar ? 'w-44' : 'w-0'}`}>
         <SideDrawer
           activeItem="chat"
           onItemSelect={handleNavChange}
@@ -175,6 +187,10 @@ function ChatPageContent() {
           userEmail={user?.email}
         />
       </div>
+      <div
+        className="flex-shrink-0 bg-accent"
+        style={{ width: showSidebar ? 1 : 0, transition: 'width 300ms ease-in-out' }}
+      />
 
       <main className="flex-1 bg-white min-h-0 relative overflow-hidden">
           {/* Landing state */}
@@ -201,23 +217,29 @@ function ChatPageContent() {
       </main>
 
       {/* Editor side panel */}
-      {showEditor && hasEditorContent && (
-        <div
-          ref={editorPanelRef}
-          className="flex-shrink-0 border-l border-divider overflow-hidden relative"
-          style={{ width: editorWidth }}
-        >
-          {/* Drag handle overlaid on the border — invisible until hover */}
-          <div
-            onMouseDown={handleDragStart}
-            className="absolute left-0 top-0 w-1 h-full cursor-col-resize hover:bg-accent/20 transition-colors z-10"
-            title="Drag to resize"
-          />
-          <div className="h-full w-full">
-            <EditorSidePanel widgets={editorWidgets} />
-          </div>
-        </div>
-      )}
+      <div
+        className="flex-shrink-0 bg-divider"
+        style={{ width: (showEditor && hasEditorContent) ? 1 : 0, transition: 'width 300ms ease-in-out' }}
+      />
+      <div
+        ref={editorPanelRef}
+        className="flex-shrink-0 overflow-hidden relative"
+        style={{ width: (showEditor && hasEditorContent) ? editorWidth : 0, transition: 'width 300ms ease-in-out' }}
+      >
+        {hasEditorContent && (
+          <>
+            {/* Drag handle overlaid on the left edge — invisible until hover */}
+            <div
+              onMouseDown={handleDragStart}
+              className="absolute left-0 top-0 w-1 h-full cursor-col-resize hover:bg-accent/20 transition-colors z-10"
+              title="Drag to resize"
+            />
+            <div className="h-full w-full">
+              <EditorSidePanel widgets={editorWidgets} />
+            </div>
+          </>
+        )}
+      </div>
       </div>
     </div>
   );

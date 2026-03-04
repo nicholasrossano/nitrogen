@@ -46,7 +46,7 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
   if (!widget) return null;
 
   return (
-    <div className="h-full flex flex-col bg-white" style={{ animation: 'slideInRight 0.2s ease-out forwards' }}>
+    <div className="h-full flex flex-col bg-white">
       {widgets.length > 1 && (
         <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
           {widgets.map((w, i) => (
@@ -73,6 +73,7 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
             type={widget.type}
             data={widget.data}
             initiativeId={initiativeId}
+            messageId={widget.messageId}
           />
         </ErrorBoundary>
       </div>
@@ -84,18 +85,20 @@ function EditorWidgetRenderer({
   type,
   data,
   initiativeId,
+  messageId,
 }: {
   type: string;
   data: Record<string, any>;
   initiativeId: string;
+  messageId: string;
 }) {
   switch (type) {
     case 'lcoe_inputs':
     case 'lcoe_output':
-      return <LCOEModelWidget data={data} initiativeId={initiativeId} isActive />;
+      return <LCOEModelWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
     case 'carbon_inputs':
     case 'carbon_output':
-      return <CarbonModelWidget data={data} initiativeId={initiativeId} isActive />;
+      return <CarbonModelWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
     default:
       return null;
   }

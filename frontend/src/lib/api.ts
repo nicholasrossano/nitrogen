@@ -723,6 +723,7 @@ export const api = {
     onError: (message: string) => void,
     session_id?: string | null,
     toolHint?: string | null,
+    modelInputsContext?: string | null,
   ) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -733,7 +734,13 @@ export const api = {
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content, history, session_id: session_id ?? null, tool_hint: toolHint ?? null }),
+      body: JSON.stringify({
+        content,
+        history,
+        session_id: session_id ?? null,
+        tool_hint: toolHint ?? null,
+        model_inputs_context: modelInputsContext ?? null,
+      }),
     });
 
     if (!response.ok || !response.body) {
