@@ -26,9 +26,12 @@ const isDevBypassEnabled = () => {
   );
 };
 
-// Check if access code bypass is enabled (production demo mode)
+// Check if access code bypass is enabled (production demo mode).
+// Only active when NEXT_PUBLIC_USE_ACCESS_CODE=true — prevents stale localStorage
+// keys from bypassing Firebase auth when running in email-auth mode.
 const isAccessCodeBypassEnabled = () => {
   if (typeof window === 'undefined') return false;
+  if (process.env.NEXT_PUBLIC_USE_ACCESS_CODE !== 'true') return false;
   return localStorage.getItem('nitrogen_access_granted') === 'true';
 };
 
