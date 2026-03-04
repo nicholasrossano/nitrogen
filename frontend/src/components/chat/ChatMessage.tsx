@@ -24,6 +24,7 @@ import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
 import { MessageVariants } from './MessageVariants';
+import { ThinkingLogs } from '@/components/core-chat/ThinkingLogs';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
 function preprocessMath(content: string): string {
@@ -215,6 +216,15 @@ export function ChatMessage({
           )
         ) : (
           // Bot message
+          <>
+          {(message.thinking_lines?.length || 0) > 0 && (
+            <ThinkingLogs
+              lines={message.thinking_lines || []}
+              completionMeta={message.completion_meta ?? null}
+              isThinking={isStreaming && !message.content}
+              isStreaming={isStreaming}
+            />
+          )}
           <div className="prose-chat">
             {isStreaming ? (
               <p className="text-sm leading-relaxed">
@@ -244,6 +254,7 @@ export function ChatMessage({
               </ReactMarkdown>
             )}
           </div>
+          </>
         )}
 
         {/* Variant switcher (shown for retried assistant messages) */}

@@ -461,7 +461,7 @@ class ComplianceChatService:
         if source_count > 0:
             await _think(f"Generating response from {source_count} sources...")
         else:
-            await _think("Generating response from general knowledge...")
+            await _think("Generating response...")
 
         # For propose requests: use the full research context to generate the answer,
         # then extract the concrete proposal from the text afterward.
@@ -502,6 +502,26 @@ class ComplianceChatService:
 
         # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)
+
+        # Step 5b: attach provenance to proposed_value widget data
+        if widget_type == "proposed_value" and widget_data:
+            from app.schemas.provenance import (
+                Derivation,
+                ItemProvenance,
+                source_attribution_from_retrieved_fact,
+            )
+            source_attrs = [
+                source_attribution_from_retrieved_fact(s).model_dump()
+                for s in cited_sources
+                if s.source_type != SourceType.LLM_ESTIMATE
+            ]
+            from app.schemas.provenance import SourceAttribution as _SA
+            derivation = Derivation.RESEARCHED if source_attrs else Derivation.INFERRED
+            widget_data["provenance"] = ItemProvenance(
+                derivation=derivation,
+                sources=[_SA(**sa) for sa in source_attrs],
+                rationale=widget_data.get("explanation", ""),
+            ).model_dump()
 
         elapsed_ms = int((time.time() - start) * 1000)
         return ComplianceChatResponse(

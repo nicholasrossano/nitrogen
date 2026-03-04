@@ -219,6 +219,7 @@ def _serialize_deep_dive(result) -> dict:
                 "title": el.title,
                 "description": el.description,
                 "classification": el.classification,
+                **({"provenance": el.provenance} if el.provenance else {}),
             }
             for el in result.elements
         ],

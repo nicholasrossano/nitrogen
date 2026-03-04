@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -12,6 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.evidence import EvidenceChunk, EvidenceDoc
+from app.schemas.provenance import (
+    Derivation,
+    ItemProvenance,
+    SourceAttribution,
+    source_attribution_from_retrieved_fact,
+)
 from app.services.tiered_retrieval import TieredRetrievalService
 
 settings = get_settings()
@@ -264,6 +271,11 @@ PLAN_FUNCTION_SCHEMA = {
                                             "type": "string",
                                             "description": "1-2 sentences: why this project specifically needs this item",
                                         },
+                                        "source_indices": {
+                                            "type": "array",
+                                            "items": {"type": "integer"},
+                                            "description": "Indices (1-based) of the WEB RESEARCH sources that support this item. Reference at least one source for required items.",
+                                        },
                                     },
                                     "required": [
                                         "id", "title", "classification", "status", "rationale",
@@ -281,6 +293,13 @@ PLAN_FUNCTION_SCHEMA = {
         },
     },
 }
+
+
+@dataclass
+class WebResearchResult:
+    """Web research formatted for the LLM prompt, plus indexed source metadata."""
+    formatted_text: str
+    sources: list = field(default_factory=list)  # list of RetrievedFact, 0-indexed
 
 
 class ProjectPlanService:
@@ -343,7 +362,7 @@ EXISTING GENERATED OUTPUTS:
         When *approved_categories* is provided the LLM is instructed to produce
         items ONLY for those categories instead of the default three pillars.
         """
-        evidence_text, web_research = await asyncio.gather(
+        evidence_text, web_result = await asyncio.gather(
             self._gather_evidence_text(initiative.id),
             self._gather_web_research(initiative, approved_categories=approved_categories),
         )
@@ -355,7 +374,7 @@ EXISTING GENERATED OUTPUTS:
             deliverables_summary=deliverables_summary,
             existing_plan=existing_plan,
             user_request=user_request,
-            web_research=web_research,
+            web_research=web_result.formatted_text,
             approved_categories=approved_categories,
         )
 
@@ -376,6 +395,16 @@ using the exact IDs and names below. Do NOT add or remove pillars.
         if existing_plan:
             system += "\n\n" + REFRESH_ADDENDUM
 
+        # Instruct the LLM to cite numbered web research sources
+        if web_result.sources:
+            system += """
+
+## SOURCE CITATION
+Web research sources above are numbered [S1], [S2], etc.
+For each plan item, include a "source_indices" array listing the 1-based numbers
+of the sources that support that item. Required items MUST cite at least one source.
+"""
+
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -391,7 +420,6 @@ using the exact IDs and names below. Do NOT add or remove pillars.
         plan_data = json.loads(tool_call.function.arguments)
 
         if not approved_categories:
-            # Legacy path: enforce canonical names for the default pillars
             PILLAR_NAMES = {
                 "authorization": "Authorization",
                 "capital": "Capital",
@@ -401,10 +429,34 @@ using the exact IDs and names below. Do NOT add or remove pillars.
                 if pillar.get("id") in PILLAR_NAMES:
                     pillar["name"] = PILLAR_NAMES[pillar["id"]]
 
+        # Attach provenance to each plan item
+        self._attach_item_provenance(plan_data, web_result.sources)
+
         return {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "pillars": plan_data["pillars"],
         }
+
+    @staticmethod
+    def _attach_item_provenance(plan_data: dict, web_sources: list) -> None:
+        """Convert LLM-emitted source_indices into structured ItemProvenance on each item."""
+        for pillar in plan_data.get("pillars", []):
+            for item in pillar.get("items", []):
+                indices = item.pop("source_indices", None) or []
+                sources: list[dict] = []
+                for idx in indices:
+                    if 1 <= idx <= len(web_sources):
+                        fact = web_sources[idx - 1]
+                        sources.append(
+                            source_attribution_from_retrieved_fact(fact).model_dump()
+                        )
+
+                derivation = Derivation.RESEARCHED if sources else Derivation.INFERRED
+                item["provenance"] = ItemProvenance(
+                    derivation=derivation,
+                    sources=[SourceAttribution(**s) for s in sources],
+                    rationale=item.get("rationale", ""),
+                ).model_dump()
 
     async def _gather_evidence_text(self, initiative_id: UUID) -> str:
         """Collect text from all uploaded evidence documents, truncated per doc."""
@@ -448,8 +500,12 @@ using the exact IDs and names below. Do NOT add or remove pillars.
 
     async def _gather_web_research(
         self, initiative, approved_categories: list[dict] | None = None,
-    ) -> str:
-        """Run web searches for each pillar area to ground plan items in authoritative sources."""
+    ) -> WebResearchResult:
+        """Run web searches for each pillar area to ground plan items in authoritative sources.
+
+        Returns a WebResearchResult with numbered sources so the LLM can cite them
+        via source_indices per plan item.
+        """
         geography = initiative.geography or ""
         project_type = initiative.project_type or ""
         desc_snippet = (initiative.project_description or "")[:200]
@@ -482,6 +538,9 @@ using the exact IDs and names below. Do NOT add or remove pillars.
                 [c["name"] for c in approved_categories] if approved_categories
                 else ["Authorization", "Capital", "Design"]
             )
+
+            # Build a flat, globally-numbered source list
+            all_facts = []
             sections: list[str] = []
             for i, facts in enumerate(results):
                 if not facts:
@@ -489,18 +548,29 @@ using the exact IDs and names below. Do NOT add or remove pillars.
                 label = pillar_labels[i] if i < len(pillar_labels) else "General"
                 lines = []
                 for f in facts[:8]:
+                    all_facts.append(f)
+                    idx = len(all_facts)  # 1-based for the LLM
                     url_ref = f" ({f.source_url})" if f.source_url else ""
-                    lines.append(f"- [{f.source_title}{url_ref}]: {f.content[:500]}")
+                    lines.append(f"- [S{idx}] [{f.source_title}{url_ref}]: {f.content[:500]}")
                 sections.append(f"### {label} Research\n" + "\n".join(lines))
 
             if not sections:
-                return "(No web research results retrieved.)"
+                return WebResearchResult(
+                    formatted_text="(No web research results retrieved.)",
+                    sources=[],
+                )
 
-            return "\n\n".join(sections)
+            return WebResearchResult(
+                formatted_text="\n\n".join(sections),
+                sources=all_facts,
+            )
 
         except Exception as exc:
             logger.warning("Web research for plan generation failed: %s", exc)
-            return "(Web research unavailable.)"
+            return WebResearchResult(
+                formatted_text="(Web research unavailable.)",
+                sources=[],
+            )
 
     def _summarize_deliverables(self, deliverables: dict | None) -> str:
         if not deliverables:

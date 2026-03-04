@@ -46,6 +46,10 @@ class ChatMessage(Base):
     # Source citations (for RAG-informed responses)
     sources: Mapped[list | None] = mapped_column(JSONB)
 
+    # Research metadata (assistant messages only) — parity with CoreChatMessage
+    thinking_lines: Mapped[list | None] = mapped_column(JSONB)
+    completion_meta: Mapped[dict | None] = mapped_column(JSONB)
+
     # User feedback: "like", "dislike", or null
     feedback: Mapped[str | None] = mapped_column(String(20), default=None)
     
