@@ -51,9 +51,49 @@ interface ChatState {
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
+  updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   reset: () => void;
   loadSession: (session: ChatSession) => void;
   deleteSession: (id: string) => void;
+}
+
+function buildModelInputsContext(messages: CoreChatMessage[]): string | null {
+  let latestLcoe: Record<string, any> | null = null;
+  let latestCarbon: Record<string, any> | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!latestLcoe && (m.widget_type === 'lcoe_inputs' || m.widget_type === 'lcoe_output') && m.widget_data) {
+      latestLcoe = m.widget_data;
+    }
+    if (!latestCarbon && (m.widget_type === 'carbon_inputs' || m.widget_type === 'carbon_output') && m.widget_data) {
+      latestCarbon = m.widget_data;
+    }
+    if (latestLcoe && latestCarbon) break;
+  }
+
+  const parts: string[] = [];
+  for (const [label, wd] of [['LCOE Model', latestLcoe], ['Carbon Model', latestCarbon]] as const) {
+    if (!wd) continue;
+    const inputs = (wd as Record<string, any>).inputs as Record<string, any> | undefined;
+    if (!inputs) continue;
+    const lines: string[] = [`### ${label} Inputs`];
+    for (const [fieldName, inp] of Object.entries(inputs)) {
+      const val = inp.value;
+      const status = inp.status || 'unknown';
+      const unit = inp.unit || '';
+      const inpLabel = inp.label || fieldName;
+      const valStr = val != null ? `${val}` : '—';
+      lines.push(`- ${inpLabel} (field_name=${fieldName}): ${valStr} ${unit} [${status}]`);
+    }
+    const missing = (wd as Record<string, any>).missing_essentials as string[] | undefined;
+    if (missing && missing.length > 0) {
+      const nice = missing.map((m: string) => (inputs[m] as any)?.label || m);
+      lines.push(`⚠ Missing essentials: ${nice.join(', ')}`);
+    }
+    parts.push(lines.join('\n'));
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
 let msgCounter = 0;
@@ -116,6 +156,8 @@ export const useChatStore = create<ChatState>()(
           role: m.role,
           content: m.content,
         }));
+
+        const modelInputsContext = buildModelInputsContext(get().messages);
 
         const assistantLocalId = nextId();
 
@@ -186,6 +228,7 @@ export const useChatStore = create<ChatState>()(
             },
             get().currentDbSessionId,
             toolHint,
+            modelInputsContext,
           );
         } catch (err: any) {
           set({
@@ -238,6 +281,16 @@ export const useChatStore = create<ChatState>()(
             }));
           });
         }
+      },
+
+      updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => {
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            (m.id === messageId || m.db_id === messageId)
+              ? { ...m, widget_data: widgetData }
+              : m
+          ),
+        }));
       },
 
       reset: () => {

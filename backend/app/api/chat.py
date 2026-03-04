@@ -159,10 +159,18 @@ async def send_chat_message_stream(
                 yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your LCOE model...'})}\n\n"
             elif action_result.action == "run_carbon_tool":
                 yield f"data: {json.dumps({'type': 'thinking', 'content': 'Building your carbon emissions model...'})}\n\n"
+            elif action_result.action == "propose_input_value":
+                yield f"data: {json.dumps({'type': 'thinking', 'content': 'Researching a value for this input...'})}\n\n"
+
+            # Build model inputs context from the latest LCOE/Carbon widget in history
+            from app.services.orchestration import OrchestrationService as _OrchestratorRef
+            _model_inputs_ctx = _OrchestratorRef._format_model_inputs_from_messages(messages)
 
             # Execute the action
             widget_type, widget_data, assistant_response, sources = await execute_action(
-                db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint
+                db, initiative, action_result, orchestration,
+                chat_history=messages, tool_hint=tool_hint,
+                model_inputs_context=_model_inputs_ctx,
             )
 
             # Stream the response word by word
@@ -251,6 +259,7 @@ async def execute_action(
     orchestration: OrchestrationService,
     chat_history: list | None = None,
     tool_hint: str | None = None,
+    model_inputs_context: str | None = None,
 ) -> tuple[str | None, dict | None, str, list]:
     """
     Execute an orchestration action and return widget/response.
@@ -328,6 +337,7 @@ async def execute_action(
                 user_message=user_message,
                 history=history_dicts,
                 project_context=project_context if project_context else None,
+                model_inputs_context=model_inputs_context,
             )
             assistant_response = research_result.content
             sources = research_result.sources
@@ -501,6 +511,59 @@ async def execute_action(
             widget_type = None
             widget_data = None
 
+    elif action == "propose_input_value":
+        # Use the research pipeline to generate the answer, then extract the concrete value
+        project_context = _build_project_context(initiative)
+        history_dicts = []
+        if chat_history:
+            history_dicts = [
+                {"role": m.role, "content": m.content}
+                for m in chat_history[-20:]
+                if m.role in ("user", "assistant")
+            ]
+            if history_dicts and history_dicts[-1]["role"] == "user":
+                history_dicts = history_dicts[:-1]
+
+        user_message = params.get("message", "")
+        if chat_history:
+            for m in reversed(chat_history):
+                if m.role == "user":
+                    user_message = m.content
+                    break
+
+        try:
+            from app.services.core_chat import ComplianceChatService
+            research_service = ComplianceChatService(db)
+            research_result = await research_service.generate_response(
+                user_message=user_message,
+                history=history_dicts,
+                project_context=project_context if project_context else None,
+                model_inputs_context=model_inputs_context,
+            )
+            assistant_response = research_result.content
+            sources = research_result.sources
+            if research_result.widget_type == "proposed_value":
+                widget_type = research_result.widget_type
+                widget_data = research_result.widget_data
+            else:
+                # Fallback: try extraction directly
+                hint_field = params.get("field_name")
+                hint_model = params.get("model_type", "lcoe")
+                if model_inputs_context:
+                    proposal = await research_service._extract_value_proposal(
+                        answer_text=assistant_response,
+                        user_message=user_message,
+                        model_inputs_context=model_inputs_context,
+                        hint_field_name=hint_field,
+                        hint_model_type=hint_model,
+                    )
+                    if proposal:
+                        widget_type = "proposed_value"
+                        widget_data = proposal
+        except Exception as e:
+            logger.error(f"propose_input_value action failed: {e}", exc_info=True)
+            assistant_response = params.get("message", "I wasn't able to research this value right now.")
+
     return widget_type, widget_data, assistant_response, sources
 
 
@@ -619,10 +682,14 @@ async def send_chat_message(
     )
     
     logger.info(f"Orchestration chose action: {action_result.action}")
-    
+
+    from app.services.orchestration import OrchestrationService as _OrchestratorRef2
+    _model_inputs_ctx2 = _OrchestratorRef2._format_model_inputs_from_messages(messages)
+
     # Execute the action
     widget_type, widget_data, assistant_response, sources = await execute_action(
-        db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint
+        db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint,
+        model_inputs_context=_model_inputs_ctx2,
     )
     
     # Convert sources to citation format
@@ -914,8 +981,12 @@ async def retry_assistant_message(
         initiative=initiative,
     )
 
+    from app.services.orchestration import OrchestrationService as _OrchestratorRef3
+    _model_inputs_ctx3 = _OrchestratorRef3._format_model_inputs_from_messages(history_before)
+
     widget_type, widget_data, assistant_response, sources = await execute_action(
-        db, initiative, action_result, orchestration, chat_history=history_before
+        db, initiative, action_result, orchestration, chat_history=history_before,
+        model_inputs_context=_model_inputs_ctx3,
     )
 
     source_citations = [

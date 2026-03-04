@@ -14,3 +14,4 @@ export { CarbonInputsWidget } from './CarbonInputsWidget';
 export { CarbonOutputWidget } from './CarbonOutputWidget';
 export { LCOEModelWidget } from './LCOEModelWidget';
 export { CarbonModelWidget } from './CarbonModelWidget';
+export { ProposedValueWidget } from './ProposedValueWidget';

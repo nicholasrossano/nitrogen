@@ -59,13 +59,13 @@ export function LCOEInputsWidget({
 }: LCOEInputsWidgetProps) {
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
-  const investigate = useCallback((label: string, status: string) => {
+  const investigate = useCallback((label: string, status: string, fieldName?: string) => {
     const text =
-      status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
-      status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
-      status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
-      `Can you help me investigate and estimate a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
+      status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
+      status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
+      status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
+      `Can you investigate and propose a value for ${label}?`;
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
   }, []);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
@@ -330,9 +330,9 @@ export function LCOEInputsWidget({
         {hoveredRow && (
           <button
             onClick={() => {
-              const { label, status } = hoveredRow;
+              const { label, status, field_name } = hoveredRow;
               setHoveredRow(null);
-              investigate(label, status);
+              investigate(label, status, field_name);
             }}
             className="absolute left-2 -translate-y-1/2 text-[11px] font-medium text-accent hover:text-accent-anchor px-2.5 py-1 rounded-md border border-accent/20 bg-white hover:bg-accent-wash shadow-sm transition-all whitespace-nowrap cursor-pointer"
             style={{ top: hoveredRow.top }}

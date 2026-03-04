@@ -20,6 +20,7 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
 import { MessageVariants } from './MessageVariants';
@@ -269,6 +270,7 @@ export function ChatMessage({
               initiativeId={initiativeId}
               isActive={isLatest}
               hasOutputWidget={hasOutputWidget}
+              messageId={message.id}
             />
           </div>
         )}
@@ -370,12 +372,14 @@ function MessageWidget({
   initiativeId,
   isActive,
   hasOutputWidget = false,
+  messageId,
 }: {
   type: string;
   data: Record<string, any>;
   initiativeId: string;
   isActive: boolean;
   hasOutputWidget?: boolean;
+  messageId?: string;
 }) {
   switch (type) {
     case 'confirmation':
@@ -408,6 +412,8 @@ function MessageWidget({
       return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'proposed_value':
+      return <ProposedValueWidget data={data as any} messageId={messageId} />;
     default:
       return null;
   }
