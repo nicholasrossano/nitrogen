@@ -26,7 +26,7 @@ function tierLabel(tiers: string[]): string {
           default:         return t;
         }
       })
-      .join(' + ') || 'general knowledge'
+      .join(' + ') || 'model knowledge'
   );
 }
 
