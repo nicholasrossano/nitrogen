@@ -4,6 +4,7 @@ from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
 from app.models.core_chat import CoreChatSession, CoreChatMessage
+from app.models.provenance import ProvenanceTrace
 
 __all__ = [
     "Initiative",
@@ -16,4 +17,5 @@ __all__ = [
     "CorpusChunk",
     "CoreChatSession",
     "CoreChatMessage",
+    "ProvenanceTrace",
 ]

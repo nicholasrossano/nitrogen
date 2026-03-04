@@ -16,6 +16,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from app.schemas.provenance import Derivation, ItemProvenance, ValidationStatus
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -37,9 +39,11 @@ class LCOEInput:
     notes: str = ""
     rationale: str = ""
     category: str = "general"
+    provenance: dict | None = None
+    validation_status: str = "unconfirmed"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "field_name": self.field_name,
             "label": self.label,
             "value": self.value,
@@ -49,7 +53,11 @@ class LCOEInput:
             "notes": self.notes,
             "rationale": self.rationale,
             "category": self.category,
+            "validation_status": self.validation_status,
         }
+        if self.provenance is not None:
+            d["provenance"] = self.provenance
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "LCOEInput":
@@ -433,6 +441,10 @@ class LCOEEngine:
 
         for field_name, label, default_val, unit, category in fields:
             if field_name in known and known[field_name] is not None:
+                prov = ItemProvenance(
+                    derivation=Derivation.PROVIDED,
+                    rationale="Extracted from project conversation",
+                ).model_dump()
                 result[field_name] = LCOEInput(
                     field_name=field_name,
                     label=label,
@@ -441,11 +453,17 @@ class LCOEEngine:
                     source="chat",
                     status="inferred",
                     category=category,
+                    provenance=prov,
+                    validation_status=ValidationStatus.UNCONFIRMED,
                 )
             elif default_val is not None:
                 rationale = ""
                 if field_name in defaults:
                     rationale = f"Typical value for {tech_type or 'generic'} projects"
+                prov = ItemProvenance(
+                    derivation=Derivation.ASSUMED,
+                    rationale=rationale,
+                ).model_dump()
                 result[field_name] = LCOEInput(
                     field_name=field_name,
                     label=label,
@@ -455,6 +473,8 @@ class LCOEEngine:
                     status="assumed",
                     rationale=rationale,
                     category=category,
+                    provenance=prov,
+                    validation_status=ValidationStatus.UNCONFIRMED,
                 )
             else:
                 result[field_name] = LCOEInput(
@@ -465,6 +485,8 @@ class LCOEEngine:
                     source="assumption",
                     status="missing",
                     category=category,
+                    provenance=None,
+                    validation_status=ValidationStatus.MISSING,
                 )
 
         return result

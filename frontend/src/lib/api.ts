@@ -90,6 +90,8 @@ export interface ChatMessage {
   widget_type: string | null;
   widget_data: Record<string, any> | null;
   sources?: SourceCitation[] | null;
+  thinking_lines?: string[] | null;
+  completion_meta?: { latency_ms?: number; citation_count: number; tiers_used: string[] } | null;
   feedback?: 'like' | 'dislike' | null;
   created_at: string;
 }

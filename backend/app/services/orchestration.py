@@ -458,7 +458,15 @@ class OrchestrationService:
                 unit = inp.get("unit", "")
                 inp_label = inp.get("label", field_name)
                 val_str = f"{val}" if val is not None else "—"
-                lines.append(f"- {inp_label} (field_name={field_name}): {val_str} {unit} [{status}]")
+                prov = inp.get("provenance") or {}
+                derivation = prov.get("derivation", "")
+                rationale = prov.get("rationale", "") or inp.get("rationale", "")
+                prov_str = ""
+                if derivation:
+                    prov_str += f" derivation={derivation}"
+                if rationale:
+                    prov_str += f' reason="{rationale}"'
+                lines.append(f"- {inp_label} (field_name={field_name}): {val_str} {unit} [{status}{prov_str}]")
             missing = widget_data.get("missing_essentials", [])
             if missing:
                 nice = [inputs.get(m, {}).get("label", m) for m in missing]

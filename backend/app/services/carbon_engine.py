@@ -25,6 +25,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from app.schemas.provenance import Derivation, ItemProvenance, ValidationStatus
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -49,9 +51,11 @@ class CarbonInput:
     notes: str = ""
     rationale: str = ""
     category: str = "general"
+    provenance: dict | None = None
+    validation_status: str = "unconfirmed"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "field_name": self.field_name,
             "label": self.label,
             "value": self.value,
@@ -62,7 +66,11 @@ class CarbonInput:
             "notes": self.notes,
             "rationale": self.rationale,
             "category": self.category,
+            "validation_status": self.validation_status,
         }
+        if self.provenance is not None:
+            d["provenance"] = self.provenance
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "CarbonInput":
@@ -452,6 +460,10 @@ class CarbonEngine:
 
         for field_name, label, default_val, unit, category, applies_to in fields:
             if field_name in known and known[field_name] is not None:
+                prov = ItemProvenance(
+                    derivation=Derivation.PROVIDED,
+                    rationale="Extracted from project conversation",
+                ).model_dump()
                 result[field_name] = CarbonInput(
                     field_name=field_name,
                     label=label,
@@ -461,11 +473,17 @@ class CarbonEngine:
                     status="inferred",
                     applies_to=applies_to,
                     category=category,
+                    provenance=prov,
+                    validation_status=ValidationStatus.UNCONFIRMED,
                 )
             elif default_val is not None:
                 rationale = ""
                 if field_name in defaults:
                     rationale = f"Default for {method_pack or 'generic'} methodology"
+                prov = ItemProvenance(
+                    derivation=Derivation.ASSUMED,
+                    rationale=rationale,
+                ).model_dump()
                 result[field_name] = CarbonInput(
                     field_name=field_name,
                     label=label,
@@ -476,6 +494,8 @@ class CarbonEngine:
                     rationale=rationale,
                     applies_to=applies_to,
                     category=category,
+                    provenance=prov,
+                    validation_status=ValidationStatus.UNCONFIRMED,
                 )
             else:
                 result[field_name] = CarbonInput(
@@ -487,6 +507,8 @@ class CarbonEngine:
                     status="missing",
                     applies_to=applies_to,
                     category=category,
+                    provenance=None,
+                    validation_status=ValidationStatus.MISSING,
                 )
 
         return result

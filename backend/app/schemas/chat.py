@@ -33,6 +33,8 @@ class ChatMessageResponse(BaseModel):
     widget_type: Optional[str] = None
     widget_data: Optional[dict[str, Any]] = None
     sources: Optional[list[SourceCitation]] = None
+    thinking_lines: Optional[list[str]] = None
+    completion_meta: Optional[dict[str, Any]] = None
     feedback: Optional[str] = None
     created_at: datetime
     
