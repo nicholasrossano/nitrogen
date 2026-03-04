@@ -165,6 +165,47 @@ ORCHESTRATION_ACTIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_input_value",
+            "description": (
+                "Propose a specific numeric or categorical value for a single model input field "
+                "(LCOE or Carbon model). Use this when the user asks to investigate, estimate, "
+                "research, or help determine a value for a specific input field. The proposed value "
+                "will be shown in a confirmation widget that the user can accept to update the model. "
+                "ALWAYS include a concrete numeric value — never just explain the field without proposing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "2-4 sentence explanation of the proposed value: why this value, what sources/reasoning support it, and any caveats."
+                    },
+                    "field_name": {
+                        "type": "string",
+                        "description": "The exact field_name from the model inputs (e.g. 'net_capacity_kw', 'total_capex', 'capacity_factor')."
+                    },
+                    "proposed_value": {
+                        "type": "number",
+                        "description": "The proposed numeric value for the field."
+                    },
+                    "model_type": {
+                        "type": "string",
+                        "enum": ["lcoe", "carbon"],
+                        "description": "Which model this input belongs to."
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["high", "moderate", "low"],
+                        "description": "How confident you are in this estimate."
+                    }
+                },
+                "required": ["message", "field_name", "proposed_value", "model_type", "confidence"]
+            }
+        }
+    },
 ]
 
 
@@ -212,6 +253,9 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 - Clarifying questions asked: {clarifying_asked}
 - User messages so far: {user_message_count}
 
+## Current Model Inputs
+{model_inputs_context}
+
 ## Retrieved Context
 {retrieved_context}
 
@@ -249,6 +293,9 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 
 **Rule 11: User discusses a clean cooking or cookstove project and asks about carbon credits, fuel savings impact, or emission reduction potential**
 → Use **run_carbon_tool** — the tool will extract inputs and fill gaps with methodology-aligned assumptions
+
+**Rule 12: User asks to investigate, estimate, validate, or research a specific model input field (e.g. "what should Net Capacity be?", "investigate Total CAPEX", "estimate capacity factor")**
+→ Use **propose_input_value** — look at the Current Model Inputs, identify the field, research an appropriate value given the project context, and propose a concrete number with explanation. Match the field_name exactly from the model inputs listed above.
 
 ## Style
 - Be proactive and directive — move toward the plan quickly
@@ -330,6 +377,8 @@ class OrchestrationService:
         )
         user_message_count = sum(1 for m in messages if m.role == "user")
 
+        model_inputs_context = self._format_model_inputs_from_messages(messages)
+
         system_prompt = ORCHESTRATION_SYSTEM_PROMPT.format(
             retrieved_context=context_str if context_str else "No additional context available.",
             title=initiative.title or "Not set",
@@ -341,6 +390,7 @@ class OrchestrationService:
             documents_requested="Yes" if has_document_request else "No",
             clarifying_asked=clarifying_asked,
             user_message_count=user_message_count,
+            model_inputs_context=model_inputs_context or "No model has been run yet.",
         )
 
         api_messages = [{"role": "system", "content": system_prompt}]
@@ -380,6 +430,42 @@ class OrchestrationService:
                 parameters={"message": "I'm here to help. Could you tell me more about your project?"},
                 sources_used=[],
             )
+
+    @staticmethod
+    def _format_model_inputs_from_messages(messages: list[ChatMessage]) -> str:
+        """Extract the latest LCOE/carbon widget_data from messages and format for the LLM."""
+        latest_lcoe = None
+        latest_carbon = None
+        for msg in reversed(messages):
+            if msg.widget_type in ("lcoe_inputs", "lcoe_output") and msg.widget_data:
+                if latest_lcoe is None:
+                    latest_lcoe = msg.widget_data
+            if msg.widget_type in ("carbon_inputs", "carbon_output") and msg.widget_data:
+                if latest_carbon is None:
+                    latest_carbon = msg.widget_data
+
+        parts = []
+        for label, widget_data in [("LCOE Model", latest_lcoe), ("Carbon Model", latest_carbon)]:
+            if not widget_data:
+                continue
+            inputs = widget_data.get("inputs", {})
+            if not inputs:
+                continue
+            lines = [f"### {label} Inputs"]
+            for field_name, inp in inputs.items():
+                val = inp.get("value")
+                status = inp.get("status", "unknown")
+                unit = inp.get("unit", "")
+                inp_label = inp.get("label", field_name)
+                val_str = f"{val}" if val is not None else "—"
+                lines.append(f"- {inp_label} (field_name={field_name}): {val_str} {unit} [{status}]")
+            missing = widget_data.get("missing_essentials", [])
+            if missing:
+                nice = [inputs.get(m, {}).get("label", m) for m in missing]
+                lines.append(f"⚠ Missing essentials: {', '.join(nice)}")
+            parts.append("\n".join(lines))
+
+        return "\n\n".join(parts)
 
     async def extract_inputs_from_message(
         self,
