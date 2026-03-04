@@ -58,12 +58,14 @@ export function LCOEModelWidget({
 
   const [data, setDataRaw] = useState(initialData);
   const setData = useCallback((newData: any) => {
-    const resolved = typeof newData === 'function' ? newData(data) : newData;
-    setDataRaw(resolved);
-    if (messageId && resolved) {
-      useChatStore.getState().updateMessageWidgetData(messageId, resolved);
-    }
-  }, [messageId, data]);
+    setDataRaw((prev: any) => {
+      const resolved = typeof newData === 'function' ? newData(prev) : newData;
+      if (messageId && resolved) {
+        updateMessageWidgetData(messageId, resolved);
+      }
+      return resolved;
+    });
+  }, [messageId, updateMessageWidgetData]);
   const [activeTab, setActiveTab] = useState<'overview' | 'inputs' | 'sensitivity' | 'cashflow'>('overview');
   const [isExporting, setIsExporting] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function LCOEModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs]);
+  }, [inputs, setData]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -148,7 +150,7 @@ export function LCOEModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs]);
+  }, [editingField, editValue, inputs, setData]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -175,7 +177,7 @@ export function LCOEModelWidget({
       setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
     }
 
-    setData(prev => ({
+    setData((prev: any) => ({
       ...prev,
       inputs: {
         ...prev?.inputs,
@@ -188,7 +190,7 @@ export function LCOEModelWidget({
       const newData = await api.updateLCOEInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
     } catch {
-      setData(prev => ({
+      setData((prev: any) => ({
         ...prev,
         inputs: {
           ...prev?.inputs,
@@ -198,7 +200,7 @@ export function LCOEModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses]);
+  }, [inputs, preConfirmStatuses, setData]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
