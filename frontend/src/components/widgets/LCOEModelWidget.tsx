@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '@/stores/chatStore';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface LCOEModelWidgetProps {
   data: Record<string, any>;
@@ -435,12 +436,16 @@ export function LCOEModelWidget({
               <span className="text-sm text-text-secondary">/kWh</span>
             </div>
           </div>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${qualityStyle.bg}`}>
-            <QualityIcon className={`w-3 h-3 ${qualityStyle.text}`} />
-            <span className={`text-[10px] font-medium uppercase tracking-wider ${qualityStyle.text}`}>
-              {result.quality_label} confidence
-            </span>
-          </div>
+          <Tooltip
+            content="Reflects data quality. High = mostly confirmed inputs. Moderate = mix of inferred and assumed values. Low = significant assumptions or missing data."
+          >
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-help ${qualityStyle.bg}`}>
+              <QualityIcon className={`w-3 h-3 ${qualityStyle.text}`} />
+              <span className={`text-[10px] font-medium uppercase tracking-wider ${qualityStyle.text}`}>
+                {result.quality_label} confidence
+              </span>
+            </div>
+          </Tooltip>
         </div>
         <p className="text-xs text-text-tertiary mt-2">
           {result.assumption_count} assumption{result.assumption_count !== 1 ? 's' : ''} used
@@ -498,18 +503,21 @@ export function LCOEModelWidget({
           </div>
           <div className="mt-3 pt-3 border-t border-stroke-subtle grid grid-cols-2 gap-4">
             <div>
-              <span className="text-[10px] text-text-tertiary">Discounted Costs (NPV)</span>
+              <Tooltip content="All project costs (CAPEX, O&M, fuel, replacements) discounted back to today's value using the discount rate. This is the numerator in the LCOE formula.">
+                <span className="text-[10px] text-text-tertiary cursor-help border-b border-dotted border-text-tertiary">
+                  Discounted Costs (NPV)
+                </span>
+              </Tooltip>
               <p className="text-xs font-medium text-text-primary">
                 {currency} {result.npv_total_costs.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </p>
             </div>
             <div>
-              <span
-                className="text-[10px] text-text-tertiary cursor-help border-b border-dotted border-text-tertiary"
-                title="Energy discounted to year 0 — the denominator in the LCOE formula. Lower than total production because future kWh are worth less in today's terms."
-              >
-                Discounted Energy (NPV)
-              </span>
+              <Tooltip content="Energy production discounted to today's value as future kWh are worth less in present terms. This is the denominator in the LCOE formula.">
+                <span className="text-[10px] text-text-tertiary cursor-help border-b border-dotted border-text-tertiary">
+                  Discounted Energy (NPV)
+                </span>
+              </Tooltip>
               <p className="text-xs font-medium text-text-primary">
                 {result.npv_total_energy.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh
               </p>
@@ -595,11 +603,27 @@ export function LCOEModelWidget({
             <thead>
               <tr className="border-b border-stroke-subtle">
                 <th className="text-left py-1 pl-5 pr-3 font-semibold text-text-secondary">Year</th>
-                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">CAPEX</th>
-                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">O&M</th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">
+                  <Tooltip content="Capital expenditure — one-time upfront or milestone-based costs.">
+                    <span className="cursor-help border-b border-dotted border-text-secondary">CAPEX</span>
+                  </Tooltip>
+                </th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">
+                  <Tooltip content="Operations & Maintenance — recurring annual costs to run the project.">
+                    <span className="cursor-help border-b border-dotted border-text-secondary">O&amp;M</span>
+                  </Tooltip>
+                </th>
                 <th className="text-right py-1 pr-3 font-semibold text-text-secondary">Energy (kWh)</th>
-                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">Disc. Cost</th>
-                <th className="text-right py-1 pr-5 font-semibold text-text-secondary">Disc. Energy</th>
+                <th className="text-right py-1 pr-3 font-semibold text-text-secondary">
+                  <Tooltip content="Total cost in this year discounted back to year 0 using the project discount rate.">
+                    <span className="cursor-help border-b border-dotted border-text-secondary">Disc. Cost</span>
+                  </Tooltip>
+                </th>
+                <th className="text-right py-1 pr-5 font-semibold text-text-secondary">
+                  <Tooltip content="Energy produced in this year discounted back to year 0 — reflects the time value of energy.">
+                    <span className="cursor-help border-b border-dotted border-text-secondary">Disc. Energy</span>
+                  </Tooltip>
+                </th>
               </tr>
             </thead>
             <tbody>
