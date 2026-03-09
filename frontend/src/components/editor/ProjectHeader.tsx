@@ -79,8 +79,8 @@ export function ProjectHeader({
   const hasRightControls = onNewChat || leftToggle || rightToggle;
 
   return (
-    <header className="flex-shrink-0 bg-white">
-      <div className="px-4 py-[7px] flex items-center relative">
+    <header className="flex-shrink-0">
+      <div className="px-4 py-[7px] min-h-[42px] flex items-center relative">
         {/* Left: back arrow */}
         {onBack && (
           <button
@@ -174,8 +174,6 @@ export function ProjectHeader({
         )}
       </div>
 
-      {/* Accent divider */}
-      <div className="divider-accent" />
     </header>
   );
 }
