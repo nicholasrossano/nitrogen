@@ -18,10 +18,29 @@ from app.core.auth import get_current_user, MockUser
 from app.config import get_settings
 from app.services.core_chat import ComplianceChatService
 from app.models.core_chat import CoreChatSession, CoreChatMessage
+from app.models.initiative import Initiative
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _build_project_context(initiative: Initiative) -> str:
+    """Build a project context string to inject into the research assistant."""
+    parts = []
+    if initiative.title:
+        parts.append(f"- Title: {initiative.title}")
+    if initiative.project_type:
+        parts.append(f"- Project type: {initiative.project_type}")
+    if initiative.project_description:
+        parts.append(f"- Description: {initiative.project_description[:600]}")
+    if initiative.geography:
+        parts.append(f"- Geography: {initiative.geography}")
+    if initiative.selected_tools:
+        parts.append(f"- Selected tools/frameworks: {', '.join(initiative.selected_tools)}")
+    if initiative.goal:
+        parts.append(f"- Goal: {initiative.goal}")
+    return "\n".join(parts) if parts else ""
 
 
 class ChatHistoryMessage(BaseModel):
@@ -35,6 +54,7 @@ class ComplianceChatRequest(BaseModel):
     session_id: Optional[str] = None  # UUID of existing session, or null to start a new one
     tool_hint: Optional[str] = None  # Optional tool ID the user explicitly selected
     model_inputs_context: Optional[str] = None  # Current LCOE/Carbon model inputs for context
+    initiative_id: Optional[str] = None  # Inject project context when chatting from a project
 
 
 class TitleRequest(BaseModel):
@@ -112,6 +132,23 @@ async def compliance_chat_stream(
             history = [{"role": m.role, "content": m.content} for m in data.history]
             service = ComplianceChatService(db)
 
+            # Load project context when chatting from a project workspace
+            project_context: str | None = None
+            if data.initiative_id:
+                try:
+                    init_uuid = uuid.UUID(data.initiative_id)
+                    result = await db.execute(
+                        select(Initiative).where(
+                            Initiative.id == init_uuid,
+                            Initiative.user_id == user.uid,
+                        )
+                    )
+                    initiative = result.scalar_one_or_none()
+                    if initiative:
+                        project_context = _build_project_context(initiative)
+                except (ValueError, Exception) as e:
+                    logger.warning(f"Failed to load initiative context: {e}")
+
             generation_task = asyncio.create_task(
                 service.generate_response(
                     user_message=data.content,
@@ -119,6 +156,7 @@ async def compliance_chat_stream(
                     on_thinking=on_thinking,
                     tool_hint=data.tool_hint or None,
                     model_inputs_context=data.model_inputs_context or None,
+                    project_context=project_context,
                 )
             )
 
