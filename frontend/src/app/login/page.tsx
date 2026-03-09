@@ -89,18 +89,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="h-[72px] px-6 flex items-center bg-white">
+      <header className="h-[72px] px-6 flex items-center">
         <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
           Nitrogen AI
         </h1>
       </header>
-      <div className="divider-accent" />
-
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           {/* Card */}
-          <div className="bg-white border border-stroke-subtle p-8">
+          <div className="bg-surface rounded-lg shadow-workspace p-8">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-display font-semibold text-text-primary mb-2">
                 {mode === 'reset' 

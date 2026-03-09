@@ -101,9 +101,9 @@ function HomePageContent() {
   });
 
   return (
-    <div className="min-h-screen h-screen flex flex-col">
-      {/* Header row — full width */}
-      <header className="shrink-0 px-4 py-[7px] flex items-center justify-end gap-4 bg-white">
+    <div className="min-h-screen h-screen flex flex-col bg-background">
+      {/* Header row — shell chrome */}
+      <header className="shrink-0 px-4 py-[7px] flex items-center justify-end gap-4">
         <div className="flex items-center gap-3 flex-1 max-w-xl justify-end">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none shrink-0" />
@@ -112,7 +112,7 @@ function HomePageContent() {
               placeholder={isTrashView ? 'Search trash' : 'Search projects'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-[2.25rem] pr-4 py-1.5 text-xs rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+              className="w-full pl-[2.25rem] pr-4 py-1.5 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
               aria-label={isTrashView ? 'Search trash' : 'Search projects'}
             />
           </div>
@@ -138,9 +138,7 @@ function HomePageContent() {
         </div>
       </header>
 
-      <div className="divider-accent shrink-0" />
-
-      {/* Content row: sidebar rail + main */}
+      {/* Content row: sidebar rail + inset workspace */}
       <div className="flex flex-1 min-h-0">
         <SideDrawer
           variant="home"
@@ -149,8 +147,9 @@ function HomePageContent() {
           onSignOut={handleSignOut}
           userEmail={user?.email}
         />
-        <main className="flex-1 bg-white min-h-0 overflow-auto">
-          <div className="px-6 py-4">
+        <div className="flex-1 p-2 pl-1 min-h-0">
+          <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-auto">
+            <div className="px-6 py-4">
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-6 h-6 text-accent animate-spin" />
@@ -222,7 +221,8 @@ function HomePageContent() {
               </div>
             )}
           </div>
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   );
