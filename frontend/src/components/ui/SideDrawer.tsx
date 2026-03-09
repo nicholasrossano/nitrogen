@@ -1,73 +1,57 @@
 'use client';
 
-import { LayoutGrid, Trash2, LogOut, MessageSquare } from 'lucide-react';
+import { Home, Trash2, LogOut, Map, MessageSquare } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-export type NavItem = 'chat' | 'projects' | 'trash';
+export type NavItem = 'home' | 'trash' | 'plan' | 'chat';
+export type SideDrawerVariant = 'home' | 'project';
+
+interface NavItemConfig {
+  key: NavItem;
+  label: string;
+  Icon: LucideIcon;
+}
 
 interface SideDrawerProps {
+  variant: SideDrawerVariant;
   activeItem: NavItem;
   onItemSelect: (item: NavItem) => void;
-  /** When false, header is rendered by parent for alignment; only nav is shown */
-  includeHeader?: boolean;
-  /** When true, adds a bottom accent border to the header cell only */
-  headerBottomBorder?: boolean;
   onSignOut?: () => void;
   userEmail?: string | null;
 }
 
-/** Renders just the Account header cell for use in a shared header row */
-export function SideDrawerHeader({ bottomBorder = false }: { bottomBorder?: boolean }) {
-  return (
-    <div className={`w-44 px-4 pb-[7px] flex items-end h-full shrink-0 bg-white${bottomBorder ? ' border-b-1 border-b-accent' : ''}`}>
-      <div className="flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-full bg-accent-wash border-1 border-accent-tint flex items-center justify-center flex-shrink-0">
-          <span className="text-xs font-medium text-accent-anchor">A</span>
-        </div>
-        <span className="text-sm text-text-secondary">Account</span>
-      </div>
-    </div>
-  );
-}
+const HOME_ITEMS: NavItemConfig[] = [
+  { key: 'home', label: 'Home', Icon: Home },
+  { key: 'trash', label: 'Trash', Icon: Trash2 },
+];
 
-export function SideDrawer({ activeItem, onItemSelect, includeHeader = true, headerBottomBorder = false, onSignOut, userEmail }: SideDrawerProps) {
-  return (
-    <aside className="w-44 bg-white h-full flex flex-col flex-shrink-0">
-      {includeHeader && <SideDrawerHeader bottomBorder={headerBottomBorder} />}
+const PROJECT_ITEMS: NavItemConfig[] = [
+  { key: 'home', label: 'Home', Icon: Home },
+  { key: 'plan', label: 'Plan', Icon: Map },
+  { key: 'chat', label: 'Chat', Icon: MessageSquare },
+];
 
-      {/* Navigation items */}
+export function SideDrawer({ variant, activeItem, onItemSelect, onSignOut, userEmail }: SideDrawerProps) {
+  const items = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
+
+  return (
+    <aside className="group w-12 hover:w-44 bg-white h-full flex flex-col flex-shrink-0 border-r-1 border-accent overflow-hidden transition-[width] duration-200 ease-in-out">
       <nav className="flex-1 bg-white">
-        <button
-          onClick={() => onItemSelect('chat')}
-          className={`nav-row w-full ${activeItem === 'chat' ? 'nav-row-active' : ''}`}
-        >
-          <MessageSquare
-            className="w-4 h-4 flex-shrink-0"
-            {...(activeItem === 'chat' && { fill: 'currentColor' })}
-          />
-          <span>Chat</span>
-        </button>
-
-        <button
-          onClick={() => onItemSelect('projects')}
-          className={`nav-row w-full ${activeItem === 'projects' ? 'nav-row-active' : ''}`}
-        >
-          <LayoutGrid
-            className="w-4 h-4 flex-shrink-0"
-            {...(activeItem === 'projects' && { fill: 'currentColor' })}
-          />
-          <span>Projects</span>
-        </button>
-
-        <button
-          onClick={() => onItemSelect('trash')}
-          className={`nav-row w-full ${activeItem === 'trash' ? 'nav-row-active' : ''}`}
-        >
-          <Trash2
-            className="w-4 h-4 flex-shrink-0"
-            {...(activeItem === 'trash' && { fill: 'currentColor' })}
-          />
-          <span>Trash</span>
-        </button>
+        {items.map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            onClick={() => onItemSelect(key)}
+            className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
+          >
+            <Icon
+              className="w-4 h-4 flex-shrink-0"
+              {...(activeItem === key && { fill: 'currentColor' })}
+            />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+              {label}
+            </span>
+          </button>
+        ))}
 
         {onSignOut && (
           <button
@@ -76,7 +60,9 @@ export function SideDrawer({ activeItem, onItemSelect, includeHeader = true, hea
             title={userEmail || 'Log out'}
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            <span>Log out</span>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+              Log out
+            </span>
           </button>
         )}
       </nav>
