@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen } from 'lucide-react';
+import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen, ArrowLeft } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 
 interface PanelToggle {
@@ -20,6 +20,8 @@ interface ProjectHeaderProps {
   rightToggle?: PanelToggle;
   /** SquarePen "new chat" button */
   onNewChat?: () => void;
+  /** ArrowLeft back button — shown on the left side when provided */
+  onBack?: () => void;
 }
 
 export function ProjectHeader({
@@ -28,6 +30,7 @@ export function ProjectHeader({
   leftToggle,
   rightToggle,
   onNewChat,
+  onBack,
 }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(initiative.title || 'New Project');
@@ -78,6 +81,17 @@ export function ProjectHeader({
   return (
     <header className="flex-shrink-0 bg-white">
       <div className="px-4 py-[7px] flex items-center relative">
+        {/* Left: back arrow */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            title="Back"
+            className="icon-btn p-1.5 text-text-tertiary"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Editable title — centered */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
@@ -124,18 +138,9 @@ export function ProjectHeader({
           </div>
         </div>
 
-        {/* Right controls: new chat + panel toggles */}
+        {/* Right controls: panel toggles + new chat */}
         {hasRightControls && (
           <div className="ml-auto flex items-center gap-1">
-            {onNewChat && (
-              <button
-                onClick={onNewChat}
-                title="New chat"
-                className="icon-btn p-1.5 text-text-tertiary"
-              >
-                <SquarePen className="w-4 h-4" />
-              </button>
-            )}
             {leftToggle && (
               <button
                 onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
@@ -154,6 +159,15 @@ export function ProjectHeader({
                 className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <PanelRight className="w-4 h-4" />
+              </button>
+            )}
+            {onNewChat && (
+              <button
+                onClick={onNewChat}
+                title="New chat"
+                className="icon-btn p-1.5 text-text-tertiary"
+              >
+                <SquarePen className="w-4 h-4" />
               </button>
             )}
           </div>

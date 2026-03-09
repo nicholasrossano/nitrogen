@@ -38,6 +38,7 @@ export interface ConversationViewProps {
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
   onSetFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   retryingMessageId: string | null;
+  onBack?: () => void;
 }
 
 function preprocessMath(content: string): string {
@@ -76,6 +77,7 @@ export function ConversationView({
   messageFeedback,
   onSetFeedback,
   retryingMessageId,
+  onBack,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -224,7 +226,6 @@ export function ConversationView({
         <form onSubmit={handleSubmit} className="relative">
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
-            style={{ boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
           >
             {(draftTag || selectedTool) && (
               <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">

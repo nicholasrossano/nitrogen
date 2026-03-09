@@ -157,7 +157,6 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
         <form onSubmit={handleSubmit} className="relative">
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
-            style={{ boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
           >
             {(attachedFiles.length > 0 || selectedTool) && (
               <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">

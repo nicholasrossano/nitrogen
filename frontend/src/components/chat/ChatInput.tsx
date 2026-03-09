@@ -11,7 +11,6 @@ interface ChatInputProps {
   stage?: string;
   placeholder?: string;
   onSend?: (content: string) => void;
-  noShadow?: boolean;
 }
 
 export function ChatInput({ 
@@ -20,7 +19,6 @@ export function ChatInput({
   stage,
   placeholder: customPlaceholder,
   onSend,
-  noShadow = false,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
@@ -101,7 +99,6 @@ export function ChatInput({
     <form onSubmit={handleSubmit} className="relative">
       <div
         className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
-        style={noShadow ? undefined : { boxShadow: '0 10px 28px -6px rgba(0,0,0,0.14), 0 4px 10px -3px rgba(0,0,0,0.09)' }}
       >
         {(draftTag || selectedTool) && (
           <div className="px-3 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">

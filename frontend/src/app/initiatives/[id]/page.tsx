@@ -17,6 +17,10 @@ const MIN_CHAT_WIDTH_PERCENT = 20;
 const MAX_CHAT_WIDTH_PERCENT = 40;
 const DEFAULT_CHAT_WIDTH_PERCENT = 30;
 
+const MIN_STANDALONE_CHAT_PERCENT = 30;
+const MAX_STANDALONE_CHAT_PERCENT = 70;
+const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
+
 type ProjectView = 'chat' | 'plan';
 
 function InitiativePageContent() {
@@ -24,11 +28,14 @@ function InitiativePageContent() {
   const router = useRouter();
   const initiativeId = params.id as string;
   const containerRef = useRef<HTMLDivElement>(null);
-  
+  const standaloneContainerRef = useRef<HTMLDivElement>(null);
+
   const [activeView, setActiveView] = useState<ProjectView>('chat');
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
+  const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
+  const [isResizingStandalone, setIsResizingStandalone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Plan view panel state
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
@@ -147,6 +154,34 @@ function InitiativePageContent() {
     };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
+  const handleStandaloneMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingStandalone || !standaloneContainerRef.current) return;
+    const rect = standaloneContainerRef.current.getBoundingClientRect();
+    const newWidthPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    setStandaloneChatWidthPercent(
+      Math.min(MAX_STANDALONE_CHAT_PERCENT, Math.max(MIN_STANDALONE_CHAT_PERCENT, newWidthPercent))
+    );
+  }, [isResizingStandalone]);
+
+  const handleStandaloneMouseUp = useCallback(() => {
+    setIsResizingStandalone(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizingStandalone) {
+      document.addEventListener('mousemove', handleStandaloneMouseMove);
+      document.addEventListener('mouseup', handleStandaloneMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleStandaloneMouseMove);
+      document.removeEventListener('mouseup', handleStandaloneMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingStandalone, handleStandaloneMouseMove, handleStandaloneMouseUp]);
+
   const handleToggleChatPanel = () => {
     setShowChatPanel(prev => !prev);
   };
@@ -192,6 +227,7 @@ function InitiativePageContent() {
 
   const handleNewChat = () => {
     setShowChatLanding(true);
+    setShowEditorInChatView(false);
   };
 
   return (
@@ -215,12 +251,8 @@ function InitiativePageContent() {
             } : undefined,
           } : {
             onNewChat: handleNewChat,
-            leftToggle: showEditorInChatView ? {
-              active: showChatInChatView,
-              onClick: () => setShowChatInChatView((p) => !p),
-              title: showChatInChatView ? 'Hide chat' : 'Show chat',
-            } : undefined,
-            rightToggle: chatEditorWidgets.length > 0 ? {
+            onBack: !showChatLanding ? () => { setShowChatLanding(true); setShowEditorInChatView(false); } : undefined,
+            rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
               onClick: () => {
                 setShowEditorInChatView((p) => !p);
@@ -260,19 +292,25 @@ function InitiativePageContent() {
             </div>
           ) : <div className="flex-1" />
         ) : activeView === 'chat' ? (
-          <main className="flex-1 min-w-0 flex overflow-hidden">
-            {showChatInChatView && (
-              <div
-                className={`${showEditorInChatView ? 'w-[40%] flex-shrink-0 border-r border-divider' : 'flex-1'} overflow-hidden`}
-              >
-                <ProjectStandaloneChatView
-                  initiativeId={initiativeId}
-                  showLanding={showChatLanding}
-                  onMessageSent={() => setShowChatLanding(false)}
-                  onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          <main ref={standaloneContainerRef} className="flex-1 min-w-0 flex overflow-hidden relative">
+            <div
+              className="flex-shrink-0 relative overflow-hidden"
+              style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
+            >
+              <ProjectStandaloneChatView
+                initiativeId={initiativeId}
+                showLanding={showChatLanding}
+                onMessageSent={() => setShowChatLanding(false)}
+                onBack={() => setShowChatLanding(true)}
+                onEditorWidgetsChange={handleChatEditorWidgetsChange}
+              />
+              {showEditorInChatView && (
+                <div
+                  onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
+                  className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
                 />
-              </div>
-            )}
+              )}
+            </div>
             {showEditorInChatView && chatEditorWidgets.length > 0 && (
               <div className="flex-1 overflow-hidden">
                 <EditorSidePanel

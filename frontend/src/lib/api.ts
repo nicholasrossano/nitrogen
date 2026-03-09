@@ -726,6 +726,7 @@ export const api = {
     session_id?: string | null,
     toolHint?: string | null,
     modelInputsContext?: string | null,
+    initiativeId?: string | null,
   ) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -742,6 +743,7 @@ export const api = {
         session_id: session_id ?? null,
         tool_hint: toolHint ?? null,
         model_inputs_context: modelInputsContext ?? null,
+        initiative_id: initiativeId ?? null,
       }),
     });
 
