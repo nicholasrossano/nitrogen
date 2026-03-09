@@ -25,6 +25,7 @@ import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
 import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
+import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { EDITOR_WIDGET_TYPES } from './EditorSidePanel';
 
 interface ChatPanelProps {
@@ -50,6 +51,7 @@ const CHAT_WIDGET_TYPES = [
   'lcoe_output',
   'carbon_inputs',
   'carbon_output',
+  'gs_proposed_field',
 ];
 
 const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
@@ -748,6 +750,12 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+        </ErrorBoundary>
+      );
+    case 'gs_proposed_field':
+      return (
+        <ErrorBoundary>
+          <CoverLetterProposedValueWidget data={data as any} />
         </ErrorBoundary>
       );
     default:
