@@ -704,7 +704,7 @@ textarea {
 }
 
 .card-interactive:hover {
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1);
 }
 
 .card-interactive:active {
@@ -824,6 +824,7 @@ textarea {
   @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary;
   position: relative;
   overflow: hidden;
+  border-radius: 0.25rem;
   z-index: 0;
   transition: color 200ms ease-out;
   background: transparent;
@@ -833,6 +834,7 @@ textarea {
   content: '';
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   background-color: rgba(255, 255, 255, 0.55);
   opacity: 0;
   transition: opacity 200ms ease-in-out;
