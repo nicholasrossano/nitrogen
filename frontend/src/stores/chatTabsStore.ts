@@ -39,6 +39,8 @@ interface ChatTabsStore {
   addMessage: (initId: string, tabId: string, msg: ChatMessage) => void;
   updateMessage: (initId: string, tabId: string, msgId: string, patch: Partial<ChatMessage>) => void;
   removeMessage: (initId: string, tabId: string, msgId: string) => void;
+  /** Directly save a set of messages as a history entry (bypasses tab lifecycle) */
+  saveToHistory: (initId: string, title: string, messages: ChatMessage[]) => void;
 }
 
 export const ONBOARDING_TAB_ID = 'onboarding';
@@ -200,6 +202,22 @@ export const useChatTabsStore = create<ChatTabsStore>()(
             ),
           })),
         ),
+
+      saveToHistory: (initId, title, messages) => {
+        if (messages.length === 0) return;
+        const entry: ClosedChatTab = {
+          id: `standalone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title,
+          createdAt: Date.now(),
+          closedAt: Date.now(),
+          messages,
+        };
+        set((prev) =>
+          patchGroup(prev, initId, (g) => ({
+            closedTabs: [entry, ...g.closedTabs].slice(0, 30),
+          })),
+        );
+      },
     }),
     {
       name: 'nitrogen-chat-tabs',

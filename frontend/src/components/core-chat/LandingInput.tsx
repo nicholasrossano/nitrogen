@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
-import { useChatStore, ChatSession } from '@/stores/chatStore';
+import type { ChatSession } from '@/stores/chatStore';
 import { ToolPicker, ToolChip, type ToolOption } from '@/components/chat/ToolPicker';
 
 const EXAMPLE_PROMPTS = [
@@ -17,6 +17,9 @@ const EXAMPLE_PROMPTS = [
 interface LandingInputProps {
   onSend: (content: string, toolHint?: string) => void;
   disabled?: boolean;
+  sessions?: ChatSession[];
+  onLoadSession?: (session: ChatSession) => void;
+  onDeleteSession?: (id: string) => void;
 }
 
 function relativeTime(ts: number): string {
@@ -31,7 +34,7 @@ function relativeTime(ts: number): string {
   return `${days}d ago`;
 }
 
-export function LandingInput({ onSend, disabled }: LandingInputProps) {
+export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, onDeleteSession }: LandingInputProps) {
   const [input, setInput] = useState('');
   const [placeholder, setPlaceholder] = useState('');
   const [animating, setAnimating] = useState(true);
@@ -43,8 +46,6 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
   const animFrameRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefersReducedMotion = useRef(false);
-
-  const { sessions, loadSession, deleteSession } = useChatStore();
 
   useEffect(() => {
     prefersReducedMotion.current = window.matchMedia(
@@ -250,8 +251,8 @@ export function LandingInput({ onSend, disabled }: LandingInputProps) {
                 <HistoryRow
                   key={session.id}
                   session={session}
-                  onOpen={() => loadSession(session)}
-                  onDelete={() => deleteSession(session.id)}
+                  onOpen={() => onLoadSession?.(session)}
+                  onDelete={() => onDeleteSession?.(session.id)}
                 />
               ))}
             </div>

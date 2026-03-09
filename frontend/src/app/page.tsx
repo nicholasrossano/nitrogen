@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search, PanelLeft } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
-import { SideDrawer, SideDrawerHeader, NavItem } from '@/components/ui';
+import { SideDrawer, NavItem } from '@/components/ui';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/auth';
-import { useChatStore } from '@/stores/chatStore';
 
 function HomePageContent() {
   const router = useRouter();
@@ -17,9 +16,8 @@ function HomePageContent() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeNav, setActiveNav] = useState<NavItem>('projects');
+  const [activeNav, setActiveNav] = useState<NavItem>('home');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSidebar, setShowSidebar] = useState(true);
 
   const handleSignOut = async () => {
     await signOut();
@@ -32,12 +30,6 @@ function HomePageContent() {
     try {
       const isTrash = activeNav === 'trash';
       const data = await api.listInitiatives(20, 0, isTrash);
-      // Debug: Log the timestamps
-      console.log('Projects with timestamps:', data.map(p => ({
-        title: p.title,
-        created_at: p.created_at,
-        updated_at: p.updated_at,
-      })));
       setProjects(data);
     } catch (err) {
       setError('Failed to load projects');
@@ -76,7 +68,6 @@ function HomePageContent() {
   };
 
   const handlePermanentDelete = async (id: string) => {
-    // Confirmation is handled in ProjectCard component
     try {
       await api.permanentlyDeleteInitiative(id);
       setProjects(projects.filter(p => p.id !== id));
@@ -95,11 +86,6 @@ function HomePageContent() {
   };
 
   const handleNavChange = (item: NavItem) => {
-    if (item === 'chat') {
-      useChatStore.getState().reset();
-      router.push('/chat');
-      return;
-    }
     setActiveNav(item);
   };
 
@@ -116,144 +102,126 @@ function HomePageContent() {
 
   return (
     <div className="min-h-screen h-screen flex flex-col">
-      {/* Shared header row - one continuous line below */}
-      <div className="flex shrink-0">
-        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
-          <SideDrawerHeader />
-        </div>
-        <header className="flex-1 px-4 py-[7px] flex items-center justify-between gap-4 bg-white">
-          <button
-            onClick={() => setShowSidebar(p => !p)}
-            title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
-            className={`icon-btn p-1.5 shrink-0 ${showSidebar ? 'text-accent' : 'text-text-tertiary'}`}
-          >
-            <PanelLeft className="w-4 h-4" />
-          </button>
-          <div className="flex items-center gap-3 flex-1 max-w-xl justify-end">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none shrink-0" />
-              <input
-                type="search"
-                placeholder={isTrashView ? 'Search trash' : 'Search projects'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-[2.25rem] pr-4 py-1.5 text-xs rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
-                aria-label={isTrashView ? 'Search trash' : 'Search projects'}
-              />
-            </div>
-            {!isTrashView && (
-              <button
-                onClick={handleNewProject}
-                disabled={creating}
-                className="btn-primary shrink-0 !text-xs !px-4 !py-1.5"
-              >
-                {creating ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-3 h-3" />
-                    New Project
-                  </>
-                )}
-              </button>
-            )}
+      {/* Header row — full width */}
+      <header className="shrink-0 px-4 py-[7px] flex items-center justify-end gap-4 bg-white">
+        <div className="flex items-center gap-3 flex-1 max-w-xl justify-end">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none shrink-0" />
+            <input
+              type="search"
+              placeholder={isTrashView ? 'Search trash' : 'Search projects'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-[2.25rem] pr-4 py-1.5 text-xs rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+              aria-label={isTrashView ? 'Search trash' : 'Search projects'}
+            />
           </div>
-        </header>
-      </div>
+          {!isTrashView && (
+            <button
+              onClick={handleNewProject}
+              disabled={creating}
+              className="btn-primary shrink-0 !text-xs !px-4 !py-1.5"
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3 h-3" />
+                  New Project
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </header>
 
-      {/* Single full-width accent divider */}
       <div className="divider-accent shrink-0" />
 
-      {/* Content row: sidebar nav + main */}
+      {/* Content row: sidebar rail + main */}
       <div className="flex flex-1 min-h-0">
-        <div className={`overflow-hidden transition-[width] duration-300 ease-in-out flex-shrink-0 bg-white ${showSidebar ? 'w-44 border-r-1 border-accent' : 'w-0'}`}>
-          <SideDrawer
-            activeItem={activeNav}
-            onItemSelect={handleNavChange}
-            includeHeader={false}
-            onSignOut={handleSignOut}
-            userEmail={user?.email}
-          />
-        </div>
+        <SideDrawer
+          variant="home"
+          activeItem={activeNav}
+          onItemSelect={handleNavChange}
+          onSignOut={handleSignOut}
+          userEmail={user?.email}
+        />
         <main className="flex-1 bg-white min-h-0 overflow-auto">
-      {/* Content */}
-      <div className="px-6 py-4">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-6 h-6 text-accent animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="text-center py-20">
-            <p className="text-text-secondary">{error}</p>
-            <button 
-              onClick={loadProjects}
-              className="btn-secondary mt-4 text-sm"
-            >
-              Try again
-            </button>
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          /* Empty state or no search matches */
-          <div className="flex flex-col items-center justify-center py-20 max-w-md mx-auto text-center">
-            <div className={`w-16 h-16 rounded-lg flex items-center justify-center mb-6 ${isTrashView ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
-              {isTrashView ? (
-                <Trash2 className="w-8 h-8 text-text-tertiary" />
-              ) : (
-                <FolderOpen className="w-8 h-8 text-accent" />
-              )}
-            </div>
-            <h2 className="text-lg font-semibold text-text-primary mb-2">
-              {searchQuery.trim()
-                ? 'No matches'
-                : isTrashView
-                  ? 'Trash is empty'
-                  : 'No projects yet'}
-            </h2>
-            <p className="text-text-secondary text-sm mb-6">
-              {searchQuery.trim()
-                ? 'Try a different search.'
-                : isTrashView
-                  ? 'Projects you delete will appear here.'
-                  : 'Create your first project to get started with investment memos and due diligence.'}
-            </p>
-            {!isTrashView && !searchQuery.trim() && (
-              <button
-                onClick={handleNewProject}
-                disabled={creating}
-                className="btn-primary"
-              >
-                {creating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    Create Project
-                  </>
+          <div className="px-6 py-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-6 h-6 text-accent animate-spin" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-20">
+                <p className="text-text-secondary">{error}</p>
+                <button 
+                  onClick={loadProjects}
+                  className="btn-secondary mt-4 text-sm"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : filteredProjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 max-w-md mx-auto text-center">
+                <div className={`w-16 h-16 rounded-lg flex items-center justify-center mb-6 ${isTrashView ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
+                  {isTrashView ? (
+                    <Trash2 className="w-8 h-8 text-text-tertiary" />
+                  ) : (
+                    <FolderOpen className="w-8 h-8 text-accent" />
+                  )}
+                </div>
+                <h2 className="text-lg font-semibold text-text-primary mb-2">
+                  {searchQuery.trim()
+                    ? 'No matches'
+                    : isTrashView
+                      ? 'Trash is empty'
+                      : 'No projects yet'}
+                </h2>
+                <p className="text-text-secondary text-sm mb-6">
+                  {searchQuery.trim()
+                    ? 'Try a different search.'
+                    : isTrashView
+                      ? 'Projects you delete will appear here.'
+                      : 'Create your first project to get started with investment memos and due diligence.'}
+                </p>
+                {!isTrashView && !searchQuery.trim() && (
+                  <button
+                    onClick={handleNewProject}
+                    disabled={creating}
+                    className="btn-primary"
+                  >
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Create Project
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {filteredProjects.map((project) => (
+                  <ProjectCard 
+                    key={project.id} 
+                    project={project} 
+                    onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
+                    onRestore={isTrashView ? handleRestoreProject : undefined}
+                    isTrash={isTrashView}
+                  />
+                ))}
+              </div>
             )}
           </div>
-        ) : (
-          /* Project grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredProjects.map((project) => (
-              <ProjectCard 
-                key={project.id} 
-                project={project} 
-                onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
-                onRestore={isTrashView ? handleRestoreProject : undefined}
-                isTrash={isTrashView}
-              />
-            ))}
-          </div>
-        )}
-      </div>
         </main>
       </div>
     </div>
