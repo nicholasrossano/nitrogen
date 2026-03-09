@@ -146,12 +146,14 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
   };
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-4">
-      <div className="w-full max-w-2xl">
+    <div className="flex flex-col items-center h-full px-4">
+      <div className="flex-1 flex flex-col justify-end w-full max-w-2xl">
         <h1 className="text-2xl font-display font-semibold text-text-primary mb-8 text-center">
           Let&apos;s build a better world.
         </h1>
+      </div>
 
+      <div className="w-full max-w-2xl">
         <form onSubmit={handleSubmit} className="relative">
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
@@ -240,7 +242,9 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
             </div>
           </div>
         </form>
+      </div>
 
+      <div className="flex-1 w-full max-w-2xl">
         {sessions.length > 0 && (
           <div className="mt-8">
             <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3 px-1">
