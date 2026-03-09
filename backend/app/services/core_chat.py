@@ -189,6 +189,65 @@ SEARCH_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_gs_certification",
+            "description": (
+                "Start the Gold Standard (GS4GG) certification workflow. "
+                "Use this when the user asks about Gold Standard certification, "
+                "GS4GG submission, cover letter preparation, design review submission, "
+                "pre-monitoring requirements, or wants to see what documents are needed "
+                "for Gold Standard project registration. Returns a checklist of required "
+                "artifacts and opens the Cover Letter editor."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "One sentence explaining why the GS certification tool is appropriate here.",
+                    },
+                },
+                "required": ["reason"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_cover_letter_value",
+            "description": (
+                "Propose a text value for a specific Gold Standard Cover Letter field. "
+                "Use when the user asks to help fill in a cover letter field, investigate "
+                "what should go in a specific field, or when the GS certification workspace "
+                "is active and the user provides information relevant to a cover letter field."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "field_id": {
+                        "type": "string",
+                        "description": "The field_id from the cover letter schema (e.g. 'project_title', 'project_country').",
+                    },
+                    "proposed_value": {
+                        "type": "string",
+                        "description": "The proposed text value for the field.",
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["high", "moderate", "low"],
+                        "description": "Confidence in this proposal.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Brief explanation of why this value is appropriate.",
+                    },
+                },
+                "required": ["field_id", "proposed_value", "confidence", "reason"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -205,6 +264,8 @@ You have these data sources available — they are all equally valid and complem
 - run_lcoe_model: builds a Levelized Cost of Energy model when the user wants energy project economics
 - run_carbon_model: builds a carbon emissions model when the user wants emission reduction estimates
 - propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE or Carbon model input field
+- start_gs_certification: starts the Gold Standard (GS4GG) certification workflow with a checklist and Cover Letter editor
+- propose_cover_letter_value: proposes a text value for a specific Gold Standard Cover Letter field
 
 GUIDELINES:
 
@@ -215,6 +276,10 @@ Call run_lcoe_model when the user wants a numerical energy cost model (LCOE, cos
 Call run_carbon_model when the user wants a numerical emissions model (carbon credits, tCO₂e, emission reductions, cookstove methodology, fNRB). This can be combined with search tools.
 
 Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia"). Combine with search tools (scholarly + web) to ground the proposal in evidence.
+
+Call start_gs_certification when the user asks about Gold Standard certification, GS4GG submission, cover letter, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration. This opens the certification checklist and cover letter editor.
+
+Call propose_cover_letter_value when a GS certification workspace is active and the user provides information relevant to a cover letter field, or asks to help fill in a specific cover letter field.
 
 Call NEITHER search tool only when:
 - The question is purely conversational, definitional, or a simple clarification (e.g. "what is MRV?", "thanks")
@@ -297,10 +362,10 @@ class ComplianceChatService:
         self.retrieval = TieredRetrievalService(db)
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-    # Forced tool names for computational tools when user explicitly selects them
     _HINT_TO_PLANNER_TOOL: dict[str, str] = {
         "lcoe_model": "run_lcoe_model",
         "carbon_model": "run_carbon_model",
+        "gs_certification": "start_gs_certification",
     }
 
     async def generate_response(
@@ -445,6 +510,55 @@ class ComplianceChatService:
                 }
                 if model_inputs_context:
                     widget_data = self._enrich_proposal_from_context(widget_data, model_inputs_context)
+
+            elif fn_name == "start_gs_certification":
+                await _think("Loading Gold Standard certification checklist...")
+                tiers_used.append("gs_certification")
+                from app.services.gs_cover_letter import GS_CHECKLIST_ITEMS
+                from app.services.gs_template_service import (
+                    GSTemplateService, TEMPLATE_TYPE_COVER_LETTER,
+                )
+                from app.services.gs_cover_letter import _get_fallback_field_schema
+                try:
+                    template_svc = GSTemplateService(self.db)
+                    # Hard cap at 30s so we never hang chat indefinitely
+                    template = await asyncio.wait_for(
+                        template_svc.get_or_fetch_active_template(TEMPLATE_TYPE_COVER_LETTER),
+                        timeout=30.0,
+                    )
+                    widget_type = "gs_checklist"
+                    widget_data = {
+                        "checklist_items": GS_CHECKLIST_ITEMS,
+                        "template_version_id": str(template.id),
+                        "template_version_label": template.version_label,
+                        "template_status": template.status,
+                        "field_schema": template.field_schema or [],
+                        "html_preview": template.html_preview or "",
+                    }
+                    await _think("Checklist and Cover Letter template loaded")
+                except Exception as e:
+                    logger.error(f"GS certification tool failed: {e}", exc_info=True)
+                    await _think("Using offline field definitions for Cover Letter")
+                    widget_type = "gs_checklist"
+                    widget_data = {
+                        "checklist_items": GS_CHECKLIST_ITEMS,
+                        "template_version_id": None,
+                        "template_version_label": None,
+                        "template_status": None,
+                        "field_schema": _get_fallback_field_schema(),
+                        "html_preview": "",
+                    }
+
+            elif fn_name == "propose_cover_letter_value":
+                field_id = args.get("field_id", "")
+                await _think(f"Proposing value for cover letter field: {field_id}...")
+                widget_type = "gs_proposed_field"
+                widget_data = {
+                    "field_id": field_id,
+                    "proposed_value": args.get("proposed_value", ""),
+                    "confidence": args.get("confidence", "moderate"),
+                    "explanation": args.get("reason", ""),
+                }
 
         # Track propose intent (field_name set by planner if it called propose_input_value)
         propose_field_name: str | None = None

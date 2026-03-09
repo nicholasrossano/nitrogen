@@ -922,3 +922,39 @@ textarea {
     transform: none !important;
   }
 }
+
+/* GS Cover Letter document preview */
+.gs-document-preview {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #1C1C1E;
+}
+.gs-document-preview h1 { font-size: 16pt; font-weight: bold; margin: 16px 0 8px; }
+.gs-document-preview h2 { font-size: 14pt; font-weight: bold; margin: 14px 0 6px; }
+.gs-document-preview h3 { font-size: 12pt; font-weight: bold; margin: 12px 0 4px; }
+.gs-document-preview p { margin: 4px 0; }
+.gs-document-preview table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.gs-document-preview td,
+.gs-document-preview th { border: 1px solid #E6E6EA; padding: 6px 10px; font-size: 10pt; }
+.gs-document-preview th { background: #F7F7F8; font-weight: 600; text-align: left; }
+
+.gs-field-placeholder {
+  cursor: pointer;
+  border-bottom: 2px dashed #D5D2E8;
+  padding-bottom: 1px;
+  transition: background-color 150ms, border-color 150ms;
+}
+.gs-field-placeholder:hover {
+  background-color: rgba(62, 53, 95, 0.06);
+  border-color: #3E355F;
+}
+.gs-field-empty {
+  color: #7A7A82;
+  font-style: italic;
+}
+.gs-field-filled {
+  color: #1C1C1E;
+  font-style: normal;
+  border-bottom-color: #9DAA9B;
+}

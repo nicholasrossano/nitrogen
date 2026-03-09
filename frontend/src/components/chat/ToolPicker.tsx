@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check } from 'lucide-react';
+import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, Award } from 'lucide-react';
 
 export interface ToolOption {
   id: string;
@@ -36,9 +36,17 @@ const ALL_TOOLS: ToolOption[] = [
     description: 'Structured assessment checklist',
     icon: <CheckSquare className="w-3.5 h-3.5" />,
   },
+  {
+    id: 'gs_certification',
+    name: 'Gold Standard Certification',
+    description: 'Gold Standard checklist',
+    icon: <Award className="w-3.5 h-3.5" />,
+  },
 ];
 
-const ANALYSIS_TOOLS = ALL_TOOLS.filter((t) => t.id === 'lcoe_model' || t.id === 'carbon_model');
+const ANALYSIS_TOOLS = ALL_TOOLS.filter(
+  (t) => t.id === 'lcoe_model' || t.id === 'carbon_model' || t.id === 'gs_certification'
+);
 
 interface ToolPickerProps {
   selected: ToolOption | null;
