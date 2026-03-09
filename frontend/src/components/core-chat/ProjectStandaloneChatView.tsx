@@ -14,6 +14,7 @@ interface ProjectStandaloneChatViewProps {
   initiativeId: string;
   showLanding?: boolean;
   onMessageSent?: () => void;
+  onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
 }
@@ -41,6 +42,7 @@ export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
   onMessageSent,
+  onBack,
   onEditorWidgetsChange,
 }: ProjectStandaloneChatViewProps) {
   const { ensureGroup, saveToHistory, deleteClosedTab } =
@@ -55,6 +57,9 @@ export function ProjectStandaloneChatView({
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [thinkingLines, setThinkingLines] = useState<string[]>([]);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [messageFeedback, setFeedbackMap] = useState<
     Record<string, 'like' | 'dislike' | null>
   >({});
@@ -104,6 +109,63 @@ export function ProjectStandaloneChatView({
     [closedTabs],
   );
 
+  const sendViaStream = useCallback(
+    async (content: string, currentMessages: ChatMessage[], toolHint?: string) => {
+      // Exclude the current user message (last item) from history — it's passed as `content`
+      const history = currentMessages.slice(0, -1).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const words: string[] = [];
+      setThinkingLines([]);
+      setStreamingContent('');
+      setError(null);
+
+      await api.sendComplianceChatStream(
+        history,
+        content,
+        (text) => setThinkingLines((prev) => [...prev, text]),
+        (word) => {
+          words.push(word);
+          setStreamingContent(words.join(' '));
+        },
+        (payload) => {
+          setStreamingContent('');
+          setThinkingLines([]);
+          const assistantMsg: ChatMessage = {
+            id: payload.assistant_message_id,
+            role: 'assistant',
+            content: payload.content,
+            sources: payload.sources ?? null,
+            thinking_lines: undefined,
+            completion_meta: {
+              latency_ms: payload.latency_ms,
+              citation_count: payload.citation_count,
+              tiers_used: payload.tiers_used,
+            },
+            widget_type: payload.widget_type ?? null,
+            widget_data: payload.widget_data ?? null,
+            created_at: new Date().toISOString(),
+          };
+          setLocalMessages((prev) => [...prev, assistantMsg]);
+          setSending(false);
+        },
+        (message) => {
+          setStreamingContent('');
+          setThinkingLines([]);
+          setError(message);
+          setSending(false);
+        },
+        null,
+        toolHint ?? null,
+        null,
+        initiativeId,
+      );
+    },
+    [initiativeId],
+  );
+
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
       onMessageSent?.();
@@ -128,25 +190,20 @@ export function ProjectStandaloneChatView({
         created_at: new Date().toISOString(),
       };
 
-      setLocalMessages((prev) => [...prev, userMsg]);
+      const updatedMessages = [...localMessages, userMsg];
+      setLocalMessages(updatedMessages);
       setSending(true);
 
       try {
-        const response = await api.sendMessage(
-          initiativeId,
-          content,
-          toolHint,
-        );
-        setLocalMessages((prev) => [...prev, response.message]);
+        await sendViaStream(content, updatedMessages, toolHint);
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
         );
-      } finally {
         setSending(false);
       }
     },
-    [initiativeId, localMessages.length, onMessageSent],
+    [initiativeId, localMessages, onMessageSent, sendViaStream],
   );
 
   const handleEditMessage = useCallback(
@@ -155,8 +212,6 @@ export function ProjectStandaloneChatView({
       if (idx === -1) return;
 
       const truncated = localMessages.slice(0, idx);
-      setLocalMessages(truncated);
-      setSending(true);
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -167,18 +222,18 @@ export function ProjectStandaloneChatView({
         created_at: new Date().toISOString(),
       };
 
-      setLocalMessages((prev) => [...prev, userMsg]);
+      const updatedMessages = [...truncated, userMsg];
+      setLocalMessages(updatedMessages);
+      setSending(true);
 
       try {
-        const response = await api.sendMessage(initiativeId, newContent);
-        setLocalMessages((prev) => [...prev, response.message]);
+        await sendViaStream(newContent, updatedMessages);
       } catch {
         setLocalMessages(truncated);
-      } finally {
         setSending(false);
       }
     },
-    [initiativeId, localMessages],
+    [localMessages, sendViaStream],
   );
 
   const handleRetryMessage = useCallback(
@@ -190,9 +245,6 @@ export function ProjectStandaloneChatView({
       const lastUserMsg = [...preceding].reverse().find((m) => m.role === 'user');
       if (!lastUserMsg) return;
 
-      setLocalMessages(preceding);
-      setSending(true);
-
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         role: 'user',
@@ -202,18 +254,18 @@ export function ProjectStandaloneChatView({
         created_at: new Date().toISOString(),
       };
 
-      setLocalMessages((prev) => [...prev, userMsg]);
+      const updatedMessages = [...preceding, userMsg];
+      setLocalMessages(updatedMessages);
+      setSending(true);
 
       try {
-        const response = await api.sendMessage(initiativeId, lastUserMsg.content);
-        setLocalMessages((prev) => [...prev, response.message]);
+        await sendViaStream(lastUserMsg.content, updatedMessages);
       } catch {
         setLocalMessages(preceding);
-      } finally {
         setSending(false);
       }
     },
-    [initiativeId, localMessages],
+    [localMessages, sendViaStream],
   );
 
   const handleSetFeedback = useCallback(
@@ -279,15 +331,16 @@ export function ProjectStandaloneChatView({
     <ConversationView
       messages={displayMessages}
       sending={sending}
-      thinkingLines={[]}
-      streamingContent=""
-      error={null}
+      thinkingLines={thinkingLines}
+      streamingContent={streamingContent}
+      error={error}
       onSendMessage={handleSend}
       onEditMessage={handleEditMessage}
       onRetryMessage={handleRetryMessage}
       messageFeedback={messageFeedback}
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
+      onBack={onBack}
     />
   );
 }
