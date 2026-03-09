@@ -846,17 +846,6 @@ textarea {
   @apply text-accent-anchor;
 }
 
-.nav-row-active::after {
-  content: '';
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: calc(100% - 8px);
-  background-color: var(--color-accent);
-  z-index: 1;
-}
 
 .nav-row-active:hover {
   @apply text-accent-anchor;
