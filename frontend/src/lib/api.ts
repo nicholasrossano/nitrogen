@@ -908,4 +908,69 @@ export const api = {
     if (!resp.ok) throw new Error('Export failed');
     return resp.blob();
   },
+
+  // --- Gold Standard Certification ---
+
+  async getGSTemplateStatus(): Promise<any> {
+    return fetchApi('/api/v1/gs/template/status');
+  },
+
+  async getGSTemplatePreview(versionId: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/template/${versionId}/preview`);
+  },
+
+  async getGSFieldSchema(versionId: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/template/${versionId}/fields`);
+  },
+
+  async createGSWorkspace(initiativeId?: string, sessionId?: string): Promise<any> {
+    return fetchApi('/api/v1/gs/workspace', {
+      method: 'POST',
+      body: JSON.stringify({ initiative_id: initiativeId, session_id: sessionId }),
+    });
+  },
+
+  async getGSWorkspace(workspaceId: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/${workspaceId}`);
+  },
+
+  async getGSWorkspaceByInitiative(initiativeId: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/by-initiative/${initiativeId}`);
+  },
+
+  async getGSWorkspaceBySession(sessionId: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/by-session/${sessionId}`);
+  },
+
+  async updateGSFieldValues(workspaceId: string, fields: Record<string, string>): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/${workspaceId}/fields`, {
+      method: 'POST',
+      body: JSON.stringify({ fields }),
+    });
+  },
+
+  async getGSFields(workspaceId: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/${workspaceId}/fields`);
+  },
+
+  async updateGSChecklistState(workspaceId: string, itemId: string, status: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/${workspaceId}/checklist`, {
+      method: 'POST',
+      body: JSON.stringify({ item_id: itemId, status }),
+    });
+  },
+
+  async getGSChecklist(): Promise<any> {
+    return fetchApi('/api/v1/gs/checklist');
+  },
+
+  async exportGSCoverLetter(workspaceId: string): Promise<Blob> {
+    const url = `${API_URL}/api/v1/gs/workspace/${workspaceId}/export`;
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const resp = await fetch(url, { method: 'POST', headers });
+    if (!resp.ok) throw new Error('Export failed');
+    return resp.blob();
+  },
 };

@@ -1,34 +1,39 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Pencil, Check, X, Map, PanelLeft, PanelRight, SquareCode } from 'lucide-react';
+import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
-import type { RightPanelMode } from './EditorSidePanel';
+
+interface PanelToggle {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  title?: string;
+}
 
 interface ProjectHeaderProps {
   initiative: Initiative;
   onTitleUpdate?: (title: string) => void;
-  rightPanel?: RightPanelMode;
-  onToggleRightPanel?: () => void;
-  hasProjectPlan?: boolean;
-  hasEditorContent?: boolean;
-  showChatPanel?: boolean;
-  onToggleChatPanel?: () => void;
-  showInspector?: boolean;
-  hasInspectorItem?: boolean;
-  onToggleInspector?: () => void;
+  /** PanelLeft button — shown on the right side when provided */
+  leftToggle?: PanelToggle;
+  /** PanelRight button — shown on the right side when provided */
+  rightToggle?: PanelToggle;
+  /** SquarePen "new chat" button */
+  onNewChat?: () => void;
 }
 
-export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed', onToggleRightPanel, hasProjectPlan = false, hasEditorContent = false, showChatPanel = true, onToggleChatPanel, showInspector = false, hasInspectorItem = false, onToggleInspector }: ProjectHeaderProps) {
+export function ProjectHeader({
+  initiative,
+  onTitleUpdate,
+  leftToggle,
+  rightToggle,
+  onNewChat,
+}: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [title, setTitle] = useState(
-    initiative.title || 'New Project'
-  );
+  const [title, setTitle] = useState(initiative.title || 'New Project');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update local title state when initiative changes (e.g., switching projects or title is generated)
   useEffect(() => {
     setTitle(initiative.title || 'New Project');
   }, [initiative.id, initiative.title]);
@@ -41,12 +46,11 @@ export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed'
   }, [isEditing]);
 
   const handleSave = async () => {
-      if (!title.trim()) {
+    if (!title.trim()) {
       setTitle(initiative.title || 'New Project');
       setIsEditing(false);
       return;
     }
-
     setSaving(true);
     try {
       await api.updateInitiative(initiative.id, { title: title.trim() });
@@ -65,47 +69,15 @@ export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed'
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSave();
-    } else if (e.key === 'Escape') {
-      handleCancel();
-    }
+    if (e.key === 'Enter') handleSave();
+    else if (e.key === 'Escape') handleCancel();
   };
+
+  const hasRightControls = onNewChat || leftToggle || rightToggle;
 
   return (
     <header className="flex-shrink-0 bg-white">
       <div className="px-4 py-[7px] flex items-center relative">
-        {/* Back button */}
-        <Link 
-          href="/" 
-          className="icon-btn flex-shrink-0"
-        >
-          <ArrowLeft className="w-4 h-4 text-text-secondary" />
-        </Link>
-
-        {/* Left: panel toggles */}
-        {rightPanel !== 'closed' && (
-          <div className="flex items-center gap-1 ml-1">
-            <button
-              onClick={onToggleChatPanel}
-              title={showChatPanel ? 'Hide chat panel' : 'Show chat panel'}
-              className={`icon-btn p-1.5 ${showChatPanel ? 'text-accent' : 'text-text-tertiary'}`}
-            >
-              <PanelLeft className="w-4 h-4" />
-            </button>
-            {rightPanel === 'project_plan' && (
-              <button
-                onClick={hasInspectorItem ? onToggleInspector : undefined}
-                disabled={!hasInspectorItem}
-                title={showInspector ? 'Hide inspector' : 'Show inspector'}
-                className={`icon-btn p-1.5 ${showInspector ? 'text-accent' : 'text-text-tertiary'} ${!hasInspectorItem ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                <PanelRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        )}
-
         {/* Editable title — centered */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
@@ -152,51 +124,40 @@ export function ProjectHeader({ initiative, onTitleUpdate, rightPanel = 'closed'
           </div>
         </div>
 
-        {/* Right controls */}
-        <div className="ml-auto flex items-center gap-1">
-          {/* Dynamic right-panel pill button */}
-          {onToggleRightPanel && (hasProjectPlan || hasEditorContent) && (() => {
-            let label: string;
-            let icon: React.ReactNode;
-            let isSelected: boolean;
-
-            if (rightPanel === 'closed') {
-              label = hasProjectPlan ? 'Project Plan' : 'Editor';
-              icon = hasProjectPlan ? <Map className="w-3.5 h-3.5" /> : <SquareCode className="w-3.5 h-3.5" />;
-              isSelected = false;
-            } else if (rightPanel === 'project_plan') {
-              if (hasEditorContent) {
-                label = 'Editor';
-                icon = <SquareCode className="w-3.5 h-3.5" />;
-                isSelected = false;
-              } else {
-                label = 'Project Plan';
-                icon = <Map className="w-3.5 h-3.5" />;
-                isSelected = true;
-              }
-            } else {
-              if (hasProjectPlan) {
-                label = 'Project Plan';
-                icon = <Map className="w-3.5 h-3.5" />;
-                isSelected = false;
-              } else {
-                label = 'Editor';
-                icon = <SquareCode className="w-3.5 h-3.5" />;
-                isSelected = true;
-              }
-            }
-
-            return (
+        {/* Right controls: new chat + panel toggles */}
+        {hasRightControls && (
+          <div className="ml-auto flex items-center gap-1">
+            {onNewChat && (
               <button
-                onClick={onToggleRightPanel}
-                className={`pill-btn !px-2.5 !py-1.5 !text-xs ml-1 ${isSelected ? 'selected' : ''}`}
+                onClick={onNewChat}
+                title="New chat"
+                className="icon-btn p-1.5 text-text-tertiary"
               >
-                {icon}
-                {label}
+                <SquarePen className="w-4 h-4" />
               </button>
-            );
-          })()}
-        </div>
+            )}
+            {leftToggle && (
+              <button
+                onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
+                disabled={leftToggle.disabled}
+                title={leftToggle.title}
+                className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <PanelLeft className="w-4 h-4" />
+              </button>
+            )}
+            {rightToggle && (
+              <button
+                onClick={rightToggle.disabled ? undefined : rightToggle.onClick}
+                disabled={rightToggle.disabled}
+                title={rightToggle.title}
+                className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <PanelRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Accent divider */}
