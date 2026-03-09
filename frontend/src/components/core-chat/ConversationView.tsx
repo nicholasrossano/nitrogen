@@ -17,13 +17,28 @@ import {
   Paperclip,
 } from 'lucide-react';
 import { ToolPicker, ToolChip, type ToolOption } from '@/components/chat/ToolPicker';
-import { useChatStore, ComplianceChatMessage } from '@/stores/chatStore';
+import type { CoreChatMessage } from '@/stores/chatStore';
 import { SourceCitation } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
+import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
+
+export interface ConversationViewProps {
+  messages: CoreChatMessage[];
+  sending: boolean;
+  thinkingLines: string[];
+  streamingContent: string;
+  error: string | null;
+  onSendMessage: (content: string, toolHint?: string) => void;
+  onEditMessage: (messageId: string, newContent: string) => void;
+  onRetryMessage: (messageId: string) => void;
+  messageFeedback: Record<string, 'like' | 'dislike' | null>;
+  onSetFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
+  retryingMessageId: string | null;
+}
 
 function preprocessMath(content: string): string {
   // Convert proper LaTeX block delimiters to KaTeX-compatible $ notation
@@ -49,21 +64,19 @@ function preprocessMath(content: string): string {
   }).join('');
 }
 
-export function ConversationView() {
-  const {
-    messages,
-    sending,
-    thinkingLines,
-    streamingContent,
-    error,
-    sendMessage,
-    editMessage,
-    retryMessage,
-    messageFeedback,
-    setMessageFeedback: storeSetFeedback,
-    retryingMessageId,
-    reset,
-  } = useChatStore();
+export function ConversationView({
+  messages,
+  sending,
+  thinkingLines,
+  streamingContent,
+  error,
+  onSendMessage,
+  onEditMessage,
+  onRetryMessage,
+  messageFeedback,
+  onSetFeedback,
+  retryingMessageId,
+}: ConversationViewProps) {
 
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
@@ -120,7 +133,7 @@ export function ConversationView() {
     e.preventDefault();
     if (!input.trim() || sending) return;
     const toolHint = selectedTool?.id ?? undefined;
-    sendMessage(input.trim(), toolHint);
+    onSendMessage(input.trim(), toolHint);
     setInput('');
     setDraftTag(null);
     setAttachedFiles([]);
@@ -161,9 +174,9 @@ export function ConversationView() {
               message={msg}
               animate={idx >= messages.length - 2}
               feedback={messageFeedback[msg.id] ?? null}
-              onFeedback={(f) => storeSetFeedback(msg.id, f)}
-              onEdit={(newContent) => editMessage(msg.id, newContent)}
-              onRetry={() => retryMessage(msg.id)}
+              onFeedback={(f) => onSetFeedback(msg.id, f)}
+              onEdit={(newContent) => onEditMessage(msg.id, newContent)}
+              onRetry={() => onRetryMessage(msg.id)}
               retrying={retryingMessageId === msg.id}
             />
           ))}
@@ -520,7 +533,7 @@ function MessageBubble({
   onRetry,
   retrying,
 }: {
-  message: ComplianceChatMessage;
+  message: CoreChatMessage;
   animate: boolean;
   feedback: 'like' | 'dislike' | null;
   onFeedback: (f: 'like' | 'dislike' | null) => void;
@@ -669,6 +682,8 @@ function ComplianceChatWidget({
   switch (type) {
     case 'proposed_value':
       return <ProposedValueWidget data={data as any} messageId={messageId} />;
+    case 'gs_proposed_field':
+      return <CoverLetterProposedValueWidget data={data as any} messageId={messageId} />;
     default:
       return null;
   }

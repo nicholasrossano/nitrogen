@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LCOEModelWidget } from '@/components/widgets/LCOEModelWidget';
 import { CarbonModelWidget } from '@/components/widgets/CarbonModelWidget';
+import { GSCertificationWidget } from '@/components/widgets/GSCertificationWidget';
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
 export const EDITOR_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
   'carbon_inputs', 'carbon_output',
+  'gs_checklist', 'gs_cover_letter',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -17,6 +19,8 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   lcoe_output: 'lcoe',
   carbon_inputs: 'carbon',
   carbon_output: 'carbon',
+  gs_checklist: 'gs',
+  gs_cover_letter: 'gs',
 };
 
 export interface EditorWidget {
@@ -35,6 +39,8 @@ const WIDGET_LABELS: Record<string, string> = {
   lcoe_output: 'LCOE Model',
   carbon_inputs: 'Carbon Calculator',
   carbon_output: 'Carbon Calculator',
+  gs_checklist: 'GS Certification',
+  gs_cover_letter: 'GS Certification',
 };
 
 export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelProps) {
@@ -99,6 +105,9 @@ function EditorWidgetRenderer({
     case 'carbon_inputs':
     case 'carbon_output':
       return <CarbonModelWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
+    case 'gs_checklist':
+    case 'gs_cover_letter':
+      return <GSCertificationWidget data={data} initiativeId={initiativeId} messageId={messageId} />;
     default:
       return null;
   }

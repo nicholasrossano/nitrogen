@@ -206,6 +206,23 @@ ORCHESTRATION_ACTIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_gs_certification",
+            "description": "Start the Gold Standard (GS4GG) certification workflow. Use when the user asks about Gold Standard certification, GS4GG submission, cover letter preparation, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Brief message (1-2 sentences) telling the user you're loading the GS certification workspace."
+                    }
+                },
+                "required": ["message"]
+            }
+        }
+    },
 ]
 
 

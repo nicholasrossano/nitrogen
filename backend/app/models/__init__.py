@@ -5,6 +5,8 @@ from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
 from app.models.core_chat import CoreChatSession, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
+from app.models.gs_template import GSTemplateVersion
+from app.models.gs_workspace import GSCertificationWorkspace
 
 __all__ = [
     "Initiative",
@@ -18,4 +20,6 @@ __all__ = [
     "CoreChatSession",
     "CoreChatMessage",
     "ProvenanceTrace",
+    "GSTemplateVersion",
+    "GSCertificationWorkspace",
 ]
