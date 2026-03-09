@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, Trash2, LogOut, Map, MessageSquare } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut, Map, MessageSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type NavItem = 'home' | 'trash' | 'plan' | 'chat';
@@ -21,12 +21,12 @@ interface SideDrawerProps {
 }
 
 const HOME_ITEMS: NavItemConfig[] = [
-  { key: 'home', label: 'Home', Icon: Home },
+  { key: 'home', label: 'Projects', Icon: LayoutGrid },
   { key: 'trash', label: 'Trash', Icon: Trash2 },
 ];
 
 const PROJECT_ITEMS: NavItemConfig[] = [
-  { key: 'home', label: 'Home', Icon: Home },
+  { key: 'home', label: 'Projects', Icon: LayoutGrid },
   { key: 'plan', label: 'Plan', Icon: Map },
   { key: 'chat', label: 'Chat', Icon: MessageSquare },
 ];
