@@ -98,7 +98,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
 
   return (
     <CardWrapper {...cardProps as any}>
-      <div className={`p-5 h-full flex flex-col relative group border-1 ${isTrash ? 'card cursor-default' : 'card-interactive'}`}>
+      <div className={`p-5 h-full flex flex-col relative group ${isTrash ? 'card cursor-default' : 'card-interactive'}`}>
         {/* Action buttons */}
         {isTrash ? (
           <>
@@ -150,7 +150,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
         <div className="flex-1" />
 
         {/* Stats row */}
-        <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-4 mt-1 border-t-1 border-divider">
+        <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-4 mt-1 border-t-1 border-black/[0.03]">
           <div className="flex items-center gap-3">
             {outputCount > 0 && (
               <span className="flex items-center gap-1">

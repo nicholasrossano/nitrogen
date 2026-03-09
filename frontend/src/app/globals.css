@@ -5,19 +5,22 @@
 @tailwind utilities;
 
 :root {
-  /* Nitrogen Enterprise Design Tokens */
-  /* Surfaces */
-  --color-background: #F5F5F7;
-  --color-background-tinted: #E8E3DB;
-  --color-surface: #FAFAFA;
-  --color-surface-subtle: #EEEEEF;
+  /* Nitrogen Design Tokens — warm workbench palette */
+  /* Shell & Surfaces */
+  --color-shell: #FAF8F5;
+  --color-shell-bar: #FDFCFA;
+  --color-shell-subtle: #F0EDE8;
+  --color-background: #FAF8F5;
+  --color-background-tinted: #F0EDE8;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F7F5F2;
   
   /* Text */
   --color-text-primary: #1C1C1E;
   --color-text-secondary: #5A5A60;
-  --color-text-tertiary: #7A7A82;
+  --color-text-tertiary: #8A8A90;
   
-  /* Accent */
+  /* Accent (interactive elements only) */
   --color-accent-anchor: #005bb5;
   --color-accent: #004d91;
   --color-accent-tint: #4d9de8;
@@ -35,8 +38,8 @@
   --color-indicator-green: #9DAA9B;
   
   /* Strokes */
-  --color-divider: #DADADF;
-  --color-stroke-subtle: #D5D5DB;
+  --color-divider: #E0DCD6;
+  --color-stroke-subtle: #DDD9D3;
   --color-stroke-accent: #004d91;
 }
 
@@ -264,13 +267,13 @@ body {
   @apply text-accent-anchor underline;
 }
 
-/* Card base style - white surface with subtle stroke */
+/* Card base — soft shadow instead of hard border */
 .card {
-  @apply bg-surface border-1 border-stroke-subtle;
+  @apply bg-surface rounded-lg shadow-card;
 }
 
 .card-elevated {
-  @apply bg-surface border border-stroke-subtle shadow-subtle rounded;
+  @apply bg-surface rounded-lg shadow-card;
 }
 
 /* Clamp text to two lines */
@@ -283,8 +286,8 @@ body {
 
 /* Input field base style */
 .input-field {
-  @apply w-full px-4 py-3 bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary;
-  @apply focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none;
+  @apply w-full px-4 py-3 bg-surface border border-stroke-subtle rounded text-text-primary placeholder:text-text-tertiary;
+  @apply focus:border-text-tertiary focus:ring-1 focus:ring-text-tertiary/15 focus:outline-none;
   @apply transition-colors duration-150;
 }
 
@@ -301,7 +304,7 @@ textarea {
 /* Button base styles - with opacity fade effect */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
-  @apply border border-accent text-accent bg-white font-medium text-sm;
+  @apply border border-accent text-accent bg-surface font-medium text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
   overflow: hidden;
@@ -341,7 +344,7 @@ textarea {
 
 .btn-secondary {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
-  @apply bg-white text-text-primary font-medium border border-stroke-subtle text-sm;
+  @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
   overflow: hidden;
@@ -376,7 +379,7 @@ textarea {
 
 .btn-danger {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
-  @apply border border-indicator-orange text-indicator-orange bg-white font-medium text-sm;
+  @apply border border-indicator-orange text-indicator-orange bg-surface font-medium text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
   overflow: hidden;
@@ -439,7 +442,7 @@ textarea {
 
 /* Focus ring utility */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-accent/20 focus:ring-offset-2 focus:ring-offset-white;
+  @apply focus:outline-none focus:ring-2 focus:ring-text-tertiary/15 focus:ring-offset-2 focus:ring-offset-surface;
 }
 
 /* Hover fade utility - for elements that need opacity-based hover transitions */
@@ -694,19 +697,18 @@ textarea {
   opacity: 0;
 }
 
-/* Card hover with shadow lift */
+/* Card hover — shadow lift, no blue border */
 .card-interactive {
-  @apply card cursor-pointer border-1;
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
+  @apply card cursor-pointer;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
 }
 
 .card-interactive:hover {
-  @apply border-stroke-accent;
-  box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.14), 0 4px 10px -3px rgba(0, 0, 0, 0.09);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
 .card-interactive:active {
-  @apply shadow-none;
+  @apply shadow-card;
   transform: scale(0.98);
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
@@ -800,34 +802,38 @@ textarea {
   @apply bg-accent-wash text-accent-anchor;
 }
 
-/* Watershed-style accent dividers */
+/* Shell dividers — warm neutral, not blue */
 .divider-accent {
-  @apply w-full h-px bg-accent;
+  @apply w-full h-px;
+  background: var(--color-divider);
 }
 
 .divider-accent-thin {
-  @apply w-full h-px bg-accent;
+  @apply w-full h-px;
+  background: var(--color-divider);
 }
 
 /* Section divider with spacing */
 .section-divider {
-  @apply w-full border-t-1 border-accent;
+  @apply w-full border-t;
+  border-color: var(--color-divider);
 }
 
-/* Navigation row - flat spreadsheet style */
+/* Navigation row — quiet rail item, no borders */
 .nav-row {
-  @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary bg-white border-b-1 border-accent;
+  @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary;
   position: relative;
   overflow: hidden;
   z-index: 0;
   transition: color 200ms ease-out;
+  background: transparent;
 }
 
 .nav-row::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-color: var(--color-surface-subtle);
+  background-color: rgba(255, 255, 255, 0.55);
   opacity: 0;
   transition: opacity 200ms ease-in-out;
   z-index: -1;
@@ -841,14 +847,29 @@ textarea {
   opacity: 1;
 }
 
-/* Active nav row state - vertical rectangle on trailing side */
+/* Active nav row — dark text + subtle frosted bg + left indicator */
 .nav-row-active {
-  @apply text-accent-anchor;
+  @apply text-text-primary;
 }
 
+.nav-row-active::before {
+  opacity: 1;
+}
+
+.nav-row-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-text-primary);
+  z-index: 1;
+}
 
 .nav-row-active:hover {
-  @apply text-accent-anchor;
+  @apply text-text-primary;
 }
 
 .nav-row-active:hover::before {

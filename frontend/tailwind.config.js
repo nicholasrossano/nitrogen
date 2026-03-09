@@ -8,25 +8,30 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Nitrogen Enterprise Design System
-        // Core Surfaces
+        // Nitrogen Design System — warm workbench palette
+        // Shell & Surfaces
+        shell: {
+          DEFAULT: '#FAF8F5',
+          bar: '#FDFCFA',
+          subtle: '#F0EDE8',
+        },
         background: {
-          DEFAULT: '#F5F5F7',
-          tinted: '#E8E3DB',
+          DEFAULT: '#FAF8F5',
+          tinted: '#F0EDE8',
         },
         surface: {
-          DEFAULT: '#FAFAFA',
-          subtle: '#EEEEEF',
-          grey: '#EEEEEF',
-          header: '#f6f6f6',
+          DEFAULT: '#FFFFFF',
+          subtle: '#F7F5F2',
+          grey: '#F7F5F2',
+          header: '#FDFCFA',
         },
         // Text
         text: {
           primary: '#1C1C1E',
           secondary: '#5A5A60',
-          tertiary: '#7A7A82',
+          tertiary: '#8A8A90',
         },
-        // Primary Accent (use sparingly)
+        // Primary Accent (use sparingly — interactive elements only)
         accent: {
           anchor: '#005bb5',
           DEFAULT: '#004d91',
@@ -48,10 +53,10 @@ module.exports = {
         },
         // Strokes & Dividers
         stroke: {
-          subtle: '#D5D5DB',
+          subtle: '#DDD9D3',
           accent: '#004d91',
         },
-        divider: '#DADADF',
+        divider: '#E0DCD6',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -74,8 +79,11 @@ module.exports = {
         '4': '4px',
       },
       boxShadow: {
-        'subtle': '0 1px 2px rgba(0, 0, 0, 0.05)',
-        'DEFAULT': '0 1px 3px rgba(0, 0, 0, 0.08)',
+        'subtle': '0 1px 2px rgba(0, 0, 0, 0.04)',
+        'DEFAULT': '0 1px 3px rgba(0, 0, 0, 0.06)',
+        'workspace': '0 1px 4px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.03)',
+        'card': '0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.03)',
+        'card-hover': '0 8px 24px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04)',
       },
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out',

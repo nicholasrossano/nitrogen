@@ -35,8 +35,8 @@ export function SideDrawer({ variant, activeItem, onItemSelect, onSignOut, userE
   const items = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
 
   return (
-    <aside className="group w-12 hover:w-44 bg-white h-full flex flex-col flex-shrink-0 border-r-1 border-accent overflow-hidden transition-[width] duration-200 ease-in-out">
-      <nav className="flex-1 bg-white">
+    <aside className="group w-12 hover:w-44 h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out">
+      <nav className="flex-1 pt-1">
         {items.map(({ key, label, Icon }) => (
           <button
             key={key}
