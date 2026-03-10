@@ -20,19 +20,19 @@ const CLASSIFICATION_STYLES: Record<Classification, {
 }> = {
   required: {
     dot: 'bg-accent',
-    card: 'border-stroke-subtle bg-white',
+    card: 'bg-surface',
     badge: 'bg-accent/10 text-accent',
     label: 'REQ',
   },
   optional: {
     dot: 'bg-accent',
-    card: 'border-stroke-subtle bg-white',
+    card: 'bg-surface',
     badge: 'bg-surface-subtle text-text-tertiary',
     label: 'OPT',
   },
   unknown: {
     dot: 'bg-accent',
-    card: 'border-stroke-subtle bg-white',
+    card: 'bg-surface',
     badge: 'bg-indicator-orange/10 text-indicator-orange',
     label: 'UNK',
   },
@@ -68,9 +68,9 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
       </div>
 
       {/* Node card */}
-      <div className="flex-1 min-w-0 py-1.5 pr-0">
+      <div className="flex-1 min-w-0 py-1.5 pr-2">
         <div
-          className={`px-3 py-2.5 border ${styles.card} ${isClickable ? 'plan-item-lift cursor-pointer' : ''} relative`}
+          className={`px-3 py-2.5 rounded-md shadow-card ${styles.card} ${isClickable ? 'plan-item-lift cursor-pointer' : ''} relative`}
           onClick={isClickable ? () => onDeepDive!(item) : undefined}
           role={isClickable ? 'button' : undefined}
           tabIndex={isClickable ? 0 : undefined}

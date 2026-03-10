@@ -19,3 +19,19 @@ class ProjectMaterialUploadResponse(BaseModel):
     success: bool
     material: ProjectMaterialResponse
     message: str
+
+
+class GeneratedFileResponse(BaseModel):
+    id: str
+    title: str
+    output_type: str
+    created_at: Optional[datetime] = None
+    exportable: bool = False
+    export_format: Optional[str] = None
+    exported: bool = False
+    download_url: Optional[str] = None
+
+
+class ProjectFilesResponse(BaseModel):
+    uploaded: list[ProjectMaterialResponse]
+    generated: list[GeneratedFileResponse]

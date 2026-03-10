@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, LayoutGrid, MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
@@ -43,6 +43,7 @@ interface ProjectPlanViewProps {
   initiativeId: string;
   showInspector?: boolean;
   onInspectorChange?: (open: boolean, hasItem: boolean) => void;
+  onReady?: () => void;
 }
 
 interface DeepDiveState {
@@ -53,7 +54,7 @@ interface DeepDiveState {
   error: string | null;
 }
 
-export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange }: ProjectPlanViewProps) {
+export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange, onReady }: ProjectPlanViewProps) {
   const {
     projectPlan,
     projectPlanLoading,
@@ -67,8 +68,8 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
 
   useEffect(() => {
-    loadProjectPlan(initiativeId);
-  }, [initiativeId, loadProjectPlan]);
+    loadProjectPlan(initiativeId).finally(() => onReady?.());
+  }, [initiativeId, loadProjectPlan, onReady]);
 
   // Seed local cache from persisted deep_dives when plan loads
   useEffect(() => {
@@ -206,87 +207,78 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     [initiativeId, deepDiveCache, projectPlan]
   );
 
-  // Loading state during generation (triggered via confirm-categories)
-  if (projectPlanLoading && !projectPlan) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center p-8 bg-white">
-        <Loader2 className="w-6 h-6 animate-spin text-accent mb-3" />
-        <p className="text-sm text-text-secondary">Building your project plan...</p>
-        <p className="text-xs text-text-tertiary mt-1">
-          This usually takes 15–30 seconds
-        </p>
-      </div>
-    );
-  }
-
-  // No plan yet — prompt user to go through the chat flow
-  if (!projectPlan) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center p-8 bg-white">
-        <div className="w-14 h-14 bg-surface-subtle rounded flex items-center justify-center mb-4">
-          <MessageSquare className="w-7 h-7 text-text-tertiary" />
-        </div>
-        <p className="text-sm text-text-secondary mb-1">No project plan yet</p>
-        <p className="text-xs text-text-tertiary text-center max-w-xs">
-          Describe your project in the chat and confirm the proposed categories to generate your plan.
-        </p>
-      </div>
-    );
-  }
-
-  const pillars = projectPlan.pillars || [];
-
-  // When showInspector prop is provided, it controls panel visibility.
-  // deepDive is preserved as "last viewed item" so it can be restored on reopen.
+  const pillars = projectPlan?.pillars ?? [];
   const inspectorVisible = showInspector !== undefined ? showInspector : deepDive !== null;
 
   return (
-    <div className="h-full flex flex-col bg-white overflow-hidden">
-      {/* Updating indicator */}
-      {projectPlanLoading && (
+    <div className="h-full flex flex-col bg-surface overflow-hidden">
+      {/* Updating indicator (background refresh after initial load) */}
+      {projectPlanLoading && projectPlan && (
         <div className="flex items-center justify-center gap-1.5 py-2 flex-shrink-0">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
           <span className="text-xs text-accent">Updating...</span>
         </div>
       )}
 
+      {/* Empty states */}
+      {!projectPlan && (
+        projectPlanLoading ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <p className="text-sm text-text-secondary">Building your project plan...</p>
+            <p className="text-xs text-text-tertiary mt-1">This usually takes 15–30 seconds</p>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <div className="w-14 h-14 bg-surface-subtle rounded flex items-center justify-center mb-4">
+              <MessageSquare className="w-7 h-7 text-text-tertiary" />
+            </div>
+            <p className="text-sm text-text-secondary mb-1">No project plan yet</p>
+            <p className="text-xs text-text-tertiary text-center max-w-xs">
+              Describe your project in the chat and confirm the proposed categories to generate your plan.
+            </p>
+          </div>
+        )
+      )}
+
       {/* Main row: pillar grid + deep dive panel side by side */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* 3-column pillar tree — squishes when panel is open */}
-        <div className="@container flex-1 overflow-y-auto p-4 pt-5">
-          <div className="grid grid-cols-1 @[32rem]:grid-cols-2 @[52rem]:grid-cols-3 gap-6">
-            {pillars.map(pillar => (
-              <PillarColumn
-                key={pillar.id}
-                pillar={pillar}
-                deepDiveCache={deepDiveCache}
-                onDeepDive={handleDeepDive}
-                onDeleteItem={handleDeleteItem}
-                onDeleteElement={handleDeleteElement}
+      {projectPlan && (
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* 3-column pillar tree — squishes when panel is open */}
+          <div className="@container flex-1 overflow-y-auto p-4 pt-5">
+            <div className="grid grid-cols-1 @[32rem]:grid-cols-2 @[52rem]:grid-cols-3 gap-6">
+              {pillars.map(pillar => (
+                <PillarColumn
+                  key={pillar.id}
+                  pillar={pillar}
+                  deepDiveCache={deepDiveCache}
+                  onDeepDive={handleDeepDive}
+                  onDeleteItem={handleDeleteItem}
+                  onDeleteElement={handleDeleteElement}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Deep Dive panel — inline, respects header */}
+          <div
+            className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+            style={{ width: inspectorVisible && deepDive ? 420 : 0 }}
+          >
+            {deepDive && (
+              <DeepDivePanel
+                initiativeId={initiativeId}
+                item={deepDive.item}
+                pillar={deepDive.pillar}
+                result={deepDive.result}
+                loading={deepDive.loading}
+                error={deepDive.error}
+                onClose={handleClosePanel}
+                onRetry={handleRetry}
               />
-            ))}
+            )}
           </div>
         </div>
-
-        {/* Deep Dive panel — inline, respects header */}
-        <div
-          className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-          style={{ width: inspectorVisible && deepDive ? 420 : 0 }}
-        >
-          {deepDive && (
-            <DeepDivePanel
-              initiativeId={initiativeId}
-              item={deepDive.item}
-              pillar={deepDive.pillar}
-              result={deepDive.result}
-              loading={deepDive.loading}
-              error={deepDive.error}
-              onClose={handleClosePanel}
-              onRetry={handleRetry}
-            />
-          )}
-        </div>
-      </div>
+      )}
 
       {activeSurvey && (
         <SurveyPopup

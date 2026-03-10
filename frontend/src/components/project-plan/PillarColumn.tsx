@@ -1,7 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Banknote, Compass, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Shield, Scale, Lock, FileText, BookOpen, Flag,
+  Banknote, DollarSign, PiggyBank, TrendingUp, Coins, Wallet, CircleDollarSign,
+  Compass, Wrench, Hammer, Settings, Target, Rocket,
+  Leaf, TreePine, Sprout, Recycle, Waves, CloudRain, Mountain,
+  Zap, Sun, Battery, BatteryCharging, Plug, Wind,
+  Users, Handshake, HeartHandshake, Globe, MapPin, Map, Navigation,
+  BarChart3, Database, Network, Satellite, Award, CheckCircle,
+  ChevronDown, ChevronRight,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { PlanSubItem } from './PlanSubItem';
 
@@ -13,17 +23,20 @@ interface PillarColumnProps {
   onDeleteElement?: (itemId: string, elementIndex: number) => void;
 }
 
-const PILLAR_ICONS: Record<string, React.ReactNode> = {
-  authorization: <Shield className="w-5 h-5" />,
-  capital: <Banknote className="w-5 h-5" />,
-  design: <Compass className="w-5 h-5" />,
+const ICON_MAP: Record<string, LucideIcon> = {
+  Shield, Scale, Lock, FileText, BookOpen, Flag,
+  Banknote, DollarSign, PiggyBank, TrendingUp, Coins, Wallet, CircleDollarSign,
+  Compass, Wrench, Hammer, Settings, Target, Rocket,
+  Leaf, TreePine, Sprout, Recycle, Waves, CloudRain, Mountain,
+  Zap, Sun, Battery, BatteryCharging, Plug, Wind,
+  Users, Handshake, HeartHandshake, Globe, MapPin, Map, Navigation,
+  BarChart3, Database, Network, Satellite, Award, CheckCircle,
 };
 
-const PILLAR_NAMES: Record<string, string> = {
-  authorization: 'Authorization',
-  capital: 'Capital',
-  design: 'Design',
-};
+function PillarIcon({ name }: { name?: string }) {
+  const Icon = (name && ICON_MAP[name]) || Compass;
+  return <Icon className="w-5 h-5" />;
+}
 
 const DEFAULT_VISIBLE = 10;
 
@@ -47,14 +60,14 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
       {/* Pillar header node — full width, aligned with items */}
       <button
         onClick={() => setItemsExpanded(v => !v)}
-        className="border border-accent bg-accent-wash/30 px-4 py-3 flex items-center gap-2.5 w-full text-left"
+        className="border border-accent bg-surface rounded-md px-4 py-3 flex items-center gap-2.5 w-full text-left hover:bg-accent-wash/20 transition-colors duration-150"
       >
         <div className="w-8 h-8 bg-accent/10 rounded flex items-center justify-center text-accent flex-shrink-0">
-          {PILLAR_ICONS[pillar.id] || <Compass className="w-5 h-5" />}
+          <PillarIcon name={pillar.icon} />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-text-primary leading-tight">
-            {PILLAR_NAMES[pillar.id] ?? pillar.name}
+            {pillar.name}
           </h3>
           <p className="text-[11px] text-text-tertiary mt-0.5">
             {requiredCount} required &middot; {optionalCount} optional

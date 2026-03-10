@@ -157,27 +157,7 @@ export function ChatMessage({
       className={`flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'} ${className}`.trim()}
     >
       {/* Message content */}
-      <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
-
-        {/* Floating toolbar — hidden while streaming or editing */}
-        {!isStreaming && !isEditing && (
-          <div className={`absolute z-10 flex items-center ${isUser ? 'right-0 -bottom-7' : 'left-0 -bottom-7'}`}>
-            {isUser ? (
-              <UserMessageToolbar
-                content={message.content}
-                onEdit={handleEditStart}
-              />
-            ) : (
-              <AssistantMessageToolbar
-                content={message.content}
-                feedback={feedback}
-                onFeedback={handleFeedback}
-                onRetry={handleRetry}
-                retrying={isRetrying}
-              />
-            )}
-          </div>
-        )}
+      <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
 
         {isUser ? (
           isEditing ? (
@@ -291,6 +271,26 @@ export function ChatMessage({
               hasOutputWidget={hasOutputWidget}
               messageId={message.id}
             />
+          </div>
+        )}
+
+        {/* Toolbar — shown below all content with consistent spacing */}
+        {!isStreaming && !isEditing && (
+          <div className={`mt-2 flex items-center relative ${isUser ? 'self-end' : 'self-start'}`}>
+            {isUser ? (
+              <UserMessageToolbar
+                content={message.content}
+                onEdit={handleEditStart}
+              />
+            ) : (
+              <AssistantMessageToolbar
+                content={message.content}
+                feedback={feedback}
+                onFeedback={handleFeedback}
+                onRetry={handleRetry}
+                retrying={isRetrying}
+              />
+            )}
           </div>
         )}
       </div>
@@ -426,11 +426,11 @@ function MessageWidget({
     case 'lcoe_inputs':
       return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'lcoe_output':
-      return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
     case 'carbon_inputs':
       return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
     case 'carbon_output':
-      return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+      return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
     case 'proposed_value':
       return <ProposedValueWidget data={data as any} messageId={messageId} />;
     case 'gs_proposed_field':
