@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, X, Loader2 } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { ProjectMaterial } from '@/lib/api';
+import { UploadToast, UploadItem } from './UploadToast';
 
-export type NavItem = 'home' | 'trash' | 'plan' | 'chat';
+export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat';
 export type SideDrawerVariant = 'home' | 'project';
 
 interface NavItemConfig {
@@ -20,9 +20,7 @@ interface SideDrawerProps {
   onItemSelect: (item: NavItem) => void;
   onSignOut?: () => void;
   userEmail?: string | null;
-  materials?: ProjectMaterial[];
   onUploadMaterial?: (file: File) => Promise<void>;
-  onDeleteMaterial?: (materialId: string) => Promise<void>;
 }
 
 const HOME_ITEMS: NavItemConfig[] = [
@@ -36,52 +34,64 @@ const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'chat', label: 'Generate', Icon: Zap },
 ];
 
-const FILE_TYPE_LABELS: Record<string, string> = {
-  pdf: 'PDF',
-  docx: 'DOCX',
-  txt: 'TXT',
-  csv: 'CSV',
-  xlsx: 'XLSX',
-  xls: 'XLS',
-  png: 'PNG',
-  jpg: 'JPG',
-};
-
 export function SideDrawer({
   variant,
   activeItem,
   onItemSelect,
   onSignOut,
   userEmail,
-  materials = [],
   onUploadMaterial,
-  onDeleteMaterial,
 }: SideDrawerProps) {
   const items = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
   const showMaterials = variant === 'project' && !!onUploadMaterial;
+  const showFilesButton = variant === 'project';
   const longestLabelLength = useMemo(() => {
     const labels = items.map((item) => item.label);
+    if (showFilesButton) labels.push('Files');
     if (onSignOut) labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
-  }, [items, onSignOut]);
+  }, [items, showFilesButton, onSignOut]);
   const drawerStyle = {
     '--side-drawer-expanded-width': `calc(${longestLabelLength}ch + 3.75rem)`,
   } as CSSProperties;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [toastItems, setToastItems] = useState<UploadItem[]>([]);
+  const [showToast, setShowToast] = useState(false);
   const dragCounter = useRef(0);
+
+  const uploading = toastItems.some((i) => i.status === 'uploading');
 
   const handleUpload = useCallback(async (files: FileList | File[]) => {
     if (!onUploadMaterial) return;
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
+
+    const fileArray = Array.from(files);
+    const initial: UploadItem[] = fileArray.map((f) => ({
+      id: `${f.name}-${Date.now()}-${Math.random()}`,
+      filename: f.name,
+      status: 'uploading',
+    }));
+    setToastItems(initial);
+    setShowToast(true);
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const item = initial[i];
+      try {
         await onUploadMaterial(file);
+        setToastItems((prev) =>
+          prev.map((t) => t.id === item.id ? { ...t, status: 'done' } : t)
+        );
+      } catch (err) {
+        setToastItems((prev) =>
+          prev.map((t) =>
+            t.id === item.id
+              ? { ...t, status: 'error', errorMessage: err instanceof Error ? err.message : 'Upload failed' }
+              : t
+          )
+        );
       }
-    } finally {
-      setUploading(false);
     }
   }, [onUploadMaterial]);
 
@@ -165,7 +175,7 @@ export function SideDrawer({
           {/* Collapsed: icon pinned at bottom-left, fades out when expanded */}
           <button
             onClick={handleFileSelect}
-            className="group-hover:opacity-0 group-hover:pointer-events-none transition-opacity duration-150 flex items-center justify-center w-8 h-8 rounded text-text-tertiary hover:text-text-secondary hover:bg-white/40"
+            className="group-hover:opacity-0 group-hover:pointer-events-none transition-opacity duration-150 flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:bg-white/40"
             title="Upload files"
           >
             {uploading ? (
@@ -179,33 +189,6 @@ export function SideDrawer({
           <div
             className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-hover:delay-[200ms] transition-opacity duration-150"
           >
-            {/* Uploaded file list */}
-            {materials.length > 0 && (
-              <div className="max-h-28 overflow-y-auto space-y-0.5" style={{ scrollbarWidth: 'thin' }}>
-                {materials.map((mat) => (
-                  <div
-                    key={mat.id}
-                    className="group/file flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-white/40 transition-colors duration-100"
-                  >
-                    <span className="text-[10px] font-medium text-text-tertiary uppercase flex-shrink-0 w-6 text-center whitespace-nowrap">
-                      {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
-                    </span>
-                    <span className="flex-1 text-xs text-text-secondary truncate" title={mat.filename}>
-                      {mat.filename}
-                    </span>
-                    {onDeleteMaterial && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onDeleteMaterial(mat.id); }}
-                        className="flex-shrink-0 p-0.5 rounded text-text-tertiary hover:text-red-400 opacity-0 group-hover/file:opacity-100 transition-all duration-100"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Upload header */}
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
 
@@ -237,6 +220,21 @@ export function SideDrawer({
           </div>
         </div>
       )}
+      {showFilesButton && (
+        <button
+          onClick={() => onItemSelect('files')}
+          className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''}`}
+        >
+          <FolderOpen
+            className="w-4 h-4 flex-shrink-0"
+            {...(activeItem === 'files' && { fill: 'currentColor' })}
+          />
+          <span className="opacity-0 group-hover:opacity-100 group-hover:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+            Files
+          </span>
+        </button>
+      )}
+
       {onSignOut && (
         <button
           onClick={onSignOut}
@@ -248,6 +246,16 @@ export function SideDrawer({
             Log out
           </span>
         </button>
+      )}
+
+      {showToast && (
+        <UploadToast
+          items={toastItems}
+          onDismiss={() => {
+            setShowToast(false);
+            setToastItems([]);
+          }}
+        />
       )}
     </aside>
   );
