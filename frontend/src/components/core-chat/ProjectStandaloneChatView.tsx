@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import type { ChatMessage } from '@/lib/api';
+import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
@@ -18,8 +19,6 @@ interface ProjectStandaloneChatViewProps {
   onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
-  /** Called when a document tool is selected — parent should switch to plan view and send via orchestration */
-  onToolRedirect?: (content: string, toolHint: string) => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -47,7 +46,6 @@ export function ProjectStandaloneChatView({
   onMessageSent,
   onBack,
   onEditorWidgetsChange,
-  onToolRedirect,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -60,6 +58,71 @@ export function ProjectStandaloneChatView({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
+
+  // Subscribe to initiative store for alignment confirm / feedback flows
+  const storeMessages = useInitiativeStore((s) => s.messages);
+  const storeAlignmentLoading = useInitiativeStore((s) => s.alignmentLoading);
+  const storeGenerating = useInitiativeStore((s) => s.generating);
+
+  const documentFlowRef = useRef(false);
+  const lastSyncedIdRef = useRef<string | null>(null);
+  const prevLoadingRef = useRef(false);
+  const documentFlowPersistedRef = useRef(false);
+
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    const isLoading = storeAlignmentLoading || storeGenerating;
+    prevLoadingRef.current = isLoading;
+
+    if (!documentFlowRef.current || !lastSyncedIdRef.current) return;
+    if (!(wasLoading && !isLoading)) return;
+
+    const anchorIdx = storeMessages.findIndex((m) => m.id === lastSyncedIdRef.current);
+    if (anchorIdx >= 0 && anchorIdx < storeMessages.length - 1) {
+      const newMsgs = storeMessages.slice(anchorIdx + 1);
+      if (newMsgs.length > 0) {
+        setLocalMessages((prev) => [...prev, ...newMsgs]);
+        lastSyncedIdRef.current = newMsgs[newMsgs.length - 1].id;
+      }
+    }
+  }, [storeAlignmentLoading, storeGenerating, storeMessages]);
+
+  // Persist document flow conversation as a core_chat session once
+  // deliverable messages appear (so it shows in chat history)
+  const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+  useEffect(() => {
+    if (!documentFlowRef.current || documentFlowPersistedRef.current) return;
+    const hasDeliverable = localMessages.some(
+      (m) => m.widget_type && DELIVERABLE_WIDGET_TYPES.includes(m.widget_type),
+    );
+    if (!hasDeliverable) return;
+
+    documentFlowPersistedRef.current = true;
+    const msgs = localMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      widget_type: m.widget_type ?? undefined,
+      widget_data: m.widget_data ?? undefined,
+      sources: m.sources ?? undefined,
+      completion_meta: m.completion_meta ?? undefined,
+    }));
+    api
+      .saveSessionFromMessages(msgs, sessionTitle ?? undefined)
+      .then(({ session_id }) => {
+        setCurrentSessionId(session_id);
+        // Add to session list so it appears immediately in history
+        setDbSessions((prev) => [
+          {
+            id: session_id,
+            title: sessionTitle || 'Deliverable generation',
+            createdAt: Date.now(),
+            messages: [],
+          },
+          ...prev,
+        ]);
+      })
+      .catch((err) => console.warn('Failed to persist document flow session:', err));
+  }, [localMessages, sessionTitle]);
 
   // Load session list from DB on mount
   useEffect(() => {
@@ -99,6 +162,9 @@ export function ProjectStandaloneChatView({
       setSessionTitle(null);
       setCurrentSessionId(null);
       setFeedbackMap({});
+      documentFlowRef.current = false;
+      documentFlowPersistedRef.current = false;
+      lastSyncedIdRef.current = null;
     }
     prevShowLanding.current = showLanding;
   }, [showLanding, localMessages]);
@@ -116,7 +182,7 @@ export function ProjectStandaloneChatView({
   // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
     if (!onEditorWidgetsChange) return;
-    const widgets: EditorWidget[] = localMessages
+    const raw: EditorWidget[] = localMessages
       .filter(
         (m) =>
           m.widget_type &&
@@ -124,6 +190,20 @@ export function ProjectStandaloneChatView({
           (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
       )
       .map((m) => ({ type: m.widget_type!, data: m.widget_data!, messageId: m.id }));
+
+    // Suppress alignment widgets whose output has already been generated
+    const OUTPUT_TYPE_TO_WIDGET: Record<string, string> = {
+      memo: 'memo_viewer',
+      checklist: 'checklist_viewer',
+    };
+    const presentWidgetTypes = new Set(raw.map((w) => w.type));
+    const widgets = raw.filter((w) => {
+      if (w.type !== 'alignment') return true;
+      const outputType = w.data?.tool?.output_type as string | undefined;
+      if (!outputType) return true;
+      const widgetType = OUTPUT_TYPE_TO_WIDGET[outputType];
+      return !widgetType || !presentWidgetTypes.has(widgetType);
+    });
     onEditorWidgetsChange(widgets);
   }, [localMessages, onEditorWidgetsChange]);
 
@@ -205,14 +285,49 @@ export function ProjectStandaloneChatView({
     [initiativeId, currentSessionId],
   );
 
+  const sendViaInitiativePipeline = useCallback(
+    async (content: string, currentMessages: ChatMessage[], toolHint: string) => {
+      const words: string[] = [];
+      setThinkingLines([]);
+      setStreamingContent('');
+      setError(null);
+
+      await api.sendMessageStream(
+        initiativeId,
+        content,
+        (word) => {
+          words.push(word);
+          setStreamingContent(words.join(' '));
+        },
+        (message, _stageStatus) => {
+          setStreamingContent('');
+          setThinkingLines([]);
+          const assistantMsg: ChatMessage = {
+            id: message.id,
+            role: 'assistant',
+            content: message.content,
+            sources: message.sources ?? null,
+            thinking_lines: message.thinking_lines ?? undefined,
+            completion_meta: message.completion_meta ?? null,
+            widget_type: message.widget_type ?? null,
+            widget_data: message.widget_data ?? null,
+            created_at: message.created_at ?? new Date().toISOString(),
+          };
+          setLocalMessages((prev) => [...prev, assistantMsg]);
+          setSending(false);
+
+          // Track the flow so we can sync follow-up messages after alignment confirm/feedback
+          documentFlowRef.current = true;
+          lastSyncedIdRef.current = message.id;
+        },
+        toolHint,
+      );
+    },
+    [initiativeId],
+  );
+
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
-      // Document tools need the project orchestration pipeline (alignment → generate → editor)
-      if (toolHint && DOCUMENT_TOOL_IDS.includes(toolHint) && onToolRedirect) {
-        onToolRedirect(content, toolHint);
-        return;
-      }
-
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -240,7 +355,11 @@ export function ProjectStandaloneChatView({
       setSending(true);
 
       try {
-        await sendViaStream(content, updatedMessages, toolHint);
+        if (toolHint && DOCUMENT_TOOL_IDS.includes(toolHint)) {
+          await sendViaInitiativePipeline(content, updatedMessages, toolHint);
+        } else {
+          await sendViaStream(content, updatedMessages, toolHint);
+        }
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
@@ -248,7 +367,7 @@ export function ProjectStandaloneChatView({
         setSending(false);
       }
     },
-    [localMessages, onMessageSent, sendViaStream],
+    [localMessages, onMessageSent, sendViaStream, sendViaInitiativePipeline],
   );
 
   const handleEditMessage = useCallback(
@@ -377,6 +496,7 @@ export function ProjectStandaloneChatView({
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
       onBack={onBack}
+      initiativeId={initiativeId}
     />
   );
 }

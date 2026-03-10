@@ -13,8 +13,25 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
 import { Tooltip } from '@/components/ui/Tooltip';
+
+async function persistWidgetToDb(
+  initiativeId: string,
+  messageId: string,
+  widgetData: Record<string, any>,
+): Promise<boolean> {
+  try {
+    await api.updateMessageWidget(initiativeId, messageId, widgetData);
+    useInitiativeStore.getState().updateMessageWidgetData(messageId, widgetData);
+    useChatStore.getState().updateMessageWidgetData(messageId, widgetData);
+    return true;
+  } catch (err) {
+    console.error('[CarbonModelWidget] persist failed:', err);
+    return false;
+  }
+}
 
 interface CarbonModelWidgetProps {
   data: Record<string, any>;
@@ -54,18 +71,12 @@ export function CarbonModelWidget({
   messageId,
   isActive = true,
 }: CarbonModelWidgetProps) {
-  const updateMessageWidgetData = useChatStore((s) => s.updateMessageWidgetData);
-
   const [data, setDataRaw] = useState(initialData);
   const setData = useCallback((newData: any) => {
-    setDataRaw((prev: any) => {
-      const resolved = typeof newData === 'function' ? newData(prev) : newData;
-      if (messageId && resolved) {
-        updateMessageWidgetData(messageId, resolved);
-      }
-      return resolved;
-    });
-  }, [messageId, updateMessageWidgetData]);
+    setDataRaw((prev: any) =>
+      typeof newData === 'function' ? newData(prev) : newData
+    );
+  }, []);
   const [activeTab, setActiveTab] = useState<'overview' | 'inputs' | 'sensitivity' | 'schedule'>('overview');
   const [isExporting, setIsExporting] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -97,13 +108,14 @@ export function CarbonModelWidget({
         try {
           const newData = await api.updateCarbonInput(inputs, fieldName, value, 'confirmed');
           setData(newData);
+          if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
         } catch { /* keep old */ }
         finally { setIsRecalculating(false); }
       })();
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData]);
+  }, [inputs, setData, messageId, initiativeId]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -143,6 +155,7 @@ export function CarbonModelWidget({
     try {
       const newData = await api.updateCarbonInput(inputs, editingField, parsed);
       setData(newData);
+      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
     } catch {
       // keep old values
     } finally {
@@ -150,7 +163,7 @@ export function CarbonModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -189,6 +202,7 @@ export function CarbonModelWidget({
     try {
       const newData = await api.updateCarbonInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
+      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
     } catch {
       setData((prev: any) => ({
         ...prev,
@@ -200,7 +214,7 @@ export function CarbonModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */

@@ -86,7 +86,8 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
       </div>
 
       {/* Input area - no container/border */}
-      <div className="flex-shrink-0 pb-4">
+      <div className="flex-shrink-0 pb-4 relative">
+        <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
         <div className="max-w-3xl mx-auto px-4">
           <ChatInput 
             initiativeId={initiativeId}

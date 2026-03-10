@@ -103,9 +103,9 @@ function HomePageContent() {
   return (
     <div className="min-h-screen h-screen flex flex-col bg-background">
       {/* Header row — shell chrome */}
-      <header className="shrink-0 h-10 px-4 flex items-center justify-end gap-3">
+      <header className="shrink-0 h-14 px-4 flex items-center justify-end gap-3">
         <div className="h-full flex items-center gap-3 flex-1 max-w-xl justify-end">
-          <div className="relative h-[30px] flex-1 min-w-0">
+          <div className="relative h-[36px] flex-1 min-w-0">
             <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
               <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
             </span>
@@ -114,7 +114,7 @@ function HomePageContent() {
               placeholder={isTrashView ? 'Search trash' : 'Search projects'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-[30px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+              className="w-full h-[36px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
               aria-label={isTrashView ? 'Search trash' : 'Search projects'}
             />
           </div>
@@ -122,7 +122,7 @@ function HomePageContent() {
             <button
               onClick={handleNewProject}
               disabled={creating}
-              className="btn-primary shrink-0 !h-[30px] !text-xs !leading-none !px-4 !py-0"
+              className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
             >
               {creating ? (
                 <>

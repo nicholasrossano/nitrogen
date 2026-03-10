@@ -5,11 +5,13 @@ from sqlalchemy import select
 from uuid import UUID
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
+import re
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.core.storage import get_storage
+from app.models.chat import ChatMessage
 from app.models.initiative import Initiative
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
@@ -228,3 +230,174 @@ async def export_checklist(
             "Content-Disposition": f'attachment; filename="{filename}"'
         }
     )
+
+
+@router.get("/initiatives/{initiative_id}/deliverables/{tool_id}/export")
+async def export_deliverable(
+    initiative_id: UUID,
+    tool_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Export any generated deliverable to its native file format (DOCX or XLSX).
+
+    Reads content directly from the DB so the frontend never needs to send
+    input data back — avoids round-trip serialisation bugs.
+    """
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    if not initiative:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+
+    deliverables: dict[str, Any] = initiative.deliverables or {}
+    data = deliverables.get(tool_id)
+
+    # Fallback: tool_id might be a MemoVersion UUID (legacy path)
+    if data is None:
+        try:
+            memo_uuid = UUID(tool_id)
+            memo_res = await db.execute(
+                select(MemoVersion).where(
+                    MemoVersion.id == memo_uuid,
+                    MemoVersion.initiative_id == initiative_id,
+                )
+            )
+            memo = memo_res.scalar_one_or_none()
+            if not memo:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliverable not found")
+            data = {
+                "output_type": "memo",
+                "title": (memo.content or {}).get("title", "Investment Memo"),
+                "content": memo.content or {},
+            }
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deliverable not found")
+
+    output_type: str = data.get("output_type", "document")
+    content: dict = data.get("content") or {}
+    title: str = data.get("title", tool_id.replace("_", " ").title())
+    safe_title = re.sub(r"[^\w\s\-.]", "_", title).replace(" ", "_")[:60]
+
+    # ── Memo → DOCX ──────────────────────────────────────────────────────────
+    if output_type == "memo":
+        memo_res = await db.execute(
+            select(MemoVersion)
+            .where(MemoVersion.initiative_id == initiative_id)
+            .order_by(MemoVersion.created_at.desc())
+            .limit(1)
+        )
+        memo = memo_res.scalar_one_or_none()
+        if not memo:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No memo found")
+
+        storage = get_storage()
+        if memo.export_path:
+            file_bytes = await storage.load(memo.export_path)
+        else:
+            exporter = DocxExporterService()
+            if "sections" in (memo.content or {}):
+                file_bytes = exporter.generate_from_sections(
+                    memo_content=memo.content,
+                    initiative_title=initiative.title or "Untitled",
+                )
+            else:
+                memo_content_obj = MemoContent(**memo.content)
+                file_bytes = exporter.generate(
+                    memo_content=memo_content_obj,
+                    initiative_title=initiative.title or "Untitled",
+                )
+            export_path = await storage.save(file_bytes, f"{safe_title}_{memo.id}.docx", folder="exports")
+            memo.export_path = export_path
+            await db.commit()
+
+        return Response(
+            content=file_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.docx"'},
+        )
+
+    # ── Checklist → XLSX ─────────────────────────────────────────────────────
+    if output_type == "checklist":
+        exporter = ExcelExporterService()
+        filepath = await exporter.export_checklist(content)
+        with open(filepath, "rb") as f:
+            file_bytes = f.read()
+        return Response(
+            content=file_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.xlsx"'},
+        )
+
+    # ── LCOE → XLSX ──────────────────────────────────────────────────────────
+    if output_type == "lcoe":
+        from app.api.lcoe import export_lcoe_excel, RecalculateRequest as LCOEReq
+        inputs: dict[str, Any] = content.get("inputs") or {}
+        if not inputs:
+            inputs = await _recover_model_inputs(db, initiative_id, ("lcoe_output", "lcoe_inputs"))
+        if not inputs:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LCOE model inputs are not available for export. "
+                       "Open the model in the chat and recalculate to refresh the data.",
+            )
+        return await export_lcoe_excel(data=LCOEReq(inputs=inputs), user=user)
+
+    # ── Carbon → XLSX ────────────────────────────────────────────────────────
+    if output_type == "carbon":
+        from app.api.carbon import export_carbon_excel, RecalculateRequest as CarbonReq
+        inputs = content.get("inputs") or {}
+        if not inputs:
+            inputs = await _recover_model_inputs(db, initiative_id, ("carbon_output", "carbon_inputs"))
+        if not inputs:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Carbon model inputs are not available for export. "
+                       "Open the model in the chat and recalculate to refresh the data.",
+            )
+        return await export_carbon_excel(data=CarbonReq(inputs=inputs), user=user)
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Export not supported for output type: {output_type}",
+    )
+
+
+async def _recover_model_inputs(
+    db: AsyncSession,
+    initiative_id: UUID,
+    widget_types: tuple[str, ...],
+) -> dict[str, Any]:
+    """Scan chat messages to find the most recent computable model inputs.
+
+    Used as a fallback when the deliverable's stored inputs are stale or empty.
+    """
+    from sqlalchemy import and_
+    result = await db.execute(
+        select(ChatMessage)
+        .where(
+            and_(
+                ChatMessage.initiative_id == initiative_id,
+                ChatMessage.widget_type.in_(widget_types),
+            )
+        )
+        .order_by(ChatMessage.created_at.desc())
+    )
+    messages = result.scalars().all()
+    for msg in messages:
+        wd = msg.widget_data or {}
+        inputs = wd.get("inputs") or {}
+        if inputs and wd.get("computable", False):
+            return inputs
+    # Last resort: return the largest set of inputs even if not computable
+    best: dict[str, Any] = {}
+    for msg in messages:
+        wd = msg.widget_data or {}
+        inputs = wd.get("inputs") or {}
+        if len(inputs) > len(best):
+            best = inputs
+    return best

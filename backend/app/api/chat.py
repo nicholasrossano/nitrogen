@@ -320,12 +320,24 @@ async def execute_action(
         registry = get_tool_registry()
         tool = registry.get_tool(tool_hint)
         if tool and tool.requires_alignment:
-            # Ensure the tool is added to selected_tools
+            from sqlalchemy.orm.attributes import flag_modified
+
+            # Replace selected_tools with only this tool so a single-tool picker
+            # action never pulls in other previously-selected tools that happen to
+            # have confirmed alignments, which would cause both to be generated
+            # simultaneously when this alignment is confirmed.
             existing = list(initiative.selected_tools or [])
-            if tool_hint not in existing:
-                initiative.selected_tools = existing + [tool_hint]
-                from sqlalchemy.orm.attributes import flag_modified
+            if existing != [tool_hint]:
+                initiative.selected_tools = [tool_hint]
+                # Clear the confirmed flag for any other tool that was previously
+                # in selected_tools so stale alignments don't interfere.
+                tool_alignments = dict(initiative.tool_alignments or {})
+                for other_id in existing:
+                    if other_id != tool_hint and other_id in tool_alignments:
+                        del tool_alignments[other_id]
+                initiative.tool_alignments = tool_alignments
                 flag_modified(initiative, "selected_tools")
+                flag_modified(initiative, "tool_alignments")
                 await db.commit()
                 await db.refresh(initiative)
 
@@ -474,7 +486,7 @@ async def execute_action(
             content = tool_output.content
             computable = content.get("computable", False)
 
-            if computable and content.get("result"):
+            if computable and content.get("result") and content.get("inputs"):
                 lcoe_val = content["result"]["lcoe"]
                 currency = content["result"].get("currency", "USD")
                 assumption_count = content["result"].get("assumption_count", 0)
@@ -534,7 +546,7 @@ async def execute_action(
             content = tool_output.content
             computable = content.get("computable", False)
 
-            if computable and content.get("result"):
+            if computable and content.get("result") and content.get("inputs"):
                 net_er = content["result"]["net_er_tco2e"]
                 assumption_count = content["result"].get("assumption_count", 0)
                 quality = content["result"].get("quality_label", "moderate")
@@ -998,14 +1010,22 @@ async def update_message_widget(
 
     msg.widget_data = data.widget_data
 
-    # Keep initiative.deliverables in sync for LCOE/Carbon models
-    # Handle both *_output (full result) and *_inputs (user filled in missing values)
+    from sqlalchemy.orm.attributes import flag_modified
+    from datetime import datetime, timezone
+
+    # Bump updated_at so the initiative sorts correctly in history
+    initiative.updated_at = datetime.now(timezone.utc)
+
+    # Keep initiative.deliverables in sync for LCOE/Carbon models.
+    # Only update when the widget has a real computed result AND non-empty inputs —
+    # both are required so we never store a deliverable with missing/corrupt input data.
     lcoe_types = ("lcoe_output", "lcoe_inputs")
     carbon_types = ("carbon_output", "carbon_inputs")
     if msg.widget_type in lcoe_types + carbon_types:
-        from sqlalchemy.orm.attributes import flag_modified
         content = data.widget_data
-        if content.get("result"):
+        has_real_result = bool(content.get("result") and content.get("computable", False))
+        has_inputs = bool(content.get("inputs"))
+        if has_real_result and has_inputs:
             deliverables = dict(initiative.deliverables or {})
             if msg.widget_type in lcoe_types:
                 lcoe_val = content["result"].get("lcoe", 0)
