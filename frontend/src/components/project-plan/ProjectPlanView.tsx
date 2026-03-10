@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquare } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -64,6 +64,89 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
+
+  // Column layout strategy:
+  // - Ref lives on the OUTER container (grid + panel together) so we always know the total width.
+  // - When the panel opens/closes, numCols updates IMMEDIATELY (before the 300ms slide animation)
+  //   so cards jump straight to their final column width, then the panel slides in alongside them.
+  //   This avoids the "shrink-shrink-snap" artefact where cards continuously narrow then suddenly
+  //   reflow after the debounce fires.
+  // - Window resize also updates immediately.
+  const outerContainerRef = useRef<HTMLDivElement>(null);
+  const containerWidth = useRef(0);
+  const [numCols, setNumCols] = useState(3);
+  const PANEL_WIDTH = 420;
+  const computeCols = (w: number) => (w >= 832 ? 3 : w >= 512 ? 2 : 1);
+
+  const panelOpenRef = useRef(false);
+
+  // ── FLIP animation ────────────────────────────────────────────────────────
+  // When numCols changes, pillar cards physically slide to their new positions
+  // instead of disappearing and reappearing.
+  //
+  // FIRST  – snapshot each card's current viewport position before the update
+  // LAST   – React renders the new column layout (DOM moves the cards)
+  // INVERT – useLayoutEffect applies a CSS transform that puts each card back
+  //          at its old position (so the user still sees the old layout)
+  // PLAY   – remove the transform with a transition, so each card slides to
+  //          where the DOM actually placed it
+  const pillarCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const flipSnapshot = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+  const registerPillarRef = useCallback((id: string, el: HTMLDivElement | null) => {
+    if (el) pillarCardRefs.current.set(id, el);
+    else pillarCardRefs.current.delete(id);
+  }, []);
+
+  // INVERT + PLAY: runs after every numCols change, before the browser paints
+  useLayoutEffect(() => {
+    const snapshot = flipSnapshot.current;
+    if (snapshot.size === 0) return;
+
+    pillarCardRefs.current.forEach((el, id) => {
+      const prev = snapshot.get(id);
+      if (!prev) return;
+      const curr = el.getBoundingClientRect();
+      const dx = Math.round(prev.x - curr.x);
+      const dy = Math.round(prev.y - curr.y);
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+
+      // Snap back to old position without transition
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      el.offsetHeight; // force reflow so the snap is committed
+
+      // Animate to natural (new) position
+      el.style.transition = 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1)';
+      el.style.transform = '';
+      el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+    });
+
+    flipSnapshot.current = new Map();
+  }, [numCols]);
+
+  const transitionNumCols = useCallback((next: number) => {
+    // FIRST: snapshot positions before React re-renders
+    flipSnapshot.current = new Map();
+    pillarCardRefs.current.forEach((el, id) => {
+      const r = el.getBoundingClientRect();
+      flipSnapshot.current.set(id, { x: r.x, y: r.y });
+    });
+    setNumCols(next);
+  }, []);
+
+  // Track outer container width for window/layout resize events
+  useEffect(() => {
+    const el = outerContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      containerWidth.current = w;
+      transitionNumCols(computeCols(w - (panelOpenRef.current ? PANEL_WIDTH : 0)));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [transitionNumCols]);
 
 
   // Seed local cache from persisted deep_dives when plan loads
@@ -204,6 +287,14 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
   const pillars = projectPlan?.pillars ?? [];
   const inspectorVisible = showInspector !== undefined ? showInspector : deepDive !== null;
+  const panelOpen = !!(inspectorVisible && deepDive);
+
+  // Immediately recalculate numCols when panel opens or closes (must be after panelOpen is declared)
+  useEffect(() => {
+    panelOpenRef.current = panelOpen;
+    const gridW = containerWidth.current - (panelOpen ? PANEL_WIDTH : 0);
+    if (gridW > 0) transitionNumCols(computeCols(gridW));
+  }, [panelOpen, transitionNumCols]);
 
   return (
     <div className="h-full flex flex-col bg-surface overflow-hidden">
@@ -237,19 +328,27 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
       {/* Main row: pillar grid + deep dive panel side by side */}
       {projectPlan && (
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          {/* 3-column pillar tree — squishes when panel is open */}
-          <div className="@container flex-1 overflow-y-auto p-4 pt-5">
-            <div className="grid grid-cols-1 @[32rem]:grid-cols-2 @[52rem]:grid-cols-3 gap-6">
-              {pillars.map(pillar => (
-                <PillarColumn
-                  key={pillar.id}
-                  pillar={pillar}
-                  deepDiveCache={deepDiveCache}
-                  onDeepDive={handleDeepDive}
-                  onDeleteItem={handleDeleteItem}
-                  onDeleteElement={handleDeleteElement}
-                />
+        <div ref={outerContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Pillar grid — each column is an independent flex stack so expanding one
+              pillar never shifts pillars in other columns */}
+          <div className="flex-1 overflow-y-auto p-4 pt-5">
+            <div className="flex gap-6 items-start">
+              {Array.from({ length: numCols }, (_, colIdx) => (
+                <div key={colIdx} className="flex-1 flex flex-col gap-6">
+                  {pillars
+                    .filter((_, i) => i % numCols === colIdx)
+                    .map(pillar => (
+                      <PillarColumn
+                        key={pillar.id}
+                        pillar={pillar}
+                        deepDiveCache={deepDiveCache}
+                        onDeepDive={handleDeepDive}
+                        onDeleteItem={handleDeleteItem}
+                        onDeleteElement={handleDeleteElement}
+                        onRegisterRef={(el) => registerPillarRef(pillar.id, el)}
+                      />
+                    ))}
+                </div>
               ))}
             </div>
           </div>

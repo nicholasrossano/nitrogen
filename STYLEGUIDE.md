@@ -118,6 +118,29 @@ Blue is an affordance signal, not a structural or decorative color.
 - Urbanist only for select headers  
 - Avoid italics in dense UI  
 
+### Label Overflow in Constrained Nodes
+
+Card or node labels (primary title + metadata subtitle) must never reflow to multiple lines in response to a layout transition or panel open/close. Reflow during animation is the main source of perceived visual chaos.
+
+**Rules**
+- Apply `whitespace-nowrap` to both the primary label and any single-line metadata subtitle — this prevents mid-transition text reflow entirely
+- **Never use `truncate` (`overflow-hidden whitespace-nowrap text-ellipsis`) on a primary label** — clipping the name removes information the user needs
+- The column/container's minimum width should be set by content (`min-width: auto`, the flex default), not forced smaller with `min-w-0`, so the title always has room to display fully
+- If a label is genuinely too long for any reasonable column width, the fallback is **smaller text (`text-xs` or `clamp()`)**, not truncation
+
+```tsx
+{/* ✅ correct — title can never wrap, column width adapts to fit it */}
+<div className="flex-1">
+  <h3 className="text-sm font-semibold whitespace-nowrap">{title}</h3>
+  <p className="text-xs text-text-tertiary whitespace-nowrap">{subtitle}</p>
+</div>
+
+{/* ❌ wrong — overflow-hidden + truncate clips the primary label */}
+<div className="flex-1 min-w-0 overflow-hidden">
+  <h3 className="text-sm font-semibold truncate">{title}</h3>
+</div>
+```
+
 ---
 
 ## D) Spacing & Layout
@@ -130,6 +153,62 @@ Blue is an affordance signal, not a structural or decorative color.
 - Section spacing: **16–24**  
 - Card padding: **16–20**  
 - Dense stacks: **8–12**
+
+---
+
+### Multi-Column Layouts with Independent Column Heights
+
+When displaying a set of cards or nodes across multiple columns, prefer **independent flex columns** over CSS Grid.
+
+**The problem with CSS Grid:** grid rows couple all cells in the same row together — when one cell expands (e.g. an accordion opens), every other cell in that row grows to match, leaving empty space next to unrelated items.
+
+**The solution:** render N independent `flex-col` containers and distribute items using row-major order (`index % numCols`). Each column manages its own height independently.
+
+```tsx
+<div className="flex gap-6 items-start">
+  {Array.from({ length: numCols }, (_, colIdx) => (
+    <div key={colIdx} className="flex-1 flex flex-col gap-6">
+      {items
+        .filter((_, i) => i % numCols === colIdx)
+        .map(item => <Card key={item.id} item={item} />)}
+    </div>
+  ))}
+</div>
+```
+
+**Column count:** compute `numCols` from a `ResizeObserver` on the outer container so the layout responds to both window resize and sibling panel open/close. Do **not** use CSS container queries when you need column count in JS (they don't communicate back).
+
+```tsx
+const outerRef = useRef<HTMLDivElement>(null);
+const containerWidth = useRef(0);
+const [numCols, setNumCols] = useState(3);
+const panelOpenRef = useRef(false);
+const PANEL_WIDTH = 420;
+const computeCols = (w: number) => (w >= 832 ? 3 : w >= 512 ? 2 : 1);
+
+useEffect(() => {
+  const observer = new ResizeObserver(([entry]) => {
+    const w = entry.contentRect.width;
+    containerWidth.current = w;
+    setNumCols(computeCols(w - (panelOpenRef.current ? PANEL_WIDTH : 0)));
+  });
+  observer.observe(outerRef.current!);
+  return () => observer.disconnect();
+}, []);
+```
+
+**Panel-awareness:** when a side panel opens or closes, switch `numCols` **immediately** (before the panel animation starts) so cards jump to their final column width first and the panel slides in alongside them. This avoids the "shrink-shrink-snap" artefact.
+
+```tsx
+// Runs after panelOpen is declared (avoid temporal dead zone)
+useEffect(() => {
+  panelOpenRef.current = panelOpen;
+  const gridW = containerWidth.current - (panelOpen ? PANEL_WIDTH : 0);
+  if (gridW > 0) setNumCols(computeCols(gridW));
+}, [panelOpen]);
+```
+
+**Column minimum width:** do **not** add `min-w-0` to column flex items — the default `min-width: auto` lets content size set the floor. Each column will be at least as wide as its widest card, so labels never need to be clipped to fit.
 
 ---
 
@@ -506,6 +585,87 @@ Use when a side panel — sidebar, chat panel, inspector — should open or clos
 **Do not apply to**
 - Modals or overlays (use opacity/scale instead)
 - Inline content that reflows (use height animation or `display: none`)
+
+---
+
+### Layout Transition — FLIP (Geometry-Based Repositioning)
+
+Use when items **physically move to new positions** in response to a layout change (e.g. column count switching, item reordering, panel open/close). FLIP makes cards appear to slide to their new positions rather than disappearing and reappearing.
+
+**Why not View Transitions API?** The default view-transition crossfade between screenshots looks identical to disappear/reappear. FLIP operates on the live DOM element so the card visually slides.
+
+**Timing:** `320ms cubic-bezier(0.4, 0, 0.2, 1)` (material ease-in-out).
+
+**Four steps:**
+
+| Step | When | What |
+|---|---|---|
+| **First** | Before state update | Snapshot each element's `getBoundingClientRect()` |
+| **Last** | React re-renders | DOM moves elements to new positions |
+| **Invert** | `useLayoutEffect` (before paint) | Apply CSS transform to put elements back at old position |
+| **Play** | Same `useLayoutEffect` | Remove transform with transition — elements slide to new position |
+
+```tsx
+// In the parent component — register refs for each animated item
+const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+const flipSnapshot = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+const registerRef = useCallback((id: string, el: HTMLDivElement | null) => {
+  if (el) itemRefs.current.set(id, el);
+  else itemRefs.current.delete(id);
+}, []);
+
+// INVERT + PLAY: fires before browser paints after layout change
+useLayoutEffect(() => {
+  const snapshot = flipSnapshot.current;
+  if (snapshot.size === 0) return;
+
+  itemRefs.current.forEach((el, id) => {
+    const prev = snapshot.get(id);
+    if (!prev) return;
+    const curr = el.getBoundingClientRect();
+    const dx = Math.round(prev.x - curr.x);
+    const dy = Math.round(prev.y - curr.y);
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.offsetHeight; // force reflow to commit the snap
+
+    el.style.transition = 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1)';
+    el.style.transform = '';
+    el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+  });
+
+  flipSnapshot.current = new Map();
+}, [layoutKey]); // depend on whatever triggers the layout change (numCols, order, etc.)
+
+// FIRST: snapshot before triggering the layout change
+const triggerLayoutChange = useCallback((next: unknown) => {
+  flipSnapshot.current = new Map();
+  itemRefs.current.forEach((el, id) => {
+    const r = el.getBoundingClientRect();
+    flipSnapshot.current.set(id, { x: r.x, y: r.y });
+  });
+  applyChange(next); // e.g. setNumCols(next)
+}, []);
+```
+
+```tsx
+// In the animated item — register its DOM node
+<div ref={el => registerRef(item.id, el)} className="...">
+```
+
+**Rules**
+- Snapshot **before** calling `setState` — after the render the old positions are gone
+- `useLayoutEffect` fires before the browser paints, so the INVERT step is invisible to the user
+- Items that move between different parent DOM nodes (e.g. between column divs) are handled correctly — React re-uses the keyed component but remounts the DOM node; the ref callback fires with the new element, which is already at its new position
+- Only use for **layout-driven** position changes, not hover/press states (use transform + transition directly for those)
+
+**Apply to**
+- Card grids that reflow when a side panel opens/closes
+- Reorderable lists
+- Any item set that can change column count or position in response to a state change
 
 ---
 
