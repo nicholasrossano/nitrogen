@@ -27,6 +27,7 @@ interface LCOEInputsWidgetProps {
   initiativeId: string;
   isActive?: boolean;
   hasOutputWidget?: boolean;
+  messageId?: string;
   onRecalculated?: (newData: Record<string, any>) => void;
   onSendMessage?: (content: string) => void;
 }
@@ -54,6 +55,7 @@ export function LCOEInputsWidget({
   initiativeId,
   isActive = true,
   hasOutputWidget = false,
+  messageId,
   onRecalculated,
   onSendMessage,
 }: LCOEInputsWidgetProps) {
@@ -67,6 +69,12 @@ export function LCOEInputsWidget({
       `Can you investigate and propose a value for ${label}?`;
     window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
   }, []);
+
+  const persistWidget = useCallback((widgetData: Record<string, any>) => {
+    if (messageId && initiativeId) {
+      api.updateMessageWidget(initiativeId, messageId, widgetData).catch(() => {});
+    }
+  }, [messageId, initiativeId]);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
@@ -106,6 +114,7 @@ export function LCOEInputsWidget({
     try {
       const result = await api.updateLCOEInput(localInputs, editingField, parsed);
       setLocalInputs(result.inputs || localInputs);
+      persistWidget(result);
       onRecalculated?.(result);
     } catch {
       // keep old values on failure
@@ -114,7 +123,7 @@ export function LCOEInputsWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, localInputs, onRecalculated]);
+  }, [editingField, editValue, localInputs, persistWidget, onRecalculated]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -141,6 +150,7 @@ export function LCOEInputsWidget({
     try {
       const result = await api.updateLCOEInput(localInputs, fieldName, currentValue, newStatus);
       setLocalInputs(result.inputs || localInputs);
+      persistWidget(result);
       onRecalculated?.(result);
     } catch {
       setLocalInputs(prev => ({
@@ -150,7 +160,7 @@ export function LCOEInputsWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [localInputs, preConfirmStatuses, onRecalculated]);
+  }, [localInputs, preConfirmStatuses, persistWidget, onRecalculated]);
 
   const handleRowHover = useCallback((e: React.MouseEvent, inp: LCOEInput) => {
     if (!cardRef.current) return;

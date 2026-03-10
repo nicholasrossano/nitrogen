@@ -214,7 +214,7 @@ export function SideDrawer({
                 <FileUp className={`w-4 h-4 ${isDragging ? 'text-accent' : 'text-text-secondary'}`} />
               )}
               <span className={`text-[11px] text-center leading-tight ${isDragging ? 'text-accent' : 'text-text-secondary'}`}>
-                {isDragging ? 'Drop files' : 'Drop files or click'}
+                {isDragging ? 'Drop files' : 'Upload files'}
               </span>
             </div>
           </div>

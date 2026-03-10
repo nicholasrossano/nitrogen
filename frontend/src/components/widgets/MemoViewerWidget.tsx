@@ -130,7 +130,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
       const match = part.match(/\[(\d+)\]/);
       if (match) {
         const num = parseInt(match[1]);
-        const citation = content.citations.find(c => c.number === num);
+        const citation = content.citations?.find(c => c.number === num);
         if (citation) {
           return (
             <button
@@ -161,7 +161,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
             <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
           </div>
         </div>
-        <p className="text-sm text-text-secondary whitespace-nowrap self-start">{formatHeaderDate(content.date)}</p>
+        {content.date && <p className="text-sm text-text-secondary whitespace-nowrap self-start">{formatHeaderDate(content.date)}</p>}
       </div>
 
       {/* Content */}
@@ -307,7 +307,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
             )}
 
             {/* Citations */}
-            {content.citations.length > 0 && (
+            {content.citations?.length > 0 && (
               <section>
                 <h2>References</h2>
                 <div className="space-y-3">
