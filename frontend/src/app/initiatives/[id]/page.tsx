@@ -60,7 +60,6 @@ function InitiativePageContent() {
   // Plan-view overlay — covers full workspace (chat + plan panels) when switching to plan
   const [planViewReady, setPlanViewReady] = useState(true);
   const [showPlanOverlay, setShowPlanOverlay] = useState(false);
-  const [planShowSprout, setPlanShowSprout] = useState(true);
 
   // Plan view panel state
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
@@ -161,12 +160,12 @@ function InitiativePageContent() {
     return () => clearTimeout(timer);
   }, [pageReady]);
 
-  // Alternate icons while the overlay is visible
+  // Alternate icons while either overlay is visible
   useEffect(() => {
-    if (!showOverlay) return;
+    if (!showOverlay && !showPlanOverlay) return;
     const interval = setInterval(() => setShowSprout((p) => !p), 750);
     return () => clearInterval(interval);
-  }, [showOverlay]);
+  }, [showOverlay, showPlanOverlay]);
 
   // Plan overlay fade-out
   useEffect(() => {
@@ -174,13 +173,6 @@ function InitiativePageContent() {
     const timer = setTimeout(() => setShowPlanOverlay(false), 350);
     return () => clearTimeout(timer);
   }, [planViewReady, showPlanOverlay]);
-
-  // Alternate plan overlay icons
-  useEffect(() => {
-    if (!showPlanOverlay) return;
-    const interval = setInterval(() => setPlanShowSprout((p) => !p), 750);
-    return () => clearInterval(interval);
-  }, [showPlanOverlay]);
 
   const prevPlanRef = useRef<boolean>(false);
   useEffect(() => {
@@ -397,19 +389,15 @@ function InitiativePageContent() {
               <div
                 className={`absolute inset-0 z-50 flex flex-col items-center justify-center gap-1.5 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${pageReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
               >
-                <div className="relative w-16 h-16">
-                  <div
-                    className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
-                  >
-                    <Sprout className="w-10 h-10 text-text-primary" strokeWidth={1.5} />
+                <div className="relative w-10 h-10">
+                  <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
+                    <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
                   </div>
-                  <div
-                    className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
-                  >
-                    <TreeDeciduous className="w-10 h-10 text-text-primary" strokeWidth={1.5} />
+                  <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
+                    <TreeDeciduous className="w-6 h-6 text-accent" strokeWidth={1.5} />
                   </div>
                 </div>
-                <span className="text-sm text-text-secondary font-medium tracking-wide">Loading project…</span>
+                <span className="text-xs text-text-secondary font-medium tracking-wide">Loading project…</span>
               </div>
             )}
 
@@ -483,10 +471,10 @@ function InitiativePageContent() {
                     className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${planViewReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
                   >
                     <div className="relative w-10 h-10">
-                      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${planShowSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
+                      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
                         <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
                       </div>
-                      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!planShowSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
+                      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
                         <TreeDeciduous className="w-6 h-6 text-accent" strokeWidth={1.5} />
                       </div>
                     </div>

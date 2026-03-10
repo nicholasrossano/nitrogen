@@ -54,6 +54,23 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
             // The variant entry is keyed by the original (first) message ID
             const variantEntry = messageVariants[message.id] ?? null;
 
+            // Only show toolbar on the last message of a consecutive assistant run
+            const isAssistant = message.role !== 'user';
+            const nextIsAssistant = index < messages.length - 1 && messages[index + 1].role !== 'user';
+            const showToolbar = !isAssistant || !nextIsAssistant;
+
+            // For grouped toolbar actions, find the start of this assistant run
+            let groupContent: string | undefined;
+            let groupFirstId: string | undefined;
+            if (isAssistant) {
+              let start = index;
+              while (start > 0 && messages[start - 1].role !== 'user') start--;
+              if (start < index) {
+                groupContent = messages.slice(start, index + 1).map(m => m.content).join('\n\n');
+                groupFirstId = messages[start].id;
+              }
+            }
+
             return (
               <ChatMessage
                 key={message.id}
@@ -65,6 +82,9 @@ export function ChatContainer({ initiativeId }: ChatContainerProps) {
                 className={marginClass}
                 hasOutputWidget={hasOutputWidget}
                 variantEntry={variantEntry}
+                showToolbar={showToolbar}
+                groupContent={groupContent}
+                groupFirstId={groupFirstId}
               />
             );
           })}

@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGeneratingProgress';
 
 /**
  * Persist widget data: write to DB first (source of truth), then sync in-memory stores.
@@ -369,10 +370,16 @@ export function LCOEModelWidget({
   /*  Inputs-only mode (no result yet)                                   */
   /* ================================================================== */
 
+  const isLoadingInputs = isActive && Object.keys(inputs).length === 0;
+
   if (!result) {
     return (
       <>
         <div className="card-elevated overflow-hidden !rounded-none">
+          {isLoadingInputs ? (
+            <WidgetGeneratingProgress steps={MODEL_INPUTS_STEPS} subtitle="Populating your LCOE model…" />
+          ) : (
+          <>
           <div className="px-5 py-4 bg-surface-header border-b border-divider">
             <div className="flex items-center gap-2 mb-1">
               <Calculator className="w-4 h-4 text-accent" />
@@ -408,9 +415,11 @@ export function LCOEModelWidget({
               Click any value to edit &middot; Yellow = assumed value &middot; Red = missing
             </p>
           </div>
+          </>
+          )}
         </div>
 
-        {renderInvestigateTooltip()}
+        {!isLoadingInputs && renderInvestigateTooltip()}
       </>
     );
   }
