@@ -254,21 +254,21 @@ async def generate_all_deliverables(
     initiative.stage = InitiativeStage.COMPLETE.value
     await db.commit()
     
-    # Add chat message with deliverables
-    message_content = f"I've generated {len(deliverable_widgets)} deliverable(s) for your project:"
+    # Create individual chat messages per deliverable so each opens in EditorSidePanel
+    WIDGET_LABELS = {
+        "memo_viewer": "Investment Memo",
+        "checklist_viewer": "Due Diligence Checklist",
+    }
     for widget in deliverable_widgets:
-        message_content += f"\n- **{widget['tool_name']}**"
-    
-    chat_message = ChatMessage(
-        initiative_id=initiative_id,
-        role="assistant",
-        content=message_content,
-        widget_type="deliverables_list",
-        widget_data={
-            "deliverables": deliverable_widgets,
-        },
-    )
-    db.add(chat_message)
+        label = WIDGET_LABELS.get(widget["widget_type"], widget["tool_name"])
+        deliverable_message = ChatMessage(
+            initiative_id=initiative_id,
+            role="assistant",
+            content=f"Here's your **{label}** for review and export.",
+            widget_type=widget["widget_type"],
+            widget_data={"content": widget["content"]},
+        )
+        db.add(deliverable_message)
     await db.commit()
     
     return {

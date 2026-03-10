@@ -214,7 +214,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
           </div>
         </div>
-        <p className="text-sm text-text-secondary whitespace-nowrap self-start">{formatHeaderDate(content.date)}</p>
+        {content.date && <p className="text-sm text-text-secondary whitespace-nowrap self-start">{formatHeaderDate(content.date)}</p>}
       </div>
 
       {/* Content */}
