@@ -424,11 +424,11 @@ function MessageWidget({
     case 'project_plan':
       return <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'lcoe_inputs':
-      return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
+      return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} messageId={messageId} />;
     case 'lcoe_output':
       return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
     case 'carbon_inputs':
-      return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} />;
+      return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} messageId={messageId} />;
     case 'carbon_output':
       return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
     case 'proposed_value':

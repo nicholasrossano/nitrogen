@@ -999,27 +999,31 @@ async def update_message_widget(
     msg.widget_data = data.widget_data
 
     # Keep initiative.deliverables in sync for LCOE/Carbon models
-    if msg.widget_type in ("lcoe_output", "carbon_output"):
+    # Handle both *_output (full result) and *_inputs (user filled in missing values)
+    lcoe_types = ("lcoe_output", "lcoe_inputs")
+    carbon_types = ("carbon_output", "carbon_inputs")
+    if msg.widget_type in lcoe_types + carbon_types:
         from sqlalchemy.orm.attributes import flag_modified
-        deliverables = dict(initiative.deliverables or {})
         content = data.widget_data
-        if msg.widget_type == "lcoe_output" and content.get("result"):
-            lcoe_val = content["result"].get("lcoe", 0)
-            currency = content["result"].get("currency", "USD")
-            deliverables["lcoe_model"] = {
-                "title": f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
-                "output_type": "lcoe",
-                "content": content,
-            }
-        elif msg.widget_type == "carbon_output" and content.get("result"):
-            net_er = content["result"].get("net_er_tco2e", 0)
-            deliverables["carbon_model"] = {
-                "title": f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
-                "output_type": "carbon",
-                "content": content,
-            }
-        initiative.deliverables = deliverables
-        flag_modified(initiative, "deliverables")
+        if content.get("result"):
+            deliverables = dict(initiative.deliverables or {})
+            if msg.widget_type in lcoe_types:
+                lcoe_val = content["result"].get("lcoe", 0)
+                currency = content["result"].get("currency", "USD")
+                deliverables["lcoe_model"] = {
+                    "title": f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
+                    "output_type": "lcoe",
+                    "content": content,
+                }
+            elif msg.widget_type in carbon_types:
+                net_er = content["result"].get("net_er_tco2e", 0)
+                deliverables["carbon_model"] = {
+                    "title": f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
+                    "output_type": "carbon",
+                    "content": content,
+                }
+            initiative.deliverables = deliverables
+            flag_modified(initiative, "deliverables")
 
     await db.commit()
 
@@ -1291,23 +1295,97 @@ async def confirm_alignment(
             next_tool_name = next_tool.definition.name if next_tool else pending[0]
             message = f"Great, I've confirmed the {tool_name} outline. Let's review the {next_tool_name} next."
     
-    # If no pending alignments, show deliverables overview
+    # If no pending alignments, generate deliverables immediately
     if not pending:
-        widget_type = "deliverables_overview"
-        widget_data = build_deliverables_overview_data(initiative)
-        tool_names = [registry.get_tool(tid).definition.name for tid in (initiative.selected_tools or []) if registry.get_tool(tid)]
-        message = f"Perfect! The {tool_name} outline is confirmed. {get_deliverables_overview_message(tool_names)}"
-    
-    # Save assistant message
-    assistant_message = ChatMessage(
-        initiative_id=initiative.id,
-        role="assistant",
-        content=message,
-        widget_type=widget_type,
-        widget_data=widget_data,
-    )
-    db.add(assistant_message)
-    await db.commit()
+        message = f"Perfect! The {tool_name} outline is confirmed. Generating your deliverables now..."
+
+        # Save a brief confirmation message
+        confirm_msg = ChatMessage(
+            initiative_id=initiative.id,
+            role="assistant",
+            content=message,
+        )
+        db.add(confirm_msg)
+        await db.commit()
+
+        # Prepare inputs
+        inputs = initiative.tool_inputs or {}
+        if initiative.title:
+            inputs.setdefault("project_title", initiative.title)
+        if initiative.geography:
+            inputs.setdefault("geography", initiative.geography)
+        if initiative.target_population:
+            inputs.setdefault("target_beneficiaries", initiative.target_population)
+        if initiative.goal:
+            inputs.setdefault("project_goal", initiative.goal)
+        if initiative.budget_range:
+            inputs.setdefault("budget_range", initiative.budget_range)
+        if initiative.timeline:
+            inputs.setdefault("timeline", initiative.timeline)
+
+        tool_alignments = initiative.tool_alignments or {}
+        deliverables = dict(initiative.deliverables or {})
+
+        WIDGET_TYPES = {"memo": "memo_viewer", "checklist": "checklist_viewer"}
+        WIDGET_LABELS = {"memo_viewer": "Investment Memo", "checklist_viewer": "Due Diligence Checklist"}
+
+        for sel_tool_id in (initiative.selected_tools or []):
+            sel_tool = registry.get_tool(sel_tool_id)
+            if not sel_tool or not sel_tool.requires_alignment:
+                continue
+            sel_alignment_data = tool_alignments.get(sel_tool_id, {})
+            if not sel_alignment_data.get("confirmed"):
+                continue
+
+            try:
+                alignment_obj = ToolAlignment.from_dict(sel_alignment_data)
+                output = await sel_tool.execute(
+                    db=db,
+                    initiative_id=initiative.id,
+                    inputs=inputs,
+                    include_corpus=True,
+                    alignment=alignment_obj,
+                )
+                deliverables[sel_tool_id] = {
+                    "title": output.title,
+                    "output_type": output.output_type,
+                    "content": output.content,
+                }
+                w_type = WIDGET_TYPES.get(output.output_type, "document_viewer")
+                label = WIDGET_LABELS.get(w_type, sel_tool.definition.name)
+                deliverable_msg = ChatMessage(
+                    initiative_id=initiative.id,
+                    role="assistant",
+                    content=f"Here's your **{label}** — review it in the editor and export when ready.",
+                    widget_type=w_type,
+                    widget_data={"content": output.content},
+                )
+                db.add(deliverable_msg)
+            except Exception as e:
+                logger.error(f"Failed to generate {sel_tool_id}: {e}", exc_info=True)
+                err_msg = ChatMessage(
+                    initiative_id=initiative.id,
+                    role="assistant",
+                    content=f"I wasn't able to generate the {sel_tool.definition.name} right now. Please try again.",
+                )
+                db.add(err_msg)
+
+        from sqlalchemy.orm.attributes import flag_modified
+        initiative.deliverables = deliverables
+        initiative.stage = InitiativeStage.COMPLETE.value
+        flag_modified(initiative, "deliverables")
+        await db.commit()
+    else:
+        # Save assistant message for the next alignment
+        assistant_message = ChatMessage(
+            initiative_id=initiative.id,
+            role="assistant",
+            content=message,
+            widget_type=widget_type,
+            widget_data=widget_data,
+        )
+        db.add(assistant_message)
+        await db.commit()
     
     return AlignmentResponse(
         alignment=ToolAlignmentSchema(**alignment_data),

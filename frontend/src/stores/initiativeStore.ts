@@ -614,13 +614,13 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Confirm alignment for a tool
+  // Confirm alignment for a tool (may also trigger generation if this is the last alignment)
   confirmAlignment: async (id: string, toolId: string, sections?: AlignmentSection[], parameters?: AlignmentParameter[]) => {
-    set({ alignmentLoading: true, error: null });
+    set({ alignmentLoading: true, generating: true, error: null });
     try {
       await api.confirmAlignment(id, toolId, sections, parameters);
       
-      // Reload everything to get next alignment or deliverables overview
+      // Reload everything — may include newly generated memo_viewer / checklist_viewer messages
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
@@ -631,11 +631,15 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         messages,
         stageStatus: stage_status,
         alignmentLoading: false,
+        generating: false,
       });
+
+      get()._refreshPlanInBackground(id);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to confirm alignment',
         alignmentLoading: false,
+        generating: false,
       });
     }
   },

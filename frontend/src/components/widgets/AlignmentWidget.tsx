@@ -28,7 +28,7 @@ interface AlignmentWidgetProps {
 }
 
 export function AlignmentWidget({ data, initiativeId, isActive = true }: AlignmentWidgetProps) {
-  const { confirmAlignment, provideFeedback, alignmentLoading } = useInitiativeStore();
+  const { confirmAlignment, provideFeedback, alignmentLoading, generating } = useInitiativeStore();
   
   // Defensive: ensure we have valid data
   const alignment = data?.alignment as ToolAlignment | undefined;
@@ -235,12 +235,12 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
                 {alignmentLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Confirming...
+                    {generating && pendingTools.length === 0 ? 'Generating...' : 'Confirming...'}
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    Confirm Outline
+                    {pendingTools.length === 0 ? 'Confirm & Generate' : 'Confirm Outline'}
                   </>
                 )}
               </button>

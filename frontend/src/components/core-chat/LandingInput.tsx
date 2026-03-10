@@ -151,7 +151,7 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
               key={tool.id}
               type="button"
               disabled={disabled}
-              onClick={() => onSend(`Create ${tool.name}`, tool.id)}
+              onClick={() => onSend(`Generate ${tool.name}`, tool.id)}
               className="flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08] transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default"
             >
               <span className="text-accent/70 [&>svg]:w-4.5 [&>svg]:h-4.5">{tool.icon}</span>

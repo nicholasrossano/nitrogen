@@ -28,6 +28,7 @@ interface CarbonInputsWidgetProps {
   initiativeId: string;
   isActive?: boolean;
   hasOutputWidget?: boolean;
+  messageId?: string;
   onRecalculated?: (newData: Record<string, any>) => void;
   onSendMessage?: (content: string) => void;
 }
@@ -56,10 +57,18 @@ export function CarbonInputsWidget({
   initiativeId,
   isActive = true,
   hasOutputWidget = false,
+  messageId,
   onRecalculated,
   onSendMessage,
 }: CarbonInputsWidgetProps) {
   const missingEssentials: string[] = data?.missing_essentials || [];
+
+  const persistWidget = useCallback((widgetData: Record<string, any>) => {
+    if (messageId && initiativeId) {
+      api.updateMessageWidget(initiativeId, messageId, widgetData).catch(() => {});
+    }
+  }, [messageId, initiativeId]);
+
   const investigate = useCallback((label: string, status: string, fieldName?: string) => {
     const text =
       status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
@@ -107,6 +116,7 @@ export function CarbonInputsWidget({
     try {
       const result = await api.updateCarbonInput(localInputs, editingField, parsed);
       setLocalInputs(result.inputs || localInputs);
+      persistWidget(result);
       onRecalculated?.(result);
     } catch {
       // keep old values on failure
@@ -115,7 +125,7 @@ export function CarbonInputsWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, localInputs, onRecalculated]);
+  }, [editingField, editValue, localInputs, persistWidget, onRecalculated]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -142,6 +152,7 @@ export function CarbonInputsWidget({
     try {
       const result = await api.updateCarbonInput(localInputs, fieldName, currentValue, newStatus);
       setLocalInputs(result.inputs || localInputs);
+      persistWidget(result);
       onRecalculated?.(result);
     } catch {
       setLocalInputs(prev => ({
@@ -151,7 +162,7 @@ export function CarbonInputsWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [localInputs, preConfirmStatuses, onRecalculated]);
+  }, [localInputs, preConfirmStatuses, persistWidget, onRecalculated]);
 
   const handleRowHover = useCallback((e: React.MouseEvent, inp: CarbonInput) => {
     if (!cardRef.current) return;

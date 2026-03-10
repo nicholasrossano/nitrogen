@@ -9,6 +9,8 @@ import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
 
+const DOCUMENT_TOOL_IDS = ['investment_memo', 'due_diligence_checklist'];
+
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
   showLanding?: boolean;
@@ -16,6 +18,8 @@ interface ProjectStandaloneChatViewProps {
   onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
+  /** Called when a document tool is selected — parent should switch to plan view and send via orchestration */
+  onToolRedirect?: (content: string, toolHint: string) => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -43,6 +47,7 @@ export function ProjectStandaloneChatView({
   onMessageSent,
   onBack,
   onEditorWidgetsChange,
+  onToolRedirect,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -202,6 +207,12 @@ export function ProjectStandaloneChatView({
 
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
+      // Document tools need the project orchestration pipeline (alignment → generate → editor)
+      if (toolHint && DOCUMENT_TOOL_IDS.includes(toolHint) && onToolRedirect) {
+        onToolRedirect(content, toolHint);
+        return;
+      }
+
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;

@@ -43,7 +43,6 @@ interface ProjectPlanViewProps {
   initiativeId: string;
   showInspector?: boolean;
   onInspectorChange?: (open: boolean, hasItem: boolean) => void;
-  onReady?: () => void;
 }
 
 interface DeepDiveState {
@@ -54,12 +53,11 @@ interface DeepDiveState {
   error: string | null;
 }
 
-export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange, onReady }: ProjectPlanViewProps) {
+export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange }: ProjectPlanViewProps) {
   const {
     projectPlan,
     projectPlanLoading,
     error,
-    loadProjectPlan,
     deletePlanItem,
   } = useInitiativeStore();
 
@@ -67,9 +65,6 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
 
-  useEffect(() => {
-    loadProjectPlan(initiativeId).finally(() => onReady?.());
-  }, [initiativeId, loadProjectPlan, onReady]);
 
   // Seed local cache from persisted deep_dives when plan loads
   useEffect(() => {
