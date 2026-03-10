@@ -51,6 +51,7 @@ function InitiativePageContent() {
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [filesRefreshKey, setFilesRefreshKey] = useState(0);
 
   // Page-level loading overlay — stays up until all 5 initial loads complete
   const [pageReady, setPageReady] = useState(false);
@@ -64,7 +65,13 @@ function InitiativePageContent() {
 
   // Plan view panel state
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
-  const [showChatPanel, setShowChatPanel] = useState(true);
+  const [showChatPanel, setShowChatPanel] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('nitrogen-plan-chat-panel-open');
+      return stored === 'true';
+    }
+    return false;
+  });
   const [showInspector, setShowInspector] = useState(false);
   const [hasInspectorItem, setHasInspectorItem] = useState(false);
   // Standalone chat view panel state
@@ -96,22 +103,37 @@ function InitiativePageContent() {
     deleteMaterial,
   } = useInitiativeStore();
 
-  const editorWidgets: EditorWidget[] = useMemo(
-    () =>
-      messages
-        .filter(
-          (m) =>
-            m.widget_type &&
-            m.widget_data &&
-            (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
-        )
-        .map((m) => ({
-          type: m.widget_type!,
-          data: m.widget_data!,
-          messageId: m.id,
-        })),
-    [messages],
-  );
+  const editorWidgets: EditorWidget[] = useMemo(() => {
+    const raw = messages
+      .filter(
+        (m) =>
+          m.widget_type &&
+          m.widget_data &&
+          (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
+      )
+      .map((m) => ({
+        type: m.widget_type!,
+        data: m.widget_data!,
+        messageId: m.id,
+      }));
+
+    // When a final output widget (memo_viewer / checklist_viewer) exists,
+    // suppress the alignment widget that produced it so it replaces rather
+    // than opens as a separate tab.
+    // Backend output_type → frontend widget type mapping
+    const OUTPUT_TYPE_TO_WIDGET: Record<string, string> = {
+      memo: 'memo_viewer',
+      checklist: 'checklist_viewer',
+    };
+    const presentWidgetTypes = new Set(raw.map((w) => w.type));
+    return raw.filter((w) => {
+      if (w.type !== 'alignment') return true;
+      const outputType = w.data?.tool?.output_type as string | undefined;
+      if (!outputType) return true;
+      const widgetType = OUTPUT_TYPE_TO_WIDGET[outputType];
+      return !widgetType || !presentWidgetTypes.has(widgetType);
+    });
+  }, [messages]);
 
   const hasEditorContent = editorWidgets.length > 0;
   const hasProjectPlan = !!projectPlan;
@@ -257,7 +279,11 @@ function InitiativePageContent() {
   }, [isResizingStandalone, handleStandaloneMouseMove, handleStandaloneMouseUp]);
 
   const handleToggleChatPanel = () => {
-    setShowChatPanel(prev => !prev);
+    setShowChatPanel(prev => {
+      const next = !prev;
+      localStorage.setItem('nitrogen-plan-chat-panel-open', String(next));
+      return next;
+    });
   };
 
   const handleInspectorChange = useCallback((open: boolean, hasItem: boolean) => {
@@ -274,12 +300,6 @@ function InitiativePageContent() {
   const handleSendMessage = (content: string) => {
     sendMessage(initiativeId, content);
   };
-
-  const handleToolRedirect = useCallback((content: string, toolHint: string) => {
-    setActiveView('plan');
-    router.replace(`/initiatives/${initiativeId}?view=plan`);
-    sendMessage(initiativeId, content, toolHint);
-  }, [initiativeId, sendMessage, router]);
 
   const handleTitleUpdate = (title: string) => {
     updateTitle(initiativeId, title);
@@ -306,6 +326,7 @@ function InitiativePageContent() {
     }
     if (item === 'files') {
       setActiveView('files');
+      setFilesRefreshKey((k) => k + 1);
       router.replace(`/initiatives/${initiativeId}?view=files`);
       return;
     }
@@ -413,45 +434,51 @@ function InitiativePageContent() {
                   </div>
                 </div>
               ) : <div className="h-full" />
-            ) : activeView === 'chat' ? (
-              <main ref={standaloneContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
-                <div
-                  className="flex-shrink-0 relative overflow-hidden"
-                  style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
+            ) : (
+              <>
+                {/* Chat view — always mounted to preserve conversation state across view switches */}
+                <main
+                  ref={standaloneContainerRef}
+                  className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'chat' ? 'hidden' : ''}`}
                 >
-                  <ProjectStandaloneChatView
-                    initiativeId={initiativeId}
-                    showLanding={showChatLanding}
-                    onMessageSent={() => setShowChatLanding(false)}
-                    onBack={() => setShowChatLanding(true)}
-                    onEditorWidgetsChange={handleChatEditorWidgetsChange}
-                    onToolRedirect={handleToolRedirect}
-                  />
-                  {showEditorInChatView && (
-                    <div
-                      onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
-                      className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
-                    />
-                  )}
-                </div>
-                {showEditorInChatView && chatEditorWidgets.length > 0 && (
-                  <div className="flex-1 overflow-hidden border-l border-divider">
-                    <EditorSidePanel
-                      widgets={chatEditorWidgets}
+                  <div
+                    className="flex-shrink-0 relative overflow-hidden"
+                    style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
+                  >
+                    <ProjectStandaloneChatView
                       initiativeId={initiativeId}
+                      showLanding={showChatLanding}
+                      onMessageSent={() => setShowChatLanding(false)}
+                      onBack={() => setShowChatLanding(true)}
+                      onEditorWidgetsChange={handleChatEditorWidgetsChange}
                     />
+                    {showEditorInChatView && (
+                      <div
+                        onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
+                        className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
+                      />
+                    )}
                   </div>
-                )}
-              </main>
-            ) : activeView === 'files' ? (
+                  {showEditorInChatView && chatEditorWidgets.length > 0 && (
+                    <div className="flex-1 overflow-hidden border-l border-divider">
+                      <EditorSidePanel
+                        widgets={chatEditorWidgets}
+                        initiativeId={initiativeId}
+                      />
+                    </div>
+                  )}
+                </main>
+
+                {activeView === 'files' ? (
               <main className="h-full min-w-0 overflow-hidden">
                 <ProjectFilesView
+                  key={filesRefreshKey}
                   initiativeId={initiativeId}
                   materials={projectMaterials}
                   onDeleteMaterial={deleteMaterial}
                 />
               </main>
-            ) : (
+            ) : activeView === 'plan' ? (
               <main ref={containerRef} className="h-full min-w-0 flex overflow-hidden relative">
                 {/* Plan-view overlay — covers chat panel + plan panel */}
                 {showPlanOverlay && (
@@ -540,6 +567,8 @@ function InitiativePageContent() {
                   </div>
                 )}
               </main>
+              ) : null}
+              </>
             )}
           </div>
         </div>

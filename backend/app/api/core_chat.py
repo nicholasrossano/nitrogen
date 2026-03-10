@@ -440,3 +440,47 @@ async def generate_chat_title(
     except Exception as e:
         logger.warning(f"Title generation failed: {e}")
         return {"title": data.message[:40]}
+
+
+class SaveSessionMessage(BaseModel):
+    role: str
+    content: str
+    widget_type: Optional[str] = None
+    widget_data: Optional[dict] = None
+    sources: Optional[list] = None
+    completion_meta: Optional[dict] = None
+
+
+class SaveSessionRequest(BaseModel):
+    title: Optional[str] = None
+    messages: list[SaveSessionMessage]
+
+
+@router.post("/chat/sessions/save")
+async def save_session_from_messages(
+    data: SaveSessionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Create a core_chat session from a list of messages (e.g. document flow)."""
+    if not data.messages:
+        raise HTTPException(status_code=400, detail="No messages provided")
+
+    session = CoreChatSession(user_id=user.uid, title=data.title)
+    db.add(session)
+    await db.flush()
+
+    for msg in data.messages:
+        db_msg = CoreChatMessage(
+            session_id=session.id,
+            role=msg.role,
+            content=msg.content,
+            widget_type=msg.widget_type,
+            widget_data=msg.widget_data,
+            sources=msg.sources,
+            completion_meta=msg.completion_meta,
+        )
+        db.add(db_msg)
+
+    await db.commit()
+    return {"session_id": str(session.id), "title": session.title}

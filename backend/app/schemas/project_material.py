@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -30,6 +30,7 @@ class GeneratedFileResponse(BaseModel):
     export_format: Optional[str] = None
     exported: bool = False
     download_url: Optional[str] = None
+    export_data: Optional[dict[str, Any]] = None
 
 
 class ProjectFilesResponse(BaseModel):

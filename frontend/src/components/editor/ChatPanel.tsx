@@ -18,7 +18,6 @@ import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
 import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
-import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { PlanCategoriesWidget } from '@/components/widgets/PlanCategoriesWidget';
 import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
@@ -220,8 +219,7 @@ export function ChatPanel({
 
   const latestMessage = safeMessages[safeMessages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
-  const showAlignmentWidget = latestMessage?.widget_type === 'alignment';
-  const hideTextInput = showDocumentRequest || showAlignmentWidget;
+  const hideTextInput = showDocumentRequest;
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${fullWidth ? '' : 'border-r border-divider'}`}>
@@ -283,7 +281,8 @@ export function ChatPanel({
       )}
 
       {!hideTextInput && (
-        <div className="flex-shrink-0 px-2 pb-2">
+        <div className="flex-shrink-0 px-2 pb-2 relative">
+          <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
           <ChatInput
             onSend={handleSend}
             disabled={effectiveSending || effectiveGenerating}
@@ -706,13 +705,6 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <DeliverablesOverviewWidget data={data} initiativeId={initiativeId} isActive={isActive} />
-        </ErrorBoundary>
-      );
-    case 'alignment':
-      if (!data.alignment || !data.tool) return null;
-      return (
-        <ErrorBoundary>
-          <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
     case 'project_plan':

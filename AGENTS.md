@@ -28,6 +28,17 @@
 - Organize new practices under relevant sections (General Workflow, UI/Design, or create domain-specific sections like Backend, Testing, etc.).
 - Mention the update briefly: "Added to AGENTS.md: [rule]"
 
+## App Architecture — Two Chat Surfaces (Critical)
+
+There are **two distinct chat/UI surfaces**. Assume the user is always referring to the **Generate flow (standalone)** unless they explicitly say "project plan" or "side chat".
+
+| Surface | Description | Key files |
+|---|---|---|
+| **Generate flow (standalone)** | Full-page chat at `/` — landing tiles, history, conversation view. **Default assumption.** | `LandingInput.tsx`, `ConversationView.tsx`, `ProjectStandaloneChatView.tsx` |
+| **Project plan side chat** | Narrow chat panel inside a project's editor/plan view, opened via the side panel | `ChatPanel.tsx`, `EditorSidePanel.tsx` |
+
+Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about the generate flow tiles in `LandingInput.tsx`.
+
 ## UI/Design
 Follow `Docs/STYLEGUIDE.md` as the source of truth.
 

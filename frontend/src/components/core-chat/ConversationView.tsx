@@ -24,6 +24,7 @@ import { track } from '@/lib/analytics';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -38,6 +39,8 @@ export interface ConversationViewProps {
   onSetFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   retryingMessageId: string | null;
   onBack?: () => void;
+  /** Required for rendering initiative-specific widgets (alignment, etc.) */
+  initiativeId?: string;
 }
 
 function preprocessMath(content: string): string {
@@ -77,6 +80,7 @@ export function ConversationView({
   onSetFeedback,
   retryingMessageId,
   onBack,
+  initiativeId,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -171,6 +175,8 @@ export function ConversationView({
               key={msg.id}
               message={msg}
               animate={idx >= messages.length - 2}
+              isLatest={idx === messages.length - 1}
+              initiativeId={initiativeId}
               feedback={messageFeedback[msg.id] ?? null}
               onFeedback={(f) => onSetFeedback(msg.id, f)}
               onEdit={(newContent) => onEditMessage(msg.id, newContent)}
@@ -218,7 +224,9 @@ export function ConversationView({
       </div>
 
       {/* Composer */}
-      <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
+      <div className="relative">
+        <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
+        <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
         <form onSubmit={handleSubmit} className="relative">
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
@@ -303,6 +311,7 @@ export function ConversationView({
             </div>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
@@ -510,6 +519,8 @@ const streamingMarkdownComponents = makeMarkdownComponents([]);
 function MessageBubble({
   message,
   animate,
+  isLatest,
+  initiativeId,
   feedback,
   onFeedback,
   onEdit,
@@ -518,6 +529,8 @@ function MessageBubble({
 }: {
   message: CoreChatMessage;
   animate: boolean;
+  isLatest?: boolean;
+  initiativeId?: string;
   feedback: 'like' | 'dislike' | null;
   onFeedback: (f: 'like' | 'dislike' | null) => void;
   onEdit: (newContent: string) => void;
@@ -641,6 +654,8 @@ function MessageBubble({
               type={message.widget_type}
               data={message.widget_data}
               messageId={message.id}
+              initiativeId={initiativeId}
+              isActive={isLatest}
             />
           </div>
         )}
@@ -657,10 +672,14 @@ function ComplianceChatWidget({
   type,
   data,
   messageId,
+  initiativeId,
+  isActive,
 }: {
   type: string;
   data: Record<string, any>;
   messageId?: string;
+  initiativeId?: string;
+  isActive?: boolean;
 }) {
   switch (type) {
     case 'proposed_value':
