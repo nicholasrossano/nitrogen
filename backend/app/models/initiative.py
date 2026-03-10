@@ -91,6 +91,10 @@ class Initiative(Base):
         back_populates="initiative", 
         cascade="all, delete-orphan"
     )
+    project_materials: Mapped[list["ProjectMaterial"]] = relationship(
+        back_populates="initiative",
+        cascade="all, delete-orphan",
+    )
     
     # New workflow methods
     def has_project_description(self) -> bool:
@@ -233,3 +237,4 @@ class Initiative(Base):
 from app.models.chat import ChatMessage
 from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
+from app.models.project_material import ProjectMaterial

@@ -7,7 +7,7 @@ import json
 
 from app.config import get_settings
 from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ app.include_router(project_plan.router, prefix="/api/v1", tags=["project-plan"])
 app.include_router(lcoe.router, prefix="/api/v1", tags=["lcoe"])
 app.include_router(carbon.router, prefix="/api/v1", tags=["carbon"])
 app.include_router(gs_certification.router, prefix="/api/v1", tags=["gs-certification"])
+app.include_router(project_materials.router, prefix="/api/v1", tags=["project-materials"])
 
 
 @app.get("/")

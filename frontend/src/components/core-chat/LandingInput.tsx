@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/stores/chatStore';
-import { ToolPicker, ToolChip, type ToolOption } from '@/components/chat/ToolPicker';
+import { ALL_TOOLS } from '@/components/chat/ToolPicker';
 
 const EXAMPLE_PROMPTS = [
   'What MECS standards apply to clean cooking programs?',
@@ -40,7 +40,6 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
   const [animating, setAnimating] = useState(true);
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [selectedTool, setSelectedTool] = useState<ToolOption | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -121,11 +120,9 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || disabled) return;
-    const toolHint = selectedTool?.id ?? undefined;
-    onSend(input.trim(), toolHint);
+    onSend(input.trim());
     setInput('');
     setAttachedFiles([]);
-    setSelectedTool(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -147,10 +144,21 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
 
   return (
     <div className="flex flex-col items-center h-full px-4">
-      <div className="flex-1 flex flex-col justify-end w-full max-w-2xl">
-        <h1 className="text-2xl font-display font-semibold text-text-primary mb-8 text-center">
-          Let&apos;s build a better world.
-        </h1>
+      <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
+        <div className="w-[70%] grid grid-cols-3 gap-2 mb-6">
+          {ALL_TOOLS.map((tool) => (
+            <button
+              key={tool.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSend(`Create ${tool.name}`, tool.id)}
+              className="flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08] transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+            >
+              <span className="text-accent/70 [&>svg]:w-4.5 [&>svg]:h-4.5">{tool.icon}</span>
+              <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{tool.name}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="w-full max-w-2xl">
@@ -158,11 +166,8 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
           >
-            {(attachedFiles.length > 0 || selectedTool) && (
+            {attachedFiles.length > 0 && (
               <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
-                {selectedTool && (
-                  <ToolChip tool={selectedTool} onRemove={() => setSelectedTool(null)} />
-                )}
                 {attachedFiles.map((file, i) => (
                   <span
                     key={i}
@@ -202,15 +207,6 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
                 className="w-full resize-none bg-transparent px-5 py-3.5 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
-              {/* Bottom-left: tool picker */}
-              <div className="absolute left-3 bottom-2.5 pointer-events-none [&>*]:pointer-events-auto">
-                <ToolPicker
-                  selected={selectedTool}
-                  onSelect={setSelectedTool}
-                  disabled={disabled}
-                  mode="standalone"
-                />
-              </div>
               {/* Bottom-right: attach + send */}
               <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
                 <input
