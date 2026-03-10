@@ -170,13 +170,21 @@ function InitiativePageContent() {
     prevPlanRef.current = hasPlan;
   }, [projectPlan]);
 
+  const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+  const hasDeliverableWidgets = editorWidgets.some(w => DELIVERABLE_WIDGET_TYPES.includes(w.type));
+
   const prevHadEditor = useRef(false);
+  const prevHadDeliverables = useRef(false);
   useEffect(() => {
-    if (hasEditorContent && !prevHadEditor.current && rightPanel === 'closed') {
+    // Switch to editor if new deliverable widgets just appeared (even from project_plan)
+    if (hasDeliverableWidgets && !prevHadDeliverables.current) {
+      setRightPanel('editor');
+    } else if (hasEditorContent && !prevHadEditor.current && rightPanel === 'closed') {
       setRightPanel('editor');
     }
     prevHadEditor.current = hasEditorContent;
-  }, [hasEditorContent, rightPanel]);
+    prevHadDeliverables.current = hasDeliverableWidgets;
+  }, [hasEditorContent, hasDeliverableWidgets, rightPanel]);
 
   // Auto-open editor in standalone chat view when widgets appear
   const prevHadChatEditor = useRef(false);
@@ -267,6 +275,12 @@ function InitiativePageContent() {
     sendMessage(initiativeId, content);
   };
 
+  const handleToolRedirect = useCallback((content: string, toolHint: string) => {
+    setActiveView('plan');
+    router.replace(`/initiatives/${initiativeId}?view=plan`);
+    sendMessage(initiativeId, content, toolHint);
+  }, [initiativeId, sendMessage, router]);
+
   const handleTitleUpdate = (title: string) => {
     updateTitle(initiativeId, title);
   };
@@ -275,6 +289,8 @@ function InitiativePageContent() {
     e.preventDefault();
     setIsResizing(true);
   };
+
+  const handlePlanReady = useCallback(() => setPlanViewReady(true), []);
 
   const handleNavChange = (item: NavItem) => {
     if (item === 'home') {
@@ -296,6 +312,7 @@ function InitiativePageContent() {
     if (item === 'plan') {
       setPlanViewReady(false);
       setShowPlanOverlay(true);
+      loadProjectPlan(initiativeId).finally(handlePlanReady);
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
@@ -328,7 +345,6 @@ function InitiativePageContent() {
             } : undefined,
           } : activeView === 'chat' ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
-            onBack: !showChatLanding ? () => { setShowChatLanding(true); setShowEditorInChatView(false); } : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
               onClick: () => {
@@ -409,6 +425,7 @@ function InitiativePageContent() {
                     onMessageSent={() => setShowChatLanding(false)}
                     onBack={() => setShowChatLanding(true)}
                     onEditorWidgetsChange={handleChatEditorWidgetsChange}
+                    onToolRedirect={handleToolRedirect}
                   />
                   {showEditorInChatView && (
                     <div
@@ -499,7 +516,6 @@ function InitiativePageContent() {
                           initiativeId={initiativeId}
                           showInspector={showInspector}
                           onInspectorChange={handleInspectorChange}
-                          onReady={() => setPlanViewReady(true)}
                         />
                       )}
                       {showEditor && (
