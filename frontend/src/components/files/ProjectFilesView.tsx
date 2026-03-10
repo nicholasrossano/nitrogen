@@ -10,6 +10,8 @@ import {
   Zap,
   FolderOpen,
 } from 'lucide-react';
+
+type TabType = 'uploaded' | 'generated';
 import { api, ProjectMaterial, GeneratedFile, ProjectFilesResponse } from '@/lib/api';
 
 interface ProjectFilesViewProps {
@@ -62,6 +64,7 @@ export function ProjectFilesView({
   const [loading, setLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('uploaded');
 
   const loadFiles = useCallback(async () => {
     try {
@@ -125,213 +128,223 @@ export function ProjectFilesView({
 
   const hasUploaded = materials.length > 0;
   const hasGenerated = generatedFiles.length > 0;
-  const isEmpty = !hasUploaded && !hasGenerated && !loading;
+
+  const thClass = 'text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5';
 
   return (
     <div className="h-full overflow-y-auto p-6">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-lg font-semibold text-text-primary">Files</h1>
-          <p className="text-sm text-text-tertiary mt-1">
-            Uploaded project materials and generated outputs.
-          </p>
+      <div className="max-w-4xl mx-auto space-y-10">
+
+        {/* Header + Toggle */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-text-primary">Files</h1>
+            <p className="text-sm text-text-tertiary mt-1">
+              Uploaded project materials and generated outputs.
+            </p>
+          </div>
+          <div className="flex items-center bg-black/[0.04] rounded-lg p-0.5 self-center">
+            {(['uploaded', 'generated'] as TabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activeTab === tab
+                    ? 'bg-white text-text-primary shadow-sm'
+                    : 'text-text-tertiary hover:text-text-secondary'
+                }`}
+              >
+                {tab === 'uploaded' ? 'Uploaded' : 'Generated'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
           </div>
-        ) : isEmpty ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <FolderOpen className="w-10 h-10 text-text-tertiary/50 mb-3" />
-            <p className="text-sm text-text-secondary font-medium">No files yet</p>
-            <p className="text-xs text-text-tertiary mt-1 max-w-xs">
-              Upload project materials from the sidebar or generate deliverables to see them here.
-            </p>
+        ) : activeTab === 'uploaded' ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-text-tertiary" />
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Uploaded</h2>
+              {hasUploaded && (
+                <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
+                  {materials.length}
+                </span>
+              )}
+            </div>
+            {hasUploaded ? (
+            <div className="border border-divider rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-black/[0.02]">
+                    <th className={thClass}>Name</th>
+                    <th className={`${thClass} w-20`}>Type</th>
+                    <th className={`${thClass} w-24`}>Size</th>
+                    <th className={`${thClass} w-28 whitespace-nowrap`}>Date</th>
+                    <th className={`${thClass} w-20 text-center`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-divider">
+                  {materials.map((mat) => (
+                    <tr key={mat.id}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                          <span className="text-text-primary truncate" title={mat.filename}>
+                            {mat.filename}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
+                          {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-text-secondary">
+                        {formatFileSize(mat.file_size)}
+                      </td>
+                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
+                        {formatDate(mat.created_at)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1 justify-center">
+                          <button
+                            onClick={() => handleDownloadMaterial(mat)}
+                            disabled={downloadingId === mat.id}
+                            className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] transition-colors"
+                            title="Download"
+                          >
+                            {downloadingId === mat.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          {onDeleteMaterial ? (
+                            <button
+                              onClick={() => onDeleteMaterial(mat.id)}
+                              className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <div className="p-1 w-[22px]" />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <FolderOpen className="w-10 h-10 text-text-tertiary/50 mb-3" />
+              <p className="text-sm text-text-secondary font-medium">No uploaded files yet</p>
+              <p className="text-xs text-text-tertiary mt-1 max-w-xs">
+                Use the sidebar to upload project materials.
+              </p>
+            </div>
+            )}
           </div>
         ) : (
-          <>
-            {/* Uploaded Section */}
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <Upload className="w-4 h-4 text-text-tertiary" />
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  Uploaded
-                </h2>
-                {hasUploaded && (
-                  <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
-                    {materials.length}
-                  </span>
-                )}
-              </div>
-
-              {hasUploaded ? (
-                <div className="border border-divider rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-black/[0.02]">
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5">Name</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Type</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-24">Size</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-28 whitespace-nowrap">Date</th>
-                        <th className="text-center text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-divider">
-                      {materials.map((mat) => (
-                        <tr key={mat.id}>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-                              <span className="text-text-primary truncate" title={mat.filename}>
-                                {mat.filename}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
-                              {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-text-secondary">
-                            {formatFileSize(mat.file_size)}
-                          </td>
-                          <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
-                            {formatDate(mat.created_at)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1 justify-center">
-                              <button
-                                onClick={() => handleDownloadMaterial(mat)}
-                                disabled={downloadingId === mat.id}
-                                className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] transition-colors"
-                                title="Download"
-                              >
-                                {downloadingId === mat.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Download className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                              {onDeleteMaterial && (
-                                <button
-                                  onClick={() => onDeleteMaterial(mat.id)}
-                                  className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="border border-dashed border-divider rounded-lg px-4 py-6 text-center">
-                  <p className="text-xs text-text-tertiary">
-                    No uploaded files yet. Use the sidebar to upload project materials.
-                  </p>
-                </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-text-tertiary" />
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Generated</h2>
+              {hasGenerated && (
+                <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
+                  {generatedFiles.length}
+                </span>
               )}
-            </section>
-
-            {/* Generated Section */}
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <Zap className="w-4 h-4 text-text-tertiary" />
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  Generated
-                </h2>
-                {hasGenerated && (
-                  <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
-                    {generatedFiles.length}
-                  </span>
-                )}
-              </div>
-
-              {hasGenerated ? (
-                <div className="border border-divider rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-black/[0.02]">
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5">Name</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Type</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-24">Size</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-28 whitespace-nowrap">Date</th>
-                        <th className="text-center text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-divider">
-                      {generatedFiles.map((file) => (
-                        <tr key={file.id}>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <Zap className="w-4 h-4 text-accent flex-shrink-0" />
-                              <span className="text-text-primary truncate">{file.title}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
-                              {file.export_format
-                                ? (EXPORT_FORMAT_LABELS[file.export_format] ?? file.export_format.toUpperCase())
-                                : '—'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-text-secondary">
-                            {formatFileSize(null)}
-                          </td>
-                          <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
-                            {formatDate(file.created_at)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1 justify-center">
-                              {file.exportable && (
-                                <button
-                                  onClick={() => handleDownloadGenerated(file)}
-                                  disabled={downloadingId === file.id || deletingId === file.id}
-                                  className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] transition-colors disabled:opacity-40"
-                                  title={`Export as ${file.export_format?.toUpperCase()}`}
-                                >
-                                  {downloadingId === file.id ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  ) : (
-                                    <Download className="w-3.5 h-3.5" />
-                                  )}
-                                </button>
+            </div>
+            {hasGenerated ? (
+            <div className="border border-divider rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-black/[0.02]">
+                    <th className={thClass}>Name</th>
+                    <th className={`${thClass} w-20`}>Type</th>
+                    <th className={`${thClass} w-24`}>Size</th>
+                    <th className={`${thClass} w-28 whitespace-nowrap`}>Date</th>
+                    <th className={`${thClass} w-20 text-center`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-divider">
+                  {generatedFiles.map((file) => (
+                    <tr key={file.id}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                          <span className="text-text-primary truncate">{file.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
+                          {file.export_format
+                            ? (EXPORT_FORMAT_LABELS[file.export_format] ?? file.export_format.toUpperCase())
+                            : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-text-secondary">
+                        {formatFileSize(null)}
+                      </td>
+                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
+                        {formatDate(file.created_at)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1 justify-center">
+                          {file.exportable ? (
+                            <button
+                              onClick={() => handleDownloadGenerated(file)}
+                              disabled={downloadingId === file.id || deletingId === file.id}
+                              className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] transition-colors disabled:opacity-40"
+                              title={`Export as ${file.export_format?.toUpperCase()}`}
+                            >
+                              {downloadingId === file.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
                               )}
-                              <button
-                                onClick={() => handleDeleteGenerated(file)}
-                                disabled={deletingId === file.id || downloadingId === file.id}
-                                className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40"
-                                title="Delete"
-                              >
-                                {deletingId === file.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="border border-dashed border-divider rounded-lg px-4 py-6 text-center">
-                  <p className="text-xs text-text-tertiary">
-                    No generated files yet. Use the Generate tab to create deliverables.
-                  </p>
-                </div>
-              )}
-            </section>
-          </>
+                            </button>
+                          ) : (
+                            <div className="p-1 w-[22px]" />
+                          )}
+                          <button
+                            onClick={() => handleDeleteGenerated(file)}
+                            disabled={deletingId === file.id || downloadingId === file.id}
+                            className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40"
+                            title="Delete"
+                          >
+                            {deletingId === file.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Zap className="w-10 h-10 text-text-tertiary/50 mb-3" />
+              <p className="text-sm text-text-secondary font-medium">No generated files yet</p>
+              <p className="text-xs text-text-tertiary mt-1 max-w-xs">
+                Use the Generate tab to create deliverables.
+              </p>
+            </div>
+            )}
+          </div>
         )}
+
       </div>
     </div>
   );
