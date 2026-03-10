@@ -21,6 +21,7 @@ interface PillarColumnProps {
   onDeepDive?: (item: ProjectPlanItem, pillar: ProjectPlanPillar) => void;
   onDeleteItem?: (itemId: string) => void;
   onDeleteElement?: (itemId: string, elementIndex: number) => void;
+  onRegisterRef?: (el: HTMLDivElement | null) => void;
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -40,7 +41,7 @@ function PillarIcon({ name }: { name?: string }) {
 
 const DEFAULT_VISIBLE = 10;
 
-export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement }: PillarColumnProps) {
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
@@ -56,7 +57,7 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
   const optionalCount = items.length - requiredCount - unknownCount;
 
   return (
-    <div className="flex flex-col min-h-0">
+    <div className="flex flex-col min-h-0" ref={el => onRegisterRef?.(el)}>
       {/* Pillar header node — full width, aligned with items */}
       <button
         onClick={() => setItemsExpanded(v => !v)}
@@ -65,11 +66,11 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
         <div className="w-8 h-8 bg-accent/10 rounded flex items-center justify-center text-accent flex-shrink-0">
           <PillarIcon name={pillar.icon} />
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-text-primary leading-tight">
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-text-primary leading-tight whitespace-nowrap">
             {pillar.name}
           </h3>
-          <p className="text-[11px] text-text-tertiary mt-0.5">
+          <p className="text-[11px] text-text-tertiary mt-0.5 whitespace-nowrap">
             {requiredCount} required &middot; {optionalCount} optional
             {unknownCount > 0 && <> &middot; <span className="text-indicator-orange">{unknownCount} unknown</span></>}
           </p>
