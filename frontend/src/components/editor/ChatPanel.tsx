@@ -242,33 +242,37 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 relative">
-        <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-8">
-          {safeMessages.length === 0 ? (
-            <div className="text-center text-text-tertiary py-8">
-              No messages yet. Start a conversation!
-            </div>
-          ) : (
-            safeMessages.map((message, index) => {
-              const hasOutputWidget =
-                (message.widget_type === 'lcoe_inputs' &&
-                  safeMessages.slice(index + 1).some(m => m.widget_type === 'lcoe_output')) ||
-                (message.widget_type === 'carbon_inputs' &&
-                  safeMessages.slice(index + 1).some(m => m.widget_type === 'carbon_output'));
-              return (
-                <ErrorBoundary key={message.id || `msg-${index}`}>
-                  <ChatMessageItem
-                    message={message}
-                    initiativeId={initiativeId}
-                    isLatest={index === safeMessages.length - 1}
-                    animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
-                    hasOutputWidget={hasOutputWidget}
-                    onSendMessage={onSendMessage}
-                  />
-                </ErrorBoundary>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} className="h-1" />
+        <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto py-4">
+          <div className={fullWidth ? 'max-w-[52rem] mx-auto' : 'px-4'}>
+          <div className={fullWidth ? 'w-[90%] mx-auto space-y-8' : 'space-y-8'}>
+            {safeMessages.length === 0 ? (
+              <div className="text-center text-text-tertiary py-8">
+                No messages yet. Start a conversation!
+              </div>
+            ) : (
+              safeMessages.map((message, index) => {
+                const hasOutputWidget =
+                  (message.widget_type === 'lcoe_inputs' &&
+                    safeMessages.slice(index + 1).some(m => m.widget_type === 'lcoe_output')) ||
+                  (message.widget_type === 'carbon_inputs' &&
+                    safeMessages.slice(index + 1).some(m => m.widget_type === 'carbon_output'));
+                return (
+                  <ErrorBoundary key={message.id || `msg-${index}`}>
+                    <ChatMessageItem
+                      message={message}
+                      initiativeId={initiativeId}
+                      isLatest={index === safeMessages.length - 1}
+                      animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
+                      hasOutputWidget={hasOutputWidget}
+                      onSendMessage={onSendMessage}
+                    />
+                  </ErrorBoundary>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} className="h-1" />
+          </div>
+          </div>
         </div>
       </div>
 
@@ -281,13 +285,15 @@ export function ChatPanel({
       )}
 
       {!hideTextInput && (
-        <div className="flex-shrink-0 px-2 pb-2 relative">
+        <div className="flex-shrink-0 relative">
           <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
-          <ChatInput
-            onSend={handleSend}
-            disabled={effectiveSending || effectiveGenerating}
-            placeholder="Ask anything"
-          />
+          <div className={fullWidth ? 'max-w-[52rem] mx-auto w-full pb-4 px-4' : 'px-2 pb-2'}>
+            <ChatInput
+              onSend={handleSend}
+              disabled={effectiveSending || effectiveGenerating}
+              placeholder="Ask anything"
+            />
+          </div>
         </div>
       )}
     </div>

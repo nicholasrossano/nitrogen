@@ -169,7 +169,7 @@ export function ConversationView({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
         <div className="max-w-[52rem] mx-auto">
-        <div className="w-[95%] mx-auto space-y-8">
+        <div className="w-[90%] mx-auto space-y-8">
           {messages.map((msg, idx) => {
             // Compute consecutive-assistant-run info
             const isAssistant = msg.role !== 'user';
