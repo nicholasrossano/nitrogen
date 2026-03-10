@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Sprout, TreeDeciduous } from 'lucide-react';
 
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { ProjectHeader, ChatPanel, EditorSidePanel, EDITOR_WIDGET_TYPES } from '@/components/editor';
+import { ProjectHeader, ChatPanel, EditorSidePanel } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
@@ -99,48 +99,17 @@ function InitiativePageContent() {
     updateTitle,
     uploadMaterial,
     deleteMaterial,
+    reset,
   } = useInitiativeStore();
 
-  const editorWidgets: EditorWidget[] = useMemo(() => {
-    const raw = messages
-      .filter(
-        (m) =>
-          m.widget_type &&
-          m.widget_data &&
-          (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
-      )
-      .map((m) => ({
-        type: m.widget_type!,
-        data: m.widget_data!,
-        messageId: m.id,
-      }));
-
-    // When a final output widget (memo_viewer / checklist_viewer) exists,
-    // suppress the alignment widget that produced it so it replaces rather
-    // than opens as a separate tab.
-    // Backend output_type → frontend widget type mapping
-    const OUTPUT_TYPE_TO_WIDGET: Record<string, string> = {
-      memo: 'memo_viewer',
-      checklist: 'checklist_viewer',
-    };
-    const presentWidgetTypes = new Set(raw.map((w) => w.type));
-    return raw.filter((w) => {
-      if (w.type !== 'alignment') return true;
-      const outputType = w.data?.tool?.output_type as string | undefined;
-      if (!outputType) return true;
-      const widgetType = OUTPUT_TYPE_TO_WIDGET[outputType];
-      return !widgetType || !presentWidgetTypes.has(widgetType);
-    });
-  }, [messages]);
-
-  const hasEditorContent = editorWidgets.length > 0;
   const hasProjectPlan = !!projectPlan;
   const showProjectPlan = rightPanel === 'project_plan';
-  const showEditor = rightPanel === 'editor';
   const rightPanelOpen = rightPanel !== 'closed';
 
   useEffect(() => {
     if (initiativeId) {
+      reset();
+      setRightPanel('closed');
       setPageReady(false);
       setShowOverlay(true);
       Promise.all([
@@ -151,7 +120,7 @@ function InitiativePageContent() {
         loadProjectPlan(initiativeId),
       ]).finally(() => setPageReady(true));
     }
-  }, [initiativeId, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan]);
+  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan]);
 
   // Fade the overlay out after loads complete, then unmount it
   useEffect(() => {
@@ -182,22 +151,6 @@ function InitiativePageContent() {
     }
     prevPlanRef.current = hasPlan;
   }, [projectPlan]);
-
-  const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
-  const hasDeliverableWidgets = editorWidgets.some(w => DELIVERABLE_WIDGET_TYPES.includes(w.type));
-
-  const prevHadEditor = useRef(false);
-  const prevHadDeliverables = useRef(false);
-  useEffect(() => {
-    // Switch to editor if new deliverable widgets just appeared (even from project_plan)
-    if (hasDeliverableWidgets && !prevHadDeliverables.current) {
-      setRightPanel('editor');
-    } else if (hasEditorContent && !prevHadEditor.current && rightPanel === 'closed') {
-      setRightPanel('editor');
-    }
-    prevHadEditor.current = hasEditorContent;
-    prevHadDeliverables.current = hasDeliverableWidgets;
-  }, [hasEditorContent, hasDeliverableWidgets, rightPanel]);
 
   // Auto-open editor in standalone chat view when widgets appear
   const prevHadChatEditor = useRef(false);
@@ -337,7 +290,7 @@ function InitiativePageContent() {
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* ProjectHeader — full width, only when initiative is loaded */}
-      <div className={`flex-shrink-0 transition-opacity duration-300 ${pageReady ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`flex-shrink-0 h-14 transition-opacity duration-300 ${pageReady ? 'opacity-100' : 'opacity-0'}`}>
       {initiative && (
         <ProjectHeader
           initiative={initiative}
@@ -528,12 +481,6 @@ function InitiativePageContent() {
                           initiativeId={initiativeId}
                           showInspector={showInspector}
                           onInspectorChange={handleInspectorChange}
-                        />
-                      )}
-                      {showEditor && (
-                        <EditorSidePanel
-                          widgets={editorWidgets}
-                          initiativeId={initiativeId}
                         />
                       )}
                     </div>
