@@ -1,0 +1,149 @@
+"""Template Fill Tool — analyse a user-uploaded template (DOCX/XLSX), extract
+requirements, cross-reference against project materials, and surface gaps."""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from app.config import get_settings
+from app.tools.base import (
+    BaseTool,
+    ExecutionModel,
+    ProgressCallback,
+    RefinementModel,
+    ReviewStrategy,
+    ToolDefinition,
+    ToolInput,
+    ToolOutput,
+)
+
+settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+class TemplateFillTool(BaseTool):
+    """Analyse an uploaded template and produce a requirements widget."""
+
+    @property
+    def definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            id="template_fill",
+            name="From Template",
+            description="Complete a document template using project materials",
+            icon="FileUp",
+            output_type="template",
+            category="documentation",
+            keywords=["template", "form", "fill", "complete", "docx", "xlsx"],
+        )
+
+    @property
+    def required_inputs(self) -> list[ToolInput]:
+        return [
+            ToolInput(
+                name="template_id",
+                label="Template file",
+                description="The uploaded template to analyse",
+                input_type="file",
+            ),
+        ]
+
+    @property
+    def review_strategy(self) -> ReviewStrategy:
+        return ReviewStrategy.INPUT_REVIEW
+
+    @property
+    def execution_model(self) -> ExecutionModel:
+        return ExecutionModel.ASYNC_LLM_GENERATION
+
+    @property
+    def refinement_model(self) -> RefinementModel:
+        return RefinementModel.FEEDBACK_AND_REGENERATE
+
+    async def execute(
+        self,
+        db: AsyncSession,
+        initiative_id: UUID,
+        inputs: dict[str, Any],
+        include_corpus: bool = True,
+        alignment=None,
+    ) -> ToolOutput:
+        raise NotImplementedError("Use execute_from_template instead")
+
+    async def execute_from_template(
+        self,
+        db: AsyncSession,
+        initiative_id: UUID,
+        template_id: UUID,
+        on_progress: ProgressCallback | None = None,
+    ) -> tuple[str, dict]:
+        """Full pipeline: parse → extract requirements → cross-reference → return
+        widget data for the template_requirements widget."""
+
+        from app.core.storage import get_uploads_storage
+        from app.models.project_material import ProjectMaterial
+        from app.services.template_parser import TemplateParserService
+        from app.services.template_analysis import TemplateAnalysisService
+
+        result = await db.execute(
+            select(ProjectMaterial).where(ProjectMaterial.id == template_id)
+        )
+        material = result.scalar_one_or_none()
+        if not material or not material.storage_path:
+            raise ValueError("Template not found")
+
+        storage = get_uploads_storage()
+        template_bytes = await storage.load(material.storage_path)
+
+        if on_progress:
+            await on_progress("Parsing template structure...")
+
+        parser = TemplateParserService()
+        is_xlsx = material.file_type == "template_xlsx"
+        structure = (
+            parser.parse_xlsx_template(template_bytes)
+            if is_xlsx
+            else parser.parse_docx_template(template_bytes)
+        )
+
+        analysis = TemplateAnalysisService()
+        requirements = await analysis.extract_requirements(structure, on_progress=on_progress)
+        statuses = await analysis.cross_reference_requirements(
+            db, initiative_id, requirements, on_progress=on_progress,
+        )
+
+        if on_progress:
+            supported = sum(1 for s in statuses if s.status == "supported")
+            total = len(statuses)
+            await on_progress(f"Found {supported}/{total} requirements already supported by project materials.")
+
+        widget_data = {
+            "template_id": str(template_id),
+            "filename": material.filename,
+            "file_type": "xlsx" if is_xlsx else "docx",
+            "requirements": [s.to_dict() for s in statuses],
+            "summary": {
+                "total": len(statuses),
+                "supported": sum(1 for s in statuses if s.status == "supported"),
+                "partial": sum(1 for s in statuses if s.status == "partially_supported"),
+                "missing": sum(1 for s in statuses if s.status == "missing"),
+                "needs_confirmation": sum(1 for s in statuses if s.status == "needs_confirmation"),
+            },
+        }
+
+        return "template_requirements", widget_data
+
+    async def execute_from_conversation(
+        self,
+        conversation_text: str,
+        planner_args: dict | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> tuple[str, dict]:
+        raise NotImplementedError(
+            "TemplateFillTool requires DB access — use execute_from_template"
+        )

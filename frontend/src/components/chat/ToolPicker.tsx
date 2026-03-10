@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, Award } from 'lucide-react';
+import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, Award, FileUp } from 'lucide-react';
 
 export interface ToolOption {
   id: string;
@@ -41,6 +41,12 @@ export const ALL_TOOLS: ToolOption[] = [
     name: 'Due Diligence',
     description: 'Structured assessment checklist',
     icon: <CheckSquare className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'template_fill',
+    name: 'From Template',
+    description: 'Complete a doc from project materials',
+    icon: <FileUp className="w-3.5 h-3.5" />,
   },
 ];
 
