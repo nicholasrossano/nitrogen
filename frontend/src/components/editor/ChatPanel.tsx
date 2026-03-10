@@ -283,7 +283,7 @@ export function ChatPanel({
       )}
 
       {!hideTextInput && (
-        <div className="flex-shrink-0 px-2 pb-4">
+        <div className="flex-shrink-0 px-2 pb-2">
           <ChatInput
             onSend={handleSend}
             disabled={effectiveSending || effectiveGenerating}
