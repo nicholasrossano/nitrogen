@@ -23,6 +23,10 @@ from app.schemas.corpus import (
     CorpusDocumentCreate,
     CorpusDocumentResponse,
 )
+from app.schemas.project_material import (
+    ProjectMaterialResponse,
+    ProjectMaterialUploadResponse,
+)
 
 __all__ = [
     "InitiativeCreate",
@@ -40,4 +44,6 @@ __all__ = [
     "ExportResponse",
     "CorpusDocumentCreate",
     "CorpusDocumentResponse",
+    "ProjectMaterialResponse",
+    "ProjectMaterialUploadResponse",
 ]

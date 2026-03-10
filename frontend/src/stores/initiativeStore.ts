@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -14,6 +14,7 @@ interface InitiativeState {
   memo: MemoContent | null;
   memoId: string | null;
   evidenceDocs: EvidenceDoc[];
+  projectMaterials: ProjectMaterial[];
   projectPlan: ProjectPlan | null;
   
   // UI State
@@ -38,6 +39,9 @@ interface InitiativeState {
   loadInitiative: (id: string) => Promise<void>;
   loadChatHistory: (id: string) => Promise<void>;
   loadEvidence: (id: string) => Promise<void>;
+  loadMaterials: (id: string) => Promise<void>;
+  uploadMaterial: (id: string, file: File) => Promise<void>;
+  deleteMaterial: (materialId: string) => Promise<void>;
   sendMessage: (id: string, content: string, toolHint?: string) => Promise<void>;
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
   retryMessage: (id: string, messageId: string) => Promise<void>;
@@ -71,6 +75,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   memo: null,
   memoId: null,
   evidenceDocs: [],
+  projectMaterials: [],
   projectPlan: null,
   loading: false,
   sending: false,
@@ -127,6 +132,44 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({ evidenceDocs });
     } catch (error) {
       console.error('Failed to load evidence:', error);
+    }
+  },
+
+  // Load project materials
+  loadMaterials: async (id: string) => {
+    try {
+      const projectMaterials = await api.getMaterials(id);
+      set({ projectMaterials });
+    } catch (error) {
+      console.error('Failed to load materials:', error);
+    }
+  },
+
+  // Upload project material
+  uploadMaterial: async (id: string, file: File) => {
+    try {
+      const response = await api.uploadMaterial(id, file);
+      set(state => ({
+        projectMaterials: [response.material, ...state.projectMaterials],
+      }));
+    } catch (error) {
+      console.error('Failed to upload material:', error);
+      throw error;
+    }
+  },
+
+  // Delete project material
+  deleteMaterial: async (materialId: string) => {
+    const prev = get().projectMaterials;
+    set(state => ({
+      projectMaterials: state.projectMaterials.filter(m => m.id !== materialId),
+    }));
+    try {
+      await api.deleteMaterial(materialId);
+    } catch (error) {
+      set({ projectMaterials: prev });
+      console.error('Failed to delete material:', error);
+      throw error;
     }
   },
 
@@ -731,6 +774,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       memo: null,
       memoId: null,
       evidenceDocs: [],
+      projectMaterials: [],
       projectPlan: null,
       loading: false,
       sending: false,

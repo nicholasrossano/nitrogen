@@ -544,7 +544,7 @@ export function LCOEOutputWidget({
 
     {mounted && activeTab === 'inputs' && hoveredRowInp && !overInteractive && mousePos && createPortal(
       <div
-        className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-accent text-white text-[11px] font-medium shadow-md whitespace-nowrap"
+        className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-gray-700 text-white text-[11px] font-medium shadow-md whitespace-nowrap"
         style={{ left: mousePos.x + 16, top: mousePos.y - 32 }}
       >
         Investigate
