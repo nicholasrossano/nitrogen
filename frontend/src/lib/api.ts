@@ -155,6 +155,22 @@ export interface ProjectMaterial {
   created_at: string;
 }
 
+export interface GeneratedFile {
+  id: string;
+  title: string;
+  output_type: string;
+  created_at: string | null;
+  exportable: boolean;
+  export_format: string | null;
+  exported: boolean;
+  download_url: string | null;
+}
+
+export interface ProjectFilesResponse {
+  uploaded: ProjectMaterial[];
+  generated: GeneratedFile[];
+}
+
 // Alignment types
 export interface AlignmentSection {
   id: string;
@@ -212,6 +228,7 @@ export interface ProjectPlanPillar {
   id: string;
   name: string;
   summary: string;
+  icon?: string;
   items: ProjectPlanItem[];
 }
 
@@ -395,6 +412,15 @@ export const api = {
       }
     ),
 
+  updateMessageWidget: (initiativeId: string, messageId: string, widgetData: Record<string, any>) =>
+    fetchApi<{ message_id: string; updated: boolean }>(
+      `/api/v1/initiatives/${initiativeId}/chat/${messageId}/widget`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ widget_data: widgetData }),
+      }
+    ),
+
   truncateChatFrom: (initiativeId: string, fromMessageId: string) =>
     fetchApi<{ deleted_count: number; messages: ChatMessage[] }>(
       `/api/v1/initiatives/${initiativeId}/chat/truncate`,
@@ -564,6 +590,30 @@ export const api = {
       throw new Error(error.detail);
     }
     return response.json();
+  },
+
+  getProjectFiles: (initiativeId: string) =>
+    fetchApi<ProjectFilesResponse>(`/api/v1/initiatives/${initiativeId}/files`),
+
+  downloadMaterial: async (materialId: string, filename: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/materials/${materialId}/download`, {
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error('Failed to download file');
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
   },
 
   exportChecklist: async (initiativeId: string, content: any) => {

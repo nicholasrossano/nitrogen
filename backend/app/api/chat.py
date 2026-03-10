@@ -34,6 +34,7 @@ from app.schemas.chat import (
     TruncateChatResponse,
     RetryResponse,
     MessageFeedbackRequest,
+    MessageWidgetUpdateRequest,
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
@@ -488,6 +489,16 @@ async def execute_action(
                     f"{quality} confidence). "
                     "Review the inputs below — you can edit any value and I'll recalculate instantly."
                 )
+
+                from sqlalchemy.orm.attributes import flag_modified
+                deliverables = dict(initiative.deliverables or {})
+                deliverables["lcoe_model"] = {
+                    "title": f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
+                    "output_type": "lcoe",
+                    "content": content,
+                }
+                initiative.deliverables = deliverables
+                flag_modified(initiative, "deliverables")
             else:
                 missing = content.get("missing_essentials", [])
                 widget_type = "lcoe_inputs"
@@ -537,6 +548,16 @@ async def execute_action(
                     f"{quality} confidence). "
                     "Review the inputs below — you can edit any value and I'll recalculate instantly."
                 )
+
+                from sqlalchemy.orm.attributes import flag_modified
+                deliverables = dict(initiative.deliverables or {})
+                deliverables["carbon_model"] = {
+                    "title": f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
+                    "output_type": "carbon",
+                    "content": content,
+                }
+                initiative.deliverables = deliverables
+                flag_modified(initiative, "deliverables")
             else:
                 missing = content.get("missing_essentials", [])
                 widget_type = "carbon_inputs"
@@ -944,6 +965,65 @@ async def set_message_feedback(
     await db.commit()
 
     return {"message_id": str(message_id), "feedback": data.feedback}
+
+
+@router.patch("/initiatives/{initiative_id}/chat/{message_id}/widget")
+async def update_message_widget(
+    initiative_id: UUID,
+    message_id: UUID,
+    data: MessageWidgetUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Persist updated widget_data on an existing message (e.g. after LCOE/Carbon recalculation)."""
+    result = await db.execute(
+        select(Initiative).where(
+            Initiative.id == initiative_id,
+            Initiative.user_id == user.uid,
+        )
+    )
+    initiative = result.scalar_one_or_none()
+    if not initiative:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+
+    msg_result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.initiative_id == initiative_id,
+        )
+    )
+    msg = msg_result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    msg.widget_data = data.widget_data
+
+    # Keep initiative.deliverables in sync for LCOE/Carbon models
+    if msg.widget_type in ("lcoe_output", "carbon_output"):
+        from sqlalchemy.orm.attributes import flag_modified
+        deliverables = dict(initiative.deliverables or {})
+        content = data.widget_data
+        if msg.widget_type == "lcoe_output" and content.get("result"):
+            lcoe_val = content["result"].get("lcoe", 0)
+            currency = content["result"].get("currency", "USD")
+            deliverables["lcoe_model"] = {
+                "title": f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
+                "output_type": "lcoe",
+                "content": content,
+            }
+        elif msg.widget_type == "carbon_output" and content.get("result"):
+            net_er = content["result"].get("net_er_tco2e", 0)
+            deliverables["carbon_model"] = {
+                "title": f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
+                "output_type": "carbon",
+                "content": content,
+            }
+        initiative.deliverables = deliverables
+        flag_modified(initiative, "deliverables")
+
+    await db.commit()
+
+    return {"message_id": str(message_id), "updated": True}
 
 
 @router.delete("/initiatives/{initiative_id}/chat/truncate", response_model=TruncateChatResponse)

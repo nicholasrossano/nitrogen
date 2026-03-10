@@ -3,13 +3,14 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Sprout, TreePine } from 'lucide-react';
 
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ProjectHeader, ChatPanel, EditorSidePanel, EDITOR_WIDGET_TYPES } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
+import { ProjectFilesView } from '@/components/files';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -22,7 +23,7 @@ const MIN_STANDALONE_CHAT_PERCENT = 30;
 const MAX_STANDALONE_CHAT_PERCENT = 70;
 const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
 
-type ProjectView = 'chat' | 'plan';
+type ProjectView = 'chat' | 'plan' | 'files';
 
 function InitiativePageContent() {
   const params = useParams();
@@ -39,7 +40,9 @@ function InitiativePageContent() {
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
 
   const viewParam = searchParams.get('view');
-  const viewFromUrl: ProjectView = viewParam === 'chat' ? 'chat' : 'plan';
+  const viewFromUrl: ProjectView =
+    viewParam === 'chat' ? 'chat' :
+    viewParam === 'files' ? 'files' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
   const [showChatLanding, setShowChatLanding] = useState(true);
@@ -48,6 +51,17 @@ function InitiativePageContent() {
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Page-level loading overlay — stays up until all 5 initial loads complete
+  const [pageReady, setPageReady] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [showSprout, setShowSprout] = useState(true);
+
+  // Plan-view overlay — covers full workspace (chat + plan panels) when switching to plan
+  const [planViewReady, setPlanViewReady] = useState(true);
+  const [showPlanOverlay, setShowPlanOverlay] = useState(false);
+  const [planShowSprout, setPlanShowSprout] = useState(true);
+
   // Plan view panel state
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
   const [showChatPanel, setShowChatPanel] = useState(true);
@@ -107,13 +121,45 @@ function InitiativePageContent() {
 
   useEffect(() => {
     if (initiativeId) {
-      loadInitiative(initiativeId);
-      loadChatHistory(initiativeId);
-      loadEvidence(initiativeId);
-      loadMaterials(initiativeId);
-      loadProjectPlan(initiativeId);
+      setPageReady(false);
+      setShowOverlay(true);
+      Promise.all([
+        loadInitiative(initiativeId),
+        loadChatHistory(initiativeId),
+        loadEvidence(initiativeId),
+        loadMaterials(initiativeId),
+        loadProjectPlan(initiativeId),
+      ]).finally(() => setPageReady(true));
     }
   }, [initiativeId, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan]);
+
+  // Fade the overlay out after loads complete, then unmount it
+  useEffect(() => {
+    if (!pageReady) return;
+    const timer = setTimeout(() => setShowOverlay(false), 350);
+    return () => clearTimeout(timer);
+  }, [pageReady]);
+
+  // Alternate icons while the overlay is visible
+  useEffect(() => {
+    if (!showOverlay) return;
+    const interval = setInterval(() => setShowSprout((p) => !p), 750);
+    return () => clearInterval(interval);
+  }, [showOverlay]);
+
+  // Plan overlay fade-out
+  useEffect(() => {
+    if (!planViewReady || !showPlanOverlay) return;
+    const timer = setTimeout(() => setShowPlanOverlay(false), 350);
+    return () => clearTimeout(timer);
+  }, [planViewReady, showPlanOverlay]);
+
+  // Alternate plan overlay icons
+  useEffect(() => {
+    if (!showPlanOverlay) return;
+    const interval = setInterval(() => setPlanShowSprout((p) => !p), 750);
+    return () => clearInterval(interval);
+  }, [showPlanOverlay]);
 
   const prevPlanRef = useRef<boolean>(false);
   useEffect(() => {
@@ -242,7 +288,14 @@ function InitiativePageContent() {
       router.replace(`/initiatives/${initiativeId}?view=chat`);
       return;
     }
+    if (item === 'files') {
+      setActiveView('files');
+      router.replace(`/initiatives/${initiativeId}?view=files`);
+      return;
+    }
     if (item === 'plan') {
+      setPlanViewReady(false);
+      setShowPlanOverlay(true);
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
@@ -256,6 +309,7 @@ function InitiativePageContent() {
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* ProjectHeader — full width, only when initiative is loaded */}
+      <div className={`flex-shrink-0 transition-opacity duration-300 ${pageReady ? 'opacity-100' : 'opacity-0'}`}>
       {initiative && (
         <ProjectHeader
           initiative={initiative}
@@ -272,7 +326,7 @@ function InitiativePageContent() {
               onClick: handleToggleInspector,
               title: showInspector ? 'Hide inspector' : 'Show inspector',
             } : undefined,
-          } : {
+          } : activeView === 'chat' ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
             onBack: !showChatLanding ? () => { setShowChatLanding(true); setShowEditorInChatView(false); } : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
@@ -283,25 +337,47 @@ function InitiativePageContent() {
               },
               title: showEditorInChatView ? 'Hide editor' : 'Show editor',
             } : undefined,
-          })}
+          } : {})}
         />
       )}
+      </div>
 
       {/* Content row: sidebar + inset workspace */}
       <div className="flex flex-1 min-h-0">
+        <div className={`flex-shrink-0 transition-opacity duration-300 ${pageReady ? 'opacity-100' : 'opacity-0'} ${!pageReady ? 'pointer-events-none' : ''}`}>
         <SideDrawer
           variant="project"
           activeItem={activeView}
           onItemSelect={handleNavChange}
           onSignOut={handleSignOut}
           userEmail={user?.email}
-          materials={projectMaterials}
           onUploadMaterial={(file) => uploadMaterial(initiativeId, file)}
-          onDeleteMaterial={deleteMaterial}
         />
+        </div>
 
         <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
-          <div className="h-full bg-surface rounded-lg shadow-workspace overflow-hidden">
+          <div className="h-full bg-surface rounded-lg shadow-workspace overflow-hidden relative">
+            {/* Loading overlay — blurs content while initial data loads */}
+            {showOverlay && (
+              <div
+                className={`absolute inset-0 z-50 flex flex-col items-center justify-center gap-1.5 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${pageReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              >
+                <div className="relative w-16 h-16">
+                  <div
+                    className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+                  >
+                    <Sprout className="w-10 h-10 text-text-primary" strokeWidth={1.5} />
+                  </div>
+                  <div
+                    className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+                  >
+                    <TreePine className="w-10 h-10 text-text-primary" strokeWidth={1.5} />
+                  </div>
+                </div>
+                <span className="text-sm text-text-secondary font-medium tracking-wide">Loading project…</span>
+              </div>
+            )}
+
             {loading && !initiative ? (
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
@@ -350,8 +426,33 @@ function InitiativePageContent() {
                   </div>
                 )}
               </main>
+            ) : activeView === 'files' ? (
+              <main className="h-full min-w-0 overflow-hidden">
+                <ProjectFilesView
+                  initiativeId={initiativeId}
+                  materials={projectMaterials}
+                  onDeleteMaterial={deleteMaterial}
+                />
+              </main>
             ) : (
               <main ref={containerRef} className="h-full min-w-0 flex overflow-hidden relative">
+                {/* Plan-view overlay — covers chat panel + plan panel */}
+                {showPlanOverlay && (
+                  <div
+                    className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${planViewReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                  >
+                    <div className="relative w-10 h-10">
+                      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${planShowSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
+                        <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
+                      </div>
+                      <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!planShowSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
+                        <TreePine className="w-6 h-6 text-accent" strokeWidth={1.5} />
+                      </div>
+                    </div>
+                    <span className="text-xs text-text-secondary font-medium tracking-wide">Loading plan…</span>
+                  </div>
+                )}
+
                 {uploadError && (
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2">
                     <div className="bg-indicator-orange/10 border border-indicator-orange/30 rounded px-4 py-3 shadow-lg max-w-md">
@@ -398,6 +499,7 @@ function InitiativePageContent() {
                           initiativeId={initiativeId}
                           showInspector={showInspector}
                           onInspectorChange={handleInspectorChange}
+                          onReady={() => setPlanViewReady(true)}
                         />
                       )}
                       {showEditor && (

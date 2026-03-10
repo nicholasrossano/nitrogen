@@ -18,6 +18,7 @@ interface LCOEOutputWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  messageId?: string;
 }
 
 
@@ -48,6 +49,7 @@ export function LCOEOutputWidget({
   data: initialData,
   initiativeId,
   isActive = true,
+  messageId,
 }: LCOEOutputWidgetProps) {
   const [data, setData] = useState(initialData);
   const [activeTab, setActiveTab] = useState<'overview' | 'inputs' | 'sensitivity' | 'cashflow'>('overview');
@@ -63,6 +65,12 @@ export function LCOEOutputWidget({
   const [overInteractive, setOverInteractive] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  const persistWidget = useCallback((widgetData: Record<string, any>) => {
+    if (messageId && initiativeId) {
+      api.updateMessageWidget(initiativeId, messageId, widgetData).catch(() => {});
+    }
+  }, [messageId, initiativeId]);
 
   const result = data?.result;
   const inputs = useMemo(() => data?.inputs || {}, [data]);
@@ -103,6 +111,7 @@ export function LCOEOutputWidget({
     try {
       const newData = await api.updateLCOEInput(inputs, editingField, parsed);
       setData(newData);
+      persistWidget(newData);
     } catch {
       // keep old values
     } finally {
@@ -110,7 +119,7 @@ export function LCOEOutputWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs]);
+  }, [editingField, editValue, inputs, persistWidget]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -149,6 +158,7 @@ export function LCOEOutputWidget({
     try {
       const newData = await api.updateLCOEInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
+      persistWidget(newData);
     } catch {
       setData(prev => ({
         ...prev,
@@ -160,7 +170,7 @@ export function LCOEOutputWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses]);
+  }, [inputs, preConfirmStatuses, persistWidget]);
 
   if (!result) return null;
 

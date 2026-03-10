@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sql_delete
 from uuid import UUID
@@ -6,12 +7,15 @@ import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
-from app.core.storage import get_uploads_storage
+from app.core.storage import get_uploads_storage, get_storage
 from app.models.initiative import Initiative
+from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
     ProjectMaterialResponse,
     ProjectMaterialUploadResponse,
+    GeneratedFileResponse,
+    ProjectFilesResponse,
 )
 from app.services.document_parser import DocumentParserService
 
@@ -171,3 +175,149 @@ async def delete_material(
     await db.commit()
 
     return {"success": True, "message": "Material deleted"}
+
+
+EXPORT_FORMAT_MAP = {
+    "memo": "docx",
+    "checklist": "xlsx",
+    "spreadsheet": "xlsx",
+    "lcoe": "xlsx",
+    "carbon": "xlsx",
+}
+
+
+@router.get(
+    "/initiatives/{initiative_id}/files",
+    response_model=ProjectFilesResponse,
+)
+async def list_project_files(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """List all project files: uploaded materials + generated outputs."""
+    initiative = await _get_initiative_for_user(initiative_id, user, db)
+
+    # Uploaded materials
+    mat_result = await db.execute(
+        select(ProjectMaterial)
+        .where(ProjectMaterial.initiative_id == initiative_id)
+        .order_by(ProjectMaterial.created_at.desc())
+    )
+    uploaded = [
+        ProjectMaterialResponse(
+            id=m.id,
+            filename=m.filename,
+            file_type=m.file_type,
+            file_size=m.file_size,
+            created_at=m.created_at,
+        )
+        for m in mat_result.scalars().all()
+    ]
+
+    # Generated outputs from initiative.deliverables
+    generated: list[GeneratedFileResponse] = []
+    deliverables = initiative.deliverables or {}
+
+    # Pre-fetch the latest memo version to check export status
+    memo_result = await db.execute(
+        select(MemoVersion)
+        .where(MemoVersion.initiative_id == initiative_id)
+        .order_by(MemoVersion.created_at.desc())
+        .limit(1)
+    )
+    latest_memo = memo_result.scalar_one_or_none()
+
+    for tool_id, data in deliverables.items():
+        if "error" in data and "title" not in data:
+            continue
+        output_type = data.get("output_type", "document")
+        export_fmt = EXPORT_FORMAT_MAP.get(output_type)
+
+        exported = False
+        download_url = None
+        if output_type == "memo" and latest_memo and latest_memo.export_path:
+            exported = True
+            download_url = f"/api/v1/exports/{latest_memo.id}"
+
+        generated.append(GeneratedFileResponse(
+            id=tool_id,
+            title=data.get("title", tool_id.replace("_", " ").title()),
+            output_type=output_type,
+            created_at=initiative.updated_at,
+            exportable=export_fmt is not None,
+            export_format=export_fmt,
+            exported=exported,
+            download_url=download_url,
+        ))
+
+    # Fallback: if deliverables has no memo entry but a MemoVersion exists,
+    # surface it so previously-generated memos aren't invisible on the Files page.
+    has_memo_in_deliverables = any(
+        d.get("output_type") == "memo" for d in deliverables.values()
+    )
+    if not has_memo_in_deliverables and latest_memo:
+        memo_title = (latest_memo.content or {}).get("title", "Investment Memo")
+        exported = bool(latest_memo.export_path)
+        download_url = f"/api/v1/exports/{latest_memo.id}" if exported else None
+        generated.append(GeneratedFileResponse(
+            id=str(latest_memo.id),
+            title=memo_title,
+            output_type="memo",
+            created_at=latest_memo.created_at,
+            exportable=True,
+            export_format="docx",
+            exported=exported,
+            download_url=download_url,
+        ))
+
+    return ProjectFilesResponse(uploaded=uploaded, generated=generated)
+
+
+@router.get("/materials/{material_id}/download")
+async def download_material(
+    material_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Download an uploaded project material."""
+    result = await db.execute(
+        select(ProjectMaterial).where(ProjectMaterial.id == material_id)
+    )
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Material not found",
+        )
+
+    await _get_initiative_for_user(material.initiative_id, user, db)
+
+    if not material.storage_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not available for download",
+        )
+
+    storage = get_uploads_storage()
+    file_bytes = await storage.load(material.storage_path)
+
+    content_type_map = {
+        "pdf": "application/pdf",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "txt": "text/plain",
+        "csv": "text/csv",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xls": "application/vnd.ms-excel",
+        "png": "image/png",
+        "jpg": "image/jpeg",
+    }
+    media_type = content_type_map.get(material.file_type, "application/octet-stream")
+
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{material.filename}"'
+        },
+    )

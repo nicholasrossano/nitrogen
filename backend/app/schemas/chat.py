@@ -136,6 +136,11 @@ class MessageFeedbackRequest(BaseModel):
     feedback: Optional[str] = Field(None, pattern=r'^(like|dislike)$', description="'like', 'dislike', or null to clear")
 
 
+class MessageWidgetUpdateRequest(BaseModel):
+    """Request to update widget_data on an existing message (e.g. after LCOE recalculation)."""
+    widget_data: dict
+
+
 class TruncateChatRequest(BaseModel):
     """Request to truncate chat from a given message onward"""
     from_message_id: str = Field(..., description="Delete this message and all messages after it")
