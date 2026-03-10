@@ -8,6 +8,8 @@ import { GSCertificationWidget } from '@/components/widgets/GSCertificationWidge
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
+import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequirementsWidget';
+import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
@@ -18,6 +20,8 @@ export const EDITOR_WIDGET_TYPES = [
   'memo_viewer',
   'checklist_viewer',
   'alignment',
+  'template_requirements',
+  'template_viewer',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -30,6 +34,8 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   memo_viewer: 'memo',
   checklist_viewer: 'checklist',
   alignment: 'alignment',
+  template_requirements: 'template',
+  template_viewer: 'template',
 };
 
 export interface EditorWidget {
@@ -53,6 +59,8 @@ const WIDGET_LABELS: Record<string, string> = {
   memo_viewer: 'Investment Memo',
   checklist_viewer: 'Due Diligence',
   alignment: 'Memo Outline',
+  template_requirements: 'Template',
+  template_viewer: 'Template Output',
 };
 
 export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelProps) {
@@ -126,6 +134,10 @@ function EditorWidgetRenderer({
       return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'alignment':
       return <AlignmentWidget data={data} initiativeId={initiativeId} isActive />;
+    case 'template_requirements':
+      return <TemplateRequirementsWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
+    case 'template_viewer':
+      return <TemplateViewerWidget data={data} initiativeId={initiativeId} isActive />;
     default:
       return null;
   }

@@ -1127,6 +1127,66 @@ export const api = {
     return fetchApi('/api/v1/gs/checklist');
   },
 
+  // --- Template Fill ---
+
+  uploadTemplate: async (initiativeId: string, file: File): Promise<{ template_id: string; filename: string; file_type: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('initiative_id', initiativeId);
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/template/upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Upload failed');
+    }
+    return response.json();
+  },
+
+  updateTemplateRequirement: (requirementId: string, value?: string | null, reqStatus?: string | null) =>
+    fetchApi<{ requirement_id: string; value: string | null; status: string | null; updated: boolean }>(
+      `/api/v1/template/requirements/${requirementId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ value: value ?? null, status: reqStatus ?? null }),
+      },
+    ),
+
+  generateFromTemplate: (initiativeId: string, templateId: string, requirements?: any[]) =>
+    fetchApi<{ template_id: string; output_path: string; file_type: string; filename: string; requirements: any[] }>(
+      '/api/v1/template/generate',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          initiative_id: initiativeId,
+          template_id: templateId,
+          requirements: requirements ?? null,
+        }),
+      },
+    ),
+
+  exportTemplate: async (templateId: string, filename: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/template/${templateId}/export`, { headers });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
   async exportGSCoverLetter(workspaceId: string): Promise<Blob> {
     const url = `${API_URL}/api/v1/gs/workspace/${workspaceId}/export`;
     const token = await getAuthToken();
