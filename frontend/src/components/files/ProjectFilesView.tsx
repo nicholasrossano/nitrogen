@@ -174,8 +174,8 @@ export function ProjectFilesView({
                         <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5">Name</th>
                         <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Type</th>
                         <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-24">Size</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-28">Date</th>
-                        <th className="w-20 px-4 py-2.5" />
+                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-28 whitespace-nowrap">Date</th>
+                        <th className="text-center text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-divider">
@@ -197,11 +197,11 @@ export function ProjectFilesView({
                           <td className="px-4 py-2.5 text-text-secondary">
                             {formatFileSize(mat.file_size)}
                           </td>
-                          <td className="px-4 py-2.5 text-text-secondary">
+                          <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
                             {formatDate(mat.created_at)}
                           </td>
                           <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1 justify-end">
+                            <div className="flex items-center gap-1 justify-center">
                               <button
                                 onClick={() => handleDownloadMaterial(mat)}
                                 disabled={downloadingId === mat.id}
@@ -261,8 +261,8 @@ export function ProjectFilesView({
                         <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5">Name</th>
                         <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Type</th>
                         <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-24">Size</th>
-                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-28">Date</th>
-                        <th className="w-20 px-4 py-2.5" />
+                        <th className="text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-28 whitespace-nowrap">Date</th>
+                        <th className="text-center text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5 w-20">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-divider">
@@ -271,7 +271,7 @@ export function ProjectFilesView({
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
                               <Zap className="w-4 h-4 text-accent flex-shrink-0" />
-                              <span className="text-text-primary">{file.title}</span>
+                              <span className="text-text-primary truncate">{file.title}</span>
                             </div>
                           </td>
                           <td className="px-4 py-2.5">
@@ -284,11 +284,11 @@ export function ProjectFilesView({
                           <td className="px-4 py-2.5 text-text-secondary">
                             {formatFileSize(null)}
                           </td>
-                          <td className="px-4 py-2.5 text-text-secondary">
+                          <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
                             {formatDate(file.created_at)}
                           </td>
                           <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1 justify-end">
+                            <div className="flex items-center gap-1 justify-center">
                               {file.exportable && (
                                 <button
                                   onClick={() => handleDownloadGenerated(file)}
