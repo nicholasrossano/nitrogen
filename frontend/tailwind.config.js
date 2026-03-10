@@ -11,19 +11,19 @@ module.exports = {
         // Nitrogen Design System — warm workbench palette
         // Shell & Surfaces
         shell: {
-          DEFAULT: '#FAF8F5',
-          bar: '#FDFCFA',
-          subtle: '#F0EDE8',
+          DEFAULT: '#FBF9F7',
+          bar: '#FDFCFB',
+          subtle: '#F2F0EB',
         },
         background: {
-          DEFAULT: '#FAF8F5',
-          tinted: '#F0EDE8',
+          DEFAULT: '#FBF9F7',
+          tinted: '#F2F0EB',
         },
         surface: {
           DEFAULT: '#FFFFFF',
-          subtle: '#F7F5F2',
-          grey: '#F7F5F2',
-          header: '#FDFCFA',
+          subtle: '#F8F7F4',
+          grey: '#F8F7F4',
+          header: '#FDFCFB',
         },
         // Text
         text: {
