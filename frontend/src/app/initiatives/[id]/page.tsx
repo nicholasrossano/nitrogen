@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, Sprout, TreePine } from 'lucide-react';
+import { ArrowLeft, Loader2, Sprout, TreeDeciduous } from 'lucide-react';
 
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ProjectHeader, ChatPanel, EditorSidePanel, EDITOR_WIDGET_TYPES } from '@/components/editor';
@@ -51,7 +51,6 @@ function InitiativePageContent() {
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [filesRefreshKey, setFilesRefreshKey] = useState(0);
 
   // Page-level loading overlay — stays up until all 5 initial loads complete
   const [pageReady, setPageReady] = useState(false);
@@ -326,7 +325,6 @@ function InitiativePageContent() {
     }
     if (item === 'files') {
       setActiveView('files');
-      setFilesRefreshKey((k) => k + 1);
       router.replace(`/initiatives/${initiativeId}?view=files`);
       return;
     }
@@ -408,7 +406,7 @@ function InitiativePageContent() {
                   <div
                     className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
                   >
-                    <TreePine className="w-10 h-10 text-text-primary" strokeWidth={1.5} />
+                    <TreeDeciduous className="w-10 h-10 text-text-primary" strokeWidth={1.5} />
                   </div>
                 </div>
                 <span className="text-sm text-text-secondary font-medium tracking-wide">Loading project…</span>
@@ -472,7 +470,6 @@ function InitiativePageContent() {
                 {activeView === 'files' ? (
               <main className="h-full min-w-0 overflow-hidden">
                 <ProjectFilesView
-                  key={filesRefreshKey}
                   initiativeId={initiativeId}
                   materials={projectMaterials}
                   onDeleteMaterial={deleteMaterial}
@@ -490,7 +487,7 @@ function InitiativePageContent() {
                         <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
                       </div>
                       <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!planShowSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                        <TreePine className="w-6 h-6 text-accent" strokeWidth={1.5} />
+                        <TreeDeciduous className="w-6 h-6 text-accent" strokeWidth={1.5} />
                       </div>
                     </div>
                     <span className="text-xs text-text-secondary font-medium tracking-wide">Loading plan…</span>
