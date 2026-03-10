@@ -189,6 +189,44 @@ class Initiative(Base):
                     pending.append(tool_id)
         return pending
     
+    def save_deliverable(
+        self,
+        tool_id: str,
+        title: str,
+        output_type: str,
+        content,
+    ):
+        """Persist a generated deliverable with a per-item timestamp.
+
+        Handles JSONB mutation detection and updates ``updated_at`` so the
+        Files page always reflects the latest generation.
+        """
+        from sqlalchemy.orm.attributes import flag_modified
+
+        deliverables = dict(self.deliverables or {})
+        deliverables[tool_id] = {
+            "title": title,
+            "output_type": output_type,
+            "content": content,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.deliverables = deliverables
+        flag_modified(self, "deliverables")
+        self.touch()
+
+    def remove_deliverable(self, tool_id: str) -> bool:
+        """Remove a deliverable by tool_id. Returns True if it existed."""
+        from sqlalchemy.orm.attributes import flag_modified
+
+        deliverables = dict(self.deliverables or {})
+        if tool_id not in deliverables:
+            return False
+        del deliverables[tool_id]
+        self.deliverables = deliverables
+        flag_modified(self, "deliverables")
+        self.touch()
+        return True
+
     def touch(self):
         """Update the updated_at timestamp to mark this initiative as recently modified."""
         self.updated_at = datetime.now(timezone.utc)

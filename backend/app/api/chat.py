@@ -502,15 +502,12 @@ async def execute_action(
                     "Review the inputs below — you can edit any value and I'll recalculate instantly."
                 )
 
-                from sqlalchemy.orm.attributes import flag_modified
-                deliverables = dict(initiative.deliverables or {})
-                deliverables["lcoe_model"] = {
-                    "title": f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
-                    "output_type": "lcoe",
-                    "content": content,
-                }
-                initiative.deliverables = deliverables
-                flag_modified(initiative, "deliverables")
+                initiative.save_deliverable(
+                    "lcoe_model",
+                    f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
+                    "lcoe",
+                    content,
+                )
             else:
                 missing = content.get("missing_essentials", [])
                 widget_type = "lcoe_inputs"
@@ -561,15 +558,12 @@ async def execute_action(
                     "Review the inputs below — you can edit any value and I'll recalculate instantly."
                 )
 
-                from sqlalchemy.orm.attributes import flag_modified
-                deliverables = dict(initiative.deliverables or {})
-                deliverables["carbon_model"] = {
-                    "title": f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
-                    "output_type": "carbon",
-                    "content": content,
-                }
-                initiative.deliverables = deliverables
-                flag_modified(initiative, "deliverables")
+                initiative.save_deliverable(
+                    "carbon_model",
+                    f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
+                    "carbon",
+                    content,
+                )
             else:
                 missing = content.get("missing_essentials", [])
                 widget_type = "carbon_inputs"
@@ -1026,24 +1020,23 @@ async def update_message_widget(
         has_real_result = bool(content.get("result") and content.get("computable", False))
         has_inputs = bool(content.get("inputs"))
         if has_real_result and has_inputs:
-            deliverables = dict(initiative.deliverables or {})
             if msg.widget_type in lcoe_types:
                 lcoe_val = content["result"].get("lcoe", 0)
                 currency = content["result"].get("currency", "USD")
-                deliverables["lcoe_model"] = {
-                    "title": f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
-                    "output_type": "lcoe",
-                    "content": content,
-                }
+                initiative.save_deliverable(
+                    "lcoe_model",
+                    f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
+                    "lcoe",
+                    content,
+                )
             elif msg.widget_type in carbon_types:
                 net_er = content["result"].get("net_er_tco2e", 0)
-                deliverables["carbon_model"] = {
-                    "title": f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
-                    "output_type": "carbon",
-                    "content": content,
-                }
-            initiative.deliverables = deliverables
-            flag_modified(initiative, "deliverables")
+                initiative.save_deliverable(
+                    "carbon_model",
+                    f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
+                    "carbon",
+                    content,
+                )
 
     await db.commit()
 
@@ -1344,7 +1337,6 @@ async def confirm_alignment(
             inputs.setdefault("timeline", initiative.timeline)
 
         tool_alignments = initiative.tool_alignments or {}
-        deliverables = dict(initiative.deliverables or {})
 
         WIDGET_TYPES = {"memo": "memo_viewer", "checklist": "checklist_viewer"}
         WIDGET_LABELS = {"memo_viewer": "Investment Memo", "checklist_viewer": "Due Diligence Checklist"}
@@ -1366,11 +1358,9 @@ async def confirm_alignment(
                     include_corpus=True,
                     alignment=alignment_obj,
                 )
-                deliverables[sel_tool_id] = {
-                    "title": output.title,
-                    "output_type": output.output_type,
-                    "content": output.content,
-                }
+                initiative.save_deliverable(
+                    sel_tool_id, output.title, output.output_type, output.content,
+                )
                 w_type = WIDGET_TYPES.get(output.output_type, "document_viewer")
                 label = WIDGET_LABELS.get(w_type, sel_tool.definition.name)
                 deliverable_msg = ChatMessage(
@@ -1390,10 +1380,7 @@ async def confirm_alignment(
                 )
                 db.add(err_msg)
 
-        from sqlalchemy.orm.attributes import flag_modified
-        initiative.deliverables = deliverables
         initiative.stage = InitiativeStage.COMPLETE.value
-        flag_modified(initiative, "deliverables")
         await db.commit()
     else:
         # Save assistant message for the next alignment
