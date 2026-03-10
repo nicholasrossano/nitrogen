@@ -45,6 +45,15 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
   const animFrameRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefersReducedMotion = useRef(false);
+  const historyListRef = useRef<HTMLDivElement>(null);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleHistoryScroll = useCallback(() => {
+    setIsScrolling(true);
+    if (scrollHideTimer.current) clearTimeout(scrollHideTimer.current);
+    scrollHideTimer.current = setTimeout(() => setIsScrolling(false), 1000);
+  }, []);
 
   useEffect(() => {
     prefersReducedMotion.current = window.matchMedia(
@@ -145,15 +154,20 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
   return (
     <div className="flex flex-col items-center h-full px-4">
       <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
-        <div className="w-[70%] grid grid-cols-3 gap-2 mb-6">
+        <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
           {ALL_TOOLS.map((tool) => (
             <button
               key={tool.id}
               type="button"
               disabled={disabled}
               onClick={() => onSend(`Generate ${tool.name}`, tool.id)}
-              className="flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08] transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+              className="relative flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08] transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default"
             >
+              {tool.id === 'gs_certification' && (
+                <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
+                  BETA
+                </span>
+              )}
               <span className="text-accent/70 [&>svg]:w-4.5 [&>svg]:h-4.5">{tool.icon}</span>
               <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{tool.name}</span>
             </button>
@@ -239,13 +253,17 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
         </form>
       </div>
 
-      <div className="flex-1 w-full max-w-2xl">
+      <div className="flex-1 min-h-0 w-full max-w-2xl flex flex-col">
         {sessions.length > 0 && (
-          <div className="mt-8">
+          <div className="mt-12 flex flex-col min-h-0 flex-1">
             <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3 px-1">
               History
             </p>
-            <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-1">
+            <div
+              ref={historyListRef}
+              onScroll={handleHistoryScroll}
+              className={`space-y-1 overflow-y-auto flex-1 min-h-0 pr-1 [&::-webkit-scrollbar-thumb]:transition-colors [&::-webkit-scrollbar-thumb]:duration-300 ${isScrolling ? '[&::-webkit-scrollbar-thumb]:bg-divider' : '[&::-webkit-scrollbar-thumb]:bg-transparent'}`}
+            >
               {sessions.map((session) => (
                 <HistoryRow
                   key={session.id}
