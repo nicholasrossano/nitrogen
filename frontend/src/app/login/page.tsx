@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -18,9 +18,13 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
-  // If already logged in, redirect to home
+  useEffect(() => {
+    if (!loading && user) {
+      router.push('/');
+    }
+  }, [loading, user, router]);
+
   if (!loading && user) {
-    router.push('/');
     return null;
   }
 

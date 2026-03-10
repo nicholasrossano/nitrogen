@@ -21,10 +21,10 @@
   --color-text-tertiary: #8A8A90;
   
   /* Accent (interactive elements only) */
-  --color-accent-anchor: #005bb5;
-  --color-accent: #004d91;
-  --color-accent-tint: #4d9de8;
-  --color-accent-wash: #edf7ff;
+  --color-accent-anchor: #0977ae;
+  --color-accent: #005f8f;
+  --color-accent-tint: #51b4e6;
+  --color-accent-wash: #ecf8fe;
   
   /* Secondary Accent */
   --color-accent-secondary-anchor: #4a3812;
@@ -40,7 +40,7 @@
   /* Strokes */
   --color-divider: #E0DCD6;
   --color-stroke-subtle: #DDD9D3;
-  --color-stroke-accent: #004d91;
+  --color-stroke-accent: #005f8f;
 }
 
 html {
@@ -893,11 +893,11 @@ textarea {
 }
 
 .editable-content:hover {
-  background-color: rgba(237, 247, 255, 0.3);
+  background-color: rgba(236, 248, 254, 0.3);
 }
 
 .editable-content:focus {
-  background-color: rgba(237, 247, 255, 0.6);
+  background-color: rgba(236, 248, 254, 0.6);
   box-shadow: 0 0 0 2px var(--color-accent-tint);
 }
 
