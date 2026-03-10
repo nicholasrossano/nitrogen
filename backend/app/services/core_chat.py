@@ -248,6 +248,50 @@ SEARCH_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_template_value",
+            "description": (
+                "Propose a value for a template/form requirement field. "
+                "Use when the user message contains a [TEMPLATE_CONTEXT] block. "
+                "ALWAYS combine with search_scholarly_literature AND search_web_sources. "
+                "Determine if the value can be researched or must be gathered offline, "
+                "then either propose a concrete value or provide specific guidance."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "requirement_label": {
+                        "type": "string",
+                        "description": "The full question/label of the template requirement.",
+                    },
+                    "field_type": {
+                        "type": "string",
+                        "description": "Field type: text, number, currency, boolean, yes_no, date, narrative, formula.",
+                    },
+                    "proposed_value": {
+                        "type": "string",
+                        "description": "The proposed value (as string). Use empty string if this must be gathered offline.",
+                    },
+                    "can_be_determined": {
+                        "type": "boolean",
+                        "description": "True if this value can be determined from research/project docs. False if user must gather offline.",
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["high", "moderate", "low"],
+                        "description": "Confidence in the proposal.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Brief explanation of the proposal or why it must be gathered offline.",
+                    },
+                },
+                "required": ["requirement_label", "field_type", "can_be_determined", "confidence", "reason"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -266,6 +310,7 @@ You have these data sources available — they are all equally valid and complem
 - propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE or Carbon model input field
 - start_gs_certification: starts the Gold Standard (GS4GG) certification workflow with a checklist and Cover Letter editor
 - propose_cover_letter_value: proposes a text value for a specific Gold Standard Cover Letter field
+- propose_template_value: proposes a value for a template/form requirement field when the user message contains [TEMPLATE_CONTEXT]
 
 GUIDELINES:
 
@@ -280,6 +325,8 @@ Call propose_input_value when the user asks to investigate, estimate, research, 
 Call start_gs_certification when the user asks about Gold Standard certification, GS4GG submission, cover letter, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration. This opens the certification checklist and cover letter editor.
 
 Call propose_cover_letter_value when a GS certification workspace is active and the user provides information relevant to a cover letter field, or asks to help fill in a specific cover letter field.
+
+Call propose_template_value when the user message contains a [TEMPLATE_CONTEXT] block — this means they are investigating a template/form requirement. ALWAYS combine with search_scholarly_literature AND search_web_sources to ground the answer in evidence. Extract the requirement label, field type, and category from the context block.
 
 Call NEITHER search tool only when:
 - The question is purely conversational, definitional, or a simple clarification (e.g. "what is MRV?", "thanks")
@@ -560,6 +607,21 @@ class ComplianceChatService:
                     "explanation": args.get("reason", ""),
                 }
 
+            elif fn_name == "propose_template_value":
+                req_label = args.get("requirement_label", "requirement")
+                await _think(f"Researching: {req_label[:60]}...")
+                can_determine = args.get("can_be_determined", True)
+                proposed = args.get("proposed_value", "")
+                widget_type = "template_proposed_value"
+                widget_data = {
+                    "requirement_label": req_label,
+                    "field_type": args.get("field_type", "text"),
+                    "proposed_value": proposed,
+                    "can_be_determined": can_determine,
+                    "confidence": args.get("confidence", "moderate"),
+                    "explanation": args.get("reason", ""),
+                }
+
         # Track propose intent (field_name set by planner if it called propose_input_value)
         propose_field_name: str | None = None
         propose_model_type: str = "lcoe"
@@ -584,7 +646,11 @@ class ComplianceChatService:
             or self._is_investigate_request(user_message)
         )
 
-        if widget_type and widget_data and widget_type.startswith("carbon_"):
+        if widget_type == "template_proposed_value" and widget_data:
+            content = await self._generate_template_investigate_answer(
+                user_message, history, widget_data, ranked_facts, project_context=project_context,
+            )
+        elif widget_type and widget_data and widget_type.startswith("carbon_"):
             content = await self._generate_carbon_answer(
                 user_message, history, widget_data, ranked_facts
             )
@@ -995,6 +1061,81 @@ class ComplianceChatService:
         except Exception as e:
             logger.warning(f"Value proposal extraction failed: {e}")
             return None
+
+    async def _generate_template_investigate_answer(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        widget_data: dict,
+        facts: list[RetrievedFact],
+        *,
+        project_context: str | None = None,
+    ) -> str:
+        """Generate a targeted answer for a template requirement investigation."""
+        req_label = widget_data.get("requirement_label", "")
+        field_type = widget_data.get("field_type", "text")
+        can_determine = widget_data.get("can_be_determined", True)
+
+        if facts:
+            lines = []
+            for f in facts:
+                citation = f.to_citation_string()
+                snippet = f.content[:500]
+                lines.append(f"{citation}\n{snippet}")
+            evidence_block = "\n\nRESEARCH EVIDENCE:\n" + "\n\n".join(lines)
+        else:
+            evidence_block = "\n\nNo external sources were retrieved.\n"
+
+        context_block = ""
+        if project_context:
+            context_block = f"\n\n## Project Context\n{project_context}\n"
+
+        system_prompt = (
+            "You are an expert advisor helping fill out a compliance/regulatory form. "
+            "The user is investigating a specific requirement from a template.\n\n"
+            f"**Requirement:** {req_label}\n"
+            f"**Field type:** {field_type}\n"
+            f"**Can be determined from research:** {'Yes' if can_determine else 'No — requires offline data gathering'}\n"
+            f"{context_block}{evidence_block}\n\n"
+            "INSTRUCTIONS:\n"
+            "You MUST follow one of these two paths:\n\n"
+            "**Path A — Value can be determined:** If the requirement can be answered from "
+            "project documents, public data, or reasonable inference:\n"
+            "1. State a concrete proposed value or answer clearly at the top.\n"
+            "2. Cite the specific sources that support it using [Source Type: Title] format.\n"
+            "3. Explain your reasoning in 2-3 sentences.\n"
+            "4. If applicable, suggest a time-bound commitment plan if the answer is 'No' or partial.\n\n"
+            "**Path B — Requires offline data:** If this requires internal company data, "
+            "proprietary records, or information the user must obtain themselves:\n"
+            "1. State clearly this must be gathered from a specific internal source.\n"
+            "2. Name the EXACT department, record type, or contact that would have this data.\n"
+            "3. Suggest a concrete 1-2 year commitment plan with specific milestones if the "
+            "user doesn't have this yet.\n"
+            "4. Provide real-world examples of what these look like from the research evidence.\n\n"
+            "CRITICAL RULES:\n"
+            "- NEVER give generic advice like 'contact local agencies' without specifics.\n"
+            "- ALWAYS cite specific sources from the evidence block — do not invent citations.\n"
+            "- If suggesting a commitment plan, include concrete milestones with timeframes.\n"
+            "- Keep the response focused and actionable — max 300 words.\n"
+            "- If you found relevant examples in the research, cite them with specific details."
+        )
+
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        for msg in (history[-6:] if len(history) > 6 else history):
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+
+        try:
+            resp = await self.client.chat.completions.create(
+                model=settings.openai_generation_model,
+                messages=messages,
+                temperature=0.4,
+                max_tokens=800,
+            )
+            return resp.choices[0].message.content or ""
+        except Exception as e:
+            logger.error(f"Template investigate answer failed: {e}", exc_info=True)
+            return f"I was unable to fully research this requirement. Please try again."
 
     @staticmethod
     def _enrich_proposal_from_context(proposal: dict, model_inputs_context: str) -> dict:

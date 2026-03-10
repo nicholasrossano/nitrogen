@@ -25,6 +25,7 @@ import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
+import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
 import { EDITOR_WIDGET_TYPES } from './EditorSidePanel';
 
 interface ChatPanelProps {
@@ -51,6 +52,7 @@ const CHAT_WIDGET_TYPES = [
   'carbon_inputs',
   'carbon_output',
   'gs_proposed_field',
+  'template_proposed_value',
 ];
 
 const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
@@ -627,7 +629,7 @@ function ChatMessageItem({
         ) : (
           <div ref={isUser ? bubbleRef : undefined} className={`rounded-lg px-3 text-sm ${isUser ? 'py-2 bg-zinc-700 text-white' : 'pt-2 pb-1 bg-white text-text-primary'}`}>
             {isUser ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="whitespace-pre-wrap">{message.content.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}</p>
             ) : (
               <div className="prose-sm prose-memo">
                 <ReactMarkdown>{message.content}</ReactMarkdown>
@@ -753,6 +755,12 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <CoverLetterProposedValueWidget data={data as any} />
+        </ErrorBoundary>
+      );
+    case 'template_proposed_value':
+      return (
+        <ErrorBoundary>
+          <TemplateProposedValueWidget data={data as any} />
         </ErrorBoundary>
       );
     default:

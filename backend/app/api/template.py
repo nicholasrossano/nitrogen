@@ -147,29 +147,42 @@ async def generate_from_template(
 
     init_uuid = UUID(body.initiative_id)
     template_uuid = UUID(body.template_id)
+    logger.info("generate_from_template: initiative=%s template=%s", init_uuid, template_uuid)
     await _get_initiative_for_user(init_uuid, user, db)
 
     result = await db.execute(
         select(ProjectMaterial).where(ProjectMaterial.id == template_uuid)
     )
     material = result.scalar_one_or_none()
-    if not material or not material.storage_path:
-        raise HTTPException(status_code=404, detail="Template not found")
+    if not material:
+        logger.error("Template material not found in DB: %s", template_uuid)
+        raise HTTPException(status_code=404, detail=f"Template material {template_uuid} not found in database")
+    if not material.storage_path:
+        logger.error("Template material has no storage_path: %s", template_uuid)
+        raise HTTPException(status_code=404, detail="Template file missing from storage")
 
     storage = get_uploads_storage()
-    template_bytes = await storage.load(material.storage_path)
+    try:
+        template_bytes = await storage.load(material.storage_path)
+    except Exception:
+        logger.error("Failed to load template file from storage: %s", material.storage_path, exc_info=True)
+        raise HTTPException(status_code=404, detail=f"Template file not found at {material.storage_path}")
 
     reqs = body.requirements or []
 
     filler = TemplateFillerService()
     is_xlsx = material.file_type == "template_xlsx"
-    filled_bytes = (
-        filler.fill_xlsx(template_bytes, reqs)
-        if is_xlsx
-        else filler.fill_docx(template_bytes, reqs)
-    )
+    try:
+        filled_bytes = (
+            filler.fill_xlsx(template_bytes, reqs)
+            if is_xlsx
+            else filler.fill_docx(template_bytes, reqs)
+        )
+    except Exception:
+        logger.error("Failed to fill template: %s", template_uuid, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fill template with provided values")
 
-    out_storage = get_storage()
+    out_storage = get_uploads_storage()
     ext = "xlsx" if is_xlsx else "docx"
     out_filename = f"filled_{material.filename}"
     out_path = await out_storage.save(
@@ -195,6 +208,42 @@ async def generate_from_template(
         "filename": out_filename,
         "requirements": reqs,
     }
+
+
+# ── List recent templates ───────────────────────────────────────────
+
+@router.get("/template/recent")
+async def list_recent_templates(
+    initiative_id: str,
+    limit: int = 5,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Return the most recently uploaded (unfilled) templates for an initiative."""
+    init_uuid = UUID(initiative_id)
+    await _get_initiative_for_user(init_uuid, user, db)
+
+    result = await db.execute(
+        select(ProjectMaterial)
+        .where(
+            ProjectMaterial.initiative_id == init_uuid,
+            ProjectMaterial.file_type.in_(["template_docx", "template_xlsx"]),
+            ~ProjectMaterial.filename.startswith("filled_"),
+        )
+        .order_by(ProjectMaterial.created_at.desc())
+        .limit(limit)
+    )
+    materials = result.scalars().all()
+
+    return [
+        {
+            "template_id": str(m.id),
+            "filename": m.filename,
+            "file_type": m.file_type,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in materials
+    ]
 
 
 # ── Export / download ───────────────────────────────────────────────

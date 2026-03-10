@@ -209,6 +209,41 @@ ORCHESTRATION_ACTIONS = [
     {
         "type": "function",
         "function": {
+            "name": "propose_template_value",
+            "description": (
+                "Propose a value (text, numeric, yes/no, date, or narrative) for a template/form "
+                "requirement field. Use when the user message contains a [TEMPLATE_CONTEXT] block "
+                "indicating they are investigating a template requirement. The response should either: "
+                "(1) propose a concrete value backed by evidence from project docs or research, OR "
+                "(2) explain why this must be gathered offline and provide specific guidance on where/how."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Brief message telling the user you're researching this requirement."
+                    },
+                    "requirement_label": {
+                        "type": "string",
+                        "description": "The full label/question text of the requirement being investigated."
+                    },
+                    "field_type": {
+                        "type": "string",
+                        "description": "The field type: text, number, currency, boolean, yes_no, date, narrative, formula."
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "The category/section this requirement belongs to."
+                    },
+                },
+                "required": ["message", "requirement_label", "field_type"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "start_gs_certification",
             "description": "Start the Gold Standard (GS4GG) certification workflow. Use when the user asks about Gold Standard certification, GS4GG submission, cover letter preparation, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration.",
             "parameters": {
@@ -313,6 +348,9 @@ You do NOT need: exact budget, timeline, team size, target population, or other 
 
 **Rule 12: User asks to investigate, estimate, validate, or research a specific model input field (e.g. "what should Net Capacity be?", "investigate Total CAPEX", "estimate capacity factor")**
 → Use **propose_input_value** — look at the Current Model Inputs, identify the field, research an appropriate value given the project context, and propose a concrete number with explanation. Match the field_name exactly from the model inputs listed above.
+
+**Rule 13: User message contains [TEMPLATE_CONTEXT] block — they are investigating a template/form requirement**
+→ Use **propose_template_value** — extract the requirement label, field type, and category from the context block. Research using project docs and web/academic sources to propose a value or provide actionable guidance.
 
 ## Style
 - Be proactive and directive — move toward the plan quickly
