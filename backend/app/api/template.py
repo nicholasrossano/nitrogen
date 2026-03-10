@@ -130,14 +130,15 @@ async def update_requirement(
 
 # ── Generate filled document ────────────────────────────────────────
 
-class GenerateRequest(BaseModel):
+class GenerateWithRequirementsRequest(BaseModel):
     initiative_id: str
     template_id: str
+    requirements: list[dict] | None = None
 
 
 @router.post("/template/generate")
 async def generate_from_template(
-    body: GenerateRequest,
+    body: GenerateWithRequirementsRequest,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
@@ -158,25 +159,41 @@ async def generate_from_template(
     storage = get_uploads_storage()
     template_bytes = await storage.load(material.storage_path)
 
+    reqs = body.requirements or []
+
     filler = TemplateFillerService()
     is_xlsx = material.file_type == "template_xlsx"
     filled_bytes = (
-        filler.fill_xlsx(template_bytes, [])
+        filler.fill_xlsx(template_bytes, reqs)
         if is_xlsx
-        else filler.fill_docx(template_bytes, [])
+        else filler.fill_docx(template_bytes, reqs)
     )
 
     out_storage = get_storage()
     ext = "xlsx" if is_xlsx else "docx"
+    out_filename = f"filled_{material.filename}"
     out_path = await out_storage.save(
-        filled_bytes, f"filled_{material.filename}", folder=f"{body.initiative_id}/templates",
+        filled_bytes, out_filename, folder=f"{body.initiative_id}/templates",
     )
 
+    # Create a new material record for the filled output
+    filled_material = ProjectMaterial(
+        initiative_id=init_uuid,
+        filename=out_filename,
+        file_type=f"template_{ext}",
+        storage_path=out_path,
+        file_size=len(filled_bytes),
+    )
+    db.add(filled_material)
+    await db.commit()
+    await db.refresh(filled_material)
+
     return {
-        "template_id": body.template_id,
+        "template_id": str(filled_material.id),
         "output_path": out_path,
         "file_type": ext,
-        "filename": f"filled_{material.filename}",
+        "filename": out_filename,
+        "requirements": reqs,
     }
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid as _uuid_module
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -162,12 +163,12 @@ class TemplateAnalysisService:
                     "completed. For spreadsheet formulas, mark them as calculated "
                     "(is_calculated=true) — they are outputs, not inputs. Focus on "
                     "real requirements, not formatting or boilerplate. Be thorough "
-                    "but avoid duplicates."
+                    "but avoid duplicates. Respond with a JSON object."
                 ),
             },
             {
                 "role": "user",
-                "content": f"Analyze this template and extract all requirements:\n\n{struct_summary}",
+                "content": f"Analyze this template and extract all requirements. Return a JSON object with a 'requirements' array:\n\n{struct_summary}",
             },
         ]
 
@@ -185,16 +186,24 @@ class TemplateAnalysisService:
             logger.error("Failed to parse LLM extraction output")
             return self._requirements_from_structure(structure)
 
+        # The LLM may nest the array under a different top-level key; try common ones
+        raw_items = data.get("requirements") or data.get("items") or data.get("fields") or []
+        # If the JSON root IS a list (shouldn't happen with json_object but guard anyway)
+        if isinstance(data, list):
+            raw_items = data
+
         reqs: list[TemplateRequirement] = []
-        for item in data.get("requirements", []):
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
             reqs.append(TemplateRequirement(
-                id=item.get("id", ""),
+                id=item.get("id", "") or str(_uuid_module.uuid4())[:8],
                 label=item.get("label", ""),
                 description=item.get("description", ""),
                 category=item.get("category", ""),
                 field_type=item.get("field_type", "text"),
-                is_calculated=item.get("is_calculated", False),
-                is_mandatory=item.get("is_mandatory", True),
+                is_calculated=bool(item.get("is_calculated", False)),
+                is_mandatory=bool(item.get("is_mandatory", True)),
                 source_location=item.get("source_location", ""),
             ))
 
@@ -314,14 +323,15 @@ class TemplateAnalysisService:
                     "For each requirement you can answer, provide the extracted value, "
                     "a confidence score (0-1), and a direct quote from the source. "
                     "Only include requirements you found answers for — omit any you "
-                    "cannot answer."
+                    "cannot answer. Respond with a JSON object."
                 ),
             },
             {
                 "role": "user",
                 "content": (
                     f"Requirements:\n{req_list}\n\n"
-                    f"Available project information:\n{context_text[:12000]}"
+                    f"Available project information:\n{context_text[:12000]}\n\n"
+                    "Return a JSON object with a 'matches' array."
                 ),
             },
         ]
@@ -339,15 +349,21 @@ class TemplateAnalysisService:
         except json.JSONDecodeError:
             data = {"matches": []}
 
+        raw_matches = data.get("matches") or data.get("results") or data.get("requirements") or []
+        if isinstance(data, list):
+            raw_matches = data
+        # Filter to only dict items
+        raw_matches = [m for m in raw_matches if isinstance(m, dict)]
+
         matches_by_id: dict[str, dict] = {}
-        for m in data.get("matches", []):
+        for m in raw_matches:
             rid = m.get("requirement_id", "")
             if rid:
                 matches_by_id[rid] = m
 
         chunk_map: dict[str, RetrievedChunk] = {}
         for c in chunks:
-            for m in data.get("matches", []):
+            for m in raw_matches:
                 quote = m.get("quote", "")
                 if quote and quote[:40] in c.content:
                     chunk_map[m.get("requirement_id", "")] = c

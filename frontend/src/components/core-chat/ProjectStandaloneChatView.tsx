@@ -12,6 +12,7 @@ import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
 
 const DOCUMENT_TOOL_IDS = ['investment_memo', 'due_diligence_checklist'];
+const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
@@ -92,7 +93,6 @@ export function ProjectStandaloneChatView({
 
   // Persist document flow conversation as a core_chat session once
   // deliverable messages appear (so it shows in chat history)
-  const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
   useEffect(() => {
     if (!documentFlowRef.current || documentFlowPersistedRef.current) return;
     const hasDeliverable = localMessages.some(
@@ -521,24 +521,23 @@ export function ProjectStandaloneChatView({
 
   const isOnLanding = showLanding || localMessages.length === 0;
 
-  if (showTemplateInterstitial) {
-    return (
-      <TemplateUploadInterstitial
-        onUpload={handleTemplateUpload}
-        onCancel={() => setShowTemplateInterstitial(false)}
-        uploading={templateUploading}
-      />
-    );
-  }
-
   if (isOnLanding) {
     return (
-      <LandingInput
-        onSend={handleSend}
-        sessions={sessions}
-        onLoadSession={handleLoadSession}
-        onDeleteSession={handleDeleteSession}
-      />
+      <>
+        <LandingInput
+          onSend={handleSend}
+          sessions={sessions}
+          onLoadSession={handleLoadSession}
+          onDeleteSession={handleDeleteSession}
+        />
+        {showTemplateInterstitial && (
+          <TemplateUploadInterstitial
+            onUpload={handleTemplateUpload}
+            onCancel={() => setShowTemplateInterstitial(false)}
+            uploading={templateUploading}
+          />
+        )}
+      </>
     );
   }
 
