@@ -12,6 +12,7 @@ import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
+import { useAuth } from '@/lib/auth';
 
 const MIN_CHAT_WIDTH_PERCENT = 20;
 const MAX_CHAT_WIDTH_PERCENT = 40;
@@ -28,6 +29,12 @@ function InitiativePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initiativeId = params.id as string;
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    router.push('/');
+  }, [signOut, router]);
   const containerRef = useRef<HTMLDivElement>(null);
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
 
@@ -286,6 +293,8 @@ function InitiativePageContent() {
           variant="project"
           activeItem={activeView}
           onItemSelect={handleNavChange}
+          onSignOut={handleSignOut}
+          userEmail={user?.email}
           materials={projectMaterials}
           onUploadMaterial={(file) => uploadMaterial(initiativeId, file)}
           onDeleteMaterial={deleteMaterial}

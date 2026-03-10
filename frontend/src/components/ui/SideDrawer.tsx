@@ -131,7 +131,7 @@ export function SideDrawer({
 
   return (
     <aside
-      className="group w-12 hover:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
+      className="group w-12 hover:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out pb-2"
       style={drawerStyle}
     >
       <nav className="flex-1 pt-1">
@@ -206,6 +206,9 @@ export function SideDrawer({
               </div>
             )}
 
+            {/* Upload header */}
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
+
             {/* Drop zone */}
             <div
               onDragEnter={handleDragEnter}
@@ -235,18 +238,16 @@ export function SideDrawer({
         </div>
       )}
       {onSignOut && (
-        <div className="pb-1">
-          <button
-            onClick={onSignOut}
-            className="nav-row w-full"
-            title={userEmail || 'Log out'}
-          >
-            <LogOut className="w-4 h-4 flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 group-hover:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-              Log out
-            </span>
-          </button>
-        </div>
+        <button
+          onClick={onSignOut}
+          className="nav-row w-full"
+          title={userEmail || 'Log out'}
+        >
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span className="opacity-0 group-hover:opacity-100 group-hover:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+            Log out
+          </span>
+        </button>
       )}
     </aside>
   );
