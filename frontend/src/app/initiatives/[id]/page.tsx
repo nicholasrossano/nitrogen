@@ -59,6 +59,7 @@ function InitiativePageContent() {
     initiative, 
     messages,
     projectPlan,
+    projectMaterials,
     loading, 
     sending,
     generating,
@@ -66,9 +67,12 @@ function InitiativePageContent() {
     loadInitiative, 
     loadChatHistory,
     loadEvidence,
+    loadMaterials,
     loadProjectPlan,
     sendMessage,
     updateTitle,
+    uploadMaterial,
+    deleteMaterial,
   } = useInitiativeStore();
 
   const editorWidgets: EditorWidget[] = useMemo(
@@ -99,9 +103,10 @@ function InitiativePageContent() {
       loadInitiative(initiativeId);
       loadChatHistory(initiativeId);
       loadEvidence(initiativeId);
+      loadMaterials(initiativeId);
       loadProjectPlan(initiativeId);
     }
-  }, [initiativeId, loadInitiative, loadChatHistory, loadEvidence, loadProjectPlan]);
+  }, [initiativeId, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan]);
 
   const prevPlanRef = useRef<boolean>(false);
   useEffect(() => {
@@ -226,6 +231,7 @@ function InitiativePageContent() {
     if (item === 'chat') {
       setActiveView('chat');
       setShowChatLanding(true);
+      setShowEditorInChatView(false);
       router.replace(`/initiatives/${initiativeId}?view=chat`);
       return;
     }
@@ -280,6 +286,9 @@ function InitiativePageContent() {
           variant="project"
           activeItem={activeView}
           onItemSelect={handleNavChange}
+          materials={projectMaterials}
+          onUploadMaterial={(file) => uploadMaterial(initiativeId, file)}
+          onDeleteMaterial={deleteMaterial}
         />
 
         <div className="flex-1 p-2 pt-0 pl-1 min-h-0">

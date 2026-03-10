@@ -7,6 +7,7 @@ from app.models.core_chat import CoreChatSession, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
 from app.models.gs_template import GSTemplateVersion
 from app.models.gs_workspace import GSCertificationWorkspace
+from app.models.project_material import ProjectMaterial
 
 __all__ = [
     "Initiative",
@@ -22,4 +23,5 @@ __all__ = [
     "ProvenanceTrace",
     "GSTemplateVersion",
     "GSCertificationWorkspace",
+    "ProjectMaterial",
 ]

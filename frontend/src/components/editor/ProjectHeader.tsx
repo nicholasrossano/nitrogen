@@ -80,7 +80,7 @@ export function ProjectHeader({
 
   return (
     <header className="flex-shrink-0">
-      <div className="px-4 py-[7px] min-h-[42px] flex items-center relative">
+      <div className="px-4 h-[42px] flex items-center relative">
         {/* Left: back arrow */}
         {onBack && (
           <button

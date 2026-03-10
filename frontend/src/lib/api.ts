@@ -147,6 +147,14 @@ export interface EvidenceDoc {
   chunk_count: number;
 }
 
+export interface ProjectMaterial {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number | null;
+  created_at: string;
+}
+
 // Alignment types
 export interface AlignmentSection {
   id: string;
@@ -510,6 +518,44 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
+      throw new Error(error.detail);
+    }
+    return response.json();
+  },
+
+  // --- Project Materials ---
+
+  uploadMaterial: async (initiativeId: string, file: File): Promise<{ success: boolean; material: ProjectMaterial; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/initiatives/${initiativeId}/materials`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Upload failed');
+    }
+    return response.json();
+  },
+
+  getMaterials: (initiativeId: string) =>
+    fetchApi<ProjectMaterial[]>(`/api/v1/initiatives/${initiativeId}/materials`),
+
+  deleteMaterial: async (materialId: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/materials/${materialId}`, {
       method: 'DELETE',
       headers,
     });

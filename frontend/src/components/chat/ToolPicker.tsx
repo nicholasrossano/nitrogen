@@ -11,7 +11,7 @@ export interface ToolOption {
   icon: React.ReactNode;
 }
 
-const ALL_TOOLS: ToolOption[] = [
+export const ALL_TOOLS: ToolOption[] = [
   {
     id: 'lcoe_model',
     name: 'LCOE Model',
