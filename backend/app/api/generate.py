@@ -67,9 +67,18 @@ async def generate_memo(
         db.add(citation)
     await db.commit()
     
-    # Update initiative stage
+    # Update initiative stage and deliverables so Files page can see the memo
+    from sqlalchemy.orm.attributes import flag_modified
     initiative.stage = "complete"
-    initiative.touch()  # Update the initiative's updated_at timestamp
+    deliverables = dict(initiative.deliverables or {})
+    deliverables["investment_memo"] = {
+        "title": memo_content.title,
+        "output_type": "memo",
+        "content": memo_content.model_dump(mode="json"),
+    }
+    initiative.deliverables = deliverables
+    flag_modified(initiative, "deliverables")
+    initiative.touch()
     await db.commit()
     
     # Add memo viewer message

@@ -18,6 +18,7 @@ interface CarbonOutputWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  messageId?: string;
 }
 
 
@@ -49,6 +50,7 @@ export function CarbonOutputWidget({
   data: initialData,
   initiativeId,
   isActive = true,
+  messageId,
 }: CarbonOutputWidgetProps) {
   const [data, setData] = useState(initialData);
   const [activeTab, setActiveTab] = useState<'overview' | 'inputs' | 'sensitivity' | 'schedule'>('overview');
@@ -64,6 +66,12 @@ export function CarbonOutputWidget({
   const [overInteractive, setOverInteractive] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  const persistWidget = useCallback((widgetData: Record<string, any>) => {
+    if (messageId && initiativeId) {
+      api.updateMessageWidget(initiativeId, messageId, widgetData).catch(() => {});
+    }
+  }, [messageId, initiativeId]);
 
   const result = data?.result;
   const inputs = useMemo(() => data?.inputs || {}, [data]);
@@ -104,6 +112,7 @@ export function CarbonOutputWidget({
     try {
       const newData = await api.updateCarbonInput(inputs, editingField, parsed);
       setData(newData);
+      persistWidget(newData);
     } catch {
       // keep old values
     } finally {
@@ -111,7 +120,7 @@ export function CarbonOutputWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs]);
+  }, [editingField, editValue, inputs, persistWidget]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -150,6 +159,7 @@ export function CarbonOutputWidget({
     try {
       const newData = await api.updateCarbonInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
+      persistWidget(newData);
     } catch {
       setData(prev => ({
         ...prev,
@@ -161,7 +171,7 @@ export function CarbonOutputWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses]);
+  }, [inputs, preConfirmStatuses, persistWidget]);
 
   if (!result) return null;
 

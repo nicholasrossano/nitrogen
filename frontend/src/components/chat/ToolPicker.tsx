@@ -25,6 +25,12 @@ export const ALL_TOOLS: ToolOption[] = [
     icon: <Leaf className="w-3.5 h-3.5" />,
   },
   {
+    id: 'gs_certification',
+    name: 'Gold Standard Certification',
+    description: 'Gold Standard checklist',
+    icon: <Award className="w-3.5 h-3.5" />,
+  },
+  {
     id: 'investment_memo',
     name: 'Investment Memo',
     description: 'Generate investment recommendation',
@@ -35,12 +41,6 @@ export const ALL_TOOLS: ToolOption[] = [
     name: 'Due Diligence',
     description: 'Structured assessment checklist',
     icon: <CheckSquare className="w-3.5 h-3.5" />,
-  },
-  {
-    id: 'gs_certification',
-    name: 'Gold Standard Certification',
-    description: 'Gold Standard checklist',
-    icon: <Award className="w-3.5 h-3.5" />,
   },
 ];
 

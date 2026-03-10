@@ -103,16 +103,18 @@ function HomePageContent() {
   return (
     <div className="min-h-screen h-screen flex flex-col bg-background">
       {/* Header row — shell chrome */}
-      <header className="shrink-0 px-4 py-[7px] flex items-center justify-end gap-4">
-        <div className="flex items-center gap-3 flex-1 max-w-xl justify-end">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none shrink-0" />
+      <header className="shrink-0 h-10 px-4 flex items-center justify-end gap-3">
+        <div className="h-full flex items-center gap-3 flex-1 max-w-xl justify-end">
+          <div className="relative h-[30px] flex-1 min-w-0">
+            <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
+            </span>
             <input
               type="search"
               placeholder={isTrashView ? 'Search trash' : 'Search projects'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-[2.25rem] pr-4 py-1.5 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+              className="w-full h-[30px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
               aria-label={isTrashView ? 'Search trash' : 'Search projects'}
             />
           </div>
@@ -120,7 +122,7 @@ function HomePageContent() {
             <button
               onClick={handleNewProject}
               disabled={creating}
-              className="btn-primary shrink-0 !text-xs !px-4 !py-1.5"
+              className="btn-primary shrink-0 !h-[30px] !text-xs !leading-none !px-4 !py-0"
             >
               {creating ? (
                 <>
@@ -147,7 +149,7 @@ function HomePageContent() {
           onSignOut={handleSignOut}
           userEmail={user?.email}
         />
-        <div className="flex-1 p-2 pl-1 min-h-0">
+        <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
           <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-auto">
             <div className="px-6 py-4">
             {loading ? (

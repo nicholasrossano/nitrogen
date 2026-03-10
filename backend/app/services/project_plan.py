@@ -419,15 +419,30 @@ of the sources that support that item. Required items MUST cite at least one sou
         tool_call = response.choices[0].message.tool_calls[0]
         plan_data = json.loads(tool_call.function.arguments)
 
-        if not approved_categories:
-            PILLAR_NAMES = {
+        if approved_categories:
+            # Carry the LLM-chosen icon from the confirmed categories onto each pillar
+            icon_map = {c["id"]: c.get("icon", "") for c in approved_categories}
+            for pillar in plan_data.get("pillars", []):
+                icon = icon_map.get(pillar.get("id", ""))
+                if icon:
+                    pillar["icon"] = icon
+        else:
+            DEFAULT_PILLAR_NAMES = {
                 "authorization": "Authorization",
                 "capital": "Capital",
                 "design": "Design",
             }
+            DEFAULT_PILLAR_ICONS = {
+                "authorization": "Shield",
+                "capital": "Banknote",
+                "design": "Compass",
+            }
             for pillar in plan_data.get("pillars", []):
-                if pillar.get("id") in PILLAR_NAMES:
-                    pillar["name"] = PILLAR_NAMES[pillar["id"]]
+                pid = pillar.get("id", "")
+                if pid in DEFAULT_PILLAR_NAMES:
+                    pillar["name"] = DEFAULT_PILLAR_NAMES[pid]
+                if pid in DEFAULT_PILLAR_ICONS:
+                    pillar["icon"] = DEFAULT_PILLAR_ICONS[pid]
 
         # Attach provenance to each plan item
         self._attach_item_provenance(plan_data, web_result.sources)

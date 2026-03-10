@@ -80,7 +80,7 @@ export function ProjectHeader({
 
   return (
     <header className="flex-shrink-0">
-      <div className="px-4 h-[42px] flex items-center relative">
+      <div className="px-4 h-10 flex items-center relative">
         {/* Left: back arrow */}
         {onBack && (
           <button
@@ -88,7 +88,7 @@ export function ProjectHeader({
             title="Back"
             className="icon-btn p-1.5 text-text-tertiary"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5" />
           </button>
         )}
 
@@ -104,7 +104,7 @@ export function ProjectHeader({
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={handleKeyDown}
                   style={{ width: `${Math.max(title.length + 2, 12)}ch` }}
-                  className="min-w-0 px-0 py-0.5 text-sm font-normal text-text-primary bg-transparent border-0 border-b border-accent rounded-none focus:outline-none focus:ring-0 text-center"
+                  className="min-w-0 px-0 py-0.5 text-[13px] font-normal text-text-primary bg-transparent border-0 border-b border-accent rounded-none focus:outline-none focus:ring-0 text-center"
                   disabled={saving}
                 />
                 <button
@@ -124,14 +124,14 @@ export function ProjectHeader({
               </div>
             ) : (
               <div className="flex items-center gap-1.5 group">
-                <h1 className="text-sm font-medium text-text-primary truncate">
+                <h1 className="text-[13px] font-medium text-text-primary truncate">
                   {title}
                 </h1>
                 <button
                   onClick={() => setIsEditing(true)}
                   className="icon-btn p-1 opacity-0 group-hover:opacity-100 text-text-tertiary"
                 >
-                  <Pencil className="w-3.5 h-3.5" />
+                  <Pencil className="w-3 h-3" />
                 </button>
               </div>
             )}
@@ -146,9 +146,9 @@ export function ProjectHeader({
                 onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
                 disabled={leftToggle.disabled}
                 title={leftToggle.title}
-                className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelLeft className="w-4 h-4" />
+                <PanelLeft className="w-3.5 h-3.5" />
               </button>
             )}
             {rightToggle && (
@@ -156,18 +156,18 @@ export function ProjectHeader({
                 onClick={rightToggle.disabled ? undefined : rightToggle.onClick}
                 disabled={rightToggle.disabled}
                 title={rightToggle.title}
-                className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelRight className="w-4 h-4" />
+                <PanelRight className="w-3.5 h-3.5" />
               </button>
             )}
             {onNewChat && (
               <button
                 onClick={onNewChat}
                 title="New chat"
-                className="icon-btn p-1.5 text-text-tertiary"
+                className="icon-btn p-1 text-text-tertiary"
               >
-                <SquarePen className="w-4 h-4" />
+                <SquarePen className="w-3.5 h-3.5" />
               </button>
             )}
           </div>

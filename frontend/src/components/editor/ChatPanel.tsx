@@ -620,7 +620,7 @@ function ChatMessageItem({
             <span>Thinking...</span>
           </div>
         ) : (
-          <div ref={isUser ? bubbleRef : undefined} className={`rounded-lg px-3 py-2 text-sm ${isUser ? 'bg-zinc-700 text-white' : 'bg-white text-text-primary'}`}>
+          <div ref={isUser ? bubbleRef : undefined} className={`rounded-lg px-3 text-sm ${isUser ? 'py-2 bg-zinc-700 text-white' : 'pt-2 pb-1 bg-white text-text-primary'}`}>
             {isUser ? (
               <p className="whitespace-pre-wrap">{message.content}</p>
             ) : (
@@ -642,7 +642,7 @@ function ChatMessageItem({
         )}
 
         {shouldShowWidget && !isDocumentRequest && (
-          <div className={`mt-3 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
+          <div className={`mt-3 mb-1 w-full ${animate ? (isUser ? 'message-widget-enter' : 'message-widget-enter-bot') : ''}`}>
             <ChatWidget
               type={message.widget_type!}
               data={message.widget_data!}
