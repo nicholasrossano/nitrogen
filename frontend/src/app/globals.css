@@ -7,13 +7,13 @@
 :root {
   /* Nitrogen Design Tokens — warm workbench palette */
   /* Shell & Surfaces */
-  --color-shell: #FAF8F5;
-  --color-shell-bar: #FDFCFA;
-  --color-shell-subtle: #F0EDE8;
-  --color-background: #FAF8F5;
-  --color-background-tinted: #F0EDE8;
+  --color-shell: #FBF9F7;
+  --color-shell-bar: #FDFCFB;
+  --color-shell-subtle: #F2F0EB;
+  --color-background: #FBF9F7;
+  --color-background-tinted: #F2F0EB;
   --color-surface: #FFFFFF;
-  --color-surface-subtle: #F7F5F2;
+  --color-surface-subtle: #F8F7F4;
   
   /* Text */
   --color-text-primary: #1C1C1E;
