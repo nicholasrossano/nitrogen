@@ -170,20 +170,42 @@ export function ConversationView({
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
         <div className="max-w-[52rem] mx-auto">
         <div className="w-[95%] mx-auto space-y-8">
-          {messages.map((msg, idx) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              animate={idx >= messages.length - 2}
-              isLatest={idx === messages.length - 1}
-              initiativeId={initiativeId}
-              feedback={messageFeedback[msg.id] ?? null}
-              onFeedback={(f) => onSetFeedback(msg.id, f)}
-              onEdit={(newContent) => onEditMessage(msg.id, newContent)}
-              onRetry={() => onRetryMessage(msg.id)}
-              retrying={retryingMessageId === msg.id}
-            />
-          ))}
+          {messages.map((msg, idx) => {
+            // Compute consecutive-assistant-run info
+            const isAssistant = msg.role !== 'user';
+            const nextIsAssistant = idx < messages.length - 1 && messages[idx + 1].role !== 'user';
+            // Only show toolbar on the last message of a consecutive assistant run
+            const showToolbar = !isAssistant || !nextIsAssistant;
+
+            // For grouped toolbar actions, find the start of this assistant run
+            let groupContent: string | undefined;
+            let groupRetryId = msg.id;
+            if (isAssistant) {
+              let start = idx;
+              while (start > 0 && messages[start - 1].role !== 'user') start--;
+              if (start < idx) {
+                groupContent = messages.slice(start, idx + 1).map(m => m.content).join('\n\n');
+                groupRetryId = messages[start].id;
+              }
+            }
+
+            return (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                animate={idx >= messages.length - 2}
+                isLatest={idx === messages.length - 1}
+                initiativeId={initiativeId}
+                feedback={messageFeedback[msg.id] ?? null}
+                onFeedback={(f) => onSetFeedback(msg.id, f)}
+                onEdit={(newContent) => onEditMessage(msg.id, newContent)}
+                onRetry={() => onRetryMessage(groupRetryId)}
+                retrying={retryingMessageId === msg.id}
+                showToolbar={showToolbar}
+                groupContent={groupContent}
+              />
+            );
+          })}
 
           {/* Active response: thinking log + streaming content, both inline */}
           {sending && (
@@ -526,6 +548,8 @@ function MessageBubble({
   onEdit,
   onRetry,
   retrying,
+  showToolbar = true,
+  groupContent,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -536,6 +560,8 @@ function MessageBubble({
   onEdit: (newContent: string) => void;
   onRetry: () => void;
   retrying: boolean;
+  showToolbar?: boolean;
+  groupContent?: string;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -584,13 +610,13 @@ function MessageBubble({
       <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
 
         {/* Floating toolbar */}
-        {!isEditing && (
+        {!isEditing && showToolbar && (
           <div className={`absolute z-10 flex items-center transition-opacity ${isUser ? 'right-0 -bottom-5 opacity-0 group-hover:opacity-100' : 'left-0 -bottom-5'}`}>
             {isUser ? (
               <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
             ) : (
               <AssistantMessageToolbar
-                content={message.content}
+                content={groupContent ?? message.content}
                 feedback={feedback}
                 onFeedback={onFeedback}
                 onRetry={onRetry}

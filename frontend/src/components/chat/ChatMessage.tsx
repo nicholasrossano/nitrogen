@@ -43,6 +43,9 @@ interface ChatMessageProps {
   className?: string;
   hasOutputWidget?: boolean;
   variantEntry?: { versions: ChatMessageType[]; currentIndex: number } | null;
+  showToolbar?: boolean;
+  groupContent?: string;
+  groupFirstId?: string;
 }
 
 function StreamingText({ content }: { content: string }) {
@@ -84,6 +87,9 @@ export function ChatMessage({
   className = '',
   hasOutputWidget = false,
   variantEntry = null,
+  showToolbar = true,
+  groupContent,
+  groupFirstId,
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -125,8 +131,8 @@ export function ChatMessage({
   }, [message.content]);
 
   const handleRetry = useCallback(() => {
-    retryMessage(initiativeId, message.id);
-  }, [initiativeId, message.id, retryMessage]);
+    retryMessage(initiativeId, groupFirstId ?? message.id);
+  }, [initiativeId, message.id, groupFirstId, retryMessage]);
 
   const handleFeedback = useCallback((f: 'like' | 'dislike' | null) => {
     setMessageFeedback(message.id, f);
@@ -275,7 +281,7 @@ export function ChatMessage({
         )}
 
         {/* Toolbar — shown below all content with consistent spacing */}
-        {!isStreaming && !isEditing && (
+        {!isStreaming && !isEditing && showToolbar && (
           <div className={`mt-2 flex items-center relative ${isUser ? 'self-end' : 'self-start'}`}>
             {isUser ? (
               <UserMessageToolbar
@@ -284,7 +290,7 @@ export function ChatMessage({
               />
             ) : (
               <AssistantMessageToolbar
-                content={message.content}
+                content={groupContent ?? message.content}
                 feedback={feedback}
                 onFeedback={handleFeedback}
                 onRetry={handleRetry}

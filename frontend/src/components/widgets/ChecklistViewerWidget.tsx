@@ -40,7 +40,7 @@ function RiskBadge({ level }: { level: 'low' | 'medium' | 'high' }) {
   };
   
   return (
-    <span className={`text-sm px-2 py-0.5 rounded-sm font-medium ${colors[level]}`}>
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none ${colors[level]}`}>
       {level}
     </span>
   );
@@ -76,7 +76,7 @@ function CategorySection({
       
       {isOpen && (
         <div className="p-4 space-y-3 bg-white">
-          {category.items.map((item, idx) => (
+          {(category.items ?? []).map((item, idx) => (
             <div key={idx} className="flex gap-3">
               <Circle className="w-4 h-4 text-divider mt-1 flex-shrink-0" />
               <div className="flex-1">
@@ -254,7 +254,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
             <section>
               <h2 className="text-sm font-semibold text-text-primary mb-3">Checklist Categories</h2>
               <div className="space-y-3">
-                {content.categories.map((category, idx) => (
+                {content.categories.filter((c) => c && c.name).map((category, idx) => (
                   <CategorySection 
                     key={idx} 
                     category={category} 
