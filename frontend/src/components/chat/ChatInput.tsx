@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ArrowUp, X, Paperclip } from 'lucide-react';
 
@@ -21,6 +22,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
+  const [draftEditing, setDraftEditing] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +36,7 @@ export function ChatInput({
       if (text) {
         setInput(text);
         setDraftTag(label);
+        setDraftEditing(false);
         setTimeout(() => textareaRef.current?.focus(), 0);
       }
     };
@@ -47,7 +50,7 @@ export function ChatInput({
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
     }
-  }, [input]);
+  }, [input, draftEditing]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +59,7 @@ export function ChatInput({
     const message = input.trim();
     setInput('');
     setDraftTag(null);
+    setDraftEditing(false);
     setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
     
@@ -134,17 +138,31 @@ export function ChatInput({
           </div>
         )}
 
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={1}
-          className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        />
+        {draftTag && input && !draftEditing ? (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setDraftEditing(true)}
+            className="w-full px-4 pt-3 pb-1 text-sm text-text-primary cursor-text prose-draft"
+          >
+            <ReactMarkdown>{input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}</ReactMarkdown>
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}
+            onChange={(e) => {
+              const ctx = input.match(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/)?.[0] || '';
+              setInput(ctx ? e.target.value + ctx : e.target.value);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          />
+        )}
 
         {/* Bottom row: attach + send */}
         <div className="flex items-center justify-end gap-1.5 px-3 pb-2.5">
