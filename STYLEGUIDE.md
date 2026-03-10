@@ -666,6 +666,42 @@ Defined as a global CSS class — do not replicate inline.
 - Active: `scale(0.98)`, shadow collapses (100ms)
 - Disabled: `opacity-50 cursor-not-allowed`
 
+### Widget Footer Action Bar
+
+Widget cards (alignment, plan structure, etc.) use a compact footer to confirm or trigger generation. The footer is always a horizontal flex row with a hint label on the left and a compact `btn-primary` on the right — never a full-width button.
+
+```tsx
+<div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
+  <p className="text-[10px] text-text-tertiary">
+    Hint text here &middot; Secondary hint
+  </p>
+  <button
+    onClick={handleConfirm}
+    disabled={isLoading}
+    className="btn-primary !text-xs !px-4 !py-1.5"
+  >
+    {isLoading ? (
+      <>
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        Loading...
+      </>
+    ) : (
+      <>
+        <Check className="w-3.5 h-3.5" />
+        Confirm &amp; Generate
+      </>
+    )}
+  </button>
+</div>
+```
+
+**Rules**
+- Footer padding: `px-5 py-3` — never `py-4`
+- Button override: `!text-xs !px-4 !py-1.5` — reduces the base `btn-primary` size for widget context
+- Icon size inside compact button: `w-3.5 h-3.5`
+- Hint text: `text-[10px] text-text-tertiary`, `&middot;` as separator between hints
+- Never use `w-full` on a widget footer action button — the right-aligned compact form is canonical
+
 ---
 
 ## M) Accessibility (Visual)
