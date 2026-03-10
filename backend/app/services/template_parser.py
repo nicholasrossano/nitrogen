@@ -170,6 +170,7 @@ class TemplateParserService:
 
     def parse_xlsx_template(self, content: bytes) -> TemplateStructure:
         from openpyxl import load_workbook
+        from openpyxl.cell.cell import Cell, MergedCell
 
         wb = load_workbook(io.BytesIO(content), data_only=False)
         sections: list[TemplateSection] = []
@@ -184,6 +185,8 @@ class TemplateParserService:
 
             for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=ws.max_row), start=1):
                 for cell in row:
+                    if isinstance(cell, MergedCell):
+                        continue
                     if cell.value is not None and isinstance(cell.value, str):
                         val = cell.value.strip()
                         if val:
@@ -195,6 +198,9 @@ class TemplateParserService:
 
             for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=ws.max_row), start=1):
                 for cell in row:
+                    if isinstance(cell, MergedCell):
+                        continue
+
                     col_letter = cell.column_letter
                     loc = f"{sheet_name}!{col_letter}{row_idx}"
 

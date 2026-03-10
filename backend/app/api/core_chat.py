@@ -271,7 +271,6 @@ async def compliance_chat_stream(
                 template_id_str = _tool_hint.split(":", 1)[1]
                 from app.tools.template_tool import TemplateFillTool
                 from app.services.core_chat import ComplianceChatResponse
-                from app.services.tiered_retrieval import SourceType
 
                 tmpl_tool = TemplateFillTool()
                 init_uuid = uuid.UUID(data.initiative_id)
