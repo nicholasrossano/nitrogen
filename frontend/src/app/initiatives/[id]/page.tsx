@@ -389,13 +389,15 @@ function InitiativePageContent() {
                     className="flex-shrink-0 relative overflow-hidden"
                     style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
                   >
-                    <ProjectStandaloneChatView
-                      initiativeId={initiativeId}
-                      showLanding={showChatLanding}
-                      onMessageSent={() => setShowChatLanding(false)}
-                      onBack={() => setShowChatLanding(true)}
-                      onEditorWidgetsChange={handleChatEditorWidgetsChange}
-                    />
+                    <div className="absolute inset-0 overflow-hidden">
+                      <ProjectStandaloneChatView
+                        initiativeId={initiativeId}
+                        showLanding={showChatLanding}
+                        onMessageSent={() => setShowChatLanding(false)}
+                        onBack={() => setShowChatLanding(true)}
+                        onEditorWidgetsChange={handleChatEditorWidgetsChange}
+                      />
+                    </div>
                     {showEditorInChatView && (
                       <div
                         onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
