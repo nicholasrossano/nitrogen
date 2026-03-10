@@ -65,6 +65,10 @@ export function ProjectFilesView({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('uploaded');
+  const [uploadedPage, setUploadedPage] = useState(1);
+  const [generatedPage, setGeneratedPage] = useState(1);
+
+  const PAGE_SIZE = 10;
 
   const loadFiles = useCallback(async () => {
     try {
@@ -129,6 +133,11 @@ export function ProjectFilesView({
   const hasUploaded = materials.length > 0;
   const hasGenerated = generatedFiles.length > 0;
 
+  const uploadedTotalPages = Math.max(1, Math.ceil(materials.length / PAGE_SIZE));
+  const generatedTotalPages = Math.max(1, Math.ceil(generatedFiles.length / PAGE_SIZE));
+  const pagedMaterials = materials.slice((uploadedPage - 1) * PAGE_SIZE, uploadedPage * PAGE_SIZE);
+  const pagedGenerated = generatedFiles.slice((generatedPage - 1) * PAGE_SIZE, generatedPage * PAGE_SIZE);
+
   const thClass = 'text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5';
 
   return (
@@ -176,6 +185,7 @@ export function ProjectFilesView({
               )}
             </div>
             {hasUploaded ? (
+            <>
             <div className="border border-divider rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -188,7 +198,7 @@ export function ProjectFilesView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-divider">
-                  {materials.map((mat) => (
+                  {pagedMaterials.map((mat) => (
                     <tr key={mat.id}>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
@@ -241,6 +251,31 @@ export function ProjectFilesView({
                 </tbody>
               </table>
             </div>
+            {uploadedTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-text-tertiary">
+                  {(uploadedPage - 1) * PAGE_SIZE + 1}–{Math.min(uploadedPage * PAGE_SIZE, materials.length)} of {materials.length}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setUploadedPage((p) => Math.max(1, p - 1))}
+                    disabled={uploadedPage === 1}
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-text-tertiary px-1">{uploadedPage} / {uploadedTotalPages}</span>
+                  <button
+                    onClick={() => setUploadedPage((p) => Math.min(uploadedTotalPages, p + 1))}
+                    disabled={uploadedPage === uploadedTotalPages}
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <FolderOpen className="w-10 h-10 text-text-tertiary/50 mb-3" />
@@ -263,6 +298,7 @@ export function ProjectFilesView({
               )}
             </div>
             {hasGenerated ? (
+            <>
             <div className="border border-divider rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -275,7 +311,7 @@ export function ProjectFilesView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-divider">
-                  {generatedFiles.map((file) => (
+                  {pagedGenerated.map((file) => (
                     <tr key={file.id}>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
@@ -333,6 +369,31 @@ export function ProjectFilesView({
                 </tbody>
               </table>
             </div>
+            {generatedTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-text-tertiary">
+                  {(generatedPage - 1) * PAGE_SIZE + 1}–{Math.min(generatedPage * PAGE_SIZE, generatedFiles.length)} of {generatedFiles.length}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setGeneratedPage((p) => Math.max(1, p - 1))}
+                    disabled={generatedPage === 1}
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-text-tertiary px-1">{generatedPage} / {generatedTotalPages}</span>
+                  <button
+                    onClick={() => setGeneratedPage((p) => Math.min(generatedTotalPages, p + 1))}
+                    disabled={generatedPage === generatedTotalPages}
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Zap className="w-10 h-10 text-text-tertiary/50 mb-3" />
