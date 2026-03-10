@@ -246,7 +246,7 @@ export function ConversationView({
       </div>
 
       {/* Composer */}
-      <div className="relative">
+      <div className="flex-shrink-0 relative">
         <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
         <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
         <form onSubmit={handleSubmit} className="relative">
@@ -291,45 +291,44 @@ export function ConversationView({
               </div>
             )}
 
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything"
-                disabled={sending}
-                rows={1}
-                className="w-full resize-none bg-transparent px-5 py-3 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask anything"
+              disabled={sending}
+              rows={1}
+              className="w-full resize-none bg-transparent px-5 pt-3 pb-1 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
+            />
+
+            {/* Bottom row: attach + send */}
+            <div className="flex items-center justify-end gap-1.5 px-4 pb-2.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+                aria-label="Attach files"
               />
-              {/* Bottom-right: attach + send */}
-              <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileChange}
-                  aria-label="Attach files"
-                />
-                <button
-                  type="button"
-                  disabled={sending}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                  aria-label="Attach files"
-                >
-                  <Paperclip className="w-[13px] h-[13px]" />
-                </button>
-                <button
-                  type="submit"
-                  disabled={sending || !input.trim()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
-                >
-                  <ArrowUp className="w-[11px] h-[11px] text-white" />
-                </button>
-              </div>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                aria-label="Attach files"
+              >
+                <Paperclip className="w-[13px] h-[13px]" />
+              </button>
+              <button
+                type="submit"
+                disabled={sending || !input.trim()}
+                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+              >
+                <ArrowUp className="w-[11px] h-[11px] text-white" />
+              </button>
             </div>
           </div>
         </form>
