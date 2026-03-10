@@ -30,7 +30,7 @@ function InitiativePageContent() {
   const containerRef = useRef<HTMLDivElement>(null);
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
 
-  const [activeView, setActiveView] = useState<ProjectView>('chat');
+  const [activeView, setActiveView] = useState<ProjectView>('plan');
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
@@ -231,7 +231,7 @@ function InitiativePageContent() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white overflow-hidden">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* ProjectHeader — full width, only when initiative is loaded */}
       {initiative && (
         <ProjectHeader
@@ -250,7 +250,7 @@ function InitiativePageContent() {
               title: showInspector ? 'Hide inspector' : 'Show inspector',
             } : undefined,
           } : {
-            onNewChat: handleNewChat,
+            onNewChat: !showChatLanding ? handleNewChat : undefined,
             onBack: !showChatLanding ? () => { setShowChatLanding(true); setShowEditorInChatView(false); } : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
@@ -264,7 +264,7 @@ function InitiativePageContent() {
         />
       )}
 
-      {/* Content row: sidebar + main */}
+      {/* Content row: sidebar + inset workspace */}
       <div className="flex flex-1 min-h-0">
         <SideDrawer
           variant="project"
@@ -272,127 +272,131 @@ function InitiativePageContent() {
           onItemSelect={handleNavChange}
         />
 
-        {loading && !initiative ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-6 h-6 animate-spin text-accent" />
-              <span className="text-sm text-text-secondary">Loading project...</span>
-            </div>
-          </div>
-        ) : !initiative ? (
-          error ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4">
-              <div className="card p-8 text-center max-w-md">
-                <p className="text-indicator-orange mb-4">{error}</p>
-                <Link href="/" className="btn-secondary inline-flex">
-                  <ArrowLeft className="w-4 h-4" />
-                  Back to projects
-                </Link>
-              </div>
-            </div>
-          ) : <div className="flex-1" />
-        ) : activeView === 'chat' ? (
-          <main ref={standaloneContainerRef} className="flex-1 min-w-0 flex overflow-hidden relative">
-            <div
-              className="flex-shrink-0 relative overflow-hidden"
-              style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
-            >
-              <ProjectStandaloneChatView
-                initiativeId={initiativeId}
-                showLanding={showChatLanding}
-                onMessageSent={() => setShowChatLanding(false)}
-                onBack={() => setShowChatLanding(true)}
-                onEditorWidgetsChange={handleChatEditorWidgetsChange}
-              />
-              {showEditorInChatView && (
-                <div
-                  onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
-                  className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
-                />
-              )}
-            </div>
-            {showEditorInChatView && chatEditorWidgets.length > 0 && (
-              <div className="flex-1 overflow-hidden">
-                <EditorSidePanel
-                  widgets={chatEditorWidgets}
-                  initiativeId={initiativeId}
-                />
-              </div>
-            )}
-          </main>
-        ) : (
-          <main ref={containerRef} className="flex-1 min-w-0 flex overflow-hidden relative">
-            {uploadError && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="bg-indicator-orange/10 border border-indicator-orange/30 rounded px-4 py-3 shadow-lg max-w-md">
-                  <p className="text-sm text-indicator-orange font-medium">{uploadError}</p>
+        <div className="flex-1 p-2 pl-1 min-h-0">
+          <div className="h-full bg-surface rounded-lg shadow-workspace overflow-hidden">
+            {loading && !initiative ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="w-6 h-6 animate-spin text-accent" />
+                  <span className="text-sm text-text-secondary">Loading project...</span>
                 </div>
               </div>
-            )}
-
-            {rightPanelOpen ? (
-              <>
+            ) : !initiative ? (
+              error ? (
+                <div className="h-full flex flex-col items-center justify-center gap-4">
+                  <div className="card p-8 text-center max-w-md">
+                    <p className="text-indicator-orange mb-4">{error}</p>
+                    <Link href="/" className="btn-secondary inline-flex">
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to projects
+                    </Link>
+                  </div>
+                </div>
+              ) : <div className="h-full" />
+            ) : activeView === 'chat' ? (
+              <main ref={standaloneContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
                 <div
                   className="flex-shrink-0 relative overflow-hidden"
-                  style={{
-                    width: showChatPanel ? `${chatWidthPercent}%` : 0,
-                    transition: isResizing ? 'none' : 'width 300ms ease-in-out',
-                  }}
+                  style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
                 >
-                  <div className="absolute inset-0">
+                  <ProjectStandaloneChatView
+                    initiativeId={initiativeId}
+                    showLanding={showChatLanding}
+                    onMessageSent={() => setShowChatLanding(false)}
+                    onBack={() => setShowChatLanding(true)}
+                    onEditorWidgetsChange={handleChatEditorWidgetsChange}
+                  />
+                  {showEditorInChatView && (
+                    <div
+                      onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
+                      className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
+                    />
+                  )}
+                </div>
+                {showEditorInChatView && chatEditorWidgets.length > 0 && (
+                  <div className="flex-1 overflow-hidden border-l border-divider">
+                    <EditorSidePanel
+                      widgets={chatEditorWidgets}
+                      initiativeId={initiativeId}
+                    />
+                  </div>
+                )}
+              </main>
+            ) : (
+              <main ref={containerRef} className="h-full min-w-0 flex overflow-hidden relative">
+                {uploadError && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="bg-indicator-orange/10 border border-indicator-orange/30 rounded px-4 py-3 shadow-lg max-w-md">
+                      <p className="text-sm text-indicator-orange font-medium">{uploadError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {rightPanelOpen ? (
+                  <>
+                    <div
+                      className="flex-shrink-0 relative overflow-hidden"
+                      style={{
+                        width: showChatPanel ? `${chatWidthPercent}%` : 0,
+                        transition: isResizing ? 'none' : 'width 300ms ease-in-out',
+                      }}
+                    >
+                      <div className="absolute inset-0">
+                        <ChatPanel
+                          messages={messages}
+                          sending={sending}
+                          generating={generating}
+                          initiativeId={initiativeId}
+                          onSendMessage={handleSendMessage}
+                          hasProjectPlan={hasProjectPlan}
+                        />
+                      </div>
+
+                      {showChatPanel && (
+                        <div
+                          onMouseDown={handleResizeStart}
+                          className={`
+                            absolute top-0 right-0 w-1 h-full cursor-col-resize
+                            hover:bg-accent/30 transition-colors
+                            ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
+                          `}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex-1 overflow-hidden">
+                      {showProjectPlan && (
+                        <ProjectPlanView
+                          initiativeId={initiativeId}
+                          showInspector={showInspector}
+                          onInspectorChange={handleInspectorChange}
+                        />
+                      )}
+                      {showEditor && (
+                        <EditorSidePanel
+                          widgets={editorWidgets}
+                          initiativeId={initiativeId}
+                        />
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 overflow-hidden h-full">
                     <ChatPanel
                       messages={messages}
                       sending={sending}
                       generating={generating}
                       initiativeId={initiativeId}
                       onSendMessage={handleSendMessage}
+                      fullWidth={true}
                       hasProjectPlan={hasProjectPlan}
                     />
                   </div>
-
-                  {showChatPanel && (
-                    <div
-                      onMouseDown={handleResizeStart}
-                      className={`
-                        absolute top-0 right-0 w-1 h-full cursor-col-resize
-                        hover:bg-accent/30 transition-colors
-                        ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
-                      `}
-                    />
-                  )}
-                </div>
-
-                <div className="flex-1 overflow-hidden">
-                  {showProjectPlan && (
-                    <ProjectPlanView
-                      initiativeId={initiativeId}
-                      showInspector={showInspector}
-                      onInspectorChange={handleInspectorChange}
-                    />
-                  )}
-                  {showEditor && (
-                    <EditorSidePanel
-                      widgets={editorWidgets}
-                      initiativeId={initiativeId}
-                    />
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 overflow-hidden h-full">
-                <ChatPanel
-                  messages={messages}
-                  sending={sending}
-                  generating={generating}
-                  initiativeId={initiativeId}
-                  onSendMessage={handleSendMessage}
-                  fullWidth={true}
-                  hasProjectPlan={hasProjectPlan}
-                />
-              </div>
+                )}
+              </main>
             )}
-          </main>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );

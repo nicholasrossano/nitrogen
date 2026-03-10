@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useChatTabsStore } from '@/stores/chatTabsStore';
 import { api } from '@/lib/api';
 import type { ChatMessage } from '@/lib/api';
 import { ConversationView } from './ConversationView';
@@ -45,39 +44,69 @@ export function ProjectStandaloneChatView({
   onBack,
   onEditorWidgetsChange,
 }: ProjectStandaloneChatViewProps) {
-  const { ensureGroup, saveToHistory, deleteClosedTab } =
-    useChatTabsStore();
-
-  ensureGroup(initiativeId);
-
-  const closedTabs = useChatTabsStore(
-    (s) => s.groups[initiativeId]?.closedTabs ?? [],
-  );
-
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [messageFeedback, setFeedbackMap] = useState<
     Record<string, 'like' | 'dislike' | null>
   >({});
+  const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
 
-  // When showLanding transitions to true, save current conversation to history
+  // Load session list from DB on mount
+  useEffect(() => {
+    api.getCoreChatSessions()
+      .then(({ sessions }) => {
+        setDbSessions(
+          sessions.map((s) => ({
+            id: s.id,
+            title: s.title || 'Untitled',
+            createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
+            messages: [],
+          })),
+        );
+      })
+      .catch((err) => console.warn('Failed to load chat sessions:', err));
+  }, []);
+
+  // When showLanding transitions to true, clear current conversation
+  // (it's already persisted to DB by the streaming endpoint)
   const prevShowLanding = useRef(showLanding);
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
-      const firstUser = localMessages.find((m) => m.role === 'user');
-      const title =
-        sessionTitle || firstUser?.content.slice(0, 80) || 'Chat';
-      saveToHistory(initiativeId, title, localMessages);
+      // Refresh sessions list so the just-finished conversation appears in history
+      api.getCoreChatSessions()
+        .then(({ sessions }) => {
+          setDbSessions(
+            sessions.map((s) => ({
+              id: s.id,
+              title: s.title || 'Untitled',
+              createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
+              messages: [],
+            })),
+          );
+        })
+        .catch(() => {});
       setLocalMessages([]);
       setSessionTitle(null);
+      setCurrentSessionId(null);
       setFeedbackMap({});
     }
     prevShowLanding.current = showLanding;
-  }, [showLanding, localMessages, sessionTitle, initiativeId, saveToHistory]);
+  }, [showLanding, localMessages]);
+
+  // Persist the AI-generated title to the DB session once both are available
+  const titlePersistedRef = useRef(false);
+  useEffect(() => {
+    if (sessionTitle && currentSessionId && !titlePersistedRef.current) {
+      titlePersistedRef.current = true;
+      api.updateChatSessionTitle(currentSessionId, sessionTitle).catch(() => {});
+    }
+    if (!currentSessionId) titlePersistedRef.current = false;
+  }, [sessionTitle, currentSessionId]);
 
   // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
@@ -98,20 +127,10 @@ export function ProjectStandaloneChatView({
     [localMessages],
   );
 
-  const sessions: ChatSession[] = useMemo(
-    () =>
-      closedTabs.map((tab) => ({
-        id: tab.id,
-        title: tab.title,
-        createdAt: tab.createdAt,
-        messages: tab.messages.map(toCoreMessage),
-      })),
-    [closedTabs],
-  );
+  const sessions = dbSessions;
 
   const sendViaStream = useCallback(
     async (content: string, currentMessages: ChatMessage[], toolHint?: string) => {
-      // Exclude the current user message (last item) from history — it's passed as `content`
       const history = currentMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
@@ -133,6 +152,21 @@ export function ProjectStandaloneChatView({
         (payload) => {
           setStreamingContent('');
           setThinkingLines([]);
+
+          // Track the DB session so follow-up messages stay in the same session
+          if (payload.session_id) {
+            setCurrentSessionId(payload.session_id);
+          }
+
+          // Back-fill the user message db_id
+          setLocalMessages((prev) =>
+            prev.map((m) =>
+              m.id.startsWith('user-') && m.role === 'user' && !prev.find((x) => x.id === payload.user_message_id)
+                ? { ...m, id: payload.user_message_id }
+                : m,
+            ),
+          );
+
           const assistantMsg: ChatMessage = {
             id: payload.assistant_message_id,
             role: 'assistant',
@@ -157,13 +191,13 @@ export function ProjectStandaloneChatView({
           setError(message);
           setSending(false);
         },
-        null,
+        currentSessionId,
         toolHint ?? null,
         null,
         initiativeId,
       );
     },
-    [initiativeId],
+    [initiativeId, currentSessionId],
   );
 
   const handleSend = useCallback(
@@ -203,7 +237,7 @@ export function ProjectStandaloneChatView({
         setSending(false);
       }
     },
-    [initiativeId, localMessages, onMessageSent, sendViaStream],
+    [localMessages, onMessageSent, sendViaStream],
   );
 
   const handleEditMessage = useCallback(
@@ -276,42 +310,33 @@ export function ProjectStandaloneChatView({
   );
 
   const handleLoadSession = useCallback(
-    (session: ChatSession) => {
-      const tab = closedTabs.find((t) => t.id === session.id);
-      if (!tab) return;
-
-      // Save any current conversation first
-      if (localMessages.length > 0) {
-        const firstUser = localMessages.find((m) => m.role === 'user');
-        const title =
-          sessionTitle || firstUser?.content.slice(0, 80) || 'Chat';
-        saveToHistory(initiativeId, title, localMessages);
+    async (session: ChatSession) => {
+      try {
+        const { messages, title } = await api.getCoreChatSessionMessages(session.id);
+        setLocalMessages(messages);
+        setSessionTitle(title || session.title);
+        setCurrentSessionId(session.id);
+        setFeedbackMap(
+          Object.fromEntries(
+            messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
+          ) as Record<string, 'like' | 'dislike' | null>,
+        );
+        onMessageSent?.();
+      } catch (err) {
+        console.error('Failed to load session messages:', err);
       }
-
-      setLocalMessages(tab.messages);
-      setSessionTitle(tab.title);
-      setFeedbackMap({});
-
-      // Remove from history (it's now the active conversation)
-      deleteClosedTab(initiativeId, session.id);
-      onMessageSent?.();
     },
-    [
-      closedTabs,
-      localMessages,
-      sessionTitle,
-      initiativeId,
-      saveToHistory,
-      deleteClosedTab,
-      onMessageSent,
-    ],
+    [onMessageSent],
   );
 
   const handleDeleteSession = useCallback(
     (id: string) => {
-      deleteClosedTab(initiativeId, id);
+      setDbSessions((prev) => prev.filter((s) => s.id !== id));
+      api.deleteCoreChatSession(id).catch((err) => {
+        console.error('Failed to delete session:', err);
+      });
     },
-    [initiativeId, deleteClosedTab],
+    [],
   );
 
   const isOnLanding = showLanding || localMessages.length === 0;

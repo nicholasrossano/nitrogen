@@ -93,6 +93,122 @@ async def _get_or_create_session(
     return session
 
 
+@router.get("/chat/sessions")
+async def list_core_chat_sessions(
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Return all core chat sessions for the current user, most recent first."""
+    from sqlalchemy import func
+
+    result = await db.execute(
+        select(
+            CoreChatSession.id,
+            CoreChatSession.title,
+            CoreChatSession.created_at,
+            CoreChatSession.updated_at,
+            func.count(CoreChatMessage.id).label("message_count"),
+        )
+        .outerjoin(CoreChatMessage, CoreChatMessage.session_id == CoreChatSession.id)
+        .where(CoreChatSession.user_id == user.uid)
+        .group_by(CoreChatSession.id)
+        .order_by(CoreChatSession.updated_at.desc())
+        .limit(50)
+    )
+    rows = result.all()
+
+    return {
+        "sessions": [
+            {
+                "id": str(r.id),
+                "title": r.title,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "message_count": r.message_count,
+            }
+            for r in rows
+            if r.message_count > 0
+        ]
+    }
+
+
+@router.get("/chat/sessions/{session_id}/messages")
+async def get_core_chat_session_messages(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Return all messages for a core chat session."""
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    session_result = await db.execute(
+        select(CoreChatSession).where(
+            CoreChatSession.id == sid,
+            CoreChatSession.user_id == user.uid,
+        )
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages_result = await db.execute(
+        select(CoreChatMessage)
+        .where(CoreChatMessage.session_id == sid)
+        .order_by(CoreChatMessage.created_at)
+    )
+    messages = messages_result.scalars().all()
+
+    return {
+        "session_id": str(session.id),
+        "title": session.title,
+        "messages": [
+            {
+                "id": str(m.id),
+                "role": m.role,
+                "content": m.content,
+                "sources": m.sources,
+                "thinking_lines": m.thinking_lines,
+                "completion_meta": m.completion_meta,
+                "widget_type": m.widget_type,
+                "widget_data": m.widget_data,
+                "feedback": m.feedback,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in messages
+        ],
+    }
+
+
+@router.delete("/chat/sessions/{session_id}")
+async def delete_core_chat_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete a core chat session and all its messages (CASCADE)."""
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    result = await db.execute(
+        select(CoreChatSession).where(
+            CoreChatSession.id == sid,
+            CoreChatSession.user_id == user.uid,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await db.delete(session)
+    await db.commit()
+    return {"deleted": True, "session_id": session_id}
+
+
 @router.post("/chat/stream")
 async def compliance_chat_stream(
     data: ComplianceChatRequest,
