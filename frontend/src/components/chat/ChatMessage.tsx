@@ -144,6 +144,13 @@ export function ChatMessage({
   const originalMessageId = variantEntry
     ? variantEntry.versions[0]?.id
     : null;
+  const completionMeta = message.completion_meta
+    ? {
+        latency_ms: message.completion_meta.latency_ms ?? 0,
+        citation_count: message.completion_meta.citation_count,
+        tiers_used: message.completion_meta.tiers_used,
+      }
+    : null;
 
   return (
     <div
@@ -221,7 +228,7 @@ export function ChatMessage({
           {(message.thinking_lines?.length || 0) > 0 && (
             <ThinkingLogs
               lines={message.thinking_lines || []}
-              completionMeta={message.completion_meta ?? null}
+              completionMeta={completionMeta}
               isThinking={isStreaming && !message.content}
               isStreaming={isStreaming}
             />

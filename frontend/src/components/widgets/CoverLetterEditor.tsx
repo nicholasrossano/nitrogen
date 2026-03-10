@@ -49,18 +49,6 @@ export function CoverLetterEditor({
     setFieldValues(initialFieldValues || {});
   }, [initialFieldValues]);
 
-  // Listen for cover letter field confirmations from chat
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.field_id && detail?.value) {
-        handleFieldSave(detail.field_id, detail.value);
-      }
-    };
-    window.addEventListener('nitrogen:cover-letter-field-confirmed', handler);
-    return () => window.removeEventListener('nitrogen:cover-letter-field-confirmed', handler);
-  }, [workspaceId]);
-
   const completion = useMemo(() => {
     const total = fieldSchema.length;
     const requiredFields = fieldSchema.filter((f) => f.required);
@@ -94,6 +82,18 @@ export function CoverLetterEditor({
       setEditingField(null);
     }
   }, [workspaceId, onFieldsUpdated]);
+
+  // Listen for cover letter field confirmations from chat
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.field_id && detail?.value) {
+        handleFieldSave(detail.field_id, detail.value);
+      }
+    };
+    window.addEventListener('nitrogen:cover-letter-field-confirmed', handler);
+    return () => window.removeEventListener('nitrogen:cover-letter-field-confirmed', handler);
+  }, [handleFieldSave]);
 
   const handleInvestigate = useCallback((field: FieldDef) => {
     const text = `Help me determine the value for "${field.label}" in the GS Cover Letter`;

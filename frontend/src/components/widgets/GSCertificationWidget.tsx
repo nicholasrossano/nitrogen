@@ -25,15 +25,7 @@ interface ChecklistItem {
 }
 
 interface GSCertificationWidgetProps {
-  data: {
-    checklist_items: ChecklistItem[];
-    template_version_id: string | null;
-    template_version_label: string | null;
-    template_status: string | null;
-    field_schema: any[];
-    html_preview: string;
-    workspace_id?: string;
-  };
+  data: Record<string, any>;
   initiativeId?: string;
   messageId?: string;
 }

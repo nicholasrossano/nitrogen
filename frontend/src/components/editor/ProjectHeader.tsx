@@ -124,7 +124,7 @@ export function ProjectHeader({
               </div>
             ) : (
               <div className="flex items-center gap-1.5 group">
-                <h1 className="text-sm font-normal text-text-primary truncate">
+                <h1 className="text-sm font-medium text-text-primary truncate">
                   {title}
                 </h1>
                 <button

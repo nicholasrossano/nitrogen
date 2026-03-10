@@ -686,7 +686,31 @@ export const api = {
       }
     ),
 
-  // Compliance chat (standalone, not initiative-bound)
+  // Core chat sessions (standalone, not initiative-bound)
+  getCoreChatSessions: () =>
+    fetchApi<{
+      sessions: {
+        id: string;
+        title: string | null;
+        created_at: string | null;
+        updated_at: string | null;
+        message_count: number;
+      }[];
+    }>('/api/v1/chat/sessions'),
+
+  getCoreChatSessionMessages: (sessionId: string) =>
+    fetchApi<{
+      session_id: string;
+      title: string | null;
+      messages: ChatMessage[];
+    }>(`/api/v1/chat/sessions/${sessionId}/messages`),
+
+  deleteCoreChatSession: (sessionId: string) =>
+    fetchApi<{ deleted: boolean; session_id: string }>(
+      `/api/v1/chat/sessions/${sessionId}`,
+      { method: 'DELETE' },
+    ),
+
   setCoreChatMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) =>
     fetchApi<{ message_id: string; feedback: string | null }>(
       `/api/v1/chat/messages/${messageId}/feedback`,
