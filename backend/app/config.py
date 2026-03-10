@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     
     # Firebase (optional)
     firebase_project_id: str = ""
-    google_application_credentials: str = ""
+    nitrogen_firebase_credentials: str = ""
     
     # App - debug defaults to True if database_url points to localhost
     debug: bool | None = None

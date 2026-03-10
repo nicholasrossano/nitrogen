@@ -92,20 +92,23 @@ export function PlanCategoriesWidget({ data, initiativeId, isActive = true }: Pl
 
       {/* Actions */}
       {(canInteract || isLoading) && (
-        <div className="px-5 py-4 bg-surface-header border-t border-divider">
+        <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
+          <p className="text-[10px] text-text-tertiary">
+            Remove categories above &middot; Request changes via the chat
+          </p>
           <button
             onClick={handleConfirm}
             disabled={isLoading || localCategories.length < 2}
-            className="btn-primary w-full py-2.5"
+            className="btn-primary !text-xs !px-4 !py-1.5"
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 Generating plan...
               </>
             ) : (
               <>
-                <Check className="w-4 h-4" />
+                <Check className="w-3.5 h-3.5" />
                 Confirm &amp; Generate Plan
               </>
             )}

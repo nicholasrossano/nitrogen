@@ -1,28 +1,8 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Check if running on localhost in development
-function isLocalDevMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  const hostname = window.location.hostname;
-  return (
-    process.env.NODE_ENV === 'development' &&
-    (hostname === 'localhost' || hostname === '127.0.0.1')
-  );
-}
-
 // Get the current user's ID token for API requests
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  
-  // In local dev mode, return a mock token that the backend will accept
-  if (isLocalDevMode()) {
-    return 'REDACTED_DEV_TOKEN';
-  }
-  
-  // In access code bypass mode (production), return mock token
-  if (localStorage.getItem('nitrogen_access_granted') === 'true') {
-    return 'REDACTED_DEV_TOKEN';
-  }
   
   try {
     const { getAuth } = await import('firebase/auth');

@@ -47,8 +47,8 @@ def _init_firebase():
                 logger.warning(f"Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
         
         # Option 2: Service account file path (for local dev)
-        if not cred and settings.google_application_credentials and os.path.exists(settings.google_application_credentials):
-            cred = credentials.Certificate(settings.google_application_credentials)
+        if not cred and settings.nitrogen_firebase_credentials and os.path.exists(settings.nitrogen_firebase_credentials):
+            cred = credentials.Certificate(settings.nitrogen_firebase_credentials)
             logger.info("Using Firebase credentials from file")
         
         # Option 3: Project ID only (works on GCP with default credentials)
