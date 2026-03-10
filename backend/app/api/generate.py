@@ -67,18 +67,13 @@ async def generate_memo(
         db.add(citation)
     await db.commit()
     
-    # Update initiative stage and deliverables so Files page can see the memo
-    from sqlalchemy.orm.attributes import flag_modified
     initiative.stage = "complete"
-    deliverables = dict(initiative.deliverables or {})
-    deliverables["investment_memo"] = {
-        "title": memo_content.title,
-        "output_type": "memo",
-        "content": memo_content.model_dump(mode="json"),
-    }
-    initiative.deliverables = deliverables
-    flag_modified(initiative, "deliverables")
-    initiative.touch()
+    initiative.save_deliverable(
+        "investment_memo",
+        memo_content.title,
+        "memo",
+        memo_content.model_dump(mode="json"),
+    )
     await db.commit()
     
     # Add memo viewer message
@@ -198,23 +193,20 @@ async def generate_all_deliverables(
     # Get tool alignments
     tool_alignments = initiative.tool_alignments or {}
     
-    # Generate each deliverable
-    deliverables = {}
     deliverable_widgets = []
-    
+
     for tool_id in initiative.selected_tools:
         tool = registry.get_tool(tool_id)
         if not tool:
             continue
-        
+
         try:
-            # Get alignment for this tool if available
             alignment = None
             if tool_id in tool_alignments:
                 alignment_data = tool_alignments[tool_id]
                 if alignment_data.get("confirmed"):
                     alignment = ToolAlignment.from_dict(alignment_data)
-            
+
             output = await tool.execute(
                 db=db,
                 initiative_id=initiative_id,
@@ -222,35 +214,30 @@ async def generate_all_deliverables(
                 include_corpus=True,
                 alignment=alignment,
             )
-            
-            deliverables[tool_id] = {
-                "title": output.title,
-                "output_type": output.output_type,
-                "content": output.content,
-            }
-            
-            # Determine widget type based on output type
+
+            initiative.save_deliverable(
+                tool_id, output.title, output.output_type, output.content,
+            )
+
             if output.output_type == "memo":
                 widget_type = "memo_viewer"
             elif output.output_type == "checklist":
                 widget_type = "checklist_viewer"
             else:
                 widget_type = "document_viewer"
-            
+
             deliverable_widgets.append({
                 "tool_id": tool_id,
                 "tool_name": tool.definition.name,
                 "widget_type": widget_type,
                 "content": output.content,
             })
-            
+
         except Exception as e:
-            deliverables[tool_id] = {
-                "error": str(e),
-            }
-    
-    # Update initiative
-    initiative.deliverables = deliverables
+            deliverables = dict(initiative.deliverables or {})
+            deliverables[tool_id] = {"error": str(e)}
+            initiative.deliverables = deliverables
+
     initiative.stage = InitiativeStage.COMPLETE.value
     await db.commit()
     
