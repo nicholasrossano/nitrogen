@@ -265,16 +265,58 @@ async def compliance_chat_stream(
                 except (ValueError, Exception) as e:
                     logger.warning(f"Failed to load initiative context: {e}")
 
-            generation_task = asyncio.create_task(
-                service.generate_response(
-                    user_message=data.content,
-                    history=history,
-                    on_thinking=on_thinking,
-                    tool_hint=data.tool_hint or None,
-                    model_inputs_context=data.model_inputs_context or None,
-                    project_context=project_context,
+            # Fast-path: template_fill tool runs directly with DB access
+            _tool_hint = data.tool_hint or ""
+            if _tool_hint.startswith("template_fill:") and data.initiative_id:
+                template_id_str = _tool_hint.split(":", 1)[1]
+                from app.tools.template_tool import TemplateFillTool
+                from app.services.core_chat import ComplianceChatResponse
+                from app.services.tiered_retrieval import SourceType
+
+                tmpl_tool = TemplateFillTool()
+                init_uuid = uuid.UUID(data.initiative_id)
+
+                async def _run_template():
+                    wt, wd = await tmpl_tool.execute_from_template(
+                        db=db,
+                        initiative_id=init_uuid,
+                        template_id=uuid.UUID(template_id_str),
+                        on_progress=on_thinking,
+                    )
+                    summary = wd.get("summary", {})
+                    supported = summary.get("supported", 0)
+                    total = summary.get("total", 0)
+                    missing = summary.get("missing", 0)
+                    text = (
+                        f"I've analyzed your template **{wd.get('filename', 'document')}** "
+                        f"and identified **{total}** requirements.\n\n"
+                        f"- **{supported}** are already supported by your project materials\n"
+                        f"- **{missing}** are missing and need your input\n\n"
+                        "Review the requirements panel on the right. You can confirm "
+                        "values, provide missing information directly, or ask me to "
+                        "investigate any requirement."
+                    )
+                    return ComplianceChatResponse(
+                        content=text,
+                        sources=[],
+                        tiers_used=["template_analysis"],
+                        latency_ms=0,
+                        widget_type=wt,
+                        widget_data=wd,
+                    )
+
+                generation_task = asyncio.create_task(_run_template())
+            else:
+                generation_task = asyncio.create_task(
+                    service.generate_response(
+                        user_message=data.content,
+                        history=history,
+                        on_thinking=on_thinking,
+                        tool_hint=data.tool_hint or None,
+                        model_inputs_context=data.model_inputs_context or None,
+                        project_context=project_context,
+                    )
                 )
-            )
 
             while not generation_task.done():
                 try:

@@ -6,6 +6,7 @@ import type { ChatMessage } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
+import { TemplateUploadInterstitial } from '@/components/widgets/TemplateUploadInterstitial';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
@@ -58,6 +59,8 @@ export function ProjectStandaloneChatView({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
+  const [showTemplateInterstitial, setShowTemplateInterstitial] = useState(false);
+  const [templateUploading, setTemplateUploading] = useState(false);
 
   // Subscribe to initiative store for alignment confirm / feedback flows
   const storeMessages = useInitiativeStore((s) => s.messages);
@@ -165,6 +168,8 @@ export function ProjectStandaloneChatView({
       documentFlowRef.current = false;
       documentFlowPersistedRef.current = false;
       lastSyncedIdRef.current = null;
+      setShowTemplateInterstitial(false);
+      setTemplateUploading(false);
     }
     prevShowLanding.current = showLanding;
   }, [showLanding, localMessages]);
@@ -326,8 +331,53 @@ export function ProjectStandaloneChatView({
     [initiativeId],
   );
 
+  const handleTemplateUpload = useCallback(
+    async (file: File) => {
+      setTemplateUploading(true);
+      try {
+        const result = await api.uploadTemplate(initiativeId, file);
+        setShowTemplateInterstitial(false);
+        onMessageSent?.();
+
+        const content = `Generate from template: ${file.name}`;
+        api.generateChatTitle(content).then(({ title }) => {
+          if (title) setSessionTitle(title);
+        }).catch(() => {});
+
+        const userMsg: ChatMessage = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content,
+          widget_type: null,
+          widget_data: null,
+          created_at: new Date().toISOString(),
+        };
+        const updatedMessages = [...localMessages, userMsg];
+        setLocalMessages(updatedMessages);
+        setSending(true);
+
+        await sendViaStream(
+          content,
+          updatedMessages,
+          `template_fill:${result.template_id}`,
+        );
+      } catch (err) {
+        console.error('Template upload failed:', err);
+        setSending(false);
+      } finally {
+        setTemplateUploading(false);
+      }
+    },
+    [initiativeId, localMessages, onMessageSent, sendViaStream],
+  );
+
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
+      if (toolHint === 'template_fill') {
+        setShowTemplateInterstitial(true);
+        return;
+      }
+
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -470,6 +520,16 @@ export function ProjectStandaloneChatView({
   );
 
   const isOnLanding = showLanding || localMessages.length === 0;
+
+  if (showTemplateInterstitial) {
+    return (
+      <TemplateUploadInterstitial
+        onUpload={handleTemplateUpload}
+        onCancel={() => setShowTemplateInterstitial(false)}
+        uploading={templateUploading}
+      />
+    );
+  }
 
   if (isOnLanding) {
     return (

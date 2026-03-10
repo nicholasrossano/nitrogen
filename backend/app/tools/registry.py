@@ -24,12 +24,14 @@ class ToolRegistry:
         from app.tools.due_diligence_checklist import DueDiligenceChecklistTool
         from app.tools.lcoe_tool import LCOETool
         from app.tools.carbon_tool import CarbonTool
+        from app.tools.template_tool import TemplateFillTool
         
         tools = [
             InvestmentMemoTool(),
             DueDiligenceChecklistTool(),
             LCOETool(),
             CarbonTool(),
+            TemplateFillTool(),
         ]
         
         for tool in tools:
