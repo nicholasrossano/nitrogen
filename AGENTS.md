@@ -17,6 +17,11 @@
   - Otherwise provide a concrete manual verification checklist.
 - Always include: "How to verify" steps.
 
+**Post-edit checks (always run):**
+- After every substantive edit, call `ReadLints` on the edited file(s) before finalizing.
+- Fix any linter errors introduced by the change before responding.
+- For JSX in particular: watch for ternary branches with multiple sibling elements — they must be wrapped in a fragment (`<>...</>`).
+
 **Scope discipline:**
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
@@ -27,6 +32,12 @@
 - Keep additions lightweight and actionable. Avoid overly broad rules.
 - Organize new practices under relevant sections (General Workflow, UI/Design, or create domain-specific sections like Backend, Testing, etc.).
 - Mention the update briefly: "Added to AGENTS.md: [rule]"
+
+**How to add new practices to this file:**
+- Any repeatable check, constraint, or pattern that prevents a class of bug belongs here.
+- Write it as a concrete action ("always do X", "never do Y") rather than a vague principle.
+- Place it in the most relevant section, or create a new section if none fits.
+- Keep each rule to 1–2 lines max.
 
 ## App Architecture — Two Chat Surfaces (Critical)
 
