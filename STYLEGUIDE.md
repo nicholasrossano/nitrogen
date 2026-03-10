@@ -63,10 +63,10 @@ Blue is an affordance signal, not a structural or decorative color.
 
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `AccentAnchor` | `#0977ae` | Strong pressed / active state |
-| `AccentPrimary` | `#005f8f` | Focus rings, enabled-state send button, selected state |
-| `AccentTint` | `#51b4e6` | Hover fills on accent-tinted surfaces |
-| `AccentWash` | `#ecf8fe` | Subtle accent highlight, selected row tint |
+| `AccentAnchor` | `#00758c` | Strong pressed / active state |
+| `AccentPrimary` | `#005e72` | Focus rings, enabled-state send button, selected state |
+| `AccentTint` | `#40bcd4` | Hover fills on accent-tinted surfaces |
+| `AccentWash` | `#e6f9fc` | Subtle accent highlight, selected row tint |
 
 ### Secondary Accent
 | Token | Hex | Usage |
@@ -88,7 +88,7 @@ Blue is an affordance signal, not a structural or decorative color.
 | --- | --- | --- |
 | `Divider` | `#E0DCD6` | Structural separators (warm neutral) |
 | `StrokeSubtle` | `#DDD9D3` | Input borders, subtle separators |
-| `StrokeAccent` | `#005f8f` | Focus / selected border (interactive only) |
+| `StrokeAccent` | `#005e72` | Focus / selected border (interactive only) |
 
 **Rules**
 - Default UI reads neutral — warm greys and off-whites
