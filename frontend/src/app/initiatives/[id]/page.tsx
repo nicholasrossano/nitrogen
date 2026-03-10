@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 
@@ -26,11 +26,15 @@ type ProjectView = 'chat' | 'plan';
 function InitiativePageContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const initiativeId = params.id as string;
   const containerRef = useRef<HTMLDivElement>(null);
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
 
-  const [activeView, setActiveView] = useState<ProjectView>('plan');
+  const viewParam = searchParams.get('view');
+  const viewFromUrl: ProjectView = viewParam === 'chat' ? 'chat' : 'plan';
+
+  const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
@@ -46,6 +50,10 @@ function InitiativePageContent() {
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [showEditorInChatView, setShowEditorInChatView] = useState(false);
   const [showChatInChatView, setShowChatInChatView] = useState(true);
+
+  useEffect(() => {
+    setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
+  }, [viewFromUrl]);
   
   const { 
     initiative, 
@@ -218,10 +226,12 @@ function InitiativePageContent() {
     if (item === 'chat') {
       setActiveView('chat');
       setShowChatLanding(true);
+      router.replace(`/initiatives/${initiativeId}?view=chat`);
       return;
     }
     if (item === 'plan') {
       setActiveView('plan');
+      router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
   };
 
@@ -272,7 +282,7 @@ function InitiativePageContent() {
           onItemSelect={handleNavChange}
         />
 
-        <div className="flex-1 p-2 pl-1 min-h-0">
+        <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
           <div className="h-full bg-surface rounded-lg shadow-workspace overflow-hidden">
             {loading && !initiative ? (
               <div className="h-full flex items-center justify-center">
