@@ -7,12 +7,10 @@ import {
   Loader2, 
   ChevronDown, 
   ChevronRight,
-  Search,
-  FileText,
-  Save,
 } from 'lucide-react';
 import { getIconByName } from '@/lib/icons';
 import type { AlignmentSection, ToolAlignment } from '@/lib/api';
+import { WidgetGeneratingProgress, ALIGNMENT_STEPS } from './WidgetGeneratingProgress';
 
 interface ToolInfo {
   id: string;
@@ -28,101 +26,6 @@ interface AlignmentWidgetProps {
   isActive?: boolean;
 }
 
-const GENERATION_STEPS = [
-  { label: 'Confirming outline', icon: Check, duration: 3 },
-  { label: 'Retrieving project evidence', icon: Search, duration: 18 },
-  { label: 'Writing deliverables', icon: FileText, duration: 75 },
-  { label: 'Saving results', icon: Save, duration: 30 },
-];
-
-function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `0:${s.toString().padStart(2, '0')}`;
-}
-
-function GeneratingProgress() {
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  let accumulated = 0;
-  let currentStep = GENERATION_STEPS.length - 1;
-  for (let i = 0; i < GENERATION_STEPS.length; i++) {
-    if (elapsed < accumulated + GENERATION_STEPS[i].duration) {
-      currentStep = i;
-      break;
-    }
-    accumulated += GENERATION_STEPS[i].duration;
-  }
-
-  const totalExpected = GENERATION_STEPS.reduce((s, step) => s + step.duration, 0);
-  const progress = Math.min(94, (elapsed / totalExpected) * 94);
-
-  const StepIcon = GENERATION_STEPS[currentStep].icon;
-
-  return (
-    <div className="px-5 py-10 flex flex-col items-center gap-5">
-      <div className="relative flex items-center justify-center w-10 h-10">
-        <div className="absolute inset-0 rounded-full border-2 border-accent/20" />
-        <div
-          className="absolute inset-0 rounded-full border-2 border-accent border-t-transparent animate-spin"
-          style={{ animationDuration: '1.2s' }}
-        />
-        <StepIcon className="w-4.5 h-4.5 text-accent" />
-      </div>
-
-      <div className="text-center">
-        <p className="text-sm font-medium text-text-primary">
-          {GENERATION_STEPS[currentStep].label}...
-        </p>
-        <p className="text-xs text-text-tertiary mt-1">
-          This usually takes 2-3 minutes
-        </p>
-      </div>
-
-      <div className="w-full max-w-[240px]">
-        <div className="h-1 bg-surface-subtle rounded-full overflow-hidden">
-          <div
-            className="h-full bg-accent rounded-full transition-[width] duration-1000 ease-linear"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Step indicators */}
-      <div className="flex items-center gap-6">
-        {GENERATION_STEPS.map((step, i) => (
-          <div key={step.label} className="flex items-center gap-1.5">
-            <div
-              className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                i < currentStep
-                  ? 'bg-accent'
-                  : i === currentStep
-                    ? 'bg-accent animate-pulse'
-                    : 'bg-zinc-200'
-              }`}
-            />
-            <span
-              className={`text-[10px] transition-colors duration-300 ${
-                i <= currentStep ? 'text-text-secondary' : 'text-text-tertiary'
-              }`}
-            >
-              {step.label.split(' ').slice(0, 2).join(' ')}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <p className="text-[10px] text-text-tertiary">
-        {formatElapsed(elapsed)} elapsed
-      </p>
-    </div>
-  );
-}
 
 export function AlignmentWidget({ data, initiativeId, isActive = true }: AlignmentWidgetProps) {
   const { confirmAlignment, alignmentLoading, generating, error: storeError } = useInitiativeStore();
@@ -203,21 +106,21 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
   
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <div className="flex items-center gap-2 mb-1">
-          <ToolIcon className="w-5 h-5 text-accent" />
-          <h3 className="text-sm font-semibold text-text-primary">{alignment.title}</h3>
-        </div>
-        {!isGenerating && (
+      {/* Header — hidden while generating */}
+      {!isGenerating && (
+        <div className="px-5 py-4 bg-surface-header border-b border-divider">
+          <div className="flex items-center gap-2 mb-1">
+            <ToolIcon className="w-5 h-5 text-accent" />
+            <h3 className="text-sm font-semibold text-text-primary">{alignment.title}</h3>
+          </div>
           <p className="text-sm text-text-secondary">
             {alignment.description}
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
       {isGenerating ? (
-        <GeneratingProgress />
+        <WidgetGeneratingProgress steps={ALIGNMENT_STEPS} subtitle="This usually takes 2–3 minutes" />
       ) : (
         <>
           {/* Sections */}
