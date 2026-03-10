@@ -286,14 +286,19 @@ async def compliance_chat_stream(
                     supported = summary.get("supported", 0)
                     total = summary.get("total", 0)
                     missing = summary.get("missing", 0)
+                    form_summary = wd.get("form_summary", "")
                     text = (
                         f"I've analyzed your template **{wd.get('filename', 'document')}** "
                         f"and identified **{total}** requirements.\n\n"
+                    )
+                    if form_summary:
+                        text += f"{form_summary}\n\n"
+                    text += (
                         f"- **{supported}** are already supported by your project materials\n"
                         f"- **{missing}** are missing and need your input\n\n"
                         "Review the requirements panel on the right. You can confirm "
-                        "values, provide missing information directly, or ask me to "
-                        "investigate any requirement."
+                        "values, provide missing information directly, or click any "
+                        "requirement to investigate it."
                     )
                     return ComplianceChatResponse(
                         content=text,
@@ -422,6 +427,44 @@ async def set_compliance_message_feedback(
     msg.feedback = data.feedback
     await db.commit()
     return {"message_id": str(msg.id), "feedback": msg.feedback}
+
+
+class WidgetUpdateRequest(BaseModel):
+    widget_data: dict
+
+
+@router.patch("/chat/messages/{message_id}/widget")
+async def update_core_chat_message_widget(
+    message_id: str,
+    data: WidgetUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Persist updated widget_data on a core chat message."""
+    try:
+        mid = uuid.UUID(message_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid message_id")
+
+    result = await db.execute(
+        select(CoreChatMessage)
+        .join(CoreChatSession)
+        .where(
+            CoreChatMessage.id == mid,
+            CoreChatSession.user_id == user.uid,
+        )
+    )
+    msg = result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    msg.widget_data = data.widget_data
+
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(msg, "widget_data")
+    await db.commit()
+
+    return {"message_id": str(msg.id), "updated": True}
 
 
 @router.patch("/chat/sessions/{session_id}/title")

@@ -83,9 +83,9 @@ export function TemplateViewerWidget({
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="card-elevated overflow-hidden h-full rounded-none flex flex-col">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-stroke-subtle">
+      <div className="px-4 pt-4 pb-3 bg-surface-header border-b border-divider">
         <div className="flex items-center gap-2 mb-1">
           <FileIcon className={`w-4 h-4 ${isXlsx ? 'text-green-600' : 'text-accent'}`} />
           <h3 className="text-sm font-semibold text-text-primary truncate">{filename}</h3>
@@ -134,7 +134,7 @@ export function TemplateViewerWidget({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-stroke-subtle flex items-center gap-2">
+      <div className="flex-shrink-0 p-4 border-t border-divider bg-surface-header flex flex-col items-center gap-2">
         {onRefine && (
           <button
             type="button"
@@ -148,16 +148,25 @@ export function TemplateViewerWidget({
           type="button"
           onClick={handleExport}
           disabled={!isActive || exporting}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-40"
+          className="btn-primary !text-xs !px-4 !py-1.5"
+          style={{ width: '40%' }}
         >
           {exporting ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Exporting...
+            </>
           ) : exported ? (
-            <CheckCircle2 className="w-3 h-3" />
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              Downloaded
+            </>
           ) : (
-            <Download className="w-3 h-3" />
+            <>
+              <Download className="w-4 h-4" />
+              Export {fileType.toUpperCase()}
+            </>
           )}
-          {exported ? 'Downloaded' : `Export ${fileType.toUpperCase()}`}
         </button>
       </div>
     </div>

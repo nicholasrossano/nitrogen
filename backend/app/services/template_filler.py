@@ -130,6 +130,9 @@ class TemplateFillerService:
         for req in requirements:
             if req.get("value") and req.get("source_location") and not req.get("is_calculated"):
                 value_by_location[req["source_location"]] = req["value"]
+            for sf in req.get("sub_fields") or []:
+                if sf.get("value") and sf.get("source_location"):
+                    value_by_location[sf["source_location"]] = sf["value"]
 
         for loc, val in value_by_location.items():
             try:

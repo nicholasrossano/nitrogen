@@ -155,23 +155,30 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
     <div className="flex flex-col items-center h-full px-4">
       <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
         <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
-          {ALL_TOOLS.map((tool) => (
-            <button
-              key={tool.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSend(`Generate ${tool.name}`, tool.id)}
-              className="relative flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08] transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default"
-            >
-              {tool.id === 'gs_certification' && (
-                <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
-                  BETA
-                </span>
-              )}
-              <span className="text-accent/70 [&>svg]:w-4.5 [&>svg]:h-4.5">{tool.icon}</span>
-              <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{tool.name}</span>
-            </button>
-          ))}
+          {ALL_TOOLS.map((tool) => {
+            const isTemplate = tool.id === 'template_fill';
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSend(`Generate ${tool.name}`, tool.id)}
+                className={`relative flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default ${
+                  isTemplate
+                    ? 'border-2 border-dashed border-accent-secondary/30 bg-accent-secondary/[0.05] hover:border-accent-secondary/50 hover:bg-accent-secondary/[0.09]'
+                    : 'border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08]'
+                }`}
+              >
+                {(tool.id === 'gs_certification' || isTemplate) && (
+                  <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
+                    BETA
+                  </span>
+                )}
+                <span className={`[&>svg]:w-4.5 [&>svg]:h-4.5 ${isTemplate ? 'text-accent-secondary/70' : 'text-accent/70'}`}>{tool.icon}</span>
+                <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{tool.name}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { FileUp, Upload, X, FileSpreadsheet, FileText } from 'lucide-react';
+import { api } from '@/lib/api';
 
 const ACCEPTED_TYPES: Record<string, string> = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
@@ -11,27 +12,54 @@ const ACCEPTED_TYPES: Record<string, string> = {
 
 const ACCEPTED_EXTENSIONS = ['.docx', '.xlsx'];
 
+interface RecentTemplate {
+  template_id: string;
+  filename: string;
+  file_type: string;
+  created_at: string;
+}
+
 interface TemplateUploadInterstitialProps {
   onUpload: (file: File) => void;
   onCancel: () => void;
   uploading?: boolean;
+  initiativeId?: string;
+  onSelectRecent?: (templateId: string, filename: string) => void;
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs === 1 ? '1h ago' : `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return days === 1 ? 'yesterday' : `${days}d ago`;
 }
 
 export function TemplateUploadInterstitial({
   onUpload,
   onCancel,
   uploading = false,
+  initiativeId,
+  onSelectRecent,
 }: TemplateUploadInterstitialProps) {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [recentTemplates, setRecentTemplates] = useState<RecentTemplate[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
+
+  useEffect(() => {
+    if (!initiativeId) return;
+    api.getRecentTemplates(initiativeId).then(setRecentTemplates).catch(() => {});
+  }, [initiativeId]);
 
   // Close on Escape
   useEffect(() => {
@@ -80,6 +108,13 @@ export function TemplateUploadInterstitial({
     <FileText className="w-5 h-5 text-accent" />
   );
 
+  const recentIcon = (t: RecentTemplate) =>
+    t.file_type === 'template_xlsx' ? (
+      <FileSpreadsheet className="w-3.5 h-3.5 text-green-600 shrink-0" />
+    ) : (
+      <FileText className="w-3.5 h-3.5 text-accent shrink-0" />
+    );
+
   const modal = (
     /* Backdrop */
     <div
@@ -113,8 +148,8 @@ export function TemplateUploadInterstitial({
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4">
-          <p className="text-[13px] text-text-secondary leading-relaxed mb-4">
+        <div className="px-5 py-4 space-y-4">
+          <p className="text-[13px] text-text-secondary leading-relaxed">
             Upload a document or spreadsheet you need completed. We&apos;ll analyze what it
             requires and fill it from your existing project materials, surfacing anything
             that&apos;s missing.
@@ -179,6 +214,34 @@ export function TemplateUploadInterstitial({
           </div>
 
           {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+
+          {/* Recent Templates */}
+          {recentTemplates.length > 0 && (
+            <div>
+              <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wide mb-2">
+                Recent Templates
+              </p>
+              <div className="space-y-1">
+                {recentTemplates.map((t) => (
+                  <button
+                    key={t.template_id}
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => onSelectRecent?.(t.template_id, t.filename)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left hover:bg-surface-subtle transition-colors disabled:opacity-40"
+                  >
+                    {recentIcon(t)}
+                    <span className="flex-1 min-w-0 text-xs font-medium text-text-primary truncate">
+                      {t.filename}
+                    </span>
+                    <span className="text-[11px] text-text-tertiary shrink-0">
+                      {formatRelativeTime(t.created_at)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

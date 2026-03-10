@@ -111,8 +111,17 @@ class TemplateFillTool(BaseTool):
             else parser.parse_docx_template(template_bytes)
         )
 
+        total_fields = sum(len(s.fields) for s in structure.sections)
+        logger.info(
+            "Template parsed: %d sections, %d pre-detected fields, raw_text=%d chars",
+            len(structure.sections), total_fields, len(structure.raw_text or ""),
+        )
+
         analysis = TemplateAnalysisService()
-        requirements = await analysis.extract_requirements(structure, on_progress=on_progress)
+        requirements, form_summary = await analysis.extract_requirements(structure, on_progress=on_progress)
+        logger.info("LLM extracted %d requirements", len(requirements))
+        for r in requirements[:10]:
+            logger.info("  Req: '%s' [%s] calculated=%s", r.label[:60], r.field_type, r.is_calculated)
         statuses = await analysis.cross_reference_requirements(
             db, initiative_id, requirements, on_progress=on_progress,
         )
@@ -126,6 +135,7 @@ class TemplateFillTool(BaseTool):
             "template_id": str(template_id),
             "filename": material.filename,
             "file_type": "xlsx" if is_xlsx else "docx",
+            "form_summary": form_summary,
             "requirements": [s.to_dict() for s in statuses],
             "summary": {
                 "total": len(statuses),

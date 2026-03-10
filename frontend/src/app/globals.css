@@ -214,6 +214,28 @@ body {
   margin-bottom: 0;
 }
 
+.prose-user {
+  @apply text-white text-sm leading-relaxed font-sans;
+}
+
+.prose-user p { margin: 0; }
+.prose-user p + p { margin-top: 0.5rem; }
+.prose-user em { @apply italic; }
+.prose-user strong { @apply font-semibold; }
+.prose-user > :first-child { margin-top: 0; }
+.prose-user > :last-child { margin-bottom: 0; }
+
+.prose-draft {
+  @apply text-sm leading-relaxed font-sans text-text-primary;
+}
+
+.prose-draft p { margin: 0; }
+.prose-draft p + p { margin-top: 0.5rem; }
+.prose-draft em { @apply italic text-text-secondary; }
+.prose-draft strong { @apply font-semibold; }
+.prose-draft > :first-child { margin-top: 0; }
+.prose-draft > :last-child { margin-bottom: 0; }
+
 .prose-memo {
   @apply text-text-primary leading-relaxed font-sans;
 }

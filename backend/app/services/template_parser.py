@@ -69,7 +69,7 @@ class TemplateStructure:
         return {
             "file_type": self.file_type,
             "sections": [s.to_dict() for s in self.sections],
-            "raw_text": self.raw_text[:8000],
+            "raw_text": self.raw_text[:30000],
         }
 
     @property
@@ -169,86 +169,66 @@ class TemplateParserService:
     # ── XLSX ────────────────────────────────────────────────────────
 
     def parse_xlsx_template(self, content: bytes) -> TemplateStructure:
+        """Serialize the workbook into a faithful text representation.
+
+        No heuristics, no field detection.  The LLM receives the full
+        cell grid and does all the semantic interpretation.
+        """
         from openpyxl import load_workbook
-        from openpyxl.cell.cell import Cell, MergedCell
+        from openpyxl.cell.cell import MergedCell
+        from openpyxl.utils import get_column_letter
 
         wb = load_workbook(io.BytesIO(content), data_only=False)
-        sections: list[TemplateSection] = []
-        raw_parts: list[str] = []
+        sheet_parts: list[str] = []
+
+        logger.info("XLSX parser: workbook has %d sheet(s): %s",
+                     len(wb.sheetnames), wb.sheetnames)
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            section = TemplateSection(id=sheet_name, title=sheet_name)
+            max_row = ws.max_row or 0
+            max_col = ws.max_column or 0
+            if max_row == 0:
+                continue
+            logger.info("  Sheet '%s': %d rows x %d cols", sheet_name, max_row, max_col)
 
-            header_row: dict[int, str] = {}
-            label_col: dict[int, str] = {}
+            lines: list[str] = [f"=== Sheet: {sheet_name} ==="]
 
-            for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=ws.max_row), start=1):
-                for cell in row:
+            for row_idx in range(1, max_row + 1):
+                row_parts: list[str] = []
+                row_has_content = False
+                for col_idx in range(1, max_col + 1):
+                    cell = ws.cell(row=row_idx, column=col_idx)
                     if isinstance(cell, MergedCell):
-                        continue
-                    if cell.value is not None and isinstance(cell.value, str):
-                        val = cell.value.strip()
-                        if val:
-                            if row_idx == 1:
-                                header_row[cell.column] = val
-                            if cell.column == 1:
-                                label_col[row_idx] = val
-                            raw_parts.append(val)
-
-            for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=ws.max_row), start=1):
-                for cell in row:
-                    if isinstance(cell, MergedCell):
+                        row_parts.append("")
                         continue
 
-                    col_letter = cell.column_letter
-                    loc = f"{sheet_name}!{col_letter}{row_idx}"
+                    col_letter = get_column_letter(col_idx)
+                    ref = f"{col_letter}{row_idx}"
 
                     if cell.data_type == "f" or (
-                        isinstance(cell.value, str) and cell.value.startswith("=")
+                        isinstance(cell.value, str) and str(cell.value).startswith("=")
                     ):
-                        label = header_row.get(cell.column, "") or label_col.get(row_idx, "")
-                        if label:
-                            section.fields.append(TemplateField(
-                                id=str(uuid.uuid4())[:8],
-                                label=label,
-                                description=f"Formula at {loc}: {cell.value}",
-                                field_type="formula",
-                                location=loc,
-                                required=False,
-                                is_calculated=True,
-                            ))
-                        continue
+                        row_parts.append(f"[FORMULA:{ref}={cell.value}]")
+                        row_has_content = True
+                    elif cell.value is not None and str(cell.value).strip():
+                        row_parts.append(str(cell.value).strip())
+                        row_has_content = True
+                    else:
+                        row_parts.append("[EMPTY]")
 
-                    if cell.value is None and row_idx > 1 and cell.column > 1:
-                        label = header_row.get(cell.column, "") or label_col.get(row_idx, "")
-                        if label:
-                            section.fields.append(TemplateField(
-                                id=str(uuid.uuid4())[:8],
-                                label=label,
-                                description=f"Input cell at {loc}",
-                                field_type="number" if _looks_numeric(label) else "text",
-                                location=loc,
-                            ))
+                if row_has_content:
+                    lines.append(f"Row {row_idx}: " + " | ".join(row_parts))
 
-            if section.fields:
-                sections.append(section)
+            sheet_text = "\n".join(lines)
+            sheet_parts.append(sheet_text)
 
-        if not sections:
-            sections.append(TemplateSection(id="sheet1", title="Sheet1"))
+        raw_text = "\n\n".join(sheet_parts)
+        logger.info("XLSX parser: serialized %d chars across %d sheet(s)",
+                     len(raw_text), len(sheet_parts))
 
         return TemplateStructure(
             file_type="xlsx",
-            sections=sections,
-            raw_text="\n".join(raw_parts),
+            sections=[],
+            raw_text=raw_text,
         )
-
-
-def _looks_numeric(label: str) -> bool:
-    keywords = [
-        "amount", "cost", "price", "rate", "total", "qty", "quantity",
-        "capex", "opex", "revenue", "budget", "kw", "mw", "kwh", "mwh",
-        "capacity", "factor", "ratio", "percent", "%", "years", "months",
-    ]
-    lower = label.lower()
-    return any(k in lower for k in keywords)

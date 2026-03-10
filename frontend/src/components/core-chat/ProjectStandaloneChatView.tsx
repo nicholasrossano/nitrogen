@@ -371,6 +371,38 @@ export function ProjectStandaloneChatView({
     [initiativeId, localMessages, onMessageSent, sendViaStream],
   );
 
+  const handleRecentTemplateSelect = useCallback(
+    async (templateId: string, filename: string) => {
+      setShowTemplateInterstitial(false);
+      onMessageSent?.();
+
+      const content = `Generate from template: ${filename}`;
+      api.generateChatTitle(content).then(({ title }) => {
+        if (title) setSessionTitle(title);
+      }).catch(() => {});
+
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content,
+        widget_type: null,
+        widget_data: null,
+        created_at: new Date().toISOString(),
+      };
+      const updatedMessages = [...localMessages, userMsg];
+      setLocalMessages(updatedMessages);
+      setSending(true);
+
+      try {
+        await sendViaStream(content, updatedMessages, `template_fill:${templateId}`);
+      } catch (err) {
+        console.error('Recent template select failed:', err);
+        setSending(false);
+      }
+    },
+    [localMessages, onMessageSent, sendViaStream],
+  );
+
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
       if (toolHint === 'template_fill') {
@@ -535,6 +567,8 @@ export function ProjectStandaloneChatView({
             onUpload={handleTemplateUpload}
             onCancel={() => setShowTemplateInterstitial(false)}
             uploading={templateUploading}
+            initiativeId={initiativeId}
+            onSelectRecent={handleRecentTemplateSelect}
           />
         )}
       </>

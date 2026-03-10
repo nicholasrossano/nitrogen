@@ -393,14 +393,25 @@ export const api = {
       }
     ),
 
-  updateMessageWidget: (initiativeId: string, messageId: string, widgetData: Record<string, any>) =>
-    fetchApi<{ message_id: string; updated: boolean }>(
-      `/api/v1/initiatives/${initiativeId}/chat/${messageId}/widget`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ widget_data: widgetData }),
-      }
-    ),
+  updateMessageWidget: async (initiativeId: string, messageId: string, widgetData: Record<string, any>) => {
+    try {
+      return await fetchApi<{ message_id: string; updated: boolean }>(
+        `/api/v1/initiatives/${initiativeId}/chat/${messageId}/widget`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ widget_data: widgetData }),
+        },
+      );
+    } catch {
+      return fetchApi<{ message_id: string; updated: boolean }>(
+        `/api/v1/chat/messages/${messageId}/widget`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ widget_data: widgetData }),
+        },
+      );
+    }
+  },
 
   truncateChatFrom: (initiativeId: string, fromMessageId: string) =>
     fetchApi<{ deleted_count: number; messages: ChatMessage[] }>(
@@ -1128,6 +1139,11 @@ export const api = {
   },
 
   // --- Template Fill ---
+
+  getRecentTemplates: (initiativeId: string, limit = 5) =>
+    fetchApi<{ template_id: string; filename: string; file_type: string; created_at: string }[]>(
+      `/api/v1/template/recent?initiative_id=${encodeURIComponent(initiativeId)}&limit=${limit}`,
+    ),
 
   uploadTemplate: async (initiativeId: string, file: File): Promise<{ template_id: string; filename: string; file_type: string }> => {
     const formData = new FormData();
