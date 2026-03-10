@@ -218,10 +218,7 @@ async def list_project_files(
     # Generated outputs from initiative.deliverables
     generated: list[GeneratedFileResponse] = []
     deliverables = initiative.deliverables or {}
-    logger = logging.getLogger(__name__)
-    logger.info(f"list_project_files: initiative={initiative_id}, deliverables keys={list(deliverables.keys())}, stage={initiative.stage}")
 
-    # Pre-fetch the latest memo version to check export status
     memo_result = await db.execute(
         select(MemoVersion)
         .where(MemoVersion.initiative_id == initiative_id)
@@ -244,7 +241,6 @@ async def list_project_files(
 
         content = data.get("content") or {}
 
-        # LCOE/carbon are only exportable when the model was actually computed
         if output_type in ("lcoe", "carbon"):
             exportable = bool(
                 export_fmt is not None
@@ -259,11 +255,14 @@ async def list_project_files(
         if output_type == "checklist":
             export_data = content if isinstance(content, dict) else {}
 
+        item_generated_at = data.get("generated_at")
+        created_at = item_generated_at if item_generated_at else initiative.updated_at
+
         generated.append(GeneratedFileResponse(
             id=tool_id,
             title=data.get("title", tool_id.replace("_", " ").title()),
             output_type=output_type,
-            created_at=initiative.updated_at,
+            created_at=created_at,
             exportable=exportable,
             export_format=export_fmt,
             exported=exported,
@@ -302,16 +301,9 @@ async def delete_deliverable(
     user: MockUser = Depends(get_current_user),
 ):
     """Remove a generated deliverable from the project."""
-    from sqlalchemy.orm.attributes import flag_modified
-
     initiative = await _get_initiative_for_user(initiative_id, user, db)
 
-    deliverables = dict(initiative.deliverables or {})
-
-    if tool_id in deliverables:
-        del deliverables[tool_id]
-        initiative.deliverables = deliverables
-        flag_modified(initiative, "deliverables")
+    if initiative.remove_deliverable(tool_id):
         await db.commit()
     else:
         # tool_id may be a MemoVersion UUID (fallback path)

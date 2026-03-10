@@ -66,7 +66,6 @@ export function ProjectFilesView({
   const loadFiles = useCallback(async () => {
     try {
       const response: ProjectFilesResponse = await api.getProjectFiles(initiativeId);
-      console.log('ProjectFilesView: loaded', { initiativeId, generated: response.generated.map(f => ({ id: f.id, title: f.title, output_type: f.output_type })) });
       setGeneratedFiles(response.generated);
     } catch (err) {
       console.error('Failed to load project files:', err);
