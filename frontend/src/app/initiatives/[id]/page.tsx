@@ -55,6 +55,8 @@ function InitiativePageContent() {
   // Page-level loading overlay — stays up until all 5 initial loads complete
   const [pageReady, setPageReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  // Header/sidebar can show as soon as the initiative itself loads (not waiting for all 5 fetches)
+  const [chromeReady, setChromeReady] = useState(false);
   const [showSprout, setShowSprout] = useState(true);
 
   // Plan-view overlay — covers full workspace (chat + plan panels) when switching to plan
@@ -111,9 +113,12 @@ function InitiativePageContent() {
       reset();
       setRightPanel('closed');
       setPageReady(false);
+      setChromeReady(false);
       setShowOverlay(true);
+      const initiativeLoad = loadInitiative(initiativeId);
+      initiativeLoad.finally(() => setChromeReady(true));
       Promise.all([
-        loadInitiative(initiativeId),
+        initiativeLoad,
         loadChatHistory(initiativeId),
         loadEvidence(initiativeId),
         loadMaterials(initiativeId),
@@ -289,8 +294,8 @@ function InitiativePageContent() {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
-      {/* ProjectHeader — full width, only when initiative is loaded */}
-      <div className={`flex-shrink-0 h-14 transition-opacity duration-300 ${pageReady ? 'opacity-100' : 'opacity-0'}`}>
+      {/* ProjectHeader — shows as soon as initiative loads, independent of secondary data */}
+      <div className={`flex-shrink-0 h-14 transition-opacity duration-300 ${chromeReady ? 'opacity-100' : 'opacity-0'}`}>
       {initiative && (
         <ProjectHeader
           initiative={initiative}
@@ -324,7 +329,7 @@ function InitiativePageContent() {
 
       {/* Content row: sidebar + inset workspace */}
       <div className="flex flex-1 min-h-0">
-        <div className={`flex-shrink-0 transition-opacity duration-300 ${pageReady ? 'opacity-100' : 'opacity-0'} ${!pageReady ? 'pointer-events-none' : ''}`}>
+        <div className={`flex-shrink-0 transition-opacity duration-300 ${chromeReady ? 'opacity-100' : 'opacity-0'} ${!chromeReady ? 'pointer-events-none' : ''}`}>
         <SideDrawer
           variant="project"
           activeItem={activeView}
