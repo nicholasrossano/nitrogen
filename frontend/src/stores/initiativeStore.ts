@@ -62,6 +62,7 @@ interface InitiativeState {
   loadProjectPlan: (id: string) => Promise<void>;
   generateProjectPlan: (id: string) => Promise<void>;
   confirmPlanCategories: (id: string, categories: ProposedCategory[]) => Promise<void>;
+  updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
   reset: () => void;
@@ -725,6 +726,15 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         projectPlanLoading: false,
       });
     }
+  },
+
+  // Update widget_data on a message in-memory (no API call — caller handles persistence)
+  updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, widget_data: widgetData } : m
+      ),
+    }));
   },
 
   // Update a single plan item status (optimistic)

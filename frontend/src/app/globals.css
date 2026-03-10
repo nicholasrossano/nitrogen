@@ -697,14 +697,15 @@ textarea {
   opacity: 0;
 }
 
-/* Card hover — shadow lift, no blue border */
+/* Card hover — shadow lift with blue accent border */
 .card-interactive {
   @apply card cursor-pointer;
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+  transition: box-shadow 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
 }
 
 .card-interactive:hover {
   box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1);
+  border-color: var(--color-accent) !important;
 }
 
 .card-interactive:active {

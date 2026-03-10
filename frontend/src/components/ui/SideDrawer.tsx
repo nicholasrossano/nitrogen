@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -57,9 +57,44 @@ export function SideDrawer({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
   const dragCounter = useRef(0);
+  const globalDragCounter = useRef(0);
+
+  useEffect(() => {
+    if (!showMaterials) return;
+
+    const onDragEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        globalDragCounter.current += 1;
+        setIsGlobalDragging(true);
+      }
+    };
+    const onDragLeave = () => {
+      globalDragCounter.current -= 1;
+      if (globalDragCounter.current <= 0) {
+        globalDragCounter.current = 0;
+        setIsGlobalDragging(false);
+      }
+    };
+    const onReset = () => {
+      globalDragCounter.current = 0;
+      setIsGlobalDragging(false);
+    };
+
+    document.addEventListener('dragenter', onDragEnter);
+    document.addEventListener('dragleave', onDragLeave);
+    document.addEventListener('drop', onReset);
+    document.addEventListener('dragend', onReset);
+    return () => {
+      document.removeEventListener('dragenter', onDragEnter);
+      document.removeEventListener('dragleave', onDragLeave);
+      document.removeEventListener('drop', onReset);
+      document.removeEventListener('dragend', onReset);
+    };
+  }, [showMaterials]);
 
   const uploading = toastItems.some((i) => i.status === 'uploading');
 
@@ -141,7 +176,8 @@ export function SideDrawer({
 
   return (
     <aside
-      className="group w-12 hover:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out pb-2"
+      data-open={isGlobalDragging || undefined}
+      className="group w-12 hover:w-[var(--side-drawer-expanded-width)] data-[open]:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out pb-2"
       style={drawerStyle}
     >
       <nav className="flex-1 pt-1">
@@ -155,7 +191,7 @@ export function SideDrawer({
               className="w-4 h-4 flex-shrink-0"
               {...(activeItem === key && { fill: 'currentColor' })}
             />
-            <span className="opacity-0 group-hover:opacity-100 group-hover:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+            <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               {label}
             </span>
           </button>
@@ -175,7 +211,7 @@ export function SideDrawer({
           {/* Collapsed: icon pinned at bottom-left, fades out when expanded */}
           <button
             onClick={handleFileSelect}
-            className="group-hover:opacity-0 group-hover:pointer-events-none transition-opacity duration-150 flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:bg-white/40"
+            className="group-hover:opacity-0 group-data-[open]:opacity-0 group-hover:pointer-events-none group-data-[open]:pointer-events-none transition-opacity duration-150 flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:bg-white/40"
             title="Upload files"
           >
             {uploading ? (
@@ -187,7 +223,7 @@ export function SideDrawer({
 
           {/* Expanded: absolutely positioned so it doesn't push the icon up when invisible */}
           <div
-            className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-hover:delay-[200ms] transition-opacity duration-150"
+            className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:pointer-events-auto group-data-[open]:pointer-events-auto group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150"
           >
             {/* Upload header */}
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
@@ -229,7 +265,7 @@ export function SideDrawer({
             className="w-4 h-4 flex-shrink-0"
             {...(activeItem === 'files' && { fill: 'currentColor' })}
           />
-          <span className="opacity-0 group-hover:opacity-100 group-hover:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+          <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
             Files
           </span>
         </button>
@@ -242,7 +278,7 @@ export function SideDrawer({
           title={userEmail || 'Log out'}
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span className="opacity-0 group-hover:opacity-100 group-hover:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+          <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
             Log out
           </span>
         </button>

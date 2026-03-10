@@ -218,6 +218,8 @@ async def list_project_files(
     # Generated outputs from initiative.deliverables
     generated: list[GeneratedFileResponse] = []
     deliverables = initiative.deliverables or {}
+    logger = logging.getLogger(__name__)
+    logger.info(f"list_project_files: initiative={initiative_id}, deliverables keys={list(deliverables.keys())}, stage={initiative.stage}")
 
     # Pre-fetch the latest memo version to check export status
     memo_result = await db.execute(
@@ -240,15 +242,33 @@ async def list_project_files(
             exported = True
             download_url = f"/api/v1/exports/{latest_memo.id}"
 
+        content = data.get("content") or {}
+
+        # LCOE/carbon are only exportable when the model was actually computed
+        if output_type in ("lcoe", "carbon"):
+            exportable = bool(
+                export_fmt is not None
+                and isinstance(content, dict)
+                and content.get("computable", False)
+                and content.get("inputs")
+            )
+        else:
+            exportable = export_fmt is not None
+
+        export_data = None
+        if output_type == "checklist":
+            export_data = content if isinstance(content, dict) else {}
+
         generated.append(GeneratedFileResponse(
             id=tool_id,
             title=data.get("title", tool_id.replace("_", " ").title()),
             output_type=output_type,
             created_at=initiative.updated_at,
-            exportable=export_fmt is not None,
+            exportable=exportable,
             export_format=export_fmt,
             exported=exported,
             download_url=download_url,
+            export_data=export_data,
         ))
 
     # Fallback: if deliverables has no memo entry but a MemoVersion exists,
@@ -272,6 +292,52 @@ async def list_project_files(
         ))
 
     return ProjectFilesResponse(uploaded=uploaded, generated=generated)
+
+
+@router.delete("/initiatives/{initiative_id}/deliverables/{tool_id}")
+async def delete_deliverable(
+    initiative_id: UUID,
+    tool_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Remove a generated deliverable from the project."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    initiative = await _get_initiative_for_user(initiative_id, user, db)
+
+    deliverables = dict(initiative.deliverables or {})
+
+    if tool_id in deliverables:
+        del deliverables[tool_id]
+        initiative.deliverables = deliverables
+        flag_modified(initiative, "deliverables")
+        await db.commit()
+    else:
+        # tool_id may be a MemoVersion UUID (fallback path)
+        try:
+            memo_uuid = UUID(tool_id)
+            memo_result = await db.execute(
+                select(MemoVersion).where(
+                    MemoVersion.id == memo_uuid,
+                    MemoVersion.initiative_id == initiative_id,
+                )
+            )
+            memo = memo_result.scalar_one_or_none()
+            if not memo:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Deliverable not found",
+                )
+            await db.delete(memo)
+            await db.commit()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deliverable not found",
+            )
+
+    return {"success": True}
 
 
 @router.get("/materials/{material_id}/download")

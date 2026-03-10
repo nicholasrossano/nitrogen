@@ -164,6 +164,7 @@ export interface GeneratedFile {
   export_format: string | null;
   exported: boolean;
   download_url: string | null;
+  export_data?: Record<string, unknown> | null;
 }
 
 export interface ProjectFilesResponse {
@@ -501,7 +502,7 @@ export const api = {
       }
     ),
 
-  downloadExport: async (memoId: string) => {
+  downloadExport: async (memoId: string, filename = 'investment_memo.docx') => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) {
@@ -513,12 +514,22 @@ export const api = {
       throw new Error('Failed to download export');
     }
     
-    // Download the file
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'investment_memo.docx';
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  triggerBlobDownload: (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -594,6 +605,44 @@ export const api = {
 
   getProjectFiles: (initiativeId: string) =>
     fetchApi<ProjectFilesResponse>(`/api/v1/initiatives/${initiativeId}/files`),
+
+  downloadDeliverable: async (initiativeId: string, toolId: string, filename: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(
+      `${API_URL}/api/v1/initiatives/${initiativeId}/deliverables/${toolId}/export`,
+      { headers }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Export failed' }));
+      throw new Error(err.detail ?? 'Export failed');
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  deleteGeneratedFile: async (initiativeId: string, toolId: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(
+      `${API_URL}/api/v1/initiatives/${initiativeId}/deliverables/${toolId}`,
+      { method: 'DELETE', headers }
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
+      throw new Error(error.detail);
+    }
+    return response.json();
+  },
 
   downloadMaterial: async (materialId: string, filename: string) => {
     const token = await getAuthToken();
@@ -822,6 +871,18 @@ export const api = {
       {
         method: 'PATCH',
         body: JSON.stringify({ title }),
+      }
+    ),
+
+  saveSessionFromMessages: (
+    messages: { role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; sources?: any[] | null; completion_meta?: Record<string, any> | null }[],
+    title?: string,
+  ) =>
+    fetchApi<{ session_id: string; title: string | null }>(
+      '/api/v1/chat/sessions/save',
+      {
+        method: 'POST',
+        body: JSON.stringify({ title, messages }),
       }
     ),
 

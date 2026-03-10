@@ -80,7 +80,7 @@ export function ProjectHeader({
 
   return (
     <header className="flex-shrink-0">
-      <div className="px-4 h-10 flex items-center relative">
+      <div className="px-4 h-14 flex items-center relative">
         {/* Left: back arrow */}
         {onBack && (
           <button
@@ -146,9 +146,9 @@ export function ProjectHeader({
                 onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
                 disabled={leftToggle.disabled}
                 title={leftToggle.title}
-                className={`icon-btn p-1 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelLeft className="w-3.5 h-3.5" />
+                <PanelLeft className="w-4 h-4" />
               </button>
             )}
             {rightToggle && (
@@ -156,18 +156,18 @@ export function ProjectHeader({
                 onClick={rightToggle.disabled ? undefined : rightToggle.onClick}
                 disabled={rightToggle.disabled}
                 title={rightToggle.title}
-                className={`icon-btn p-1 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelRight className="w-3.5 h-3.5" />
+                <PanelRight className="w-4 h-4" />
               </button>
             )}
             {onNewChat && (
               <button
                 onClick={onNewChat}
                 title="New chat"
-                className="icon-btn p-1 text-text-tertiary"
+                className="icon-btn p-1.5 text-text-tertiary"
               >
-                <SquarePen className="w-3.5 h-3.5" />
+                <SquarePen className="w-4 h-4" />
               </button>
             )}
           </div>
