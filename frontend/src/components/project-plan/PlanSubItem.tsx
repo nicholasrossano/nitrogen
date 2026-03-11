@@ -19,19 +19,19 @@ const CLASSIFICATION_STYLES: Record<Classification, {
   label: string;
 }> = {
   required: {
-    dot: 'bg-accent',
+    dot: 'bg-stroke-muted',
     card: 'bg-surface',
     badge: 'bg-accent/10 text-accent',
     label: 'REQ',
   },
   optional: {
-    dot: 'bg-accent',
+    dot: 'bg-stroke-muted',
     card: 'bg-surface',
     badge: 'bg-surface-subtle text-text-tertiary',
     label: 'OPT',
   },
   unknown: {
-    dot: 'bg-accent',
+    dot: 'bg-stroke-muted',
     card: 'bg-surface',
     badge: 'bg-indicator-orange/10 text-indicator-orange',
     label: 'UNK',
@@ -46,25 +46,27 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
 
   return (
     <div className="flex items-stretch relative group/item">
-      {/* Branch gutter */}
-      <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
-        <div className="w-px bg-stroke-subtle flex-1" />
-        <div className="relative flex-shrink-0 w-2 h-2">
-          <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ease-in-out ${onDelete ? 'group-hover/item:opacity-0' : ''} ${styles.dot}`} />
-          {onDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/item:opacity-100 group-hover/item:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
-              aria-label="Delete item"
-            >
-              <Minus className="w-2.5 h-2.5 text-white" />
-            </button>
-          )}
+      {/* Branch gutter — all absolute lines, guaranteed connected */}
+      <div className="w-8 flex-shrink-0 relative">
+        {/* Vertical line: top-0 to center for last, full height for others */}
+        <div className={`absolute left-1/2 top-0 w-px bg-stroke-subtle ${isLast ? 'h-1/2' : 'h-full'}`} />
+        {/* Horizontal line: center to right edge */}
+        <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle" />
+        {/* Dot + delete button at intersection */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+          <div className="relative w-2 h-2">
+            <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete ? 'group-hover/item:opacity-0' : ''} ${styles.dot}`} />
+            {onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/item:opacity-100 group-hover/item:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out"
+                aria-label="Delete item"
+              >
+                <Minus className="w-2.5 h-2.5 text-white" />
+              </button>
+            )}
+          </div>
         </div>
-        {!isLast
-          ? <div className="w-px bg-stroke-subtle flex-1" />
-          : <div className="flex-1" />}
-        <div className="absolute top-1/2 right-0 w-[calc(50%-4px)] h-px bg-stroke-subtle -translate-y-[0.5px]" />
       </div>
 
       {/* Node card */}

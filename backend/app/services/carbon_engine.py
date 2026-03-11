@@ -2,21 +2,22 @@
 Carbon Emissions Calculation Engine
 
 Pure-math service for computing emission reductions (tCO₂e).
-Handles: baseline vs project comparison, leakage, ER schedules, sensitivity.
+Three methodology-specific calculation paths:
 
-General formula (Gold Standard simplified cookstoves, biomass-to-biomass):
-  ER_y = (B_y − P_y) × fNRB × EF_fuel
-  where B_y and P_y are fuel consumption in tonnes/year.
+1. Cookstoves (GS TPDDTEC, biomass-to-biomass):
+   ER_y = (B_y − P_y) × fNRB × EF_fuel
+   fNRB applied symmetrically to both sides.
 
-Dual emission-factor pathways:
-  1. Direct: fuel_kg × EF_kgCO₂/kg  (preferred, aligns with GS formula)
-  2. NCV chain: fuel_kg × NCV_MJ/kg ÷ 1e6 × EF_tCO₂/TJ  (fallback)
+2. Fuel Switch (GS TPDDTEC, biomass-to-LPG/biogas/ethanol):
+   ER_y = B_y × fNRB × EF_baseline − P_y × EF_project − Leakage
+   fNRB only on baseline (biomass) side; project has its own EF.
+   Ref: TPDDTEC v3.1 Equations (3)+(5)+(7).
 
-fNRB is applied symmetrically to both baseline and project when
-project_is_biomass is True (default for cookstoves).
-
-Designed as methodology-agnostic with swappable "method packs".
-v1 ships with a cookstoves pack aligned to Gold Standard patterns.
+3. Safe Water (GS SWS v1.0):
+   BE_y = EF_b × (1 − C_b − X_cleanboil) × Q_y × M_q
+   Where EF_b = SE_w × Σ(x_f × (EF_CO2 × fNRB + EF_nonCO2)) / 1e9
+   And SE_w = 360.83 kJ/L ÷ η_wb (stove efficiency for boiling)
+   Ref: GS "Emission reductions from Safe Drinking Water Supply" v1.0.
 """
 
 from __future__ import annotations
