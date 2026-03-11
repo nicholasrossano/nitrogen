@@ -49,87 +49,60 @@ INPUT_EXTRACTION_SCHEMA = {
     "properties": {
         "method_pack": {
             "type": "string",
-            "enum": ["cookstoves", "fuel_switch", "safe_water"],
+            "enum": [
+                "cookstoves", "fuel_switch", "safe_water",
+                "grid_renewable", "solar_home", "biodigester", "efficient_lighting",
+            ],
             "description": (
-                "Project type determining calculation defaults. "
-                "'cookstoves' for improved biomass cookstoves (biomass-to-biomass). "
-                "'fuel_switch' for switching from biomass to LPG, biogas, or ethanol. "
-                "'safe_water' for water purification replacing fuel-based boiling. "
-                "Default to 'cookstoves' if the project involves improved stoves or biomass cooking."
+                "Project type determining calculation methodology. "
+                "'cookstoves': improved biomass cookstoves (biomass-to-biomass). "
+                "'fuel_switch': biomass to LPG/biogas/ethanol. "
+                "'safe_water': water purification replacing fuel-based boiling. "
+                "'grid_renewable': grid-connected solar/wind/hydro/geothermal. "
+                "'solar_home': off-grid solar home systems displacing kerosene/diesel. "
+                "'biodigester': animal manure biodigesters (methane avoidance + fuel). "
+                "'efficient_lighting': replacing incandescent/CFL with LED. "
+                "Default to 'cookstoves' if unclear but involves cooking or stoves."
             ),
         },
-        "devices_households": {
-            "type": "number",
-            "description": "Number of devices or households covered by the project",
-        },
-        "usage_rate": {
-            "type": "number",
-            "description": "Usage rate as a decimal (0-1). 1.0 means 100% of households use the device.",
-        },
-        "adoption_rate": {
-            "type": "number",
-            "description": "Adoption rate as a decimal (0-1). 1.0 means full adoption in year 1.",
-        },
-        "baseline_fuel_type": {
-            "type": "string",
-            "description": "Baseline fuel type (e.g. wood, charcoal, kerosene, dung)",
-        },
-        "baseline_fuel_consumption_kg_yr": {
-            "type": "number",
-            "description": "Baseline fuel consumption in kg per year per device/household",
-        },
-        "baseline_ncv_mj_kg": {
-            "type": "number",
-            "description": "Net calorific value of baseline fuel in MJ/kg",
-        },
-        "baseline_efficiency": {
-            "type": "number",
-            "description": "Thermal efficiency of baseline stove/device as a decimal (e.g. 0.10 for 10%)",
-        },
-        "project_fuel_type": {
-            "type": "string",
-            "description": "Project fuel type (e.g. improved_biomass, lpg, biogas, ethanol)",
-        },
-        "project_fuel_consumption_kg_yr": {
-            "type": "number",
-            "description": "Project fuel consumption in kg per year per device/household",
-        },
-        "project_ncv_mj_kg": {
-            "type": "number",
-            "description": "Net calorific value of project fuel in MJ/kg",
-        },
-        "project_efficiency": {
-            "type": "number",
-            "description": "Thermal efficiency of project stove/device as a decimal (e.g. 0.30 for 30%)",
-        },
-        "emission_factor_tco2_per_tj": {
-            "type": "number",
-            "description": "Emission factor in tCO2 per TJ for the fuel (NCV/TJ pathway)",
-        },
-        "emission_factor_kgco2_per_kg": {
-            "type": "number",
-            "description": "Emission factor in kgCO2 per kg of fuel (direct pathway, preferred). E.g. ~1.747 for wood.",
-        },
-        "fnrb": {
-            "type": "number",
-            "description": "Fraction of non-renewable biomass as a decimal (0-1)",
-        },
-        "fuel_savings_pct": {
-            "type": "number",
-            "description": "Percentage of fuel saved by the project as a decimal (0-1). E.g. 0.30 means 30% fuel savings.",
-        },
-        "project_is_biomass": {
-            "type": "boolean",
-            "description": "Whether the project technology still burns biomass. True for improved cookstoves, False for LPG/biogas switch.",
-        },
-        "leakage_factor": {
-            "type": "number",
-            "description": "Leakage factor as a decimal (0-1). 0 means no leakage.",
-        },
-        "crediting_period_years": {
-            "type": "integer",
-            "description": "Crediting period in years",
-        },
+        # --- Shared ---
+        "usage_rate": {"type": "number", "description": "Usage rate (0-1). 1.0 = 100%."},
+        "adoption_rate": {"type": "number", "description": "Adoption rate (0-1). 1.0 = full in year 1."},
+        "baseline_fuel_type": {"type": "string", "description": "Baseline fuel: wood, charcoal, kerosene, dung."},
+        "fnrb": {"type": "number", "description": "Fraction of non-renewable biomass (0-1)."},
+        "crediting_period_years": {"type": "integer", "description": "Crediting period in years."},
+        # --- Cookstoves & fuel switch ---
+        "devices_households": {"type": "number", "description": "Number of devices/households (cookstoves & fuel switch)."},
+        "baseline_fuel_consumption_kg_yr": {"type": "number", "description": "Baseline fuel in kg/yr per device/household."},
+        "project_fuel_type": {"type": "string", "description": "Project fuel: improved_biomass, lpg, biogas, ethanol."},
+        "project_fuel_consumption_kg_yr": {"type": "number", "description": "Project fuel in kg/yr per device/household."},
+        "baseline_efficiency": {"type": "number", "description": "Baseline stove thermal efficiency (decimal)."},
+        "project_efficiency": {"type": "number", "description": "Project stove thermal efficiency (decimal)."},
+        "fuel_savings_pct": {"type": "number", "description": "Fuel savings % as decimal (cookstoves only)."},
+        "emission_factor_kgco2_per_kg": {"type": "number", "description": "Direct EF kgCO2/kg (cookstoves only). ~1.747 for wood."},
+        # --- Safe water ---
+        "people_served": {"type": "number", "description": "Number of people served (safe water projects)."},
+        "water_per_person_day": {"type": "number", "description": "Litres of drinking water per person per day. Default 4, cap 5.5."},
+        "proportion_already_safe": {"type": "number", "description": "Proportion already with safe water before project (0-1)."},
+        "proportion_still_boiling": {"type": "number", "description": "Proportion still boiling after project (0-1)."},
+        # --- Grid renewable energy ---
+        "installed_capacity_kw": {"type": "number", "description": "Installed capacity in kW (grid renewable)."},
+        "capacity_factor": {"type": "number", "description": "Capacity factor 0-1 (grid renewable). ~0.18 solar, ~0.30 wind."},
+        "grid_emission_factor": {"type": "number", "description": "Grid EF in tCO₂/MWh (grid renewable, efficient lighting)."},
+        # --- Solar home systems ---
+        "num_systems": {"type": "number", "description": "Number of solar home systems deployed."},
+        "system_capacity_wp": {"type": "number", "description": "SHS panel watt-peak capacity (Wp)."},
+        "peak_sun_hours": {"type": "number", "description": "Average peak sun hours per day."},
+        "baseline_fuel_consumption_l_yr": {"type": "number", "description": "Baseline kerosene/diesel per HH per year (litres)."},
+        # --- Biodigesters ---
+        "num_digesters": {"type": "number", "description": "Number of biodigesters installed."},
+        "livestock_type": {"type": "string", "description": "Livestock type: dairy_cattle, other_cattle, swine, poultry, buffalo, sheep, goats."},
+        "num_animals": {"type": "number", "description": "Number of animals per digester."},
+        # --- Efficient lighting ---
+        "num_lamps": {"type": "number", "description": "Number of project lamps distributed."},
+        "baseline_wattage": {"type": "number", "description": "Baseline lamp wattage (W). Typical incandescent ~60W."},
+        "project_wattage": {"type": "number", "description": "Project lamp wattage (W). Typical LED ~9W."},
+        "operating_hours_per_day": {"type": "number", "description": "Daily lamp operating hours. Default 3.5, max 5.0."},
     },
 }
 
@@ -153,6 +126,10 @@ class CarbonTool(BaseTool):
                 "clean cooking", "fuel consumption", "emission factor",
                 "fuel switch", "lpg", "biogas", "ethanol",
                 "safe water", "water purification", "water filter",
+                "solar", "wind", "renewable energy", "grid emission factor",
+                "solar home system", "shs", "off-grid", "kerosene lamp",
+                "biodigester", "manure", "methane", "livestock", "anaerobic",
+                "efficient lighting", "led", "cfl", "incandescent", "lamp",
             ],
         )
 
@@ -240,6 +217,10 @@ class CarbonTool(BaseTool):
                             "- 'cookstoves': improved biomass cookstoves replacing traditional stoves\n"
                             "- 'fuel_switch': switching from biomass to LPG, biogas, or ethanol\n"
                             "- 'safe_water': water purification/filtration replacing fuel-based boiling\n"
+                            "- 'grid_renewable': grid-connected solar, wind, hydro, or geothermal power\n"
+                            "- 'solar_home': off-grid solar home systems displacing kerosene/diesel\n"
+                            "- 'biodigester': animal manure biodigesters (methane avoidance + cooking fuel)\n"
+                            "- 'efficient_lighting': LED/CFL replacing incandescent lamps\n"
                             "Default to 'cookstoves' if unclear but the project involves cooking or stoves."
                         ),
                     },
