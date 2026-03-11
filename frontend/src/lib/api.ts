@@ -1069,6 +1069,23 @@ export const api = {
     });
   },
 
+  async getCarbonProjectTypes(): Promise<{ project_types: { value: string; label: string }[] }> {
+    return fetchApi('/api/v1/carbon/project-types');
+  },
+
+  async switchCarbonMethodPack(
+    methodPack: string,
+    currentInputs?: Record<string, any>,
+  ): Promise<any> {
+    return fetchApi('/api/v1/carbon/switch-method-pack', {
+      method: 'POST',
+      body: JSON.stringify({
+        method_pack: methodPack,
+        current_inputs: currentInputs,
+      }),
+    });
+  },
+
   async exportCarbonExcel(inputs: Record<string, any>): Promise<Blob> {
     const url = `${API_URL}/api/v1/carbon/export`;
     const token = await getAuthToken();

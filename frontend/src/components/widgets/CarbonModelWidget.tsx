@@ -11,6 +11,7 @@ import {
   Pencil,
   AlertCircle,
   MessageSquare,
+  ChevronDown,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -66,6 +67,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
 
+const PROJECT_TYPE_OPTIONS = [
+  { value: 'cookstoves', label: 'Improved Cookstoves' },
+  { value: 'fuel_switch', label: 'Fuel Switch (LPG / Biogas / Ethanol)' },
+  { value: 'safe_water', label: 'Safe Water Supply' },
+];
+
 export function CarbonModelWidget({
   data: initialData,
   initiativeId,
@@ -90,6 +97,7 @@ export function CarbonModelWidget({
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [overInteractive, setOverInteractive] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isSwitchingPack, setIsSwitchingPack] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
   const result = data?.result;
@@ -97,6 +105,7 @@ export function CarbonModelWidget({
   const missingEssentials: string[] = data?.missing_essentials || [];
   const sensitivity: any[] = data?.sensitivity || [];
   const isUnruly = data?.is_unruly ?? false;
+  const currentMethodPack = data?.method_pack || (inputs.method_pack as any)?.value || 'cookstoves';
 
   useEffect(() => {
     const handler = (e: Event) => {

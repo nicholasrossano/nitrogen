@@ -10,7 +10,7 @@ import {
   FileText,
   Download,
   Loader2,
-  Trash2,
+  Minus,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -215,6 +215,18 @@ export function TemplateRequirementsWidget({
     });
   }, [persistWidget]);
 
+  const deleteSubField = useCallback((reqId: string, sfIndex: number) => {
+    setLocalReqs((prev) => {
+      const updated = prev.map((r) => {
+        if (r.id !== reqId || !r.sub_fields) return r;
+        const newSubs = r.sub_fields.filter((_, idx) => idx !== sfIndex);
+        return { ...r, sub_fields: newSubs };
+      });
+      persistWidget(updated);
+      return updated;
+    });
+  }, [persistWidget]);
+
   const investigate = useCallback((req: TemplateRequirement) => {
     setHoveredRowReq(null);
     const num = getNumber(req.id);
@@ -299,20 +311,32 @@ export function TemplateRequirementsWidget({
     const visible = children.filter((c) => parentValueMatchesCondition(parent.value, c.condition ?? null));
     if (visible.length === 0) return null;
     return (
-      <div className="ml-6 mt-2 relative space-y-2">
+      <div className="ml-6 mt-1 relative">
         {visible.map((child, idx) => {
           const isLast = idx === visible.length - 1;
           return (
-            <div key={child.id} className="flex items-stretch">
-              {/* Branch gutter */}
-              <div className="relative w-4 shrink-0">
-                {/* Vertical stem — extends through space-y-2 gap for non-last items */}
-                <div className={`absolute left-0 top-0 w-px bg-stroke-subtle ${isLast ? 'h-5' : '-bottom-2'}`} />
-                {/* Horizontal hook */}
-                <div className="absolute left-0 top-5 h-px w-3 bg-stroke-subtle" />
+            <div key={child.id} className="flex items-stretch group/subnode">
+              {/* Branch gutter — flex-col spine with dot and horizontal connector */}
+              <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
+                <div className="w-px bg-stroke-subtle flex-1" />
+                <div className="relative flex-shrink-0 w-3 h-3">
+                  <div className="w-3 h-3 rounded-full bg-stroke-muted transition-opacity duration-200 ease-in-out group-hover/subnode:opacity-0" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); deleteReq(child.id); }}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/subnode:opacity-100 group-hover/subnode:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
+                    aria-label="Remove question"
+                  >
+                    <Minus className="w-2.5 h-2.5 text-white" />
+                  </button>
+                </div>
+                {!isLast
+                  ? <div className="w-px bg-stroke-subtle flex-1" />
+                  : <div className="flex-1" />}
+                <div className="absolute top-1/2 right-0 w-[calc(50%-6px)] h-px bg-stroke-subtle -translate-y-px" />
               </div>
               {/* Child tile */}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 py-1.5 pr-1">
                 {renderTile(child)}
               </div>
             </div>
@@ -327,23 +351,35 @@ export function TemplateRequirementsWidget({
     const sfs = req.sub_fields;
     if (!sfs || sfs.length === 0) return null;
     return (
-      <div className="ml-6 mt-2 relative space-y-2">
+      <div className="ml-6 mt-1 relative">
         {sfs.map((sf, sfIdx) => {
           const sfBool = sf.field_type === 'boolean';
           const sfYesNo = sf.field_type === 'yes_no';
           const sfToggle = sfBool || sfYesNo;
           const isLast = sfIdx === sfs.length - 1;
           return (
-            <div key={`${req.id}_sf_${sfIdx}`} className="flex items-stretch">
-              {/* Branch gutter */}
-              <div className="relative w-5 shrink-0">
-                {/* Vertical stem — extends through space-y-2 gap for non-last items */}
-                <div className={`absolute left-0 top-0 w-px bg-stroke-subtle ${isLast ? 'h-5' : '-bottom-2'}`} />
-                {/* Horizontal hook */}
-                <div className="absolute left-0 top-5 h-px w-4 bg-stroke-subtle" />
+            <div key={`${req.id}_sf_${sfIdx}`} className="flex items-stretch group/subnode">
+              {/* Branch gutter — flex-col spine with dot and horizontal connector */}
+              <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
+                <div className="w-px bg-stroke-subtle flex-1" />
+                <div className="relative flex-shrink-0 w-3 h-3">
+                  <div className="w-3 h-3 rounded-full bg-stroke-muted transition-opacity duration-200 ease-in-out group-hover/subnode:opacity-0" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); deleteSubField(req.id, sfIdx); }}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/subnode:opacity-100 group-hover/subnode:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
+                    aria-label="Remove sub-field"
+                  >
+                    <Minus className="w-2.5 h-2.5 text-white" />
+                  </button>
+                </div>
+                {!isLast
+                  ? <div className="w-px bg-stroke-subtle flex-1" />
+                  : <div className="flex-1" />}
+                <div className="absolute top-1/2 right-0 w-[calc(50%-6px)] h-px bg-stroke-subtle -translate-y-px" />
               </div>
               {/* Sub-field tile */}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 py-1.5 pr-1">
                 <div className="rounded-lg border border-stroke-subtle hover:border-stroke-muted transition-colors px-3 py-2 flex items-center gap-2">
                   <span className="text-[11px] text-text-secondary leading-snug shrink-0 max-w-[45%]">
                     {sf.label}
@@ -427,11 +463,21 @@ export function TemplateRequirementsWidget({
         }}
         style={{ cursor: hoveredRowReq?.id === req.id && !overInteractive ? MAGNIFY_CURSOR : undefined }}
       >
-        {/* Number circle — vertically centered */}
+        {/* Number circle — fades on hover; minus button covers it */}
         <div className="flex items-center px-3 shrink-0">
-          <span className="w-5 h-5 rounded-full bg-surface-subtle border border-stroke-subtle flex items-center justify-center text-[9px] font-semibold text-text-tertiary leading-none">
-            {num}
-          </span>
+          <div className="relative w-5 h-5">
+            <span className="absolute inset-0 rounded-full bg-surface-subtle border border-stroke-subtle flex items-center justify-center text-[9px] font-semibold text-text-tertiary leading-none transition-opacity duration-200 group-hover/tile:opacity-0">
+              {num}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); deleteReq(req.id); }}
+              className="absolute inset-0 w-5 h-5 opacity-0 scale-50 group-hover/tile:opacity-100 group-hover/tile:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-10"
+              aria-label="Remove question"
+            >
+              <Minus className="w-3 h-3 text-white" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -593,15 +639,6 @@ export function TemplateRequirementsWidget({
         )}
         </div>{/* close content div */}
 
-        {/* Trash — bottom-right corner, visible on hover */}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); deleteReq(req.id); }}
-          className="absolute right-2 bottom-2 w-5 h-5 flex items-center justify-center rounded text-text-tertiary hover:text-red-500 opacity-0 group-hover/tile:opacity-100 transition-opacity"
-          aria-label="Remove question"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
       </div>
     );
   };

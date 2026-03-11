@@ -53,6 +53,8 @@ class CarbonInput:
     category: str = "general"
     provenance: dict | None = None
     validation_status: str = "unconfirmed"
+    field_type: str = "number"  # "number", "text", "select", "boolean"
+    options: list[str] | None = None  # for "select" fields
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -67,9 +69,12 @@ class CarbonInput:
             "rationale": self.rationale,
             "category": self.category,
             "validation_status": self.validation_status,
+            "field_type": self.field_type,
         }
         if self.provenance is not None:
             d["provenance"] = self.provenance
+        if self.options is not None:
+            d["options"] = self.options
         return d
 
     @classmethod
@@ -156,8 +161,19 @@ class SensitivityPoint:
 
 
 # ---------------------------------------------------------------------------
-# Method-pack defaults
+# Project types & method-pack defaults
 # ---------------------------------------------------------------------------
+
+PROJECT_TYPE_OPTIONS: list[dict[str, str]] = [
+    {"value": "cookstoves", "label": "Improved Cookstoves"},
+    {"value": "fuel_switch", "label": "Fuel Switch (LPG / Biogas / Ethanol)"},
+    {"value": "safe_water", "label": "Safe Water Supply"},
+]
+
+BASELINE_FUEL_OPTIONS = ["wood", "charcoal", "kerosene", "dung"]
+PROJECT_FUEL_OPTIONS_BIOMASS = ["improved_biomass"]
+PROJECT_FUEL_OPTIONS_SWITCH = ["lpg", "biogas", "ethanol"]
+PROJECT_FUEL_OPTIONS_WATER = ["purified_water"]
 
 METHOD_PACK_DEFAULTS: dict[str, dict[str, Any]] = {
     "cookstoves": {
@@ -180,6 +196,46 @@ METHOD_PACK_DEFAULTS: dict[str, dict[str, Any]] = {
         "adoption_rate": 1.0,                         # 100% adoption year-1
         "crediting_period_years": 10,
     },
+    "fuel_switch": {
+        "baseline_fuel_type": "wood",
+        "baseline_fuel_consumption_kg_yr": None,
+        "baseline_ncv_mj_kg": 15.6,
+        "baseline_efficiency": 0.10,
+        "project_fuel_type": "lpg",
+        "project_fuel_consumption_kg_yr": None,
+        "project_ncv_mj_kg": 47.3,                   # LPG NCV
+        "project_efficiency": 0.55,                   # typical LPG stove ~55%
+        "emission_factor_tco2_per_tj": 112.0,
+        "emission_factor_kgco2_per_kg": 1.747,        # baseline fuel EF (wood)
+        "fnrb": 0.70,
+        "leakage_factor": 0.10,                       # GS default 10% leakage for fuel switch
+        "fuel_savings_pct": None,
+        "project_is_biomass": False,                   # LPG/biogas/ethanol are non-biomass
+        "devices_households": None,
+        "usage_rate": 1.0,
+        "adoption_rate": 1.0,
+        "crediting_period_years": 10,
+    },
+    "safe_water": {
+        "baseline_fuel_type": "wood",
+        "baseline_fuel_consumption_kg_yr": None,       # fuel used to boil water
+        "baseline_ncv_mj_kg": 15.6,
+        "baseline_efficiency": 0.10,                   # open-fire boiling
+        "project_fuel_type": "purified_water",
+        "project_fuel_consumption_kg_yr": 0,           # no fuel — purification replaces boiling
+        "project_ncv_mj_kg": 0,
+        "project_efficiency": 1.0,
+        "emission_factor_tco2_per_tj": 112.0,
+        "emission_factor_kgco2_per_kg": 1.747,
+        "fnrb": 0.70,
+        "leakage_factor": 0.0,
+        "fuel_savings_pct": 1.0,                       # 100% fuel saved — no boiling needed
+        "project_is_biomass": False,
+        "devices_households": None,
+        "usage_rate": 1.0,
+        "adoption_rate": 1.0,
+        "crediting_period_years": 10,
+    },
     "default": {
         "baseline_fuel_type": "unknown",
         "baseline_fuel_consumption_kg_yr": None,
@@ -190,7 +246,7 @@ METHOD_PACK_DEFAULTS: dict[str, dict[str, Any]] = {
         "project_ncv_mj_kg": 15.6,
         "project_efficiency": 0.30,
         "emission_factor_tco2_per_tj": 112.0,
-        "emission_factor_kgco2_per_kg": None,         # not assumed for generic
+        "emission_factor_kgco2_per_kg": None,
         "fnrb": 0.50,
         "leakage_factor": 0.0,
         "fuel_savings_pct": None,
@@ -433,32 +489,42 @@ class CarbonEngine:
 
         defaults = _get_pack_defaults(method_pack)
         known = known_values or {}
+        pack_key = (method_pack or "").lower().replace(" ", "_").replace("-", "_")
 
-        fields: list[tuple[str, str, Any, str, str, AppliesTo]] = [
-            ("method_pack", "Methodology", method_pack or "default", "", "general", "general"),
-            ("devices_households", "Devices / Households", defaults.get("devices_households"), "units", "activity", "general"),
-            ("usage_rate", "Usage Rate", defaults.get("usage_rate", 1.0), "", "activity", "general"),
-            ("adoption_rate", "Adoption Rate", defaults.get("adoption_rate", 1.0), "", "activity", "general"),
-            ("baseline_fuel_type", "Baseline Fuel Type", defaults.get("baseline_fuel_type"), "", "baseline", "baseline"),
-            ("baseline_fuel_consumption_kg_yr", "Baseline Fuel Consumption", defaults.get("baseline_fuel_consumption_kg_yr"), "kg/yr per device", "baseline", "baseline"),
-            ("baseline_ncv_mj_kg", "Baseline NCV", defaults.get("baseline_ncv_mj_kg", 15.6), "MJ/kg", "baseline", "baseline"),
-            ("baseline_efficiency", "Baseline Stove Efficiency", defaults.get("baseline_efficiency", 0.10), "", "baseline", "baseline"),
-            ("project_fuel_type", "Project Fuel Type", defaults.get("project_fuel_type"), "", "project", "project"),
-            ("project_fuel_consumption_kg_yr", "Project Fuel Consumption", defaults.get("project_fuel_consumption_kg_yr"), "kg/yr per device", "project", "project"),
-            ("project_ncv_mj_kg", "Project NCV", defaults.get("project_ncv_mj_kg", 15.6), "MJ/kg", "project", "project"),
-            ("project_efficiency", "Project Stove Efficiency", defaults.get("project_efficiency", 0.30), "", "project", "project"),
-            ("fuel_savings_pct", "Fuel Savings %", defaults.get("fuel_savings_pct"), "", "project", "project"),
-            ("emission_factor_tco2_per_tj", "Emission Factor (tCO₂/TJ)", defaults.get("emission_factor_tco2_per_tj", 112.0), "tCO₂/TJ", "emissions", "general"),
-            ("emission_factor_kgco2_per_kg", "Emission Factor (kgCO₂/kg)", defaults.get("emission_factor_kgco2_per_kg"), "kgCO₂/kg", "emissions", "general"),
-            ("fnrb", "fNRB", defaults.get("fnrb", 0.50), "", "emissions", "general"),
-            ("project_is_biomass", "Project Uses Biomass", defaults.get("project_is_biomass", True), "", "project", "project"),
-            ("leakage_factor", "Leakage Factor", defaults.get("leakage_factor", 0.0), "", "leakage", "leakage"),
-            ("crediting_period_years", "Crediting Period", defaults.get("crediting_period_years", 10), "years", "general", "general"),
+        # Resolve project fuel options based on project type
+        if pack_key == "fuel_switch":
+            project_fuel_opts = PROJECT_FUEL_OPTIONS_SWITCH
+        elif pack_key == "safe_water":
+            project_fuel_opts = PROJECT_FUEL_OPTIONS_WATER
+        else:
+            project_fuel_opts = PROJECT_FUEL_OPTIONS_BIOMASS
+
+        # field_name, label, default, unit, category, applies_to, field_type, options
+        fields: list[tuple[str, str, Any, str, str, AppliesTo, str, list[str] | None]] = [
+            ("method_pack", "Project Type", method_pack or "default", "", "general", "general", "text", None),
+            ("devices_households", "Devices / Households", defaults.get("devices_households"), "units", "activity", "general", "number", None),
+            ("usage_rate", "Usage Rate", defaults.get("usage_rate", 1.0), "", "activity", "general", "number", None),
+            ("adoption_rate", "Adoption Rate", defaults.get("adoption_rate", 1.0), "", "activity", "general", "number", None),
+            ("baseline_fuel_type", "Baseline Fuel Type", defaults.get("baseline_fuel_type"), "", "baseline", "baseline", "select", BASELINE_FUEL_OPTIONS),
+            ("baseline_fuel_consumption_kg_yr", "Baseline Fuel Consumption", defaults.get("baseline_fuel_consumption_kg_yr"), "kg/yr per device", "baseline", "baseline", "number", None),
+            ("baseline_ncv_mj_kg", "Baseline NCV", defaults.get("baseline_ncv_mj_kg", 15.6), "MJ/kg", "baseline", "baseline", "number", None),
+            ("baseline_efficiency", "Baseline Efficiency", defaults.get("baseline_efficiency", 0.10), "", "baseline", "baseline", "number", None),
+            ("project_fuel_type", "Project Fuel Type", defaults.get("project_fuel_type"), "", "project", "project", "select", project_fuel_opts),
+            ("project_fuel_consumption_kg_yr", "Project Fuel Consumption", defaults.get("project_fuel_consumption_kg_yr"), "kg/yr per device", "project", "project", "number", None),
+            ("project_ncv_mj_kg", "Project NCV", defaults.get("project_ncv_mj_kg", 15.6), "MJ/kg", "project", "project", "number", None),
+            ("project_efficiency", "Project Efficiency", defaults.get("project_efficiency", 0.30), "", "project", "project", "number", None),
+            ("fuel_savings_pct", "Fuel Savings %", defaults.get("fuel_savings_pct"), "", "project", "project", "number", None),
+            ("emission_factor_tco2_per_tj", "Emission Factor (tCO₂/TJ)", defaults.get("emission_factor_tco2_per_tj", 112.0), "tCO₂/TJ", "emissions", "general", "number", None),
+            ("emission_factor_kgco2_per_kg", "Emission Factor (kgCO₂/kg)", defaults.get("emission_factor_kgco2_per_kg"), "kgCO₂/kg", "emissions", "general", "number", None),
+            ("fnrb", "fNRB", defaults.get("fnrb", 0.50), "", "emissions", "general", "number", None),
+            ("project_is_biomass", "Project Uses Biomass", defaults.get("project_is_biomass", True), "", "project", "project", "boolean", None),
+            ("leakage_factor", "Leakage Factor", defaults.get("leakage_factor", 0.0), "", "leakage", "leakage", "number", None),
+            ("crediting_period_years", "Crediting Period", defaults.get("crediting_period_years", 10), "years", "general", "general", "number", None),
         ]
 
         result: dict[str, CarbonInput] = {}
 
-        for field_name, label, default_val, unit, category, applies_to in fields:
+        for field_name, label, default_val, unit, category, applies_to, ftype, opts in fields:
             if field_name in known and known[field_name] is not None:
                 prov = ItemProvenance(
                     derivation=Derivation.PROVIDED,
@@ -475,6 +541,8 @@ class CarbonEngine:
                     category=category,
                     provenance=prov,
                     validation_status=ValidationStatus.UNCONFIRMED,
+                    field_type=ftype,
+                    options=opts,
                 )
             elif default_val is not None:
                 rationale = ""
@@ -496,6 +564,8 @@ class CarbonEngine:
                     category=category,
                     provenance=prov,
                     validation_status=ValidationStatus.UNCONFIRMED,
+                    field_type=ftype,
+                    options=opts,
                 )
             else:
                 result[field_name] = CarbonInput(
@@ -509,6 +579,8 @@ class CarbonEngine:
                     category=category,
                     provenance=None,
                     validation_status=ValidationStatus.MISSING,
+                    field_type=ftype,
+                    options=opts,
                 )
 
         return result
