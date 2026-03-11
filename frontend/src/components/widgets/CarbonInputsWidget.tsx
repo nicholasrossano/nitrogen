@@ -42,12 +42,13 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
 };
 
 
-const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'leakage', 'general'];
+const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'adjustments', 'leakage', 'general'];
 const CATEGORY_LABELS: Record<string, string> = {
   activity: 'Activity',
   baseline: 'Baseline Scenario',
   project: 'Project Scenario',
   emissions: 'Emission Factors',
+  adjustments: 'Behaviour Adjustments',
   leakage: 'Leakage',
   general: 'General',
 };

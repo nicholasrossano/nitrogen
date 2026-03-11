@@ -1,4 +1,5 @@
-import { Minus } from 'lucide-react';
+import { useState } from 'react';
+import { Minus, Check } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem } from '@/lib/api';
 
 interface PlanSubItemProps {
@@ -43,6 +44,7 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
   const cls = (item.classification as Classification) ?? 'optional';
   const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
   const isClickable = Boolean(onDeepDive);
+  const [isComplete, setIsComplete] = useState(false);
 
   return (
     <div className="flex items-stretch relative group/item">
@@ -72,19 +74,44 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
       {/* Node card */}
       <div className="flex-1 min-w-0 py-1.5 pr-2">
         <div
-          className={`px-3 py-2.5 rounded-md shadow-card ${styles.card} ${isClickable ? 'plan-item-lift cursor-pointer' : ''} relative`}
-          onClick={isClickable ? () => onDeepDive!(item) : undefined}
-          role={isClickable ? 'button' : undefined}
-          tabIndex={isClickable ? 0 : undefined}
-          onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDeepDive!(item); } } : undefined}
+          className={`px-3 py-2 rounded-md shadow-card flex items-center gap-2 transition-colors ${
+            isComplete
+              ? 'bg-green-50/60 border border-green-200'
+              : `${styles.card} border border-transparent ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`
+          }`}
+          onClick={isClickable && !isComplete ? () => onDeepDive!(item) : undefined}
+          role={isClickable && !isComplete ? 'button' : undefined}
+          tabIndex={isClickable && !isComplete ? 0 : undefined}
+          onKeyDown={isClickable && !isComplete ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDeepDive!(item); } } : undefined}
           aria-label={isClickable ? `Deep dive: ${item.title}` : undefined}
         >
-          <span className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none ${styles.badge}`}>
+          {/* REQ / OPT badge — leading */}
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wide leading-none flex-shrink-0 transition-opacity ${
+            isComplete ? 'opacity-40' : ''
+          } ${styles.badge}`}>
             {styles.label}
           </span>
-          <span className="text-sm font-medium text-text-primary leading-snug block pr-10">
+
+          {/* Title */}
+          <span className={`flex-1 text-sm font-medium leading-snug transition-colors ${
+            isComplete ? 'line-through text-text-tertiary' : 'text-text-primary'
+          }`}>
             {item.title}
           </span>
+
+          {/* Checkbox — trailing */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIsComplete(v => !v); }}
+            aria-label={isComplete ? 'Mark incomplete' : 'Mark complete'}
+            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150 ${
+              isComplete
+                ? 'bg-green-500 border-green-500'
+                : 'border-stroke-muted hover:border-green-400 bg-transparent'
+            }`}
+          >
+            {isComplete && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+          </button>
         </div>
       </div>
     </div>

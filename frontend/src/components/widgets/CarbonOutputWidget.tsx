@@ -36,12 +36,13 @@ const QUALITY_STYLES: Record<string, { bg: string; text: string; icon: typeof Ch
   low: { bg: 'bg-red-50', text: 'text-red-700', icon: AlertTriangle },
 };
 
-const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'leakage', 'general'];
+const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'adjustments', 'leakage', 'general'];
 const CATEGORY_LABELS: Record<string, string> = {
   activity: 'Activity',
   baseline: 'Baseline Scenario',
   project: 'Project Scenario',
   emissions: 'Emission Factors',
+  adjustments: 'Behaviour Adjustments',
   leakage: 'Leakage',
   general: 'General',
 };
