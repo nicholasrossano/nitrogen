@@ -86,7 +86,6 @@ export function ConversationView({
 
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
-  const [draftEditing, setDraftEditing] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -120,7 +119,6 @@ export function ConversationView({
       if (text) {
         setInput(text);
         setDraftTag(label);
-        setDraftEditing(false);
         setTimeout(() => textareaRef.current?.focus(), 0);
       }
     };
@@ -134,7 +132,7 @@ export function ConversationView({
       ta.style.height = 'auto';
       ta.style.height = `${Math.min(ta.scrollHeight, 150)}px`;
     }
-  }, [input, draftEditing]);
+  }, [input]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +140,6 @@ export function ConversationView({
     onSendMessage(input.trim());
     setInput('');
     setDraftTag(null);
-    setDraftEditing(false);
     setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -295,33 +292,20 @@ export function ConversationView({
               </div>
             )}
 
-            {draftTag && input && !draftEditing ? (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setDraftEditing(true)}
-                className="w-full px-5 pt-3 pb-1 text-sm text-text-primary cursor-text prose-draft"
-              >
-                <ReactMarkdown components={streamingMarkdownComponents}>
-                  {input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <textarea
-                ref={textareaRef}
-                value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '')}
-                onChange={(e) => {
-                  const ctx = input.match(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/)?.[0] || '';
-                  setInput(ctx ? e.target.value + ctx : e.target.value);
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything"
-                disabled={sending}
-                rows={1}
-                className="w-full resize-none bg-transparent px-5 pt-3 pb-1 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
-              />
-            )}
+            <textarea
+              ref={textareaRef}
+              value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '')}
+              onChange={(e) => {
+                const ctx = input.match(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/)?.[0] || '';
+                setInput(ctx ? e.target.value + ctx : e.target.value);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask anything"
+              disabled={sending}
+              rows={1}
+              className="w-full resize-none bg-transparent px-5 pt-3 pb-1 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
+            />
 
             {/* Bottom row: attach + send */}
             <div className="flex items-center justify-end gap-1.5 px-4 pb-2.5">
