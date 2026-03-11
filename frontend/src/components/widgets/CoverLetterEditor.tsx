@@ -209,11 +209,12 @@ export function CoverLetterEditor({
       </div>
 
       {/* Export footer */}
-      <div className="flex-shrink-0 p-4 border-t border-divider bg-surface-header">
+      <div className="flex-shrink-0 p-4 border-t border-divider bg-surface-header flex justify-center">
         <button
           onClick={handleExport}
           disabled={exporting || !workspaceId}
-          className="btn-primary w-full !py-3"
+          className="btn-primary !text-xs !px-4 !py-1.5"
+          style={{ width: '40%' }}
         >
           {exporting ? (
             <>
