@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     
     # Gold Standard template settings
     gs_cover_letter_template_url: str = "https://globalgoals.goldstandard.org/standards/T-PreReview_V2.0-Cover-Letter.docx"
+    gs_preliminary_review_template_url: str = ""  # Optional: add when GS publishes direct DOCX URL
     gs_template_cache_ttl_hours: int = 24
 
     # RAG settings

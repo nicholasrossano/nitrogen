@@ -1114,10 +1114,10 @@ export const api = {
     return fetchApi(`/api/v1/gs/template/${versionId}/fields`);
   },
 
-  async createGSWorkspace(initiativeId?: string, sessionId?: string): Promise<any> {
+  async createGSWorkspace(initiativeId?: string, sessionId?: string, templateType = 'cover_letter'): Promise<any> {
     return fetchApi('/api/v1/gs/workspace', {
       method: 'POST',
-      body: JSON.stringify({ initiative_id: initiativeId, session_id: sessionId }),
+      body: JSON.stringify({ initiative_id: initiativeId, session_id: sessionId, template_type: templateType }),
     });
   },
 
@@ -1125,12 +1125,16 @@ export const api = {
     return fetchApi(`/api/v1/gs/workspace/${workspaceId}`);
   },
 
-  async getGSWorkspaceByInitiative(initiativeId: string): Promise<any> {
-    return fetchApi(`/api/v1/gs/workspace/by-initiative/${initiativeId}`);
+  async getGSWorkspaceByInitiative(initiativeId: string, templateType = 'cover_letter'): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/by-initiative/${initiativeId}?template_type=${templateType}`);
   },
 
-  async getGSWorkspaceBySession(sessionId: string): Promise<any> {
-    return fetchApi(`/api/v1/gs/workspace/by-session/${sessionId}`);
+  async getGSWorkspaceBySession(sessionId: string, templateType = 'cover_letter'): Promise<any> {
+    return fetchApi(`/api/v1/gs/workspace/by-session/${sessionId}?template_type=${templateType}`);
+  },
+
+  async getGSActiveTemplate(templateType: string): Promise<any> {
+    return fetchApi(`/api/v1/gs/template/active/${templateType}`);
   },
 
   async updateGSFieldValues(workspaceId: string, fields: Record<string, string>): Promise<any> {

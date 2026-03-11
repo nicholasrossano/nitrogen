@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Circle,
   Lock,
-  FileText,
   ExternalLink,
   ChevronRight,
   AlertTriangle,
@@ -30,7 +29,7 @@ interface GSCertificationWidgetProps {
   messageId?: string;
 }
 
-type Tab = 'checklist' | 'cover_letter';
+type Tab = 'checklist' | 'cover_letter' | 'preliminary_review';
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
   not_started: { bg: 'bg-surface-subtle', text: 'text-text-tertiary', label: 'Not Started' },
@@ -41,41 +40,58 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
 
 export function GSCertificationWidget({ data, initiativeId, messageId }: GSCertificationWidgetProps) {
   const [activeTab, setActiveTab] = useState<Tab>('checklist');
-  const [workspaceId, setWorkspaceId] = useState<string | null>(data.workspace_id || null);
+  const [coverLetterWorkspaceId, setCoverLetterWorkspaceId] = useState<string | null>(data.workspace_id || null);
+  const [prelimWorkspaceId, setPrelimWorkspaceId] = useState<string | null>(null);
   const [checklistState, setChecklistState] = useState<Record<string, { status: string }>>({});
-  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
-  const [completion, setCompletion] = useState<any>(null);
+  const [coverLetterFields, setCoverLetterFields] = useState<Record<string, any>>({});
+  const [prelimFields, setPrelimFields] = useState<Record<string, any>>({});
+  const [coverLetterCompletion, setCoverLetterCompletion] = useState<any>(null);
+  const [prelimCompletion, setPrelimCompletion] = useState<any>(null);
+  const [prelimSchema, setPrelimSchema] = useState<{ field_schema: any[]; section_context: Record<string, string> } | null>(null);
+  const [prelimLoading, setPrelimLoading] = useState(false);
   const sessionId = useChatStore((s) => s.currentDbSessionId);
 
-  const ensureWorkspace = useCallback(async () => {
-    if (workspaceId) return workspaceId;
+  const ensureWorkspace = useCallback(async (templateType: 'cover_letter' | 'preliminary_review' = 'cover_letter') => {
+    if (templateType === 'cover_letter' && coverLetterWorkspaceId) return coverLetterWorkspaceId;
+    if (templateType === 'preliminary_review' && prelimWorkspaceId) return prelimWorkspaceId;
     try {
-      const ws = await api.createGSWorkspace(initiativeId || undefined, sessionId || undefined);
-      setWorkspaceId(ws.id);
-      setChecklistState(ws.checklist_state || {});
-      setFieldValues(ws.field_values || {});
+      const ws = await api.createGSWorkspace(initiativeId || undefined, sessionId || undefined, templateType);
+      if (templateType === 'cover_letter') {
+        setCoverLetterWorkspaceId(ws.id);
+        setCoverLetterFields(ws.field_values || {});
+        setChecklistState(ws.checklist_state || {});
+      } else {
+        setPrelimWorkspaceId(ws.id);
+        setPrelimFields(ws.field_values || {});
+      }
       return ws.id as string;
     } catch (err) {
       console.error('Failed to create GS workspace', err);
       return null;
     }
-  }, [workspaceId, initiativeId, sessionId]);
+  }, [coverLetterWorkspaceId, prelimWorkspaceId, initiativeId, sessionId]);
 
   useEffect(() => {
-    ensureWorkspace();
+    ensureWorkspace('cover_letter');
   }, [ensureWorkspace]);
 
-  const handleOpenCoverLetter = useCallback(() => {
-    setActiveTab('cover_letter');
+  const handleOpenDocument = useCallback((docId: string) => {
+    if (docId === 'cover_letter') setActiveTab('cover_letter');
+    if (docId === 'preliminary_review') setActiveTab('preliminary_review');
   }, []);
 
-  const handleFieldsUpdated = useCallback((newFields: Record<string, any>, newCompletion: any) => {
-    setFieldValues(newFields);
-    setCompletion(newCompletion);
+  const handleCoverLetterFieldsUpdated = useCallback((newFields: Record<string, any>, newCompletion: any) => {
+    setCoverLetterFields(newFields);
+    setCoverLetterCompletion(newCompletion);
+  }, []);
+
+  const handlePrelimFieldsUpdated = useCallback((newFields: Record<string, any>, newCompletion: any) => {
+    setPrelimFields(newFields);
+    setPrelimCompletion(newCompletion);
   }, []);
 
   const handleChecklistUpdate = useCallback(async (itemId: string, status: string) => {
-    const wsId = await ensureWorkspace();
+    const wsId = await ensureWorkspace('cover_letter');
     if (!wsId) return;
     try {
       const result = await api.updateGSChecklistState(wsId, itemId, status);
@@ -85,10 +101,35 @@ export function GSCertificationWidget({ data, initiativeId, messageId }: GSCerti
     }
   }, [ensureWorkspace]);
 
+  const ensurePrelimWorkspaceAndSchema = useCallback(async () => {
+    if (prelimSchema) return;
+    setPrelimLoading(true);
+    try {
+      const [template, ws] = await Promise.all([
+        api.getGSActiveTemplate('preliminary_review'),
+        api.createGSWorkspace(initiativeId || undefined, sessionId || undefined, 'preliminary_review'),
+      ]);
+      setPrelimSchema({
+        field_schema: template.field_schema || [],
+        section_context: template.section_context || {},
+      });
+      setPrelimWorkspaceId(ws.id);
+      setPrelimFields(ws.field_values || {});
+    } catch (err) {
+      console.error('Failed to load preliminary review', err);
+    } finally {
+      setPrelimLoading(false);
+    }
+  }, [prelimSchema, initiativeId, sessionId]);
+
+  useEffect(() => {
+    if (activeTab === 'preliminary_review') ensurePrelimWorkspaceAndSchema();
+  }, [activeTab, ensurePrelimWorkspaceAndSchema]);
+
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Tab bar */}
-      <div className="flex-shrink-0 flex border-b border-divider bg-white">
+      <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
         <button
           onClick={() => setActiveTab('checklist')}
           className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
@@ -108,9 +149,24 @@ export function GSCertificationWidget({ data, initiativeId, messageId }: GSCerti
           }`}
         >
           Cover Letter
-          {completion && (
+          {coverLetterCompletion && (
             <span className="ml-1.5 text-[10px] text-text-tertiary">
-              {completion.filled_fields}/{completion.total_fields}
+              {coverLetterCompletion.filled_fields}/{coverLetterCompletion.total_fields}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('preliminary_review')}
+          className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+            activeTab === 'preliminary_review'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Preliminary Review
+          {prelimCompletion && (
+            <span className="ml-1.5 text-[10px] text-text-tertiary">
+              {prelimCompletion.filled_fields}/{prelimCompletion.total_fields}
             </span>
           )}
         </button>
@@ -124,17 +180,32 @@ export function GSCertificationWidget({ data, initiativeId, messageId }: GSCerti
             checklistState={checklistState}
             templateStatus={data.template_status}
             templateLabel={data.template_version_label}
-            onOpenCoverLetter={handleOpenCoverLetter}
+            onOpenDocument={handleOpenDocument}
             onUpdateStatus={handleChecklistUpdate}
-            completion={completion}
+            coverLetterCompletion={coverLetterCompletion}
+            prelimCompletion={prelimCompletion}
           />
+        ) : activeTab === 'cover_letter' ? (
+          <CoverLetterEditor
+            fieldSchema={data.field_schema || []}
+            sectionContext={data.section_context || {}}
+            fieldValues={coverLetterFields}
+            workspaceId={coverLetterWorkspaceId}
+            documentTitle="Cover Letter"
+            onFieldsUpdated={handleCoverLetterFieldsUpdated}
+          />
+        ) : prelimLoading || !prelimSchema ? (
+          <div className="flex items-center justify-center h-32 text-text-tertiary text-sm">
+            {prelimLoading ? 'Loading...' : 'Loading Preliminary Review...'}
+          </div>
         ) : (
           <CoverLetterEditor
-            fieldSchema={data.field_schema}
-            htmlPreview={data.html_preview}
-            fieldValues={fieldValues}
-            workspaceId={workspaceId}
-            onFieldsUpdated={handleFieldsUpdated}
+            fieldSchema={prelimSchema.field_schema}
+            sectionContext={prelimSchema.section_context}
+            fieldValues={prelimFields}
+            workspaceId={prelimWorkspaceId}
+            documentTitle="Preliminary Review"
+            onFieldsUpdated={handlePrelimFieldsUpdated}
           />
         )}
       </div>
@@ -148,17 +219,19 @@ function ChecklistTab({
   checklistState,
   templateStatus,
   templateLabel,
-  onOpenCoverLetter,
+  onOpenDocument,
   onUpdateStatus,
-  completion,
+  coverLetterCompletion,
+  prelimCompletion,
 }: {
   items: ChecklistItem[];
   checklistState: Record<string, { status: string }>;
   templateStatus: string | null;
   templateLabel: string | null;
-  onOpenCoverLetter: () => void;
+  onOpenDocument: (docId: string) => void;
   onUpdateStatus: (itemId: string, status: string) => void;
-  completion: any;
+  coverLetterCompletion: any;
+  prelimCompletion: any;
 }) {
   return (
     <div className="p-5 space-y-4">
@@ -196,16 +269,16 @@ function ChecklistTab({
             : 'not_supported_yet';
           const config = STATUS_CONFIG[itemStatus] || STATUS_CONFIG.not_started;
 
-          // For cover letter, reflect completion
-          const coverLetterStatus = item.id === 'cover_letter' && completion
+          const completion = item.id === 'cover_letter' ? coverLetterCompletion : item.id === 'preliminary_review' ? prelimCompletion : null;
+          const docStatus = completion
             ? completion.status === 'complete' || completion.status === 'ready_for_signature'
               ? 'complete'
               : completion.filled_fields > 0
                 ? 'in_progress'
                 : 'not_started'
             : itemStatus;
-          const displayConfig = item.id === 'cover_letter' && completion
-            ? STATUS_CONFIG[coverLetterStatus] || config
+          const displayConfig = completion
+            ? STATUS_CONFIG[docStatus] || config
             : config;
 
           return (
@@ -215,14 +288,16 @@ function ChecklistTab({
                 item.supported ? 'cursor-pointer hover:border-accent/30' : ''
               }`}
               onClick={() => {
-                if (item.id === 'cover_letter') onOpenCoverLetter();
+                if (item.supported && (item.id === 'cover_letter' || item.id === 'preliminary_review')) {
+                  onOpenDocument(item.id);
+                }
               }}
             >
               <div className="px-4 py-3 flex items-center gap-3">
                 <div className="flex-shrink-0">
-                  {coverLetterStatus === 'complete' ? (
+                  {docStatus === 'complete' ? (
                     <CheckCircle2 className="w-4.5 h-4.5 text-indicator-green" />
-                  ) : coverLetterStatus === 'in_progress' ? (
+                  ) : docStatus === 'in_progress' ? (
                     <Circle className="w-4.5 h-4.5 text-indicator-yellow" />
                   ) : !item.supported ? (
                     <Lock className="w-4 h-4 text-text-tertiary" />

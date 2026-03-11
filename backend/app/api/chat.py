@@ -642,13 +642,14 @@ async def execute_action(
     elif action == "start_gs_certification":
         import asyncio as _asyncio
         from app.services.gs_cover_letter import GS_CHECKLIST_ITEMS, _get_fallback_field_schema
-        from app.services.gs_template_service import GSTemplateService, TEMPLATE_TYPE_COVER_LETTER
+        from app.services.gs_template_service import GSTemplateService, TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW
         try:
             template_svc = GSTemplateService(db)
             template = await _asyncio.wait_for(
                 template_svc.get_or_fetch_active_template(TEMPLATE_TYPE_COVER_LETTER),
                 timeout=30.0,
             )
+            section_context = template_svc.get_section_contexts(TEMPLATE_TYPE_COVER_LETTER)
             widget_type = "gs_checklist"
             widget_data = {
                 "checklist_items": GS_CHECKLIST_ITEMS,
@@ -656,10 +657,12 @@ async def execute_action(
                 "template_version_label": template.version_label,
                 "template_status": template.status,
                 "field_schema": template.field_schema or [],
-                "html_preview": template.html_preview or "",
+                "section_context": section_context,
+                "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
             }
         except Exception as e:
             logger.error(f"GS certification tool failed: {e}", exc_info=True)
+            section_context = GSTemplateService(db).get_section_contexts(TEMPLATE_TYPE_COVER_LETTER)
             widget_type = "gs_checklist"
             widget_data = {
                 "checklist_items": GS_CHECKLIST_ITEMS,
@@ -667,7 +670,8 @@ async def execute_action(
                 "template_version_label": None,
                 "template_status": None,
                 "field_schema": _get_fallback_field_schema(),
-                "html_preview": "",
+                "section_context": section_context,
+                "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
             }
 
     return widget_type, widget_data, assistant_response, sources

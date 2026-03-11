@@ -31,9 +31,13 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 TEMPLATE_TYPE_COVER_LETTER = "cover_letter"
+TEMPLATE_TYPE_PRELIMINARY_REVIEW = "preliminary_review"
 
 TEMPLATE_URLS = {
     TEMPLATE_TYPE_COVER_LETTER: settings.gs_cover_letter_template_url,
+    TEMPLATE_TYPE_PRELIMINARY_REVIEW: getattr(
+        settings, "gs_preliminary_review_template_url", ""
+    ) or None,
 }
 
 
@@ -177,15 +181,17 @@ class GSTemplateService:
         if active:
             return active
 
-        # Nothing cached — try to fetch, but with a strict timeout so we never hang
-        try:
-            return await self.fetch_latest_template(template_type)
-        except Exception as e:
-            logger.warning(
-                "Could not fetch GS template from web (%s); creating synthetic fallback: %s",
-                template_type, e,
-            )
-            return await self._create_synthetic_template(template_type)
+        # Nothing cached — try to fetch (skip if no URL), or create synthetic fallback
+        url = TEMPLATE_URLS.get(template_type)
+        if url:
+            try:
+                return await self.fetch_latest_template(template_type)
+            except Exception as e:
+                logger.warning(
+                    "Could not fetch GS template from web (%s); creating synthetic fallback: %s",
+                    template_type, e,
+                )
+        return await self._create_synthetic_template(template_type)
 
     async def approve_template(self, version_id: UUID, approved_by: str) -> GSTemplateVersion:
         """Approve a draft template and deprecate the previous approved version."""
@@ -480,6 +486,47 @@ class GSTemplateService:
                       help_text="Leave blank — sign after export"),
         ]
 
+    def _get_fallback_preliminary_review_fields(self) -> list[FieldDef]:
+        """Bespoke fields for Preliminary Review when no template URL is available."""
+        loc = lambda i: {"type": "paragraph", "index": i}
+        return [
+            FieldDef("project_title", "Project Title", "text", "Project Information", True, loc(0)),
+            FieldDef("project_developer_name", "Project Developer / Proponent Name", "text", "Project Information", True, loc(1)),
+            FieldDef("project_country", "Host Country", "text", "Project Information", True, loc(2)),
+            FieldDef("methodology", "Methodology / Protocol", "text", "Project Information", True, loc(3)),
+            FieldDef("project_scale", "Project Scale", "choice", "Project Information", True, loc(4),
+                      help_text="Micro, Small, Regular, or Large"),
+            FieldDef("project_summary", "Brief Project Summary", "multiline", "Project Description", True, loc(5)),
+            FieldDef("expected_credits", "Expected Annual Emission Reductions (tCO2e)", "text", "Project Description", False, loc(6)),
+            FieldDef("documents_list", "Documents Submitted with this Submission", "multiline", "Submission", True, loc(7)),
+            FieldDef("signatory_name", "Authorized Signatory Name", "text", "Declaration", True, loc(8)),
+            FieldDef("signatory_title", "Title / Position", "text", "Declaration", True, loc(9)),
+            FieldDef("signature_date", "Date", "date", "Declaration", True, loc(10)),
+        ]
+
+    @staticmethod
+    def get_section_contexts(template_type: str) -> dict[str, str]:
+        """Return explanatory context text per section for questionnaire UI."""
+        if template_type == TEMPLATE_TYPE_COVER_LETTER:
+            return {
+                "Project Information": "Basic project identification details required for all Gold Standard submissions.",
+                "Project Developer": "Contact and organizational information for the project developer or implementing entity.",
+                "Project Details": "Methodology, scale, crediting period, and estimated emission reductions.",
+                "Project Summary": "A concise description of the project activities and expected outcomes.",
+                "Sustainability": "How the project contributes to sustainable development goals (optional but recommended).",
+                "Stakeholder Engagement": "Summary of consultations with local stakeholders (optional).",
+                "Submission Details": "List of all documents being submitted with this cover letter.",
+                "Declaration": "Authorized signatory information. Sign after export.",
+            }
+        if template_type == TEMPLATE_TYPE_PRELIMINARY_REVIEW:
+            return {
+                "Project Information": "Core project identification for the preliminary review screening.",
+                "Project Description": "Brief overview of the project and expected emission reductions.",
+                "Submission": "Documents accompanying this preliminary review submission.",
+                "Declaration": "Authorized signatory details.",
+            }
+        return {}
+
     # ------------------------------------------------------------------
     # HTML preview generation
     # ------------------------------------------------------------------
@@ -575,18 +622,28 @@ class GSTemplateService:
     async def _create_synthetic_template(self, template_type: str) -> GSTemplateVersion:
         """Create a placeholder template using the hardcoded fallback field schema.
 
-        This is used when the GS website is unreachable so users can still
-        fill fields. Exports will use a generic blank document structure.
+        This is used when the GS website is unreachable or no URL is configured.
+        Exports will use a generic blank document structure.
         """
         import io
         from docx import Document as DocxDocument
 
-        fallback_fields = self._get_fallback_cover_letter_fields()
-        field_schema_dicts = [asdict(f) for f in fallback_fields]
+        if template_type == TEMPLATE_TYPE_PRELIMINARY_REVIEW:
+            fallback_fields = self._get_fallback_preliminary_review_fields()
+            doc_title = "Gold Standard Preliminary Review Submission"
+        else:
+            fallback_fields = self._get_fallback_cover_letter_fields()
+            doc_title = "Gold Standard Cover Letter"
+        field_schema_dicts = []
+        for f in fallback_fields:
+            d = asdict(f)
+            if not d.get("placeholder_text"):
+                d["placeholder_text"] = f"[{f.label}]"
+            field_schema_dicts.append(d)
 
         # Build a minimal placeholder DOCX so fill_template has something to write into
         doc = DocxDocument()
-        doc.add_heading("Gold Standard Cover Letter", 0)
+        doc.add_heading(doc_title, 0)
         doc.add_paragraph("(Template loaded in offline mode — formatting may differ from the official GS template)")
         doc.add_paragraph("")
         for f in fallback_fields:
@@ -607,7 +664,7 @@ class GSTemplateService:
         version_count = await self._count_versions(template_type)
 
         # Build a minimal HTML preview from the fallback fields
-        html_lines = ["<h1>Gold Standard Cover Letter</h1>",
+        html_lines = [f"<h1>{doc_title}</h1>",
                       "<p><em>(Offline mode — fill fields below)</em></p>"]
         for f in fallback_fields:
             placeholder = f.placeholder_text or f"[{f.label}]"

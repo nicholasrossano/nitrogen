@@ -21,7 +21,11 @@ from app.core.auth import get_current_user, MockUser
 from app.core.database import get_db
 from app.models.gs_template import GSTemplateVersion
 from app.models.gs_workspace import GSCertificationWorkspace
-from app.services.gs_template_service import GSTemplateService, TEMPLATE_TYPE_COVER_LETTER
+from app.services.gs_template_service import (
+    GSTemplateService,
+    TEMPLATE_TYPE_COVER_LETTER,
+    TEMPLATE_TYPE_PRELIMINARY_REVIEW,
+)
 from app.services.gs_cover_letter import CoverLetterService, GS_CHECKLIST_ITEMS
 
 logger = logging.getLogger(__name__)
@@ -35,6 +39,7 @@ router = APIRouter()
 class CreateWorkspaceRequest(BaseModel):
     initiative_id: Optional[str] = None
     session_id: Optional[str] = None
+    template_type: str = "cover_letter"  # cover_letter | preliminary_review
 
 
 class UpdateFieldsRequest(BaseModel):
@@ -53,6 +58,28 @@ class ApproveTemplateRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Template endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/gs/template/active/{template_type}")
+async def get_active_template_schema(
+    template_type: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Return field schema and section context for the active template of this type."""
+    if template_type not in (TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW):
+        raise HTTPException(status_code=400, detail=f"Unknown template type: {template_type}")
+    template_svc = GSTemplateService(db)
+    template = await template_svc.get_or_fetch_active_template(template_type)
+    section_contexts = template_svc.get_section_contexts(template_type)
+    return {
+        "template_type": template_type,
+        "template_version_id": str(template.id),
+        "template_version_label": template.version_label,
+        "template_status": template.status,
+        "field_schema": template.field_schema or [],
+        "section_context": section_contexts,
+    }
+
 
 @router.get("/gs/template/status")
 async def get_template_status(
@@ -141,9 +168,14 @@ async def create_workspace(
     """Create a GS certification workspace, pinning the active template version."""
     initiative_id = UUID(data.initiative_id) if data.initiative_id else None
     session_id = UUID(data.session_id) if data.session_id else None
+    template_type = data.template_type or "cover_letter"
+    if template_type not in (TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW):
+        template_type = TEMPLATE_TYPE_COVER_LETTER
 
-    # Check for existing workspace
-    query = select(GSCertificationWorkspace)
+    # Check for existing workspace for this document type
+    query = select(GSCertificationWorkspace).where(
+        GSCertificationWorkspace.template_type == template_type,
+    )
     if initiative_id:
         query = query.where(GSCertificationWorkspace.initiative_id == initiative_id)
     elif session_id:
@@ -153,14 +185,15 @@ async def create_workspace(
     if existing:
         return _workspace_response(existing)
 
-    # Get or fetch the active template
+    # Get or fetch the active template for this document type
     template_svc = GSTemplateService(db)
-    template = await template_svc.get_or_fetch_active_template(TEMPLATE_TYPE_COVER_LETTER)
+    template = await template_svc.get_or_fetch_active_template(template_type)
 
     workspace = GSCertificationWorkspace(
         initiative_id=initiative_id,
         session_id=session_id,
         template_version_id=template.id,
+        template_type=template_type,
         field_values={},
         checklist_state={item["id"]: {"status": "not_started"} for item in GS_CHECKLIST_ITEMS},
         export_history=[],
@@ -186,13 +219,15 @@ async def get_workspace(
 @router.get("/gs/workspace/by-initiative/{initiative_id}")
 async def get_workspace_by_initiative(
     initiative_id: UUID,
+    template_type: str = "cover_letter",
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Look up workspace by initiative ID."""
+    """Look up workspace by initiative ID and document type."""
     result = await db.execute(
         select(GSCertificationWorkspace).where(
-            GSCertificationWorkspace.initiative_id == initiative_id
+            GSCertificationWorkspace.initiative_id == initiative_id,
+            GSCertificationWorkspace.template_type == template_type,
         ).limit(1)
     )
     workspace = result.scalar_one_or_none()
@@ -204,13 +239,15 @@ async def get_workspace_by_initiative(
 @router.get("/gs/workspace/by-session/{session_id}")
 async def get_workspace_by_session(
     session_id: UUID,
+    template_type: str = "cover_letter",
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Look up workspace by chat session ID."""
+    """Look up workspace by chat session ID and document type."""
     result = await db.execute(
         select(GSCertificationWorkspace).where(
-            GSCertificationWorkspace.session_id == session_id
+            GSCertificationWorkspace.session_id == session_id,
+            GSCertificationWorkspace.template_type == template_type,
         ).limit(1)
     )
     workspace = result.scalar_one_or_none()
@@ -359,7 +396,8 @@ async def export_cover_letter(
     flag_modified(workspace, "export_history")
     await db.commit()
 
-    filename = f"GS_Cover_Letter_{now.strftime('%Y%m%d')}.docx"
+    doc_name = "Preliminary_Review" if template.template_type == TEMPLATE_TYPE_PRELIMINARY_REVIEW else "Cover_Letter"
+    filename = f"GS_{doc_name}_{now.strftime('%Y%m%d')}.docx"
     return Response(
         content=filled_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
