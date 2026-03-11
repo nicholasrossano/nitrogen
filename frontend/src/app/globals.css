@@ -331,7 +331,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+  transition: transform 200ms ease-out;
 }
 
 .btn-primary::before {
@@ -350,7 +350,6 @@ textarea {
 
 .btn-primary:hover {
   @apply text-white;
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.18), 0 4px 8px -2px rgba(0, 0, 0, 0.12);
 }
 
 .btn-primary:active::before {
@@ -359,9 +358,8 @@ textarea {
 }
 
 .btn-primary:active {
-  @apply shadow-none;
   transform: scale(0.98);
-  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+  transition: transform 100ms ease-out;
 }
 
 .btn-secondary {
@@ -371,7 +369,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+  transition: transform 200ms ease-out;
 }
 
 .btn-secondary::before {
@@ -390,13 +388,11 @@ textarea {
 }
 
 .btn-secondary:hover {
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.14), 0 4px 8px -2px rgba(0, 0, 0, 0.09);
 }
 
 .btn-secondary:active {
-  @apply shadow-none;
   transform: scale(0.98);
-  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+  transition: transform 100ms ease-out;
 }
 
 .btn-danger {
@@ -406,7 +402,7 @@ textarea {
   position: relative;
   overflow: hidden;
   z-index: 0;
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+  transition: transform 200ms ease-out;
 }
 
 .btn-danger::before {
@@ -425,7 +421,6 @@ textarea {
 
 .btn-danger:hover {
   @apply text-white;
-  box-shadow: 0 8px 24px -4px rgba(185, 122, 93, 0.28), 0 4px 8px -2px rgba(185, 122, 93, 0.18);
 }
 
 .btn-danger:active::before {
@@ -433,9 +428,8 @@ textarea {
 }
 
 .btn-danger:active {
-  @apply shadow-none;
   transform: scale(0.98);
-  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+  transition: transform 100ms ease-out;
 }
 
 .btn-ghost {
@@ -742,7 +736,6 @@ textarea {
 }
 
 .plan-item-lift:hover {
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
 .plan-item-lift:active {
