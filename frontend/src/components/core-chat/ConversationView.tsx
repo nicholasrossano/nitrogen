@@ -309,7 +309,7 @@ export function ConversationView({
             ) : (
               <textarea
                 ref={textareaRef}
-                value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}
+                value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '')}
                 onChange={(e) => {
                   const ctx = input.match(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/)?.[0] || '';
                   setInput(ctx ? e.target.value + ctx : e.target.value);
