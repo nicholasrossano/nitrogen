@@ -49,7 +49,14 @@ INPUT_EXTRACTION_SCHEMA = {
     "properties": {
         "method_pack": {
             "type": "string",
-            "description": "Methodology type: cookstoves, or other. Default to cookstoves if the project involves stoves, cooking, biomass fuel, etc.",
+            "enum": ["cookstoves", "fuel_switch", "safe_water"],
+            "description": (
+                "Project type determining calculation defaults. "
+                "'cookstoves' for improved biomass cookstoves (biomass-to-biomass). "
+                "'fuel_switch' for switching from biomass to LPG, biogas, or ethanol. "
+                "'safe_water' for water purification replacing fuel-based boiling. "
+                "Default to 'cookstoves' if the project involves improved stoves or biomass cooking."
+            ),
         },
         "devices_households": {
             "type": "number",
@@ -144,6 +151,8 @@ class CarbonTool(BaseTool):
                 "carbon credits", "cookstove", "cookstoves", "baseline",
                 "fnrb", "leakage", "er calculation", "gold standard",
                 "clean cooking", "fuel consumption", "emission factor",
+                "fuel switch", "lpg", "biogas", "ethanol",
+                "safe water", "water purification", "water filter",
             ],
         )
 
@@ -221,13 +230,17 @@ class CarbonTool(BaseTool):
                     {
                         "role": "system",
                         "content": (
-                            "You are a carbon project analyst specialising in cookstove and "
-                            "clean-cooking methodologies. Extract any carbon-ER-relevant "
-                            "numeric inputs from the conversation below. "
+                            "You are a carbon project analyst specialising in emission reduction "
+                            "methodologies. Extract any carbon-ER-relevant numeric inputs from "
+                            "the conversation below. "
                             "Only include values that are explicitly stated or clearly implied. "
                             "Convert units where needed (e.g. tonnes → kg). "
                             "For rates (usage_rate, adoption_rate, fnrb, efficiencies), return as decimals (0-1). "
-                            "If the project clearly involves cookstoves, set method_pack to 'cookstoves'."
+                            "Set method_pack based on the project type:\n"
+                            "- 'cookstoves': improved biomass cookstoves replacing traditional stoves\n"
+                            "- 'fuel_switch': switching from biomass to LPG, biogas, or ethanol\n"
+                            "- 'safe_water': water purification/filtration replacing fuel-based boiling\n"
+                            "Default to 'cookstoves' if unclear but the project involves cooking or stoves."
                         ),
                     },
                     {"role": "user", "content": conversation_text},
