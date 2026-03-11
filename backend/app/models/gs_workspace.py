@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import ForeignKey, DateTime, func
+from sqlalchemy import ForeignKey, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
@@ -29,6 +29,9 @@ class GSCertificationWorkspace(Base):
         UUID(as_uuid=True),
         ForeignKey("gs_template_versions.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    template_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="cover_letter", index=True
     )
     field_values: Mapped[dict | None] = mapped_column(JSONB, default=dict)
     checklist_state: Mapped[dict | None] = mapped_column(JSONB, default=dict)

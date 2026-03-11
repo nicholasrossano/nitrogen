@@ -131,7 +131,7 @@ GS_CHECKLIST_ITEMS = [
     {
         "id": "preliminary_review",
         "name": "Preliminary Review Submission",
-        "supported": False,
+        "supported": True,
         "description": "Initial project screening submission for Gold Standard review prior to full design certification.",
         "template_url": "https://globalgoals.goldstandard.org/standards/",
     },
