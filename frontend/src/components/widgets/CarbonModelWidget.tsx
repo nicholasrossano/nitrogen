@@ -55,12 +55,13 @@ const QUALITY_STYLES: Record<string, { bg: string; text: string; icon: typeof Ch
   low: { bg: 'bg-red-50', text: 'text-red-700', icon: AlertTriangle },
 };
 
-const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'leakage', 'general'];
+const CATEGORY_ORDER = ['activity', 'baseline', 'project', 'emissions', 'adjustments', 'leakage', 'general'];
 const CATEGORY_LABELS: Record<string, string> = {
   activity: 'Activity',
   baseline: 'Baseline Scenario',
   project: 'Project Scenario',
   emissions: 'Emission Factors',
+  adjustments: 'Behaviour Adjustments',
   leakage: 'Leakage',
   general: 'General',
 };
@@ -71,6 +72,10 @@ const PROJECT_TYPE_OPTIONS = [
   { value: 'cookstoves', label: 'Improved Cookstoves' },
   { value: 'fuel_switch', label: 'Fuel Switch (LPG / Biogas / Ethanol)' },
   { value: 'safe_water', label: 'Safe Water Supply' },
+  { value: 'grid_renewable', label: 'Grid Renewable Energy' },
+  { value: 'solar_home', label: 'Solar Home Systems (Off-Grid)' },
+  { value: 'biodigester', label: 'Biodigesters (Manure Mgmt + Biogas)' },
+  { value: 'efficient_lighting', label: 'Efficient Lighting' },
 ];
 
 export function CarbonModelWidget({
@@ -326,7 +331,7 @@ export function CarbonModelWidget({
                               } catch { /* keep old */ }
                               finally { setIsRecalculating(false); }
                             }}
-                            className="appearance-none text-xs font-mono text-text-primary bg-white border border-stroke-subtle rounded pl-2 pr-6 py-1 hover:border-stroke-muted focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer disabled:opacity-50"
+                            className="appearance-none text-xs font-medium text-text-primary bg-surface border border-stroke-subtle rounded pl-2 pr-6 py-1 hover:border-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 cursor-pointer disabled:opacity-50 transition-colors duration-150"
                           >
                             {(inp.options as string[]).map((opt: string) => (
                               <option key={opt} value={opt}>
@@ -445,7 +450,7 @@ export function CarbonModelWidget({
                   value={currentMethodPack}
                   disabled={!isActive || isSwitchingPack}
                   onChange={(e) => switchMethodPack(e.target.value)}
-                  className="appearance-none text-xs font-medium text-text-primary bg-white border border-stroke-subtle rounded-md pl-2.5 pr-7 py-1.5 hover:border-stroke-muted focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer disabled:opacity-50 transition-colors"
+                  className="appearance-none text-xs font-medium text-text-primary bg-surface border border-stroke-subtle rounded-md pl-2.5 pr-7 py-1.5 hover:border-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 cursor-pointer disabled:opacity-50 transition-colors duration-150"
                 >
                   {PROJECT_TYPE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
