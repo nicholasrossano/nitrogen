@@ -226,6 +226,20 @@ export function CarbonModelWidget({
     }
   }, [inputs, preConfirmStatuses, setData, messageId, initiativeId]);
 
+  const switchMethodPack = useCallback(async (newPack: string) => {
+    if (newPack === currentMethodPack) return;
+    setIsSwitchingPack(true);
+    try {
+      const newData = await api.switchCarbonMethodPack(newPack, inputs);
+      setData(newData);
+      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+    } catch {
+      // keep old data
+    } finally {
+      setIsSwitchingPack(false);
+    }
+  }, [currentMethodPack, inputs, setData, messageId, initiativeId]);
+
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
   /* ------------------------------------------------------------------ */
@@ -244,117 +258,147 @@ export function CarbonModelWidget({
 
   const renderInputsTable = () => (
     <div className="divide-y divide-divider">
-      {groupedInputs.map((group) => (
-        <div key={group.category}>
-          <div className="px-5 py-2 bg-surface-subtle">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-              {group.label}
-            </span>
-          </div>
-          <div className="divide-y divide-stroke-subtle">
-            {group.inputs.map((inp: any) => {
-              const isMissing = inp.status === 'missing';
-              const isEditing = editingField === inp.field_name;
-              const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
+      {groupedInputs.map((group) => {
+        const visibleInputs = group.inputs.filter((inp: any) => inp.field_name !== 'method_pack');
+        if (visibleInputs.length === 0) return null;
+        return (
+          <div key={group.category}>
+            <div className="px-5 py-2 bg-surface-subtle">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                {group.label}
+              </span>
+            </div>
+            <div className="divide-y divide-stroke-subtle">
+              {visibleInputs.map((inp: any) => {
+                const isMissing = inp.status === 'missing';
+                const isEditing = editingField === inp.field_name;
+                const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
+                const isSelect = inp.field_type === 'select' && inp.options?.length > 0;
 
-              return (
-                <div
-                  key={inp.field_name}
-                  onMouseMove={(e) => {
-                    const isInteractive = !!(e.target as HTMLElement).closest('button, input, a');
-                    setOverInteractive(isInteractive);
-                    setMousePos({ x: e.clientX, y: e.clientY });
-                    setHoveredRowInp(inp);
-                  }}
-                  onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest('button, input, a')) return;
-                    investigate(inp.label, inp.status, inp.field_name);
-                  }}
-                  style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
-                  className={`px-5 py-2.5 flex items-center gap-3 ${
-                    isMissing ? 'bg-red-50/40' : 'bg-white'
-                  }`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-text-primary truncate">
-                        {inp.label}
-                      </span>
-                      {inp.unit && (
-                        <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
+                return (
+                  <div
+                    key={inp.field_name}
+                    onMouseMove={(e) => {
+                      const isInteractive = !!(e.target as HTMLElement).closest('button, input, select, a');
+                      setOverInteractive(isInteractive);
+                      setMousePos({ x: e.clientX, y: e.clientY });
+                      setHoveredRowInp(inp);
+                    }}
+                    onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('button, input, select, a')) return;
+                      investigate(inp.label, inp.status, inp.field_name);
+                    }}
+                    style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
+                    className={`px-5 py-2.5 flex items-center gap-3 ${
+                      isMissing ? 'bg-red-50/40' : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-medium text-text-primary truncate">
+                          {inp.label}
+                        </span>
+                        {inp.unit && (
+                          <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
+                        )}
+                      </div>
+                      {inp.rationale && inp.status === 'assumed' && (
+                        <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
+                          {inp.rationale}
+                        </p>
                       )}
                     </div>
-                    {inp.rationale && inp.status === 'assumed' && (
-                      <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
-                        {inp.rationale}
-                      </p>
-                    )}
-                  </div>
 
-                  <div className="w-28 text-right">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onBlur={commitEdit}
-                        autoFocus
-                        className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => isActive && startEdit(inp.field_name, inp.value)}
-                        disabled={!isActive}
-                        className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
+                    <div className="w-32 text-right">
+                      {isSelect ? (
+                        <div className="relative inline-flex">
+                          <select
+                            value={inp.value || ''}
+                            disabled={!isActive}
+                            onChange={async (e) => {
+                              const newVal = e.target.value;
+                              setIsRecalculating(true);
+                              try {
+                                const newData = await api.updateCarbonInput(inputs, inp.field_name, newVal, 'confirmed');
+                                setData(newData);
+                                if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+                              } catch { /* keep old */ }
+                              finally { setIsRecalculating(false); }
+                            }}
+                            className="appearance-none text-xs font-mono text-text-primary bg-white border border-stroke-subtle rounded pl-2 pr-6 py-1 hover:border-stroke-muted focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer disabled:opacity-50"
+                          >
+                            {(inp.options as string[]).map((opt: string) => (
+                              <option key={opt} value={opt}>
+                                {opt.replace(/_/g, ' ')}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-tertiary pointer-events-none" />
+                        </div>
+                      ) : isEditing ? (
+                        <input
+                          type="text"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          onBlur={commitEdit}
+                          autoFocus
+                          className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => isActive && startEdit(inp.field_name, inp.value)}
+                          disabled={!isActive}
+                          className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
+                        >
+                          {isMissing ? (
+                            <span className="text-red-500 italic">—</span>
+                          ) : (
+                            <span>
+                              {typeof inp.value === 'number'
+                                ? inp.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                                : typeof inp.value === 'boolean' ? (inp.value ? 'Yes' : 'No') : inp.value}
+                            </span>
+                          )}
+                          {isActive && (
+                            <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="w-16 flex justify-end">
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                       >
-                        {isMissing ? (
-                          <span className="text-red-500 italic">—</span>
-                        ) : (
-                          <span>
-                            {typeof inp.value === 'number'
-                              ? inp.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
-                              : inp.value}
-                          </span>
-                        )}
-                        {isActive && (
-                          <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
-                        )}
-                      </button>
-                    )}
-                  </div>
+                        {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                        {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
+                        {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
+                        {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
+                        {statusStyle.label}
+                      </span>
+                    </div>
 
-                  <div className="w-16 flex justify-end">
-                    <span
-                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                    >
-                      {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
-                      {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
-                      {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
-                      {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
-                      {statusStyle.label}
-                    </span>
+                    <div className="w-5 flex justify-center">
+                      {isActive && (
+                        <input
+                          type="checkbox"
+                          checked={inp.status === 'confirmed'}
+                          disabled={isMissing || confirmingFields.has(inp.field_name)}
+                          onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
+                          title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                          className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      )}
+                    </div>
                   </div>
-
-                  <div className="w-5 flex justify-center">
-                    {isActive && (
-                      <input
-                        type="checkbox"
-                        checked={inp.status === 'confirmed'}
-                        disabled={isMissing || confirmingFields.has(inp.field_name)}
-                        onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                        title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
-                        className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -390,7 +434,33 @@ export function CarbonModelWidget({
               <Leaf className="w-4 h-4 text-emerald-600" />
               <h3 className="text-sm font-semibold text-text-primary">Carbon Emissions Model Inputs</h3>
             </div>
-            <p className="text-xs text-text-secondary mt-0.5">
+
+            {/* Project type selector */}
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                Project Type
+              </span>
+              <div className="relative">
+                <select
+                  value={currentMethodPack}
+                  disabled={!isActive || isSwitchingPack}
+                  onChange={(e) => switchMethodPack(e.target.value)}
+                  className="appearance-none text-xs font-medium text-text-primary bg-white border border-stroke-subtle rounded-md pl-2.5 pr-7 py-1.5 hover:border-stroke-muted focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  {PROJECT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none" />
+              </div>
+              {isSwitchingPack && (
+                <span className="text-[10px] text-accent">Switching…</span>
+              )}
+            </div>
+
+            <p className="text-xs text-text-secondary mt-2">
               {Object.keys(inputs).length} fields
               {missingEssentials.length > 0 && (
                 <span className="text-red-600 ml-2">
@@ -491,6 +561,8 @@ export function CarbonModelWidget({
           </Tooltip>
         </div>
         <p className="text-xs text-text-tertiary mt-2">
+          {PROJECT_TYPE_OPTIONS.find(o => o.value === currentMethodPack)?.label || currentMethodPack}
+          {' '}&middot;{' '}
           {result.assumption_count} assumption{result.assumption_count !== 1 ? 's' : ''} used
           &middot; {result.period_years}-year crediting period
         </p>
