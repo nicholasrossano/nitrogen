@@ -564,6 +564,7 @@ class ComplianceChatService:
                 from app.services.gs_cover_letter import GS_CHECKLIST_ITEMS
                 from app.services.gs_template_service import (
                     GSTemplateService, TEMPLATE_TYPE_COVER_LETTER,
+                    TEMPLATE_TYPE_PRELIMINARY_REVIEW,
                 )
                 from app.services.gs_cover_letter import _get_fallback_field_schema
                 try:
@@ -573,6 +574,7 @@ class ComplianceChatService:
                         template_svc.get_or_fetch_active_template(TEMPLATE_TYPE_COVER_LETTER),
                         timeout=30.0,
                     )
+                    section_context = template_svc.get_section_contexts(TEMPLATE_TYPE_COVER_LETTER)
                     widget_type = "gs_checklist"
                     widget_data = {
                         "checklist_items": GS_CHECKLIST_ITEMS,
@@ -580,12 +582,14 @@ class ComplianceChatService:
                         "template_version_label": template.version_label,
                         "template_status": template.status,
                         "field_schema": template.field_schema or [],
-                        "html_preview": template.html_preview or "",
+                        "section_context": section_context,
+                        "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
                     }
                     await _think("Checklist and Cover Letter template loaded")
                 except Exception as e:
                     logger.error(f"GS certification tool failed: {e}", exc_info=True)
                     await _think("Using offline field definitions for Cover Letter")
+                    section_context = GSTemplateService(self.db).get_section_contexts(TEMPLATE_TYPE_COVER_LETTER)
                     widget_type = "gs_checklist"
                     widget_data = {
                         "checklist_items": GS_CHECKLIST_ITEMS,
@@ -593,7 +597,8 @@ class ComplianceChatService:
                         "template_version_label": None,
                         "template_status": None,
                         "field_schema": _get_fallback_field_schema(),
-                        "html_preview": "",
+                        "section_context": section_context,
+                        "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
                     }
 
             elif fn_name == "propose_cover_letter_value":
