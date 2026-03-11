@@ -299,20 +299,20 @@ export function TemplateRequirementsWidget({
     const visible = children.filter((c) => parentValueMatchesCondition(parent.value, c.condition ?? null));
     if (visible.length === 0) return null;
     return (
-      <div className="ml-6 mt-1 relative">
+      <div className="ml-6 mt-2 relative space-y-2">
         {visible.map((child, idx) => {
           const isLast = idx === visible.length - 1;
           return (
             <div key={child.id} className="flex items-stretch">
               {/* Branch gutter */}
               <div className="relative w-4 shrink-0">
-                {!isLast && (
-                  <div className="absolute left-0 top-0 bottom-0 w-px bg-stroke-subtle" />
-                )}
-                <div className="absolute left-0 top-0 w-3 h-4 border-l border-b border-stroke-subtle rounded-bl-lg" />
+                {/* Vertical stem — extends through space-y-2 gap for non-last items */}
+                <div className={`absolute left-0 top-0 w-px bg-stroke-subtle ${isLast ? 'h-5' : '-bottom-2'}`} />
+                {/* Horizontal hook */}
+                <div className="absolute left-0 top-5 h-px w-3 bg-stroke-subtle" />
               </div>
               {/* Child tile */}
-              <div className="flex-1 min-w-0 py-0.5">
+              <div className="flex-1 min-w-0">
                 {renderTile(child)}
               </div>
             </div>
@@ -327,7 +327,7 @@ export function TemplateRequirementsWidget({
     const sfs = req.sub_fields;
     if (!sfs || sfs.length === 0) return null;
     return (
-      <div className="ml-6 relative">
+      <div className="ml-6 mt-2 relative space-y-2">
         {sfs.map((sf, sfIdx) => {
           const sfBool = sf.field_type === 'boolean';
           const sfYesNo = sf.field_type === 'yes_no';
@@ -337,13 +337,13 @@ export function TemplateRequirementsWidget({
             <div key={`${req.id}_sf_${sfIdx}`} className="flex items-stretch">
               {/* Branch gutter */}
               <div className="relative w-5 shrink-0">
-                {!isLast && (
-                  <div className="absolute left-0 top-0 bottom-0 w-px bg-stroke-subtle" />
-                )}
-                <div className="absolute left-0 top-0 w-4 h-[50%] border-l border-b border-stroke-subtle rounded-bl-lg" />
+                {/* Vertical stem — extends through space-y-2 gap for non-last items */}
+                <div className={`absolute left-0 top-0 w-px bg-stroke-subtle ${isLast ? 'h-5' : '-bottom-2'}`} />
+                {/* Horizontal hook */}
+                <div className="absolute left-0 top-5 h-px w-4 bg-stroke-subtle" />
               </div>
               {/* Sub-field tile */}
-              <div className="flex-1 min-w-0 py-0.5">
+              <div className="flex-1 min-w-0">
                 <div className="rounded-lg border border-stroke-subtle hover:border-stroke-muted transition-colors px-3 py-2 flex items-center gap-2">
                   <span className="text-[11px] text-text-secondary leading-snug shrink-0 max-w-[45%]">
                     {sf.label}
@@ -697,7 +697,7 @@ export function TemplateRequirementsWidget({
                   </span>
                 </div>
               )}
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {topLevelReqs.map((req) => {
                   const children = allCatReqs.filter((r) => r.parent_id === req.id);
                   return (
