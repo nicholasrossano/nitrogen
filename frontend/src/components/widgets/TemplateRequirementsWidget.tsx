@@ -316,24 +316,26 @@ export function TemplateRequirementsWidget({
           const isLast = idx === visible.length - 1;
           return (
             <div key={child.id} className="flex items-stretch group/subnode">
-              {/* Branch gutter — flex-col spine with dot and horizontal connector */}
-              <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
-                <div className="w-px bg-stroke-subtle flex-1" />
-                <div className="relative flex-shrink-0 w-3 h-3">
-                  <div className="w-3 h-3 rounded-full bg-stroke-muted transition-opacity duration-200 ease-in-out group-hover/subnode:opacity-0" />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); deleteReq(child.id); }}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/subnode:opacity-100 group-hover/subnode:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
-                    aria-label="Remove question"
-                  >
-                    <Minus className="w-2.5 h-2.5 text-white" />
-                  </button>
+              {/* Branch gutter — all absolute lines, guaranteed connected */}
+              <div className="w-8 flex-shrink-0 relative">
+                {/* Vertical line: top-0 to center for last, full height for others */}
+                <div className={`absolute left-1/2 top-0 w-px bg-stroke-subtle ${isLast ? 'h-1/2' : 'h-full'}`} />
+                {/* Horizontal line: center to right edge */}
+                <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle" />
+                {/* Dot + delete button at intersection */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                  <div className="relative w-3 h-3">
+                    <div className="w-3 h-3 rounded-full bg-stroke-muted transition-opacity duration-200 group-hover/subnode:opacity-0" />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); deleteReq(child.id); }}
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/subnode:opacity-100 group-hover/subnode:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out"
+                      aria-label="Remove question"
+                    >
+                      <Minus className="w-2.5 h-2.5 text-white" />
+                    </button>
+                  </div>
                 </div>
-                {!isLast
-                  ? <div className="w-px bg-stroke-subtle flex-1" />
-                  : <div className="flex-1" />}
-                <div className="absolute top-1/2 right-0 w-[calc(50%-6px)] h-px bg-stroke-subtle -translate-y-px" />
               </div>
               {/* Child tile */}
               <div className="flex-1 min-w-0 py-1.5 pr-1">
@@ -359,24 +361,26 @@ export function TemplateRequirementsWidget({
           const isLast = sfIdx === sfs.length - 1;
           return (
             <div key={`${req.id}_sf_${sfIdx}`} className="flex items-stretch group/subnode">
-              {/* Branch gutter — flex-col spine with dot and horizontal connector */}
-              <div className="w-8 flex flex-col items-center flex-shrink-0 relative">
-                <div className="w-px bg-stroke-subtle flex-1" />
-                <div className="relative flex-shrink-0 w-3 h-3">
-                  <div className="w-3 h-3 rounded-full bg-stroke-muted transition-opacity duration-200 ease-in-out group-hover/subnode:opacity-0" />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); deleteSubField(req.id, sfIdx); }}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/subnode:opacity-100 group-hover/subnode:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out z-20"
-                    aria-label="Remove sub-field"
-                  >
-                    <Minus className="w-2.5 h-2.5 text-white" />
-                  </button>
+              {/* Branch gutter — all absolute lines, guaranteed connected */}
+              <div className="w-8 flex-shrink-0 relative">
+                {/* Vertical line: top-0 to center for last, full height for others */}
+                <div className={`absolute left-1/2 top-0 w-px bg-stroke-subtle ${isLast ? 'h-1/2' : 'h-full'}`} />
+                {/* Horizontal line: center to right edge */}
+                <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle" />
+                {/* Dot + delete button at intersection */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                  <div className="relative w-3 h-3">
+                    <div className="w-3 h-3 rounded-full bg-stroke-muted transition-opacity duration-200 group-hover/subnode:opacity-0" />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); deleteSubField(req.id, sfIdx); }}
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/subnode:opacity-100 group-hover/subnode:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out"
+                      aria-label="Remove sub-field"
+                    >
+                      <Minus className="w-2.5 h-2.5 text-white" />
+                    </button>
+                  </div>
                 </div>
-                {!isLast
-                  ? <div className="w-px bg-stroke-subtle flex-1" />
-                  : <div className="flex-1" />}
-                <div className="absolute top-1/2 right-0 w-[calc(50%-6px)] h-px bg-stroke-subtle -translate-y-px" />
               </div>
               {/* Sub-field tile */}
               <div className="flex-1 min-w-0 py-1.5 pr-1">
