@@ -22,6 +22,8 @@ interface PillarColumnProps {
   onDeleteItem?: (itemId: string) => void;
   onDeleteElement?: (itemId: string, elementIndex: number) => void;
   onRegisterRef?: (el: HTMLDivElement | null) => void;
+  completedIds?: Set<string>;
+  onToggleComplete?: (id: string) => void;
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -41,7 +43,7 @@ function PillarIcon({ name }: { name?: string }) {
 
 const DEFAULT_VISIBLE = 10;
 
-export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef }: PillarColumnProps) {
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
@@ -91,6 +93,8 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
             onDeepDive={onDeepDive ? (item) => onDeepDive(item, pillar) : undefined}
             onDelete={onDeleteItem ? () => onDeleteItem(item.id) : undefined}
             onDeleteElement={onDeleteElement ? (elIdx) => onDeleteElement(item.id, elIdx) : undefined}
+            isComplete={completedIds?.has(item.id) ?? false}
+            onToggleComplete={onToggleComplete}
           />
         ))}
 
