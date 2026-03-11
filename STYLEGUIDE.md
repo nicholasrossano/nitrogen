@@ -429,38 +429,31 @@ Use for:
 - Interactive cards
 - Pills and toggle-style controls
 
-### Shadow Lift with Press Compression
+### Press Compression
 
-For primary interactive elements, combine hover lift with press compression.
+For primary interactive elements, use press compression on active. Buttons do **not** lift or add shadow on hover — hover is communicated through the opacity-fill only.
 
 ```css
 .element {
-  transition: box-shadow 200ms ease-out, transform 200ms ease-out;
-}
-
-.element:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+  transition: transform 200ms ease-out;
 }
 
 .element:active {
-  box-shadow: none;
-  transform: translateY(0) scale(0.98);
-  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
+  transform: scale(0.98);
+  transition: transform 100ms ease-out;
 }
 ```
 
 **Rules**
-- Hover: lift up (-2px) with shadow fade in (200ms)
-- Press: compress (scale 0.98), return to origin, shadow fades out (100ms)
-- Active transition is faster than hover for snappier tactile feel
+- Hover: opacity-fill feedback only (no shadow, no lift)
+- Press: compress (`scale(0.98)`) — active transition is faster than hover for snappier tactile feel
 - Scale only 1–2%
 - Never combine with bounce or elastic motion
 
 **Apply to**
 - Primary action buttons
-- Secondary buttons with shadow
-- Clickable cards
+- Secondary buttons
+- Clickable cards (cards use shadow lift — see Card Hover below)
 
 **Do not apply to**
 - Inline links
@@ -822,8 +815,8 @@ Defined as a global CSS class — do not replicate inline.
 
 - `rounded-[20px]` — slightly softer than data surfaces
 - Uses `bg-surface` (not `bg-white`) so it adapts correctly in all contexts
-- Hover: accent fill fades in, button lifts `translateY(-2px)` with shadow
-- Active: `scale(0.98)`, shadow collapses (100ms)
+- Hover: accent fill fades in (no shadow, no lift)
+- Active: `scale(0.98)` (100ms)
 - Disabled: `opacity-50 cursor-not-allowed`
 
 ### Widget Footer Action Bar
