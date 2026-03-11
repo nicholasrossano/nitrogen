@@ -10,7 +10,11 @@ import logging
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.tools.carbon_tool import CarbonTool
-from app.services.carbon_engine import CarbonEngine, CarbonInput
+from app.services.carbon_engine import (
+    CarbonEngine,
+    CarbonInput,
+    PROJECT_TYPE_OPTIONS,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -32,6 +36,62 @@ class UpdateInputRequest(BaseModel):
     value: Any
     source: str = "user"
     status: str = "confirmed"
+
+
+class SwitchMethodPackRequest(BaseModel):
+    method_pack: str
+    current_inputs: dict[str, dict[str, Any]] | None = None
+
+
+@router.get("/carbon/project-types")
+async def get_project_types(
+    user: MockUser = Depends(get_current_user),
+):
+    """Return available project types for the carbon calculator."""
+    return {"project_types": PROJECT_TYPE_OPTIONS}
+
+
+@router.post("/carbon/switch-method-pack")
+async def switch_method_pack(
+    data: SwitchMethodPackRequest,
+    user: MockUser = Depends(get_current_user),
+):
+    """Rebuild inputs for a new method pack, preserving user-confirmed values."""
+    preserved: dict[str, Any] = {}
+    if data.current_inputs:
+        for field_name, inp in data.current_inputs.items():
+            if field_name == "method_pack":
+                continue
+            if inp.get("source") in ("chat", "user") or inp.get("status") == "confirmed":
+                preserved[field_name] = inp.get("value")
+
+    engine_inputs = CarbonEngine.build_default_inputs(
+        method_pack=data.method_pack,
+        known_values=preserved,
+    )
+
+    missing = CarbonEngine.get_missing_essentials(engine_inputs)
+    computable = CarbonEngine.is_computable(engine_inputs)
+
+    result_data: dict[str, Any] = {
+        "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
+        "missing_essentials": missing,
+        "computable": computable,
+        "method_pack": data.method_pack,
+    }
+
+    if computable:
+        try:
+            carbon_result = CarbonEngine.calculate(engine_inputs)
+            result_data["result"] = carbon_result.to_dict()
+            sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
+            result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
+            result_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
+        except (ValueError, ZeroDivisionError) as e:
+            result_data["error"] = str(e)
+            result_data["computable"] = False
+
+    return result_data
 
 
 @router.post("/carbon/recalculate")
