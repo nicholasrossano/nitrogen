@@ -59,11 +59,27 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     projectPlanLoading,
     error,
     deletePlanItem,
+    updatePlanItemStatus,
   } = useInitiativeStore();
 
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
+  // Derive completed set directly from persisted plan data
+  const completedIds = useMemo<Set<string>>(
+    () => new Set(
+      (projectPlan?.pillars ?? [])
+        .flatMap((p) => p.items)
+        .filter((i) => i.status === 'complete')
+        .map((i) => i.id)
+    ),
+    [projectPlan]
+  );
+
+  const toggleComplete = useCallback((id: string) => {
+    const isComplete = completedIds.has(id);
+    updatePlanItemStatus(initiativeId, id, isComplete ? 'not_started' : 'complete');
+  }, [completedIds, initiativeId, updatePlanItemStatus]);
 
   // Column layout strategy:
   // - Ref lives on the OUTER container (grid + panel together) so we always know the total width.
@@ -327,8 +343,51 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
       )}
 
       {/* Main row: pillar grid + deep dive panel side by side */}
-      {projectPlan && (
-        <div ref={outerContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
+      {projectPlan && (() => {
+        const totalItems = pillars.reduce((sum, p) => sum + p.items.length, 0);
+        const completedCount = pillars.reduce(
+          (sum, p) => sum + p.items.filter((i) => completedIds.has(i.id)).length, 0
+        );
+        const pct = totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
+
+        return (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Progress tracker */}
+          {totalItems > 0 && (
+            <div className="flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-divider bg-surface-header">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] text-text-tertiary">
+                  <span className="font-medium text-text-secondary">{completedCount}</span>
+                  {' '}of {totalItems} complete
+                </span>
+                <span className="text-[11px] font-medium text-text-secondary tabular-nums">{pct}%</span>
+              </div>
+              {/* Segmented bar — each pillar is proportional to its item count */}
+              <div className="flex gap-px h-1.5 rounded-full overflow-hidden">
+                {pillars.map((pillar) => {
+                  const pillarTotal = pillar.items.length;
+                  const pillarDone = pillar.items.filter((i) => completedIds.has(i.id)).length;
+                  const fillPct = pillarTotal > 0 ? (pillarDone / pillarTotal) * 100 : 0;
+                  const widthPct = totalItems > 0 ? (pillarTotal / totalItems) * 100 : 0;
+                  return (
+                    <div
+                      key={pillar.id}
+                      className="relative bg-surface-subtle overflow-hidden first:rounded-l-full last:rounded-r-full"
+                      style={{ width: `${widthPct}%` }}
+                      title={`${pillar.name}: ${pillarDone} / ${pillarTotal}`}
+                    >
+                      <div
+                        className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-300"
+                        style={{ width: `${fillPct}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div ref={outerContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
           {/* Pillar grid — each column is an independent flex stack so expanding one
               pillar never shifts pillars in other columns */}
           <div className="flex-1 overflow-y-auto p-4 pt-5">
@@ -346,6 +405,8 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                         onDeleteItem={handleDeleteItem}
                         onDeleteElement={handleDeleteElement}
                         onRegisterRef={(el) => registerPillarRef(pillar.id, el)}
+                        completedIds={completedIds}
+                        onToggleComplete={toggleComplete}
                       />
                     ))}
                 </div>
@@ -371,8 +432,10 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
               />
             )}
           </div>
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       {activeSurvey && (
         <SurveyPopup

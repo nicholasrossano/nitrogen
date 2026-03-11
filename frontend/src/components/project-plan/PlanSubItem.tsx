@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Minus, Check } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem } from '@/lib/api';
 
@@ -9,6 +8,8 @@ interface PlanSubItemProps {
   onDeepDive?: (item: ProjectPlanItem) => void;
   onDelete?: () => void;
   onDeleteElement?: (elementIndex: number) => void;
+  isComplete?: boolean;
+  onToggleComplete?: (id: string) => void;
 }
 
 type Classification = 'required' | 'optional' | 'unknown';
@@ -40,11 +41,10 @@ const CLASSIFICATION_STYLES: Record<Classification, {
 };
 
 
-export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemProps) {
+export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = false, onToggleComplete }: PlanSubItemProps) {
   const cls = (item.classification as Classification) ?? 'optional';
   const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
   const isClickable = Boolean(onDeepDive);
-  const [isComplete, setIsComplete] = useState(false);
 
   return (
     <div className="flex items-stretch relative group/item">
@@ -76,7 +76,7 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
         <div
           className={`px-3 py-2 rounded-md shadow-card flex items-center gap-2 transition-colors ${
             isComplete
-              ? 'bg-green-50/60 border border-green-200'
+              ? 'bg-green-50/30 border border-green-200/50'
               : `${styles.card} border border-transparent ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`
           }`}
           onClick={isClickable && !isComplete ? () => onDeepDive!(item) : undefined}
@@ -94,7 +94,7 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
 
           {/* Title */}
           <span className={`flex-1 text-sm font-medium leading-snug transition-colors ${
-            isComplete ? 'line-through text-text-tertiary' : 'text-text-primary'
+            isComplete ? 'text-text-tertiary' : 'text-text-primary'
           }`}>
             {item.title}
           </span>
@@ -102,7 +102,7 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete }: PlanSubItemP
           {/* Checkbox — trailing */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setIsComplete(v => !v); }}
+            onClick={(e) => { e.stopPropagation(); onToggleComplete?.(item.id); }}
             aria-label={isComplete ? 'Mark incomplete' : 'Mark complete'}
             className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150 ${
               isComplete
