@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 QUERY_GEN_SYSTEM_PROMPT = """You are a search query specialist for regulatory compliance research.
 
-Given a project plan requirement (title, rationale, geography), generate exactly 4
+Given a project plan requirement (title, rationale, geography), generate exactly 3
 search-engine-optimized queries that will find the relevant government portals,
 official checklists, application forms, and regulatory guidance for this requirement.
 
@@ -53,8 +53,6 @@ QUERY STRATEGY
   (e.g. "Ghana EPA environmental permit application form checklist documents")
 - Query 3: Target the deliverable name + geography + "how to apply" or "submission"
   (e.g. "environmental impact assessment submission Ghana official guide")
-- Query 4: Broader fallback targeting official requirements
-  (e.g. "Ghana EPA environmental screening permit requirements official")
 
 RULES
 - Prefer keyword-style queries over full sentences — search engines respond better
@@ -67,16 +65,16 @@ QUERY_GEN_FUNCTION = {
     "type": "function",
     "function": {
         "name": "generate_search_queries",
-        "description": "Generate 4 precision search queries for finding official regulatory sources.",
+        "description": "Generate 3 precision search queries for finding official regulatory sources.",
         "parameters": {
             "type": "object",
             "properties": {
                 "queries": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "minItems": 4,
-                    "maxItems": 4,
-                    "description": "Exactly 4 search queries, ordered from most to least specific.",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "description": "Exactly 3 search queries, ordered from most to least specific.",
                 }
             },
             "required": ["queries"],
@@ -147,6 +145,11 @@ For compliance / authorization sub-items:
 INTEGRITY RULES
 - Never fabricate regulations, form numbers, agency names, or specific statistics.
 - Cap elements at 10. List in descending order of importance / blocking risk.
+
+DEPENDENCY FORMAT
+- condition: Start with a capital letter (e.g. "Only if the installation involves grid connection").
+- effect: Full sentence(s) describing what is required under that condition.
+- The UI displays condition (bold) on the first line, then effect on the next line.
 """
 
 DEEP_DIVE_FUNCTION = {
@@ -215,18 +218,25 @@ DEEP_DIVE_FUNCTION = {
                         "properties": {
                             "condition": {
                                 "type": "string",
-                                "description": 'The triggering condition (e.g. "only if new construction").',
+                                "description": (
+                                    "The triggering condition, capitalized (e.g. 'Only if the "
+                                    "installation involves grid connection'). Start with a capital letter."
+                                ),
                             },
                             "effect": {
                                 "type": "string",
-                                "description": "What changes or is required under this condition.",
+                                "description": (
+                                    "What changes or is required under this condition. "
+                                    "Full sentence(s) — will be displayed on a new line after the condition."
+                                ),
                             },
                         },
                         "required": ["condition", "effect"],
                     },
                     "description": (
                         "Declarative if/then notes about conditions that change what is "
-                        "required. State conditions — do NOT ask questions."
+                        "required. State conditions — do NOT ask questions. Condition and "
+                        "effect are displayed separately (condition bold, effect on new line)."
                     ),
                 },
             },
@@ -299,8 +309,8 @@ class DeepDiveService:
     Runs targeted web research + LLM analysis for a single project plan sub-item.
 
     Flow:
-      1. gpt-4o-mini generates 4 precision search queries from item title/rationale/geo.
-      2. Fire all 4 web searches in parallel via TieredRetrievalService.
+      1. gpt-4o-mini generates 3 precision search queries from item title/rationale/geo.
+      2. Fire all 3 web searches in parallel via TieredRetrievalService.
       3. Deduplicate results by URL.
       4. Call main LLM with structured function calling to produce the deep dive output.
       5. Return typed DeepDiveResult.
@@ -348,7 +358,7 @@ class DeepDiveService:
 
         # Step 2: Fire all queries in parallel
         search_results = await asyncio.gather(
-            *[self.retrieval.search_web(q, max_results=8, max_content_length=800) for q in queries]
+            *[self.retrieval.search_web(q, max_results=5, max_content_length=800) for q in queries]
         )
 
         # Step 3: Deduplicate by URL (fall back to title)
@@ -373,25 +383,15 @@ class DeepDiveService:
             facts=all_facts,
         )
 
-        # Build source list — only facts with real URLs
-        sources = [
-            DeepDiveSource(
-                title=f.source_title,
-                url=f.source_url,
-                source_type=f.source_type.value,
-                publisher=f.publisher,
-            )
-            for f in all_facts
-            if f.source_url
-        ]
-
         # Attach per-element provenance from LLM-emitted source_indices
         elements: list[DeepDiveElement] = []
+        referenced_indices: set[int] = set()
         for el in result_data.get("elements", []):
             indices = el.get("source_indices") or []
             source_attrs = []
             for idx in indices:
                 if 1 <= idx <= len(all_facts):
+                    referenced_indices.add(idx)
                     source_attrs.append(
                         source_attribution_from_retrieved_fact(all_facts[idx - 1]).model_dump()
                     )
@@ -407,6 +407,18 @@ class DeepDiveService:
                 classification=el["classification"],
                 provenance=prov,
             ))
+
+        # Build source list — only facts the LLM actually referenced
+        sources = [
+            DeepDiveSource(
+                title=f.source_title,
+                url=f.source_url,
+                source_type=f.source_type.value,
+                publisher=f.publisher,
+            )
+            for idx, f in enumerate(all_facts, 1)
+            if idx in referenced_indices and f.source_url
+        ]
 
         elapsed_ms = int((time.time() - start) * 1000)
         return DeepDiveResult(
@@ -438,13 +450,13 @@ class DeepDiveService:
         geography: str,
         pillar_name: str,
     ) -> list[str]:
-        """Use gpt-4o-mini to generate 4 precision search queries targeting government sources."""
+        """Use gpt-4o-mini to generate 3 precision search queries targeting government sources."""
         user_message = (
             f"Requirement: {item_title}\n"
             f"Pillar: {pillar_name}\n"
             f"Geography: {geography or 'Not specified'}\n"
             f"Rationale (may name specific regulations/agencies): {item_rationale or 'Not provided'}\n\n"
-            "Generate 4 search queries to find the official government portal pages, "
+            "Generate 3 search queries to find the official government portal pages, "
             "application forms, and regulatory checklists for this requirement."
         )
 
@@ -465,7 +477,7 @@ class DeepDiveService:
                 data = json.loads(tool_calls[0].function.arguments)
                 queries = data.get("queries", [])
                 if len(queries) >= 2:
-                    return queries[:4]
+                    return queries[:3]
         except Exception as exc:
             logger.warning("Query generation failed, using fallback queries: %s", exc)
 
@@ -475,7 +487,6 @@ class DeepDiveService:
             f"{item_title}{geo_tag} official requirements government",
             f"{item_title}{geo_tag} application process documents needed",
             f"{item_rationale[:80]}{geo_tag} requirements checklist" if item_rationale else f"{item_title}{geo_tag} permit checklist",
-            f"{item_title}{geo_tag} official forms submission",
         ]
 
     async def _generate_structured(
