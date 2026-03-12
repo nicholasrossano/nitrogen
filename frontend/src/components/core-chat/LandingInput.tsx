@@ -118,13 +118,25 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
     };
   }, [animating]);
 
-  useEffect(() => {
+  const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
     }
-  }, [input]);
+  }, []);
+
+  useEffect(() => {
+    adjustHeight();
+  }, [input, adjustHeight]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const ro = new ResizeObserver(() => adjustHeight());
+    ro.observe(textarea);
+    return () => ro.disconnect();
+  }, [adjustHeight]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,7 +254,7 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
                   type="button"
                   disabled={disabled}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
                   aria-label="Attach files"
                 >
                   <Paperclip className="w-[13px] h-[13px]" />

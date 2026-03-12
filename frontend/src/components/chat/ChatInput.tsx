@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ArrowUp, X, Paperclip } from 'lucide-react';
 
@@ -41,13 +41,26 @@ export function ChatInput({
     return () => window.removeEventListener('nitrogen:draft', handler);
   }, []);
 
-  useEffect(() => {
+  const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
     }
-  }, [input]);
+  }, []);
+
+  useEffect(() => {
+    adjustHeight();
+  }, [input, adjustHeight]);
+
+  // Re-measure when container resizes (e.g. after client-side nav when layout settles)
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const ro = new ResizeObserver(() => adjustHeight());
+    ro.observe(textarea);
+    return () => ro.disconnect();
+  }, [adjustHeight]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +176,7 @@ export function ChatInput({
             type="button"
             disabled={disabled}
             onClick={() => fileInputRef.current?.click()}
-            className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+            className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
             aria-label="Attach files"
           >
             <Paperclip className="w-[13px] h-[13px]" />
