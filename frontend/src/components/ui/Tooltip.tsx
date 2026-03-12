@@ -18,50 +18,50 @@ export function Tooltip({ content, children, className }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   const [style, setStyle] = useState<React.CSSProperties>({ opacity: 0, width: TOOLTIP_WIDTH });
   const [mounted, setMounted] = useState(false);
-  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
-  const handleMouseEnter = () => {
-    // Reset to invisible before measuring so there's no flash at the wrong position
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    setCursor({ x: e.clientX, y: e.clientY });
     setStyle({ opacity: 0, width: TOOLTIP_WIDTH });
     setVisible(true);
   };
 
-  // After the tooltip renders (invisible), measure it and snap to the correct position
-  useLayoutEffect(() => {
-    if (!visible || !tooltipRef.current || !triggerRef.current) return;
+  const handleMouseMove = (e: React.MouseEvent) => {
+    setCursor({ x: e.clientX, y: e.clientY });
+  };
 
-    const trig = triggerRef.current.getBoundingClientRect();
+  // Position above the cursor, clamped to viewport
+  useLayoutEffect(() => {
+    if (!visible || !tooltipRef.current || !cursor) return;
+
     const tip = tooltipRef.current.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const tipH = tip.height;
 
-    // Horizontal: center on trigger, clamp so it never escapes the viewport
-    let left = trig.left + trig.width / 2 - TOOLTIP_WIDTH / 2;
+    let left = cursor.x - TOOLTIP_WIDTH / 2;
     left = Math.max(EDGE_PAD, Math.min(left, vw - TOOLTIP_WIDTH - EDGE_PAD));
 
-    // Vertical: prefer above, flip below when there isn't enough room
-    const tipH = tip.height;
     let top: number;
-    if (trig.top - tipH - GAP >= EDGE_PAD) {
-      top = trig.top - tipH - GAP;
-    } else if (vh - trig.bottom - GAP >= tipH + EDGE_PAD) {
-      top = trig.bottom + GAP;
+    if (cursor.y - tipH - GAP >= EDGE_PAD) {
+      top = cursor.y - tipH - GAP;
+    } else if (vh - cursor.y - GAP >= tipH + EDGE_PAD) {
+      top = cursor.y + GAP;
     } else {
-      // Best effort: clamp so it stays on screen
-      top = Math.max(EDGE_PAD, trig.top - tipH - GAP);
+      top = Math.max(EDGE_PAD, cursor.y - tipH - GAP);
     }
 
     setStyle({ opacity: 1, width: TOOLTIP_WIDTH, left, top });
-  }, [visible, content]);
+  }, [visible, cursor, content]);
 
   return (
     <>
       <span
-        ref={triggerRef}
         onMouseEnter={handleMouseEnter}
+        onMouseMove={handleMouseMove}
         onMouseLeave={() => setVisible(false)}
         className={className}
       >
