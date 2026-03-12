@@ -53,7 +53,7 @@ class InitiativeResponse(BaseModel):
     archived: bool = False
     created_at: datetime
     updated_at: datetime
-    # New tool-based fields
+    # Tool-based fields
     project_description: Optional[str] = None
     project_type: Optional[str] = None
     selected_tools: Optional[list[str]] = None
@@ -61,6 +61,9 @@ class InitiativeResponse(BaseModel):
     tool_alignments: Optional[dict] = None
     deliverables: Optional[dict] = None
     project_plan: Optional[dict] = None
+    # Sharing fields (null = owned by current user)
+    shared_role: Optional[str] = None
+    owner_email: Optional[str] = None
     
     class Config:
         from_attributes = True

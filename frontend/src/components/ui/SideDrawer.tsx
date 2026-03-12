@@ -21,6 +21,7 @@ interface SideDrawerProps {
   onSignOut?: () => void;
   userEmail?: string | null;
   onUploadMaterial?: (file: File) => Promise<void>;
+  hiddenItems?: NavItem[];
 }
 
 const HOME_ITEMS: NavItemConfig[] = [
@@ -41,8 +42,10 @@ export function SideDrawer({
   onSignOut,
   userEmail,
   onUploadMaterial,
+  hiddenItems,
 }: SideDrawerProps) {
-  const items = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
+  const allItems = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
+  const items = hiddenItems ? allItems.filter(i => !hiddenItems.includes(i.key)) : allItems;
   const showMaterials = variant === 'project' && !!onUploadMaterial;
   const showFilesButton = variant === 'project';
   const longestLabelLength = useMemo(() => {

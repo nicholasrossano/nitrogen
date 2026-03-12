@@ -12,7 +12,8 @@ import json
 import asyncio
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_editor, require_viewer
 from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
 from app.models.evidence import EvidenceDoc
@@ -102,25 +103,14 @@ async def send_chat_message_stream(
     initiative_id: UUID,
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Send a chat message and get streaming assistant response."""
-    
+    # Verify editor access before starting the stream
+    initiative = await require_editor(db, initiative_id, user)
+
     async def generate_stream():
         try:
-            # Get initiative
-            result = await db.execute(
-                select(Initiative).where(
-                    Initiative.id == initiative_id,
-                    Initiative.user_id == user.uid,
-                )
-            )
-            initiative = result.scalar_one_or_none()
-            
-            if not initiative:
-                yield f"data: {json.dumps({'error': 'Initiative not found'})}\n\n"
-                return
-            
             # Save user message
             user_message = ChatMessage(
                 initiative_id=initiative.id,
@@ -729,24 +719,11 @@ async def send_chat_message(
     initiative_id: UUID,
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Send a chat message and get assistant response using LLM-driven orchestration."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    
+    initiative = await require_editor(db, initiative_id, user)
+
     # Save user message
     user_message = ChatMessage(
         initiative_id=initiative.id,
@@ -861,24 +838,11 @@ async def send_chat_message(
 async def get_chat_history(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Get chat history for an initiative."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    
+    initiative = await require_viewer(db, initiative_id, user)
+
     # Get messages
     messages_result = await db.execute(
         select(ChatMessage)
@@ -948,18 +912,10 @@ async def set_message_feedback(
     message_id: UUID,
     data: MessageFeedbackRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Set or clear like/dislike feedback on a message."""
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+    await require_editor(db, initiative_id, user)
 
     msg_result = await db.execute(
         select(ChatMessage).where(
@@ -983,18 +939,10 @@ async def update_message_widget(
     message_id: UUID,
     data: MessageWidgetUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Persist updated widget_data on an existing message (e.g. after LCOE/Carbon recalculation)."""
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+    initiative = await require_editor(db, initiative_id, user)
 
     msg_result = await db.execute(
         select(ChatMessage).where(
@@ -1052,18 +1000,10 @@ async def truncate_chat(
     initiative_id: UUID,
     data: TruncateChatRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Delete a message and all messages after it (used by the Edit flow)."""
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+    initiative = await require_editor(db, initiative_id, user)
 
     # Fetch the target message to get its created_at timestamp
     from uuid import UUID as UUIDType
@@ -1128,18 +1068,10 @@ async def retry_assistant_message(
     initiative_id: UUID,
     message_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Delete an assistant message and regenerate it from the same preceding context."""
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+    initiative = await require_editor(db, initiative_id, user)
 
     # Fetch the target assistant message
     msg_result = await db.execute(
@@ -1238,24 +1170,11 @@ async def confirm_alignment(
     initiative_id: UUID,
     data: AlignmentConfirmRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Confirm an alignment, optionally with modifications."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    
+    initiative = await require_editor(db, initiative_id, user)
+
     # Get existing alignment
     alignment_data = initiative.get_alignment_for_tool(data.tool_id)
     if not alignment_data:
@@ -1409,24 +1328,11 @@ async def provide_alignment_feedback(
     initiative_id: UUID,
     data: AlignmentFeedbackRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Provide feedback to update an alignment."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    
+    initiative = await require_editor(db, initiative_id, user)
+
     # Get existing alignment
     alignment_data = initiative.get_alignment_for_tool(data.tool_id)
     if not alignment_data:
@@ -1506,24 +1412,11 @@ async def get_alignment(
     initiative_id: UUID,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Get the current alignment for a specific tool."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    
+    initiative = await require_viewer(db, initiative_id, user)
+
     # Get alignment
     alignment_data = initiative.get_alignment_for_tool(tool_id)
     

@@ -18,7 +18,7 @@ export function MessageVariants({ currentIndex, total, onPrev, onNext }: Message
         onClick={onPrev}
         disabled={currentIndex === 0}
         aria-label="Previous response"
-        className="p-0.5 rounded hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="p-0.5 rounded enabled:hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <ChevronLeft className="w-3 h-3" />
       </button>
@@ -29,7 +29,7 @@ export function MessageVariants({ currentIndex, total, onPrev, onNext }: Message
         onClick={onNext}
         disabled={currentIndex === total - 1}
         aria-label="Next response"
-        className="p-0.5 rounded hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="p-0.5 rounded enabled:hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <ChevronRight className="w-3 h-3" />
       </button>

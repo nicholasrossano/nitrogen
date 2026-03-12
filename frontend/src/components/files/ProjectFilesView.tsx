@@ -260,7 +260,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setUploadedPage((p) => Math.max(1, p - 1))}
                     disabled={uploadedPage === 1}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
@@ -268,7 +268,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setUploadedPage((p) => Math.min(uploadedTotalPages, p + 1))}
                     disabled={uploadedPage === uploadedTotalPages}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>
@@ -338,7 +338,7 @@ export function ProjectFilesView({
                             <button
                               onClick={() => handleDownloadGenerated(file)}
                               disabled={downloadingId === file.id || deletingId === file.id}
-                              className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] transition-colors disabled:opacity-40"
+                              className="p-1 rounded text-text-tertiary enabled:hover:text-text-secondary enabled:hover:bg-black/[0.04] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               title={`Export as ${file.export_format?.toUpperCase()}`}
                             >
                               {downloadingId === file.id ? (
@@ -353,7 +353,7 @@ export function ProjectFilesView({
                           <button
                             onClick={() => handleDeleteGenerated(file)}
                             disabled={deletingId === file.id || downloadingId === file.id}
-                            className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40"
+                            className="p-1 rounded text-text-tertiary enabled:hover:text-red-400 enabled:hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Delete"
                           >
                             {deletingId === file.id ? (
@@ -378,7 +378,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setGeneratedPage((p) => Math.max(1, p - 1))}
                     disabled={generatedPage === 1}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
@@ -386,7 +386,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setGeneratedPage((p) => Math.min(generatedTotalPages, p + 1))}
                     disabled={generatedPage === generatedTotalPages}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>

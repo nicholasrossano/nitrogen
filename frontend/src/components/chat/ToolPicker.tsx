@@ -189,7 +189,7 @@ export function ToolPicker({
         type="button"
         disabled={disabled}
         onClick={handleOpen}
-        className="w-5 h-5 flex items-center justify-center rounded-full border border-stroke-subtle transition-colors duration-150 text-text-tertiary hover:text-text-secondary hover:border-stroke-muted disabled:opacity-40 disabled:cursor-default"
+        className="w-5 h-5 flex items-center justify-center rounded-full border border-stroke-subtle transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary enabled:hover:border-stroke-muted disabled:opacity-40 disabled:cursor-default"
         aria-label={selected ? `Tool selected: ${selected.name}` : 'Select a tool'}
       >
         <Plus className="w-[11px] h-[11px]" />
