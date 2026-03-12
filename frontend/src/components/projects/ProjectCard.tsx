@@ -2,9 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { FileText, Clock, Trash2, RotateCcw } from 'lucide-react';
+import { FileText, Clock, Trash2, RotateCcw, Users } from 'lucide-react';
 import { Initiative } from '@/lib/api';
 import { getIconByName } from '@/lib/icons';
+
+const ROLE_LABEL: Record<string, string> = {
+  editor: 'Editor',
+  viewer: 'Viewer',
+};
 
 interface ProjectCardProps {
   project: Initiative;
@@ -57,6 +62,8 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
   const IconComponent = getIconByName(project.icon);
+  const isShared = !!project.shared_role;
+  const canDelete = !isShared;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -124,7 +131,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
             )}
           </>
         ) : (
-          onDelete && (
+          canDelete && onDelete && (
             <button
               onClick={handleDelete}
               className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
@@ -144,6 +151,15 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
             <h3 className={`font-semibold text-sm line-clamp-2 ${isTrash ? 'text-text-secondary' : 'text-text-primary'}`}>
               {title}
             </h3>
+            {isShared && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <Users className="w-3 h-3 text-text-tertiary flex-shrink-0" />
+                <span className="text-[10px] text-text-tertiary truncate">
+                  {ROLE_LABEL[project.shared_role!] || project.shared_role}
+                  {project.owner_email && <> &middot; {project.owner_email}</>}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

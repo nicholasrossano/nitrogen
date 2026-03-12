@@ -9,10 +9,10 @@ from typing import Any, Optional
 import re
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_viewer
 from app.core.storage import get_storage
 from app.models.chat import ChatMessage
-from app.models.initiative import Initiative
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
@@ -30,7 +30,7 @@ async def export_memo(
     initiative_id: UUID,
     data: ExportRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Export memo to DOCX"""
     import logging
@@ -39,21 +39,7 @@ async def export_memo(
     try:
         logger.info(f"Export request for initiative {initiative_id} by user {user.uid}")
         
-        # Verify access
-        result = await db.execute(
-            select(Initiative).where(
-                Initiative.id == initiative_id,
-                Initiative.user_id == user.uid,
-            )
-        )
-        initiative = result.scalar_one_or_none()
-        
-        if not initiative:
-            logger.warning(f"Initiative {initiative_id} not found for user {user.uid}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Initiative not found",
-            )
+        initiative = await require_viewer(db, initiative_id, user)
         
         # Get memo version
         if data.memo_version_id:
@@ -138,7 +124,7 @@ async def export_memo(
 async def download_export(
     memo_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Download an exported DOCX file"""
     # Get memo and verify access
@@ -153,20 +139,7 @@ async def download_export(
             detail="Export not found",
         )
     
-    # Verify user owns the initiative
-    initiative_result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == memo.initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = initiative_result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
+    initiative = await require_viewer(db, memo.initiative_id, user)
     
     if not memo.export_path:
         raise HTTPException(
@@ -195,23 +168,10 @@ async def export_checklist(
     initiative_id: UUID,
     data: ChecklistExportRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Export checklist to Excel"""
-    # Verify access
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    initiative = await require_viewer(db, initiative_id, user)
     
     # Generate Excel
     exporter = ExcelExporterService()
@@ -237,22 +197,14 @@ async def export_deliverable(
     initiative_id: UUID,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Export any generated deliverable to its native file format (DOCX or XLSX).
 
     Reads content directly from the DB so the frontend never needs to send
     input data back — avoids round-trip serialisation bugs.
     """
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
+    initiative = await require_viewer(db, initiative_id, user)
 
     deliverables: dict[str, Any] = initiative.deliverables or {}
     data = deliverables.get(tool_id)

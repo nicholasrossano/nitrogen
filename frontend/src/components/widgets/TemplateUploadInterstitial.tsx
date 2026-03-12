@@ -141,7 +141,7 @@ export function TemplateUploadInterstitial({
             type="button"
             onClick={onCancel}
             disabled={uploading}
-            className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors disabled:opacity-40"
+            className="p-1 rounded-lg text-text-tertiary enabled:hover:text-text-secondary enabled:hover:bg-surface-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <X className="w-4 h-4" />
           </button>
@@ -228,7 +228,7 @@ export function TemplateUploadInterstitial({
                     type="button"
                     disabled={uploading}
                     onClick={() => onSelectRecent?.(t.template_id, t.filename)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left hover:bg-surface-subtle transition-colors disabled:opacity-40"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left enabled:hover:bg-surface-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {recentIcon(t)}
                     <span className="flex-1 min-w-0 text-xs font-medium text-text-primary truncate">
@@ -250,7 +250,7 @@ export function TemplateUploadInterstitial({
             type="button"
             onClick={onCancel}
             disabled={uploading}
-            className="px-3.5 py-1.5 text-xs font-medium text-text-secondary rounded-lg border border-stroke-subtle hover:bg-surface-subtle transition-colors disabled:opacity-40"
+            className="px-3.5 py-1.5 text-xs font-medium text-text-secondary rounded-lg border border-stroke-subtle enabled:hover:bg-surface-subtle transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -258,7 +258,7 @@ export function TemplateUploadInterstitial({
             type="button"
             onClick={() => file && onUpload(file)}
             disabled={!file || uploading}
-            className="px-3.5 py-1.5 text-xs font-medium text-white rounded-lg bg-accent hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-default flex items-center gap-1.5"
+            className="px-3.5 py-1.5 text-xs font-medium text-white rounded-lg bg-accent enabled:hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
             {uploading ? (
               <>

@@ -34,7 +34,7 @@ export interface Initiative {
   archived: boolean;
   created_at: string;
   updated_at: string;
-  // New tool-based fields
+  // Tool-based fields
   project_description: string | null;
   project_type: string | null;
   selected_tools: string[] | null;
@@ -42,6 +42,25 @@ export interface Initiative {
   tool_alignments: Record<string, ToolAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
+  // Sharing fields
+  shared_role?: 'editor' | 'viewer' | null;
+  owner_email?: string | null;
+}
+
+export interface ProjectShare {
+  id: string;
+  initiative_id: string;
+  user_id: string;
+  user_email: string | null;
+  user_display_name: string | null;
+  role: 'editor' | 'viewer';
+  created_at: string;
+}
+
+export interface UserSearchResult {
+  id: string;
+  email: string | null;
+  display_name: string | null;
 }
 
 export interface ToolDefinition {
@@ -1233,4 +1252,28 @@ export const api = {
     if (!resp.ok) throw new Error('Export failed');
     return resp.blob();
   },
+
+  // ── Sharing ──────────────────────────────────────────────────────
+  searchUsers: (q: string): Promise<UserSearchResult[]> =>
+    fetchApi<UserSearchResult[]>(`/api/v1/users/search?q=${encodeURIComponent(q)}`),
+
+  getShares: (initiativeId: string): Promise<ProjectShare[]> =>
+    fetchApi<ProjectShare[]>(`/api/v1/initiatives/${initiativeId}/shares`),
+
+  createShare: (initiativeId: string, email: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
+    fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    }),
+
+  updateShare: (initiativeId: string, shareId: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
+    fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
+
+  deleteShare: (initiativeId: string, shareId: string): Promise<void> =>
+    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
+      method: 'DELETE',
+    }),
 };

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen, ArrowLeft } from 'lucide-react';
+import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen, ArrowLeft, Users } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
-
+import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 interface PanelToggle {
   active: boolean;
   disabled?: boolean;
@@ -22,6 +22,8 @@ interface ProjectHeaderProps {
   onNewChat?: () => void;
   /** ArrowLeft back button — shown on the left side when provided */
   onBack?: () => void;
+  /** Hide editing controls for read-only viewers */
+  readOnly?: boolean;
 }
 
 export function ProjectHeader({
@@ -31,11 +33,15 @@ export function ProjectHeader({
   rightToggle,
   onNewChat,
   onBack,
+  readOnly = false,
 }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(initiative.title || 'New Project');
   const [saving, setSaving] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isOwner = !initiative.shared_role;
+  const canShare = isOwner || initiative.shared_role === 'editor';
 
   useEffect(() => {
     setTitle(initiative.title || 'New Project');
@@ -76,7 +82,7 @@ export function ProjectHeader({
     else if (e.key === 'Escape') handleCancel();
   };
 
-  const hasRightControls = onNewChat || leftToggle || rightToggle;
+  const hasRightControls = onNewChat || leftToggle || rightToggle || canShare || initiative.shared_role;
 
   return (
     <header className="flex-shrink-0">
@@ -95,7 +101,7 @@ export function ProjectHeader({
         {/* Editable title — centered */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
-            {isEditing ? (
+            {isEditing && !readOnly ? (
               <div className="flex items-center gap-1">
                 <input
                   ref={inputRef}
@@ -127,20 +133,36 @@ export function ProjectHeader({
                 <h1 className="text-[13px] font-medium text-text-primary truncate">
                   {title}
                 </h1>
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="icon-btn p-1 opacity-0 group-hover:opacity-100 text-text-tertiary"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="icon-btn p-1 opacity-0 group-hover:opacity-100 text-text-tertiary"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
+                {initiative.shared_role === 'viewer' && (
+                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-text-tertiary bg-surface-subtle rounded">
+                    View only
+                  </span>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right controls: panel toggles + new chat */}
+        {/* Right controls: share + panel toggles + new chat */}
         {hasRightControls && (
           <div className="ml-auto flex items-center gap-1">
+            {canShare && (
+              <button
+                onClick={() => setShowShareModal(true)}
+                className="flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg border border-stroke-subtle bg-white text-text-secondary hover:border-accent hover:text-accent transition-colors"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Share
+              </button>
+            )}
             {leftToggle && (
               <button
                 onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
@@ -174,6 +196,13 @@ export function ProjectHeader({
         )}
       </div>
 
+      {showShareModal && (
+        <ShareProjectModal
+          initiativeId={initiative.id}
+          ownerEmail={initiative.owner_email}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
     </header>
   );
 }

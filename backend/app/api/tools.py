@@ -7,7 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_editor, require_viewer
 from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
 from app.tools import get_tool_registry
@@ -67,7 +68,7 @@ class ToolInputsResponse(BaseModel):
 
 @router.get("/tools", response_model=list[ToolDefinitionResponse])
 async def list_tools(
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """List all available tools."""
     registry = get_tool_registry()
@@ -90,21 +91,10 @@ async def list_tools(
 async def get_recommended_tools(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Get tool recommendations for an initiative based on its description."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    
+    initiative = await require_viewer(db, initiative_id, user)
     if not initiative.project_description:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -143,23 +133,12 @@ async def select_tools(
     initiative_id: UUID,
     data: SelectToolsRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Select tools for an initiative."""
     from app.services.chat_agent import ChatAgentService
-    
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    
+
+    initiative = await require_editor(db, initiative_id, user)
     # Validate tool IDs
     registry = get_tool_registry()
     valid_tools = []
@@ -283,21 +262,10 @@ async def select_tools(
 async def get_tool_inputs(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Get input requirements for selected tools."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    
+    initiative = await require_viewer(db, initiative_id, user)
     if not initiative.selected_tools:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -342,21 +310,10 @@ async def update_tool_inputs(
     initiative_id: UUID,
     inputs: dict,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Update tool inputs for an initiative."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    
+    initiative = await require_editor(db, initiative_id, user)
     # Merge with existing inputs
     current_inputs = initiative.tool_inputs or {}
     current_inputs.update(inputs)
@@ -393,21 +350,10 @@ async def update_tool_inputs(
 async def proceed_to_review(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Move initiative to review stage."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    
+    initiative = await require_editor(db, initiative_id, user)
     # Update stage
     initiative.stage = InitiativeStage.REVIEW.value
     initiative.stage_1_complete = True  # Legacy compatibility

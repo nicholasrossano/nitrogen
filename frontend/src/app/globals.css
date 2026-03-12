@@ -353,6 +353,14 @@ textarea {
   @apply text-white;
 }
 
+.btn-primary:disabled:hover::before {
+  opacity: 0;
+}
+
+.btn-primary:disabled:hover {
+  @apply text-accent;
+}
+
 .btn-primary:active::before {
   opacity: 1;
   background-color: var(--color-accent-anchor);
@@ -388,6 +396,10 @@ textarea {
   opacity: 1;
 }
 
+.btn-secondary:disabled:hover::before {
+  opacity: 0;
+}
+
 .btn-secondary:hover {
 }
 
@@ -420,8 +432,16 @@ textarea {
   opacity: 1;
 }
 
+.btn-danger:disabled:hover::before {
+  opacity: 0;
+}
+
 .btn-danger:hover {
   @apply text-white;
+}
+
+.btn-danger:disabled:hover {
+  @apply text-indicator-orange;
 }
 
 .btn-danger:active::before {

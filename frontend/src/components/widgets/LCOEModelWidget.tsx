@@ -302,7 +302,7 @@ export function LCOEModelWidget({
                       <button
                         onClick={() => isActive && startEdit(inp.field_name, inp.value)}
                         disabled={!isActive}
-                        className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary hover:text-accent transition-colors disabled:opacity-50"
+                        className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isMissing ? (
                           <span className="text-red-500 italic">—</span>

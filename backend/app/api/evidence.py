@@ -5,9 +5,9 @@ from uuid import UUID
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
-from app.models.initiative import Initiative
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.chat import ChatMessage
 from app.schemas.evidence import (
@@ -28,23 +28,10 @@ async def upload_evidence(
     text_content: Optional[str] = Form(None),
     text_title: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Upload a file or paste text as evidence"""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    initiative = await require_editor(db, initiative_id, user)
     
     # Validate input
     if not file and not text_content:
@@ -146,7 +133,7 @@ async def paste_evidence_text(
     initiative_id: UUID,
     data: EvidenceTextInput,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Paste text as evidence (alternative to file upload)"""
     # Reuse upload endpoint logic with text
@@ -164,23 +151,10 @@ async def paste_evidence_text(
 async def list_evidence(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """List evidence documents for an initiative"""
-    # Verify access
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    initiative = await require_viewer(db, initiative_id, user)
     
     # Get evidence docs with chunk counts
     docs_result = await db.execute(
@@ -212,7 +186,7 @@ async def list_evidence(
 async def get_evidence_content(
     evidence_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Get the full content of an evidence document"""
     # Get evidence doc
@@ -251,7 +225,7 @@ async def get_evidence_content(
 async def delete_evidence(
     evidence_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Delete an evidence document and its chunks"""
     # Get evidence doc
@@ -266,20 +240,7 @@ async def delete_evidence(
             detail="Evidence document not found",
         )
     
-    # Verify user owns the initiative
-    initiative_result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == evidence_doc.initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = initiative_result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    await require_editor(db, evidence_doc.initiative_id, user)
     
     # Delete all chunks first
     await db.execute(

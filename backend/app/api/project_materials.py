@@ -6,9 +6,9 @@ from uuid import UUID
 import logging
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
-from app.models.initiative import Initiative
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
@@ -35,24 +35,6 @@ ALLOWED_CONTENT_TYPES = {
 }
 
 
-async def _get_initiative_for_user(
-    initiative_id: UUID, user: MockUser, db: AsyncSession
-) -> Initiative:
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
-    return initiative
-
-
 @router.post(
     "/initiatives/{initiative_id}/materials",
     response_model=ProjectMaterialUploadResponse,
@@ -61,10 +43,10 @@ async def upload_material(
     initiative_id: UUID,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Upload a file as project-level context material."""
-    initiative = await _get_initiative_for_user(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     file_type = ALLOWED_CONTENT_TYPES.get(file.content_type or "")
     if not file_type:
@@ -124,10 +106,10 @@ async def upload_material(
 async def list_materials(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """List all project materials for an initiative."""
-    await _get_initiative_for_user(initiative_id, user, db)
+    await require_viewer(db, initiative_id, user)
 
     result = await db.execute(
         select(ProjectMaterial)
@@ -152,7 +134,7 @@ async def list_materials(
 async def delete_material(
     material_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Delete a project material."""
     result = await db.execute(
@@ -165,7 +147,7 @@ async def delete_material(
             detail="Material not found",
         )
 
-    await _get_initiative_for_user(material.initiative_id, user, db)
+    await require_editor(db, material.initiative_id, user)
 
     if material.storage_path:
         storage = get_uploads_storage()
@@ -193,10 +175,10 @@ EXPORT_FORMAT_MAP = {
 async def list_project_files(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """List all project files: uploaded materials + generated outputs."""
-    initiative = await _get_initiative_for_user(initiative_id, user, db)
+    initiative = await require_viewer(db, initiative_id, user)
 
     # Uploaded materials
     mat_result = await db.execute(
@@ -298,10 +280,10 @@ async def delete_deliverable(
     initiative_id: UUID,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Remove a generated deliverable from the project."""
-    initiative = await _get_initiative_for_user(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     if initiative.remove_deliverable(tool_id):
         await db.commit()
@@ -336,7 +318,7 @@ async def delete_deliverable(
 async def download_material(
     material_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Download an uploaded project material."""
     result = await db.execute(
@@ -349,7 +331,7 @@ async def download_material(
             detail="Material not found",
         )
 
-    await _get_initiative_for_user(material.initiative_id, user, db)
+    await require_viewer(db, material.initiative_id, user)
 
     if not material.storage_path:
         raise HTTPException(

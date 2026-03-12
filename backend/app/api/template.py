@@ -9,9 +9,9 @@ from pydantic import BaseModel
 import logging
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
-from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
 from app.services.document_parser import DocumentParserService
 
@@ -25,21 +25,6 @@ TEMPLATE_CONTENT_TYPES = {
 }
 
 
-async def _get_initiative_for_user(
-    initiative_id: UUID, user: MockUser, db: AsyncSession,
-) -> Initiative:
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    return initiative
-
-
 # ── Upload ──────────────────────────────────────────────────────────
 
 @router.post("/template/upload")
@@ -47,11 +32,11 @@ async def upload_template(
     initiative_id: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Upload a DOCX or XLSX template for analysis and completion."""
     init_uuid = UUID(initiative_id)
-    initiative = await _get_initiative_for_user(init_uuid, user, db)
+    initiative = await require_editor(db, init_uuid, user)
 
     file_type = TEMPLATE_CONTENT_TYPES.get(file.content_type or "")
     if not file_type:
@@ -111,7 +96,7 @@ class RequirementUpdate(BaseModel):
 async def update_requirement(
     requirement_id: str,
     body: RequirementUpdate,
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Update a single requirement value/status from the widget's inline editor.
 
@@ -140,7 +125,7 @@ class GenerateWithRequirementsRequest(BaseModel):
 async def generate_from_template(
     body: GenerateWithRequirementsRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Fill the template with resolved requirement values and return a viewer payload."""
     from app.services.template_filler import TemplateFillerService
@@ -148,7 +133,7 @@ async def generate_from_template(
     init_uuid = UUID(body.initiative_id)
     template_uuid = UUID(body.template_id)
     logger.info("generate_from_template: initiative=%s template=%s", init_uuid, template_uuid)
-    await _get_initiative_for_user(init_uuid, user, db)
+    await require_editor(db, init_uuid, user)
 
     result = await db.execute(
         select(ProjectMaterial).where(ProjectMaterial.id == template_uuid)
@@ -217,11 +202,11 @@ async def list_recent_templates(
     initiative_id: str,
     limit: int = 5,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Return the most recently uploaded (unfilled) templates for an initiative."""
     init_uuid = UUID(initiative_id)
-    await _get_initiative_for_user(init_uuid, user, db)
+    await require_viewer(db, init_uuid, user)
 
     result = await db.execute(
         select(ProjectMaterial)
@@ -252,7 +237,7 @@ async def list_recent_templates(
 async def export_template(
     template_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Download the generated (filled) template file."""
     result = await db.execute(
@@ -262,7 +247,7 @@ async def export_template(
     if not material or not material.storage_path:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    await _get_initiative_for_user(material.initiative_id, user, db)
+    await require_viewer(db, material.initiative_id, user)
 
     storage = get_uploads_storage()
     file_bytes = await storage.load(material.storage_path)
