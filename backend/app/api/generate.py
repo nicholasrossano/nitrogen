@@ -4,8 +4,9 @@ from sqlalchemy import select
 from uuid import UUID
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
-from app.models.initiative import Initiative, InitiativeStage
+from app.core.auth import get_current_user, AuthUser
+from app.core.permissions import require_editor, require_viewer
+from app.models.initiative import InitiativeStage
 from app.models.memo import MemoVersion
 from app.models.chat import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
@@ -21,23 +22,10 @@ async def generate_memo(
     initiative_id: UUID,
     data: MemoGenerateRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Generate an investment memo using RAG"""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    initiative = await require_editor(db, initiative_id, user)
     
     if not initiative.evidence_ready:
         raise HTTPException(
@@ -102,23 +90,10 @@ async def generate_memo(
 async def get_latest_memo(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Get the latest memo for an initiative"""
-    # Verify access
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    initiative = await require_viewer(db, initiative_id, user)
     
     # Get latest memo
     memo_result = await db.execute(
@@ -147,23 +122,10 @@ async def get_latest_memo(
 async def generate_all_deliverables(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Generate all selected deliverables for an initiative."""
-    # Get initiative
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    
-    if not initiative:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initiative not found",
-        )
+    initiative = await require_editor(db, initiative_id, user)
     
     if not initiative.selected_tools:
         raise HTTPException(

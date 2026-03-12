@@ -17,6 +17,9 @@
   - Otherwise provide a concrete manual verification checklist.
 - Always include: "How to verify" steps.
 
+**Disabled button hover states:**
+- Whenever a button has both `hover:X` effects and `disabled:opacity-*`, replace `hover:X` with `enabled:hover:X` so hover animations are suppressed when disabled while the `disabled:cursor-not-allowed` cursor still shows. For `btn-primary/secondary/danger` classes in `globals.css`, add `:disabled:hover::before { opacity: 0 }` CSS overrides to suppress the pseudo-element fill animation.
+
 **Post-edit checks (always run):**
 - After every substantive edit, call `ReadLints` on the edited file(s) before finalizing.
 - Fix any linter errors introduced by the change before responding.

@@ -104,9 +104,18 @@ function InitiativePageContent() {
     reset,
   } = useInitiativeStore();
 
+  const isViewer = initiative?.shared_role === 'viewer';
   const hasProjectPlan = !!projectPlan;
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
+
+  // Viewers cannot access the chat/generate view; redirect them to plan
+  useEffect(() => {
+    if (isViewer && activeView === 'chat') {
+      setActiveView('plan');
+      router.replace(`/initiatives/${initiativeId}?view=plan`);
+    }
+  }, [isViewer, activeView, initiativeId, router]);
 
   useEffect(() => {
     if (initiativeId) {
@@ -299,9 +308,10 @@ function InitiativePageContent() {
       {initiative && (
         <ProjectHeader
           initiative={initiative}
-          onTitleUpdate={handleTitleUpdate}
+          onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
+          readOnly={isViewer}
           {...(activeView === 'plan' ? {
-            leftToggle: rightPanelOpen ? {
+            leftToggle: !isViewer && rightPanelOpen ? {
               active: showChatPanel,
               onClick: handleToggleChatPanel,
               title: showChatPanel ? 'Hide chat panel' : 'Show chat panel',
@@ -312,7 +322,7 @@ function InitiativePageContent() {
               onClick: handleToggleInspector,
               title: showInspector ? 'Hide inspector' : 'Show inspector',
             } : undefined,
-          } : activeView === 'chat' ? {
+          } : activeView === 'chat' && !isViewer ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
@@ -336,7 +346,8 @@ function InitiativePageContent() {
           onItemSelect={handleNavChange}
           onSignOut={handleSignOut}
           userEmail={user?.email}
-          onUploadMaterial={(file) => uploadMaterial(initiativeId, file)}
+          onUploadMaterial={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
+          hiddenItems={isViewer ? ['chat'] : undefined}
         />
         </div>
 
@@ -420,7 +431,7 @@ function InitiativePageContent() {
                 <ProjectFilesView
                   initiativeId={initiativeId}
                   materials={projectMaterials}
-                  onDeleteMaterial={deleteMaterial}
+                  onDeleteMaterial={isViewer ? undefined : deleteMaterial}
                 />
               </main>
             ) : activeView === 'plan' ? (
@@ -452,35 +463,37 @@ function InitiativePageContent() {
 
                 {rightPanelOpen ? (
                   <>
-                    <div
-                      className="flex-shrink-0 relative overflow-hidden"
-                      style={{
-                        width: showChatPanel ? `${chatWidthPercent}%` : 0,
-                        transition: isResizing ? 'none' : 'width 300ms ease-in-out',
-                      }}
-                    >
-                      <div className="absolute inset-0">
-                        <ChatPanel
-                          messages={messages}
-                          sending={sending}
-                          generating={generating}
-                          initiativeId={initiativeId}
-                          onSendMessage={handleSendMessage}
-                          hasProjectPlan={hasProjectPlan}
-                        />
-                      </div>
+                    {!isViewer && (
+                      <div
+                        className="flex-shrink-0 relative overflow-hidden"
+                        style={{
+                          width: showChatPanel ? `${chatWidthPercent}%` : 0,
+                          transition: isResizing ? 'none' : 'width 300ms ease-in-out',
+                        }}
+                      >
+                        <div className="absolute inset-0">
+                          <ChatPanel
+                            messages={messages}
+                            sending={sending}
+                            generating={generating}
+                            initiativeId={initiativeId}
+                            onSendMessage={handleSendMessage}
+                            hasProjectPlan={hasProjectPlan}
+                          />
+                        </div>
 
-                      {showChatPanel && (
-                        <div
-                          onMouseDown={handleResizeStart}
-                          className={`
-                            absolute top-0 right-0 w-1 h-full cursor-col-resize
-                            hover:bg-accent/30 transition-colors
-                            ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
-                          `}
-                        />
-                      )}
-                    </div>
+                        {showChatPanel && (
+                          <div
+                            onMouseDown={handleResizeStart}
+                            className={`
+                              absolute top-0 right-0 w-1 h-full cursor-col-resize
+                              hover:bg-accent/30 transition-colors
+                              ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
+                            `}
+                          />
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex-1 overflow-hidden">
                       {showProjectPlan && (
@@ -492,7 +505,7 @@ function InitiativePageContent() {
                       )}
                     </div>
                   </>
-                ) : (
+                ) : !isViewer ? (
                   <div className="flex-1 overflow-hidden h-full">
                     <ChatPanel
                       messages={messages}
@@ -503,6 +516,10 @@ function InitiativePageContent() {
                       fullWidth={true}
                       hasProjectPlan={hasProjectPlan}
                     />
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-hidden h-full flex items-center justify-center">
+                    <p className="text-sm text-text-tertiary">No project plan yet</p>
                   </div>
                 )}
               </main>

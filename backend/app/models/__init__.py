@@ -8,6 +8,8 @@ from app.models.provenance import ProvenanceTrace
 from app.models.gs_template import GSTemplateVersion
 from app.models.gs_workspace import GSCertificationWorkspace
 from app.models.project_material import ProjectMaterial
+from app.models.user import User
+from app.models.project_share import ProjectShare
 
 __all__ = [
     "Initiative",
@@ -24,4 +26,6 @@ __all__ = [
     "GSTemplateVersion",
     "GSCertificationWorkspace",
     "ProjectMaterial",
+    "User",
+    "ProjectShare",
 ]

@@ -9,9 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.core.auth import MockUser, get_current_user
+from app.core.auth import AuthUser, get_current_user
+from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
-from app.models.initiative import Initiative, InitiativeStage
+from app.models.initiative import InitiativeStage
 from app.services.deep_dive import DeepDiveService
 from app.services.project_plan import ProjectPlanService
 
@@ -34,31 +35,14 @@ class DeepDiveRequest(BaseModel):
     pillar_name: str = ""
 
 
-async def _get_initiative(
-    initiative_id: UUID,
-    user: MockUser,
-    db: AsyncSession,
-) -> Initiative:
-    result = await db.execute(
-        select(Initiative).where(
-            Initiative.id == initiative_id,
-            Initiative.user_id == user.uid,
-        )
-    )
-    initiative = result.scalar_one_or_none()
-    if not initiative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
-    return initiative
-
-
 @router.get("/initiatives/{initiative_id}/project-plan")
 async def get_project_plan(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Return the cached project plan, or null if none exists."""
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_viewer(db, initiative_id, user)
     return {"project_plan": initiative.project_plan}
 
 
@@ -66,10 +50,10 @@ async def get_project_plan(
 async def generate_project_plan(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Generate a new project plan (or refresh the existing one)."""
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_description and not initiative.title:
         raise HTTPException(
@@ -104,10 +88,10 @@ async def generate_project_plan(
 async def propose_plan_categories(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Propose high-level plan categories adapted to the project."""
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_description and not initiative.title:
         raise HTTPException(
@@ -133,10 +117,10 @@ async def confirm_plan_categories(
     initiative_id: UUID,
     body: ConfirmCategoriesRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Accept confirmed categories and generate the full project plan."""
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     service = ProjectPlanService(db)
     existing_plan = initiative.project_plan
@@ -170,7 +154,7 @@ async def update_plan_item_status(
     item_id: str,
     body: StatusUpdate,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Update the status of a single sub-item in the project plan."""
     VALID_STATUSES = {"not_started", "in_progress", "complete"}
@@ -180,7 +164,7 @@ async def update_plan_item_status(
             detail=f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
         )
 
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -246,10 +230,10 @@ async def delete_plan_item(
     initiative_id: UUID,
     item_id: str,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Remove a single item from the project plan."""
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -278,10 +262,10 @@ async def delete_plan_element(
     item_id: str,
     element_index: int,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Remove an element by index from a deep-dive result cached in the project plan."""
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -309,14 +293,14 @@ async def deep_dive_plan_item(
     item_id: str,
     body: DeepDiveRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Run a targeted research deep dive on a specific project plan sub-item.
 
     Results are cached inside project_plan.deep_dives[item_id] so subsequent
     requests for the same item are returned instantly without re-running research.
     """
-    initiative = await _get_initiative(initiative_id, user, db)
+    initiative = await require_editor(db, initiative_id, user)
 
     # Check for cached result
     plan = initiative.project_plan or {}
