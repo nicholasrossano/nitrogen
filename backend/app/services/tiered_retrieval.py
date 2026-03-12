@@ -250,7 +250,7 @@ class TieredRetrievalService:
     async def search_openalex(self, query: str) -> list[RetrievedFact]:
         """Search OpenAlex for scholarly works."""
         try:
-            works = await self.openalex.search_works(query, per_page=10)
+            works = await self.openalex.search_works(query, per_page=5)
             if not works:
                 return []
             
@@ -297,11 +297,10 @@ class TieredRetrievalService:
 
             resp = await self.client.responses.create(
                 model=settings.openai_orchestration_model,
-                tools=[{"type": "web_search", "search_context_size": "high"}],
+                tools=[{"type": "web_search", "search_context_size": "medium"}],
                 input=(
                     f"Search the web for the most relevant and authoritative information about: {query}\n\n"
-                    "Provide a comprehensive summary citing as many distinct, authoritative sources as possible "
-                    "(aim for at least 5–8 inline citations from different domains)."
+                    "Summarize the most relevant findings, citing authoritative sources."
                 ),
             )
 
@@ -351,6 +350,8 @@ class TieredRetrievalService:
                                 publisher=domain,
                             )
                         )
+
+            facts = [f for f in facts if len(f.content) >= 50]
 
             logger.info(
                 "search_web query=%r  annotations=%d  url_citations=%d  unique_facts=%d",
