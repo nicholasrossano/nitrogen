@@ -16,44 +16,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Auto-bypass auth on localhost (development only)
-const isDevBypassEnabled = () => {
-  if (typeof window === 'undefined') return false;
-  const hostname = window.location.hostname;
-  return (
-    process.env.NODE_ENV === 'development' &&
-    (hostname === 'localhost' || hostname === '127.0.0.1')
-  );
-};
-
-// Mock user for development bypass
-const createMockUser = (): User => ({
-  uid: 'shared-user',
-  email: 'shared@nitrogen.ai',
-  emailVerified: true,
-  displayName: 'Dev User',
-  isAnonymous: false,
-  photoURL: null,
-  providerData: [],
-  metadata: {} as User['metadata'],
-  phoneNumber: null,
-  tenantId: null,
-  refreshToken: '',
-  providerId: 'mock',
-  delete: async () => {},
-  getIdToken: async () => 'mock-token',
-  getIdTokenResult: async () => ({
-    token: 'mock-token',
-    claims: {},
-    authTime: new Date().toISOString(),
-    issuedAtTime: new Date().toISOString(),
-    expirationTime: new Date(Date.now() + 3600000).toISOString(),
-    signInProvider: 'mock',
-    signInSecondFactor: null,
-  }),
-  reload: async () => {},
-  toJSON: () => ({}),
-});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -63,14 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Only run on client
     if (typeof window === 'undefined') return;
-
-    // Dev bypass mode - skip Firebase auth entirely
-    // if (isDevBypassEnabled()) {
-    //   console.log('🔓 Dev auth bypass enabled - using mock user');
-    //   setUser(createMockUser());
-    //   setLoading(false);
-    //   return;
-    // }
 
     let unsubscribe: (() => void) | undefined;
 
@@ -119,11 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    // In dev bypass mode, just clear the mock user
-    // if (isDevBypassEnabled()) {
-    //   setUser(null);
-    //   return;
-    // }
     if (!auth) throw new Error('Auth not initialized');
     const { signOut: firebaseSignOut } = await import('firebase/auth');
     await firebaseSignOut(auth);
@@ -137,10 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getIdToken = async (): Promise<string | null> => {
     if (!user) return null;
-    // In dev bypass mode, return a mock token
-    // if (isDevBypassEnabled()) {
-    //   return 'REDACTED_DEV_TOKEN';
-    // }
     return user.getIdToken();
   };
 
