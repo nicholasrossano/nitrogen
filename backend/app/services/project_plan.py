@@ -546,7 +546,7 @@ of the sources that support that item. Required items MUST cite at least one sou
 
         try:
             results = await asyncio.gather(
-                *[self.retrieval.search_web(q, max_results=10, max_content_length=600) for q in queries]
+                *[self.retrieval.search_web(q, max_results=6, max_content_length=600) for q in queries]
             )
 
             pillar_labels = (
@@ -562,7 +562,7 @@ of the sources that support that item. Required items MUST cite at least one sou
                     continue
                 label = pillar_labels[i] if i < len(pillar_labels) else "General"
                 lines = []
-                for f in facts[:8]:
+                for f in facts[:5]:
                     all_facts.append(f)
                     idx = len(all_facts)  # 1-based for the LLM
                     url_ref = f" ({f.source_url})" if f.source_url else ""

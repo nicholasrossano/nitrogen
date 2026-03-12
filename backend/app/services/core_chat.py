@@ -1192,7 +1192,7 @@ class ComplianceChatService:
             if key not in seen:
                 seen.add(key)
                 deduped.append(fact)
-        return deduped[:10]
+        return deduped[:8]
 
     async def _generate_answer(
         self,
