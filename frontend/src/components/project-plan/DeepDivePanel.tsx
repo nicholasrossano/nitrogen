@@ -165,7 +165,6 @@ export function DeepDivePanel({
                         key={i}
                         className="border border-stroke-subtle rounded px-3 py-2.5 flex items-center gap-2"
                       >
-                        <span className="w-2 h-2 rounded-full flex-shrink-0 bg-stroke-subtle" />
                         <span className="text-sm font-medium text-text-primary flex-1 min-w-0 leading-snug">
                           {el.title}
                         </span>
