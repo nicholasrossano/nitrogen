@@ -45,11 +45,51 @@ module.exports = {
           tint: '#9a8a5a',
           wash: '#e8e4cf',
         },
-        // Semantic Indicators (meaning only)
+        // Semantic Indicators (meaning only) — ~20% less saturated for consistency
         indicator: {
           orange: '#B97A5D',
           yellow: '#C6B875',
-          green: '#9DAA9B',
+          green: '#8a9a88',
+          red: '#c94a4a',
+        },
+        // Green palette — ~20% less saturated than Tailwind default
+        green: {
+          50: '#f2faf5',
+          100: '#e2f3e9',
+          200: '#c4e8d2',
+          300: '#94d4a8',
+          400: '#5cb87a',
+          500: '#3a9e52',
+          600: '#2d8442',
+          700: '#266b38',
+          800: '#225432',
+          900: '#1e472a',
+        },
+        // Red palette — ~20% less saturated than Tailwind default
+        red: {
+          50: '#fef5f5',
+          100: '#fde8e8',
+          200: '#fad4d4',
+          300: '#f5b0b0',
+          400: '#ec8484',
+          500: '#e05858',
+          600: '#c94a4a',
+          700: '#b03737',
+          800: '#8f3232',
+          900: '#7a2a2a',
+        },
+        // Emerald palette — ~20% less saturated (charts, carbon outputs)
+        emerald: {
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#1a9e6a',
+          600: '#0d7d5a',
+          700: '#0c6649',
+          800: '#065f46',
+          900: '#064e3b',
         },
         // Strokes & Dividers
         stroke: {
