@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { X, ExternalLink, Loader2, AlertCircle, Zap, ChevronDown } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { X, ExternalLink, Loader2, AlertCircle, Zap, HelpCircle } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface DeepDivePanelProps {
   initiativeId: string;
@@ -75,15 +76,6 @@ export function DeepDivePanel({
   useEffect(() => {
     panelRef.current?.focus();
   }, []);
-
-  const [expandedElements, setExpandedElements] = useState<Set<number>>(new Set());
-
-  const toggleElement = (i: number) =>
-    setExpandedElements((prev) => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
 
   const pillarLabel =
     result?.pillar_name ?? pillar.name;
@@ -161,40 +153,29 @@ export function DeepDivePanel({
                 </section>
               )}
 
-              {/* Elements */}
+              {/* Requirements */}
               {result.elements.length > 0 && (
                 <section>
                   <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                    Elements
+                    Requirements
                   </h3>
                   <div className="space-y-2">
-                    {result.elements.map((el, i) => {
-                      const open = expandedElements.has(i);
-                      return (
-                        <div
-                          key={i}
-                          className="border border-stroke-subtle rounded overflow-hidden"
-                        >
-                          <button
-                            onClick={() => toggleElement(i)}
-                            className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                          >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0 bg-stroke-subtle" />
-                            <span className="text-sm font-medium text-text-primary flex-1 min-w-0 leading-snug">
-                              {el.title}
-                            </span>
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 text-text-tertiary flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-                            />
-                          </button>
-                          {open && (
-                            <p className="text-xs text-text-secondary leading-relaxed px-3 pb-2.5 pl-7">
-                              {el.description}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {result.elements.map((el, i) => (
+                      <div
+                        key={i}
+                        className="border border-stroke-subtle rounded px-3 py-2.5 flex items-center gap-2"
+                      >
+                        <span className="w-2 h-2 rounded-full flex-shrink-0 bg-stroke-subtle" />
+                        <span className="text-sm font-medium text-text-primary flex-1 min-w-0 leading-snug">
+                          {el.title}
+                        </span>
+                        <Tooltip content={el.description}>
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-surface-subtle text-text-tertiary hover:bg-surface-hover hover:text-text-secondary cursor-help transition-colors">
+                            <HelpCircle className="w-3 h-3" />
+                          </span>
+                        </Tooltip>
+                      </div>
+                    ))}
                   </div>
                 </section>
               )}
@@ -206,13 +187,18 @@ export function DeepDivePanel({
                     Dependencies
                   </h3>
                   <div className="space-y-2">
-                    {result.dependencies.map((dep, i) => (
-                      <div key={i} className="text-xs text-text-secondary leading-relaxed bg-surface-subtle rounded px-3 py-2">
-                        <span className="font-medium text-text-primary">{dep.condition}</span>
-                        {' — '}
-                        {dep.effect}
-                      </div>
-                    ))}
+                    {result.dependencies.map((dep, i) => {
+                      const conditionCapitalized =
+                        dep.condition.charAt(0).toUpperCase() + dep.condition.slice(1);
+                      return (
+                        <div key={i} className="text-xs text-text-secondary leading-relaxed bg-surface-subtle rounded px-3 py-2">
+                          <span className="font-semibold text-text-primary block">
+                            {conditionCapitalized}
+                          </span>
+                          <span className="block mt-1">{dep.effect}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               )}
