@@ -1,3 +1,9 @@
+from pathlib import Path
+
+from dotenv import load_dotenv
+# Load .env before any config reads (backend/.env when run from backend/)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -7,30 +13,32 @@ import json
 
 from app.config import get_settings
 from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Parse CORS origins directly from env var to avoid pydantic issues
+# CORS origins: prefer settings (loaded from .env by pydantic) since os.environ
+# may not have CORS_ORIGINS when pydantic-settings loads .env for its own use
 def get_cors_origins():
     cors_env = os.environ.get('CORS_ORIGINS', '')
     if cors_env:
         try:
             parsed = json.loads(cors_env)
-            if isinstance(parsed, list):
+            if isinstance(parsed, list) and parsed:
                 logger.info(f"CORS origins from env: {parsed}")
                 return parsed
         except json.JSONDecodeError:
-            # Try comma-separated
             origins = [o.strip() for o in cors_env.split(',') if o.strip()]
-            logger.info(f"CORS origins (comma-sep): {origins}")
-            return origins
-    # Fallback to settings
-    logger.info(f"CORS origins from settings: {settings.cors_origins}")
-    return settings.cors_origins
+            if origins:
+                logger.info(f"CORS origins (comma-sep): {origins}")
+                return origins
+    # Primary: settings loads from .env via pydantic-settings
+    origins = settings.cors_origins
+    logger.info(f"CORS origins from settings: {origins}")
+    return origins if origins else ["http://localhost:3000", "http://localhost:3001"]
 
 cors_origins = get_cors_origins()
 logger.info(f"Final CORS origins: {cors_origins}")
@@ -81,6 +89,7 @@ app.include_router(project_materials.router, prefix="/api/v1", tags=["project-ma
 app.include_router(template.router, prefix="/api/v1", tags=["template"])
 app.include_router(shares.router, prefix="/api/v1", tags=["shares"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
+app.include_router(compliance_precheck.router, prefix="/api/v1", tags=["compliance-precheck"])
 
 
 @app.get("/")

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial, CompliancePrecheck, FrameworkRoutingResult, ScopeFact } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -16,6 +16,7 @@ interface InitiativeState {
   evidenceDocs: EvidenceDoc[];
   projectMaterials: ProjectMaterial[];
   projectPlan: ProjectPlan | null;
+  compliancePrecheck: CompliancePrecheck | null;
   
   // UI State
   loading: boolean;
@@ -23,6 +24,7 @@ interface InitiativeState {
   generating: boolean;
   alignmentLoading: boolean;
   projectPlanLoading: boolean;
+  compliancePrecheckLoading: boolean;
   error: string | null;
   streamingMessageId: string | null;
 
@@ -65,6 +67,10 @@ interface InitiativeState {
   updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
+  loadCompliancePrecheck: (id: string) => Promise<void>;
+  routeFramework: (id: string) => Promise<FrameworkRoutingResult>;
+  runCompliancePrecheck: (id: string, frameworkId: string, confirmedFacts: ScopeFact[]) => Promise<void>;
+  rerunCompliancePrecheck: (id: string, updatedFacts: ScopeFact[]) => Promise<void>;
   reset: () => void;
 }
 
@@ -78,11 +84,13 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   evidenceDocs: [],
   projectMaterials: [],
   projectPlan: null,
+  compliancePrecheck: null,
   loading: false,
   sending: false,
   generating: false,
   alignmentLoading: false,
   projectPlanLoading: false,
+  compliancePrecheckLoading: false,
   error: null,
   streamingMessageId: null,
   messageFeedback: {},
@@ -259,6 +267,10 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           // Sync the project plan from the initiative (covers both initial generation and chat-driven updates)
           if (initiative.project_plan) {
             set({ projectPlan: initiative.project_plan });
+          }
+
+          if (initiative.compliance_precheck) {
+            set({ compliancePrecheck: initiative.compliance_precheck });
           }
 
           // Reload chat history to get any additional messages the backend added
@@ -779,6 +791,47 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
+  loadCompliancePrecheck: async (id: string) => {
+    try {
+      const response = await api.getCompliancePrecheck(id);
+      set({ compliancePrecheck: response.compliance_precheck });
+    } catch (error) {
+      console.error('Failed to load compliance precheck:', error);
+    }
+  },
+
+  routeFramework: async (id: string) => {
+    set({ compliancePrecheckLoading: true });
+    try {
+      const result = await api.routeFramework(id);
+      return result;
+    } finally {
+      set({ compliancePrecheckLoading: false });
+    }
+  },
+
+  runCompliancePrecheck: async (id: string, frameworkId: string, confirmedFacts: ScopeFact[]) => {
+    set({ compliancePrecheckLoading: true });
+    try {
+      const response = await api.runCompliancePrecheck(id, frameworkId, confirmedFacts);
+      set({ compliancePrecheck: response.compliance_precheck, compliancePrecheckLoading: false });
+    } catch (error) {
+      set({ compliancePrecheckLoading: false });
+      throw error;
+    }
+  },
+
+  rerunCompliancePrecheck: async (id: string, updatedFacts: ScopeFact[]) => {
+    set({ compliancePrecheckLoading: true });
+    try {
+      const response = await api.rerunCompliancePrecheck(id, updatedFacts);
+      set({ compliancePrecheck: response.compliance_precheck, compliancePrecheckLoading: false });
+    } catch (error) {
+      set({ compliancePrecheckLoading: false });
+      throw error;
+    }
+  },
+
   // Reset state
   reset: () => {
     set({
@@ -790,11 +843,13 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       evidenceDocs: [],
       projectMaterials: [],
       projectPlan: null,
+      compliancePrecheck: null,
       loading: false,
       sending: false,
       generating: false,
       alignmentLoading: false,
       projectPlanLoading: false,
+      compliancePrecheckLoading: false,
       error: null,
       streamingMessageId: null,
       messageFeedback: {},
