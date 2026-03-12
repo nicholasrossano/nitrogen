@@ -5,8 +5,21 @@ import { Loader2, MessageSquare } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { DeepDivePanel } from './DeepDivePanel';
 import { SurveyPopup, SurveyConfig, SurveyResponse } from '@/components/survey/SurveyPopup';
+
+// Gradient-ordered palette: cool blues → warm reds/browns → greens
+const PILLAR_COLORS = [
+  '#005e72', // Teal
+  '#4a6680', // Slate
+  '#8d5e6a', // Dusty rose
+  '#7a5030', // Sienna
+  '#a06548', // Terracotta
+  '#7a6520', // Amber
+  '#7a7a3a', // Olive
+  '#6b7d6a', // Sage
+];
 
 const DELETE_ITEM_SURVEY: SurveyConfig = {
   id: 'project_plan_item_deleted',
@@ -362,28 +375,41 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                 </span>
                 <span className="text-[11px] font-medium text-text-secondary tabular-nums">{pct}%</span>
               </div>
-              {/* Segmented bar — each pillar is proportional to its item count */}
-              <div className="flex gap-px h-1.5 rounded-full overflow-hidden">
-                {pillars.map((pillar) => {
-                  const pillarTotal = pillar.items.length;
-                  const pillarDone = pillar.items.filter((i) => completedIds.has(i.id)).length;
-                  const fillPct = pillarTotal > 0 ? (pillarDone / pillarTotal) * 100 : 0;
-                  const widthPct = totalItems > 0 ? (pillarTotal / totalItems) * 100 : 0;
-                  return (
-                    <div
-                      key={pillar.id}
-                      className="relative bg-surface-subtle overflow-hidden first:rounded-l-full last:rounded-r-full"
-                      style={{ width: `${widthPct}%` }}
-                      title={`${pillar.name}: ${pillarDone} / ${pillarTotal}`}
-                    >
-                      <div
-                        className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-300"
-                        style={{ width: `${fillPct}%` }}
-                      />
+              {/* Single continuous bar — each pillar's completions stack left to right in pillar order */}
+              {(() => {
+                const lastFilledIdx = pillars.reduce(
+                  (last, p, i) => p.items.filter((item) => completedIds.has(item.id)).length > 0 ? i : last, -1
+                );
+                return (
+                  <div className="h-1.5 rounded-full overflow-hidden bg-surface-subtle w-full">
+                    <div className="h-full w-full flex">
+                      {pillars.map((pillar, pillarIdx) => {
+                        const pillarColor = PILLAR_COLORS[pillarIdx % PILLAR_COLORS.length];
+                        const pillarDone = pillar.items.filter((i) => completedIds.has(i.id)).length;
+                        const widthPct = totalItems > 0 ? (pillarDone / totalItems) * 100 : 0;
+                        const isLastFilled = pillarIdx === lastFilledIdx;
+                        return (
+                          <Tooltip
+                            key={pillar.id}
+                            content={`${pillar.name}: ${pillarDone} / ${pillar.items.length}`}
+                            className="contents"
+                          >
+                            <div
+                              className="h-full transition-[width] duration-300 ease-out flex-shrink-0"
+                              style={{
+                                width: `${widthPct}%`,
+                                backgroundColor: widthPct > 0 ? pillarColor : 'transparent',
+                                borderRadius: isLastFilled ? '0 9999px 9999px 0' : undefined,
+                                borderRight: widthPct > 0 && !isLastFilled ? '1px solid #F7F5F2' : undefined,
+                              }}
+                            />
+                          </Tooltip>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -396,19 +422,23 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                 <div key={colIdx} className="flex-1 flex flex-col gap-6">
                   {pillars
                     .filter((_, i) => i % numCols === colIdx)
-                    .map(pillar => (
-                      <PillarColumn
-                        key={pillar.id}
-                        pillar={pillar}
-                        deepDiveCache={deepDiveCache}
-                        onDeepDive={handleDeepDive}
-                        onDeleteItem={handleDeleteItem}
-                        onDeleteElement={handleDeleteElement}
-                        onRegisterRef={(el) => registerPillarRef(pillar.id, el)}
-                        completedIds={completedIds}
-                        onToggleComplete={toggleComplete}
-                      />
-                    ))}
+                    .map((pillar, colPillarIdx) => {
+                      const globalIdx = pillars.indexOf(pillar);
+                      return (
+                        <PillarColumn
+                          key={pillar.id}
+                          pillar={pillar}
+                          deepDiveCache={deepDiveCache}
+                          onDeepDive={handleDeepDive}
+                          onDeleteItem={handleDeleteItem}
+                          onDeleteElement={handleDeleteElement}
+                          onRegisterRef={(el) => registerPillarRef(pillar.id, el)}
+                          completedIds={completedIds}
+                          onToggleComplete={toggleComplete}
+                          color={PILLAR_COLORS[globalIdx % PILLAR_COLORS.length]}
+                        />
+                      );
+                    })}
                 </div>
               ))}
             </div>
