@@ -24,6 +24,7 @@ interface PillarColumnProps {
   onRegisterRef?: (el: HTMLDivElement | null) => void;
   completedIds?: Set<string>;
   onToggleComplete?: (id: string) => void;
+  color?: string;
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -43,7 +44,14 @@ function PillarIcon({ name }: { name?: string }) {
 
 const DEFAULT_VISIBLE = 10;
 
-export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete }: PillarColumnProps) {
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete, color = '#005e72' }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
@@ -63,9 +71,12 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
       {/* Pillar header node — full width, aligned with items */}
       <button
         onClick={() => setItemsExpanded(v => !v)}
-        className="border border-accent bg-surface rounded-md px-4 py-3 flex items-center gap-2.5 w-full text-left hover:bg-accent-wash/20 transition-colors duration-150"
+        className="border bg-surface rounded-md px-4 py-3 flex items-center gap-2.5 w-full text-left transition-colors duration-150"
+        style={{ borderColor: color }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = hexToRgba(color, 0.06); }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = ''; }}
       >
-        <div className="w-8 h-8 bg-accent/10 rounded flex items-center justify-center text-accent flex-shrink-0">
+        <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: hexToRgba(color, 0.1), color }}>
           <PillarIcon name={pillar.icon} />
         </div>
         <div className="flex-1">
