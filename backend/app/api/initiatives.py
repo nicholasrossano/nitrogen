@@ -69,10 +69,8 @@ async def get_initiative(
     await ensure_user_exists(db, user)
     initiative, role = await get_initiative_with_role(db, initiative_id, user)
 
-    owner_email = None
-    if role != "owner":
-        owner_user = await db.get(User, initiative.user_id)
-        owner_email = owner_user.email if owner_user else None
+    owner_user = await db.get(User, initiative.user_id)
+    owner_email = owner_user.email if owner_user else None
 
     return _initiative_to_response(
         initiative,
@@ -162,7 +160,7 @@ async def list_initiatives(
 
     results = []
     for init in owned_initiatives:
-        results.append(_initiative_to_response(init))
+        results.append(_initiative_to_response(init, owner_email=user.email))
 
     for init, role, owner_email in shared_initiatives:
         results.append(_initiative_to_response(init, shared_role=role, owner_email=owner_email))
