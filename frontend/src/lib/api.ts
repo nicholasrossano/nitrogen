@@ -3,7 +3,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 // Get the current user's ID token for API requests
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  
+
   try {
     const { getAuth } = await import('firebase/auth');
     const { app } = await import('./firebase');
@@ -42,6 +42,7 @@ export interface Initiative {
   tool_alignments: Record<string, ToolAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
+  compliance_precheck: CompliancePrecheck | null;
   // Sharing fields
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
@@ -267,6 +268,99 @@ export interface DeepDiveResult {
   sources: DeepDiveSource[];
   generated_at: string;
   latency_ms: number;
+}
+
+// Compliance Pre-Check types
+export type ComplianceFindingStatus =
+  | 'supported'
+  | 'partially_supported'
+  | 'missing'
+  | 'ambiguous'
+  | 'not_enough_info'
+  | 'human_review';
+
+export interface ComplianceEvidence {
+  source_type: string;
+  source_title: string;
+  quote: string;
+}
+
+export interface ComplianceFinding {
+  id: string;
+  requirement_id: string;
+  section: string;
+  requirement_name: string;
+  status: ComplianceFindingStatus;
+  rationale: string;
+  evidence: ComplianceEvidence[];
+  missing_support: string;
+  human_review_needed: boolean;
+  human_review_reason?: string;
+}
+
+export interface ReviewQueueItem {
+  id: string;
+  finding_id: string;
+  summary: string;
+  framework_location: string;
+  why_unresolved: string;
+  missing_fact: string;
+  suggested_next_step: string;
+}
+
+export interface ScopeFact {
+  id: string;
+  label: string;
+  value: string;
+  source: 'auto' | 'needs_confirmation';
+  confirmed?: boolean;
+}
+
+export interface FrameworkInfo {
+  id: string;
+  family: string;
+  name: string;
+  rationale: string;
+  signals: string[];
+  not_activated: { id: string; reason: string }[];
+}
+
+export interface CompliancePrecheckSummary {
+  supported: number;
+  partially_supported: number;
+  missing: number;
+  ambiguous: number;
+  not_enough_info: number;
+  human_review: number;
+  total: number;
+}
+
+export interface CompliancePrecheck {
+  generated_at: string;
+  version: number;
+  framework: FrameworkInfo;
+  scope_confirmation: { facts: ScopeFact[] };
+  findings: ComplianceFinding[];
+  review_queue: ReviewQueueItem[];
+  summary: CompliancePrecheckSummary;
+  delta?: {
+    newly_supported: string[];
+    unresolved_blockers: string[];
+    new_ambiguities: string[];
+    changed: { requirement_id: string; previous_status: string; current_status: string }[];
+  };
+}
+
+export interface FrameworkRoutingResult {
+  framework: FrameworkInfo;
+  scope_facts: ScopeFact[];
+}
+
+export interface FrameworkListItem {
+  id: string;
+  family: string;
+  name: string;
+  description: string;
 }
 
 async function fetchApi<T>(
@@ -1276,4 +1370,39 @@ export const api = {
     fetchApi<void>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
       method: 'DELETE',
     }),
+
+  // ── Compliance Pre-Check ──────────────────────────────────────────
+  getCompliancePrecheck: (initiativeId: string) =>
+    fetchApi<{ compliance_precheck: CompliancePrecheck | null }>(
+      `/api/v1/initiatives/${initiativeId}/compliance-precheck`
+    ),
+
+  listComplianceFrameworks: (initiativeId: string) =>
+    fetchApi<{ frameworks: FrameworkListItem[] }>(
+      `/api/v1/initiatives/${initiativeId}/compliance-precheck/frameworks`
+    ),
+
+  routeFramework: (initiativeId: string) =>
+    fetchApi<FrameworkRoutingResult>(
+      `/api/v1/initiatives/${initiativeId}/compliance-precheck/route`,
+      { method: 'POST' }
+    ),
+
+  runCompliancePrecheck: (initiativeId: string, frameworkId: string, confirmedFacts: ScopeFact[]) =>
+    fetchApi<{ compliance_precheck: CompliancePrecheck }>(
+      `/api/v1/initiatives/${initiativeId}/compliance-precheck/run`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ framework_id: frameworkId, confirmed_facts: confirmedFacts }),
+      }
+    ),
+
+  rerunCompliancePrecheck: (initiativeId: string, updatedFacts: ScopeFact[], additionalAnswers?: Record<string, string>) =>
+    fetchApi<{ compliance_precheck: CompliancePrecheck }>(
+      `/api/v1/initiatives/${initiativeId}/compliance-precheck/rerun`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ updated_facts: updatedFacts, additional_answers: additionalAnswers }),
+      }
+    ),
 };

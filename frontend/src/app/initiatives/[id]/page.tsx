@@ -11,6 +11,7 @@ import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { ProjectFilesView } from '@/components/files';
+import { EvaluateView } from '@/components/evaluate/EvaluateView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -23,7 +24,7 @@ const MIN_STANDALONE_CHAT_PERCENT = 30;
 const MAX_STANDALONE_CHAT_PERCENT = 70;
 const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
 
-type ProjectView = 'chat' | 'plan' | 'files';
+type ProjectView = 'chat' | 'plan' | 'files' | 'evaluate';
 
 function InitiativePageContent() {
   const params = useParams();
@@ -42,7 +43,8 @@ function InitiativePageContent() {
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
     viewParam === 'chat' ? 'chat' :
-    viewParam === 'files' ? 'files' : 'plan';
+    viewParam === 'files' ? 'files' :
+    viewParam === 'evaluate' ? 'evaluate' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
   const [showChatLanding, setShowChatLanding] = useState(true);
@@ -293,6 +295,11 @@ function InitiativePageContent() {
       loadProjectPlan(initiativeId).finally(handlePlanReady);
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
+      return;
+    }
+    if (item === 'evaluate') {
+      setActiveView('evaluate');
+      router.replace(`/initiatives/${initiativeId}?view=evaluate`);
     }
   };
 
@@ -522,6 +529,10 @@ function InitiativePageContent() {
                     <p className="text-sm text-text-tertiary">No project plan yet</p>
                   </div>
                 )}
+              </main>
+              ) : activeView === 'evaluate' ? (
+              <main className="h-full min-w-0 overflow-hidden">
+                <EvaluateView initiativeId={initiativeId} />
               </main>
               ) : null}
               </>
