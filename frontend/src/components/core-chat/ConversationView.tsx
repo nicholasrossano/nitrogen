@@ -126,13 +126,25 @@ export function ConversationView({
     return () => window.removeEventListener('nitrogen:draft', handler);
   }, []);
 
-  useEffect(() => {
+  const adjustHeight = useCallback(() => {
     const ta = textareaRef.current;
     if (ta) {
       ta.style.height = 'auto';
       ta.style.height = `${Math.min(ta.scrollHeight, 150)}px`;
     }
-  }, [input]);
+  }, []);
+
+  useEffect(() => {
+    adjustHeight();
+  }, [input, adjustHeight]);
+
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const ro = new ResizeObserver(() => adjustHeight());
+    ro.observe(ta);
+    return () => ro.disconnect();
+  }, [adjustHeight]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,7 +333,7 @@ export function ConversationView({
                 type="button"
                 disabled={sending}
                 onClick={() => fileInputRef.current?.click()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
                 aria-label="Attach files"
               >
                 <Paperclip className="w-[13px] h-[13px]" />
