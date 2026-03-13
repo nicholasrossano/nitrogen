@@ -202,6 +202,21 @@ export function ConversationView({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Conversation header — back button + LLM-generated title */}
+      {onBack && (
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-divider flex-shrink-0">
+          <button
+            onClick={onBack}
+            className="p-1 rounded hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
+            title="Back to chat home"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <h3 className="text-sm font-medium text-text-primary truncate flex-1">
+            {title || 'New chat'}
+          </h3>
+        </div>
+      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
         <div className="max-w-[52rem] mx-auto">
