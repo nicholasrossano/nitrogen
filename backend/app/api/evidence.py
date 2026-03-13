@@ -228,6 +228,48 @@ async def get_evidence_content(
     }
 
 
+@router.get("/evidence/{evidence_id}/chunks")
+async def get_evidence_chunks(
+    evidence_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Return individual chunks for a document, enabling scroll-to and highlighting."""
+    result = await db.execute(
+        select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
+    )
+    evidence_doc = result.scalar_one_or_none()
+
+    if not evidence_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence document not found",
+        )
+
+    await require_viewer(db, evidence_doc.initiative_id, user)
+
+    chunks_result = await db.execute(
+        select(EvidenceChunk)
+        .where(EvidenceChunk.evidence_doc_id == evidence_id)
+        .order_by(EvidenceChunk.chunk_index)
+    )
+    chunks = chunks_result.scalars().all()
+
+    return {
+        "id": str(evidence_doc.id),
+        "filename": evidence_doc.filename,
+        "file_type": evidence_doc.file_type,
+        "chunks": [
+            {
+                "id": str(c.id),
+                "chunk_index": c.chunk_index,
+                "content": c.content,
+            }
+            for c in chunks
+        ],
+    }
+
+
 EVIDENCE_CONTENT_TYPE_MAP = {
     "pdf": "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

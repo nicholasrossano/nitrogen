@@ -82,6 +82,22 @@ export interface SourceCitation {
   confidence: number;
   /** Journal name (OpenAlex) or domain (web) — used in citation chips */
   publisher?: string | null;
+  /** Internal document ID for citation navigation */
+  evidence_doc_id?: string | null;
+  /** Chunk position within the document */
+  chunk_index?: number | null;
+}
+
+export interface ResearchStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+}
+
+export interface EvidenceChunkDetail {
+  id: string;
+  chunk_index: number;
+  content: string;
 }
 
 export interface ChatMessage {
@@ -769,6 +785,14 @@ export const api = {
       chunk_count: number;
     }>(`/api/v1/evidence/${evidenceId}/content`),
 
+  getEvidenceChunks: (evidenceId: string) =>
+    fetchApi<{
+      id: string;
+      filename: string | null;
+      file_type: string | null;
+      chunks: EvidenceChunkDetail[];
+    }>(`/api/v1/evidence/${evidenceId}/chunks`),
+
   deleteEvidence: async (evidenceId: string) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -1150,6 +1174,7 @@ export const api = {
     toolHint?: string | null,
     modelInputsContext?: string | null,
     initiativeId?: string | null,
+    onResearchStep?: (step: ResearchStep) => void,
   ) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -1191,6 +1216,11 @@ export const api = {
         switch (event.type) {
           case 'thinking':
             onThinking(event.text);
+            break;
+          case 'research_step':
+            if (onResearchStep) {
+              onResearchStep({ id: event.id, label: event.label, status: event.status });
+            }
             break;
           case 'word':
             onWord(event.content);

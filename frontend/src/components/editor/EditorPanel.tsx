@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { FileText, Upload, Trash2, Loader2 } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { Initiative, EvidenceDoc, MemoContent, api } from '@/lib/api';
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
@@ -182,32 +183,21 @@ function EvidenceDocumentViewer({
 
   return (
     <div className="card-elevated flex flex-col overflow-hidden group flex-1 rounded-none">
-      {/* Header */}
-      <div className="relative flex items-center gap-3 px-4 pt-4 pb-3 bg-surface-header border-b border-divider">
-          <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center">
-            <FileText className="w-5 h-5 text-accent" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-text-primary">{cleanFilename(doc.filename)}</h3>
-            <p className="text-sm text-text-tertiary">
-              {doc.file_type?.toUpperCase()} • {doc.chunk_count} sections
-            </p>
-          </div>
-          {onDelete && (
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="absolute top-2 right-2 project-action-btn project-action-btn-danger p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
-              title="Delete document"
-            >
-              {deleting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-            </button>
-          )}
-        </div>
+      <PanelHeader
+        icon={FileText}
+        title={cleanFilename(doc.filename)}
+        subtitle={`${doc.file_type?.toUpperCase()} • ${doc.chunk_count} sections`}
+        action={onDelete ? (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="p-1 rounded enabled:hover:bg-surface-subtle transition-colors text-text-tertiary enabled:hover:text-text-secondary flex-shrink-0"
+            title="Delete document"
+          >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          </button>
+        ) : undefined}
+      />
 
         {/* Content */}
         {loading ? (

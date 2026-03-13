@@ -23,6 +23,8 @@ class SourceCitation(BaseModel):
     source_url: Optional[str] = None
     chunk_id: Optional[str] = None
     confidence: float = 1.0
+    evidence_doc_id: Optional[str] = None
+    chunk_index: Optional[int] = None
 
 
 class ChatMessageResponse(BaseModel):

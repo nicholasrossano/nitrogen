@@ -13,6 +13,7 @@ import {
   FileText
 } from 'lucide-react';
 import { MemoContent, Citation } from '@/lib/api';
+import { PanelHeader } from '@/components/ui';
 
 interface MemoViewerWidgetProps {
   data: Record<string, any>;
@@ -150,19 +151,12 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
 
   return (
     <div className="card-elevated overflow-hidden h-full rounded-none flex flex-col">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 bg-surface-header border-b border-divider flex items-center justify-between gap-4 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-accent-wash rounded flex items-center justify-center flex-shrink-0">
-            <FileText className="w-5 h-5 text-accent" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-text-primary">Investment Memo</h3>
-            <p className="text-sm text-text-secondary mt-0.5">{projectName}</p>
-          </div>
-        </div>
-        {content.date && <p className="text-sm text-text-secondary whitespace-nowrap self-start">{formatHeaderDate(content.date)}</p>}
-      </div>
+      <PanelHeader
+        icon={FileText}
+        title="Investment Memo"
+        subtitle={projectName}
+        action={content.date ? <p className="text-xs text-text-tertiary whitespace-nowrap flex-shrink-0">{formatHeaderDate(content.date)}</p> : undefined}
+      />
 
       {/* Content */}
           <div className="p-6 space-y-6 prose-memo flex-1 min-h-0 overflow-y-auto bg-white">

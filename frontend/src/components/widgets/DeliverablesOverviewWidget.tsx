@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Sparkles, Loader2, FileText, Target, MapPin, Globe } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { getIconByName } from '@/lib/icons';
 
 interface ToolInfo {
@@ -61,13 +62,11 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">Project Overview</h3>
-        <p className="text-sm text-text-secondary">
-          Review your project details and deliverables
-        </p>
-      </div>
+      <PanelHeader
+        icon={FileText}
+        title="Project Overview"
+        subtitle="Review your project details and deliverables"
+      />
 
       {/* Project Summary */}
       <div className="p-5 space-y-4 bg-white border-b border-divider">
