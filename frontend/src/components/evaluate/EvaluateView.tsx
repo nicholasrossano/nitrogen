@@ -227,9 +227,8 @@ export function EvaluateView({ initiativeId }: EvaluateViewProps) {
               <div className="space-y-2">
                 <h2 className="text-lg font-semibold text-text-primary">Compliance Pre-Check</h2>
                 <p className="text-sm text-text-secondary max-w-md leading-relaxed">
-                  Nitrogen will analyze your project workspace, recommend the most relevant
-                  compliance framework, and run a gap analysis to identify supported requirements,
-                  missing evidence, and items that need human review.
+                  Select a compliance framework and run a gap analysis to identify requirements,
+                  missing evidence, and items for human review.
                 </p>
               </div>
               <button
@@ -293,7 +292,7 @@ export function EvaluateView({ initiativeId }: EvaluateViewProps) {
         {/* Stage: Routing */}
         {stage === 'routing' && (
           <div className="flex items-center justify-center pt-16">
-            <PageLoader label="Analyzing project workspace…" />
+            <PageLoader label="Analyzing project…" />
           </div>
         )}
 

@@ -54,7 +54,7 @@ export interface ProjectShare {
   user_id: string;
   user_email: string | null;
   user_display_name: string | null;
-  role: 'editor' | 'viewer';
+  role: 'editor' | 'viewer' | 'client';
   created_at: string;
 }
 
@@ -1571,7 +1571,12 @@ export const api = {
       { method: 'POST' }
     ),
 
-  draftPDDSection: (initiativeId: string, sectionId: string, userAnswers?: Record<string, string>) =>
+  draftPDDSection: (
+    initiativeId: string,
+    sectionId: string,
+    userAnswers?: Record<string, string>,
+    generalGuidance?: boolean,
+  ) =>
     fetchApi<{
       section_id: string;
       content: string;
@@ -1580,7 +1585,13 @@ export const api = {
       unsupported_claims: string[];
     }>(
       `/api/v1/initiatives/${initiativeId}/pdd/sections/${sectionId}/draft`,
-      { method: 'POST', body: JSON.stringify({ user_answers: userAnswers || null }) }
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          user_answers: userAnswers || null,
+          general_guidance: generalGuidance ?? false,
+        }),
+      }
     ),
 
   updatePDDSection: (initiativeId: string, sectionId: string, content: string) =>

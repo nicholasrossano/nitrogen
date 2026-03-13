@@ -25,6 +25,7 @@ class UpdateOutlineRequest(BaseModel):
 
 class DraftSectionRequest(BaseModel):
     user_answers: dict[str, str] | None = None
+    general_guidance: bool = False
 
 
 class UpdateSectionRequest(BaseModel):
@@ -169,9 +170,10 @@ async def draft_pdd_section(
     service = PDDService(db)
 
     user_answers = body.user_answers if body else None
+    general_guidance = body.general_guidance if body else False
 
     try:
-        result = await service.draft_section(initiative_id, section_id, user_answers)
+        result = await service.draft_section(initiative_id, section_id, user_answers, general_guidance)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception:
