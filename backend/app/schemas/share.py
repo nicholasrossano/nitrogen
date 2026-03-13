@@ -6,11 +6,11 @@ from uuid import UUID
 
 class ShareCreate(BaseModel):
     email: str
-    role: Literal["editor", "viewer", "client"]
+    role: Literal["editor", "viewer"]
 
 
 class ShareUpdate(BaseModel):
-    role: Literal["editor", "viewer", "client"]
+    role: Literal["editor", "viewer"]
 
 
 class ShareResponse(BaseModel):

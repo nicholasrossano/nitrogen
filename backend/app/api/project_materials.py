@@ -7,7 +7,7 @@ import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
-from app.core.permissions import require_editor, require_client_onboarding, require_viewer
+from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
 from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
@@ -47,7 +47,7 @@ async def upload_material(
     user: AuthUser = Depends(get_current_user),
 ):
     """Upload a file as project-level context material."""
-    initiative = await require_client_onboarding(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     file_type = ALLOWED_CONTENT_TYPES.get(file.content_type or "")
     if not file_type:

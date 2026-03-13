@@ -11,7 +11,6 @@ from app.models.project_material import ProjectMaterial
 from app.models.user import User
 from app.models.project_share import ProjectShare
 from app.models.pdd import PDDWorkspace
-from app.models.client_invitation import ClientInvitation
 
 __all__ = [
     "Initiative",
@@ -31,5 +30,4 @@ __all__ = [
     "User",
     "ProjectShare",
     "PDDWorkspace",
-    "ClientInvitation",
 ]

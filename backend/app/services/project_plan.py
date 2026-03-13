@@ -24,22 +24,28 @@ from app.services.tiered_retrieval import TieredRetrievalService
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an expert environmental and development project analyst who produces hyper-specific, actionable project plans.
+SYSTEM_PROMPT = """You are an expert sustainable development program designer who produces hyper-specific, actionable project plans.
 
-Your job: analyze a project description + supporting documents and produce a Project Plan that maps the SPECIFIC environmental deliverables, permits, certifications, and outputs this project needs to move forward.
+Your job: analyze a project description + supporting documents and produce a Project Plan that maps the SPECIFIC deliverables this project needs to move from concept to implementation — covering regulatory approvals, environmental & social compliance, feasibility, funding strategy, stakeholder engagement, and technical design.
 
-## SCOPE: Environmental Requirements (Flexible Definition)
+## SCOPE: Sustainable Development Program Design
 
-Focus on **environmental** requirements — but interpret this broadly and practically:
-- Core environmental: EIAs, ESIA, emissions permits, water discharge permits, air quality permits, habitat/biodiversity assessments, wetland delineation, stormwater management plans
-- Land use: zoning, conditional use permits, land acquisition/lease agreements, right-of-way easements, setback compliance
-- Environmental certifications: Gold Standard, VCS/Verra, LEED, Clean Development Mechanism, Green Climate Fund accreditation
-- Jurisdiction-specific: In a highly regulated market like California, include the full suite of permits and standards that are realistically associated with environmental compliance (CEQA, CARB, Title 24, SGIP, NEM interconnection, etc.). In less regulated markets, focus on what actually applies.
-- Climate finance & carbon: carbon credit methodologies, MRV plans, validation/verification documents
+Think like a project developer preparing for DFI funding, investor due diligence, or government approval. Cover every workstream that a credible project design document would address:
 
-What to EXCLUDE: generic project management tasks (hiring, budgeting, scheduling), internal business operations, marketing plans, HR policies. This is NOT a general to-do list — every item should be a specific deliverable that the project needs to obtain, file, or produce to satisfy an external requirement (regulatory, funder, certifier, or technical standard).
+- **Regulatory & environmental compliance**: EIAs, ESIA, emissions permits, water discharge permits, air quality permits, habitat/biodiversity assessments, wetland delineation, stormwater management plans, zoning, land acquisition, right-of-way easements, setback compliance
+- **Environmental certifications & carbon**: Gold Standard, VCS/Verra, LEED, CDM, GCF accreditation, carbon credit methodologies, MRV plans, validation/verification documents
+- **Feasibility & technical design**: techno-economic analysis (LCOE, payback, sizing), resource assessment, site assessment, system configuration, engineering studies, procurement packs (RFP/TOR)
+- **Funding strategy & investor readiness**: tailored to the project's likely funding route — DFI application packages for developing-country projects, tax equity/PPA documentation for US renewable energy, grant applications by program name, IC memos, due diligence checklists, capital stack summaries
+- **Stakeholder & community engagement**: stakeholder mapping, community consultation plans, FPIC processes, social impact assessments, public hearings — include when the project's geography, scale, or funder requirements warrant it
+- **Market & demand assessment**: offtake analysis, demand studies, bankability assessments — include when the project needs to demonstrate commercial viability to funders or investors
+- **Environmental & social safeguards**: E&S frameworks (IFC PS, World Bank ESF, Equator Principles), resettlement plans, labor standards — include when DFI or lender requirements apply
+- **Jurisdiction-specific**: In highly regulated markets, include the full suite of applicable permits and standards. In less regulated markets, focus on what actually applies.
 
-## The Three Pillars
+What to EXCLUDE: generic project management tasks (hiring, scheduling, internal meetings), HR policies, internal business operations, marketing campaigns, generic "to-do" items. Every item should be a specific deliverable the project needs to obtain, file, produce, or complete to satisfy an external requirement or demonstrate readiness to a funder, regulator, certifier, or technical standard.
+
+## Default Pillars (when no approved categories are provided)
+
+These are the default pillars. When the user has confirmed custom categories, use those instead.
 
 **Pillar 1 — Authorization**
 Deliverables needed to obtain legal/regulatory permission and/or formal certification.
@@ -48,12 +54,12 @@ Practical test: if skipping it blocks building, operating, or obtaining a requir
 
 **Pillar 2 — Capital**
 Deliverables whose audience is a funding decision-maker and whose purpose is to unlock capital.
-Includes: investment committee memo, due diligence checklist, capital stack summary, specific incentive applications (e.g. "ITC Step-Up Documentation" not "incentives"), grant applications by program name (e.g. "GCF Simplified Approval Process Application"), loan application packs.
+Includes: investment committee memo, due diligence checklist, capital stack summary, specific incentive applications (e.g. "ITC Step-Up Documentation" not "incentives"), grant applications by program name (e.g. "GCF Simplified Approval Process Application"), loan application packs, market/demand studies needed for bankability.
 Practical test: if the artifact exists so someone can approve/price funding, it belongs here.
 
 **Pillar 3 — Design**
 Deliverables needed to decide what to build and how to implement it.
-Includes: techno-economic feasibility (LCOE, payback, sizing), site assessment, environmental baseline study, system configuration, procurement packs (RFP/TOR), monitoring plans, MRV methodology selection.
+Includes: techno-economic feasibility (LCOE, payback, sizing), site assessment, environmental baseline study, system configuration, procurement packs (RFP/TOR), monitoring plans, MRV methodology selection, stakeholder engagement plans.
 Practical test: if it determines the solution and/or how it gets delivered, it belongs here.
 
 ## Classification System — Three Labels
@@ -143,6 +149,17 @@ If you cannot honestly fill in all three, omit the item or mark it unknown rathe
 
 6. All items start with status "not_started" unless existing generated outputs clearly satisfy them.
 
+## Phase Assignment
+
+Every item MUST have a `phase` field and a `phase_order` field (integer, for ordering within a phase).
+
+You must also provide a top-level `phases` array that defines the project's phases in chronological order. Adapt phase names to the project type:
+- **Energy projects**: "Pre-Development", "Development & Permitting", "Financial Close", "Construction & Commissioning"
+- **Carbon/climate projects**: "Feasibility & Design", "Registration & Validation", "Implementation", "Monitoring & Verification"
+- **General/infrastructure**: "Scoping & Assessment", "Design & Approvals", "Procurement & Construction", "Operations & Compliance"
+
+Use 3-5 phases. Phase IDs should be short lowercase slugs (e.g. "pre_dev", "permitting", "financial_close").
+
 You MUST respond with valid JSON matching the schema provided."""
 
 REFRESH_ADDENDUM = """
@@ -155,13 +172,14 @@ STABILITY RULES FOR REFRESH:
 - Users CAN request custom pillars beyond the default Authorization/Capital/Design. If the USER REQUESTED CHANGE asks for a new section or pillar, add it as a new pillar entry with a short lowercase ID (e.g. "internal"). Do not refuse — honour the user's structural override.
 """
 
-CATEGORY_PROPOSAL_SYSTEM_PROMPT = """You are an expert environmental and development project analyst.
+CATEGORY_PROPOSAL_SYSTEM_PROMPT = """You are an expert sustainable development program designer.
 
-Your job: given a project description and any uploaded documents, propose the most relevant HIGH-LEVEL CATEGORIES (pillars) for this project's needs map.
+Your job: given a project description and any uploaded documents, propose the most relevant HIGH-LEVEL CATEGORIES (pillars) for this project's needs map. Think like a project developer preparing a full program design — covering regulatory, environmental, financial, technical, and stakeholder workstreams as appropriate.
 
 ## Rules
 - Do NOT produce individual items or deliverables — only the category structure.
 - Read the project description carefully FIRST, then decide on categories. The description is the primary signal — not the project type label.
+- Categories should cover the full scope of what the project needs to move forward: regulatory/permitting, funding/investor readiness, technical design, stakeholder engagement, E&S safeguards, market assessment — but only include categories that are genuinely relevant to THIS project.
 - Match categories to the actual technology and workstreams. Examples by project type — use as a starting point only; always adapt names and summaries to the real project:
   - **Utility-scale solar farm**: Permitting & Environmental, Grid Interconnection, Capital & Incentives, Engineering & Procurement
   - **Offshore or onshore wind**: Marine/Land Permitting & Consenting, Grid Connection & Transmission, Capital & Offtake, Engineering & Procurement
@@ -169,11 +187,12 @@ Your job: given a project description and any uploaded documents, propose the mo
   - **Clean cooking / cookstoves**: Regulatory & Product Certification, Health & Emissions Standards, Supply Chain & Distribution, Community Uptake & Finance
   - **Carbon / climate certification** (Gold Standard, Verra, CDM): Regulatory & Certification, Carbon Methodology & MRV, Funding & Finance, Implementation & Procurement
   - **Reforestation / land restoration**: Land Rights & Authorization, Carbon Standard Registration, Monitoring & Verification, Funding & Partnerships
-  - **DFI-financed infrastructure**: Environmental & Social Safeguards, Permitting & Authorization, Capital & Financing, Engineering & Procurement
+  - **DFI-financed infrastructure**: Environmental & Social Safeguards, Permitting & Authorization, Capital & Financing, Stakeholder Engagement, Engineering & Procurement
 - If the project does not closely match any example above, derive categories directly from the description — do NOT use a loosely similar example.
-- **CRITICAL — summaries**: Every category summary MUST describe what that category covers for THIS specific project (its technology, geography, and context). Never write a summary that describes a different project type. If the project is offshore wind in North Carolina, the summary must mention offshore wind — not tree planting, not cookstoves, not anything else.
+- Merge related workstreams into one category rather than creating many thin categories (e.g. market assessment items can live inside a Capital/Funding category; stakeholder engagement can live inside a Permitting category if it's part of the same process).
+- **CRITICAL — summaries**: Every category summary MUST describe what that category covers for THIS specific project (its technology, geography, and context). Never write a summary that describes a different project type.
 - Each category should represent a distinct workstream with at least 3–5 potential deliverables.
-- Propose 3–5 categories.
+- Propose 3–6 categories. Prefer 4–5; use 6 only when the project genuinely has a distinct workstream that doesn't fit the others.
 - Give each a short, clear name (2–4 words) and a 1–2 sentence summary of what it covers for THIS specific project.
 
 You MUST respond with valid JSON matching the schema provided."""
@@ -221,7 +240,7 @@ CATEGORY_PROPOSAL_SCHEMA = {
                         "required": ["id", "name", "summary", "icon"],
                     },
                     "minItems": 3,
-                    "maxItems": 5,
+                    "maxItems": 6,
                 },
             },
             "required": ["categories"],
@@ -234,10 +253,34 @@ PLAN_FUNCTION_SCHEMA = {
     "type": "function",
     "function": {
         "name": "produce_project_plan",
-        "description": "Produce a structured 3-pillar project plan with specific, tangible items",
+        "description": "Produce a structured project plan with categorized items and chronological phases",
         "parameters": {
             "type": "object",
             "properties": {
+                "phases": {
+                    "type": "array",
+                    "description": "Chronological project phases, ordered from earliest to latest",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "Short lowercase slug (e.g. 'pre_dev', 'permitting', 'financial_close')",
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Human-readable phase name (e.g. 'Pre-Development', 'Financial Close')",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "1 sentence describing what happens in this phase for this project",
+                            },
+                        },
+                        "required": ["id", "name"],
+                    },
+                    "minItems": 3,
+                    "maxItems": 5,
+                },
                 "pillars": {
                     "type": "array",
                     "items": {
@@ -277,6 +320,14 @@ PLAN_FUNCTION_SCHEMA = {
                                             "type": "string",
                                             "description": "1-2 sentences: why this project specifically needs this item",
                                         },
+                                        "phase": {
+                                            "type": "string",
+                                            "description": "Phase ID this item belongs to (must match one of the phase IDs in the phases array)",
+                                        },
+                                        "phase_order": {
+                                            "type": "integer",
+                                            "description": "Suggested order within the phase (lower = earlier)",
+                                        },
                                         "source_indices": {
                                             "type": "array",
                                             "items": {"type": "integer"},
@@ -284,7 +335,7 @@ PLAN_FUNCTION_SCHEMA = {
                                         },
                                     },
                                     "required": [
-                                        "id", "title", "classification", "status", "rationale",
+                                        "id", "title", "classification", "status", "rationale", "phase", "phase_order",
                                     ],
                                 },
                             },
@@ -295,7 +346,7 @@ PLAN_FUNCTION_SCHEMA = {
                     "maxItems": 7,
                 },
             },
-            "required": ["pillars"],
+            "required": ["phases", "pillars"],
         },
     },
 }
@@ -470,10 +521,13 @@ of the sources that support that item. Required items MUST cite at least one sou
         # Attach provenance to each plan item
         self._attach_item_provenance(plan_data, web_result.sources)
 
-        return {
+        result = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "pillars": plan_data["pillars"],
         }
+        if plan_data.get("phases"):
+            result["phases"] = plan_data["phases"]
+        return result
 
     @staticmethod
     def _attach_item_provenance(plan_data: dict, web_sources: list) -> None:

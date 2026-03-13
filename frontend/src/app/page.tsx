@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search, UserPlus } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/auth';
-import { OnboardClientModal } from '@/components/onboarding/OnboardClientModal';
 
 function HomePageContent() {
   const router = useRouter();
@@ -19,7 +18,6 @@ function HomePageContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>('home');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showOnboardModal, setShowOnboardModal] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -122,13 +120,6 @@ function HomePageContent() {
           </div>
           {!isTrashView && (
             <>
-              <button
-                onClick={() => setShowOnboardModal(true)}
-                className="btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 !rounded-[20px]"
-              >
-                <UserPlus className="w-3 h-3" />
-                Onboard Client
-              </button>
               <button
                 onClick={handleNewProject}
                 disabled={creating}
@@ -237,10 +228,6 @@ function HomePageContent() {
           </main>
         </div>
       </div>
-
-      {showOnboardModal && (
-        <OnboardClientModal onClose={() => setShowOnboardModal(false)} />
-      )}
     </div>
   );
 }

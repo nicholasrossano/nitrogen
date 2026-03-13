@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquare } from 'lucide-react';
-import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
+import { Loader2, MessageSquare, LayoutGrid, Clock } from 'lucide-react';
+import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar, ProjectPlanPhase } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
+import { PlanSubItem } from './PlanSubItem';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { DeepDivePanel } from './DeepDivePanel';
 import { SurveyPopup, SurveyConfig, SurveyResponse } from '@/components/survey/SurveyPopup';
@@ -78,6 +79,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
+  const [viewMode, setViewMode] = useState<'category' | 'phase'>('category');
   // Derive completed set directly from persisted plan data
   const completedIds = useMemo<Set<string>>(
     () => new Set(
@@ -314,7 +316,27 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     [initiativeId, deepDiveCache, projectPlan]
   );
 
-  const pillars = projectPlan?.pillars ?? [];
+  const pillars = useMemo(() => projectPlan?.pillars ?? [], [projectPlan?.pillars]);
+  const phases = useMemo(() => projectPlan?.phases ?? [], [projectPlan?.phases]);
+  const hasPhases = phases.length > 0 && pillars.some((p) => p.items.some((i) => i.phase));
+
+  // Build phase-grouped items for the phase view
+  const phaseGroups = useMemo(() => {
+    if (!hasPhases) return [];
+    const allItems: { item: ProjectPlanItem; pillar: ProjectPlanPillar }[] = [];
+    for (const pillar of pillars) {
+      for (const item of pillar.items) {
+        allItems.push({ item, pillar });
+      }
+    }
+    return phases.map((phase) => ({
+      phase,
+      items: allItems
+        .filter(({ item }) => item.phase === phase.id)
+        .sort((a, b) => (a.item.phase_order ?? 999) - (b.item.phase_order ?? 999)),
+    }));
+  }, [hasPhases, pillars, phases]);
+
   const inspectorVisible = showInspector !== undefined ? showInspector : deepDive !== null;
   const panelOpen = !!(inspectorVisible && deepDive);
 
@@ -373,7 +395,28 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                   <span className="font-medium text-text-secondary">{completedCount}</span>
                   {' '}of {totalItems} complete
                 </span>
-                <span className="text-[11px] font-medium text-text-secondary tabular-nums">{pct}%</span>
+                <div className="flex items-center gap-3">
+                  {/* Category / Phase toggle — only show when phase data exists */}
+                  {hasPhases && (
+                    <div className="flex items-center bg-surface-subtle rounded-full p-0.5">
+                      {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
+                        <button
+                          key={mode}
+                          onClick={() => setViewMode(mode)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
+                            viewMode === mode
+                              ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
+                              : 'text-text-tertiary hover:text-text-secondary'
+                          }`}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <span className="text-[11px] font-medium text-text-secondary tabular-nums">{pct}%</span>
+                </div>
               </div>
               {/* Single continuous bar — each pillar's completions stack left to right in pillar order */}
               {(() => {
@@ -414,15 +457,14 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           )}
 
           <div ref={outerContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
-          {/* Pillar grid — each column is an independent flex stack so expanding one
-              pillar never shifts pillars in other columns */}
+          {viewMode === 'category' ? (
           <div className="flex-1 overflow-y-auto p-4 pt-5">
             <div className="flex gap-6 items-start">
               {Array.from({ length: numCols }, (_, colIdx) => (
                 <div key={colIdx} className="flex-1 flex flex-col gap-6">
                   {pillars
                     .filter((_, i) => i % numCols === colIdx)
-                    .map((pillar, colPillarIdx) => {
+                    .map((pillar) => {
                       const globalIdx = pillars.indexOf(pillar);
                       return (
                         <PillarColumn
@@ -443,6 +485,27 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
               ))}
             </div>
           </div>
+          ) : (
+          <div className="flex-1 overflow-y-auto p-4 pt-5">
+            <div className="max-w-3xl mx-auto space-y-6">
+              {phaseGroups.map((group, groupIdx) => (
+                <PhaseSection
+                  key={group.phase.id}
+                  phase={group.phase}
+                  items={group.items}
+                  phaseIndex={groupIdx}
+                  totalPhases={phaseGroups.length}
+                  pillars={pillars}
+                  deepDiveCache={deepDiveCache}
+                  onDeepDive={handleDeepDive}
+                  onDeleteItem={handleDeleteItem}
+                  completedIds={completedIds}
+                  onToggleComplete={toggleComplete}
+                />
+              ))}
+            </div>
+          </div>
+          )}
 
           {/* Deep Dive panel — inline, respects header */}
           <div
@@ -474,6 +537,111 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           onSubmit={handleSurveySubmit}
           onDismiss={handleSurveyDismiss}
         />
+      )}
+    </div>
+  );
+}
+
+
+// ── Phase view section ───────────────────────────────────────────────
+
+interface PhaseSectionProps {
+  phase: ProjectPlanPhase;
+  items: { item: ProjectPlanItem; pillar: ProjectPlanPillar }[];
+  phaseIndex: number;
+  totalPhases: number;
+  pillars: ProjectPlanPillar[];
+  deepDiveCache: Record<string, DeepDiveResult>;
+  onDeepDive: (item: ProjectPlanItem, pillar: ProjectPlanPillar) => void;
+  onDeleteItem: (itemId: string) => void;
+  completedIds: Set<string>;
+  onToggleComplete: (id: string) => void;
+}
+
+function PhaseSection({
+  phase,
+  items,
+  phaseIndex,
+  totalPhases,
+  pillars,
+  deepDiveCache,
+  onDeepDive,
+  onDeleteItem,
+  completedIds,
+  onToggleComplete,
+}: PhaseSectionProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const completedInPhase = items.filter(({ item }) => completedIds.has(item.id)).length;
+
+  // Build a color map so pillar badges match the category view
+  const pillarColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    pillars.forEach((p, i) => { map[p.id] = PILLAR_COLORS[i % PILLAR_COLORS.length]; });
+    return map;
+  }, [pillars]);
+
+  return (
+    <div>
+      {/* Phase header */}
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="flex items-center gap-3 w-full text-left mb-2 group"
+      >
+        {/* Phase number badge */}
+        <div className="w-7 h-7 rounded-full bg-accent/10 text-accent flex items-center justify-center text-xs font-bold flex-shrink-0">
+          {phaseIndex + 1}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-text-primary leading-tight">
+            {phase.name}
+          </h3>
+          {phase.description && (
+            <p className="text-[11px] text-text-tertiary mt-0.5 line-clamp-1">{phase.description}</p>
+          )}
+        </div>
+        <span className="text-[10px] text-text-tertiary whitespace-nowrap">
+          {completedInPhase}/{items.length}
+        </span>
+      </button>
+
+      {/* Phase items */}
+      {!collapsed && (
+        <div className="ml-3.5 border-l border-stroke-subtle pl-4 space-y-1.5 pb-2">
+          {items.map(({ item, pillar }) => (
+            <div key={item.id} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <PlanSubItem
+                  item={item}
+                  isLast={false}
+                  onDeepDive={() => onDeepDive(item, pillar)}
+                  onDelete={() => onDeleteItem(item.id)}
+                  isComplete={completedIds.has(item.id)}
+                  onToggleComplete={onToggleComplete}
+                />
+              </div>
+              {/* Pillar badge */}
+              <span
+                className="text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0"
+                style={{
+                  backgroundColor: `${pillarColorMap[pillar.id] ?? '#666'}15`,
+                  color: pillarColorMap[pillar.id] ?? '#666',
+                }}
+              >
+                {pillar.name}
+              </span>
+            </div>
+          ))}
+          {items.length === 0 && (
+            <p className="text-xs text-text-tertiary italic py-2">No items in this phase</p>
+          )}
+        </div>
+      )}
+
+      {/* Connector line between phases */}
+      {phaseIndex < totalPhases - 1 && !collapsed && (
+        <div className="flex justify-start ml-3.5">
+          <div className="w-px h-4 bg-stroke-subtle" />
+        </div>
       )}
     </div>
   );

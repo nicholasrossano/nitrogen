@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import AuthUser, get_current_user
-from app.core.permissions import require_editor, require_editor_or_client_plan, require_viewer
+from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
 from app.models.chat import ChatMessage
 from app.models.initiative import InitiativeStage
@@ -175,7 +175,7 @@ async def update_plan_item_status(
             detail=f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
         )
 
-    initiative = await require_editor_or_client_plan(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -244,7 +244,7 @@ async def delete_plan_item(
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove a single item from the project plan."""
-    initiative = await require_editor_or_client_plan(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -276,7 +276,7 @@ async def delete_plan_element(
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove an element by index from a deep-dive result cached in the project plan."""
-    initiative = await require_editor_or_client_plan(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -311,7 +311,7 @@ async def deep_dive_plan_item(
     Results are cached inside project_plan.deep_dives[item_id] so subsequent
     requests for the same item are returned instantly without re-running research.
     """
-    initiative = await require_editor_or_client_plan(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     # Check for cached result
     plan = initiative.project_plan or {}

@@ -94,19 +94,17 @@ function InitiativePageContent() {
   } = useInitiativeStore();
 
   const isViewer = initiative?.shared_role === 'viewer';
-  const isClient = initiative?.shared_role === 'client';
-  const isClientPostPlan = isClient && !!initiative?.project_plan;
   const hasProjectPlan = !!projectPlan;
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
 
-  // Viewers and clients cannot access the generate/evaluate views; redirect to plan.
+  // Viewers cannot access the generate/evaluate views; redirect to plan.
   useEffect(() => {
-    if ((isViewer || isClient) && (activeView === 'chat' || activeView === 'evaluate')) {
+    if (isViewer && (activeView === 'chat' || activeView === 'evaluate')) {
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
-  }, [isViewer, isClient, activeView, initiativeId, router]);
+  }, [isViewer, activeView, initiativeId, router]);
 
   useEffect(() => {
     if (initiativeId) {
@@ -264,8 +262,8 @@ function InitiativePageContent() {
       {initiative && (
         <ProjectHeader
           initiative={initiative}
-          onTitleUpdate={isViewer || isClient ? undefined : handleTitleUpdate}
-          readOnly={isViewer || isClient}
+          onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
+          readOnly={isViewer}
           {...(activeView === 'plan' ? {
             rightToggle: rightPanel === 'project_plan' ? {
               active: showInspector,
@@ -273,7 +271,7 @@ function InitiativePageContent() {
               onClick: handleToggleInspector,
               title: showInspector ? 'Hide inspector' : 'Show inspector',
             } : undefined,
-          } : activeView === 'chat' && !isViewer && !isClientPostPlan ? {
+          } : activeView === 'chat' && !isViewer ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
@@ -297,8 +295,8 @@ function InitiativePageContent() {
           onItemSelect={handleNavChange}
           onSignOut={handleSignOut}
           userEmail={user?.email}
-          onUploadMaterial={isViewer || isClientPostPlan ? undefined : (file) => uploadMaterial(initiativeId, file)}
-          hiddenItems={isViewer ? ['chat'] : isClient ? ['chat', 'evaluate'] : undefined}
+          onUploadMaterial={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
+          hiddenItems={isViewer ? ['chat'] : undefined}
         />
         </div>
 
@@ -422,7 +420,7 @@ function InitiativePageContent() {
                       />
                     )}
                   </div>
-                ) : !isViewer ? (
+                  ) : !isViewer ? (
                   <div className="flex-1 overflow-hidden h-full">
                     <ChatPanel
                       messages={messages}
@@ -432,7 +430,6 @@ function InitiativePageContent() {
                       onSendMessage={handleSendMessage}
                       fullWidth={true}
                       hasProjectPlan={hasProjectPlan}
-                      readOnly={isClientPostPlan}
                     />
                   </div>
                 ) : (
