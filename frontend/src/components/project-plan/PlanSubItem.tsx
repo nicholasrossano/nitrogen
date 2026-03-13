@@ -10,6 +10,10 @@ interface PlanSubItemProps {
   onDeleteElement?: (elementIndex: number) => void;
   isComplete?: boolean;
   onToggleComplete?: (id: string) => void;
+  /** When true, hide the branch gutter (T lines) — used in phase view where vertical line comes from parent */
+  hideBranchGutter?: boolean;
+  /** When true, card stretches to full width of container */
+  fullWidth?: boolean;
 }
 
 type Classification = 'required' | 'optional' | 'unknown';
@@ -41,40 +45,42 @@ const CLASSIFICATION_STYLES: Record<Classification, {
 };
 
 
-export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = false, onToggleComplete }: PlanSubItemProps) {
+export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = false, onToggleComplete, hideBranchGutter = false, fullWidth = false }: PlanSubItemProps) {
   const cls = (item.classification as Classification) ?? 'optional';
   const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
   const isClickable = Boolean(onDeepDive);
 
   return (
     <div className="flex items-stretch relative group/item">
-      {/* Branch gutter — all absolute lines, guaranteed connected */}
-      <div className="w-8 flex-shrink-0 relative">
-        {/* Vertical line: top-0 to center for last, full height for others */}
-        <div className={`absolute left-1/2 top-0 w-px bg-stroke-subtle ${isLast ? 'h-1/2' : 'h-full'}`} />
-        {/* Horizontal line: center to right edge */}
-        <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle" />
-        {/* Dot + delete button at intersection */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-          <div className="relative w-2 h-2">
-            <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete ? 'group-hover/item:opacity-0' : ''} ${styles.dot}`} />
-            {onDelete && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/item:opacity-100 group-hover/item:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out"
-                aria-label="Delete item"
-              >
-                <Minus className="w-2.5 h-2.5 text-white" />
-              </button>
-            )}
+      {/* Branch gutter — all absolute lines, guaranteed connected (hidden in phase view) */}
+      {!hideBranchGutter && (
+        <div className="w-8 flex-shrink-0 relative">
+          {/* Vertical line: top-0 to center for last, full height for others */}
+          <div className={`absolute left-1/2 top-0 w-px bg-stroke-subtle ${isLast ? 'h-1/2' : 'h-full'}`} />
+          {/* Horizontal line: center to right edge */}
+          <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle" />
+          {/* Dot + delete button at intersection */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+            <div className="relative w-2 h-2">
+              <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete ? 'group-hover/item:opacity-0' : ''} ${styles.dot}`} />
+              {onDelete && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 opacity-0 scale-50 group-hover/item:opacity-100 group-hover/item:scale-100 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 ease-out"
+                  aria-label="Delete item"
+                >
+                  <Minus className="w-2.5 h-2.5 text-white" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Node card */}
-      <div className="flex-1 min-w-0 py-1.5 pr-2">
+      <div className={`flex-1 min-w-0 py-1.5 ${hideBranchGutter ? 'pl-0 pr-2' : 'pr-2'}`}>
         <div
-          className={`px-3 py-2 rounded-md shadow-card flex items-center gap-2 transition-colors ${
+          className={`px-3 py-2 rounded-md shadow-card flex items-center gap-2 transition-colors ${fullWidth ? 'w-full' : ''} ${
             isComplete
               ? 'bg-green-50/30 border border-green-200/50'
               : `${styles.card} border border-transparent ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`
