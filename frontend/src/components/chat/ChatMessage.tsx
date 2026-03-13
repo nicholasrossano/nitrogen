@@ -282,7 +282,7 @@ export function ChatMessage({
 
         {/* Toolbar — shown below all content with consistent spacing */}
         {!isStreaming && !isEditing && showToolbar && (
-          <div className={`mt-2 flex items-center relative ${isUser ? 'self-end' : 'self-start'}`}>
+          <div className={`${isUser ? 'mt-2' : 'mt-3'} flex items-center relative ${isUser ? 'self-end' : 'self-start'}`}>
             {isUser ? (
               <UserMessageToolbar
                 content={message.content}

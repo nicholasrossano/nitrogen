@@ -452,10 +452,10 @@ function CitationChip({
     }
   } else if (type === 'corpus' || type === 'curated') {
     icon = <BookOpen className="w-3 h-3 shrink-0" />;
-    label = 'Curated';
+    label = title.trim().length > 30 ? title.trim().slice(0, 28) + '…' : title.trim() || 'Curated';
   } else if (type === 'evidence' || type === 'uploaded') {
     icon = <FileText className="w-3 h-3 shrink-0" />;
-    label = 'Uploaded';
+    label = title.trim().length > 30 ? title.trim().slice(0, 28) + '…' : title.trim() || 'Document';
   } else {
     icon = <FileText className="w-3 h-3 shrink-0" />;
     label = sourceType;
@@ -710,7 +710,7 @@ function MessageBubble({
                 onFeedback={onFeedback}
                 onRetry={onRetry}
                 retrying={retrying}
-                sources={message.sources}
+                sources={message.sources ?? undefined}
                 onCitationClick={onCitationClick}
               />
             )}
