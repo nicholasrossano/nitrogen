@@ -369,9 +369,13 @@ EVIDENCE_BLOCK_TEMPLATE = """
 RETRIEVED EVIDENCE (use these to ground your response):
 {evidence}
 
-CITATION REMINDER: You MUST cite sources from the evidence above using the EXACT format [Source Type: Title]. Match the source type shown on each piece of evidence, for example:
-  [Evidence: filename.pdf]  [Corpus: document title]  [Scholarly: paper title]  [Web: page title]
-Cite inline next to each claim. Every factual statement that draws on evidence MUST have a citation. Do not omit citations.
+CITATION RULES (MANDATORY):
+1. Every claim, fact, or data point that comes from the evidence above MUST include an inline citation.
+2. Use the EXACT citation tag shown at the start of each evidence block (e.g. [Evidence: filename.pdf]).
+3. Place the citation IMMEDIATELY after the sentence or clause it supports.
+4. Do NOT group citations at the end of a paragraph — cite inline next to each claim.
+5. If multiple pieces of evidence support one claim, include all their citations.
+Example: "The project targets 50% thermal efficiency [Evidence: project_report.pdf]."
 """
 
 # Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title]
@@ -1263,8 +1267,6 @@ class ComplianceChatService:
                 f"## Active Project Context\n{project_context}\n\n"
                 "Ground your answer in this project's specific details where relevant. "
                 "The user is working on this project and expects responses tailored to it.\n\n"
-                "IMPORTANT: You MUST still cite sources inline using [Source Type: Title] format "
-                "when referencing evidence. Do not skip citations even when discussing model inputs.\n\n"
             )
 
         messages: list[dict] = [

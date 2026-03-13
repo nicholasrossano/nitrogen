@@ -42,30 +42,23 @@ interface TimelineItem {
 }
 
 function buildTimeline(steps: ResearchStep[], lines: string[]): TimelineItem[] {
-  const items: TimelineItem[] = [];
-  const seen = new Set<string>();
-
-  for (const step of steps) {
-    items.push({
+  // When structured research steps exist, use only those (thinking lines
+  // cover the same ground but are less structured and cause duplicates).
+  if (steps.length > 0) {
+    return steps.map((step) => ({
       key: `step-${step.id}`,
       label: step.label,
       done: step.status === 'done' || step.status === 'error',
       active: step.status === 'running',
-    });
-    seen.add(step.label);
+    }));
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    if (seen.has(lines[i])) continue;
-    items.push({
-      key: `line-${i}`,
-      label: lines[i],
-      done: i < lines.length - 1,
-      active: i === lines.length - 1,
-    });
-  }
-
-  return items;
+  return lines.map((line, i) => ({
+    key: `line-${i}`,
+    label: line,
+    done: i < lines.length - 1,
+    active: i === lines.length - 1,
+  }));
 }
 
 function TimelineRow({ item }: { item: TimelineItem }) {
