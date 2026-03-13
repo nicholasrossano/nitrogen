@@ -13,6 +13,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Loader2,
   X,
   Paperclip,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ export interface ConversationViewProps {
   streamingContent: string;
   error: string | null;
   onSendMessage: (content: string, toolHint?: string) => void;
+  onUploadFile?: (file: File) => Promise<void>;
   onEditMessage: (messageId: string, newContent: string) => void;
   onRetryMessage: (messageId: string) => void;
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
@@ -75,6 +77,7 @@ export function ConversationView({
   streamingContent,
   error,
   onSendMessage,
+  onUploadFile,
   onEditMessage,
   onRetryMessage,
   messageFeedback,
@@ -87,6 +90,7 @@ export function ConversationView({
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -146,9 +150,22 @@ export function ConversationView({
     return () => ro.disconnect();
   }, [adjustHeight]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || sending) return;
+    if (!input.trim() || sending || uploading) return;
+
+    if (attachedFiles.length > 0 && onUploadFile) {
+      setUploading(true);
+      for (const file of attachedFiles) {
+        try {
+          await onUploadFile(file);
+        } catch (err) {
+          console.error('Failed to upload attachment:', file.name, err);
+        }
+      }
+      setUploading(false);
+    }
+
     onSendMessage(input.trim());
     setInput('');
     setDraftTag(null);
@@ -340,10 +357,14 @@ export function ConversationView({
               </button>
               <button
                 type="submit"
-                disabled={sending || !input.trim()}
+                disabled={sending || uploading || !input.trim()}
                 className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
               >
-                <ArrowUp className="w-[11px] h-[11px] text-white" />
+                {uploading ? (
+                  <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+                ) : (
+                  <ArrowUp className="w-[11px] h-[11px] text-white" />
+                )}
               </button>
             </div>
           </div>
