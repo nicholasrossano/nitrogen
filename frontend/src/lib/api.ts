@@ -44,7 +44,7 @@ export interface Initiative {
   project_plan: ProjectPlan | null;
   compliance_prechecks: Record<string, CompliancePrecheck> | null;
   // Sharing fields
-  shared_role?: 'editor' | 'viewer' | 'client' | null;
+  shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
 }
 
@@ -54,7 +54,7 @@ export interface ProjectShare {
   user_id: string;
   user_email: string | null;
   user_display_name: string | null;
-  role: 'editor' | 'viewer' | 'client';
+  role: 'editor' | 'viewer';
   created_at: string;
 }
 
@@ -64,16 +64,6 @@ export interface UserSearchResult {
   display_name: string | null;
 }
 
-export interface ClientInviteResponse {
-  invitation_id: string;
-  token: string;
-}
-
-export interface InviteValidation {
-  invited_by_name: string | null;
-  project_title: string | null;
-  requires_auth: boolean;
-}
 
 export interface ToolDefinition {
   id: string;
@@ -235,6 +225,8 @@ export interface ProjectPlanItem {
   classification: 'required' | 'optional' | 'unknown';
   status: 'not_started' | 'in_progress' | 'complete';
   rationale: string;
+  phase?: string;
+  phase_order?: number;
 }
 
 export interface ProjectPlanPillar {
@@ -245,9 +237,16 @@ export interface ProjectPlanPillar {
   items: ProjectPlanItem[];
 }
 
+export interface ProjectPlanPhase {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface ProjectPlan {
   generated_at: string;
   pillars: ProjectPlanPillar[];
+  phases?: ProjectPlanPhase[];
   deep_dives?: Record<string, DeepDiveResult>;
 }
 
@@ -1493,13 +1492,13 @@ export const api = {
   getShares: (initiativeId: string): Promise<ProjectShare[]> =>
     fetchApi<ProjectShare[]>(`/api/v1/initiatives/${initiativeId}/shares`),
 
-  createShare: (initiativeId: string, email: string, role: 'editor' | 'viewer' | 'client'): Promise<ProjectShare> =>
+  createShare: (initiativeId: string, email: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
     fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares`, {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     }),
 
-  updateShare: (initiativeId: string, shareId: string, role: 'editor' | 'viewer' | 'client'): Promise<ProjectShare> =>
+  updateShare: (initiativeId: string, shareId: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
     fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
       method: 'PATCH',
       body: JSON.stringify({ role }),
@@ -1650,23 +1649,4 @@ export const api = {
     return resp.blob();
   },
 
-  // --- Client onboarding ---
-
-  createClientInvite: (initiativeId: string, clientEmail?: string) =>
-    fetchApi<ClientInviteResponse>(
-      `/api/v1/initiatives/${initiativeId}/client-invite`,
-      { method: 'POST', body: JSON.stringify({ client_email: clientEmail || null }) }
-    ),
-
-  createInitiativeAndInvite: (clientEmail?: string, title?: string) =>
-    fetchApi<ClientInviteResponse>(
-      `/api/v1/client-onboard`,
-      { method: 'POST', body: JSON.stringify({ client_email: clientEmail || null, title: title || null }) }
-    ),
-
-  validateInvite: (token: string) =>
-    fetchApi<InviteValidation>(`/api/v1/invite/${token}`, { method: 'GET' }),
-
-  acceptInvite: (token: string) =>
-    fetchApi<{ initiative_id: string }>(`/api/v1/invite/${token}/accept`, { method: 'POST' }),
 };

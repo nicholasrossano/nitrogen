@@ -83,39 +83,11 @@ async def require_editor(
     return initiative
 
 
-async def require_editor_or_client_plan(
-    db: AsyncSession,
-    initiative_id: uuid.UUID | str,
-    user: AuthUser,
-) -> Initiative:
-    """Return initiative if user is owner/editor, or client (plan item ops always allowed)."""
-    initiative, role = await get_initiative_with_role(db, initiative_id, user)
-    if role in ("owner", "editor", "client"):
-        return initiative
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to modify plan items")
-
-
-async def require_client_onboarding(
-    db: AsyncSession,
-    initiative_id: uuid.UUID | str,
-    user: AuthUser,
-) -> Initiative:
-    """Allow owner/editor always. Allow client only before the plan is generated."""
-    initiative, role = await get_initiative_with_role(db, initiative_id, user)
-    if role in ("owner", "editor"):
-        return initiative
-    if role == "client" and initiative.project_plan is None:
-        return initiative
-    if role == "client":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client onboarding is complete")
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Viewers cannot modify this project")
-
-
 async def require_viewer(
     db: AsyncSession,
     initiative_id: uuid.UUID | str,
     user: AuthUser,
 ) -> Initiative:
-    """Return initiative if the user has any access (owner/editor/viewer/client)."""
+    """Return initiative if the user has any access (owner/editor/viewer)."""
     initiative, _role = await get_initiative_with_role(db, initiative_id, user)
     return initiative
