@@ -1471,13 +1471,13 @@ export const api = {
   getShares: (initiativeId: string): Promise<ProjectShare[]> =>
     fetchApi<ProjectShare[]>(`/api/v1/initiatives/${initiativeId}/shares`),
 
-  createShare: (initiativeId: string, email: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
+  createShare: (initiativeId: string, email: string, role: 'editor' | 'viewer' | 'client'): Promise<ProjectShare> =>
     fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares`, {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     }),
 
-  updateShare: (initiativeId: string, shareId: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
+  updateShare: (initiativeId: string, shareId: string, role: 'editor' | 'viewer' | 'client'): Promise<ProjectShare> =>
     fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
       method: 'PATCH',
       body: JSON.stringify({ role }),
