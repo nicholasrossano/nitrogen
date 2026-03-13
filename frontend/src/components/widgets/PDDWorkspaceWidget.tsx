@@ -654,7 +654,7 @@ function AuthoringView({
             <div>
               <p className="text-sm font-medium text-text-primary">Prepare this section</p>
               <p className="text-xs text-text-tertiary mt-1 max-w-[220px] mx-auto">
-                We'll scan your project materials and draft a first version automatically.
+                We&apos;ll scan your project materials and draft a first version automatically.
               </p>
             </div>
             <button
