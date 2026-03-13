@@ -17,6 +17,7 @@ from app.models.project_share import ProjectShare
 from app.models.user import User
 from app.schemas.initiative import (
     InitiativeCreate,
+    InitiativeUpdate,
     InitiativeResponse,
     InitiativeConfirmResponse,
 )
@@ -172,7 +173,7 @@ async def list_initiatives(
 @router.patch("/initiatives/{initiative_id}", response_model=InitiativeResponse)
 async def update_initiative(
     initiative_id: UUID,
-    data: InitiativeCreate,
+    data: InitiativeUpdate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
