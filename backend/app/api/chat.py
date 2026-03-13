@@ -1,6 +1,14 @@
 """Chat API endpoints with LLM-driven orchestration."""
 
 import re
+
+# Synthetic messages sent automatically by the UI that carry no real project info.
+# Skipping input extraction for these prevents the LLM from inferring junk titles
+# like "Document Upload" when initiative.title is still None.
+_SKIP_EXTRACTION_MESSAGES = {
+    "I've uploaded my documents.",
+    "I don't have any documents to upload.",
+}
 from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -132,12 +140,13 @@ async def send_chat_message_stream(
             # Use orchestration service
             orchestration = OrchestrationService(db)
 
-            # Extract inputs from the user's message first
-            extracted = await orchestration.extract_inputs_from_message(
-                message=data.content,
-                initiative=initiative,
-            )
-            await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+            # Extract inputs from the user's message first (skip synthetic UI messages)
+            if data.content not in _SKIP_EXTRACTION_MESSAGES:
+                extracted = await orchestration.extract_inputs_from_message(
+                    message=data.content,
+                    initiative=initiative,
+                )
+                await update_initiative_from_inputs(db, initiative, extracted, orchestration)
 
             tool_hint = data.tool_hint or None
             action_result = await orchestration.get_next_action(
@@ -775,13 +784,14 @@ async def send_chat_message(
     
     orchestration = OrchestrationService(db)
     
-    # Extract inputs from the user's message first
-    extracted = await orchestration.extract_inputs_from_message(
-        message=data.content,
-        initiative=initiative,
-    )
-    await update_initiative_from_inputs(db, initiative, extracted, orchestration)
-    
+    # Extract inputs from the user's message first (skip synthetic UI messages)
+    if data.content not in _SKIP_EXTRACTION_MESSAGES:
+        extracted = await orchestration.extract_inputs_from_message(
+            message=data.content,
+            initiative=initiative,
+        )
+        await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+
     tool_hint = data.tool_hint or None
 
     # Get the next action from the orchestration LLM
