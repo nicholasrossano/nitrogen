@@ -327,10 +327,18 @@ class ProjectPlanService:
 
         # Include recent chat messages so the model has the full conversation context,
         # not just the brief extracted summary stored on the initiative.
+        # chat_history may be dicts or SQLAlchemy ChatMessage objects — handle both.
         chat_context = ""
         if chat_history:
-            recent = chat_history[-12:]  # last 12 messages is plenty
-            lines = [f"{m['role'].upper()}: {m['content']}" for m in recent if m.get("content")]
+            recent = chat_history[-12:]
+            lines = []
+            for m in recent:
+                if isinstance(m, dict):
+                    role, content = m.get("role", ""), m.get("content", "")
+                else:
+                    role, content = getattr(m, "role", ""), getattr(m, "content", "")
+                if content:
+                    lines.append(f"{role.upper()}: {content}")
             if lines:
                 chat_context = "\n\nCONVERSATION (most recent — use this as the primary source of detail):\n" + "\n".join(lines)
 
