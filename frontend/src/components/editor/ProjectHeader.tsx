@@ -64,11 +64,12 @@ export function ProjectHeader({
     try {
       await api.updateInitiative(initiative.id, { title: title.trim() });
       onTitleUpdate?.(title.trim());
-      setIsEditing(false);
     } catch (error) {
       console.error('Failed to update title:', error);
+      setTitle(initiative.title || 'New Project');
     } finally {
       setSaving(false);
+      setIsEditing(false);
     }
   };
 
@@ -78,7 +79,7 @@ export function ProjectHeader({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSave();
+    if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
     else if (e.key === 'Escape') handleCancel();
   };
 
