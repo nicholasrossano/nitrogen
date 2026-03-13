@@ -122,7 +122,7 @@ export function DocumentRequestWidget({
           onDrop={handleDrop}
           onClick={() => !uploading && fileInputRef.current?.click()}
           className={`
-            flex flex-col items-center justify-center gap-2 w-48 min-h-[120px] rounded-lg cursor-pointer
+            flex flex-col items-center justify-center gap-2 w-64 min-h-[120px] rounded-lg cursor-pointer
             border border-dashed transition-colors duration-150
             ${isDragging
               ? 'border-accent/60 bg-accent-wash/60'
