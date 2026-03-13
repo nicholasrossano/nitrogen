@@ -432,6 +432,20 @@ class OrchestrationService:
         )
         user_message_count = sum(1 for m in messages if m.role == "user")
 
+        # Fast path: first user message always triggers ask_for_documents — skip the LLM entirely.
+        if not has_document_request and user_message_count == 1:
+            geo = initiative.geography
+            project_type = initiative.project_type or "project"
+            if geo:
+                msg = f"Thanks! Please upload any relevant documents for your {project_type} in {geo}, such as feasibility studies, site assessments, or permit applications."
+            else:
+                msg = f"Thanks! Please upload any relevant documents for your {project_type}, such as feasibility studies, site assessments, or permit applications."
+            return OrchestrationResult(
+                action="ask_for_documents",
+                parameters={"message": msg, "suggested_types": []},
+                sources_used=[],
+            )
+
         model_inputs_context = self._format_model_inputs_from_messages(messages)
 
         system_prompt = ORCHESTRATION_SYSTEM_PROMPT.format(
