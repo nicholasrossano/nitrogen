@@ -15,7 +15,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
   const [shares, setShares] = useState<ProjectShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'editor' | 'viewer'>('editor');
+  const [role, setRole] = useState<'editor' | 'viewer' | 'client'>('editor');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -85,7 +85,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
     }
   };
 
-  const handleRoleChange = async (shareId: string, newRole: 'editor' | 'viewer') => {
+  const handleRoleChange = async (shareId: string, newRole: 'editor' | 'viewer' | 'client') => {
     try {
       const updated = await api.updateShare(initiativeId, shareId, newRole);
       setShares(prev => prev.map(s => s.id === shareId ? updated : s));
@@ -165,11 +165,12 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
             <div className="relative inline-flex shrink-0">
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')}
+                onChange={(e) => setRole(e.target.value as 'editor' | 'viewer' | 'client')}
                 className="h-9 appearance-none pl-3 pr-7 text-xs rounded-lg bg-surface border border-stroke-subtle text-text-primary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors cursor-pointer"
               >
                 <option value="editor">Editor</option>
                 <option value="viewer">Viewer</option>
+                <option value="client">Client</option>
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none" />
             </div>
@@ -235,11 +236,12 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
                     <div className="relative inline-flex">
                       <select
                         value={share.role}
-                        onChange={(e) => handleRoleChange(share.id, e.target.value as 'editor' | 'viewer')}
+                        onChange={(e) => handleRoleChange(share.id, e.target.value as 'editor' | 'viewer' | 'client')}
                         className="h-6 appearance-none pl-2 pr-6 text-[10px] rounded bg-surface border border-stroke-subtle text-text-secondary focus:border-accent focus:outline-none cursor-pointer transition-colors"
                       >
                         <option value="editor">Editor</option>
                         <option value="viewer">Viewer</option>
+                        <option value="client">Client</option>
                       </select>
                       <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-tertiary pointer-events-none" />
                     </div>

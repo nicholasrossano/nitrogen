@@ -156,7 +156,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
                 />
                 <button
                   onClick={handleCopy}
-                  className="btn-secondary shrink-0 !h-9 !px-3 !text-xs"
+                  className="btn-secondary shrink-0 !h-9 !px-3 !text-xs !rounded-lg"
                 >
                   {copied ? (
                     <>
@@ -174,7 +174,7 @@ export function OnboardClientModal({ onClose }: OnboardClientModalProps) {
 
               <button
                 onClick={handleClose}
-                className="w-full btn-secondary h-9 text-sm"
+                className="w-full btn-secondary h-9 text-sm !rounded-lg"
               >
                 Done
               </button>
