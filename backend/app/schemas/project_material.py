@@ -10,6 +10,7 @@ class ProjectMaterialResponse(BaseModel):
     file_type: str
     file_size: Optional[int] = None
     created_at: datetime
+    source: str = "material"  # "material" or "evidence"
 
     class Config:
         from_attributes = True

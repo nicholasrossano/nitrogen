@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_client_onboarding, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
+from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
@@ -70,6 +71,8 @@ async def upload_material(
             content_text = parser.parse_docx(content)
         elif file_type in ("txt", "csv"):
             content_text = content.decode("utf-8", errors="replace")
+        elif file_type in ("xlsx", "xls"):
+            content_text = parser.parse_xlsx(content)
     except Exception:
         logger.warning("Could not extract text from %s", file.filename, exc_info=True)
 
@@ -108,26 +111,45 @@ async def list_materials(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List all project materials for an initiative."""
+    """List all uploaded files for an initiative — materials and evidence docs combined."""
     await require_viewer(db, initiative_id, user)
 
-    result = await db.execute(
+    mat_result = await db.execute(
         select(ProjectMaterial)
         .where(ProjectMaterial.initiative_id == initiative_id)
         .order_by(ProjectMaterial.created_at.desc())
     )
-    materials = result.scalars().all()
+    ev_result = await db.execute(
+        select(EvidenceDoc)
+        .where(
+            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.storage_path.isnot(None),  # exclude text-paste entries
+        )
+        .order_by(EvidenceDoc.created_at.desc())
+    )
 
-    return [
-        ProjectMaterialResponse(
+    rows: list[ProjectMaterialResponse] = []
+    for m in mat_result.scalars().all():
+        rows.append(ProjectMaterialResponse(
             id=m.id,
             filename=m.filename,
             file_type=m.file_type,
             file_size=m.file_size,
             created_at=m.created_at,
-        )
-        for m in materials
-    ]
+            source="material",
+        ))
+    for e in ev_result.scalars().all():
+        rows.append(ProjectMaterialResponse(
+            id=e.id,
+            filename=e.filename or "Untitled",
+            file_type=e.file_type or "unknown",
+            file_size=None,
+            created_at=e.created_at,
+            source="evidence",
+        ))
+
+    rows.sort(key=lambda r: r.created_at, reverse=True)
+    return rows
 
 
 @router.delete("/materials/{material_id}")

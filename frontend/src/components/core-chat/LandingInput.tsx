@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowUp, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/stores/chatStore';
 import { ALL_TOOLS } from '@/components/chat/ToolPicker';
 
@@ -16,6 +16,7 @@ const EXAMPLE_PROMPTS = [
 
 interface LandingInputProps {
   onSend: (content: string, toolHint?: string) => void;
+  onUploadFile?: (file: File) => Promise<void>;
   disabled?: boolean;
   sessions?: ChatSession[];
   onLoadSession?: (session: ChatSession) => void;
@@ -34,12 +35,13 @@ function relativeTime(ts: number): string {
   return `${days}d ago`;
 }
 
-export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, onDeleteSession }: LandingInputProps) {
+export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession }: LandingInputProps) {
   const [input, setInput] = useState('');
   const [placeholder, setPlaceholder] = useState('');
   const [animating, setAnimating] = useState(true);
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -138,9 +140,22 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
     return () => ro.disconnect();
   }, [adjustHeight]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || disabled) return;
+    if (!input.trim() || disabled || uploading) return;
+
+    if (attachedFiles.length > 0 && onUploadFile) {
+      setUploading(true);
+      for (const file of attachedFiles) {
+        try {
+          await onUploadFile(file);
+        } catch (err) {
+          console.error('Failed to upload attachment:', file.name, err);
+        }
+      }
+      setUploading(false);
+    }
+
     onSend(input.trim());
     setInput('');
     setAttachedFiles([]);
@@ -261,10 +276,14 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
                 </button>
                 <button
                   type="submit"
-                  disabled={disabled || !input.trim()}
+                  disabled={disabled || uploading || !input.trim()}
                   className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
                 >
-                  <ArrowUp className="w-[11px] h-[11px] text-white" />
+                  {uploading ? (
+                    <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+                  ) : (
+                    <ArrowUp className="w-[11px] h-[11px] text-white" />
+                  )}
                 </button>
               </div>
             </div>

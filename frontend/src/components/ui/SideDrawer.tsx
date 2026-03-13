@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { UploadToast, UploadItem } from './UploadToast';
+import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'evaluate';
 export type SideDrawerVariant = 'home' | 'project';
@@ -60,6 +61,7 @@ export function SideDrawer({
   } as CSSProperties;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
@@ -157,13 +159,18 @@ export function SideDrawer({
     e.stopPropagation();
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     dragCounter.current = 0;
-    if (e.dataTransfer.files.length > 0) {
-      handleUpload(e.dataTransfer.files);
+    const all = await extractFilesFromDrop(e.dataTransfer);
+    const { accepted, rejected } = filterSupportedFiles(all);
+    if (rejected.length > 0) {
+      console.warn('Skipped unsupported files:', rejected.join(', '));
+    }
+    if (accepted.length > 0) {
+      handleUpload(accepted);
     }
   }, [handleUpload]);
 
@@ -171,9 +178,19 @@ export function SideDrawer({
     fileInputRef.current?.click();
   }, []);
 
+  const handleFolderSelect = useCallback(() => {
+    folderInputRef.current?.click();
+  }, []);
+
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleUpload(e.target.files);
+      const { accepted, rejected } = filterSupportedFiles(Array.from(e.target.files));
+      if (rejected.length > 0) {
+        console.warn('Skipped unsupported files:', rejected.join(', '));
+      }
+      if (accepted.length > 0) {
+        handleUpload(accepted);
+      }
       e.target.value = '';
     }
   }, [handleUpload]);
@@ -208,6 +225,17 @@ export function SideDrawer({
             ref={fileInputRef}
             type="file"
             className="hidden"
+            accept={SUPPORTED_EXTENSIONS}
+            multiple
+            onChange={handleFileChange}
+          />
+          {/* Folder picker — webkitdirectory is non-standard but widely supported */}
+          <input
+            ref={folderInputRef}
+            type="file"
+            className="hidden"
+            // @ts-expect-error webkitdirectory is non-standard
+            webkitdirectory=""
             multiple
             onChange={handleFileChange}
           />
@@ -240,7 +268,7 @@ export function SideDrawer({
               onDrop={handleDrop}
               onClick={handleFileSelect}
               className={`
-                flex flex-col items-center justify-center gap-2 min-h-[180px] px-2 rounded-lg cursor-pointer
+                flex flex-col items-center justify-center gap-2 min-h-[140px] px-2 rounded-lg cursor-pointer
                 border border-dashed transition-colors duration-150
                 ${isDragging
                   ? 'border-accent/60 bg-accent-wash/60 text-accent'

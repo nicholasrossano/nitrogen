@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import type { ChatMessage } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import { filterSupportedFiles } from '@/lib/fileUtils';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { TemplateUploadInterstitial } from '@/components/widgets/TemplateUploadInterstitial';
@@ -403,6 +404,15 @@ export function ProjectStandaloneChatView({
     [localMessages, onMessageSent, sendViaStream],
   );
 
+  const handleUploadFile = useCallback(
+    async (file: File) => {
+      const { accepted } = filterSupportedFiles([file]);
+      if (accepted.length === 0) return;
+      await api.uploadMaterial(initiativeId, file);
+    },
+    [initiativeId],
+  );
+
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
       if (toolHint === 'template_fill') {
@@ -558,6 +568,7 @@ export function ProjectStandaloneChatView({
       <>
         <LandingInput
           onSend={handleSend}
+          onUploadFile={handleUploadFile}
           sessions={sessions}
           onLoadSession={handleLoadSession}
           onDeleteSession={handleDeleteSession}
@@ -583,6 +594,7 @@ export function ProjectStandaloneChatView({
       streamingContent={streamingContent}
       error={error}
       onSendMessage={handleSend}
+      onUploadFile={handleUploadFile}
       onEditMessage={handleEditMessage}
       onRetryMessage={handleRetryMessage}
       messageFeedback={messageFeedback}

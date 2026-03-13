@@ -2,7 +2,8 @@
 
 import { useRef } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Upload, Loader2, CheckCircle } from 'lucide-react';
+import { Upload, Loader2, CheckCircle, FolderOpen } from 'lucide-react';
+import { filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface DocumentRequestWidgetProps {
   initiativeId: string;
@@ -18,26 +19,20 @@ export function DocumentRequestWidget({
   data 
 }: DocumentRequestWidgetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   
   const { evidenceDocs, uploadEvidence, loading, sendMessage } = useInitiativeStore();
 
-  const handleFileSelect = async (files: FileList) => {
-    const allowedTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
+  const handleFiles = async (files: File[]) => {
+    const { accepted, rejected } = filterSupportedFiles(files);
+    if (rejected.length > 0) {
+      alert(`Skipped unsupported files:\n${rejected.join('\n')}`);
+    }
+
     let successCount = 0;
-    let failedFiles: string[] = [];
-    
-    // Upload files
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!allowedTypes.includes(file.type)) {
-        alert(`${file.name} is not a PDF or DOCX file. Skipping.`);
-        continue;
-      }
-      
+    const failedFiles: string[] = [];
+
+    for (const file of accepted) {
       try {
         await uploadEvidence(initiativeId, file);
         successCount++;
@@ -46,17 +41,22 @@ export function DocumentRequestWidget({
         failedFiles.push(file.name);
       }
     }
-    
-    // Show results and auto-continue if at least one file succeeded
+
     if (failedFiles.length > 0) {
       alert(`Failed to upload: ${failedFiles.join(', ')}`);
     }
-    
+
     if (successCount > 0) {
-      // Auto-continue after upload completes
       setTimeout(() => {
         sendMessage(initiativeId, "I've uploaded my documents.");
       }, 500);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFiles(Array.from(e.target.files));
+      e.target.value = '';
     }
   };
 
@@ -89,8 +89,7 @@ export function DocumentRequestWidget({
         )}
 
         {/* Buttons - centered */}
-        <div className="flex items-center gap-3">
-          {/* Upload button (styled like Inputs bar) */}
+        <div className="flex items-center gap-3 flex-wrap justify-center">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={loading}
@@ -104,17 +103,36 @@ export function DocumentRequestWidget({
             ) : (
               <>
                 <Upload className="w-4 h-4" />
-                Upload documents
+                Upload files
               </>
             )}
+          </button>
+
+          <button
+            onClick={() => folderInputRef.current?.click()}
+            disabled={loading}
+            className="upload-btn"
+          >
+            <FolderOpen className="w-4 h-4" />
+            Upload folder
           </button>
 
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx"
+            accept={SUPPORTED_EXTENSIONS}
             multiple={data?.allow_multiple !== false}
-            onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+            onChange={handleInputChange}
+            className="hidden"
+          />
+          {/* webkitdirectory lets the user pick an entire folder */}
+          <input
+            ref={folderInputRef}
+            type="file"
+            // @ts-expect-error webkitdirectory is non-standard
+            webkitdirectory=""
+            multiple
+            onChange={handleInputChange}
             className="hidden"
           />
 

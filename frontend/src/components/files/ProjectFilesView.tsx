@@ -29,6 +29,8 @@ const FILE_TYPE_LABELS: Record<string, string> = {
   xls: 'XLS',
   png: 'PNG',
   jpg: 'JPG',
+  template_docx: 'Template',
+  template_xlsx: 'Template',
 };
 
 const EXPORT_FORMAT_LABELS: Record<string, string> = {
@@ -88,7 +90,11 @@ export function ProjectFilesView({
   const handleDownloadMaterial = async (mat: ProjectMaterial) => {
     setDownloadingId(mat.id);
     try {
-      await api.downloadMaterial(mat.id, mat.filename);
+      if (mat.source === 'evidence') {
+        await api.downloadEvidence(mat.id, mat.filename);
+      } else {
+        await api.downloadMaterial(mat.id, mat.filename);
+      }
     } catch (err) {
       console.error('Download failed:', err);
     } finally {
@@ -209,9 +215,16 @@ export function ProjectFilesView({
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
-                          {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
-                        </span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
+                            {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
+                          </span>
+                          {mat.source === 'evidence' && (
+                            <span className="text-[10px] font-medium text-indigo-500 bg-indigo-50 rounded px-1.5 py-0.5">
+                              Evidence
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary">
                         {formatFileSize(mat.file_size)}
