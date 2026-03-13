@@ -5,14 +5,6 @@ import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-re
 import type { ChatSession } from '@/stores/chatStore';
 import { ALL_TOOLS } from '@/components/chat/ToolPicker';
 
-const EXAMPLE_PROMPTS = [
-  'What MECS standards apply to clean cooking programs?',
-  'Design a compliance framework for off-grid solar in Kenya',
-  'Compare carbon credit methodologies for cookstove projects',
-  'What MRV requirements exist for clean energy in Sub-Saharan Africa?',
-  'Outline environmental safeguards for a mini-grid project',
-  'What are the Gold Standard certification steps for a biogas program?',
-];
 
 interface LandingInputProps {
   onSend: (content: string, toolHint?: string) => void;
@@ -37,16 +29,11 @@ function relativeTime(ts: number): string {
 
 export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession }: LandingInputProps) {
   const [input, setInput] = useState('');
-  const [placeholder, setPlaceholder] = useState('');
-  const [animating, setAnimating] = useState(true);
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const animFrameRef = useRef<number | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prefersReducedMotion = useRef(false);
   const historyListRef = useRef<HTMLDivElement>(null);
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -57,68 +44,6 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
     scrollHideTimer.current = setTimeout(() => setIsScrolling(false), 1000);
   }, []);
 
-  useEffect(() => {
-    prefersReducedMotion.current = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
-    ).matches;
-  }, []);
-
-  const stopAnimation = useCallback(() => {
-    setAnimating(false);
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setPlaceholder('Ask anything');
-  }, []);
-
-  useEffect(() => {
-    if (!animating) return;
-    if (prefersReducedMotion.current) {
-      setPlaceholder(EXAMPLE_PROMPTS[0]);
-      return;
-    }
-
-    let promptIdx = 0;
-    let charIdx = 0;
-    let deleting = false;
-    let paused = false;
-
-    function tick() {
-      if (!animating) return;
-      const prompt = EXAMPLE_PROMPTS[promptIdx];
-
-      if (paused) return;
-
-      if (!deleting) {
-        charIdx++;
-        setPlaceholder(prompt.slice(0, charIdx));
-        if (charIdx === prompt.length) {
-          paused = true;
-          timeoutRef.current = setTimeout(() => {
-            paused = false;
-            deleting = true;
-            tick();
-          }, 2000);
-          return;
-        }
-      } else {
-        charIdx--;
-        setPlaceholder(prompt.slice(0, charIdx));
-        if (charIdx === 0) {
-          deleting = false;
-          promptIdx = (promptIdx + 1) % EXAMPLE_PROMPTS.length;
-        }
-      }
-
-      const speed = deleting ? 20 : 45;
-      timeoutRef.current = setTimeout(tick, speed);
-    }
-
-    tick();
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, [animating]);
 
   const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
@@ -241,15 +166,13 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
-                  if (animating) stopAnimation();
                 }}
                 onFocus={() => {
                   setFocused(true);
-                  if (animating) stopAnimation();
                 }}
                 onBlur={() => setFocused(false)}
                 onKeyDown={handleKeyDown}
-                placeholder={focused ? '' : placeholder}
+                placeholder="Ask anything"
                 disabled={disabled}
                 rows={1}
                 className="w-full resize-none bg-transparent px-5 py-3.5 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
