@@ -622,6 +622,7 @@ class PDDService:
         initiative_id: UUID,
         section_id: str,
         user_answers: dict[str, str] | None = None,
+        general_guidance: bool = False,
     ) -> dict:
         ws = await self._get_workspace_by_initiative(initiative_id)
         if ws is None:
@@ -636,13 +637,18 @@ class PDDService:
         sec = sections.get(section_id, {})
 
         # Build evidence context from stored evidence
-        evidence_list = sec.get("evidence", [])
+        evidence_list = sec.get("evidence", []) if not general_guidance else []
         evidence_context = ""
         for ev in evidence_list:
             evidence_context += f"\n[{ev['citation_key']}] [{ev['source_type'].upper()}] {ev['source_title']}:\n{ev['excerpt']}\n"
 
         if not evidence_context.strip():
-            evidence_context = "(No evidence available.)"
+            evidence_context = (
+                "(No project-specific evidence available. Draft using standard "
+                "PDD content for this section type, flagging all claims as requiring verification.)"
+                if general_guidance
+                else "(No evidence available.)"
+            )
 
         # Build user answers context
         answers_context = ""
@@ -654,27 +660,39 @@ class PDDService:
         valid_citations = [ev["citation_key"] for ev in evidence_list]
         citation_list = ", ".join(f"[{n}]" for n in sorted(valid_citations)) if valid_citations else "none"
 
+        system_content = (
+            "You are drafting a section of a Project Design Document. "
+            "Write clear, professional prose.\n\n"
+        )
+        if general_guidance:
+            system_content += (
+                "No project documents are available. Draft this section using general PDD best practices "
+                "and standard content for this section type. Every factual claim MUST be listed in "
+                "`unsupported_claims` since there is no evidence to back it up. Use placeholder text "
+                "like '[TO BE CONFIRMED]' for project-specific values (names, numbers, locations).\n\n"
+                "CITATION RULES:\n- Do NOT use any citations — there is no evidence.\n"
+                "- Set confidence to 'low'."
+            )
+        else:
+            system_content += (
+                "Ground your writing in the provided evidence.\n\n"
+                "CITATION RULES:\n"
+                f"- You may ONLY use these citation numbers: {citation_list}\n"
+                "- Use [N] inline when a claim is backed by evidence.\n"
+                "- Do NOT invent citations.\n"
+                "- If making a claim without evidence, do NOT add a citation.\n\n"
+                "Mark any statements that are assumptions or require verification."
+            )
+
         response = await self.client.chat.completions.create(
             model=self.generation_model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are drafting a section of a Project Design Document. "
-                        "Write clear, professional prose grounded in the provided evidence.\n\n"
-                        "CITATION RULES:\n"
-                        f"- You may ONLY use these citation numbers: {citation_list}\n"
-                        "- Use [N] inline when a claim is backed by evidence.\n"
-                        "- Do NOT invent citations.\n"
-                        "- If making a claim without evidence, do NOT add a citation.\n\n"
-                        "Mark any statements that are assumptions or require verification."
-                    ),
-                },
+                {"role": "system", "content": system_content},
                 {
                     "role": "user",
                     "content": (
                         f"Section: {section_meta['title']}\n"
-                        f"Description: {section_meta['description']}\n"
+                        f"Description: {section_meta.get('description', '')}\n"
                         f"Key topics: {', '.join(section_meta.get('key_topics', []))}\n\n"
                         f"Evidence:\n{evidence_context}\n"
                         f"{'User-provided answers:\n' + answers_context if answers_context else ''}\n"

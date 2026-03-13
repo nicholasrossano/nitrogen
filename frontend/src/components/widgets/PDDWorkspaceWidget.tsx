@@ -20,6 +20,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   FileText,
+  FileSearch,
+  FolderOpen,
   Loader2,
   Check,
   ChevronDown,
@@ -46,7 +48,6 @@ import type {
   PDDSectionState,
   PDDConsistencyFinding,
   PDDEvidenceItem,
-  PDDFollowUpQuestion,
 } from '@/lib/api';
 
 interface PDDWorkspaceWidgetProps {
@@ -437,8 +438,10 @@ function AuthoringView({
   const outline = workspace.outline || [];
   const sections = workspace.sections || {};
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [subLoading, setSubLoading] = useState<'prepare' | 'draft' | 'confirm' | null>(null);
+  const [noEvidence, setNoEvidence] = useState(false);
+  const [updateAnswers, setUpdateAnswers] = useState('');
+  const [subLoading, setSubLoading] = useState<'prepare' | 'draft' | 'update' | 'confirm' | null>(null);
+  const [loadingLabel, setLoadingLabel] = useState('');
 
   const confirmedCount = outline.filter((s) => sections[s.id]?.status === 'confirmed').length;
 
@@ -446,33 +449,96 @@ function AuthoringView({
   const sectionState: PDDSectionState | undefined = openSectionId ? sections[openSectionId] : undefined;
   const sectionStatus = sectionState?.status || 'pending';
 
-  const handlePrepare = async () => {
+  // Reset no-evidence flag when navigating to a different section
+  const handleOpenSection = (id: string) => {
+    setNoEvidence(false);
+    setUpdateAnswers('');
+    setOpenSectionId(id);
+  };
+
+  // Prepare then auto-draft if evidence is found
+  const handlePrepareAndDraft = async () => {
     if (!openSectionId) return;
     setSubLoading('prepare');
+    setLoadingLabel('Scanning project materials…');
     onError(null);
     try {
-      await api.preparePDDSection(initiativeId, openSectionId);
+      const prepResult = await api.preparePDDSection(initiativeId, openSectionId);
+
+      if (prepResult.evidence.length === 0) {
+        // No docs found — show the no-evidence state
+        const { workspace: ws } = await api.getPDDWorkspace(initiativeId);
+        if (ws) onUpdate(ws);
+        setNoEvidence(true);
+        setSubLoading(null);
+        setLoadingLabel('');
+        return;
+      }
+
+      // Evidence found — immediately draft
+      setSubLoading('draft');
+      setLoadingLabel('Drafting section…');
+      await api.draftPDDSection(initiativeId, openSectionId);
       const { workspace: ws } = await api.getPDDWorkspace(initiativeId);
       if (ws) onUpdate(ws);
     } catch (e: any) {
       onError(e.message || 'Preparation failed');
     } finally {
       setSubLoading(null);
+      setLoadingLabel('');
     }
   };
 
-  const handleDraft = async () => {
+  const handleDraftGeneral = async () => {
     if (!openSectionId) return;
     setSubLoading('draft');
+    setLoadingLabel('Drafting with general guidance…');
     onError(null);
     try {
-      await api.draftPDDSection(initiativeId, openSectionId, Object.keys(answers).length > 0 ? answers : undefined);
+      await api.draftPDDSection(initiativeId, openSectionId, undefined, true);
       const { workspace: ws } = await api.getPDDWorkspace(initiativeId);
       if (ws) onUpdate(ws);
+      setNoEvidence(false);
     } catch (e: any) {
       onError(e.message || 'Drafting failed');
     } finally {
       setSubLoading(null);
+      setLoadingLabel('');
+    }
+  };
+
+  const handleUpdateDraft = async () => {
+    if (!openSectionId || !updateAnswers.trim()) return;
+    setSubLoading('update');
+    setLoadingLabel('Updating draft…');
+    onError(null);
+    try {
+      await api.draftPDDSection(initiativeId, openSectionId, { context: updateAnswers });
+      const { workspace: ws } = await api.getPDDWorkspace(initiativeId);
+      if (ws) onUpdate(ws);
+      setUpdateAnswers('');
+    } catch (e: any) {
+      onError(e.message || 'Update failed');
+    } finally {
+      setSubLoading(null);
+      setLoadingLabel('');
+    }
+  };
+
+  const handleRedraft = async () => {
+    if (!openSectionId) return;
+    setSubLoading('draft');
+    setLoadingLabel('Redrafting…');
+    onError(null);
+    try {
+      await api.draftPDDSection(initiativeId, openSectionId);
+      const { workspace: ws } = await api.getPDDWorkspace(initiativeId);
+      if (ws) onUpdate(ws);
+    } catch (e: any) {
+      onError(e.message || 'Redraft failed');
+    } finally {
+      setSubLoading(null);
+      setLoadingLabel('');
     }
   };
 
@@ -486,7 +552,7 @@ function AuthoringView({
       if (ws) {
         onUpdate(ws);
         if (result.next_section_id) {
-          setOpenSectionId(result.next_section_id);
+          handleOpenSection(result.next_section_id);
         } else {
           setOpenSectionId(null);
         }
@@ -522,7 +588,7 @@ function AuthoringView({
             return (
               <div
                 key={s.id}
-                onClick={() => setOpenSectionId(s.id)}
+                onClick={() => handleOpenSection(s.id)}
                 className="rounded border border-stroke-subtle hover:border-accent/30 cursor-pointer transition-colors"
               >
                 <div className="px-4 py-3 flex items-center gap-3">
@@ -554,6 +620,8 @@ function AuthoringView({
   }
 
   /* ── Section detail ── */
+  const isWorking = !!subLoading;
+
   return (
     <>
       {/* Header with back nav */}
@@ -570,22 +638,59 @@ function AuthoringView({
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        {/* Pending: show prepare button */}
-        {sectionStatus === 'pending' && (
-          <button
-            onClick={handlePrepare}
-            disabled={subLoading === 'prepare'}
-            className="btn-primary !text-xs !px-4 !py-1.5 w-full"
-          >
-            {subLoading === 'prepare' ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" />Gathering evidence...</>
-            ) : (
-              <><Search className="w-3.5 h-3.5" />Prepare Section</>
-            )}
-          </button>
+
+        {/* ── Working state (prepare + auto-draft in progress) ── */}
+        {isWorking && (
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <Loader2 className="w-6 h-6 animate-spin text-accent" />
+            <p className="text-xs text-text-tertiary">{loadingLabel || 'Working…'}</p>
+          </div>
         )}
 
-        {(sectionStatus === 'prepared' || sectionStatus === 'drafted' || sectionStatus === 'confirmed') && sectionState && (
+        {/* ── Pending: empty state ── */}
+        {!isWorking && sectionStatus === 'pending' && !noEvidence && isActive && (
+          <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <FileSearch className="w-8 h-8 text-text-tertiary" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">Prepare this section</p>
+              <p className="text-xs text-text-tertiary mt-1 max-w-[220px] mx-auto">
+                We'll scan your project materials and draft a first version automatically.
+              </p>
+            </div>
+            <button
+              onClick={handlePrepareAndDraft}
+              className="btn-primary !text-xs !px-4 !py-1.5"
+            >
+              <Search className="w-3.5 h-3.5" />
+              Start preparation
+            </button>
+          </div>
+        )}
+
+        {/* ── No evidence found ── */}
+        {!isWorking && noEvidence && (
+          <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <FolderOpen className="w-8 h-8 text-text-tertiary" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">No project documents found</p>
+              <p className="text-xs text-text-tertiary mt-1 max-w-[240px] mx-auto">
+                Upload documents to your project for a grounded draft, or generate a template-style draft using general guidance.
+              </p>
+            </div>
+            {isActive && (
+              <button
+                onClick={handleDraftGeneral}
+                className="btn-primary !text-xs !px-4 !py-1.5"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Draft with general guidance
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── Drafted / confirmed content ── */}
+        {!isWorking && (sectionStatus === 'drafted' || sectionStatus === 'confirmed') && sectionState && (
           <>
             {sectionState.evidence.length > 0 && (
               <EvidencePanel evidence={sectionState.evidence} notes={sectionState.evidence_notes} />
@@ -606,59 +711,49 @@ function AuthoringView({
               </div>
             )}
 
-            {sectionState.questions.length > 0 && sectionStatus === 'prepared' && (
-              <div>
-                <h5 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
-                  Follow-up Questions
-                </h5>
-                <div className="space-y-2">
-                  {sectionState.questions.map((q) => (
-                    <div key={q.id} className="bg-surface-subtle rounded-lg px-3 py-2">
-                      <p className="text-xs font-medium text-text-primary">{q.question}</p>
-                      <p className="text-[10px] text-text-tertiary mt-0.5">{q.why}</p>
-                      <textarea
-                        rows={2}
-                        placeholder="Your answer (optional)"
-                        value={answers[q.id] || ''}
-                        onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                        className="mt-1.5 w-full text-xs bg-white border border-stroke-subtle rounded px-2 py-1.5 focus:outline-none focus:border-accent resize-none"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {sectionStatus === 'prepared' && isActive && (
-              <button
-                onClick={handleDraft}
-                disabled={subLoading === 'draft'}
-                className="btn-primary !text-xs !px-4 !py-1.5 w-full"
-              >
-                {subLoading === 'draft' ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />Drafting section...</>
-                ) : (
-                  <><Pencil className="w-3.5 h-3.5" />Draft Section</>
-                )}
-              </button>
-            )}
-
-            {(sectionStatus === 'drafted' || sectionStatus === 'confirmed') && sectionState.draft && (
+            {sectionState.draft && (
               <DraftPanel
                 draft={sectionState.draft}
                 confidence={sectionState.confidence}
                 unsupportedClaims={sectionState.unsupported_claims}
               />
             )}
+
+            {/* Inline "add context to improve draft" input */}
+            {isActive && sectionStatus === 'drafted' && (
+              <div className="border border-stroke-subtle rounded-lg overflow-hidden">
+                <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                  Add missing information
+                </p>
+                <textarea
+                  rows={3}
+                  placeholder="Provide any context, corrections, or missing details and we'll update the draft…"
+                  value={updateAnswers}
+                  onChange={(e) => setUpdateAnswers(e.target.value)}
+                  className="w-full text-xs text-text-primary bg-transparent px-3 py-2 focus:outline-none resize-none"
+                />
+                <div className="px-3 pb-3 flex justify-end">
+                  <button
+                    onClick={handleUpdateDraft}
+                    disabled={!updateAnswers.trim()}
+                    className="btn-primary !text-xs !px-4 !py-1.5"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    Update draft
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
 
-      {sectionStatus === 'drafted' && isActive && (
+      {/* Footer: redraft + approve */}
+      {!isWorking && sectionStatus === 'drafted' && isActive && (
         <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
           <button
-            onClick={handleDraft}
-            disabled={!!subLoading}
+            onClick={handleRedraft}
+            disabled={isWorking}
             className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
@@ -666,11 +761,11 @@ function AuthoringView({
           </button>
           <button
             onClick={handleConfirmSection}
-            disabled={!!subLoading}
+            disabled={isWorking}
             className="btn-primary !text-xs !px-4 !py-1.5"
           >
             {subLoading === 'confirm' ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" />Approving...</>
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" />Approving…</>
             ) : (
               <><Check className="w-3.5 h-3.5" />Approve Section</>
             )}
