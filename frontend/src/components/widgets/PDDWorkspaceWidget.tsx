@@ -358,7 +358,7 @@ function OutlineView({ workspace, initiativeId, isActive, loading, onLoading, on
       <div className="px-5 py-4 bg-surface-header border-b border-divider">
         <div className="flex items-center gap-2 mb-1">
           <FileText className="w-4 h-4 text-accent" />
-          <h3 className="text-sm font-semibold text-text-primary">PDD Outline</h3>
+          <h3 className="text-sm font-semibold text-text-primary">Project Design Document</h3>
         </div>
         <p className="text-xs text-text-secondary">
           Drag to reorder, click to rename, or add and remove sections.
