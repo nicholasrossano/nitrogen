@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquare, LayoutGrid, Clock } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar, ProjectPlanPhase } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -395,28 +395,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                   <span className="font-medium text-text-secondary">{completedCount}</span>
                   {' '}of {totalItems} complete
                 </span>
-                <div className="flex items-center gap-3">
-                  {/* Category / Phase toggle — only show when phase data exists */}
-                  {hasPhases && (
-                    <div className="flex items-center bg-surface-subtle rounded-full p-0.5">
-                      {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
-                        <button
-                          key={mode}
-                          onClick={() => setViewMode(mode)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
-                            viewMode === mode
-                              ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
-                              : 'text-text-tertiary hover:text-text-secondary'
-                          }`}
-                        >
-                          <Icon className="w-3 h-3" />
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <span className="text-[11px] font-medium text-text-secondary tabular-nums">{pct}%</span>
-                </div>
+                <span className="text-[11px] font-medium text-text-secondary tabular-nums">{pct}%</span>
               </div>
               {/* Single continuous bar — each pillar's completions stack left to right in pillar order */}
               {(() => {
@@ -457,8 +436,30 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           )}
 
           <div ref={outerContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Category / Phase toggle — in main white space, only when phase data exists */}
+          {hasPhases && (
+            <div className="flex-shrink-0 px-4 pt-4 pb-2 flex justify-end">
+              <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit">
+                {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
+                      viewMode === mode
+                        ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
+                        : 'text-text-tertiary hover:text-text-secondary'
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {viewMode === 'category' ? (
-          <div className="flex-1 overflow-y-auto p-4 pt-5">
+          <div className="flex-1 overflow-y-auto p-4 pt-2">
             <div className="flex gap-6 items-start">
               {Array.from({ length: numCols }, (_, colIdx) => (
                 <div key={colIdx} className="flex-1 flex flex-col gap-6">
@@ -486,7 +487,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
             </div>
           </div>
           ) : (
-          <div className="flex-1 overflow-y-auto p-4 pt-5">
+          <div className="flex-1 overflow-y-auto p-4 pt-2">
             <div className="max-w-3xl mx-auto space-y-6">
               {phaseGroups.map((group, groupIdx) => (
                 <PhaseSection
@@ -506,6 +507,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
             </div>
           </div>
           )}
+          </div>
 
           {/* Deep Dive panel — inline, respects header */}
           <div
@@ -606,10 +608,11 @@ function PhaseSection({
 
       {/* Phase items */}
       {!collapsed && (
-        <div className="ml-3.5 border-l border-stroke-subtle pl-4 space-y-1.5 pb-2">
-          {items.map(({ item, pillar }) => (
-            <div key={item.id} className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
+        <div className="ml-3.5 border-l border-stroke-subtle pl-4 pb-2">
+          {/* Single grid so tile column is shared — all tiles same width, badges vary */}
+          <div className="grid gap-y-1.5 items-center" style={{ gridTemplateColumns: '1fr auto' }}>
+            {items.map(({ item, pillar }) => (
+              <React.Fragment key={item.id}>
                 <PlanSubItem
                   item={item}
                   isLast={false}
@@ -617,20 +620,22 @@ function PhaseSection({
                   onDelete={() => onDeleteItem(item.id)}
                   isComplete={completedIds.has(item.id)}
                   onToggleComplete={onToggleComplete}
+                  hideBranchGutter
+                  fullWidth
                 />
-              </div>
-              {/* Pillar badge */}
-              <span
-                className="text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0"
-                style={{
-                  backgroundColor: `${pillarColorMap[pillar.id] ?? '#666'}15`,
-                  color: pillarColorMap[pillar.id] ?? '#666',
-                }}
-              >
-                {pillar.name}
-              </span>
-            </div>
-          ))}
+                {/* Pillar badge */}
+                <span
+                  className="text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ml-2 self-center justify-self-start"
+                  style={{
+                    backgroundColor: `${pillarColorMap[pillar.id] ?? '#666'}15`,
+                    color: pillarColorMap[pillar.id] ?? '#666',
+                  }}
+                >
+                  {pillar.name}
+                </span>
+              </React.Fragment>
+            ))}
+          </div>
           {items.length === 0 && (
             <p className="text-xs text-text-tertiary italic py-2">No items in this phase</p>
           )}
