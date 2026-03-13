@@ -9,6 +9,7 @@ import { getIconByName } from '@/lib/icons';
 const ROLE_LABEL: Record<string, string> = {
   editor: 'Editor',
   viewer: 'Viewer',
+  client: 'Client',
 };
 
 interface ProjectCardProps {
@@ -58,7 +59,7 @@ function getOutputCount(project: Initiative): number {
 
 export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: ProjectCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const title = project.title || 'Untitled';
+  const title = project.title || 'New Project';
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
   const IconComponent = getIconByName(project.icon);

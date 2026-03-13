@@ -36,6 +36,7 @@ interface ChatPanelProps {
   onSendMessage: (content: string) => void;
   fullWidth?: boolean;
   hasProjectPlan?: boolean;
+  readOnly?: boolean;
 }
 
 const CHAT_WIDGET_TYPES = [
@@ -65,6 +66,7 @@ export function ChatPanel({
   onSendMessage,
   fullWidth = false,
   hasProjectPlan = false,
+  readOnly = false,
 }: ChatPanelProps) {
   const {
     ensureGroup, setActiveTab, createTab, closeTab,
@@ -286,7 +288,7 @@ export function ChatPanel({
         />
       )}
 
-      {!hideTextInput && (
+      {!hideTextInput && !readOnly && (
         <div className="flex-shrink-0 relative">
           <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
           <div className={fullWidth ? 'max-w-[52rem] mx-auto w-full pb-4 px-4' : 'px-2 pb-2'}>

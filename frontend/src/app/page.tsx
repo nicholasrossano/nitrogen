@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Search, UserPlus } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/auth';
+import { OnboardClientModal } from '@/components/onboarding/OnboardClientModal';
 
 function HomePageContent() {
   const router = useRouter();
@@ -18,6 +19,7 @@ function HomePageContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>('home');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -94,7 +96,7 @@ function HomePageContent() {
   const filteredProjects = projects.filter((p: Initiative) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.trim().toLowerCase();
-    const title = (p.title || 'Untitled').toLowerCase();
+    const title = (p.title || 'New Project').toLowerCase();
     const sector = (p.sector || '').toLowerCase();
     const desc = (p.project_description || '').toLowerCase();
     return title.includes(q) || sector.includes(q) || desc.includes(q);
@@ -119,23 +121,32 @@ function HomePageContent() {
             />
           </div>
           {!isTrashView && (
-            <button
-              onClick={handleNewProject}
-              disabled={creating}
-              className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
-            >
-              {creating ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-3 h-3" />
-                  New Project
-                </>
-              )}
-            </button>
+            <>
+              <button
+                onClick={() => setShowOnboardModal(true)}
+                className="btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 !rounded-[20px]"
+              >
+                <UserPlus className="w-3 h-3" />
+                Onboard Client
+              </button>
+              <button
+                onClick={handleNewProject}
+                disabled={creating}
+                className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-3 h-3" />
+                    New Project
+                  </>
+                )}
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -226,6 +237,10 @@ function HomePageContent() {
           </main>
         </div>
       </div>
+
+      {showOnboardModal && (
+        <OnboardClientModal onClose={() => setShowOnboardModal(false)} />
+      )}
     </div>
   );
 }
