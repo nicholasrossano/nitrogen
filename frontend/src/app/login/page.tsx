@@ -1,14 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+
+function getSafeReturnUrl(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
+  return raw;
+}
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = getSafeReturnUrl(searchParams.get('returnUrl'));
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword, user, loading } = useAuth();
   
   const [mode, setMode] = useState<AuthMode>('signin');
@@ -20,9 +27,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.push('/');
+      router.push(returnUrl);
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, returnUrl]);
 
   if (!loading && user) {
     return null;
@@ -39,10 +46,10 @@ export default function LoginPage() {
         setResetSent(true);
       } else if (mode === 'signup') {
         await signUpWithEmail(email, password);
-        router.push('/');
+        router.push(returnUrl);
       } else {
         await signInWithEmail(email, password);
-        router.push('/');
+        router.push(returnUrl);
       }
     } catch (err: any) {
       const errorCode = err?.code || '';
@@ -72,7 +79,7 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle();
-      router.push('/');
+      router.push(returnUrl);
     } catch (err: any) {
       if (err?.code !== 'auth/popup-closed-by-user') {
         setError(err?.message || 'Failed to sign in with Google.');

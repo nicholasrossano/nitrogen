@@ -13,7 +13,7 @@ import asyncio
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_editor, require_client_onboarding, require_viewer
 from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
 from app.models.evidence import EvidenceDoc
@@ -106,8 +106,8 @@ async def send_chat_message_stream(
     user: AuthUser = Depends(get_current_user),
 ):
     """Send a chat message and get streaming assistant response."""
-    # Verify editor access before starting the stream
-    initiative = await require_editor(db, initiative_id, user)
+    # Verify editor/client-onboarding access before starting the stream
+    initiative = await require_client_onboarding(db, initiative_id, user)
 
     async def generate_stream():
         try:
@@ -722,7 +722,7 @@ async def send_chat_message(
     user: AuthUser = Depends(get_current_user),
 ):
     """Send a chat message and get assistant response using LLM-driven orchestration."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_client_onboarding(db, initiative_id, user)
 
     # Save user message
     user_message = ChatMessage(
