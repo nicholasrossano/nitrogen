@@ -6,19 +6,17 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
   ArrowUp,
+  ArrowLeft,
   BookOpen,
   GraduationCap,
   Globe,
-  AlertCircle,
   FileText,
-  ChevronDown,
-  ChevronUp,
   Loader2,
   X,
   Paperclip,
 } from 'lucide-react';
 import type { CoreChatMessage } from '@/stores/chatStore';
-import { SourceCitation } from '@/lib/api';
+import { SourceCitation, ResearchStep } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
@@ -32,6 +30,7 @@ export interface ConversationViewProps {
   messages: CoreChatMessage[];
   sending: boolean;
   thinkingLines: string[];
+  researchSteps: ResearchStep[];
   streamingContent: string;
   error: string | null;
   onSendMessage: (content: string, toolHint?: string) => void;
@@ -42,8 +41,12 @@ export interface ConversationViewProps {
   onSetFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   retryingMessageId: string | null;
   onBack?: () => void;
+  /** LLM-generated title for the current conversation */
+  title?: string | null;
   /** Required for rendering initiative-specific widgets (alignment, etc.) */
   initiativeId?: string;
+  /** Called when user clicks an internal citation (corpus/evidence) */
+  onCitationClick?: (citation: SourceCitation) => void;
 }
 
 function preprocessMath(content: string): string {
@@ -74,6 +77,7 @@ export function ConversationView({
   messages,
   sending,
   thinkingLines,
+  researchSteps,
   streamingContent,
   error,
   onSendMessage,
@@ -84,7 +88,9 @@ export function ConversationView({
   onSetFeedback,
   retryingMessageId,
   onBack,
+  title,
   initiativeId,
+  onCitationClick,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -233,6 +239,7 @@ export function ConversationView({
                 retrying={retryingMessageId === msg.id}
                 showToolbar={showToolbar}
                 groupContent={groupContent}
+                onCitationClick={onCitationClick}
               />
             );
           })}
@@ -243,6 +250,7 @@ export function ConversationView({
               <div className="max-w-[90%] flex flex-col items-start">
                 <ThinkingLogs
                   lines={thinkingLines}
+                  researchSteps={researchSteps}
                   completionMeta={null}
                   isThinking={isThinking}
                   isStreaming={isStreaming}
@@ -386,10 +394,12 @@ function CitationChip({
   sourceType,
   title,
   sources,
+  onCitationClick,
 }: {
   sourceType: string;
   title: string;
   sources: SourceCitation[];
+  onCitationClick?: (citation: SourceCitation) => void;
 }) {
   const type = sourceType.toLowerCase().trim();
 
@@ -405,6 +415,9 @@ function CitationChip({
 
   const url = matched?.source_url;
   const publisher = matched?.publisher;
+  const isInternal = matched && (
+    matched.source_type === 'corpus' || matched.source_type === 'evidence'
+  ) && matched.evidence_doc_id;
 
   let label: string;
   let icon: React.ReactNode;
@@ -443,6 +456,23 @@ function CitationChip({
     </span>
   );
 
+  if (isInternal && matched && onCitationClick) {
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className="no-underline"
+        onClick={() => {
+          track('citation_chip_clicked', { source_type: type, publisher: label, internal: true });
+          onCitationClick(matched);
+        }}
+        onKeyDown={(e) => { if (e.key === 'Enter') onCitationClick(matched); }}
+      >
+        {chip}
+      </span>
+    );
+  }
+
   if (url) {
     return (
       <a
@@ -464,14 +494,15 @@ function injectCitationChips(
   children: React.ReactNode,
   sources: SourceCitation[],
   keyPrefix = '0',
+  onCitationClick?: (citation: SourceCitation) => void,
 ): React.ReactNode {
   if (typeof children === 'string') {
-    return splitOnCitations(children, sources, keyPrefix);
+    return splitOnCitations(children, sources, keyPrefix, onCitationClick);
   }
   if (Array.isArray(children)) {
     return children.map((child, i) =>
       typeof child === 'string'
-        ? splitOnCitations(child, sources, `${keyPrefix}-${i}`)
+        ? splitOnCitations(child, sources, `${keyPrefix}-${i}`, onCitationClick)
         : child
     );
   }
@@ -482,6 +513,7 @@ function splitOnCitations(
   text: string,
   sources: SourceCitation[],
   keyPrefix: string,
+  onCitationClick?: (citation: SourceCitation) => void,
 ): React.ReactNode {
   const parts: React.ReactNode[] = [];
   const re = new RegExp(INLINE_CITATION_RE.source, 'g');
@@ -499,6 +531,7 @@ function splitOnCitations(
         key={`${keyPrefix}-c${m.index}`}
         sourceType={sourceType}
         title={title}
+        onCitationClick={onCitationClick}
         sources={sources}
       />
     );
@@ -516,11 +549,14 @@ function splitOnCitations(
 /*  Markdown component factory (sources injected per-message)         */
 /* ------------------------------------------------------------------ */
 
-function makeMarkdownComponents(sources: SourceCitation[]) {
+function makeMarkdownComponents(
+  sources: SourceCitation[],
+  onCitationClick?: (citation: SourceCitation) => void,
+) {
   const wrap = (Tag: string, className: string) => {
     const Wrapped = ({ children }: any) =>
       // @ts-expect-error dynamic tag
-      <Tag className={className}>{injectCitationChips(children, sources)}</Tag>;
+      <Tag className={className}>{injectCitationChips(children, sources, '0', onCitationClick)}</Tag>;
     Wrapped.displayName = `Wrapped_${Tag}`;
     return Wrapped;
   };
@@ -528,12 +564,12 @@ function makeMarkdownComponents(sources: SourceCitation[]) {
   return {
     p: ({ children }: any) => (
       <p className="text-sm leading-relaxed">
-        {injectCitationChips(children, sources, 'p')}
+        {injectCitationChips(children, sources, 'p', onCitationClick)}
       </p>
     ),
     li: ({ children }: any) => (
       <li className="leading-relaxed">
-        {injectCitationChips(children, sources, 'li')}
+        {injectCitationChips(children, sources, 'li', onCitationClick)}
       </li>
     ),
     strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
@@ -586,6 +622,7 @@ function MessageBubble({
   retrying,
   showToolbar = true,
   groupContent,
+  onCitationClick,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -598,12 +635,13 @@ function MessageBubble({
   retrying: boolean;
   showToolbar?: boolean;
   groupContent?: string;
+  onCitationClick?: (citation: SourceCitation) => void;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
   const mdComponents = isUser
     ? streamingMarkdownComponents
-    : makeMarkdownComponents(message.sources ?? []);
+    : makeMarkdownComponents(message.sources ?? [], onCitationClick);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
@@ -657,6 +695,8 @@ function MessageBubble({
                 onFeedback={onFeedback}
                 onRetry={onRetry}
                 retrying={retrying}
+                sources={message.sources}
+                onCitationClick={onCitationClick}
               />
             )}
           </div>
@@ -724,9 +764,6 @@ function MessageBubble({
           </div>
         )}
 
-        {!isUser && message.sources && message.sources.length > 0 && (
-          <CitationsDisplay sources={message.sources} />
-        )}
       </div>
     </div>
   );
@@ -757,98 +794,3 @@ function ComplianceChatWidget({
   }
 }
 
-function CitationsDisplay({ sources }: { sources: SourceCitation[] }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const verified = sources.filter((s) => s.source_type !== 'llm_estimate');
-  const hasUnverified = sources.some((s) => s.source_type === 'llm_estimate');
-
-  if (verified.length === 0 && !hasUnverified) return null;
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'corpus':   return <BookOpen className="w-3 h-3" />;
-      case 'evidence': return <FileText className="w-3 h-3" />;
-      case 'openalex': return <GraduationCap className="w-3 h-3" />;
-      case 'web':      return <Globe className="w-3 h-3" />;
-      default:         return <AlertCircle className="w-3 h-3" />;
-    }
-  };
-
-  const getLabel = (type: string) => {
-    switch (type) {
-      case 'corpus':   return 'Curated';
-      case 'evidence': return 'Uploaded';
-      case 'openalex': return 'OpenAlex';
-      case 'web':      return 'Web';
-      default:         return 'Estimate';
-    }
-  };
-
-  return (
-    <div className="mt-2">
-      <button
-        onClick={() => {
-          const next = !expanded;
-          setExpanded(next);
-          if (next && verified.length > 0) {
-            track('citation_clicked', {
-              tier: verified[0].source_type,
-              source_id: verified[0].chunk_id || verified[0].source_title,
-            });
-          }
-        }}
-        className="flex items-center gap-1 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-      >
-        {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        <span>
-          {verified.length > 0
-            ? `${verified.length} source${verified.length !== 1 ? 's' : ''}`
-            : 'Sources'}
-        </span>
-        {hasUnverified && (
-          <span className="text-indicator-yellow ml-1">(includes estimates)</span>
-        )}
-      </button>
-
-      {expanded && (
-        <div className="mt-2 space-y-1.5 pl-2 border-l border-stroke-subtle">
-          {verified.map((source, idx) => (
-            <div key={idx} className="flex items-start gap-2 text-xs text-text-secondary min-w-0">
-              <span className="flex items-center gap-1 text-text-tertiary shrink-0">
-                {getIcon(source.source_type)}
-                <span className="text-[10px] uppercase tracking-wide">
-                  {getLabel(source.source_type)}
-                </span>
-              </span>
-              {source.source_url ? (
-                <a
-                  href={source.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent hover:underline truncate"
-                  onClick={() =>
-                    track('citation_clicked', {
-                      tier: source.source_type,
-                      source_id: source.chunk_id || source.source_title,
-                    })
-                  }
-                >
-                  {source.source_title}
-                </a>
-              ) : (
-                <span className="truncate">{source.source_title}</span>
-              )}
-            </div>
-          ))}
-          {hasUnverified && (
-            <div className="flex items-center gap-2 text-xs text-indicator-yellow">
-              <AlertCircle className="w-3 h-3 shrink-0" />
-              <span>Some information is based on general knowledge and should be verified</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
