@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Clock, ChevronDown, ChevronRight, RefreshCw, Info } from 'lucide-react';
+import { ArrowLeft, Clock, Upload, ChevronDown, ChevronRight, Settings2, Info } from 'lucide-react';
 import type { CompliancePrecheck, ComplianceFinding } from '@/lib/api';
 import { StatusBadge } from './StatusBadge';
 import { FindingCard } from './FindingCard';
@@ -9,11 +9,12 @@ import { ReviewQueue } from './ReviewQueue';
 
 interface FindingsReportProps {
   precheck: CompliancePrecheck;
-  onRerun?: () => void;
+  onEditScope?: () => void;
+  onBack?: () => void;
   rerunning?: boolean;
 }
 
-export function FindingsReport({ precheck, onRerun, rerunning }: FindingsReportProps) {
+export function FindingsReport({ precheck, onEditScope, onBack, rerunning }: FindingsReportProps) {
   const [showWhySection, setShowWhySection] = useState(false);
 
   const groupedFindings = useMemo(() => {
@@ -35,24 +36,40 @@ export function FindingsReport({ precheck, onRerun, rerunning }: FindingsReportP
         {/* Header */}
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">{framework.name}</h2>
-              <div className="flex items-center gap-2 mt-1 text-xs text-text-secondary">
-                <Clock className="w-3 h-3" />
-                <span>{timestamp}</span>
-                {precheck.version > 1 && (
-                  <span className="text-text-tertiary">(v{precheck.version})</span>
-                )}
+            <div className="flex items-start gap-2">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  title="Back to overview"
+                  className="icon-btn p-1.5 text-text-tertiary mt-0.5 shrink-0"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">{framework.name}</h2>
+                <div className="flex items-center gap-2 mt-1 text-xs text-text-secondary">
+                  <Clock className="w-3 h-3" />
+                  <span>{timestamp}</span>
+                  {precheck.version > 1 && (
+                    <span className="text-text-tertiary">(v{precheck.version})</span>
+                  )}
+                  <span className="text-text-tertiary">·</span>
+                  <span className="inline-flex items-center gap-1 text-text-tertiary">
+                    <Upload className="w-3 h-3" />
+                    Autosaved
+                  </span>
+                </div>
               </div>
             </div>
-            {onRerun && (
+            {onEditScope && (
               <button
-                onClick={onRerun}
+                onClick={onEditScope}
                 disabled={rerunning}
-                className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                className="btn-primary !text-xs !px-4 !py-1.5 disabled:opacity-50"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${rerunning ? 'animate-spin' : ''}`} />
-                Rerun
+                <Settings2 className="w-3.5 h-3.5" />
+                Edit Scope &amp; Rerun
               </button>
             )}
           </div>

@@ -161,11 +161,17 @@ Your job: given a project description and any uploaded documents, propose the mo
 
 ## Rules
 - Do NOT produce individual items or deliverables — only the category structure.
-- Adapt categories to the project type, geography, and the user's likely role.
-- The classic defaults (Authorization, Capital, Design) are a starting point but you MUST tailor them. For example:
-  - A clean cooking carbon project might have: Regulatory & Certification, Carbon Methodology & MRV, Funding & Finance, Implementation & Procurement
-  - A solar farm might have: Permitting & Environmental, Grid Interconnection, Capital & Incentives, Engineering & Procurement
-  - A reforestation project might have: Land Rights & Authorization, Carbon Standard Registration, Monitoring & Verification, Funding & Partnerships
+- Read the project description carefully FIRST, then decide on categories. The description is the primary signal — not the project type label.
+- Match categories to the actual technology and workstreams. Examples by project type — use as a starting point only; always adapt names and summaries to the real project:
+  - **Utility-scale solar farm**: Permitting & Environmental, Grid Interconnection, Capital & Incentives, Engineering & Procurement
+  - **Offshore or onshore wind**: Marine/Land Permitting & Consenting, Grid Connection & Transmission, Capital & Offtake, Engineering & Procurement
+  - **Mini-grid / energy access**: Regulatory & Licensing, Site & Load Assessment, Capital & Subsidy, EPC & Commissioning
+  - **Clean cooking / cookstoves**: Regulatory & Product Certification, Health & Emissions Standards, Supply Chain & Distribution, Community Uptake & Finance
+  - **Carbon / climate certification** (Gold Standard, Verra, CDM): Regulatory & Certification, Carbon Methodology & MRV, Funding & Finance, Implementation & Procurement
+  - **Reforestation / land restoration**: Land Rights & Authorization, Carbon Standard Registration, Monitoring & Verification, Funding & Partnerships
+  - **DFI-financed infrastructure**: Environmental & Social Safeguards, Permitting & Authorization, Capital & Financing, Engineering & Procurement
+- If the project does not closely match any example above, derive categories directly from the description — do NOT use a loosely similar example.
+- **CRITICAL — summaries**: Every category summary MUST describe what that category covers for THIS specific project (its technology, geography, and context). Never write a summary that describes a different project type. If the project is offshore wind in North Carolina, the summary must mention offshore wind — not tree planting, not cookstoves, not anything else.
 - Each category should represent a distinct workstream with at least 3–5 potential deliverables.
 - Propose 3–5 categories.
 - Give each a short, clear name (2–4 words) and a 1–2 sentence summary of what it covers for THIS specific project.
@@ -309,7 +315,7 @@ class ProjectPlanService:
         self.model = settings.openai_orchestration_model
         self.retrieval = TieredRetrievalService(db)
 
-    async def propose_categories(self, initiative) -> list[dict]:
+    async def propose_categories(self, initiative, chat_history: list | None = None) -> list[dict]:
         """Propose high-level plan categories adapted to the project (lightweight LLM call)."""
         evidence_text = await self._gather_evidence_text(initiative.id)
         deliverables_summary = self._summarize_deliverables(initiative.deliverables)
@@ -319,6 +325,15 @@ class ProjectPlanService:
         geography = initiative.geography or "unspecified"
         title = initiative.title or "Untitled Project"
 
+        # Include recent chat messages so the model has the full conversation context,
+        # not just the brief extracted summary stored on the initiative.
+        chat_context = ""
+        if chat_history:
+            recent = chat_history[-12:]  # last 12 messages is plenty
+            lines = [f"{m['role'].upper()}: {m['content']}" for m in recent if m.get("content")]
+            if lines:
+                chat_context = "\n\nCONVERSATION (most recent — use this as the primary source of detail):\n" + "\n".join(lines)
+
         user_content = f"""Propose plan categories for the following project.
 
 PROJECT: {title}
@@ -326,7 +341,7 @@ TYPE: {project_type}
 GEOGRAPHY: {geography}
 
 DESCRIPTION:
-{desc}
+{desc}{chat_context}
 
 UPLOADED DOCUMENTS:
 {evidence_text}
