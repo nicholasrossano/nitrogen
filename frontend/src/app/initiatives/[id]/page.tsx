@@ -380,7 +380,7 @@ function InitiativePageContent() {
                 <ProjectFilesView
                   initiativeId={initiativeId}
                   materials={projectMaterials}
-                  onDeleteMaterial={isViewer || isClient ? undefined : deleteMaterial}
+                  onDeleteMaterial={isViewer ? undefined : deleteMaterial}
                 />
               </main>
             ) : activeView === 'plan' ? (
