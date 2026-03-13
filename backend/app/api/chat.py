@@ -1,5 +1,6 @@
 """Chat API endpoints with LLM-driven orchestration."""
 
+import re
 from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -414,7 +415,7 @@ async def execute_action(
     elif action == "generate_project_plan":
         plan_service = ProjectPlanService(db)
         try:
-            categories = await plan_service.propose_categories(initiative=initiative)
+            categories = await plan_service.propose_categories(initiative=initiative, chat_history=chat_history)
             widget_type = "plan_categories"
             widget_data = {"categories": categories}
         except Exception as e:
@@ -667,6 +668,28 @@ async def execute_action(
     return widget_type, widget_data, assistant_response, sources
 
 
+_LOWERCASE_WORDS = frozenset(
+    ["a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
+     "at", "by", "in", "of", "on", "to", "up", "as", "is", "it"]
+)
+
+
+def _to_title_case(text: str) -> str:
+    """Convert a project title to conventional title case."""
+    if not text:
+        return text
+    words = text.split()
+    result = []
+    for i, word in enumerate(words):
+        # Always capitalise first and last word; lowercase minor words in the middle
+        if i == 0 or i == len(words) - 1 or word.lower() not in _LOWERCASE_WORDS:
+            # Preserve all-caps acronyms (e.g. "LPG", "IFC")
+            result.append(word if word.isupper() and len(word) > 1 else word.capitalize())
+        else:
+            result.append(word.lower())
+    return " ".join(result)
+
+
 async def update_initiative_from_inputs(
     db: AsyncSession,
     initiative: Initiative,
@@ -680,7 +703,7 @@ async def update_initiative_from_inputs(
     updated = False
 
     if extracted.get("project_title") and not initiative.title:
-        initiative.title = extracted["project_title"]
+        initiative.title = _to_title_case(extracted["project_title"])
         chat_agent = ChatAgentService()
         icon = await chat_agent.select_project_icon(
             extracted["project_title"],

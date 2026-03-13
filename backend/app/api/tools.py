@@ -1,6 +1,24 @@
 """API endpoints for tools."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+_LOWERCASE_WORDS = frozenset(
+    ["a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
+     "at", "by", "in", "of", "on", "to", "up", "as", "is", "it"]
+)
+
+
+def _to_title_case(text: str) -> str:
+    if not text:
+        return text
+    words = text.split()
+    result = []
+    for i, word in enumerate(words):
+        if i == 0 or i == len(words) - 1 or word.lower() not in _LOWERCASE_WORDS:
+            result.append(word if word.isupper() and len(word) > 1 else word.capitalize())
+        else:
+            result.append(word.lower())
+    return " ".join(result)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -321,7 +339,7 @@ async def update_tool_inputs(
     
     # Also update legacy fields if present
     if "project_title" in inputs:
-        initiative.title = inputs["project_title"]
+        initiative.title = _to_title_case(inputs["project_title"])
     if "geography" in inputs:
         initiative.geography = inputs["geography"]
     if "target_beneficiaries" in inputs:
