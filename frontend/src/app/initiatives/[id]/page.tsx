@@ -42,6 +42,7 @@ function InitiativePageContent() {
     viewParam === 'evaluate' ? 'evaluate' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
+  const [evaluateKey, setEvaluateKey] = useState(0);
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
@@ -99,14 +100,13 @@ function InitiativePageContent() {
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
 
-  // Viewers cannot access the chat/generate view; redirect them to plan.
-  // Clients with an existing plan are also redirected away from chat.
+  // Viewers and clients cannot access the generate/evaluate views; redirect to plan.
   useEffect(() => {
-    if ((isViewer || isClientPostPlan) && activeView === 'chat') {
+    if ((isViewer || isClient) && (activeView === 'chat' || activeView === 'evaluate')) {
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
-  }, [isViewer, isClientPostPlan, activeView, initiativeId, router]);
+  }, [isViewer, isClient, activeView, initiativeId, router]);
 
   useEffect(() => {
     if (initiativeId) {
@@ -247,6 +247,7 @@ function InitiativePageContent() {
     }
     if (item === 'evaluate') {
       setActiveView('evaluate');
+      setEvaluateKey((k) => k + 1);
       router.replace(`/initiatives/${initiativeId}?view=evaluate`);
     }
   };
@@ -297,7 +298,7 @@ function InitiativePageContent() {
           onSignOut={handleSignOut}
           userEmail={user?.email}
           onUploadMaterial={isViewer || isClientPostPlan ? undefined : (file) => uploadMaterial(initiativeId, file)}
-          hiddenItems={isViewer || isClientPostPlan ? ['chat'] : undefined}
+          hiddenItems={isViewer ? ['chat'] : isClient ? ['chat', 'evaluate'] : undefined}
         />
         </div>
 
@@ -442,7 +443,7 @@ function InitiativePageContent() {
               </main>
               ) : activeView === 'evaluate' ? (
               <main className="h-full min-w-0 overflow-hidden">
-                <EvaluateView initiativeId={initiativeId} />
+                <EvaluateView key={evaluateKey} initiativeId={initiativeId} />
               </main>
               ) : null}
               </>

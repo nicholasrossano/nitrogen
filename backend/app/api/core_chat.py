@@ -265,9 +265,44 @@ async def compliance_chat_stream(
                 except (ValueError, Exception) as e:
                     logger.warning(f"Failed to load initiative context: {e}")
 
-            # Fast-path: template_fill tool runs directly with DB access
+            # Fast-path: PDD tool scans + generates outline in one shot
             _tool_hint = data.tool_hint or ""
-            if _tool_hint.startswith("template_fill:") and data.initiative_id:
+            if _tool_hint == "pdd" and data.initiative_id:
+                from app.services.pdd_service import PDDService
+                from app.services.core_chat import ComplianceChatResponse
+
+                init_uuid = uuid.UUID(data.initiative_id)
+
+                async def _run_pdd_setup():
+                    pdd_svc = PDDService(db)
+                    if on_thinking:
+                        await on_thinking("Scanning project materials...")
+                    await pdd_svc.create_workspace(init_uuid)
+                    await pdd_svc.scan_project(init_uuid)
+                    if on_thinking:
+                        await on_thinking("Generating PDD outline...")
+                    outline = await pdd_svc.generate_outline(init_uuid)
+                    workspace_state = await pdd_svc.get_workspace(init_uuid)
+
+                    section_count = len(outline)
+                    text = (
+                        f"I've reviewed your project materials and generated a "
+                        f"**{section_count}-section** PDD outline.\n\n"
+                        "Review and edit the outline in the panel on the right — "
+                        "you can rename, reorder, add, or remove sections. "
+                        "When you're happy with it, click **Confirm Outline** to start drafting."
+                    )
+                    return ComplianceChatResponse(
+                        content=text,
+                        sources=[],
+                        tiers_used=["pdd_scan"],
+                        latency_ms=0,
+                        widget_type="pdd_workspace",
+                        widget_data=workspace_state,
+                    )
+
+                generation_task = asyncio.create_task(_run_pdd_setup())
+            elif _tool_hint.startswith("template_fill:") and data.initiative_id:
                 template_id_str = _tool_hint.split(":", 1)[1]
                 from app.tools.template_tool import TemplateFillTool
                 from app.services.core_chat import ComplianceChatResponse

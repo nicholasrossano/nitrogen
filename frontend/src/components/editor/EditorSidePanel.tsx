@@ -10,6 +10,7 @@ import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidge
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequirementsWidget';
 import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
+import { PDDWorkspaceWidget } from '@/components/widgets/PDDWorkspaceWidget';
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
@@ -22,6 +23,7 @@ export const EDITOR_WIDGET_TYPES = [
   'alignment',
   'template_requirements',
   'template_viewer',
+  'pdd_workspace',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -36,6 +38,7 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   alignment: 'alignment',
   template_requirements: 'template',
   template_viewer: 'template',
+  pdd_workspace: 'pdd',
 };
 
 export interface EditorWidget {
@@ -61,6 +64,7 @@ const WIDGET_LABELS: Record<string, string> = {
   alignment: 'Memo Outline',
   template_requirements: 'Template',
   template_viewer: 'Template Output',
+  pdd_workspace: 'Project Design Document',
 };
 
 export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelProps) {
@@ -138,6 +142,8 @@ function EditorWidgetRenderer({
       return <TemplateRequirementsWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
     case 'template_viewer':
       return <TemplateViewerWidget data={data} initiativeId={initiativeId} isActive />;
+    case 'pdd_workspace':
+      return <PDDWorkspaceWidget data={data} initiativeId={initiativeId} isActive />;
     default:
       return null;
   }
