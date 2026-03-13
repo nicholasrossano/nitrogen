@@ -4,41 +4,50 @@ from dotenv import load_dotenv
 # Load .env before any config reads (backend/.env when run from backend/)
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import os
 import json
+import traceback
 
 from app.config import get_settings
 from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, client_onboarding
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
+PRODUCTION_ORIGINS = [
+    "https://the-nitrogen.ai",
+    "https://www.the-nitrogen.ai",
+]
+
 # CORS origins: prefer settings (loaded from .env by pydantic) since os.environ
 # may not have CORS_ORIGINS when pydantic-settings loads .env for its own use
 def get_cors_origins():
+    base_origins: list[str] = []
     cors_env = os.environ.get('CORS_ORIGINS', '')
     if cors_env:
         try:
             parsed = json.loads(cors_env)
             if isinstance(parsed, list) and parsed:
                 logger.info(f"CORS origins from env: {parsed}")
-                return parsed
+                base_origins = parsed
         except json.JSONDecodeError:
             origins = [o.strip() for o in cors_env.split(',') if o.strip()]
             if origins:
                 logger.info(f"CORS origins (comma-sep): {origins}")
-                return origins
-    # Primary: settings loads from .env via pydantic-settings
-    origins = settings.cors_origins
-    logger.info(f"CORS origins from settings: {origins}")
-    return origins if origins else ["http://localhost:3000", "http://localhost:3001"]
+                base_origins = origins
+    if not base_origins:
+        base_origins = settings.cors_origins or ["http://localhost:3000", "http://localhost:3001"]
+        logger.info(f"CORS origins from settings: {base_origins}")
+    merged = list(dict.fromkeys(base_origins + PRODUCTION_ORIGINS))
+    return merged
 
 cors_origins = get_cors_origins()
 logger.info(f"Final CORS origins: {cors_origins}")
@@ -66,11 +75,22 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Return CORS-safe JSON on unhandled errors so the browser doesn't hide them."""
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error_type": type(exc).__name__},
+    )
+
 
 # Include routers
 app.include_router(initiatives.router, prefix="/api/v1", tags=["initiatives"])
@@ -91,7 +111,6 @@ app.include_router(shares.router, prefix="/api/v1", tags=["shares"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
 app.include_router(compliance_precheck.router, prefix="/api/v1", tags=["compliance-precheck"])
 app.include_router(pdd.router, prefix="/api/v1", tags=["pdd"])
-app.include_router(client_onboarding.router, prefix="/api/v1", tags=["client-onboarding"])
 
 
 @app.get("/")
