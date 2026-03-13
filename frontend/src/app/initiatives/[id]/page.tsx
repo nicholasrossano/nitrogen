@@ -10,7 +10,10 @@ import { ProjectHeader, ChatPanel, EditorSidePanel } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
+import { ResearchPanel } from '@/components/core-chat/ResearchPanel';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ProjectFilesView } from '@/components/files';
+import type { SourceCitation } from '@/lib/api';
 import { EvaluateView } from '@/components/evaluate/EvaluateView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
@@ -67,6 +70,8 @@ function InitiativePageContent() {
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [showEditorInChatView, setShowEditorInChatView] = useState(false);
   const [showChatInChatView, setShowChatInChatView] = useState(true);
+  // Research panel state (citation preview)
+  const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
 
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
@@ -169,6 +174,21 @@ function InitiativePageContent() {
     setChatEditorWidgets(widgets);
   }, []);
 
+  const handleCitationClick = useCallback((citation: SourceCitation) => {
+    if (
+      (citation.source_type === 'corpus' || citation.source_type === 'evidence') &&
+      citation.evidence_doc_id
+    ) {
+      setResearchCitation({
+        evidence_doc_id: citation.evidence_doc_id,
+        chunk_id: citation.chunk_id ?? null,
+        source_title: citation.source_title,
+      });
+    } else if (citation.source_url) {
+      window.open(citation.source_url, '_blank', 'noopener');
+    }
+  }, []);
+
   const handleStandaloneMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizingStandalone || !standaloneContainerRef.current) return;
     const rect = standaloneContainerRef.current.getBoundingClientRect();
@@ -227,6 +247,7 @@ function InitiativePageContent() {
       setActiveView('chat');
       setShowChatLanding(true);
       setShowEditorInChatView(false);
+      setResearchCitation(null);
       router.replace(`/initiatives/${initiativeId}?view=chat`);
       return;
     }
@@ -253,6 +274,7 @@ function InitiativePageContent() {
   const handleNewChat = () => {
     setShowChatLanding(true);
     setShowEditorInChatView(false);
+    setResearchCitation(null);
   };
 
   return (
@@ -345,26 +367,45 @@ function InitiativePageContent() {
                   ref={standaloneContainerRef}
                   className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'chat' ? 'hidden' : ''}`}
                 >
+                  {/* Left: chat column */}
                   <div
                     className="flex-shrink-0 relative overflow-hidden"
-                    style={{ width: showEditorInChatView ? `${standaloneChatWidthPercent}%` : '100%' }}
+                    style={{
+                      width: (showEditorInChatView && chatEditorWidgets.length > 0) || researchCitation
+                        ? `${standaloneChatWidthPercent}%`
+                        : '100%',
+                    }}
                   >
                     <div className="absolute inset-0 overflow-hidden">
                       <ProjectStandaloneChatView
                         initiativeId={initiativeId}
                         showLanding={showChatLanding}
                         onMessageSent={() => setShowChatLanding(false)}
-                        onBack={() => setShowChatLanding(true)}
+                        onBack={handleNewChat}
                         onEditorWidgetsChange={handleChatEditorWidgetsChange}
+                        onCitationClick={handleCitationClick}
                       />
                     </div>
-                    {showEditorInChatView && (
+                    {((showEditorInChatView && chatEditorWidgets.length > 0) || researchCitation) && (
                       <div
                         onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
                         className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
                       />
                     )}
                   </div>
+
+                  {/* Research panel (citation preview) — fills remaining space when no editor */}
+                  {researchCitation && (
+                    <div className={showEditorInChatView ? 'flex-shrink-0 w-80 overflow-hidden' : 'flex-1 overflow-hidden'}>
+                      <ResearchPanel
+                        key={`${researchCitation.evidence_doc_id}-${researchCitation.chunk_id}`}
+                        citation={researchCitation}
+                        onClose={() => setResearchCitation(null)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Right: editor / document viewer */}
                   {showEditorInChatView && chatEditorWidgets.length > 0 && (
                     <div className="flex-1 overflow-hidden border-l border-divider">
                       <EditorSidePanel
