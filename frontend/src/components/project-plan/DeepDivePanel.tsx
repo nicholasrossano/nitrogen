@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { X, ExternalLink, Loader2, AlertCircle, Zap, HelpCircle } from 'lucide-react';
+import { X, ExternalLink, AlertCircle, Zap, HelpCircle } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 interface DeepDivePanelProps {
   initiativeId: string;
@@ -87,7 +88,7 @@ export function DeepDivePanel({
       role="dialog"
       aria-modal="true"
       aria-label={`Deep dive: ${item.title}`}
-      className="w-[420px] h-full flex-shrink-0 bg-white border-l border-divider flex flex-col outline-none"
+      className="w-full h-full flex-shrink-0 bg-white border-l border-divider flex flex-col outline-none"
       style={{ animation: 'slideInRight 0.2s ease-out forwards' }}
     >
         {/* Header */}
@@ -119,9 +120,8 @@ export function DeepDivePanel({
         <div className="flex-1 overflow-y-auto">
           {loading && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
-              <Loader2 className="w-5 h-5 animate-spin text-accent" />
+              <PageLoader label="" />
               <p className="text-sm text-text-secondary">Researching requirements...</p>
-              <p className="text-xs text-text-tertiary">Searching authoritative sources</p>
             </div>
           )}
 
