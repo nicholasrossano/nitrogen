@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Upload, FileText, Loader2, ClipboardPaste } from 'lucide-react';
+import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface EvidenceInputWidgetProps {
   initiativeId: string;
@@ -18,28 +19,21 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
   
   const { uploadEvidence, pasteEvidence, loading } = useInitiativeStore();
 
-  const handleFileSelect = async (file: File) => {
-    const allowedTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
-    if (!allowedTypes.includes(file.type)) {
-      alert('Please upload a PDF or DOCX file');
-      return;
+  const handleFiles = async (files: File[]) => {
+    const { accepted, rejected } = filterSupportedFiles(files);
+    if (rejected.length > 0) {
+      alert(`Skipped unsupported files:\n${rejected.join('\n')}\n\nAccepted: PDF, DOCX, XLSX, XLS`);
     }
-
-    await uploadEvidence(initiativeId, file);
+    for (const file of accepted) {
+      await uploadEvidence(initiativeId, file);
+    }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
-    
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
+    const files = await extractFilesFromDrop(e.dataTransfer);
+    if (files.length > 0) handleFiles(files);
   };
 
   const handlePasteSubmit = async () => {
@@ -102,8 +96,14 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx"
-              onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+              accept={SUPPORTED_EXTENSIONS}
+              multiple
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  handleFiles(Array.from(e.target.files));
+                  e.target.value = '';
+                }
+              }}
               className="hidden"
             />
             
@@ -118,10 +118,10 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
                   <FileText className="w-6 h-6 text-accent" />
                 </div>
                 <p className="text-sm font-medium text-text-primary">
-                  Drop your file here or click to browse
+                  Drop files or a folder, or click to browse
                 </p>
                 <p className="text-sm text-text-tertiary">
-                  PDF or DOCX, max 10MB
+                  PDF, DOCX, or Excel · multiple files supported
                 </p>
               </div>
             )}

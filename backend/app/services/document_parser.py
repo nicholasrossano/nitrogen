@@ -41,6 +41,25 @@ class DocumentParserService:
         
         return "\n\n".join(text_parts)
     
+    def parse_xlsx(self, content: bytes) -> str:
+        """Parse XLSX/XLS spreadsheet content to text"""
+        import openpyxl
+        
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        sheet_parts = []
+        
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(cell) if cell is not None else "" for cell in row]
+                if any(c.strip() for c in cells):
+                    rows.append("\t".join(cells))
+            if rows:
+                sheet_parts.append(f"[Sheet: {sheet_name}]\n" + "\n".join(rows))
+        
+        return "\n\n".join(sheet_parts)
+    
     def chunk_text(self, text: str) -> list[str]:
         """Split text into chunks of approximately chunk_size tokens"""
         # Tokenize

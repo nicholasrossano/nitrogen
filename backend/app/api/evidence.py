@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sql_delete
 from uuid import UUID
@@ -47,11 +48,17 @@ async def upload_evidence(
     # Process file upload
     if file:
         # Validate file type
-        allowed_types = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
-        if file.content_type not in allowed_types:
+        allowed_types = {
+            "application/pdf": "pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+            "application/vnd.ms-excel": "xls",
+        }
+        file_type = allowed_types.get(file.content_type or "")
+        if not file_type:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be PDF or DOCX",
+                detail="File must be PDF, DOCX, or Excel (XLSX/XLS)",
             )
         
         # Read and store file
@@ -59,12 +66,12 @@ async def upload_evidence(
         storage_path = await storage.save(content, file.filename, folder=str(initiative_id))
         
         # Parse document
-        if file.content_type == "application/pdf":
+        if file_type == "pdf":
             text = parser.parse_pdf(content)
-            file_type = "pdf"
-        else:
+        elif file_type == "docx":
             text = parser.parse_docx(content)
-            file_type = "docx"
+        else:
+            text = parser.parse_xlsx(content)
         
         filename = file.filename
     
@@ -219,6 +226,56 @@ async def get_evidence_content(
         "content": full_content,
         "chunk_count": len(chunks),
     }
+
+
+EVIDENCE_CONTENT_TYPE_MAP = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls": "application/vnd.ms-excel",
+}
+
+
+@router.get("/evidence/{evidence_id}/download")
+async def download_evidence(
+    evidence_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Download an uploaded evidence document."""
+    result = await db.execute(
+        select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
+    )
+    evidence_doc = result.scalar_one_or_none()
+
+    if not evidence_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence document not found",
+        )
+
+    await require_viewer(db, evidence_doc.initiative_id, user)
+
+    if not evidence_doc.storage_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not available for download",
+        )
+
+    storage = get_uploads_storage()
+    file_bytes = await storage.load(evidence_doc.storage_path)
+
+    media_type = EVIDENCE_CONTENT_TYPE_MAP.get(
+        evidence_doc.file_type or "", "application/octet-stream"
+    )
+
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{evidence_doc.filename or "file"}"'
+        },
+    )
 
 
 @router.delete("/evidence/{evidence_id}")

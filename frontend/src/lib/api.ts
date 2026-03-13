@@ -164,6 +164,7 @@ export interface ProjectMaterial {
   file_type: string;
   file_size: number | null;
   created_at: string;
+  source?: string; // "material" | "evidence"
 }
 
 export interface GeneratedFile {
@@ -874,6 +875,27 @@ export const api = {
     });
     if (!response.ok) {
       throw new Error('Failed to download file');
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadEvidence: async (evidenceId: string, filename: string) => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}/download`, {
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error('Failed to download evidence file');
     }
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
