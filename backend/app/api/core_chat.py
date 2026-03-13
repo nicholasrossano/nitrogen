@@ -237,13 +237,17 @@ async def compliance_chat_stream(
             db.add(user_msg)
             await db.flush()
 
-            thinking_queue: asyncio.Queue[str] = asyncio.Queue()
+            event_queue: asyncio.Queue[str] = asyncio.Queue()
             thinking_lines: list[str] = []
 
             async def on_thinking(text: str):
                 thinking_lines.append(text)
                 event = {"type": "thinking", "text": text}
-                await thinking_queue.put(json.dumps(event))
+                await event_queue.put(json.dumps(event))
+
+            async def on_research_step(step_id: str, label: str, step_status: str):
+                event = {"type": "research_step", "id": step_id, "label": label, "status": step_status}
+                await event_queue.put(json.dumps(event))
 
             history = [{"role": m.role, "content": m.content} for m in data.history]
             service = ComplianceChatService(db)
@@ -354,18 +358,20 @@ async def compliance_chat_stream(
                         tool_hint=data.tool_hint or None,
                         model_inputs_context=data.model_inputs_context or None,
                         project_context=project_context,
+                        on_research_step=on_research_step,
+                        initiative_id=data.initiative_id or None,
                     )
                 )
 
             while not generation_task.done():
                 try:
-                    event_json = await asyncio.wait_for(thinking_queue.get(), timeout=0.1)
+                    event_json = await asyncio.wait_for(event_queue.get(), timeout=0.1)
                     yield f"data: {event_json}\n\n"
                 except asyncio.TimeoutError:
                     continue
 
-            while not thinking_queue.empty():
-                event_json = await thinking_queue.get()
+            while not event_queue.empty():
+                event_json = await event_queue.get()
                 yield f"data: {event_json}\n\n"
 
             result = generation_task.result()

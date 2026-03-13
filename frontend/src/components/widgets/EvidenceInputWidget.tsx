@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Upload, FileText, Loader2, ClipboardPaste } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface EvidenceInputWidgetProps {
@@ -43,11 +44,11 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">Add Evidence</h3>
-        <p className="text-sm text-text-secondary">Upload a document or paste text</p>
-      </div>
+      <PanelHeader
+        icon={FileText}
+        title="Add Evidence"
+        subtitle="Upload a document or paste text"
+      />
 
       {/* Mode tabs */}
       <div className="flex border-b border-divider bg-white">

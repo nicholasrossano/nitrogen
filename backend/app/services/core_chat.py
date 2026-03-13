@@ -34,6 +34,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 ThinkingCallback = Callable[[str], Awaitable[None]]
+ResearchStepCallback = Callable[[str, str, str], Awaitable[None]]  # (id, label, status)
 
 # ---------------------------------------------------------------------------
 # Tool definitions — the planner LLM sees these and decides which to call.
@@ -354,7 +355,7 @@ Your areas of expertise include:
 RESPONSE RULES:
 - Ground your answers in the provided evidence whenever possible.
 - Cite sources inline using EXACTLY this format: [Source Type: Title]
-  Examples: [Scholarly: Cookstove adoption in Ghana] [Web: Gold Standard MRV requirements] [Corpus: Accra Clean Cooking Program]
+  Examples: [Evidence: project_report.pdf] [Scholarly: Cookstove adoption in Ghana] [Web: Gold Standard MRV requirements] [Corpus: Accra Clean Cooking Program]
 - ONLY cite a source if you actually used it to inform your answer.
 - If no evidence was retrieved, answer from general knowledge and flag uncertainty explicitly.
 - Be explicit about uncertainty, assumptions, and jurisdictional variability.
@@ -368,7 +369,9 @@ EVIDENCE_BLOCK_TEMPLATE = """
 RETRIEVED EVIDENCE (use these to ground your response):
 {evidence}
 
-CITATION REMINDER: You MUST cite at least one source from the evidence above using the format [Scholarly: Title] or [Web: Title]. If you reference data, ranges, or cost estimates, include the citation inline next to the claim. Do not omit citations.
+CITATION REMINDER: You MUST cite sources from the evidence above using the EXACT format [Source Type: Title]. Match the source type shown on each piece of evidence, for example:
+  [Evidence: filename.pdf]  [Corpus: document title]  [Scholarly: paper title]  [Web: page title]
+Cite inline next to each claim. Every factual statement that draws on evidence MUST have a citation. Do not omit citations.
 """
 
 # Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title]
@@ -424,6 +427,8 @@ class ComplianceChatService:
         project_context: str | None = None,
         tool_hint: str | None = None,
         model_inputs_context: str | None = None,
+        on_research_step: ResearchStepCallback | None = None,
+        initiative_id: str | None = None,
     ) -> ComplianceChatResponse:
         start = time.time()
 
@@ -431,28 +436,58 @@ class ComplianceChatService:
             if on_thinking:
                 await on_thinking(text)
 
+        async def _step(step_id: str, label: str, status: str) -> None:
+            if on_research_step:
+                await on_research_step(step_id, label, status)
+
         # Step 1: corpus search (if enabled) + tool planning run in parallel (independent)
         search_query = await self._build_search_query(user_message, history)
 
+        await _step("scan_docs", "Scanning project documents", "running")
+
         async def _corpus_search() -> list[RetrievedFact]:
+            if initiative_id:
+                from uuid import UUID as _UUID
+                try:
+                    return await self.retrieval.search_corpus(search_query, _UUID(initiative_id))
+                except ValueError:
+                    pass
             if not settings.enable_corpus_rag:
                 return []
             return await self.retrieval.search_corpus(search_query, None)
 
+        # Search project materials when inside a workspace
+        async def _material_search() -> list[RetrievedFact]:
+            if not initiative_id:
+                return []
+            from uuid import UUID as _UUID
+            try:
+                iid = _UUID(initiative_id)
+            except ValueError:
+                return []
+            return await self.retrieval.search_project_materials(search_query, iid)
+
         forced_fn = self._HINT_TO_PLANNER_TOOL.get(tool_hint or "")
 
         corpus_task = asyncio.create_task(_corpus_search())
+        material_task = asyncio.create_task(_material_search())
         plan_task = asyncio.create_task(
             self._plan_tool_calls(user_message, history, model_inputs_context=model_inputs_context)
         )
-        corpus_facts, tool_calls = await asyncio.gather(corpus_task, plan_task)
+        corpus_facts, material_facts, tool_calls = await asyncio.gather(
+            corpus_task, material_task, plan_task
+        )
 
-        all_facts: list[RetrievedFact] = list(corpus_facts)
+        all_facts: list[RetrievedFact] = list(corpus_facts) + list(material_facts)
         tiers_used: list[str] = []
 
-        if corpus_facts:
+        doc_count = len(corpus_facts) + len(material_facts)
+        if doc_count:
             tiers_used.append("corpus")
-            await _think(f"Found {len(corpus_facts)} relevant case studies")
+            await _think(f"Found {doc_count} relevant sections in project documents")
+            await _step("scan_docs", f"Found {doc_count} relevant sections", "done")
+        else:
+            await _step("scan_docs", "No matching document sections", "done")
 
         # Step 2: execute requested tools — search tools run in parallel
         widget_type: str | None = None
@@ -479,21 +514,27 @@ class ComplianceChatService:
 
         # Run search tools (scholarly + web) concurrently
         async def _run_scholarly(query: str) -> list[RetrievedFact]:
+            await _step("search_scholarly", "Searching scholarly databases", "running")
             await _think(f"Searching scholarly databases: \"{query}\"...")
             facts = await self.retrieval.search_openalex(query)
             if facts:
                 await _think(f"Found {len(facts)} scholarly works")
+                await _step("search_scholarly", f"Found {len(facts)} scholarly works", "done")
             else:
                 await _think("No relevant scholarly works found")
+                await _step("search_scholarly", "No scholarly works found", "done")
             return facts
 
         async def _run_web(query: str) -> list[RetrievedFact]:
+            await _step("search_web", "Searching web sources", "running")
             await _think("Searching web sources...")
             facts = await self.retrieval.search_web(query)
             if facts:
                 await _think(f"Found {len(facts)} web sources")
+                await _step("search_web", f"Found {len(facts)} web sources", "done")
             else:
                 await _think("No web sources found")
+                await _step("search_web", "No web sources found", "done")
             return facts
 
         search_tasks = []
@@ -639,6 +680,7 @@ class ComplianceChatService:
         ranked_facts = self._rank_facts(all_facts)
         source_count = len([f for f in ranked_facts if f.source_type != SourceType.LLM_ESTIMATE])
 
+        await _step("analyze_sources", f"Analyzing {source_count} sources" if source_count else "Generating response", "running")
         if source_count > 0:
             await _think(f"Generating response from {source_count} sources...")
         else:
@@ -684,6 +726,8 @@ class ComplianceChatService:
             if proposal:
                 widget_type = "proposed_value"
                 widget_data = proposal
+
+        await _step("analyze_sources", "Analysis complete", "done")
 
         # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)

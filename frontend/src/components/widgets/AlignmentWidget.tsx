@@ -8,6 +8,7 @@ import {
   ChevronDown, 
   ChevronRight,
 } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { getIconByName } from '@/lib/icons';
 import type { AlignmentSection, ToolAlignment } from '@/lib/api';
 import { WidgetGeneratingProgress, ALIGNMENT_STEPS } from './WidgetGeneratingProgress';
@@ -108,15 +109,11 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
     <div className="card-elevated overflow-hidden">
       {/* Header — hidden while generating */}
       {!isGenerating && (
-        <div className="px-5 py-4 bg-surface-header border-b border-divider">
-          <div className="flex items-center gap-2 mb-1">
-            <ToolIcon className="w-5 h-5 text-accent" />
-            <h3 className="text-sm font-semibold text-text-primary">{alignment.title}</h3>
-          </div>
-          <p className="text-sm text-text-secondary">
-            {alignment.description}
-          </p>
-        </div>
+        <PanelHeader
+          icon={ToolIcon}
+          title={alignment.title}
+          subtitle={alignment.description}
+        />
       )}
 
       {isGenerating ? (

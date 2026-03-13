@@ -11,6 +11,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { PanelHeader } from '@/components/ui';
 
 interface TemplateRequirement {
   id: string;
@@ -84,17 +85,11 @@ export function TemplateViewerWidget({
 
   return (
     <div className="card-elevated overflow-hidden h-full rounded-none flex flex-col">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 bg-surface-header border-b border-divider">
-        <div className="flex items-center gap-2 mb-1">
-          <FileIcon className={`w-4 h-4 ${isXlsx ? 'text-green-600' : 'text-accent'}`} />
-          <h3 className="text-sm font-semibold text-text-primary truncate">{filename}</h3>
-        </div>
-        <p className="text-[11px] text-text-tertiary">
-          {supported} of {total} fields populated
-          {unfilled > 0 && <span className="text-amber-600"> &middot; {unfilled} left blank</span>}
-        </p>
-      </div>
+      <PanelHeader
+        icon={FileIcon}
+        title={filename}
+        subtitle={<>{supported} of {total} fields populated{unfilled > 0 && <span className="text-amber-600"> &middot; {unfilled} left blank</span>}</>}
+      />
 
       {/* Content preview */}
       <div className="flex-1 overflow-y-auto px-4 py-3">

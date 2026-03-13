@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
-import type { ChatMessage } from '@/lib/api';
+import type { ChatMessage, ResearchStep, SourceCitation } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
 import { ConversationView } from './ConversationView';
@@ -22,6 +22,8 @@ interface ProjectStandaloneChatViewProps {
   onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
+  /** Called when user clicks an internal citation */
+  onCitationClick?: (citation: SourceCitation) => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -49,6 +51,7 @@ export function ProjectStandaloneChatView({
   onMessageSent,
   onBack,
   onEditorWidgetsChange,
+  onCitationClick,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -57,6 +60,7 @@ export function ProjectStandaloneChatView({
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [researchSteps, setResearchSteps] = useState<ResearchStep[]>([]);
   const [messageFeedback, setFeedbackMap] = useState<
     Record<string, 'like' | 'dislike' | null>
   >({});
@@ -231,6 +235,7 @@ export function ProjectStandaloneChatView({
       setThinkingLines([]);
       setStreamingContent('');
       setError(null);
+      setResearchSteps([]);
 
       await api.sendComplianceChatStream(
         history,
@@ -244,12 +249,10 @@ export function ProjectStandaloneChatView({
           setStreamingContent('');
           setThinkingLines([]);
 
-          // Track the DB session so follow-up messages stay in the same session
           if (payload.session_id) {
             setCurrentSessionId(payload.session_id);
           }
 
-          // Back-fill the user message db_id
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id.startsWith('user-') && m.role === 'user' && !prev.find((x) => x.id === payload.user_message_id)
@@ -286,6 +289,17 @@ export function ProjectStandaloneChatView({
         toolHint ?? null,
         null,
         initiativeId,
+        (step) => {
+          setResearchSteps((prev) => {
+            const idx = prev.findIndex((s) => s.id === step.id);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = step;
+              return updated;
+            }
+            return [...prev, step];
+          });
+        },
       );
     },
     [initiativeId, currentSessionId],
@@ -591,6 +605,7 @@ export function ProjectStandaloneChatView({
       messages={displayMessages}
       sending={sending}
       thinkingLines={thinkingLines}
+      researchSteps={researchSteps}
       streamingContent={streamingContent}
       error={error}
       onSendMessage={handleSend}
@@ -601,7 +616,9 @@ export function ProjectStandaloneChatView({
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
       onBack={onBack}
+      title={sessionTitle}
       initiativeId={initiativeId}
+      onCitationClick={onCitationClick}
     />
   );
 }

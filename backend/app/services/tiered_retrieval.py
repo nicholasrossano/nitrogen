@@ -21,10 +21,13 @@ import time
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select, func
+
 from app.config import get_settings
 from app.services.rag import RAGService, RetrievedChunk
 from app.services.openalex import OpenAlexService
 from app.models.initiative import Initiative
+from app.models.project_material import ProjectMaterial
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -50,6 +53,9 @@ class RetrievedFact:
     confidence: float = 1.0
     # Human-readable publisher / journal / domain — shown in citation chips
     publisher: str | None = None
+    # Internal document linking for citation navigation
+    evidence_doc_id: str | None = None
+    chunk_index: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +66,8 @@ class RetrievedFact:
             "chunk_id": self.chunk_id,
             "confidence": self.confidence,
             "publisher": self.publisher,
+            "evidence_doc_id": self.evidence_doc_id,
+            "chunk_index": self.chunk_index,
         }
     
     def to_citation_string(self) -> str:
@@ -240,6 +248,7 @@ class TieredRetrievalService:
                     source_title=chunk.source_title,
                     chunk_id=str(chunk.chunk_id),
                     confidence=chunk.similarity,
+                    evidence_doc_id=str(chunk.source_doc_id) if chunk.source_type == "evidence" else None,
                 )
                 for chunk in relevant_chunks
             ]
@@ -247,6 +256,71 @@ class TieredRetrievalService:
             logger.error(f"Corpus search failed: {e}")
             return []
     
+    async def search_project_materials(
+        self,
+        query: str,
+        initiative_id: UUID,
+        max_results: int = 5,
+        max_snippet_len: int = 500,
+    ) -> list[RetrievedFact]:
+        """Full-text keyword search on project_materials.content_text."""
+        try:
+            result = await self.db.execute(
+                select(ProjectMaterial).where(
+                    ProjectMaterial.initiative_id == initiative_id,
+                    ProjectMaterial.content_text.isnot(None),
+                    ProjectMaterial.content_text != "",
+                )
+            )
+            materials = result.scalars().all()
+            if not materials:
+                return []
+
+            keywords = [w.lower() for w in query.split() if len(w) > 2]
+            if not keywords:
+                keywords = [w.lower() for w in query.split() if len(w) > 1]
+            if not keywords:
+                return []
+
+            scored: list[tuple[float, ProjectMaterial, str]] = []
+            for mat in materials:
+                text = mat.content_text or ""
+                text_lower = text.lower()
+                hits = sum(1 for kw in keywords if kw in text_lower)
+                if hits == 0:
+                    continue
+                score = hits / len(keywords)
+
+                best_pos = 0
+                best_count = 0
+                window = max_snippet_len
+                for i in range(0, len(text_lower) - window + 1, window // 4):
+                    chunk = text_lower[i : i + window]
+                    cnt = sum(1 for kw in keywords if kw in chunk)
+                    if cnt > best_count:
+                        best_count = cnt
+                        best_pos = i
+                snippet = text[best_pos : best_pos + window].strip()
+
+                scored.append((score, mat, snippet))
+
+            scored.sort(key=lambda x: x[0], reverse=True)
+
+            return [
+                RetrievedFact(
+                    content=snippet,
+                    source_type=SourceType.EVIDENCE,
+                    source_title=mat.filename,
+                    chunk_id=None,
+                    confidence=min(score, 0.95),
+                    evidence_doc_id=str(mat.id),
+                )
+                for score, mat, snippet in scored[:max_results]
+            ]
+        except Exception as e:
+            logger.error(f"Project material search failed: {e}", exc_info=True)
+            return []
+
     async def search_openalex(self, query: str) -> list[RetrievedFact]:
         """Search OpenAlex for scholarly works."""
         try:

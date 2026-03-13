@@ -154,12 +154,22 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Upload project material
+  // Upload project material — routes through evidence so all files get semantic indexing
   uploadMaterial: async (id: string, file: File) => {
     try {
-      const response = await api.uploadMaterial(id, file);
+      const response = await api.uploadEvidence(id, file);
+      const doc: EvidenceDoc = response.document;
+      const asMaterial: ProjectMaterial = {
+        id: doc.id,
+        filename: doc.filename ?? file.name,
+        file_type: doc.file_type ?? '',
+        file_size: null,
+        created_at: doc.created_at,
+        source: 'evidence',
+      };
       set(state => ({
-        projectMaterials: [response.material, ...state.projectMaterials],
+        projectMaterials: [asMaterial, ...state.projectMaterials],
+        evidenceDocs: [doc, ...state.evidenceDocs],
       }));
     } catch (error) {
       console.error('Failed to upload material:', error);
@@ -167,14 +177,24 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Delete project material
+  // Delete project material (or evidence doc if source === 'evidence')
   deleteMaterial: async (materialId: string) => {
     const prev = get().projectMaterials;
+    const mat = prev.find(m => m.id === materialId);
+    const isEvidence = mat?.source === 'evidence';
+
     set(state => ({
       projectMaterials: state.projectMaterials.filter(m => m.id !== materialId),
     }));
     try {
-      await api.deleteMaterial(materialId);
+      if (isEvidence) {
+        await api.deleteEvidence(materialId);
+        set(state => ({
+          evidenceDocs: state.evidenceDocs.filter(d => d.id !== materialId),
+        }));
+      } else {
+        await api.deleteMaterial(materialId);
+      }
     } catch (error) {
       set({ projectMaterials: prev });
       console.error('Failed to delete material:', error);

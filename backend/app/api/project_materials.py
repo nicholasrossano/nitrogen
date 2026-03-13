@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
-from app.models.evidence import EvidenceDoc
+from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
@@ -19,6 +19,7 @@ from app.schemas.project_material import (
     ProjectFilesResponse,
 )
 from app.services.document_parser import DocumentParserService
+from app.services.embeddings import EmbeddingsService
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,35 @@ async def upload_material(
         content_text=content_text,
     )
     db.add(material)
+
+    # Also chunk + embed the text so it's searchable via vector similarity
+    if content_text and content_text.strip():
+        try:
+            parser_for_chunks = DocumentParserService()
+            embeddings_service = EmbeddingsService()
+
+            evidence_doc = EvidenceDoc(
+                initiative_id=initiative.id,
+                filename=file.filename or "Untitled",
+                file_type=file_type,
+                storage_path=storage_path,
+            )
+            db.add(evidence_doc)
+            await db.flush()
+
+            chunks = parser_for_chunks.chunk_text(content_text)
+            embeddings = await embeddings_service.embed_texts(chunks)
+            for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+                db.add(EvidenceChunk(
+                    evidence_doc_id=evidence_doc.id,
+                    chunk_index=i,
+                    content=chunk_text,
+                    embedding=embedding,
+                ))
+            initiative.evidence_ready = True
+        except Exception:
+            logger.warning("Could not embed material %s", file.filename, exc_info=True)
+
     initiative.touch()
     await db.commit()
     await db.refresh(material)

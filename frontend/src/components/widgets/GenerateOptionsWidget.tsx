@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Sparkles, Loader2, Check, Library } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 
 interface GenerateOptionsWidgetProps {
   data: Record<string, any>;
@@ -20,13 +21,11 @@ export function GenerateOptionsWidget({ data, initiativeId, isActive = true }: G
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">Generate Memo</h3>
-        <p className="text-sm text-text-secondary">
-          Evidence received: {data.chunk_count || 0} sections processed
-        </p>
-      </div>
+      <PanelHeader
+        icon={Library}
+        title="Generate Memo"
+        subtitle={`Evidence received: ${data.chunk_count || 0} sections processed`}
+      />
 
       {/* Options */}
       <div className="p-5 space-y-4 bg-white">

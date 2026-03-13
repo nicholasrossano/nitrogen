@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { CheckCircle2, HelpCircle, Loader2, FileText, X } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import type { ScopeFact, ScopeFactSource } from '@/lib/api';
 
 // ── Field type config ────────────────────────────────────────────────
@@ -114,12 +115,15 @@ function SourcesPanel({ fact, onClose }: { fact: ScopeFact; onClose: () => void 
 
   return (
     <div className="w-[340px] border-l border-divider h-full flex flex-col bg-white shrink-0">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-divider">
-        <h4 className="text-xs font-semibold text-text-primary">Sources</h4>
-        <button onClick={onClose} className="icon-btn p-1 text-text-tertiary">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <PanelHeader
+        icon={FileText}
+        title="Sources"
+        action={
+          <button onClick={onClose} className="p-1 rounded hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        }
+      />
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         <div className="space-y-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Fact</p>

@@ -7,7 +7,9 @@ import {
   MessageSquare,
   Sparkles,
   Pencil,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { api } from '@/lib/api';
 
 interface CarbonInput {
@@ -184,18 +186,11 @@ export function CarbonInputsWidget({
       onMouseLeave={() => setHoveredRow(null)}
     >
       <div className="flex-1 min-w-0 card-elevated overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-4 bg-surface-header border-b border-divider">
-          <h3 className="text-sm font-semibold text-text-primary">Carbon Emissions Model Inputs</h3>
-          <p className="text-xs text-text-secondary mt-0.5">
-            {Object.keys(localInputs).length} fields
-            {missingEssentials.length > 0 && (
-              <span className="text-red-600 ml-2">
-                &middot; {missingEssentials.length} critical input{missingEssentials.length !== 1 ? 's' : ''} missing
-              </span>
-            )}
-          </p>
-        </div>
+        <PanelHeader
+          icon={SlidersHorizontal}
+          title="Carbon Emissions Model Inputs"
+          subtitle={<>{Object.keys(localInputs).length} fields{missingEssentials.length > 0 && <span className="text-red-600 ml-2">&middot; {missingEssentials.length} critical input{missingEssentials.length !== 1 ? 's' : ''} missing</span>}</>}
+        />
 
         {/* Missing essentials banner */}
         {missingEssentials.length > 0 && (
