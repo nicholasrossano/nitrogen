@@ -35,8 +35,8 @@
   /* Semantic Indicators — ~20% less saturated for consistency */
   --color-indicator-orange: #B97A5D;
   --color-indicator-yellow: #C6B875;
-  --color-indicator-green: #8a9a88;
-  --color-indicator-red: #c94a4a;
+  --color-indicator-green: #6e7b6d;
+  --color-indicator-red: #b03737;
   
   /* Strokes */
   --color-divider: #E0DCD6;
@@ -625,7 +625,7 @@ textarea {
 
 /* Icon button - success variant */
 .icon-btn-success::before {
-  background-color: rgba(138, 154, 136, 0.1); /* indicator-green/10 */
+  background-color: rgba(110, 123, 109, 0.1); /* indicator-green/10 */
 }
 
 /* Project action buttons - like icon-btn but without padding override */
@@ -651,7 +651,7 @@ textarea {
 }
 
 .project-action-btn-success::before {
-  background-color: rgba(138, 154, 136, 0.2); /* indicator-green/20 for visibility */
+  background-color: rgba(110, 123, 109, 0.2); /* indicator-green/20 for visibility */
 }
 
 /* Pill button (for input/output tags) with opacity fade */

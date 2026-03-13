@@ -25,6 +25,8 @@ interface PillarColumnProps {
   completedIds?: Set<string>;
   onToggleComplete?: (id: string) => void;
   color?: string;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -51,9 +53,11 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete, color = '#005e72' }: PillarColumnProps) {
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete, color = '#005e72', expanded: expandedProp, onToggleExpanded }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
-  const [itemsExpanded, setItemsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const itemsExpanded = expandedProp !== undefined ? expandedProp : internalExpanded;
+  const toggleExpanded = onToggleExpanded ?? (() => setInternalExpanded(v => !v));
   const CLASSIFICATION_ORDER: Record<string, number> = { required: 0, optional: 1, unknown: 2 };
   const items = (pillar.items || []).slice().sort((a, b) => {
     const aOrder = CLASSIFICATION_ORDER[a.classification ?? 'optional'] ?? 1;
@@ -70,7 +74,7 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
     <div className="flex flex-col min-h-0" ref={el => onRegisterRef?.(el)}>
       {/* Pillar header node — full width, aligned with items */}
       <button
-        onClick={() => setItemsExpanded(v => !v)}
+        onClick={() => toggleExpanded()}
         className="border bg-surface rounded-md px-4 py-3 flex items-center gap-2.5 w-full text-left transition-colors duration-150"
         style={{ borderColor: color }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = hexToRgba(color, 0.06); }}

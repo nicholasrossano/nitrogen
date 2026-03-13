@@ -108,15 +108,18 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = f
           {/* Checkbox — trailing */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onToggleComplete?.(item.id); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleComplete?.(item.id); }}
+            onPointerDown={(e) => e.stopPropagation()}
             aria-label={isComplete ? 'Mark incomplete' : 'Mark complete'}
-            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150 ${
+            className={`p-2 -m-2 flex items-center justify-center flex-shrink-0 group/check`}
+          >
+            <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-150 pointer-events-none ${
               isComplete
                 ? 'bg-green-500 border-green-500'
-                : 'border-stroke-muted hover:border-green-400 bg-transparent'
-            }`}
-          >
-            {isComplete && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                : 'border-stroke-muted group-hover/check:border-green-400 bg-transparent'
+            }`}>
+              {isComplete && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+            </span>
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquare, LayoutGrid, Clock } from 'lucide-react';
+import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar, ProjectPlanPhase } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
@@ -80,6 +80,11 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
   const [viewMode, setViewMode] = useState<'category' | 'phase'>('category');
+  const [selectedPillarFilter, setSelectedPillarFilter] = useState<string | null>(null);
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+  const [expandedPillars, setExpandedPillars] = useState<Set<string>>(new Set());
   // Derive completed set directly from persisted plan data
   const completedIds = useMemo<Set<string>>(
     () => new Set(
@@ -316,9 +321,24 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     [initiativeId, deepDiveCache, projectPlan]
   );
 
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+        setFilterDropdownOpen(false);
+      }
+    }
+    if (filterDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [filterDropdownOpen]);
+
   const pillars = useMemo(() => projectPlan?.pillars ?? [], [projectPlan?.pillars]);
   const phases = useMemo(() => projectPlan?.phases ?? [], [projectPlan?.phases]);
   const hasPhases = phases.length > 0 && pillars.some((p) => p.items.some((i) => i.phase));
+  const allPhasesCollapsed = phases.length > 0 && collapsedPhases.size >= phases.length;
+  const allPillarsExpanded = pillars.length > 0 && expandedPillars.size >= pillars.length;
 
   // Build phase-grouped items for the phase view
   const phaseGroups = useMemo(() => {
@@ -332,10 +352,13 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     return phases.map((phase) => ({
       phase,
       items: allItems
-        .filter(({ item }) => item.phase === phase.id)
+        .filter(({ item, pillar }) =>
+          item.phase === phase.id &&
+          (!selectedPillarFilter || pillar.id === selectedPillarFilter)
+        )
         .sort((a, b) => (a.item.phase_order ?? 999) - (b.item.phase_order ?? 999)),
     }));
-  }, [hasPhases, pillars, phases]);
+  }, [hasPhases, pillars, phases, selectedPillarFilter]);
 
   const inspectorVisible = showInspector !== undefined ? showInspector : deepDive !== null;
   const panelOpen = !!(inspectorVisible && deepDive);
@@ -439,12 +462,92 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Category / Phase toggle — in main white space, only when phase data exists */}
           {hasPhases && (
-            <div className="flex-shrink-0 px-4 pt-4 pb-2 flex justify-end">
+            <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
+              {/* Contextual controls slot — stable width, expand/collapse fades in on category, filter fades in on phase */}
+              <div className="relative">
+                {/* Expand / collapse all — category view */}
+                <div
+                  className={`transition-opacity duration-200 ease-in-out flex items-center bg-surface-subtle rounded-full p-0.5 ${
+                    viewMode === 'category'
+                      ? 'opacity-100 pointer-events-auto'
+                      : 'opacity-0 pointer-events-none absolute inset-0'
+                  }`}
+                >
+                  <button
+                    onClick={() => setExpandedPillars(allPillarsExpanded ? new Set() : new Set(pillars.map((p) => p.id)))}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium text-text-tertiary hover:text-text-secondary transition-colors whitespace-nowrap"
+                  >
+                    <ChevronsUpDown className="w-3 h-3" />
+                    {allPillarsExpanded ? 'Collapse all' : 'Expand all'}
+                  </button>
+                </div>
+
+                {/* Category filter dropdown — phase view */}
+                <div
+                  className={`transition-opacity duration-200 ease-in-out ${
+                    viewMode === 'phase'
+                      ? 'opacity-100 pointer-events-auto'
+                      : 'opacity-0 pointer-events-none absolute inset-0'
+                  }`}
+                >
+                  <div ref={filterDropdownRef} className="relative flex items-center bg-surface-subtle rounded-full p-0.5">
+                    <button
+                      onClick={() => setFilterDropdownOpen((v) => !v)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap ${
+                        selectedPillarFilter
+                          ? 'bg-white text-accent shadow-sm border border-accent/30'
+                          : 'bg-transparent text-text-tertiary hover:text-text-secondary'
+                      }`}
+                    >
+                      {selectedPillarFilter
+                        ? pillars.find((p) => p.id === selectedPillarFilter)?.name ?? 'Category'
+                        : 'All Categories'}
+                      <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {filterDropdownOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[160px]">
+                        <button
+                          onClick={() => { setSelectedPillarFilter(null); setFilterDropdownOpen(false); }}
+                          className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                            !selectedPillarFilter
+                              ? 'text-accent bg-accent/5'
+                              : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+                          }`}
+                        >
+                          All Categories
+                        </button>
+                        {pillars.map((pillar, idx) => (
+                          <button
+                            key={pillar.id}
+                            onClick={() => { setSelectedPillarFilter(pillar.id); setFilterDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
+                              selectedPillarFilter === pillar.id
+                                ? 'text-accent bg-accent/5'
+                                : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+                            }`}
+                          >
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: PILLAR_COLORS[idx % PILLAR_COLORS.length] }}
+                            />
+                            {pillar.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* View mode toggle */}
               <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit">
                 {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
                   <button
                     key={mode}
-                    onClick={() => setViewMode(mode)}
+                    onClick={() => {
+                      setViewMode(mode);
+                      if (mode === 'category') setSelectedPillarFilter(null);
+                    }}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
                       viewMode === mode
                         ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
@@ -479,6 +582,14 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                           completedIds={completedIds}
                           onToggleComplete={toggleComplete}
                           color={PILLAR_COLORS[globalIdx % PILLAR_COLORS.length]}
+                          expanded={expandedPillars.has(pillar.id)}
+                          onToggleExpanded={() =>
+                            setExpandedPillars((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(pillar.id)) next.delete(pillar.id); else next.add(pillar.id);
+                              return next;
+                            })
+                          }
                         />
                       );
                     })}
@@ -502,6 +613,14 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                   onDeleteItem={handleDeleteItem}
                   completedIds={completedIds}
                   onToggleComplete={toggleComplete}
+                  collapsed={collapsedPhases.has(group.phase.id)}
+                  onToggleCollapsed={(id) =>
+                    setCollapsedPhases((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(id)) next.delete(id); else next.add(id);
+                      return next;
+                    })
+                  }
                 />
               ))}
             </div>
@@ -558,6 +677,8 @@ interface PhaseSectionProps {
   onDeleteItem: (itemId: string) => void;
   completedIds: Set<string>;
   onToggleComplete: (id: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: (id: string) => void;
 }
 
 function PhaseSection({
@@ -571,8 +692,9 @@ function PhaseSection({
   onDeleteItem,
   completedIds,
   onToggleComplete,
+  collapsed,
+  onToggleCollapsed,
 }: PhaseSectionProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const completedInPhase = items.filter(({ item }) => completedIds.has(item.id)).length;
 
   // Build a color map so pillar badges match the category view
@@ -586,7 +708,7 @@ function PhaseSection({
     <div>
       {/* Phase header */}
       <button
-        onClick={() => setCollapsed((v) => !v)}
+        onClick={() => onToggleCollapsed(phase.id)}
         className="flex items-center gap-3 w-full text-left mb-2 group"
       >
         {/* Phase number badge */}
