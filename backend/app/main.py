@@ -13,7 +13,7 @@ import json
 
 from app.config import get_settings
 from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, client_onboarding
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -90,6 +90,8 @@ app.include_router(template.router, prefix="/api/v1", tags=["template"])
 app.include_router(shares.router, prefix="/api/v1", tags=["shares"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
 app.include_router(compliance_precheck.router, prefix="/api/v1", tags=["compliance-precheck"])
+app.include_router(pdd.router, prefix="/api/v1", tags=["pdd"])
+app.include_router(client_onboarding.router, prefix="/api/v1", tags=["client-onboarding"])
 
 
 @app.get("/")

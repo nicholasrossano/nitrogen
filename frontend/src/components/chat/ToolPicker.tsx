@@ -43,6 +43,12 @@ export const ALL_TOOLS: ToolOption[] = [
     icon: <CheckSquare className="w-3.5 h-3.5" />,
   },
   {
+    id: 'pdd',
+    name: 'Project Design Document',
+    description: 'Build a PDD from project materials',
+    icon: <FileText className="w-3.5 h-3.5" />,
+  },
+  {
     id: 'template_fill',
     name: 'From Template',
     description: 'Complete a doc from project materials',

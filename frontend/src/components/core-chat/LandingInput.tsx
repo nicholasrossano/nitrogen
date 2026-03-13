@@ -181,7 +181,7 @@ export function LandingInput({ onSend, disabled, sessions = [], onLoadSession, o
                     : 'border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08]'
                 }`}
               >
-                {(tool.id === 'gs_certification' || isTemplate) && (
+                {(tool.id === 'gs_certification' || tool.id === 'pdd' || isTemplate) && (
                   <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
                     BETA
                   </span>

@@ -25,6 +25,7 @@ class ToolRegistry:
         from app.tools.lcoe_tool import LCOETool
         from app.tools.carbon_tool import CarbonTool
         from app.tools.template_tool import TemplateFillTool
+        from app.tools.pdd_tool import PDDTool
         
         tools = [
             InvestmentMemoTool(),
@@ -32,6 +33,7 @@ class ToolRegistry:
             LCOETool(),
             CarbonTool(),
             TemplateFillTool(),
+            PDDTool(),
         ]
         
         for tool in tools:

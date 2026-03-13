@@ -572,12 +572,158 @@ Use when a side panel — sidebar, chat panel, inspector — should open or clos
 
 **Apply to**
 - Navigation sidebar (home, chat pages)
-- Chat panel in split project view
 - Inspector / deep-dive panel in project plan view
 
 **Do not apply to**
 - Modals or overlays (use opacity/scale instead)
 - Inline content that reflows (use height animation or `display: none`)
+
+---
+
+### Resizable Chat Side Panel (Split-View Pattern)
+
+A horizontally resizable chat panel docked to the left of a main content area. The panel slides in/out via the Panel Slide pattern and can be dragged to any width within a clamped range using a drag handle on its right edge.
+
+**Key implementation details**
+
+- **Toggle state**: `showChatPanel` (boolean, persisted to `localStorage`) — remembers the user's last open/closed preference across sessions
+- **Width state**: `chatWidthPercent` (number, initialized from `DEFAULT_CHAT_WIDTH_PERCENT`) — updated live during drag
+- **Width constraints**: `MIN_CHAT_WIDTH_PERCENT = 20`, `MAX_CHAT_WIDTH_PERCENT = 40`, `DEFAULT = 30`
+- **Resize handle**: a 1px-wide absolutely-positioned div on the right edge of the panel container. Uses `cursor-col-resize`. While dragging (`isResizing === true`) the CSS transition is disabled (`transition: none`) to avoid fighting with mouse tracking.
+- **Toggle button**: a `PanelLeft` (Lucide) icon button in the `ProjectHeader` via the `leftToggle` prop. Active state uses `text-accent`; inactive uses `text-text-tertiary`.
+
+**Layout structure**
+
+```tsx
+{/* Outer split container */}
+<main ref={containerRef} className="h-full min-w-0 flex overflow-hidden relative">
+
+  {/* Left: collapsible chat panel */}
+  <div
+    className="flex-shrink-0 relative overflow-hidden"
+    style={{
+      width: showChatPanel ? `${chatWidthPercent}%` : 0,
+      transition: isResizing ? 'none' : 'width 300ms ease-in-out',
+    }}
+  >
+    <div className="absolute inset-0">
+      <ChatPanel ... />
+    </div>
+
+    {/* Drag handle — only rendered when panel is open */}
+    {showChatPanel && (
+      <div
+        onMouseDown={handleResizeStart}
+        className={`absolute top-0 right-0 w-1 h-full cursor-col-resize
+                    hover:bg-accent/30 transition-colors
+                    ${isResizing ? 'bg-accent/50' : 'bg-transparent'}`}
+      />
+    )}
+  </div>
+
+  {/* Right: main content fills remaining space */}
+  <div className="flex-1 overflow-hidden">
+    <MainContent />
+  </div>
+
+</main>
+```
+
+**Resize handlers**
+
+```tsx
+const MIN_CHAT_WIDTH_PERCENT = 20;
+const MAX_CHAT_WIDTH_PERCENT = 40;
+const DEFAULT_CHAT_WIDTH_PERCENT = 30;
+
+const containerRef = useRef<HTMLDivElement>(null);
+const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
+const [isResizing, setIsResizing] = useState(false);
+
+const handleMouseMove = useCallback((e: MouseEvent) => {
+  if (!isResizing || !containerRef.current) return;
+  const rect = containerRef.current.getBoundingClientRect();
+  const newWidthPercent = ((e.clientX - rect.left) / rect.width) * 100;
+  setChatWidthPercent(Math.min(MAX_CHAT_WIDTH_PERCENT, Math.max(MIN_CHAT_WIDTH_PERCENT, newWidthPercent)));
+}, [isResizing]);
+
+const handleMouseUp = useCallback(() => setIsResizing(false), []);
+
+useEffect(() => {
+  if (isResizing) {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+  return () => {
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+}, [isResizing, handleMouseMove, handleMouseUp]);
+
+const handleResizeStart = (e: React.MouseEvent) => {
+  e.preventDefault();
+  setIsResizing(true);
+};
+```
+
+**Toggle handler (with localStorage persistence)**
+
+```tsx
+const [showChatPanel, setShowChatPanel] = useState(() => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('nitrogen-plan-chat-panel-open') === 'true';
+  }
+  return false;
+});
+
+const handleToggleChatPanel = () => {
+  setShowChatPanel(prev => {
+    const next = !prev;
+    localStorage.setItem('nitrogen-plan-chat-panel-open', String(next));
+    return next;
+  });
+};
+```
+
+**Header toggle button wiring (via `ProjectHeader` `leftToggle` prop)**
+
+```tsx
+leftToggle: showPanelToggle ? {
+  active: showChatPanel,
+  onClick: handleToggleChatPanel,
+  title: showChatPanel ? 'Hide chat panel' : 'Show chat panel',
+} : undefined,
+```
+
+In `ProjectHeader.tsx`, `leftToggle` renders a `PanelLeft` icon button:
+
+```tsx
+{leftToggle && (
+  <button
+    onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
+    disabled={leftToggle.disabled}
+    title={leftToggle.title}
+    className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ...`}
+  >
+    <PanelLeft className="w-4 h-4" />
+  </button>
+)}
+```
+
+**Rules**
+- Persist open/closed state to `localStorage` so users don't have to re-open the panel on every navigation
+- Disable the CSS `width` transition while `isResizing` to prevent the panel lagging behind the cursor
+- Clamp drag width to `[MIN, MAX]` percent — never allow the panel to occupy more than 40% of the workspace
+- Only show the toggle button in the header when the split-view is active (i.e. a plan/content panel exists alongside chat); hide it during full-width onboarding
+- Never show the split chat panel to viewers (`isViewer`) — the chat surface is editor-only
+
+**When to use**
+- Any view where a persistent chat thread should be available alongside a primary content panel (plan view, document editor, etc.)
+- The onboarding/setup phase should use a **full-width** `ChatPanel` instead (no split, no toggle button) — only switch to the split layout after the primary content (e.g. project plan) has been generated
 
 ---
 
@@ -855,16 +1001,161 @@ Widget cards (alignment, plan structure, etc.) use a compact footer to confirm o
 - Hint text: `text-[10px] text-text-tertiary`, `&middot;` as separator between hints
 - Never use `w-full` on a widget footer action button — the right-aligned compact form is canonical
 
+### Workflow Step Card Primary Action
+
+Any card or tile that drives a workflow step (framework selection, scope confirmation, analysis run) places its primary CTA in a footer bar — never as a standalone block element inside the card body.
+
+```tsx
+{/* Workflow step card */}
+<div className="border border-accent/30 bg-accent-wash/30 rounded-lg overflow-hidden">
+  <div className="px-5 py-4 space-y-3">
+    {/* Card body content */}
+  </div>
+  {/* Footer action bar */}
+  <div className="px-5 py-3 bg-surface-subtle/50 border-t border-accent/20 flex items-center justify-between">
+    <p className="text-[10px] text-text-tertiary">Hint text here</p>
+    <button onClick={handleAction} className="btn-primary !text-xs !px-4 !py-1.5">
+      Continue with ...
+    </button>
+  </div>
+</div>
+```
+
+**Rules**
+- Use `btn-primary !text-xs !px-4 !py-1.5` — same compact override as widget footer
+- Always pair with hint text on the left (`text-[10px] text-text-tertiary`)
+- Footer background: `bg-surface-subtle/50` with `border-t border-accent/20` on accent-tinted cards, or `border-t border-divider` on neutral cards
+- Never float or center the CTA — always `justify-between` footer row
+
+### Framework / Alternative Tiles
+
+Tiles in framework selection (or similar classification UIs) use a tag in the top-right and a compact action button in the footer.
+
+```tsx
+<div className="border border-divider rounded-lg overflow-hidden">
+  <div className="px-4 py-3">
+    {/* Name + tag in the same row */}
+    <div className="flex items-start justify-between gap-3 mb-1">
+      <span className="text-sm font-medium text-text-secondary">{name}</span>
+      {/* Tag: same pattern as REQ/confidence tags */}
+      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 shrink-0">
+        Possibly relevant
+      </span>
+    </div>
+    <p className="text-[11px] text-text-tertiary leading-relaxed">{reason}</p>
+  </div>
+  {/* Action in footer, bottom-right */}
+  <div className="px-4 py-2 border-t border-divider flex justify-end">
+    <button className="btn-primary !text-xs !px-3 !py-1">
+      Use instead
+    </button>
+  </div>
+</div>
+```
+
+**Tag color conventions for framework tiles**
+| State | Classes |
+| --- | --- |
+| Possibly relevant | `bg-amber-50 text-amber-700` |
+| Likely not relevant | `bg-gray-100 text-gray-500` |
+| Recommended | `bg-accent/10 text-accent` |
+
+### Scope-Fact Review Tiles
+
+Used in any workflow step where the user confirms pre-filled facts before running an analysis. Mirrors the `TemplateRequirementsWidget` tile pattern.
+
+```tsx
+{/* Tile — amber tint when pending, white when confirmed */}
+<div className={`rounded-lg border transition-colors ${
+  fact.confirmed ? 'border-stroke-subtle bg-white' : 'border-amber-200 bg-amber-50/40'
+}`}>
+  {/* Header: label + status badge */}
+  <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1.5">
+    <span className="text-xs font-medium text-text-primary">{fact.label}</span>
+    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-flex items-center gap-1 shrink-0 ${bg} ${text}`}>
+      <Icon className="w-3 h-3" />
+      {label}
+    </span>
+  </div>
+  {/* Input area */}
+  <div className="px-4 pb-3">
+    {/* Yes/No toggle (preferred for binary facts) */}
+    <div className="flex items-center gap-1.5 mt-0.5">
+      {['Yes', 'No'].map((opt) => (
+        <button key={opt} type="button"
+          className={`text-[11px] font-medium px-3 py-1 rounded-md border transition-colors ${
+            isSelected ? 'bg-surface-subtle border-stroke-muted text-text-primary'
+                       : 'border-stroke-subtle text-text-secondary hover:border-stroke-muted'
+          }`}
+        >{opt}</button>
+      ))}
+    </div>
+  </div>
+</div>
+```
+
+**Status badge palette for scope facts**
+| State | Classes |
+| --- | --- |
+| Confirmed (user-set) | `bg-green-50 text-green-700` + `CheckCircle2` |
+| Auto-detected | `bg-green-50 text-green-700` + `CheckCircle2` |
+| Needs input | `bg-amber-50 text-amber-700` + `HelpCircle` |
+
+**Field type rules**
+- Binary facts (yes/no involvement, presence, intent) → **Yes / No toggle buttons** (auto-confirm on click)
+- Categorical facts with a bounded option set → **`<select>`** (auto-confirm on change)
+- Open-ended text → **`<input type="text">`** + explicit Confirm button
+- Never render LLM source tags (`"auto"`, `"needs_confirmation"`) as field values — sanitize to empty string before display
+
+**Footer**
+Always use the Widget Footer Action Bar pattern: hint text on left (count of pending facts), `btn-primary !text-xs !px-4 !py-1.5` on right. Disable the button until all facts are confirmed.
+
 ---
 
-## M) Accessibility (Visual)
+## M) Loading States
+
+### Page-Level: `PageLoader` (Sprout ↔ TreeDeciduous)
+
+Use for full-page or full-panel loading states — anywhere a user is waiting for a significant operation to complete (data fetch, LLM analysis, file processing).
+
+```tsx
+import { PageLoader } from '@/components/ui/PageLoader';
+
+// Default label
+<PageLoader />
+
+// Custom label
+<PageLoader label="Analyzing project…" />
+```
+
+The component cross-fades between `Sprout` and `TreeDeciduous` (Lucide) at 750ms intervals with an opacity + scale transition, matching the workspace page-load overlay.
+
+**Rules**
+- Use `PageLoader` for page-level, panel-level, or stage-level waits (routing, running analysis, loading a project)
+- Never use `PageLoader` for inline or sub-component loading (thought chains, button spinners, row-level status) — use `Loader2 className="animate-spin"` there
+- Wrap in a centered flex container: `<div className="flex items-center justify-center pt-16"><PageLoader label="…" /></div>`
+- Label should end with `…` (ellipsis), not a period
+
+### Inline: `Loader2` (Spinner)
+
+Use for button loading states, thought chains, and any sub-component spinner.
+
+```tsx
+import { Loader2 } from 'lucide-react';
+
+<Loader2 className="w-3.5 h-3.5 animate-spin" />
+```
+
+---
+
+## N) Accessibility (Visual)
 - WCAG AA contrast minimum
 - Color never sole indicator
 - Focus and selection clearly visible
 
 ---
 
-## N) Visual North Star
+## O) Visual North Star
 
 The UI should feel at home next to native macOS productivity apps, enterprise desktop tools, and high-end analytics platforms.
 
