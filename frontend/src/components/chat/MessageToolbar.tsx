@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Copy, Pencil, ThumbsUp, ThumbsDown, RefreshCw, Check } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Copy, Pencil, ThumbsUp, ThumbsDown, RefreshCw, Check, BookMarked, BookOpen, FileText, GraduationCap, Globe, AlertCircle } from 'lucide-react';
+import type { SourceCitation } from '@/lib/api';
+import { track } from '@/lib/analytics';
 
 interface ToolbarIconProps {
   icon: React.ReactNode;
@@ -85,6 +87,28 @@ interface AssistantMessageToolbarProps {
   onRetry: () => void;
   retrying: boolean;
   hideRetry?: boolean;
+  sources?: SourceCitation[];
+  onCitationClick?: (citation: SourceCitation) => void;
+}
+
+function getSourceIcon(type: string) {
+  switch (type) {
+    case 'corpus':   return <BookOpen className="w-3 h-3 shrink-0" />;
+    case 'evidence': return <FileText className="w-3 h-3 shrink-0" />;
+    case 'openalex': return <GraduationCap className="w-3 h-3 shrink-0" />;
+    case 'web':      return <Globe className="w-3 h-3 shrink-0" />;
+    default:         return <AlertCircle className="w-3 h-3 shrink-0" />;
+  }
+}
+
+function getSourceLabel(type: string) {
+  switch (type) {
+    case 'corpus':   return 'Curated';
+    case 'evidence': return 'Uploaded';
+    case 'openalex': return 'OpenAlex';
+    case 'web':      return 'Web';
+    default:         return 'Estimate';
+  }
 }
 
 export function AssistantMessageToolbar({
@@ -94,8 +118,27 @@ export function AssistantMessageToolbar({
   onRetry,
   retrying,
   hideRetry = false,
+  sources,
+  onCitationClick,
 }: AssistantMessageToolbarProps) {
   const [copied, setCopied] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const sourcesRef = useRef<HTMLDivElement>(null);
+
+  const verified = (sources ?? []).filter((s) => s.source_type !== 'llm_estimate');
+  const hasUnverified = (sources ?? []).some((s) => s.source_type === 'llm_estimate');
+  const hasSources = verified.length > 0 || hasUnverified;
+
+  useEffect(() => {
+    if (!sourcesOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (sourcesRef.current && !sourcesRef.current.contains(e.target as Node)) {
+        setSourcesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [sourcesOpen]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -167,6 +210,94 @@ export function AssistantMessageToolbar({
           disabled={retrying}
           spinning={retrying}
         />
+      )}
+
+      {hasSources && (
+        <div ref={sourcesRef} className="relative">
+          <button
+            title="Sources"
+            aria-label="Sources"
+            onClick={() => {
+              const next = !sourcesOpen;
+              setSourcesOpen(next);
+              if (next && verified.length > 0) {
+                track('citation_clicked', {
+                  tier: verified[0].source_type,
+                  source_id: verified[0].chunk_id || verified[0].source_title,
+                });
+              }
+            }}
+            className={[
+              'flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded transition-colors text-[11px]',
+              sourcesOpen
+                ? 'text-accent bg-accent/[0.07]'
+                : 'text-text-tertiary hover:text-text-primary',
+            ].join(' ')}
+          >
+            <BookMarked className="w-3 h-3" />
+            <span>Sources</span>
+          </button>
+
+          {sourcesOpen && (
+            <div className="absolute bottom-full mb-1.5 left-0 z-50 bg-white border border-stroke-subtle rounded-lg shadow-lg p-2 min-w-[220px] max-w-[320px]">
+              <div className="space-y-0.5">
+                {verified.map((source, idx) => {
+                  const isInternal = (source.source_type === 'corpus' || source.source_type === 'evidence') && source.evidence_doc_id;
+                  return (
+                    <div key={idx} className="flex items-center gap-2 min-w-0 rounded-md px-1.5 py-1 hover:bg-surface-subtle transition-colors">
+                      <span className="text-text-tertiary shrink-0">
+                        {getSourceIcon(source.source_type)}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wide text-text-tertiary shrink-0 w-14">
+                        {getSourceLabel(source.source_type)}
+                      </span>
+                      {isInternal && onCitationClick ? (
+                        <button
+                          className="text-xs text-accent hover:underline truncate text-left"
+                          onClick={() => {
+                            track('citation_clicked', {
+                              tier: source.source_type,
+                              source_id: source.chunk_id || source.source_title,
+                              internal: true,
+                            });
+                            onCitationClick(source);
+                            setSourcesOpen(false);
+                          }}
+                        >
+                          {source.source_title}
+                        </button>
+                      ) : source.source_url ? (
+                        <a
+                          href={source.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-accent hover:underline truncate"
+                          onClick={() => {
+                            track('citation_clicked', {
+                              tier: source.source_type,
+                              source_id: source.chunk_id || source.source_title,
+                            });
+                            setSourcesOpen(false);
+                          }}
+                        >
+                          {source.source_title}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-text-secondary truncate">{source.source_title}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {hasUnverified && (
+                  <div className="flex items-center gap-2 text-xs text-indicator-yellow px-1.5 py-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>Includes estimates — verify before using</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
