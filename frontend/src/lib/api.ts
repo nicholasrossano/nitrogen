@@ -42,9 +42,9 @@ export interface Initiative {
   tool_alignments: Record<string, ToolAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
-  compliance_precheck: CompliancePrecheck | null;
+  compliance_prechecks: Record<string, CompliancePrecheck> | null;
   // Sharing fields
-  shared_role?: 'editor' | 'viewer' | null;
+  shared_role?: 'editor' | 'viewer' | 'client' | null;
   owner_email?: string | null;
 }
 
@@ -62,6 +62,17 @@ export interface UserSearchResult {
   id: string;
   email: string | null;
   display_name: string | null;
+}
+
+export interface ClientInviteResponse {
+  invitation_id: string;
+  token: string;
+}
+
+export interface InviteValidation {
+  invited_by_name: string | null;
+  project_title: string | null;
+  requires_auth: boolean;
 }
 
 export interface ToolDefinition {
@@ -308,11 +319,19 @@ export interface ReviewQueueItem {
   suggested_next_step: string;
 }
 
+export interface ScopeFactSource {
+  source_title: string;
+  content: string;
+  similarity: number;
+}
+
 export interface ScopeFact {
   id: string;
   label: string;
   value: string;
   source: 'auto' | 'needs_confirmation';
+  source_quote?: string;
+  sources?: ScopeFactSource[];
   confirmed?: boolean;
 }
 
@@ -322,6 +341,7 @@ export interface FrameworkInfo {
   name: string;
   rationale: string;
   signals: string[];
+  possibly_relevant: { id: string; reason: string }[];
   not_activated: { id: string; reason: string }[];
 }
 
@@ -361,6 +381,103 @@ export interface FrameworkListItem {
   family: string;
   name: string;
   description: string;
+}
+
+// ── PDD (Project Design Document) types ────────────────────────────
+
+export interface PDDSourceSummary {
+  filename: string;
+  topics_covered: string[];
+}
+
+export interface PDDScanResult {
+  project_type: string;
+  project_type_label: string;
+  pdd_style: string;
+  sources_summary: PDDSourceSummary[];
+  information_gaps: string[];
+}
+
+export interface PDDOutlineSection {
+  id: string;
+  title: string;
+  description: string;
+  key_topics: string[];
+}
+
+export interface PDDEvidenceItem {
+  citation_key: number;
+  chunk_id: string;
+  source_type: string;
+  source_title: string;
+  excerpt: string;
+  similarity: number;
+}
+
+export interface PDDEvidenceNote {
+  citation_key: number;
+  note: string;
+}
+
+export interface PDDFollowUpQuestion {
+  id: string;
+  question: string;
+  why: string;
+}
+
+export interface PDDSectionState {
+  status: 'pending' | 'prepared' | 'drafted' | 'confirmed';
+  evidence: PDDEvidenceItem[];
+  evidence_notes?: PDDEvidenceNote[];
+  missing_items: string[];
+  questions: PDDFollowUpQuestion[];
+  draft: string | null;
+  citations: number[];
+  confidence: 'high' | 'medium' | 'low' | null;
+  unsupported_claims: string[];
+  user_answers: Record<string, string>;
+}
+
+export interface PDDConsistencyFinding {
+  id: string;
+  severity: 'error' | 'warning' | 'info';
+  category: string;
+  description: string;
+  affected_sections: string[];
+  suggestion: string;
+}
+
+export interface PDDAssembledSection {
+  id: string;
+  title: string;
+  content: string;
+  confidence: string;
+  unsupported_claims: string[];
+}
+
+export interface PDDAssembledDocument {
+  title: string;
+  project_type: string;
+  sections: PDDAssembledSection[];
+  citations: { number: number; source_type: string; source_title: string; excerpt: string }[];
+  unresolved_gaps: string[];
+  section_count: number;
+  citation_count: number;
+}
+
+export interface PDDWorkspace {
+  id: string;
+  initiative_id: string | null;
+  status: 'scan' | 'outline' | 'authoring' | 'review' | 'assembled';
+  project_scan: PDDScanResult | null;
+  outline: PDDOutlineSection[];
+  sections: Record<string, PDDSectionState>;
+  active_section_id: string | null;
+  consistency_findings: PDDConsistencyFinding[];
+  assembled_document: PDDAssembledDocument | null;
+  missing_items_global: string[];
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 async function fetchApi<T>(
@@ -1372,37 +1489,151 @@ export const api = {
     }),
 
   // ── Compliance Pre-Check ──────────────────────────────────────────
-  getCompliancePrecheck: (initiativeId: string) =>
+  getAllCompliancePrechecks: (initiativeId: string) =>
+    fetchApi<{ compliance_prechecks: Record<string, CompliancePrecheck> }>(
+      `/api/v1/initiatives/${initiativeId}/compliance-prechecks`
+    ),
+
+  getCompliancePrecheck: (initiativeId: string, frameworkId: string) =>
     fetchApi<{ compliance_precheck: CompliancePrecheck | null }>(
-      `/api/v1/initiatives/${initiativeId}/compliance-precheck`
+      `/api/v1/initiatives/${initiativeId}/compliance-prechecks/${frameworkId}`
     ),
 
   listComplianceFrameworks: (initiativeId: string) =>
     fetchApi<{ frameworks: FrameworkListItem[] }>(
-      `/api/v1/initiatives/${initiativeId}/compliance-precheck/frameworks`
+      `/api/v1/initiatives/${initiativeId}/compliance-prechecks/meta/frameworks`
     ),
 
-  routeFramework: (initiativeId: string) =>
+  routeFramework: (initiativeId: string, frameworkId: string) =>
     fetchApi<FrameworkRoutingResult>(
-      `/api/v1/initiatives/${initiativeId}/compliance-precheck/route`,
+      `/api/v1/initiatives/${initiativeId}/compliance-prechecks/${frameworkId}/route`,
       { method: 'POST' }
     ),
 
-  runCompliancePrecheck: (initiativeId: string, frameworkId: string, confirmedFacts: ScopeFact[]) =>
+  runCompliancePrecheck: (initiativeId: string, frameworkId: string, confirmedFacts: ScopeFact[], force = false) =>
     fetchApi<{ compliance_precheck: CompliancePrecheck }>(
-      `/api/v1/initiatives/${initiativeId}/compliance-precheck/run`,
+      `/api/v1/initiatives/${initiativeId}/compliance-prechecks/${frameworkId}/run`,
       {
         method: 'POST',
-        body: JSON.stringify({ framework_id: frameworkId, confirmed_facts: confirmedFacts }),
+        body: JSON.stringify({ confirmed_facts: confirmedFacts, force }),
       }
     ),
 
-  rerunCompliancePrecheck: (initiativeId: string, updatedFacts: ScopeFact[], additionalAnswers?: Record<string, string>) =>
+  rerunCompliancePrecheck: (initiativeId: string, frameworkId: string, updatedFacts: ScopeFact[], additionalAnswers?: Record<string, string>) =>
     fetchApi<{ compliance_precheck: CompliancePrecheck }>(
-      `/api/v1/initiatives/${initiativeId}/compliance-precheck/rerun`,
+      `/api/v1/initiatives/${initiativeId}/compliance-prechecks/${frameworkId}/rerun`,
       {
         method: 'POST',
         body: JSON.stringify({ updated_facts: updatedFacts, additional_answers: additionalAnswers }),
       }
     ),
+
+  // ── PDD (Project Design Document) ──────────────────────────────────
+
+  createPDDWorkspace: (initiativeId: string) =>
+    fetchApi<{ workspace: PDDWorkspace }>(
+      `/api/v1/initiatives/${initiativeId}/pdd`,
+      { method: 'POST' }
+    ),
+
+  getPDDWorkspace: (initiativeId: string) =>
+    fetchApi<{ workspace: PDDWorkspace | null }>(
+      `/api/v1/initiatives/${initiativeId}/pdd`
+    ),
+
+  generatePDDOutline: (initiativeId: string) =>
+    fetchApi<{ outline: PDDOutlineSection[] }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/outline`,
+      { method: 'POST' }
+    ),
+
+  updatePDDOutline: (initiativeId: string, sections: PDDOutlineSection[]) =>
+    fetchApi<{ outline: PDDOutlineSection[] }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/outline`,
+      { method: 'PATCH', body: JSON.stringify({ sections }) }
+    ),
+
+  confirmPDDOutline: (initiativeId: string) =>
+    fetchApi<{ status: string; active_section_id: string | null; total_sections: number }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/outline/confirm`,
+      { method: 'POST' }
+    ),
+
+  preparePDDSection: (initiativeId: string, sectionId: string) =>
+    fetchApi<{
+      section_id: string;
+      evidence: PDDEvidenceItem[];
+      evidence_notes: PDDEvidenceNote[];
+      missing_items: string[];
+      questions: PDDFollowUpQuestion[];
+    }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/sections/${sectionId}/prepare`,
+      { method: 'POST' }
+    ),
+
+  draftPDDSection: (initiativeId: string, sectionId: string, userAnswers?: Record<string, string>) =>
+    fetchApi<{
+      section_id: string;
+      content: string;
+      citations_used: number[];
+      confidence: string;
+      unsupported_claims: string[];
+    }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/sections/${sectionId}/draft`,
+      { method: 'POST', body: JSON.stringify({ user_answers: userAnswers || null }) }
+    ),
+
+  updatePDDSection: (initiativeId: string, sectionId: string, content: string) =>
+    fetchApi<{ ok: boolean }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/sections/${sectionId}`,
+      { method: 'PATCH', body: JSON.stringify({ content }) }
+    ),
+
+  confirmPDDSection: (initiativeId: string, sectionId: string) =>
+    fetchApi<{ section_id: string; next_section_id: string | null; all_confirmed: boolean }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/sections/${sectionId}/confirm`,
+      { method: 'POST' }
+    ),
+
+  runPDDConsistency: (initiativeId: string) =>
+    fetchApi<{ findings: PDDConsistencyFinding[] }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/consistency`,
+      { method: 'POST' }
+    ),
+
+  assemblePDD: (initiativeId: string) =>
+    fetchApi<{ assembled: PDDAssembledDocument }>(
+      `/api/v1/initiatives/${initiativeId}/pdd/assemble`,
+      { method: 'POST' }
+    ),
+
+  async exportPDD(initiativeId: string): Promise<Blob> {
+    const url = `${API_URL}/api/v1/initiatives/${initiativeId}/pdd/export`;
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const resp = await fetch(url, { method: 'POST', headers });
+    if (!resp.ok) throw new Error('PDD export failed');
+    return resp.blob();
+  },
+
+  // --- Client onboarding ---
+
+  createClientInvite: (initiativeId: string, clientEmail?: string) =>
+    fetchApi<ClientInviteResponse>(
+      `/api/v1/initiatives/${initiativeId}/client-invite`,
+      { method: 'POST', body: JSON.stringify({ client_email: clientEmail || null }) }
+    ),
+
+  createInitiativeAndInvite: (clientEmail?: string, title?: string) =>
+    fetchApi<ClientInviteResponse>(
+      `/api/v1/client-onboard`,
+      { method: 'POST', body: JSON.stringify({ client_email: clientEmail || null, title: title || null }) }
+    ),
+
+  validateInvite: (token: string) =>
+    fetchApi<InviteValidation>(`/api/v1/invite/${token}`, { method: 'GET' }),
+
+  acceptInvite: (token: string) =>
+    fetchApi<{ initiative_id: string }>(`/api/v1/invite/${token}/accept`, { method: 'POST' }),
 };
