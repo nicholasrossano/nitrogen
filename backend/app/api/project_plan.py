@@ -12,6 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.core.auth import AuthUser, get_current_user
 from app.core.permissions import require_editor, require_editor_or_client_plan, require_viewer
 from app.core.database import get_db
+from app.models.chat import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.services.deep_dive import DeepDiveService
 from app.services.project_plan import ProjectPlanService
@@ -99,9 +100,19 @@ async def propose_plan_categories(
             detail="Project needs a description before categories can be proposed.",
         )
 
+    # Load recent chat messages for richer context
+    result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.initiative_id == initiative_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(12)
+    )
+    recent_messages = list(reversed(result.scalars().all()))
+    chat_history = [{"role": m.role, "content": m.content} for m in recent_messages]
+
     service = ProjectPlanService(db)
     try:
-        categories = await service.propose_categories(initiative=initiative)
+        categories = await service.propose_categories(initiative=initiative, chat_history=chat_history)
     except Exception:
         logger.exception("Category proposal failed for %s", initiative_id)
         raise HTTPException(
