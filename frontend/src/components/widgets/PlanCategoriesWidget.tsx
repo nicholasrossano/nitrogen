@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Check, Loader2, Map, Trash2 } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { getIconByName } from '@/lib/icons';
 import type { ProposedCategory } from '@/lib/api';
 
@@ -45,20 +46,13 @@ export function PlanCategoriesWidget({ data, initiativeId, isActive = true }: Pl
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <div className="flex items-center gap-2 mb-1">
-          <Map className="w-4 h-4 text-accent" />
-          <h3 className="text-sm font-semibold text-text-primary">
-            {confirmed ? 'Building your project plan...' : 'Proposed Plan Structure'}
-          </h3>
-        </div>
-        <p className="text-xs text-text-secondary mt-0.5">
-          {confirmed
-            ? `Generating detailed breakdown for ${localCategories.length} categories`
-            : `Proposing the following ${localCategories.length} categories. Review and confirm to generate the full breakdown, or propose changes in the chat.`}
-        </p>
-      </div>
+      <PanelHeader
+        icon={Map}
+        title={confirmed ? 'Building your project plan...' : 'Proposed Plan Structure'}
+        subtitle={confirmed
+          ? `Generating detailed breakdown for ${localCategories.length} categories`
+          : `Proposing the following ${localCategories.length} categories. Review and confirm to generate the full breakdown, or propose changes in the chat.`}
+      />
 
       {/* Category list */}
       <div className="p-4 space-y-2 bg-white">

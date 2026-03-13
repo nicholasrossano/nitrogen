@@ -631,7 +631,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           {/* Deep Dive panel — inline, respects header */}
           <div
             className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-            style={{ width: inspectorVisible && deepDive ? 420 : 0 }}
+            style={{ width: inspectorVisible && deepDive ? 'min(420px, calc(100% - 280px))' : 0 }}
           >
             {deepDive && (
               <DeepDivePanel

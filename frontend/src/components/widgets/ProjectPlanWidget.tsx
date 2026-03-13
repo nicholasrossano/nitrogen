@@ -1,6 +1,7 @@
 'use client';
 
-import { Shield, DollarSign, Compass, CheckCircle2, Circle } from 'lucide-react';
+import { Shield, DollarSign, Compass, CheckCircle2, Circle, LayoutGrid } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 
 interface PillarSummary {
   id: string;
@@ -39,13 +40,11 @@ export function ProjectPlanWidget({ data }: ProjectPlanWidgetProps) {
 
   return (
     <div className="card-elevated overflow-hidden">
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">Project Plan</h3>
-        <p className="text-xs text-text-secondary mt-0.5">
-          {summary.total_items} deliverables identified across {summary.pillars.length} pillars
-          {requiredCount > 0 && <> &middot; {requiredCount} required</>}
-        </p>
-      </div>
+      <PanelHeader
+        icon={LayoutGrid}
+        title="Project Plan"
+        subtitle={<>{summary.total_items} deliverables identified across {summary.pillars.length} pillars{requiredCount > 0 && <> &middot; {requiredCount} required</>}</>}
+      />
 
       <div className="p-4 space-y-2 bg-white">
         {summary.pillars.map((pillar) => {

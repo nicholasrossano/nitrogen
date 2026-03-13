@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Wrench } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 import { getIconByName } from '@/lib/icons';
 
 interface ToolRecommendation {
@@ -82,13 +83,11 @@ export function ToolChecklistWidget({ data, initiativeId, isActive = true }: Too
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">Available Tools</h3>
-        <p className="text-sm text-text-secondary">
-          Select the deliverables you&apos;d like to prepare
-        </p>
-      </div>
+      <PanelHeader
+        icon={Wrench}
+        title="Available Tools"
+        subtitle="Select the deliverables you'd like to prepare"
+      />
 
       {/* Tool list */}
       <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-3 bg-white">

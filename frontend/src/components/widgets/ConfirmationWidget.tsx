@@ -1,7 +1,8 @@
 'use client';
 
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Check, Edit2, Loader2, MapPin, Users, Target, DollarSign, Clock, AlertCircle, Flame } from 'lucide-react';
+import { Check, Edit2, Loader2, MapPin, Users, Target, DollarSign, Clock, AlertCircle, Flame, ClipboardList } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 
 interface ConfirmationWidgetProps {
   data: Record<string, any>;
@@ -22,11 +23,11 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
 
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 bg-surface-header border-b border-divider">
-        <h3 className="text-sm font-semibold text-text-primary">Initiative Summary</h3>
-        <p className="text-sm text-text-secondary">Please review and confirm</p>
-      </div>
+      <PanelHeader
+        icon={ClipboardList}
+        title="Initiative Summary"
+        subtitle="Please review and confirm"
+      />
 
       {/* Content */}
       <div className="p-5 space-y-4 bg-white">

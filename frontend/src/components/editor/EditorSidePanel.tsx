@@ -11,6 +11,7 @@ import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequirementsWidget';
 import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
 import { PDDWorkspaceWidget } from '@/components/widgets/PDDWorkspaceWidget';
+import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
@@ -24,6 +25,7 @@ export const EDITOR_WIDGET_TYPES = [
   'template_requirements',
   'template_viewer',
   'pdd_workspace',
+  'document_viewer',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -39,6 +41,7 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   template_requirements: 'template',
   template_viewer: 'template',
   pdd_workspace: 'pdd',
+  document_viewer: 'document_viewer',
 };
 
 export interface EditorWidget {
@@ -65,6 +68,7 @@ const WIDGET_LABELS: Record<string, string> = {
   template_requirements: 'Template',
   template_viewer: 'Template Output',
   pdd_workspace: 'Project Design Document',
+  document_viewer: 'Document',
 };
 
 export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelProps) {
@@ -144,6 +148,8 @@ function EditorWidgetRenderer({
       return <TemplateViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'pdd_workspace':
       return <PDDWorkspaceWidget data={data} initiativeId={initiativeId} isActive />;
+    case 'document_viewer':
+      return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
     default:
       return null;
   }

@@ -2,6 +2,8 @@
 
 import { MemoViewerWidget } from './MemoViewerWidget';
 import { ChecklistViewerWidget } from './ChecklistViewerWidget';
+import { FileText } from 'lucide-react';
+import { PanelHeader } from '@/components/ui';
 
 interface DeliverableItem {
   tool_id: string;
@@ -53,9 +55,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           // Generic document viewer fallback
           return (
             <div key={idx} className="card-elevated overflow-hidden">
-              <div className="px-5 py-4 bg-surface-header border-b border-divider">
-                <h3 className="text-sm font-semibold text-text-primary">{deliverable.tool_name}</h3>
-              </div>
+              <PanelHeader icon={FileText} title={deliverable.tool_name} />
               <div className="p-5 bg-white">
                 <pre className="text-sm text-text-secondary whitespace-pre-wrap">
                   {JSON.stringify(deliverable.content, null, 2)}

@@ -215,16 +215,9 @@ export function ProjectFilesView({
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
-                            {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
-                          </span>
-                          {mat.source === 'evidence' && (
-                            <span className="text-[10px] font-medium text-indigo-500 bg-indigo-50 rounded px-1.5 py-0.5">
-                              Evidence
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-[10px] font-medium text-text-tertiary uppercase bg-black/[0.04] rounded px-1.5 py-0.5">
+                          {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
+                        </span>
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary">
                         {formatFileSize(mat.file_size)}
