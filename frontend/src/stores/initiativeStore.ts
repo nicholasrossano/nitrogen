@@ -16,7 +16,7 @@ interface InitiativeState {
   evidenceDocs: EvidenceDoc[];
   projectMaterials: ProjectMaterial[];
   projectPlan: ProjectPlan | null;
-  compliancePrecheck: CompliancePrecheck | null;
+  compliancePrechecks: Record<string, CompliancePrecheck>;
   
   // UI State
   loading: boolean;
@@ -67,10 +67,10 @@ interface InitiativeState {
   updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
-  loadCompliancePrecheck: (id: string) => Promise<void>;
-  routeFramework: (id: string) => Promise<FrameworkRoutingResult>;
-  runCompliancePrecheck: (id: string, frameworkId: string, confirmedFacts: ScopeFact[]) => Promise<void>;
-  rerunCompliancePrecheck: (id: string, updatedFacts: ScopeFact[]) => Promise<void>;
+  loadCompliancePrechecks: (id: string) => Promise<void>;
+  routeFramework: (id: string, frameworkId: string) => Promise<FrameworkRoutingResult>;
+  runCompliancePrecheck: (id: string, frameworkId: string, confirmedFacts: ScopeFact[], force?: boolean) => Promise<void>;
+  rerunCompliancePrecheck: (id: string, frameworkId: string, updatedFacts: ScopeFact[]) => Promise<void>;
   reset: () => void;
 }
 
@@ -84,7 +84,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   evidenceDocs: [],
   projectMaterials: [],
   projectPlan: null,
-  compliancePrecheck: null,
+  compliancePrechecks: {},
   loading: false,
   sending: false,
   generating: false,
@@ -269,8 +269,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
             set({ projectPlan: initiative.project_plan });
           }
 
-          if (initiative.compliance_precheck) {
-            set({ compliancePrecheck: initiative.compliance_precheck });
+          if (initiative.compliance_prechecks) {
+            set({ compliancePrechecks: initiative.compliance_prechecks });
           }
 
           // Reload chat history to get any additional messages the backend added
@@ -791,41 +791,47 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  loadCompliancePrecheck: async (id: string) => {
+  loadCompliancePrechecks: async (id: string) => {
     try {
-      const response = await api.getCompliancePrecheck(id);
-      set({ compliancePrecheck: response.compliance_precheck });
+      const response = await api.getAllCompliancePrechecks(id);
+      set({ compliancePrechecks: response.compliance_prechecks || {} });
     } catch (error) {
-      console.error('Failed to load compliance precheck:', error);
+      console.error('Failed to load compliance prechecks:', error);
     }
   },
 
-  routeFramework: async (id: string) => {
+  routeFramework: async (id: string, frameworkId: string) => {
     set({ compliancePrecheckLoading: true });
     try {
-      const result = await api.routeFramework(id);
+      const result = await api.routeFramework(id, frameworkId);
       return result;
     } finally {
       set({ compliancePrecheckLoading: false });
     }
   },
 
-  runCompliancePrecheck: async (id: string, frameworkId: string, confirmedFacts: ScopeFact[]) => {
+  runCompliancePrecheck: async (id: string, frameworkId: string, confirmedFacts: ScopeFact[], force = false) => {
     set({ compliancePrecheckLoading: true });
     try {
-      const response = await api.runCompliancePrecheck(id, frameworkId, confirmedFacts);
-      set({ compliancePrecheck: response.compliance_precheck, compliancePrecheckLoading: false });
+      const response = await api.runCompliancePrecheck(id, frameworkId, confirmedFacts, force);
+      set(state => ({
+        compliancePrechecks: { ...state.compliancePrechecks, [frameworkId]: response.compliance_precheck },
+        compliancePrecheckLoading: false,
+      }));
     } catch (error) {
       set({ compliancePrecheckLoading: false });
       throw error;
     }
   },
 
-  rerunCompliancePrecheck: async (id: string, updatedFacts: ScopeFact[]) => {
+  rerunCompliancePrecheck: async (id: string, frameworkId: string, updatedFacts: ScopeFact[]) => {
     set({ compliancePrecheckLoading: true });
     try {
-      const response = await api.rerunCompliancePrecheck(id, updatedFacts);
-      set({ compliancePrecheck: response.compliance_precheck, compliancePrecheckLoading: false });
+      const response = await api.rerunCompliancePrecheck(id, frameworkId, updatedFacts);
+      set(state => ({
+        compliancePrechecks: { ...state.compliancePrechecks, [frameworkId]: response.compliance_precheck },
+        compliancePrecheckLoading: false,
+      }));
     } catch (error) {
       set({ compliancePrecheckLoading: false });
       throw error;
@@ -843,7 +849,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       evidenceDocs: [],
       projectMaterials: [],
       projectPlan: null,
-      compliancePrecheck: null,
+      compliancePrechecks: {},
       loading: false,
       sending: false,
       generating: false,

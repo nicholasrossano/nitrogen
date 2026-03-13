@@ -32,8 +32,8 @@ const HOME_ITEMS: NavItemConfig[] = [
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'home', label: 'Projects', Icon: LayoutGrid },
   { key: 'plan', label: 'Plan', Icon: Map },
-  { key: 'chat', label: 'Generate', Icon: Zap },
   { key: 'evaluate', label: 'Evaluate', Icon: FlaskConical },
+  { key: 'chat', label: 'Generate', Icon: Zap },
 ];
 
 export function SideDrawer({

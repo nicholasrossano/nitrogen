@@ -23,10 +23,12 @@ from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project_material import ProjectMaterial
 from app.services.compliance_frameworks import (
     FRAMEWORK_FAMILIES,
+    FRAMEWORK_SCOPE_FACTS,
     ROUTING_SIGNALS,
     SCOPE_FACTS,
     FAMILY_LABELS,
     get_requirements_for_framework,
+    get_scope_facts_for_framework,
 )
 from app.services.rag import RAGService
 
@@ -44,7 +46,7 @@ ROUTE_FRAMEWORK_SCHEMA = {
         "description": "Recommend the most relevant compliance framework for this project.",
         "parameters": {
             "type": "object",
-            "required": ["framework_id", "rationale", "signals", "not_activated", "scope_facts"],
+            "required": ["framework_id", "rationale", "signals", "possibly_relevant", "not_activated", "scope_facts"],
             "properties": {
                 "framework_id": {
                     "type": "string",
@@ -60,6 +62,24 @@ ROUTE_FRAMEWORK_SCHEMA = {
                     "items": {"type": "string"},
                     "description": "Project signals that drove this recommendation (e.g. 'geography: Ghana', 'financing: DFI').",
                 },
+                "possibly_relevant": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["id", "reason"],
+                    },
+                    "description": (
+                        "Frameworks that are contextually plausible but whose activation depends on project intent "
+                        "not yet confirmed. For example, solar or renewable energy projects often pursue carbon credits "
+                        "even when not explicitly stated — Verra VCS and Gold Standard would be possibly_relevant here. "
+                        "Include frameworks where relevance is plausible but uncertain, NOT frameworks that are "
+                        "foundationally inapplicable (those go in not_activated)."
+                    ),
+                },
                 "not_activated": {
                     "type": "array",
                     "items": {
@@ -70,7 +90,11 @@ ROUTE_FRAMEWORK_SCHEMA = {
                         },
                         "required": ["id", "reason"],
                     },
-                    "description": "Frameworks that were considered but not recommended, with brief reasons.",
+                    "description": (
+                        "Frameworks that are foundationally NOT applicable to this project type — e.g. ASTM Phase I "
+                        "for a non-US project, carbon standards for a pure infrastructure project with no carbon intent, "
+                        "or World Bank ESF for a private-sector non-sovereign project. These are hidden by default."
+                    ),
                 },
                 "scope_facts": {
                     "type": "array",
@@ -84,10 +108,22 @@ ROUTE_FRAMEWORK_SCHEMA = {
                                 "type": "string",
                                 "enum": ["auto", "needs_confirmation"],
                             },
+                            "source_quote": {
+                                "type": "string",
+                                "description": (
+                                    "If source is 'auto', provide the EXACT quote from project documents that supports "
+                                    "this value. Must be a verbatim passage, not a paraphrase. If you cannot provide "
+                                    "a verbatim quote, set source to 'needs_confirmation' instead."
+                                ),
+                            },
                         },
                         "required": ["id", "label", "value", "source"],
                     },
-                    "description": "Key facts about the project, auto-detected or flagged for user confirmation.",
+                    "description": (
+                        "Key facts about the project. Mark as 'auto' ONLY if you can point to a specific passage "
+                        "in the project documents that directly supports the value. If the value is inferred from "
+                        "general context or project type rather than documented evidence, mark as 'needs_confirmation'."
+                    ),
                 },
             },
         },
@@ -188,9 +224,11 @@ class CompliancePrecheckService:
 
     # ── Framework routing ────────────────────────────────────────────
 
-    async def route_framework(self, initiative) -> dict:
-        """Analyze the project workspace and recommend the most relevant framework.
+    async def route_framework(self, initiative, framework_id: str | None = None) -> dict:
+        """Analyze the project workspace and recommend/route a framework.
 
+        If framework_id is provided, returns scope facts for that specific framework.
+        Otherwise recommends the most relevant one.
         Returns a dict with: framework, scope_facts.
         """
         evidence_text = await self._gather_evidence_text(initiative.id)
@@ -210,12 +248,22 @@ class CompliancePrecheckService:
             f"- `{fid}`: {', '.join(sigs)}" for fid, sigs in ROUTING_SIGNALS.items()
         )
 
-        scope_facts_desc = "\n".join(
-            f"- `{f['id']}`: {f['label']} (relevant for: {', '.join(f['frameworks'])})"
-            for f in SCOPE_FACTS
-        )
+        # Use per-framework scope facts when routing for a specific framework
+        if framework_id and framework_id in FRAMEWORK_SCOPE_FACTS:
+            fw_facts = FRAMEWORK_SCOPE_FACTS[framework_id]
+            scope_facts_desc = "\n".join(
+                f"- `{f['id']}`: {f['label']} (type: {f.get('type', 'text')}"
+                + (f", options: {f['options']}" if 'options' in f else "")
+                + ")"
+                for f in fw_facts
+            )
+        else:
+            scope_facts_desc = "\n".join(
+                f"- `{f['id']}`: {f['label']} (relevant for: {', '.join(f['frameworks'])})"
+                for f in SCOPE_FACTS
+            )
 
-        system_prompt = f"""You are a compliance routing specialist. Given project details and workspace documents, recommend the single most relevant compliance framework.
+        system_prompt = f"""You are a compliance routing specialist. Given project details and workspace documents, recommend the single most relevant compliance framework and classify all others into two buckets.
 
 ## Supported Frameworks
 {frameworks_desc}
@@ -224,16 +272,41 @@ class CompliancePrecheckService:
 {signals_desc}
 
 ## Scope Facts to Evaluate
-For each of these facts, determine a value from the project context. Mark as "auto" if you can confidently infer the value, or "needs_confirmation" if the user should verify.
+For each of these facts, determine a value from the project context.
 {scope_facts_desc}
 
+### GROUNDING RULE (critical)
+- Mark a fact as "auto" ONLY if the project documents contain a specific passage that directly states or implies the value. You MUST provide the exact quote in source_quote.
+- If there are NO project documents, or the documents do not mention the fact, mark it as "needs_confirmation" — even if you can guess from the project type.
+- General inferences (e.g. "solar projects usually pursue carbon credits") are NOT grounds for "auto". That belongs in "needs_confirmation".
+- "(No documents uploaded yet.)" or "(No project materials uploaded.)" means there is NO evidence — mark ALL facts as "needs_confirmation".
+
+## THREE-BUCKET CLASSIFICATION (critical)
+
+You must classify every non-recommended framework into exactly one of two buckets:
+
+### possibly_relevant
+Frameworks that are CONTEXTUALLY PLAUSIBLE but depend on project intent not yet confirmed.
+Examples:
+- A solar/wind/renewable energy project → Verra VCS and Gold Standard are possibly_relevant (many pursue carbon credits even when not stated)
+- Any infrastructure project with construction → Equator Principles may be possibly_relevant if the financing source is ambiguous
+- A mixed-use development with habitat near the site → IFC PS6 / biodiversity requirements possibly relevant
+
+### not_activated
+Frameworks that are FOUNDATIONALLY INAPPLICABLE to this project type:
+- ASTM Phase I for any non-US project
+- Carbon standards (Verra VCS, Gold Standard) for a pure government or social service project with no plausible emission reductions
+- World Bank ESF for a private-sector project with no sovereign/government borrower
+
+The key distinction: possibly_relevant = "might matter once we know intent", not_activated = "would not apply regardless of intent."
+
 ## Rules
-- Recommend the SINGLE most relevant framework, not multiple.
+- Recommend the SINGLE most relevant framework.
 - Base the recommendation on concrete project signals (geography, financing, project type, document content).
-- Do not recommend carbon frameworks unless carbon credit intent is present.
-- Do not recommend ASTM unless a U.S. property transaction context is evident.
+- NEVER put a framework in not_activated just because the project didn't explicitly mention it.
 - For emerging-market infrastructure projects with DFI/bank financing, prefer IFC PS or World Bank ESF.
-- List frameworks that were NOT activated with brief reasons."""
+- reason in possibly_relevant should explain WHY it might be relevant (what would trigger it).
+- reason in not_activated should explain WHY it's foundationally inapplicable."""
 
         user_content = f"""PROJECT: {title}
 TYPE: {project_type}
@@ -265,6 +338,10 @@ PROJECT MATERIALS:
         framework_id = result["framework_id"]
         meta = FRAMEWORK_FAMILIES[framework_id]
 
+        # RAG-verify auto-detected scope facts
+        scope_facts = result.get("scope_facts", [])
+        scope_facts = await self._verify_scope_facts(initiative.id, scope_facts)
+
         return {
             "framework": {
                 "id": framework_id,
@@ -272,9 +349,10 @@ PROJECT MATERIALS:
                 "name": meta.name,
                 "rationale": result.get("rationale", ""),
                 "signals": result.get("signals", []),
+                "possibly_relevant": result.get("possibly_relevant", []),
                 "not_activated": result.get("not_activated", []),
             },
-            "scope_facts": result.get("scope_facts", []),
+            "scope_facts": scope_facts,
         }
 
     # ── Run pre-check ────────────────────────────────────────────────
@@ -288,7 +366,7 @@ PROJECT MATERIALS:
     ) -> dict:
         """Run the full compliance pre-check for a given framework.
 
-        Returns the complete precheck result dict ready to store in initiative.compliance_precheck.
+        Returns the complete precheck result dict stored in initiative.compliance_prechecks[framework_id].
         """
         if framework_id not in FRAMEWORK_FAMILIES:
             raise ValueError(f"Unsupported framework: {framework_id}")
@@ -389,9 +467,11 @@ PROJECT MATERIALS:
             "summary": summary,
         }
 
-        # Persist
-        initiative.compliance_precheck = precheck_result
-        flag_modified(initiative, "compliance_precheck")
+        # Persist into keyed dict
+        prechecks = dict(initiative.compliance_prechecks or {})
+        prechecks[framework_id] = precheck_result
+        initiative.compliance_prechecks = prechecks
+        flag_modified(initiative, "compliance_prechecks")
         initiative.touch()
         await self.db.commit()
 
@@ -402,6 +482,7 @@ PROJECT MATERIALS:
     async def rerun_precheck(
         self,
         initiative,
+        framework_id: str,
         updated_facts: list[dict],
         additional_answers: dict[str, str] | None = None,
         on_progress: ProgressCallback = None,
@@ -410,11 +491,11 @@ PROJECT MATERIALS:
 
         Bumps the version and includes delta information.
         """
-        existing = initiative.compliance_precheck
+        prechecks = initiative.compliance_prechecks or {}
+        existing = prechecks.get(framework_id)
         if not existing:
-            raise ValueError("No existing pre-check to rerun. Run the initial pre-check first.")
+            raise ValueError(f"No existing pre-check for {framework_id}. Run the initial pre-check first.")
 
-        framework_id = existing["framework"]["id"]
         prev_version = existing.get("version", 1)
 
         result = await self.run_precheck(
@@ -455,12 +536,72 @@ PROJECT MATERIALS:
 
         result["delta"] = delta
 
-        initiative.compliance_precheck = result
-        flag_modified(initiative, "compliance_precheck")
+        prechecks = dict(initiative.compliance_prechecks or {})
+        prechecks[framework_id] = result
+        initiative.compliance_prechecks = prechecks
+        flag_modified(initiative, "compliance_prechecks")
         initiative.touch()
         await self.db.commit()
 
         return result
+
+    # ── Scope fact verification ────────────────────────────────────────
+
+    async def _verify_scope_facts(
+        self, initiative_id: UUID, scope_facts: list[dict]
+    ) -> list[dict]:
+        """RAG-verify auto-detected scope facts against project evidence.
+
+        For each fact marked 'auto', query RAG to find supporting evidence.
+        If no evidence is found above the similarity threshold, downgrade
+        to 'needs_confirmation' and clear the value. Attach source citations
+        to grounded facts.
+        """
+        MIN_SIMILARITY = 0.35
+        verified: list[dict] = []
+
+        for fact in scope_facts:
+            if fact.get("source") != "auto" or not fact.get("value"):
+                fact["sources"] = []
+                verified.append(fact)
+                continue
+
+            query = f"{fact.get('label', '')} {fact.get('value', '')}"
+            try:
+                chunks = await self.rag.retrieve(
+                    query=query,
+                    initiative_id=initiative_id,
+                    sources=["evidence"],
+                    evidence_top_k=3,
+                    corpus_top_k=0,
+                )
+            except Exception:
+                logger.warning("RAG verification failed for scope fact %s", fact.get("id"))
+                chunks = []
+
+            matching = [
+                c for c in chunks
+                if c.similarity >= MIN_SIMILARITY
+            ]
+
+            if matching:
+                fact["sources"] = [
+                    {
+                        "source_title": c.source_title,
+                        "content": c.content[:400],
+                        "similarity": round(c.similarity, 3),
+                    }
+                    for c in matching[:3]
+                ]
+                verified.append(fact)
+            else:
+                fact["source"] = "needs_confirmation"
+                fact["value"] = ""
+                fact["sources"] = []
+                fact.pop("source_quote", None)
+                verified.append(fact)
+
+        return verified
 
     # ── Internal helpers ─────────────────────────────────────────────
 

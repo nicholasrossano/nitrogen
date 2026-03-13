@@ -18,3 +18,4 @@ export { ProposedValueWidget } from './ProposedValueWidget';
 export { GSCertificationWidget } from './GSCertificationWidget';
 export { CoverLetterEditor } from './CoverLetterEditor';
 export { CoverLetterProposedValueWidget } from './CoverLetterProposedValueWidget';
+export { PDDWorkspaceWidget } from './PDDWorkspaceWidget';
