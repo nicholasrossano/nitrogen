@@ -144,7 +144,7 @@ export function EvaluateView({ initiativeId }: EvaluateViewProps) {
       setError(err instanceof Error ? err.message : 'Framework routing failed. Please try again.');
       setStage('idle');
     }
-  }, [initiativeId, routeFramework, allFrameworks]);
+  }, [initiativeId, routeFramework, allFrameworks, compliancePrechecks]);
 
   const handleContinueToScope = useCallback(() => {
     setStage('scope');
