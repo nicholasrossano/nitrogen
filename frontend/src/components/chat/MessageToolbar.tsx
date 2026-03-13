@@ -22,7 +22,7 @@ function ToolbarIcon({ icon, label, onClick, active = false, disabled = false, s
       onClick={onClick}
       disabled={disabled}
       className={[
-        'p-0.5 rounded transition-colors',
+        'p-1 rounded transition-colors',
         active
           ? 'text-accent'
           : 'text-text-tertiary hover:text-text-primary',
@@ -57,21 +57,21 @@ export function UserMessageToolbar({ content, onEdit, hideEdit = false }: UserMe
   }, [content]);
 
   return (
-    <div className="flex items-center gap-0.5 relative">
+    <div className="flex items-center gap-1 relative">
       {copied && (
         <span className="absolute -top-6 right-0 text-xs text-text-secondary bg-surface-subtle border border-stroke-subtle rounded px-1.5 py-0.5 whitespace-nowrap pointer-events-none">
           Copied
         </span>
       )}
       <ToolbarIcon
-        icon={copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        icon={copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
         label="Copy message"
         onClick={handleCopy}
         active={copied}
       />
       {!hideEdit && (
         <ToolbarIcon
-          icon={<Pencil className="w-3 h-3" />}
+          icon={<Pencil className="w-3.5 h-3.5" />}
           label="Edit message"
           onClick={onEdit}
         />
@@ -159,14 +159,14 @@ export function AssistantMessageToolbar({
   }, [feedback, onFeedback]);
 
   return (
-    <div className="flex items-center gap-0.5 relative">
+    <div className="flex items-center gap-1 relative">
       {copied && (
         <span className="absolute -top-6 left-0 text-xs text-text-secondary bg-surface-subtle border border-stroke-subtle rounded px-1.5 py-0.5 whitespace-nowrap pointer-events-none">
           Copied
         </span>
       )}
       <ToolbarIcon
-        icon={copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        icon={copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
         label="Copy response"
         onClick={handleCopy}
         active={copied}
@@ -178,10 +178,10 @@ export function AssistantMessageToolbar({
           title={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
           aria-label={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
           onClick={handleLike}
-          className="p-0.5 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
         >
           <ThumbsUp
-            className="w-3 h-3"
+            className="w-3.5 h-3.5"
             {...(feedback === 'like' ? { style: { fill: 'currentColor', strokeWidth: 0 } } : {})}
           />
         </button>
@@ -193,10 +193,10 @@ export function AssistantMessageToolbar({
           title={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
           aria-label={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
           onClick={handleDislike}
-          className="p-0.5 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
         >
           <ThumbsDown
-            className="w-3 h-3"
+            className="w-3.5 h-3.5"
             {...(feedback === 'dislike' ? { style: { fill: 'currentColor', strokeWidth: 0 } } : {})}
           />
         </button>
@@ -204,7 +204,7 @@ export function AssistantMessageToolbar({
 
       {!hideRetry && (
         <ToolbarIcon
-          icon={<RefreshCw className="w-3 h-3" />}
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
           label={retrying ? 'Retrying…' : 'Retry'}
           onClick={onRetry}
           disabled={retrying}
@@ -228,13 +228,13 @@ export function AssistantMessageToolbar({
               }
             }}
             className={[
-              'flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded transition-colors text-[11px]',
+              'flex items-center gap-1 pl-1.5 pr-2 py-1 rounded transition-colors text-[11px]',
               sourcesOpen
                 ? 'text-accent bg-accent/[0.07]'
                 : 'text-text-tertiary hover:text-text-primary',
             ].join(' ')}
           >
-            <BookMarked className="w-3 h-3" />
+            <BookMarked className="w-3.5 h-3.5" />
             <span>Sources</span>
           </button>
 
