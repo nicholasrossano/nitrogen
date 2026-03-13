@@ -695,8 +695,8 @@ class PDDService:
                         f"Description: {section_meta.get('description', '')}\n"
                         f"Key topics: {', '.join(section_meta.get('key_topics', []))}\n\n"
                         f"Evidence:\n{evidence_context}\n"
-                        f"{'User-provided answers:\n' + answers_context if answers_context else ''}\n"
-                        f"Missing items flagged: {json.dumps(sec.get('missing_items', []))}\n\n"
+                        + (f"User-provided answers:\n{answers_context}\n" if answers_context else "")
+                        + f"Missing items flagged: {json.dumps(sec.get('missing_items', []))}\n\n"
                         "Draft this section now."
                     ),
                 },
