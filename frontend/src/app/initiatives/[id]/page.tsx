@@ -16,10 +16,6 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 
-const MIN_CHAT_WIDTH_PERCENT = 20;
-const MAX_CHAT_WIDTH_PERCENT = 40;
-const DEFAULT_CHAT_WIDTH_PERCENT = 30;
-
 const MIN_STANDALONE_CHAT_PERCENT = 30;
 const MAX_STANDALONE_CHAT_PERCENT = 70;
 const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
@@ -37,7 +33,6 @@ function InitiativePageContent() {
     await signOut();
     router.push('/');
   }, [signOut, router]);
-  const containerRef = useRef<HTMLDivElement>(null);
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
 
   const viewParam = searchParams.get('view');
@@ -48,8 +43,6 @@ function InitiativePageContent() {
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
   const [showChatLanding, setShowChatLanding] = useState(true);
-  const [chatWidthPercent, setChatWidthPercent] = useState(DEFAULT_CHAT_WIDTH_PERCENT);
-  const [isResizing, setIsResizing] = useState(false);
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -67,13 +60,6 @@ function InitiativePageContent() {
 
   // Plan view panel state
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
-  const [showChatPanel, setShowChatPanel] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('nitrogen-plan-chat-panel-open');
-      return stored === 'true';
-    }
-    return false;
-  });
   const [showInspector, setShowInspector] = useState(false);
   const [hasInspectorItem, setHasInspectorItem] = useState(false);
   // Standalone chat view panel state
@@ -182,34 +168,6 @@ function InitiativePageContent() {
     setChatEditorWidgets(widgets);
   }, []);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing || !containerRef.current) return;
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const newWidthPercent = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-    setChatWidthPercent(
-      Math.min(MAX_CHAT_WIDTH_PERCENT, Math.max(MIN_CHAT_WIDTH_PERCENT, newWidthPercent))
-    );
-  }, [isResizing]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, handleMouseMove, handleMouseUp]);
-
   const handleStandaloneMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizingStandalone || !standaloneContainerRef.current) return;
     const rect = standaloneContainerRef.current.getBoundingClientRect();
@@ -238,14 +196,6 @@ function InitiativePageContent() {
     };
   }, [isResizingStandalone, handleStandaloneMouseMove, handleStandaloneMouseUp]);
 
-  const handleToggleChatPanel = () => {
-    setShowChatPanel(prev => {
-      const next = !prev;
-      localStorage.setItem('nitrogen-plan-chat-panel-open', String(next));
-      return next;
-    });
-  };
-
   const handleInspectorChange = useCallback((open: boolean, hasItem: boolean) => {
     setShowInspector(open);
     if (hasItem) setHasInspectorItem(true);
@@ -263,11 +213,6 @@ function InitiativePageContent() {
 
   const handleTitleUpdate = (title: string) => {
     updateTitle(initiativeId, title);
-  };
-
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
   };
 
   const handlePlanReady = useCallback(() => setPlanViewReady(true), []);
@@ -318,11 +263,6 @@ function InitiativePageContent() {
           onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
           readOnly={isViewer}
           {...(activeView === 'plan' ? {
-            leftToggle: !isViewer && rightPanelOpen ? {
-              active: showChatPanel,
-              onClick: handleToggleChatPanel,
-              title: showChatPanel ? 'Hide chat panel' : 'Show chat panel',
-            } : undefined,
             rightToggle: rightPanel === 'project_plan' ? {
               active: showInspector,
               disabled: !hasInspectorItem,
@@ -442,7 +382,7 @@ function InitiativePageContent() {
                 />
               </main>
             ) : activeView === 'plan' ? (
-              <main ref={containerRef} className="h-full min-w-0 flex overflow-hidden relative">
+              <main className="h-full min-w-0 flex overflow-hidden relative">
                 {/* Plan-view overlay — covers chat panel + plan panel */}
                 {showPlanOverlay && (
                   <div
@@ -469,49 +409,15 @@ function InitiativePageContent() {
                 )}
 
                 {rightPanelOpen ? (
-                  <>
-                    {!isViewer && (
-                      <div
-                        className="flex-shrink-0 relative overflow-hidden"
-                        style={{
-                          width: showChatPanel ? `${chatWidthPercent}%` : 0,
-                          transition: isResizing ? 'none' : 'width 300ms ease-in-out',
-                        }}
-                      >
-                        <div className="absolute inset-0">
-                          <ChatPanel
-                            messages={messages}
-                            sending={sending}
-                            generating={generating}
-                            initiativeId={initiativeId}
-                            onSendMessage={handleSendMessage}
-                            hasProjectPlan={hasProjectPlan}
-                          />
-                        </div>
-
-                        {showChatPanel && (
-                          <div
-                            onMouseDown={handleResizeStart}
-                            className={`
-                              absolute top-0 right-0 w-1 h-full cursor-col-resize
-                              hover:bg-accent/30 transition-colors
-                              ${isResizing ? 'bg-accent/50' : 'bg-transparent'}
-                            `}
-                          />
-                        )}
-                      </div>
+                  <div className="flex-1 overflow-hidden">
+                    {showProjectPlan && (
+                      <ProjectPlanView
+                        initiativeId={initiativeId}
+                        showInspector={showInspector}
+                        onInspectorChange={handleInspectorChange}
+                      />
                     )}
-
-                    <div className="flex-1 overflow-hidden">
-                      {showProjectPlan && (
-                        <ProjectPlanView
-                          initiativeId={initiativeId}
-                          showInspector={showInspector}
-                          onInspectorChange={handleInspectorChange}
-                        />
-                      )}
-                    </div>
-                  </>
+                  </div>
                 ) : !isViewer ? (
                   <div className="flex-1 overflow-hidden h-full">
                     <ChatPanel
