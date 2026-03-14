@@ -56,6 +56,22 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
   const [chunks, setChunks] = useState<EvidenceChunkDetail[]>([]);
   const highlightRef = useRef<HTMLDivElement>(null);
 
+  // Pinch-to-zoom for plain-text fallback
+  const plainTextScrollRef = useRef<HTMLDivElement>(null);
+  const [textScale, setTextScale] = useState(1);
+
+  useEffect(() => {
+    const el = plainTextScrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setTextScale(prev => Math.min(3, Math.max(0.5, prev - e.deltaY * 0.01)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [chunks]);
+
   useEffect(() => {
     if (!evidenceDocId) return;
     let cancelled = false;
@@ -147,7 +163,7 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
   if (fileData) {
     return (
       <div className="h-full flex flex-col">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-divider flex-shrink-0">
+        <div className="flex items-center gap-2 px-4 py-3 min-h-[3rem] border-b border-divider flex-shrink-0">
           <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
           <h3 className="text-sm font-medium text-text-primary truncate">{filename}</h3>
         </div>
@@ -169,13 +185,13 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
   // Fallback: plain-text chunk rendering
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-divider flex-shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 min-h-[3rem] border-b border-divider flex-shrink-0">
         <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
         <h3 className="text-sm font-medium text-text-primary truncate">{filename}</h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="space-y-4">
+      <div ref={plainTextScrollRef} className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="space-y-4" style={{ zoom: textScale }}>
           {chunks.map((chunk) => {
             const isHighlighted = chunkId && chunk.id === chunkId;
             const paragraphs = chunk.content.split(/\n{2,}/);
