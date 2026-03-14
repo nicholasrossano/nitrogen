@@ -250,3 +250,23 @@ export function getIconByName(iconName: string | null | undefined): LucideIcon {
   if (!iconName) return FolderOpen;
   return iconMap[iconName] || FolderOpen;
 }
+
+/** Canonical icon names (excludes aliases) for the icon picker */
+export const ICON_NAMES: string[] = [
+  'FolderOpen', 'FileText', 'Briefcase', 'Rocket', 'Sparkles', 'Star', 'Target', 'Flag',
+  'Lightbulb', 'Leaf', 'Sprout', 'TreePine', 'Trees', 'Mountain', 'Waves', 'CloudRain',
+  'Sun', 'Droplet', 'Droplets', 'Wind', 'Flame', 'Zap', 'Battery', 'BatteryCharging',
+  'Plug', 'Plug2', 'Recycle', 'Globe', 'Map', 'MapPin', 'Compass', 'Navigation',
+  'Building', 'Building2', 'Home', 'Store', 'Warehouse', 'Factory', 'School',
+  'Heart', 'Stethoscope', 'Pill', 'Users', 'Handshake', 'HeartHandshake', 'Scale',
+  'DollarSign', 'Coins', 'Wallet', 'PiggyBank', 'Banknote', 'CreditCard', 'Receipt',
+  'TrendingUp', 'BarChart3', 'Calculator', 'CircleDollarSign', 'BadgeDollarSign',
+  'Truck', 'Ship', 'Plane', 'Bus', 'Train', 'Car', 'Bike', 'Footprints', 'Tractor',
+  'Wheat', 'Apple', 'Carrot', 'Milk', 'Beef', 'Fish', 'Utensils',
+  'Package', 'ShoppingCart', 'Gem', 'Shovel',
+  'Laptop', 'Monitor', 'Smartphone', 'Wifi', 'Radio', 'Antenna', 'Signal', 'Satellite',
+  'Database', 'Server', 'Cloud', 'Network', 'Lock', 'Shield', 'Eye',
+  'BookOpen', 'GraduationCap', 'Library', 'Palette', 'Paintbrush',
+  'Wrench', 'Hammer', 'Settings', 'Power', 'PowerOff',
+  'Award', 'Trophy', 'Medal', 'CheckCircle', 'CheckSquare', 'Info', 'AlertCircle', 'HelpCircle',
+];

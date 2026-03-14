@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { FileText, Clock, Trash2, RotateCcw, Users } from 'lucide-react';
-import { Initiative } from '@/lib/api';
-import { getIconByName } from '@/lib/icons';
+import { Initiative, api } from '@/lib/api';
+import { getIconByName, ICON_NAMES } from '@/lib/icons';
 
 const ROLE_LABEL: Record<string, string> = {
   editor: 'Editor',
@@ -59,12 +60,59 @@ function getOutputCount(project: Initiative): number {
 
 export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: ProjectCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const [currentIcon, setCurrentIcon] = useState(project.icon);
+  const iconBtnRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
   const title = project.title || 'New Project';
   const outputCount = getOutputCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
-  const IconComponent = getIconByName(project.icon);
+  const IconComponent = getIconByName(currentIcon);
   const isShared = !!project.shared_role;
   const canDelete = !isShared;
+
+  const handleIconClick = (e: React.MouseEvent) => {
+    if (isTrash) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (iconPickerOpen) {
+      setIconPickerOpen(false);
+      return;
+    }
+    const rect = iconBtnRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPickerPos({ top: rect.bottom + window.scrollY + 6, left: rect.left + window.scrollX });
+    }
+    setIconPickerOpen(true);
+  };
+
+  const handlePickIcon = useCallback(async (e: React.MouseEvent, name: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentIcon(name);
+    setIconPickerOpen(false);
+    try {
+      await api.updateInitiative(project.id, { icon: name });
+    } catch {
+      setCurrentIcon(project.icon);
+    }
+  }, [project.id, project.icon]);
+
+  useEffect(() => {
+    if (!iconPickerOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (
+        pickerRef.current && !pickerRef.current.contains(e.target as Node) &&
+        iconBtnRef.current && !iconBtnRef.current.contains(e.target as Node)
+      ) {
+        setIconPickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [iconPickerOpen]);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -145,8 +193,52 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
 
         {/* Icon and title */}
         <div className="flex items-center gap-3 mb-3 pr-6">
-          <div className={`w-10 h-10 rounded flex items-center justify-center flex-shrink-0 ${isTrash ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
-            <IconComponent className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
+          <div className="relative flex-shrink-0">
+            <button
+              ref={iconBtnRef}
+              type="button"
+              onClick={handleIconClick}
+              className={`w-10 h-10 rounded flex items-center justify-center transition-colors ${
+                isTrash
+                  ? 'bg-surface-subtle cursor-default'
+                  : 'bg-accent-wash hover:bg-accent/15 cursor-pointer'
+              }`}
+              title={isTrash ? undefined : 'Change icon'}
+            >
+              <IconComponent className={`w-5 h-5 ${isTrash ? 'text-text-tertiary' : 'text-accent'}`} />
+            </button>
+
+            {/* Icon picker — portalled to body so it escapes card stacking context */}
+            {iconPickerOpen && pickerPos && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={pickerRef}
+                style={{ position: 'absolute', top: pickerPos.top, left: pickerPos.left }}
+                className="z-[9999] bg-surface border border-stroke-subtle rounded-lg shadow-lg p-2 w-[224px]"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              >
+                <div className="grid grid-cols-7 gap-0.5 max-h-48 overflow-y-auto overflow-x-hidden">
+                  {ICON_NAMES.map((name) => {
+                    const Icon = getIconByName(name);
+                    const isActive = name === currentIcon;
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={(e) => handlePickIcon(e, name)}
+                        className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                          isActive
+                            ? 'bg-accent text-white'
+                            : 'text-text-secondary hover:bg-accent/10 hover:text-accent'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <h3 className={`font-semibold text-sm line-clamp-2 ${isTrash ? 'text-text-secondary' : 'text-text-primary'}`}>
