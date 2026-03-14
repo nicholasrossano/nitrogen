@@ -89,7 +89,7 @@ function RichHtmlContent({ html }: { html: string }) {
   );
 }
 
-function SnippetCard({
+export function SnippetCard({
   citation,
   onOpenFull,
 }: {
@@ -180,7 +180,7 @@ function SnippetCard({
       {onOpenFull && !loading && !error && (
         <button
           onClick={onOpenFull}
-          className="flex items-center gap-1 px-3 py-2 w-full text-xs text-text-tertiary enabled:hover:text-accent border-t border-stroke-subtle transition-colors"
+          className="flex items-center justify-end gap-1 px-3 py-2 w-full text-xs text-text-tertiary enabled:hover:text-accent border-t border-stroke-subtle transition-colors"
         >
           <span>View full document</span>
           <ChevronRight className="w-3 h-3" />
