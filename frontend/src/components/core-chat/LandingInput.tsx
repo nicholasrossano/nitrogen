@@ -13,6 +13,12 @@ interface LandingInputProps {
   sessions?: ChatSession[];
   onLoadSession?: (session: ChatSession) => void;
   onDeleteSession?: (id: string) => void;
+  /** Hide the tool tile grid (e.g. in compare mode) */
+  hideTiles?: boolean;
+  /** Custom content rendered above the input field (below the tiles area) */
+  headerContent?: React.ReactNode;
+  /** Override the default placeholder text */
+  placeholder?: string;
 }
 
 function relativeTime(ts: number): string {
@@ -27,7 +33,7 @@ function relativeTime(ts: number): string {
   return `${days}d ago`;
 }
 
-export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession }: LandingInputProps) {
+export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession, hideTiles, headerContent, placeholder = 'Ask anything' }: LandingInputProps) {
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -106,6 +112,8 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
   return (
     <div className="flex flex-col items-center h-full px-4">
       <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
+        {headerContent}
+        {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
           {ALL_TOOLS.map((tool) => {
             const isTemplate = tool.id === 'template_fill';
@@ -132,6 +140,7 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
             );
           })}
         </div>
+        )}
       </div>
 
       <div className="w-full max-w-2xl">
@@ -172,7 +181,7 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                 }}
                 onBlur={() => setFocused(false)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask anything"
+                placeholder={placeholder}
                 disabled={disabled}
                 rows={1}
                 className="w-full resize-none bg-transparent px-5 py-3.5 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"

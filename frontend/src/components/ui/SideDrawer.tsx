@@ -1,12 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { UploadToast, UploadItem } from './UploadToast';
 import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
-export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'evaluate';
+export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'evaluate';
 export type SideDrawerVariant = 'home' | 'project';
 
 interface NavItemConfig {
@@ -27,6 +27,7 @@ interface SideDrawerProps {
 
 const HOME_ITEMS: NavItemConfig[] = [
   { key: 'home', label: 'Projects', Icon: LayoutGrid },
+  { key: 'compare', label: 'Compare', Icon: Scale },
   { key: 'trash', label: 'Trash', Icon: Trash2 },
 ];
 

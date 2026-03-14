@@ -17,6 +17,9 @@ class CoreChatSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Compare mode: pair of initiative UUIDs (as strings), null for regular sessions
+    compare_initiative_ids: Mapped[list | None] = mapped_column(JSONB)
+
     messages: Mapped[list["CoreChatMessage"]] = relationship(
         back_populates="session", cascade="all, delete-orphan", order_by="CoreChatMessage.created_at"
     )

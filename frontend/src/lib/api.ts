@@ -86,6 +86,8 @@ export interface SourceCitation {
   evidence_doc_id?: string | null;
   /** Chunk position within the document */
   chunk_index?: number | null;
+  /** Compare mode: "A" or "B" to attribute to a specific project */
+  project_label?: string | null;
 }
 
 export interface ResearchStep {
@@ -342,6 +344,8 @@ export interface ScopeFactSource {
   source_title: string;
   content: string;
   similarity: number;
+  evidence_doc_id?: string | null;
+  chunk_id?: string | null;
 }
 
 export interface ScopeFact {
@@ -1117,6 +1121,7 @@ export const api = {
         created_at: string | null;
         updated_at: string | null;
         message_count: number;
+        compare_initiative_ids: string[] | null;
       }[];
     }>('/api/v1/chat/sessions'),
 
@@ -1187,6 +1192,7 @@ export const api = {
     modelInputsContext?: string | null,
     initiativeId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
+    compareInitiativeIds?: string[] | null,
   ) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -1204,6 +1210,7 @@ export const api = {
         tool_hint: toolHint ?? null,
         model_inputs_context: modelInputsContext ?? null,
         initiative_id: initiativeId ?? null,
+        compare_initiative_ids: compareInitiativeIds ?? null,
       }),
     });
 

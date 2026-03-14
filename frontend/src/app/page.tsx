@@ -86,6 +86,10 @@ function HomePageContent() {
   };
 
   const handleNavChange = (item: NavItem) => {
+    if (item === 'compare') {
+      router.push('/compare');
+      return;
+    }
     setActiveNav(item);
   };
 

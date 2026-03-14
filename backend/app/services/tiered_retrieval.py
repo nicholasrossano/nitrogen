@@ -57,6 +57,8 @@ class RetrievedFact:
     # Internal document linking for citation navigation
     evidence_doc_id: str | None = None
     chunk_index: int | None = None
+    # Compare mode: "A" or "B" to attribute facts to a specific project
+    project_label: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -69,18 +71,20 @@ class RetrievedFact:
             "publisher": self.publisher,
             "evidence_doc_id": self.evidence_doc_id,
             "chunk_index": self.chunk_index,
+            "project_label": self.project_label,
         }
     
     def to_citation_string(self) -> str:
-        """Format as inline citation with optional chunk index."""
+        """Format as inline citation with optional chunk index and project label."""
+        prefix = f"{self.project_label}-" if self.project_label else ""
         if self.source_type == SourceType.WEB:
-            return f"[Web: {self.source_title}]"
+            return f"[{prefix}Web: {self.source_title}]"
         elif self.source_type == SourceType.OPENALEX:
-            return f"[Scholarly: {self.source_title}]"
+            return f"[{prefix}Scholarly: {self.source_title}]"
         elif self.source_type == SourceType.LLM_ESTIMATE:
             return "[LLM Estimate - unverified]"
         else:
-            tag = f"[{self.source_type.value.title()}: {self.source_title}"
+            tag = f"[{prefix}{self.source_type.value.title()}: {self.source_title}"
             if self.chunk_index is not None:
                 tag += f", p{self.chunk_index}"
             tag += "]"
@@ -228,17 +232,21 @@ class TieredRetrievalService:
         self,
         query: str,
         initiative_id: UUID | None,
+        *,
+        corpus_top_k: int = 5,
+        evidence_top_k: int | None = None,
     ) -> list[RetrievedFact]:
         """Search corpus and evidence using existing RAG service."""
         try:
             search_id = initiative_id or UUID('00000000-0000-0000-0000-000000000000')
-            
+            ev_k = evidence_top_k if evidence_top_k is not None else (corpus_top_k if initiative_id else 0)
+
             chunks = await self.rag.retrieve(
                 query=query,
                 initiative_id=search_id,
                 sources=["corpus"] if not initiative_id else ["corpus", "evidence"],
-                corpus_top_k=5,
-                evidence_top_k=5 if initiative_id else 0,
+                corpus_top_k=corpus_top_k,
+                evidence_top_k=ev_k,
             )
             
             relevant_chunks = [c for c in chunks if c.similarity >= self.CORPUS_RELEVANCE_THRESHOLD]

@@ -3,7 +3,8 @@
 import { useState, useCallback } from 'react';
 import { CheckCircle2, HelpCircle, Loader2, FileText, X } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
-import type { ScopeFact, ScopeFactSource } from '@/lib/api';
+import { SnippetCard } from '@/components/core-chat/ResearchPanel';
+import type { ScopeFact } from '@/lib/api';
 
 // ── Field type config ────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ function SourcesPanel({ fact, onClose }: { fact: ScopeFact; onClose: () => void 
   const sources = fact.sources ?? [];
 
   return (
-    <div className="w-[340px] border-l border-divider h-full flex flex-col bg-white shrink-0">
+    <div className="w-[340px] border-l border-divider h-full flex flex-col bg-surface shrink-0">
       <PanelHeader
         icon={FileText}
         title="Sources"
@@ -124,30 +125,50 @@ function SourcesPanel({ fact, onClose }: { fact: ScopeFact; onClose: () => void 
           </button>
         }
       />
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        <div className="space-y-1">
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* Fact context */}
+        <div className="space-y-1 px-0.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Fact</p>
           <p className="text-xs text-text-primary font-medium">{fact.label}</p>
-          {fact.value && <p className="text-xs text-text-secondary">Value: {fact.value}</p>}
+          {fact.value && <p className="text-xs text-text-secondary">Detected value: <span className="font-medium text-text-primary">{fact.value}</span></p>}
         </div>
 
         {fact.source_quote && (
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">LLM Quote</p>
-            <blockquote className="text-[11px] text-text-secondary italic border-l-2 border-divider pl-2.5 leading-relaxed">
-              &ldquo;{fact.source_quote}&rdquo;
-            </blockquote>
-          </div>
+          <blockquote className="text-[11px] text-text-secondary italic border-l-2 border-accent/30 pl-2.5 leading-relaxed">
+            &ldquo;{fact.source_quote}&rdquo;
+          </blockquote>
         )}
 
+        {/* Evidence */}
         {sources.length > 0 ? (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
               Evidence ({sources.length})
             </p>
-            {sources.map((src, i) => (
-              <SourceCard key={i} source={src} />
-            ))}
+            {sources.map((src, i) =>
+              src.evidence_doc_id ? (
+                <SnippetCard
+                  key={i}
+                  citation={{
+                    evidence_doc_id: src.evidence_doc_id,
+                    chunk_id: src.chunk_id ?? null,
+                    source_title: src.source_title,
+                  }}
+                />
+              ) : (
+                <div key={i} className="border border-stroke-subtle rounded-lg px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="w-3 h-3 text-text-tertiary shrink-0" />
+                    <span className="text-[11px] font-medium text-text-primary truncate">{src.source_title}</span>
+                    <span className="text-[9px] text-text-tertiary ml-auto shrink-0">
+                      {Math.round(src.similarity * 100)}% match
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-4">{src.content}</p>
+                </div>
+              )
+            )}
           </div>
         ) : (
           <div className="text-xs text-text-tertiary py-4 text-center">
@@ -155,21 +176,6 @@ function SourcesPanel({ fact, onClose }: { fact: ScopeFact; onClose: () => void 
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function SourceCard({ source }: { source: ScopeFactSource }) {
-  return (
-    <div className="border border-stroke-subtle rounded-lg px-3 py-2.5 space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <FileText className="w-3 h-3 text-text-tertiary shrink-0" />
-        <span className="text-[11px] font-medium text-text-primary truncate">{source.source_title}</span>
-        <span className="text-[9px] text-text-tertiary ml-auto shrink-0">
-          {Math.round(source.similarity * 100)}% match
-        </span>
-      </div>
-      <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-4">{source.content}</p>
     </div>
   );
 }
