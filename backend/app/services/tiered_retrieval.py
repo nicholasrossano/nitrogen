@@ -130,7 +130,7 @@ class TieredRetrievalService:
     and ranked. LLM fallback is only added when no other source returned data.
     """
     
-    CORPUS_RELEVANCE_THRESHOLD = 0.7
+    CORPUS_RELEVANCE_THRESHOLD = 0.55
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -238,7 +238,7 @@ class TieredRetrievalService:
                 initiative_id=search_id,
                 sources=["corpus"] if not initiative_id else ["corpus", "evidence"],
                 corpus_top_k=5,
-                evidence_top_k=3 if initiative_id else 0,
+                evidence_top_k=5 if initiative_id else 0,
             )
             
             relevant_chunks = [c for c in chunks if c.similarity >= self.CORPUS_RELEVANCE_THRESHOLD]

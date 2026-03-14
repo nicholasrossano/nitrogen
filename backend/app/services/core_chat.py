@@ -357,8 +357,10 @@ Your areas of expertise include:
 RESPONSE RULES:
 - When evidence contains specific numbers, names, dates, or data — QUOTE THEM DIRECTLY. Do not paraphrase with vague language when the source has the concrete answer.
 - Ground your answers in the provided evidence whenever possible.
-- Cite sources inline using EXACTLY this format: [Source Type: Title]
-  Examples: [Evidence: project_report.pdf] [Scholarly: Cookstove adoption in Ghana] [Web: Gold Standard MRV requirements] [Corpus: Accra Clean Cooking Program]
+- CITE EVERY FACT from evidence inline using the EXACT tag shown at the start of each evidence block. Place citations immediately after each claim.
+  Format: [Source Type: Title, pN] where N is the chunk index (if present in the evidence tag).
+  Examples: [Evidence: project_report.pdf, p3] [Scholarly: Cookstove adoption in Ghana] [Web: Gold Standard MRV requirements]
+- A response with evidence but NO inline citations is UNACCEPTABLE. If you use evidence, you MUST cite it.
 - ONLY cite a source if you actually used it to inform your answer.
 - If no evidence was retrieved, answer from general knowledge and flag uncertainty explicitly.
 - Be explicit about uncertainty, assumptions, and jurisdictional variability.
@@ -372,13 +374,17 @@ EVIDENCE_BLOCK_TEMPLATE = """
 RETRIEVED EVIDENCE (use these to ground your response):
 {evidence}
 
-CITATION RULES (MANDATORY):
-1. Every claim, fact, or data point that comes from the evidence above MUST include an inline citation.
-2. Use the EXACT citation tag shown at the start of each evidence block (e.g. [Evidence: filename.pdf]).
-3. Place the citation IMMEDIATELY after the sentence or clause it supports.
-4. Do NOT group citations at the end of a paragraph — cite inline next to each claim.
-5. If multiple pieces of evidence support one claim, include all their citations.
-Example: "The project targets 50% thermal efficiency [Evidence: project_report.pdf]."
+CITATION RULES (MANDATORY — you will be penalized for missing citations):
+1. Every claim, fact, or data point from the evidence MUST have an inline citation.
+2. Copy the EXACT tag from the start of each block, including the ", pN" suffix if present.
+3. Place the citation IMMEDIATELY after the sentence or clause it supports — not at the end of a paragraph.
+4. If multiple blocks support one claim, cite all of them.
+
+GOOD example:
+  The project targets 50% thermal efficiency [Evidence: project_report.pdf, p3] and covers 12 districts [Evidence: project_report.pdf, p0].
+
+BAD example (missing citations):
+  The project targets high thermal efficiency and covers several districts.
 """
 
 # Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title] or [Evidence: file.pdf, p3]
@@ -477,18 +483,20 @@ class ComplianceChatService:
         forced_fn = self._HINT_TO_PLANNER_TOOL.get(tool_hint or "")
 
         corpus_task = asyncio.create_task(_corpus_search())
-        material_task = asyncio.create_task(_material_search())
         plan_task = asyncio.create_task(
             self._plan_tool_calls(user_message, history, model_inputs_context=model_inputs_context)
         )
-        corpus_facts, material_facts, tool_calls = await asyncio.gather(
-            corpus_task, material_task, plan_task
-        )
+        corpus_facts, tool_calls = await asyncio.gather(corpus_task, plan_task)
 
-        all_facts: list[RetrievedFact] = list(corpus_facts) + list(material_facts)
+        # Only fall back to keyword search when vector search found nothing for this initiative
+        all_facts: list[RetrievedFact] = list(corpus_facts)
+        if not corpus_facts and initiative_id:
+            material_facts = await _material_search()
+            all_facts.extend(material_facts)
+
         tiers_used: list[str] = []
 
-        doc_count = len(corpus_facts) + len(material_facts)
+        doc_count = len(all_facts)
         if doc_count:
             tiers_used.append("corpus")
             await _think(f"Found {doc_count} relevant sections in project documents")
@@ -1293,15 +1301,14 @@ class ComplianceChatService:
         facts: list[RetrievedFact],
     ) -> list[RetrievedFact]:
         """
-        Parse [Source Type: Title(, pN)?] citations from the generated response and
-        return only the RetrievedFact objects that were actually referenced.
+        Parse [Source Type: Title(, pN)?] citations from the generated response
+        and return ONLY the RetrievedFact objects that were actually cited inline.
 
-        Falls back to returning corpus/evidence facts (provided as passive
-        context even when not explicitly named) if no inline citations found.
+        The sources toolbar should mirror what's cited in the message — nothing more.
         """
         matches = _CITATION_RE.findall(content)
         if not matches:
-            return [f for f in facts if f.source_type in (SourceType.CORPUS, SourceType.EVIDENCE)]
+            return []
 
         cited: list[RetrievedFact] = []
         for _source_type, cited_title, chunk_idx_str in matches:
@@ -1328,9 +1335,5 @@ class ComplianceChatService:
 
             if best is not None and best not in cited:
                 cited.append(best)
-
-        for fact in facts:
-            if fact.source_type in (SourceType.CORPUS, SourceType.EVIDENCE) and fact not in cited:
-                cited.append(fact)
 
         return cited
