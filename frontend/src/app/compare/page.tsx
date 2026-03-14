@@ -502,12 +502,15 @@ function ProjectSlot({
               <span className="flex-1 truncate text-text-primary font-medium">
                 {selected.title || 'Untitled Project'}
               </span>
-              <button
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); onSelect(null); }}
-                className="shrink-0 p-0.5 rounded hover:bg-surface-subtle"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onSelect(null); } }}
+                className="shrink-0 p-0.5 rounded hover:bg-surface-subtle cursor-pointer"
               >
                 <X className="w-3 h-3 text-text-tertiary" />
-              </button>
+              </span>
             </>
           ) : (
             <>

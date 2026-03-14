@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { FileText, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
+import { ZoomableContainer } from '@/components/viewers/ZoomableContainer';
 
 const PdfViewer = dynamic(
   () => import('@/components/viewers/PdfViewer').then((m) => m.PdfViewer),
@@ -55,22 +56,6 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
   // Fallback plain-text state
   const [chunks, setChunks] = useState<EvidenceChunkDetail[]>([]);
   const highlightRef = useRef<HTMLDivElement>(null);
-
-  // Pinch-to-zoom for plain-text fallback
-  const plainTextScrollRef = useRef<HTMLDivElement>(null);
-  const [textScale, setTextScale] = useState(1);
-
-  useEffect(() => {
-    const el = plainTextScrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      setTextScale(prev => Math.min(3, Math.max(0.5, prev - e.deltaY * 0.01)));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [chunks]);
 
   useEffect(() => {
     if (!evidenceDocId) return;
@@ -190,8 +175,8 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
         <h3 className="text-sm font-medium text-text-primary truncate">{filename}</h3>
       </div>
 
-      <div ref={plainTextScrollRef} className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="space-y-4" style={{ zoom: textScale }}>
+      <ZoomableContainer className="flex-1 px-5 py-4">
+        <div className="space-y-4">
           {chunks.map((chunk) => {
             const isHighlighted = chunkId && chunk.id === chunkId;
             const paragraphs = chunk.content.split(/\n{2,}/);
@@ -217,7 +202,7 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
             );
           })}
         </div>
-      </div>
+      </ZoomableContainer>
     </div>
   );
 }
