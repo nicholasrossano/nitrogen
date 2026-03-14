@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface XlsxViewerProps {
@@ -28,6 +28,8 @@ export function XlsxViewer({ fileData }: XlsxViewerProps) {
   const [activeSheet, setActiveSheet] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +65,18 @@ export function XlsxViewer({ fileData }: XlsxViewerProps) {
       cancelled = true;
     };
   }, [fileData]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setScale(prev => Math.min(3, Math.max(0.5, prev - e.deltaY * 0.01)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const sheet = sheets[activeSheet];
 
@@ -105,8 +119,8 @@ export function XlsxViewer({ fileData }: XlsxViewerProps) {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
-        <table className="border-collapse text-xs leading-tight">
+      <div ref={scrollRef} className="flex-1 overflow-auto">
+        <table className="border-collapse text-xs leading-tight" style={{ zoom: scale }}>
           <thead className="sticky top-0 z-10">
             <tr>
               <th className="bg-[#f0ede8] border border-stroke-subtle px-2 py-1.5 text-text-tertiary font-normal w-10 text-center sticky left-0 z-20" />
