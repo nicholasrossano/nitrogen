@@ -477,8 +477,8 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                     onClick={() => setExpandedPillars(allPillarsExpanded ? new Set() : new Set(pillars.map((p) => p.id)))}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium text-text-tertiary hover:text-text-secondary transition-colors whitespace-nowrap"
                   >
-                    <ChevronsUpDown className="w-3 h-3" />
                     {allPillarsExpanded ? 'Collapse all' : 'Expand all'}
+                    <ChevronsUpDown className="w-3 h-3" />
                   </button>
                 </div>
 
