@@ -549,7 +549,7 @@ export const api = {
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
   
-  updateInitiative: (id: string, data: { title?: string }) =>
+  updateInitiative: (id: string, data: { title?: string; icon?: string }) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
