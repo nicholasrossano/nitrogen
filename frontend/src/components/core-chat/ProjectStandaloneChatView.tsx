@@ -72,6 +72,7 @@ export function ProjectStandaloneChatView({
   const storeMessages = useInitiativeStore((s) => s.messages);
   const storeAlignmentLoading = useInitiativeStore((s) => s.alignmentLoading);
   const storeGenerating = useInitiativeStore((s) => s.generating);
+  const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
   const documentFlowRef = useRef(false);
   const lastSyncedIdRef = useRef<string | null>(null);
@@ -266,7 +267,7 @@ export function ProjectStandaloneChatView({
             role: 'assistant',
             content: payload.content,
             sources: payload.sources ?? null,
-            thinking_lines: undefined,
+            thinking_lines: payload.thinking_lines,
             completion_meta: {
               latency_ms: payload.latency_ms,
               citation_count: payload.citation_count,
@@ -422,9 +423,9 @@ export function ProjectStandaloneChatView({
     async (file: File) => {
       const { accepted } = filterSupportedFiles([file]);
       if (accepted.length === 0) return;
-      await api.uploadMaterial(initiativeId, file);
+      await uploadMaterial(initiativeId, file);
     },
-    [initiativeId],
+    [initiativeId, uploadMaterial],
   );
 
   const handleSend = useCallback(

@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
-from app.models.evidence import EvidenceDoc, EvidenceChunk
+from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
@@ -19,7 +19,6 @@ from app.schemas.project_material import (
     ProjectFilesResponse,
 )
 from app.services.document_parser import DocumentParserService
-from app.services.embeddings import EmbeddingsService
 
 logger = logging.getLogger(__name__)
 
@@ -87,34 +86,6 @@ async def upload_material(
     )
     db.add(material)
 
-    # Also chunk + embed the text so it's searchable via vector similarity
-    if content_text and content_text.strip():
-        try:
-            parser_for_chunks = DocumentParserService()
-            embeddings_service = EmbeddingsService()
-
-            evidence_doc = EvidenceDoc(
-                initiative_id=initiative.id,
-                filename=file.filename or "Untitled",
-                file_type=file_type,
-                storage_path=storage_path,
-            )
-            db.add(evidence_doc)
-            await db.flush()
-
-            chunks = parser_for_chunks.chunk_text(content_text)
-            embeddings = await embeddings_service.embed_texts(chunks)
-            for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-                db.add(EvidenceChunk(
-                    evidence_doc_id=evidence_doc.id,
-                    chunk_index=i,
-                    content=chunk_text,
-                    embedding=embedding,
-                ))
-            initiative.evidence_ready = True
-        except Exception:
-            logger.warning("Could not embed material %s", file.filename, exc_info=True)
-
     initiative.touch()
     await db.commit()
     await db.refresh(material)
@@ -173,7 +144,7 @@ async def list_materials(
             id=e.id,
             filename=e.filename or "Untitled",
             file_type=e.file_type or "unknown",
-            file_size=None,
+            file_size=e.file_size,
             created_at=e.created_at,
             source="evidence",
         ))
@@ -232,22 +203,40 @@ async def list_project_files(
     """List all project files: uploaded materials + generated outputs."""
     initiative = await require_viewer(db, initiative_id, user)
 
-    # Uploaded materials
+    # Uploaded materials (project_materials + evidence_docs with files)
     mat_result = await db.execute(
         select(ProjectMaterial)
         .where(ProjectMaterial.initiative_id == initiative_id)
         .order_by(ProjectMaterial.created_at.desc())
     )
-    uploaded = [
-        ProjectMaterialResponse(
+    ev_result = await db.execute(
+        select(EvidenceDoc)
+        .where(
+            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.storage_path.isnot(None),
+        )
+        .order_by(EvidenceDoc.created_at.desc())
+    )
+    uploaded: list[ProjectMaterialResponse] = []
+    for m in mat_result.scalars().all():
+        uploaded.append(ProjectMaterialResponse(
             id=m.id,
             filename=m.filename,
             file_type=m.file_type,
             file_size=m.file_size,
             created_at=m.created_at,
-        )
-        for m in mat_result.scalars().all()
-    ]
+            source="material",
+        ))
+    for e in ev_result.scalars().all():
+        uploaded.append(ProjectMaterialResponse(
+            id=e.id,
+            filename=e.filename or "Untitled",
+            file_type=e.file_type or "unknown",
+            file_size=e.file_size,
+            created_at=e.created_at,
+            source="evidence",
+        ))
+    uploaded.sort(key=lambda r: r.created_at, reverse=True)
 
     # Generated outputs from initiative.deliverables
     generated: list[GeneratedFileResponse] = []

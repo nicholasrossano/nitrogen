@@ -28,6 +28,7 @@ from app.services.rag import RAGService, RetrievedChunk
 from app.services.openalex import OpenAlexService
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
+from app.models.evidence import EvidenceDoc
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class RetrievedFact:
         }
     
     def to_citation_string(self) -> str:
-        """Format as inline citation."""
+        """Format as inline citation with optional chunk index."""
         if self.source_type == SourceType.WEB:
             return f"[Web: {self.source_title}]"
         elif self.source_type == SourceType.OPENALEX:
@@ -79,7 +80,11 @@ class RetrievedFact:
         elif self.source_type == SourceType.LLM_ESTIMATE:
             return "[LLM Estimate - unverified]"
         else:
-            return f"[{self.source_type.value.title()}: {self.source_title}]"
+            tag = f"[{self.source_type.value.title()}: {self.source_title}"
+            if self.chunk_index is not None:
+                tag += f", p{self.chunk_index}"
+            tag += "]"
+            return tag
 
 
 StageCallback = Callable[[str, str, Optional[str]], Awaitable[None]]
@@ -249,11 +254,16 @@ class TieredRetrievalService:
                     chunk_id=str(chunk.chunk_id),
                     confidence=chunk.similarity,
                     evidence_doc_id=str(chunk.source_doc_id) if chunk.source_type == "evidence" else None,
+                    chunk_index=chunk.chunk_index,
                 )
                 for chunk in relevant_chunks
             ]
         except Exception as e:
             logger.error(f"Corpus search failed: {e}")
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
             return []
     
     async def search_project_materials(
@@ -306,6 +316,17 @@ class TieredRetrievalService:
 
             scored.sort(key=lambda x: x[0], reverse=True)
 
+            # Resolve the EvidenceDoc IDs for materials that have embedded chunks
+            storage_paths = [mat.storage_path for _, mat, _ in scored[:max_results] if mat.storage_path]
+            ev_doc_map: dict[str, UUID] = {}
+            if storage_paths:
+                ev_result = await self.db.execute(
+                    select(EvidenceDoc.storage_path, EvidenceDoc.id).where(
+                        EvidenceDoc.storage_path.in_(storage_paths)
+                    )
+                )
+                ev_doc_map = {row.storage_path: row.id for row in ev_result.fetchall()}
+
             return [
                 RetrievedFact(
                     content=snippet,
@@ -313,12 +334,16 @@ class TieredRetrievalService:
                     source_title=mat.filename,
                     chunk_id=None,
                     confidence=min(score, 0.95),
-                    evidence_doc_id=str(mat.id),
+                    evidence_doc_id=str(ev_doc_map[mat.storage_path]) if mat.storage_path and mat.storage_path in ev_doc_map else None,
                 )
                 for score, mat, snippet in scored[:max_results]
             ]
         except Exception as e:
             logger.error(f"Project material search failed: {e}", exc_info=True)
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
             return []
 
     async def search_openalex(self, query: str) -> list[RetrievedFact]:
