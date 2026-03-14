@@ -55,6 +55,7 @@ class ComplianceChatRequest(BaseModel):
     tool_hint: Optional[str] = None  # Optional tool ID the user explicitly selected
     model_inputs_context: Optional[str] = None  # Current LCOE/Carbon model inputs for context
     initiative_id: Optional[str] = None  # Inject project context when chatting from a project
+    compare_initiative_ids: Optional[list[str]] = None  # Exactly 2 initiative IDs for compare mode
 
 
 class TitleRequest(BaseModel):
@@ -107,6 +108,7 @@ async def list_core_chat_sessions(
             CoreChatSession.title,
             CoreChatSession.created_at,
             CoreChatSession.updated_at,
+            CoreChatSession.compare_initiative_ids,
             func.count(CoreChatMessage.id).label("message_count"),
         )
         .outerjoin(CoreChatMessage, CoreChatMessage.session_id == CoreChatSession.id)
@@ -125,6 +127,7 @@ async def list_core_chat_sessions(
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                 "message_count": r.message_count,
+                "compare_initiative_ids": r.compare_initiative_ids,
             }
             for r in rows
             if r.message_count > 0
@@ -252,116 +255,164 @@ async def compliance_chat_stream(
             history = [{"role": m.role, "content": m.content} for m in data.history]
             service = ComplianceChatService(db)
 
-            # Load project context when chatting from a project workspace
-            project_context: str | None = None
-            if data.initiative_id:
-                try:
-                    init_uuid = uuid.UUID(data.initiative_id)
-                    result = await db.execute(
-                        select(Initiative).where(
-                            Initiative.id == init_uuid,
-                            Initiative.user_id == user.uid,
+            # --- Compare mode ---
+            compare_contexts: list[dict] | None = None
+            if data.compare_initiative_ids and len(data.compare_initiative_ids) == 2:
+                compare_contexts = []
+                for cid in data.compare_initiative_ids:
+                    try:
+                        init_uuid = uuid.UUID(cid)
+                        result = await db.execute(
+                            select(Initiative).where(
+                                Initiative.id == init_uuid,
+                                Initiative.user_id == user.uid,
+                            )
+                        )
+                        initiative = result.scalar_one_or_none()
+                        if not initiative:
+                            raise ValueError(f"Initiative {cid} not found")
+                        compare_contexts.append({
+                            "initiative_id": cid,
+                            "project_context": _build_project_context(initiative),
+                            "title": initiative.title or "Untitled Project",
+                        })
+                    except (ValueError, Exception) as e:
+                        logger.warning(f"Failed to load compare initiative {cid}: {e}")
+                        compare_contexts = None
+                        break
+
+                if compare_contexts:
+                    # Persist compare_initiative_ids on the session
+                    if not session.compare_initiative_ids:
+                        session.compare_initiative_ids = data.compare_initiative_ids
+                        await db.flush()
+
+                    generation_task = asyncio.create_task(
+                        service.generate_response(
+                            user_message=data.content,
+                            history=history,
+                            on_thinking=on_thinking,
+                            on_research_step=on_research_step,
+                            compare_contexts=compare_contexts,
                         )
                     )
-                    initiative = result.scalar_one_or_none()
-                    if initiative:
-                        project_context = _build_project_context(initiative)
-                except (ValueError, Exception) as e:
-                    logger.warning(f"Failed to load initiative context: {e}")
+                else:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to load one or both projects for comparison.'})}\n\n"
+                    return
 
-            # Fast-path: PDD tool scans + generates outline in one shot
-            _tool_hint = data.tool_hint or ""
-            if _tool_hint == "pdd" and data.initiative_id:
-                from app.services.pdd_service import PDDService
-                from app.services.core_chat import ComplianceChatResponse
+            # --- Single project / normal mode ---
+            if not compare_contexts:
+                # Load project context when chatting from a project workspace
+                project_context: str | None = None
+                if data.initiative_id:
+                    try:
+                        init_uuid = uuid.UUID(data.initiative_id)
+                        result = await db.execute(
+                            select(Initiative).where(
+                                Initiative.id == init_uuid,
+                                Initiative.user_id == user.uid,
+                            )
+                        )
+                        initiative = result.scalar_one_or_none()
+                        if initiative:
+                            project_context = _build_project_context(initiative)
+                    except (ValueError, Exception) as e:
+                        logger.warning(f"Failed to load initiative context: {e}")
 
-                init_uuid = uuid.UUID(data.initiative_id)
+            if not compare_contexts:
+                # Fast-path: PDD tool scans + generates outline in one shot
+                _tool_hint = data.tool_hint or ""
+                if _tool_hint == "pdd" and data.initiative_id:
+                    from app.services.pdd_service import PDDService
+                    from app.services.core_chat import ComplianceChatResponse
 
-                async def _run_pdd_setup():
-                    pdd_svc = PDDService(db)
-                    if on_thinking:
-                        await on_thinking("Scanning project materials...")
-                    await pdd_svc.create_workspace(init_uuid)
-                    await pdd_svc.scan_project(init_uuid)
-                    if on_thinking:
-                        await on_thinking("Generating PDD outline...")
-                    outline = await pdd_svc.generate_outline(init_uuid)
-                    workspace_state = await pdd_svc.get_workspace(init_uuid)
+                    init_uuid = uuid.UUID(data.initiative_id)
 
-                    section_count = len(outline)
-                    text = (
-                        f"I've reviewed your project materials and generated a "
-                        f"**{section_count}-section** PDD outline.\n\n"
-                        "Review and edit the outline in the panel on the right — "
-                        "you can rename, reorder, add, or remove sections. "
-                        "When you're happy with it, click **Confirm Outline** to start drafting."
+                    async def _run_pdd_setup():
+                        pdd_svc = PDDService(db)
+                        if on_thinking:
+                            await on_thinking("Scanning project materials...")
+                        await pdd_svc.create_workspace(init_uuid)
+                        await pdd_svc.scan_project(init_uuid)
+                        if on_thinking:
+                            await on_thinking("Generating PDD outline...")
+                        outline = await pdd_svc.generate_outline(init_uuid)
+                        workspace_state = await pdd_svc.get_workspace(init_uuid)
+
+                        section_count = len(outline)
+                        text = (
+                            f"I've reviewed your project materials and generated a "
+                            f"**{section_count}-section** PDD outline.\n\n"
+                            "Review and edit the outline in the panel on the right — "
+                            "you can rename, reorder, add, or remove sections. "
+                            "When you're happy with it, click **Confirm Outline** to start drafting."
+                        )
+                        return ComplianceChatResponse(
+                            content=text,
+                            sources=[],
+                            tiers_used=["pdd_scan"],
+                            latency_ms=0,
+                            widget_type="pdd_workspace",
+                            widget_data=workspace_state,
+                        )
+
+                    generation_task = asyncio.create_task(_run_pdd_setup())
+                elif _tool_hint.startswith("template_fill:") and data.initiative_id:
+                    template_id_str = _tool_hint.split(":", 1)[1]
+                    from app.tools.template_tool import TemplateFillTool
+                    from app.services.core_chat import ComplianceChatResponse
+
+                    tmpl_tool = TemplateFillTool()
+                    init_uuid = uuid.UUID(data.initiative_id)
+
+                    async def _run_template():
+                        wt, wd = await tmpl_tool.execute_from_template(
+                            db=db,
+                            initiative_id=init_uuid,
+                            template_id=uuid.UUID(template_id_str),
+                            on_progress=on_thinking,
+                        )
+                        summary = wd.get("summary", {})
+                        supported = summary.get("supported", 0)
+                        total = summary.get("total", 0)
+                        missing = summary.get("missing", 0)
+                        form_summary = wd.get("form_summary", "")
+                        text = (
+                            f"I've analyzed your template **{wd.get('filename', 'document')}** "
+                            f"and identified **{total}** requirements.\n\n"
+                        )
+                        if form_summary:
+                            text += f"{form_summary}\n\n"
+                        text += (
+                            f"- **{supported}** are already supported by your project materials\n"
+                            f"- **{missing}** are missing and need your input\n\n"
+                            "Review the requirements panel on the right. You can confirm "
+                            "values, provide missing information directly, or click any "
+                            "requirement to investigate it."
+                        )
+                        return ComplianceChatResponse(
+                            content=text,
+                            sources=[],
+                            tiers_used=["template_analysis"],
+                            latency_ms=0,
+                            widget_type=wt,
+                            widget_data=wd,
+                        )
+
+                    generation_task = asyncio.create_task(_run_template())
+                else:
+                    generation_task = asyncio.create_task(
+                        service.generate_response(
+                            user_message=data.content,
+                            history=history,
+                            on_thinking=on_thinking,
+                            tool_hint=data.tool_hint or None,
+                            model_inputs_context=data.model_inputs_context or None,
+                            project_context=project_context,
+                            on_research_step=on_research_step,
+                            initiative_id=data.initiative_id or None,
+                        )
                     )
-                    return ComplianceChatResponse(
-                        content=text,
-                        sources=[],
-                        tiers_used=["pdd_scan"],
-                        latency_ms=0,
-                        widget_type="pdd_workspace",
-                        widget_data=workspace_state,
-                    )
-
-                generation_task = asyncio.create_task(_run_pdd_setup())
-            elif _tool_hint.startswith("template_fill:") and data.initiative_id:
-                template_id_str = _tool_hint.split(":", 1)[1]
-                from app.tools.template_tool import TemplateFillTool
-                from app.services.core_chat import ComplianceChatResponse
-
-                tmpl_tool = TemplateFillTool()
-                init_uuid = uuid.UUID(data.initiative_id)
-
-                async def _run_template():
-                    wt, wd = await tmpl_tool.execute_from_template(
-                        db=db,
-                        initiative_id=init_uuid,
-                        template_id=uuid.UUID(template_id_str),
-                        on_progress=on_thinking,
-                    )
-                    summary = wd.get("summary", {})
-                    supported = summary.get("supported", 0)
-                    total = summary.get("total", 0)
-                    missing = summary.get("missing", 0)
-                    form_summary = wd.get("form_summary", "")
-                    text = (
-                        f"I've analyzed your template **{wd.get('filename', 'document')}** "
-                        f"and identified **{total}** requirements.\n\n"
-                    )
-                    if form_summary:
-                        text += f"{form_summary}\n\n"
-                    text += (
-                        f"- **{supported}** are already supported by your project materials\n"
-                        f"- **{missing}** are missing and need your input\n\n"
-                        "Review the requirements panel on the right. You can confirm "
-                        "values, provide missing information directly, or click any "
-                        "requirement to investigate it."
-                    )
-                    return ComplianceChatResponse(
-                        content=text,
-                        sources=[],
-                        tiers_used=["template_analysis"],
-                        latency_ms=0,
-                        widget_type=wt,
-                        widget_data=wd,
-                    )
-
-                generation_task = asyncio.create_task(_run_template())
-            else:
-                generation_task = asyncio.create_task(
-                    service.generate_response(
-                        user_message=data.content,
-                        history=history,
-                        on_thinking=on_thinking,
-                        tool_hint=data.tool_hint or None,
-                        model_inputs_context=data.model_inputs_context or None,
-                        project_context=project_context,
-                        on_research_step=on_research_step,
-                        initiative_id=data.initiative_id or None,
-                    )
-                )
 
             while not generation_task.done():
                 try:

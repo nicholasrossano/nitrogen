@@ -387,8 +387,53 @@ BAD example (missing citations):
   The project targets high thermal efficiency and covers several districts.
 """
 
-# Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title] or [Evidence: file.pdf, p3]
-_CITATION_RE = re.compile(r'\[([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]')
+COMPARE_SYSTEM_PROMPT = """You are an expert comparative analyst for environmental programs, development projects, and sustainability initiatives. You help decision-makers evaluate two projects side by side through grounded, document-based analysis.
+
+You are comparing two projects:
+- **{title_a}** (labelled "A" in evidence blocks)
+- **{title_b}** (labelled "B" in evidence blocks)
+
+RESPONSE RULES:
+- ALWAYS refer to projects by their actual names ("{title_a}" and "{title_b}"), NEVER as "Project A" or "Project B".
+- Answer comparatively, addressing BOTH projects explicitly unless the question is clearly about only one.
+- When evidence contains specific numbers, names, dates, or data — QUOTE THEM DIRECTLY.
+- Ground your answers in the provided evidence whenever possible.
+- CITE EVERY FACT inline using the EXACT tag shown at the start of each evidence block, including the project prefix.
+  Format: [A-Source Type: Title, pN] or [B-Source Type: Title, pN]
+  Examples: [A-Evidence: project_report.pdf, p3] [B-Evidence: budget_plan.docx, p1] [A-Scholarly: Solar adoption in Kenya]
+- A response with evidence but NO inline citations is UNACCEPTABLE.
+- ONLY cite a source if you actually used it.
+- Structure answers with clear headings that make the comparison easy to scan.
+- When ranking or recommending, ALWAYS explain the basis and show the evidence trail.
+- Be explicit about uncertainty, assumptions, and where one project has gaps the other doesn't.
+- For calculations and formulas, use plain text arithmetic. Do NOT use LaTeX commands."""
+
+COMPARE_EVIDENCE_BLOCK_TEMPLATE = """
+
+RETRIEVED EVIDENCE — PROJECT A ({title_a}):
+{evidence_a}
+
+RETRIEVED EVIDENCE — PROJECT B ({title_b}):
+{evidence_b}
+
+{shared_evidence_block}
+
+CITATION RULES (MANDATORY — you will be penalized for missing citations):
+1. Every claim from evidence MUST have an inline citation with the project prefix.
+2. Copy the EXACT tag from the start of each block, including the "A-" or "B-" prefix and ", pN" suffix if present.
+3. Place the citation IMMEDIATELY after the sentence or clause it supports.
+4. If multiple blocks support one claim, cite all of them.
+
+GOOD example:
+  Project A targets 50% thermal efficiency [A-Evidence: project_report.pdf, p3] while Project B aims for 40% [B-Evidence: design_doc.pdf, p1].
+
+BAD example (missing citations or prefixes):
+  Both projects target high thermal efficiency.
+"""
+
+# Pattern to extract inline citations the LLM produces.
+# Supports optional project prefix for compare mode: [A-Evidence: file.pdf, p3]
+_CITATION_RE = re.compile(r'\[(?:([AB])-)?([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]')
 
 
 # ---------------------------------------------------------------------------
@@ -442,8 +487,16 @@ class ComplianceChatService:
         model_inputs_context: str | None = None,
         on_research_step: ResearchStepCallback | None = None,
         initiative_id: str | None = None,
+        compare_contexts: list[dict] | None = None,
     ) -> ComplianceChatResponse:
         start = time.time()
+
+        if compare_contexts:
+            return await self._generate_compare_response(
+                user_message, history, compare_contexts,
+                on_thinking=on_thinking, on_research_step=on_research_step,
+                start_time=start,
+            )
 
         async def _think(text: str) -> None:
             if on_thinking:
@@ -776,6 +829,221 @@ class ComplianceChatService:
             widget_type=widget_type,
             widget_data=widget_data,
         )
+
+    # -----------------------------------------------------------------------
+    # Compare mode
+    # -----------------------------------------------------------------------
+
+    async def _generate_compare_response(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        compare_contexts: list[dict],
+        *,
+        on_thinking: ThinkingCallback | None = None,
+        on_research_step: ResearchStepCallback | None = None,
+        start_time: float,
+    ) -> ComplianceChatResponse:
+        """Handle compare mode: dual-project retrieval + comparative answer generation."""
+        from uuid import UUID as _UUID
+
+        async def _think(text: str) -> None:
+            if on_thinking:
+                await on_thinking(text)
+
+        async def _step(step_id: str, label: str, status: str) -> None:
+            if on_research_step:
+                await on_research_step(step_id, label, status)
+
+        ctx_a = compare_contexts[0]
+        ctx_b = compare_contexts[1]
+        title_a = ctx_a.get("title") or "Project A"
+        title_b = ctx_b.get("title") or "Project B"
+
+        search_query = await self._build_search_query(user_message, history)
+
+        # Parallel retrieval across both projects
+        await _step("scan_a", f"Scanning {title_a} documents", "running")
+        await _step("scan_b", f"Scanning {title_b} documents", "running")
+
+        async def _search_project(ctx: dict, label: str) -> list[RetrievedFact]:
+            iid = _UUID(ctx["initiative_id"])
+            facts: list[RetrievedFact] = []
+            corpus_facts = await self.retrieval.search_corpus(
+                search_query, iid, corpus_top_k=12, evidence_top_k=12,
+            )
+            if not corpus_facts:
+                corpus_facts = await self.retrieval.search_project_materials(
+                    search_query, iid, max_results=10,
+                )
+            for f in corpus_facts:
+                f.project_label = label
+            facts.extend(corpus_facts)
+            return facts
+
+        facts_a, facts_b = await asyncio.gather(
+            _search_project(ctx_a, "A"),
+            _search_project(ctx_b, "B"),
+        )
+
+        count_a = len(facts_a)
+        count_b = len(facts_b)
+        await _step("scan_a", f"Found {count_a} sections from {title_a}", "done") if count_a else await _step("scan_a", f"No matching sections in {title_a}", "done")
+        await _step("scan_b", f"Found {count_b} sections from {title_b}", "done") if count_b else await _step("scan_b", f"No matching sections in {title_b}", "done")
+        await _think(f"Found {count_a} sections from {title_a}, {count_b} from {title_b}")
+
+        # Optional: planner can add scholarly/web search for external context
+        await _step("plan_tools", "Planning external research", "running")
+        tool_calls = await self._plan_tool_calls(user_message, history)
+
+        search_tasks = []
+        search_labels = []
+        for tc in tool_calls:
+            fn_name = tc.function.name
+            try:
+                args = json.loads(tc.function.arguments)
+            except Exception:
+                args = {}
+            tool_query = args.get("query", search_query)
+            if fn_name == "search_scholarly_literature":
+                search_tasks.append(self._run_compare_search(
+                    "scholarly", tool_query, _step, _think))
+                search_labels.append("openalex")
+            elif fn_name == "search_web_sources":
+                search_tasks.append(self._run_compare_search(
+                    "web", tool_query, _step, _think))
+                search_labels.append("web")
+
+        await _step("plan_tools", "Research plan ready", "done")
+
+        shared_facts: list[RetrievedFact] = []
+        tiers_used = ["corpus"]
+        if search_tasks:
+            results = await asyncio.gather(*search_tasks)
+            for label, facts_list in zip(search_labels, results):
+                if facts_list:
+                    shared_facts.extend(facts_list)
+                    tiers_used.append(label)
+
+        ranked_a = self._rank_facts(facts_a)[:8]
+        ranked_b = self._rank_facts(facts_b)[:8]
+        ranked_shared = self._rank_facts(shared_facts)[:4]
+        all_facts = ranked_a + ranked_b + ranked_shared
+
+        source_count = len([f for f in all_facts if f.source_type != SourceType.LLM_ESTIMATE])
+
+        await _step("compare", "Drafting comparison", "running")
+        await _think(f"Comparing {source_count} sources across both projects...")
+
+        content = await self._generate_compare_answer(
+            user_message, history, ranked_a, ranked_b, ranked_shared,
+            title_a=title_a, title_b=title_b,
+            context_a=ctx_a.get("project_context", ""),
+            context_b=ctx_b.get("project_context", ""),
+        )
+
+        await _step("compare", "Comparison complete", "done")
+
+        cited_sources = self._extract_cited_sources(content, all_facts)
+        elapsed_ms = int((time.time() - start_time) * 1000)
+
+        return ComplianceChatResponse(
+            content=content,
+            sources=cited_sources,
+            tiers_used=tiers_used,
+            latency_ms=elapsed_ms,
+        )
+
+    async def _run_compare_search(
+        self,
+        search_type: str,
+        query: str,
+        _step: ResearchStepCallback,
+        _think: ThinkingCallback,
+    ) -> list[RetrievedFact]:
+        if search_type == "scholarly":
+            await _step("search_scholarly", "Searching scholarly databases", "running")
+            await _think(f'Searching scholarly databases: "{query}"...')
+            facts = await self.retrieval.search_openalex(query)
+            label = f"Found {len(facts)} scholarly works" if facts else "No scholarly works found"
+            await _step("search_scholarly", label, "done")
+        else:
+            await _step("search_web", "Searching web sources", "running")
+            await _think("Searching web sources...")
+            facts = await self.retrieval.search_web(query)
+            label = f"Found {len(facts)} web sources" if facts else "No web sources found"
+            await _step("search_web", label, "done")
+        return facts
+
+    async def _generate_compare_answer(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        facts_a: list[RetrievedFact],
+        facts_b: list[RetrievedFact],
+        shared_facts: list[RetrievedFact],
+        *,
+        title_a: str,
+        title_b: str,
+        context_a: str,
+        context_b: str,
+    ) -> str:
+        """Generate a comparative answer using evidence from both projects."""
+
+        def _format_evidence(facts: list[RetrievedFact]) -> str:
+            if not facts:
+                return "No relevant document sections found."
+            lines = []
+            for f in facts:
+                citation = f.to_citation_string()
+                snippet = f.content[:800]
+                lines.append(f"{citation}\n{snippet}")
+            return "\n\n".join(lines)
+
+        evidence_a = _format_evidence(facts_a)
+        evidence_b = _format_evidence(facts_b)
+
+        shared_evidence_block = ""
+        if shared_facts:
+            shared_evidence_block = (
+                "SHARED / EXTERNAL EVIDENCE:\n"
+                + _format_evidence(shared_facts)
+            )
+
+        evidence_block = COMPARE_EVIDENCE_BLOCK_TEMPLATE.format(
+            title_a=title_a,
+            title_b=title_b,
+            evidence_a=evidence_a,
+            evidence_b=evidence_b,
+            shared_evidence_block=shared_evidence_block,
+        )
+
+        context_prefix = ""
+        if context_a or context_b:
+            context_prefix = "## Project Details\n\n"
+            if context_a:
+                context_prefix += f"### {title_a} (A)\n{context_a}\n\n"
+            if context_b:
+                context_prefix += f"### {title_b} (B)\n{context_b}\n\n"
+
+        system_prompt = COMPARE_SYSTEM_PROMPT.format(
+            title_a=title_a, title_b=title_b,
+        )
+
+        messages: list[dict] = [
+            {"role": "system", "content": context_prefix + system_prompt + evidence_block},
+        ]
+        for msg in (history[-10:] if len(history) > 10 else history):
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+
+        resp = await self.client.chat.completions.create(
+            model=settings.openai_generation_model,
+            messages=messages,
+            temperature=0.4,
+            max_tokens=3200,
+        )
+        return resp.choices[0].message.content or ""
 
     # -----------------------------------------------------------------------
     # Internal helpers
@@ -1301,23 +1569,25 @@ class ComplianceChatService:
         facts: list[RetrievedFact],
     ) -> list[RetrievedFact]:
         """
-        Parse [Source Type: Title(, pN)?] citations from the generated response
-        and return ONLY the RetrievedFact objects that were actually cited inline.
-
-        The sources toolbar should mirror what's cited in the message — nothing more.
+        Parse [Source Type: Title(, pN)?] or [A-Source Type: Title(, pN)?] citations
+        from the generated response and return ONLY the RetrievedFact objects that
+        were actually cited inline.
         """
         matches = _CITATION_RE.findall(content)
         if not matches:
             return []
 
         cited: list[RetrievedFact] = []
-        for _source_type, cited_title, chunk_idx_str in matches:
+        for project_label, _source_type, cited_title, chunk_idx_str in matches:
             cited_lower = cited_title.lower().strip()
             chunk_idx = int(chunk_idx_str) if chunk_idx_str else None
 
             best: RetrievedFact | None = None
             for fact in facts:
                 if fact in cited:
+                    continue
+                # In compare mode, match project labels to avoid cross-attribution
+                if project_label and fact.project_label and project_label != fact.project_label:
                     continue
                 fact_lower = fact.source_title.lower().strip()
                 title_match = cited_lower in fact_lower or fact_lower in cited_lower
