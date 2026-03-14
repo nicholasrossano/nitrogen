@@ -402,8 +402,9 @@ export function ConversationView({
 /*  Inline citation chip                                               */
 /* ------------------------------------------------------------------ */
 
-// Matches [OpenAlex: Title], [Web: Title], [Evidence: file.pdf, p3], etc.
-const INLINE_CITATION_RE = /\[([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]/g;
+// Matches citations with optional project prefix for compare mode:
+// [Evidence: file.pdf, p3], [A-Evidence: file.pdf, p3], [B-Web: Title]
+const INLINE_CITATION_RE = /\[(?:([AB])-)?([\w\s]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]/g;
 
 function CitationChip({
   sourceType,
@@ -411,18 +412,22 @@ function CitationChip({
   chunkIndex,
   sources,
   onCitationClick,
+  projectLabel,
 }: {
   sourceType: string;
   title: string;
   chunkIndex?: number;
   sources: SourceCitation[];
   onCitationClick?: (citation: SourceCitation) => void;
+  projectLabel?: string;
 }) {
   const type = sourceType.toLowerCase().trim();
 
   // Fuzzy-match the cited title to a source; prefer chunk_index match when available
   const trimmedTitle = title.trim().toLowerCase();
   const titleCandidates = sources.filter((s) => {
+    // In compare mode, only match sources with the same project label
+    if (projectLabel && s.project_label && projectLabel !== s.project_label) return false;
     const a = s.source_title.toLowerCase();
     return (
       a.includes(trimmedTitle.slice(0, 50)) ||
@@ -468,11 +473,22 @@ function CitationChip({
     label = sourceType;
   }
 
+  const badgeColor = projectLabel === 'A'
+    ? 'bg-accent-wash text-accent'
+    : projectLabel === 'B'
+      ? 'bg-accent-secondary-wash text-accent-secondary'
+      : '';
+
   const chip = (
     <span
       title={title.trim()}
       className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded border text-[10px] font-medium leading-none align-[0.1em] bg-surface-subtle border-stroke-subtle text-text-secondary hover:bg-accent/[0.07] hover:border-accent/30 hover:text-accent transition-colors cursor-pointer select-none"
     >
+      {projectLabel && (
+        <span className={`px-1 py-px rounded text-[9px] font-semibold leading-none ${badgeColor}`}>
+          {projectLabel}
+        </span>
+      )}
       {icon}
       {label}
     </span>
@@ -547,7 +563,7 @@ function splitOnCitations(
     if (m.index > last) {
       parts.push(<span key={`${keyPrefix}-t${partIdx++}`}>{text.slice(last, m.index)}</span>);
     }
-    const [, sourceType, title, chunkIdxStr] = m;
+    const [, projectLabel, sourceType, title, chunkIdxStr] = m;
     const chunkIdx = chunkIdxStr ? parseInt(chunkIdxStr, 10) : undefined;
     parts.push(
       <CitationChip
@@ -557,6 +573,7 @@ function splitOnCitations(
         chunkIndex={chunkIdx}
         onCitationClick={onCitationClick}
         sources={sources}
+        projectLabel={projectLabel || undefined}
       />
     );
     last = re.lastIndex;
