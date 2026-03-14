@@ -22,7 +22,7 @@ function ToolbarIcon({ icon, label, onClick, active = false, disabled = false, s
       onClick={onClick}
       disabled={disabled}
       className={[
-        'p-1 rounded transition-colors',
+        'p-0.5 rounded transition-colors',
         active
           ? 'text-accent'
           : 'text-text-tertiary hover:text-text-primary',
@@ -178,7 +178,7 @@ export function AssistantMessageToolbar({
           title={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
           aria-label={feedback === 'like' ? 'Remove helpful rating' : 'Helpful'}
           onClick={handleLike}
-          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+          className="p-0.5 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
         >
           <ThumbsUp
             className="w-3.5 h-3.5"
@@ -193,7 +193,7 @@ export function AssistantMessageToolbar({
           title={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
           aria-label={feedback === 'dislike' ? 'Remove unhelpful rating' : 'Not helpful'}
           onClick={handleDislike}
-          className="p-1 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
+          className="p-0.5 rounded transition-colors cursor-pointer text-text-tertiary hover:text-text-primary"
         >
           <ThumbsDown
             className="w-3.5 h-3.5"
@@ -228,7 +228,7 @@ export function AssistantMessageToolbar({
               }
             }}
             className={[
-              'flex items-center gap-1 pl-1.5 pr-2 py-1 rounded transition-colors text-[11px]',
+              'flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded transition-colors text-[11px]',
               sourcesOpen
                 ? 'text-accent bg-accent/[0.07]'
                 : 'text-text-tertiary hover:text-text-primary',

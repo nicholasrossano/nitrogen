@@ -56,8 +56,8 @@ class Settings(BaseSettings):
 
     # RAG settings
     enable_corpus_rag: bool = False
-    chunk_size: int = 500
-    chunk_overlap: int = 50
+    chunk_size: int = 300
+    chunk_overlap: int = 75
     retrieval_top_k: int = 5
     
     @field_validator('cors_origins', mode='before')

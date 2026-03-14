@@ -189,6 +189,23 @@ function InitiativePageContent() {
     }
   }, []);
 
+  const handleOpenFullDoc = useCallback((citation: ResearchPanelCitation) => {
+    const viewerWidget: EditorWidget = {
+      type: 'document_viewer',
+      data: {
+        evidence_doc_id: citation.evidence_doc_id,
+        chunk_id: citation.chunk_id,
+        source_title: citation.source_title,
+      },
+      messageId: 'citation-nav',
+    };
+    setChatEditorWidgets((prev) => {
+      const filtered = prev.filter((w) => w.type !== 'document_viewer');
+      return [...filtered, viewerWidget];
+    });
+    setShowEditorInChatView(true);
+  }, []);
+
   const handleStandaloneMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizingStandalone || !standaloneContainerRef.current) return;
     const rect = standaloneContainerRef.current.getBoundingClientRect();
@@ -396,11 +413,12 @@ function InitiativePageContent() {
 
                   {/* Research panel (citation preview) — fills remaining space when no editor */}
                   {researchCitation && (
-                    <div className={showEditorInChatView ? 'flex-shrink-0 w-80 overflow-hidden' : 'flex-1 overflow-hidden'}>
+                    <div className={(showEditorInChatView && chatEditorWidgets.length > 0) ? 'flex-shrink-0 w-80 overflow-hidden' : 'flex-1 overflow-hidden'}>
                       <ResearchPanel
                         key={`${researchCitation.evidence_doc_id}-${researchCitation.chunk_id}`}
                         citation={researchCitation}
                         onClose={() => setResearchCitation(null)}
+                        onOpenFullDoc={handleOpenFullDoc}
                       />
                     </div>
                   )}

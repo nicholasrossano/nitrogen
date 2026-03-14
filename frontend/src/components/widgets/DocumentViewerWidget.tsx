@@ -90,21 +90,29 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
         <h3 className="text-sm font-medium text-text-primary truncate">{filename}</h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-0">
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="space-y-4">
           {chunks.map((chunk) => {
             const isHighlighted = chunkId && chunk.id === chunkId;
+            const paragraphs = chunk.content.split(/\n{2,}/);
             return (
               <div
                 key={chunk.id}
                 ref={isHighlighted ? highlightRef : undefined}
-                className={`text-sm leading-relaxed whitespace-pre-wrap transition-colors duration-300 ${
+                className={`transition-colors duration-300 ${
                   isHighlighted
-                    ? 'bg-accent-wash border-l-2 border-accent pl-3 py-2 -ml-3 rounded-r'
-                    : 'text-text-primary'
+                    ? 'bg-accent-wash border-l-2 border-accent pl-4 py-3 -ml-4 rounded-r'
+                    : ''
                 }`}
               >
-                {chunk.content}
+                {paragraphs.map((para, i) => (
+                  <p
+                    key={i}
+                    className={`text-sm leading-[1.7] text-text-primary ${i > 0 ? 'mt-3' : ''}`}
+                  >
+                    {para.trim()}
+                  </p>
+                ))}
               </div>
             );
           })}

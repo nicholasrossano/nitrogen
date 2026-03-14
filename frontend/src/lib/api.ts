@@ -160,6 +160,7 @@ export interface EvidenceDoc {
   id: string;
   filename: string | null;
   file_type: string | null;
+  file_size?: number | null;
   created_at: string;
   chunk_count: number;
 }
@@ -812,24 +813,6 @@ export const api = {
 
   // --- Project Materials ---
 
-  uploadMaterial: async (initiativeId: string, file: File): Promise<{ success: boolean; material: ProjectMaterial; message: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/initiatives/${initiativeId}/materials`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(error.detail || 'Upload failed');
-    }
-    return response.json();
-  },
-
   getMaterials: (initiativeId: string) =>
     fetchApi<ProjectMaterial[]>(`/api/v1/initiatives/${initiativeId}/materials`),
 
@@ -1165,6 +1148,7 @@ export const api = {
       latency_ms: number;
       widget_type?: string | null;
       widget_data?: Record<string, any> | null;
+      thinking_lines?: string[];
       session_id: string;
       user_message_id: string;
       assistant_message_id: string;

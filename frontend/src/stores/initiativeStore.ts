@@ -163,7 +163,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         id: doc.id,
         filename: doc.filename ?? file.name,
         file_type: doc.file_type ?? '',
-        file_size: null,
+        file_size: doc.file_size ?? file.size,
         created_at: doc.created_at,
         source: 'evidence',
       };
@@ -440,37 +440,44 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Upload evidence file
+  // Upload evidence file (used by EvidenceInputWidget / DocumentRequestWidget)
   uploadEvidence: async (id: string, file: File) => {
     set({ loading: true, error: null });
     try {
-      await api.uploadEvidence(id, file);
-      
-      // Reload
+      const response = await api.uploadEvidence(id, file);
+
+      // Reload initiative context (needed so AI sees the new evidence)
       const [initiative, { messages, stage_status }, evidenceDocs] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
         api.getEvidence(id),
       ]);
-      
-      set({
+
+      // Also surface the new file in projectMaterials so the Files tab updates immediately
+      const doc: EvidenceDoc = response.document;
+      const asMaterial: ProjectMaterial = {
+        id: doc.id,
+        filename: doc.filename ?? file.name,
+        file_type: doc.file_type ?? '',
+        file_size: doc.file_size ?? file.size,
+        created_at: doc.created_at,
+        source: 'evidence',
+      };
+
+      set((state) => ({
         initiative,
         messages,
         stageStatus: stage_status,
         evidenceDocs,
+        projectMaterials: [asMaterial, ...state.projectMaterials.filter((m) => m.id !== doc.id)],
         loading: false,
         error: null,
-      });
+      }));
 
       get()._refreshPlanInBackground(id);
     } catch (error) {
       console.error('Failed to upload evidence:', error);
-      // Don't persist upload errors - just log them and clear loading state
-      set({
-        loading: false,
-        error: null,
-      });
-      // Re-throw so the UI can handle it with a toast or inline message
+      set({ loading: false, error: null });
       throw error;
     }
   },

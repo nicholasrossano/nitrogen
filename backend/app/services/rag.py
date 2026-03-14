@@ -21,6 +21,7 @@ class RetrievedChunk:
     source_doc_id: UUID
     source_title: str
     similarity: float
+    chunk_index: int | None = None
 
 
 class RAGService:
@@ -104,6 +105,7 @@ class RAGService:
             SELECT 
                 id,
                 evidence_doc_id,
+                chunk_index,
                 content,
                 1 - (embedding <=> CAST(:embedding AS vector)) as similarity
             FROM evidence_chunks
@@ -130,6 +132,7 @@ class RAGService:
                 source_doc_id=row.evidence_doc_id,
                 source_title=docs[row.evidence_doc_id].filename or "Uploaded evidence",
                 similarity=row.similarity,
+                chunk_index=row.chunk_index,
             )
             for row in rows
         ]

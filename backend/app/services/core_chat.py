@@ -315,7 +315,9 @@ You have these data sources available — they are all equally valid and complem
 
 GUIDELINES:
 
-For research questions (the majority of user questions), call BOTH search_scholarly_literature AND search_web_sources to give the most comprehensive answer. Academic papers and web sources cover different angles — use both.
+The user may be working inside a project workspace. Project documents are ALREADY searched automatically — you do not need to call any tool to search them. When the user asks about THEIR project's specific details (budget, partners, timeline, scope, deliverables, etc.), do NOT call search_scholarly_literature or search_web_sources — the project documents already provide the answer.
+
+For general research questions that go BEYOND the project's own documents (e.g. industry benchmarks, regulatory standards, methodology comparisons, best practices), call BOTH search_scholarly_literature AND search_web_sources.
 
 Call run_lcoe_model when the user wants a numerical energy cost model (LCOE, cost per kWh, project economics, capex/opex/WACC analysis). This can be combined with search tools.
 
@@ -353,6 +355,7 @@ Your areas of expertise include:
 - Standards bodies (MECS, Gold Standard, Verra, CDM, etc.)
 
 RESPONSE RULES:
+- When evidence contains specific numbers, names, dates, or data — QUOTE THEM DIRECTLY. Do not paraphrase with vague language when the source has the concrete answer.
 - Ground your answers in the provided evidence whenever possible.
 - Cite sources inline using EXACTLY this format: [Source Type: Title]
   Examples: [Evidence: project_report.pdf] [Scholarly: Cookstove adoption in Ghana] [Web: Gold Standard MRV requirements] [Corpus: Accra Clean Cooking Program]
@@ -378,8 +381,8 @@ CITATION RULES (MANDATORY):
 Example: "The project targets 50% thermal efficiency [Evidence: project_report.pdf]."
 """
 
-# Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title]
-_CITATION_RE = re.compile(r'\[([^\]:]+):\s*([^\]]{4,})\]')
+# Pattern to extract inline citations the LLM produces, e.g. [Scholarly: Some Title] or [Evidence: file.pdf, p3]
+_CITATION_RE = re.compile(r'\[([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]')
 
 
 # ---------------------------------------------------------------------------
@@ -1233,10 +1236,10 @@ class ComplianceChatService:
             facts,
             key=lambda f: (tier_order.get(f.source_type, 9), -f.confidence),
         )
-        seen: set[str] = set()
+        seen: set[tuple[str, str | None]] = set()
         deduped: list[RetrievedFact] = []
         for fact in sorted_facts:
-            key = fact.source_title.lower().strip()
+            key = (fact.source_title.lower().strip(), fact.chunk_id)
             if key not in seen:
                 seen.add(key)
                 deduped.append(fact)
@@ -1290,7 +1293,7 @@ class ComplianceChatService:
         facts: list[RetrievedFact],
     ) -> list[RetrievedFact]:
         """
-        Parse [Source Type: Title] citations from the generated response and
+        Parse [Source Type: Title(, pN)?] citations from the generated response and
         return only the RetrievedFact objects that were actually referenced.
 
         Falls back to returning corpus/evidence facts (provided as passive
@@ -1298,27 +1301,34 @@ class ComplianceChatService:
         """
         matches = _CITATION_RE.findall(content)
         if not matches:
-            # No inline citations — return corpus facts that informed context
             return [f for f in facts if f.source_type in (SourceType.CORPUS, SourceType.EVIDENCE)]
 
         cited: list[RetrievedFact] = []
-        for _source_type, cited_title in matches:
+        for _source_type, cited_title, chunk_idx_str in matches:
             cited_lower = cited_title.lower().strip()
+            chunk_idx = int(chunk_idx_str) if chunk_idx_str else None
+
+            best: RetrievedFact | None = None
             for fact in facts:
                 if fact in cited:
                     continue
                 fact_lower = fact.source_title.lower().strip()
-                # Match if titles share meaningful overlap
-                if cited_lower in fact_lower or fact_lower in cited_lower:
-                    cited.append(fact)
+                title_match = cited_lower in fact_lower or fact_lower in cited_lower
+                if not title_match:
+                    cited_words = {w for w in cited_lower.split() if len(w) > 3}
+                    fact_words = {w for w in fact_lower.split() if len(w) > 3}
+                    title_match = len(cited_words & fact_words) >= 2
+                if not title_match:
                     continue
-                # Word-overlap fallback: ≥2 significant words in common
-                cited_words = {w for w in cited_lower.split() if len(w) > 3}
-                fact_words = {w for w in fact_lower.split() if len(w) > 3}
-                if len(cited_words & fact_words) >= 2:
-                    cited.append(fact)
+                if chunk_idx is not None and fact.chunk_index == chunk_idx:
+                    best = fact
+                    break
+                if best is None:
+                    best = fact
 
-        # Always include corpus facts that were used as background context
+            if best is not None and best not in cited:
+                cited.append(best)
+
         for fact in facts:
             if fact.source_type in (SourceType.CORPUS, SourceType.EVIDENCE) and fact not in cited:
                 cited.append(fact)
