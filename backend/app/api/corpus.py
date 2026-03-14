@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
@@ -99,13 +100,17 @@ async def add_corpus_document(
     content = await file.read()
     storage_path = await storage.save(content, file.filename, folder="corpus")
     
-    # Parse document
+    # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
     if file.content_type == "application/pdf":
-        text = parser.parse_pdf(content)
         file_type = "pdf"
+        pages = parser.parse_pdf_pages(content)
+        page_chunks = parser.chunk_pdf_pages(pages)
+        chunk_tuples = [(c, None, pg) for c, pg in page_chunks]
     else:
-        text = parser.parse_docx(content)
         file_type = "docx"
+        html = parser.parse_docx_html(content)
+        html_chunks = parser.chunk_html(html)
+        chunk_tuples = [(plain, h, None) for plain, h in html_chunks]
     
     # Parse metadata if provided
     import json
@@ -128,16 +133,20 @@ async def add_corpus_document(
     await db.commit()
     await db.refresh(corpus_doc)
     
-    # Chunk and embed
-    chunks = parser.chunk_text(text)
-    embeddings = await embeddings_service.embed_texts(chunks)
+    # Embed plain-text chunks
+    plain_texts = [t[0] for t in chunk_tuples]
+    embeddings = await embeddings_service.embed_texts(plain_texts)
     
     # Store chunks
-    for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+    for i, ((plain, html_content, page_num), embedding) in enumerate(
+        zip(chunk_tuples, embeddings)
+    ):
         chunk = CorpusChunk(
             corpus_doc_id=corpus_doc.id,
             chunk_index=i,
-            content=chunk_text,
+            content=plain,
+            content_html=html_content,
+            page_number=page_num,
             embedding=embedding,
         )
         db.add(chunk)
@@ -148,8 +157,8 @@ async def add_corpus_document(
         title=corpus_doc.title,
         source=corpus_doc.source,
         file_type=corpus_doc.file_type,
-            metadata=corpus_doc.doc_metadata,
-        chunk_count=len(chunks),
+        metadata=corpus_doc.doc_metadata,
+        chunk_count=len(chunk_tuples),
         created_at=corpus_doc.created_at,
     )
 
@@ -233,6 +242,54 @@ async def get_corpus_document(
         metadata=doc.metadata,
         chunk_count=chunk_count,
         created_at=doc.created_at,
+    )
+
+
+CORPUS_CONTENT_TYPE_MAP = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls": "application/vnd.ms-excel",
+}
+
+
+@router.get("/corpus/{doc_id}/download")
+async def download_corpus_document(
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Download an uploaded corpus document."""
+    result = await db.execute(
+        select(CorpusDocument).where(CorpusDocument.id == doc_id)
+    )
+    doc = result.scalar_one_or_none()
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Corpus document not found",
+        )
+
+    if not doc.storage_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not available for download",
+        )
+
+    storage = get_uploads_storage()
+    file_bytes = await storage.load(doc.storage_path)
+
+    media_type = CORPUS_CONTENT_TYPE_MAP.get(
+        doc.file_type or "", "application/octet-stream"
+    )
+
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{doc.title or "file"}"'
+        },
     )
 
 

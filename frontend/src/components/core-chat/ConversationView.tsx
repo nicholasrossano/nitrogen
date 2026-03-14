@@ -591,8 +591,8 @@ function makeMarkdownComponents(
         {injectCitationChips(children, sources, 'p', onCitationClick)}
       </p>
     ),
-    li: ({ children }: any) => (
-      <li className="leading-relaxed">
+    li: ({ children, node, ...rest }: any) => (
+      <li className="leading-relaxed" {...rest}>
         {injectCitationChips(children, sources, 'li', onCitationClick)}
       </li>
     ),

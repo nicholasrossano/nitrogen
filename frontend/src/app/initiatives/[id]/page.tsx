@@ -20,8 +20,11 @@ import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 
 const MIN_STANDALONE_CHAT_PERCENT = 30;
-const MAX_STANDALONE_CHAT_PERCENT = 70;
+const MAX_STANDALONE_CHAT_PERCENT = 60;
 const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
+const MIN_RESEARCH_PANEL_PERCENT = 20;
+const MAX_RESEARCH_PANEL_PERCENT = 25;
+const DEFAULT_RESEARCH_PANEL_PERCENT = 25;
 
 type ProjectView = 'chat' | 'plan' | 'files' | 'evaluate';
 
@@ -49,6 +52,8 @@ function InitiativePageContent() {
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
+  const [researchPanelWidthPercent, setResearchPanelWidthPercent] = useState(DEFAULT_RESEARCH_PANEL_PERCENT);
+  const [isResizingResearch, setIsResizingResearch] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Page-level loading overlay — stays up until all 5 initial loads complete
@@ -210,13 +215,30 @@ function InitiativePageContent() {
     if (!isResizingStandalone || !standaloneContainerRef.current) return;
     const rect = standaloneContainerRef.current.getBoundingClientRect();
     const newWidthPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    // Cap chat so editor keeps ≥ 40%; account for current research panel width when both are open
+    const maxPercent = researchCitation
+      ? 100 - researchPanelWidthPercent - 40
+      : MAX_STANDALONE_CHAT_PERCENT;
     setStandaloneChatWidthPercent(
-      Math.min(MAX_STANDALONE_CHAT_PERCENT, Math.max(MIN_STANDALONE_CHAT_PERCENT, newWidthPercent))
+      Math.min(maxPercent, Math.max(MIN_STANDALONE_CHAT_PERCENT, newWidthPercent))
     );
-  }, [isResizingStandalone]);
+  }, [isResizingStandalone, researchCitation, researchPanelWidthPercent]);
 
   const handleStandaloneMouseUp = useCallback(() => {
     setIsResizingStandalone(false);
+  }, []);
+
+  const handleResearchMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingResearch || !standaloneContainerRef.current) return;
+    const rect = standaloneContainerRef.current.getBoundingClientRect();
+    const newResearchPercent = ((rect.right - e.clientX) / rect.width) * 100;
+    setResearchPanelWidthPercent(
+      Math.min(MAX_RESEARCH_PANEL_PERCENT, Math.max(MIN_RESEARCH_PANEL_PERCENT, newResearchPercent))
+    );
+  }, [isResizingResearch]);
+
+  const handleResearchMouseUp = useCallback(() => {
+    setIsResizingResearch(false);
   }, []);
 
   useEffect(() => {
@@ -233,6 +255,21 @@ function InitiativePageContent() {
       document.body.style.userSelect = '';
     };
   }, [isResizingStandalone, handleStandaloneMouseMove, handleStandaloneMouseUp]);
+
+  useEffect(() => {
+    if (isResizingResearch) {
+      document.addEventListener('mousemove', handleResearchMouseMove);
+      document.addEventListener('mouseup', handleResearchMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleResearchMouseMove);
+      document.removeEventListener('mouseup', handleResearchMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingResearch, handleResearchMouseMove, handleResearchMouseUp]);
 
   const handleInspectorChange = useCallback((open: boolean, hasItem: boolean) => {
     setShowInspector(open);
@@ -385,53 +422,77 @@ function InitiativePageContent() {
                   className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'chat' ? 'hidden' : ''}`}
                 >
                   {/* Left: chat column */}
-                  <div
-                    className="flex-shrink-0 relative overflow-hidden"
-                    style={{
-                      width: (showEditorInChatView && chatEditorWidgets.length > 0) || researchCitation
-                        ? `${standaloneChatWidthPercent}%`
-                        : '100%',
-                    }}
-                  >
-                    <div className="absolute inset-0 overflow-hidden">
-                      <ProjectStandaloneChatView
-                        initiativeId={initiativeId}
-                        showLanding={showChatLanding}
-                        onMessageSent={() => setShowChatLanding(false)}
-                        onBack={handleNewChat}
-                        onEditorWidgetsChange={handleChatEditorWidgetsChange}
-                        onCitationClick={handleCitationClick}
-                      />
-                    </div>
-                    {((showEditorInChatView && chatEditorWidgets.length > 0) || researchCitation) && (
-                      <div
-                        onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
-                        className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
-                      />
-                    )}
-                  </div>
+                  {(() => {
+                    const hasEditor = showEditorInChatView && chatEditorWidgets.length > 0;
+                    const hasResearch = !!researchCitation;
+                    // When only research is open, chat is fixed at 85% (no resize needed).
+                    // When editor is open, chat is resizable; cap at 45% when research is also visible
+                    // so the editor always gets its minimum 40%.
+                    const chatWidth = hasEditor
+                      ? `${Math.min(hasResearch ? 100 - researchPanelWidthPercent - 40 : MAX_STANDALONE_CHAT_PERCENT, standaloneChatWidthPercent)}%`
+                      : hasResearch
+                        ? `${100 - researchPanelWidthPercent}%`
+                        : '100%';
 
-                  {/* Research panel (citation preview) — fills remaining space when no editor */}
-                  {researchCitation && (
-                    <div className={(showEditorInChatView && chatEditorWidgets.length > 0) ? 'flex-shrink-0 w-80 overflow-hidden' : 'flex-1 overflow-hidden'}>
-                      <ResearchPanel
-                        key={`${researchCitation.evidence_doc_id}-${researchCitation.chunk_id}`}
-                        citation={researchCitation}
-                        onClose={() => setResearchCitation(null)}
-                        onOpenFullDoc={handleOpenFullDoc}
-                      />
-                    </div>
-                  )}
+                    return (
+                      <>
+                        <div
+                          className="flex-shrink-0 relative overflow-hidden"
+                          style={{ width: chatWidth }}
+                        >
+                          <div className="absolute inset-0 overflow-hidden">
+                            <ProjectStandaloneChatView
+                              initiativeId={initiativeId}
+                              showLanding={showChatLanding}
+                              onMessageSent={() => setShowChatLanding(false)}
+                              onBack={handleNewChat}
+                              onEditorWidgetsChange={handleChatEditorWidgetsChange}
+                              onCitationClick={handleCitationClick}
+                            />
+                          </div>
+                          {/* Resize handle only shown when editor is open */}
+                          {hasEditor && (
+                            <div
+                              onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
+                              className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
+                            />
+                          )}
+                        </div>
 
-                  {/* Right: editor / document viewer */}
-                  {showEditorInChatView && chatEditorWidgets.length > 0 && (
-                    <div className="flex-1 overflow-hidden border-l border-divider">
-                      <EditorSidePanel
-                        widgets={chatEditorWidgets}
-                        initiativeId={initiativeId}
-                      />
-                    </div>
-                  )}
+                        {/* Research panel — 20–25% wide, resizable from the left edge */}
+                        {hasResearch && (
+                          <div
+                            className="flex-shrink-0 overflow-hidden relative"
+                            style={{ width: `${researchPanelWidthPercent}%` }}
+                          >
+                            <div
+                              onMouseDown={(e) => { e.preventDefault(); setIsResizingResearch(true); }}
+                              className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10 ${isResizingResearch ? 'bg-accent/50' : 'bg-transparent'}`}
+                            />
+                            <ResearchPanel
+                              key={`${researchCitation!.evidence_doc_id}-${researchCitation!.chunk_id}`}
+                              citation={researchCitation!}
+                              onClose={() => setResearchCitation(null)}
+                              onOpenFullDoc={handleOpenFullDoc}
+                            />
+                          </div>
+                        )}
+
+                        {/* Right: editor / document viewer — flex-1 with minimum 40% */}
+                        {hasEditor && (
+                          <div
+                            className="flex-1 overflow-hidden border-l border-divider"
+                            style={{ minWidth: '40%' }}
+                          >
+                            <EditorSidePanel
+                              widgets={chatEditorWidgets}
+                              initiativeId={initiativeId}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </main>
 
                 {activeView === 'files' ? (
