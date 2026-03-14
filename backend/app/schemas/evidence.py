@@ -15,6 +15,7 @@ class EvidenceDocResponse(BaseModel):
     id: UUID
     filename: Optional[str] = None
     file_type: Optional[str] = None
+    file_size: Optional[int] = None
     created_at: datetime
     chunk_count: int = 0
     

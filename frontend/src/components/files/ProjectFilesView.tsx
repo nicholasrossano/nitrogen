@@ -192,7 +192,8 @@ export function ProjectFilesView({
             </div>
             {hasUploaded ? (
             <>
-            <div className="border border-divider rounded-lg overflow-hidden">
+            <div className="rounded-lg overflow-hidden border border-divider">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-black/[0.02]">
@@ -206,10 +207,10 @@ export function ProjectFilesView({
                 <tbody className="divide-y divide-divider">
                   {pagedMaterials.map((mat) => (
                     <tr key={mat.id}>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-2.5 max-w-0 w-full">
+                        <div className="flex items-center gap-2 min-w-0">
                           <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-                          <span className="text-text-primary truncate" title={mat.filename}>
+                          <span className="text-text-primary truncate min-w-0" title={mat.filename}>
                             {mat.filename}
                           </span>
                         </div>
@@ -219,7 +220,7 @@ export function ProjectFilesView({
                           {FILE_TYPE_LABELS[mat.file_type] || mat.file_type}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-text-secondary">
+                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
                         {formatFileSize(mat.file_size)}
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
@@ -256,6 +257,7 @@ export function ProjectFilesView({
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
             {uploadedTotalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
@@ -305,7 +307,8 @@ export function ProjectFilesView({
             </div>
             {hasGenerated ? (
             <>
-            <div className="border border-divider rounded-lg overflow-hidden">
+            <div className="rounded-lg overflow-hidden border border-divider">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-black/[0.02]">
@@ -319,10 +322,10 @@ export function ProjectFilesView({
                 <tbody className="divide-y divide-divider">
                   {pagedGenerated.map((file) => (
                     <tr key={file.id}>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-2.5 max-w-0 w-full">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Zap className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-                          <span className="text-text-primary truncate">{file.title}</span>
+                          <span className="text-text-primary truncate min-w-0">{file.title}</span>
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
@@ -332,7 +335,7 @@ export function ProjectFilesView({
                             : '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-text-secondary">
+                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
                         {formatFileSize(null)}
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
@@ -374,6 +377,7 @@ export function ProjectFilesView({
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
             {generatedTotalPages > 1 && (
               <div className="flex items-center justify-between pt-2">

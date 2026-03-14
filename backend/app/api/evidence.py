@@ -74,6 +74,7 @@ async def upload_evidence(
             text = parser.parse_xlsx(content)
         
         filename = file.filename
+        file_size = len(content)
     
     # Process text paste
     else:
@@ -81,6 +82,7 @@ async def upload_evidence(
         filename = text_title or "Pasted text"
         file_type = "text"
         storage_path = None  # Text is stored in chunks, no file
+        file_size = None
     
     # Create evidence doc
     evidence_doc = EvidenceDoc(
@@ -88,6 +90,7 @@ async def upload_evidence(
         filename=filename,
         file_type=file_type,
         storage_path=storage_path,
+        file_size=file_size,
     )
     db.add(evidence_doc)
     await db.commit()

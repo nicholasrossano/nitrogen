@@ -411,6 +411,7 @@ async def compliance_chat_stream(
                 "latency_ms": result.latency_ms,
                 "widget_type": result.widget_type,
                 "widget_data": result.widget_data,
+                "thinking_lines": thinking_lines,
                 # IDs for the frontend to track for feedback / retry
                 "session_id": str(session.id),
                 "user_message_id": str(user_msg.id),

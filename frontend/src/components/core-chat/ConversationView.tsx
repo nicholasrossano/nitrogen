@@ -204,7 +204,7 @@ export function ConversationView({
     <div className="flex flex-col h-full">
       {/* Conversation header — back button + LLM-generated title */}
       {onBack && (
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-divider flex-shrink-0">
+        <div className="relative flex items-center px-4 py-3 border-b border-divider flex-shrink-0">
           <button
             onClick={onBack}
             className="p-1 rounded hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
@@ -212,7 +212,7 @@ export function ConversationView({
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <h3 className="text-sm font-medium text-text-primary truncate flex-1">
+          <h3 className="absolute inset-x-0 text-center text-sm font-medium text-text-primary truncate px-10 pointer-events-none">
             {title || 'New chat'}
           </h3>
         </div>
@@ -402,31 +402,38 @@ export function ConversationView({
 /*  Inline citation chip                                               */
 /* ------------------------------------------------------------------ */
 
-// Matches [OpenAlex: Title], [Web: Title], [Corpus: Title], etc.
-const INLINE_CITATION_RE = /\[([^\]:]+):\s*([^\]]{4,200})\]/g;
+// Matches [OpenAlex: Title], [Web: Title], [Evidence: file.pdf, p3], etc.
+const INLINE_CITATION_RE = /\[([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]/g;
 
 function CitationChip({
   sourceType,
   title,
+  chunkIndex,
   sources,
   onCitationClick,
 }: {
   sourceType: string;
   title: string;
+  chunkIndex?: number;
   sources: SourceCitation[];
   onCitationClick?: (citation: SourceCitation) => void;
 }) {
   const type = sourceType.toLowerCase().trim();
 
-  // Fuzzy-match the cited title to a source so we can get the URL + publisher
+  // Fuzzy-match the cited title to a source; prefer chunk_index match when available
   const trimmedTitle = title.trim().toLowerCase();
-  const matched = sources.find((s) => {
+  const titleCandidates = sources.filter((s) => {
     const a = s.source_title.toLowerCase();
     return (
       a.includes(trimmedTitle.slice(0, 50)) ||
       trimmedTitle.includes(a.slice(0, 50))
     );
   });
+  const matched = (
+    chunkIndex != null
+      ? titleCandidates.find((s) => s.chunk_index === chunkIndex)
+      : undefined
+  ) ?? titleCandidates[0];
 
   const url = matched?.source_url;
   const publisher = matched?.publisher;
@@ -540,12 +547,14 @@ function splitOnCitations(
     if (m.index > last) {
       parts.push(<span key={`${keyPrefix}-t${partIdx++}`}>{text.slice(last, m.index)}</span>);
     }
-    const [, sourceType, title] = m;
+    const [, sourceType, title, chunkIdxStr] = m;
+    const chunkIdx = chunkIdxStr ? parseInt(chunkIdxStr, 10) : undefined;
     parts.push(
       <CitationChip
         key={`${keyPrefix}-c${m.index}`}
         sourceType={sourceType}
         title={title}
+        chunkIndex={chunkIdx}
         onCitationClick={onCitationClick}
         sources={sources}
       />
@@ -696,7 +705,7 @@ function MessageBubble({
 
   return (
     <div className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start'}`}>
+      <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start pb-2'}`}>
 
         {/* Floating toolbar */}
         {!isEditing && showToolbar && (

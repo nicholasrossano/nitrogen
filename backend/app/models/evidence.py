@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
@@ -26,6 +26,7 @@ class EvidenceDoc(Base):
     filename: Mapped[str | None] = mapped_column(String(255))
     file_type: Mapped[str | None] = mapped_column(String(50))  # pdf, docx, text
     storage_path: Mapped[str | None] = mapped_column(String(500))
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
