@@ -65,13 +65,19 @@ async def upload_evidence(
         content = await file.read()
         storage_path = await storage.save(content, file.filename, folder=str(initiative_id))
         
-        # Parse document
+        # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
         if file_type == "pdf":
-            text = parser.parse_pdf(content)
+            pages = parser.parse_pdf_pages(content)
+            page_chunks = parser.chunk_pdf_pages(pages)
+            chunk_tuples = [(c, None, pg) for c, pg in page_chunks]
         elif file_type == "docx":
-            text = parser.parse_docx(content)
+            html = parser.parse_docx_html(content)
+            html_chunks = parser.chunk_html(html)
+            chunk_tuples = [(plain, h, None) for plain, h in html_chunks]
         else:
-            text = parser.parse_xlsx(content)
+            html = parser.parse_xlsx_html(content)
+            html_chunks = parser.chunk_html(html)
+            chunk_tuples = [(plain, h, None) for plain, h in html_chunks]
         
         filename = file.filename
         file_size = len(content)
@@ -81,8 +87,9 @@ async def upload_evidence(
         text = text_content
         filename = text_title or "Pasted text"
         file_type = "text"
-        storage_path = None  # Text is stored in chunks, no file
+        storage_path = None
         file_size = None
+        chunk_tuples = [(c, None, None) for c in parser.chunk_text(text)]
     
     # Create evidence doc
     evidence_doc = EvidenceDoc(
@@ -96,16 +103,20 @@ async def upload_evidence(
     await db.commit()
     await db.refresh(evidence_doc)
     
-    # Chunk and embed
-    chunks = parser.chunk_text(text)
-    embeddings = await embeddings_service.embed_texts(chunks)
+    # Embed plain-text chunks
+    plain_texts = [t[0] for t in chunk_tuples]
+    embeddings = await embeddings_service.embed_texts(plain_texts)
     
     # Store chunks
-    for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+    for i, ((plain, html_content, page_num), embedding) in enumerate(
+        zip(chunk_tuples, embeddings)
+    ):
         chunk = EvidenceChunk(
             evidence_doc_id=evidence_doc.id,
             chunk_index=i,
-            content=chunk_text,
+            content=plain,
+            content_html=html_content,
+            page_number=page_num,
             embedding=embedding,
         )
         db.add(chunk)
@@ -132,7 +143,7 @@ async def upload_evidence(
             created_at=evidence_doc.created_at,
             chunk_count=chunk_count,
         ),
-        message=f"Evidence processed: {len(chunks)} chunks created",
+        message=f"Evidence processed: {len(chunk_tuples)} chunks created",
         stage=initiative.stage,
         evidence_ready=initiative.evidence_ready,
     )
@@ -267,6 +278,8 @@ async def get_evidence_chunks(
                 "id": str(c.id),
                 "chunk_index": c.chunk_index,
                 "content": c.content,
+                "content_html": c.content_html,
+                "page_number": c.page_number,
             }
             for c in chunks
         ],
@@ -318,7 +331,7 @@ async def download_evidence(
         content=file_bytes,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{evidence_doc.filename or "file"}"'
+            "Content-Disposition": f'inline; filename="{evidence_doc.filename or "file"}"'
         },
     )
 

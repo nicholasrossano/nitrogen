@@ -98,6 +98,8 @@ export interface EvidenceChunkDetail {
   id: string;
   chunk_index: number;
   content: string;
+  content_html?: string | null;
+  page_number?: number | null;
 }
 
 export interface ChatMessage {
@@ -912,6 +914,32 @@ export const api = {
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  getEvidenceFileBytes: async (evidenceId: string): Promise<ArrayBuffer> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}/download`, {
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch evidence file');
+    }
+    return response.arrayBuffer();
+  },
+
+  getCorpusFileBytes: async (docId: string): Promise<ArrayBuffer> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/corpus/${docId}/download`, {
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch corpus file');
+    }
+    return response.arrayBuffer();
   },
 
   exportChecklist: async (initiativeId: string, content: any) => {

@@ -3,7 +3,6 @@ const nextConfig = {
   output: 'standalone',
   transpilePackages: ['undici'],
   webpack: (config) => {
-    // Fix for undici/firebase compatibility
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,

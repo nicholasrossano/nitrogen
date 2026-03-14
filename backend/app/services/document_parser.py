@@ -1,4 +1,5 @@
 import io
+import re
 from typing import Optional
 import tiktoken
 
@@ -9,45 +10,61 @@ settings = get_settings()
 
 class DocumentParserService:
     """Service for parsing documents and chunking text"""
-    
+
     def __init__(self):
         self.chunk_size = settings.chunk_size
         self.chunk_overlap = settings.chunk_overlap
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
-    
+
+    # ------------------------------------------------------------------
+    # Plain-text extraction (used for embeddings / backward compat)
+    # ------------------------------------------------------------------
+
     def parse_pdf(self, content: bytes) -> str:
-        """Parse PDF content to text"""
+        """Parse PDF content to plain text (all pages concatenated)."""
         import pdfplumber
-        
+
         text_parts = []
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text()
                 if page_text:
                     text_parts.append(page_text)
-        
+
         return "\n\n".join(text_parts)
-    
+
+    def parse_pdf_pages(self, content: bytes) -> list[tuple[str, int]]:
+        """Parse PDF returning (text, page_number) pairs (1-indexed)."""
+        import pdfplumber
+
+        pages: list[tuple[str, int]] = []
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text and page_text.strip():
+                    pages.append((page_text, page.page_number))
+        return pages
+
     def parse_docx(self, content: bytes) -> str:
-        """Parse DOCX content to text"""
+        """Parse DOCX content to plain text."""
         from docx import Document
-        
+
         doc = Document(io.BytesIO(content))
         text_parts = []
-        
+
         for para in doc.paragraphs:
             if para.text.strip():
                 text_parts.append(para.text)
-        
+
         return "\n\n".join(text_parts)
-    
+
     def parse_xlsx(self, content: bytes) -> str:
-        """Parse XLSX/XLS spreadsheet content to text"""
+        """Parse XLSX/XLS spreadsheet content to plain text."""
         import openpyxl
-        
+
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
         sheet_parts = []
-        
+
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
             rows = []
@@ -57,51 +74,211 @@ class DocumentParserService:
                     rows.append("\t".join(cells))
             if rows:
                 sheet_parts.append(f"[Sheet: {sheet_name}]\n" + "\n".join(rows))
-        
+
         return "\n\n".join(sheet_parts)
-    
+
+    # ------------------------------------------------------------------
+    # Rich (HTML) extraction – for content_html column
+    # ------------------------------------------------------------------
+
+    def parse_docx_html(self, content: bytes) -> str:
+        """Convert DOCX to HTML preserving bold, italic, links, tables, lists."""
+        import mammoth
+
+        result = mammoth.convert_to_html(io.BytesIO(content))
+        return result.value
+
+    def parse_xlsx_html(self, content: bytes) -> str:
+        """Convert XLSX to HTML tables (one per sheet)."""
+        import openpyxl
+
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        html_parts: list[str] = []
+
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            all_rows = list(ws.iter_rows(values_only=True))
+            non_empty = [r for r in all_rows if any(
+                (str(c).strip() if c is not None else "") for c in r
+            )]
+            if not non_empty:
+                continue
+
+            table_html = f'<h3>{_esc(sheet_name)}</h3>\n<table>\n'
+            for idx, row in enumerate(non_empty):
+                tag = "th" if idx == 0 else "td"
+                cells = "".join(
+                    f"<{tag}>{_esc(str(c) if c is not None else '')}</{tag}>"
+                    for c in row
+                )
+                table_html += f"<tr>{cells}</tr>\n"
+            table_html += "</table>"
+            html_parts.append(table_html)
+
+        return "\n".join(html_parts)
+
+    # ------------------------------------------------------------------
+    # Chunking – plain text (original)
+    # ------------------------------------------------------------------
+
     def chunk_text(self, text: str) -> list[str]:
-        """Split text into chunks of approximately chunk_size tokens"""
-        # Tokenize
+        """Split text into chunks of approximately chunk_size tokens."""
         tokens = self.tokenizer.encode(text)
-        
-        # Split into chunks
         chunks = []
         start = 0
-        
+
         while start < len(tokens):
             end = start + self.chunk_size
-            
-            # Get chunk tokens
             chunk_tokens = tokens[start:end]
-            
-            # Decode back to text
             chunk_text = self.tokenizer.decode(chunk_tokens)
-            
-            # Clean up chunk (try to end at sentence boundary)
             chunk_text = self._clean_chunk(chunk_text)
-            
+
             if chunk_text.strip():
                 chunks.append(chunk_text.strip())
-            
-            # Move start with overlap
+
             start = end - self.chunk_overlap
-        
+
         return chunks
-    
+
+    def chunk_pdf_pages(
+        self, pages: list[tuple[str, int]]
+    ) -> list[tuple[str, int]]:
+        """Chunk PDF text while tracking the originating page number.
+
+        Returns list of (chunk_text, page_number) tuples.  Each chunk is
+        tagged with the page it started on.
+        """
+        chunks: list[tuple[str, int]] = []
+
+        for page_text, page_num in pages:
+            page_chunks = self.chunk_text(page_text)
+            for c in page_chunks:
+                chunks.append((c, page_num))
+
+        return chunks
+
+    # ------------------------------------------------------------------
+    # Chunking – HTML-aware (for content_html)
+    # ------------------------------------------------------------------
+
+    def chunk_html(self, html: str) -> list[tuple[str, str]]:
+        """Chunk HTML into (plain_text, html_fragment) pairs.
+
+        Splits on block-level element boundaries so tags stay balanced.
+        Falls back to the plain-text chunker if the HTML has no block tags.
+        """
+        from html.parser import HTMLParser
+
+        block_tags = {
+            "p", "h1", "h2", "h3", "h4", "h5", "h6",
+            "table", "tr", "ul", "ol", "li", "blockquote", "div", "section",
+        }
+
+        fragments = _split_html_blocks(html, block_tags)
+        if not fragments:
+            plain = _strip_tags(html)
+            text_chunks = self.chunk_text(plain)
+            return [(c, f"<p>{_esc(c)}</p>") for c in text_chunks]
+
+        results: list[tuple[str, str]] = []
+        current_html_parts: list[str] = []
+        current_plain_parts: list[str] = []
+        current_tokens = 0
+
+        for frag_html in fragments:
+            frag_plain = _strip_tags(frag_html).strip()
+            frag_tokens = self.count_tokens(frag_plain) if frag_plain else 0
+
+            if current_tokens + frag_tokens > self.chunk_size and current_html_parts:
+                results.append((
+                    "\n\n".join(current_plain_parts),
+                    "\n".join(current_html_parts),
+                ))
+                overlap_count = max(1, len(current_html_parts) // 4)
+                current_html_parts = current_html_parts[-overlap_count:]
+                current_plain_parts = current_plain_parts[-overlap_count:]
+                current_tokens = sum(
+                    self.count_tokens(p) for p in current_plain_parts
+                )
+
+            current_html_parts.append(frag_html)
+            if frag_plain:
+                current_plain_parts.append(frag_plain)
+            current_tokens += frag_tokens
+
+        if current_html_parts:
+            results.append((
+                "\n\n".join(current_plain_parts),
+                "\n".join(current_html_parts),
+            ))
+
+        return results
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
     def _clean_chunk(self, text: str) -> str:
-        """Try to clean chunk boundaries at sentence ends"""
-        # If chunk ends mid-sentence, try to find last sentence end
+        """Try to clean chunk boundaries at sentence ends."""
         sentence_ends = ['.', '!', '?', '\n']
-        
-        # Only truncate if we're not at the end
+
         if len(text) > 50:
             for i in range(len(text) - 1, max(len(text) - 100, 0), -1):
                 if text[i] in sentence_ends:
                     return text[:i + 1]
-        
+
         return text
-    
+
     def count_tokens(self, text: str) -> int:
-        """Count tokens in text"""
+        """Count tokens in text."""
         return len(self.tokenizer.encode(text))
+
+
+# ======================================================================
+# Module-level helpers
+# ======================================================================
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_tags(html: str) -> str:
+    """Remove all HTML tags, returning plain text."""
+    return _TAG_RE.sub("", html)
+
+
+def _esc(text: str) -> str:
+    """Minimal HTML escaping."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _split_html_blocks(html: str, block_tags: set[str]) -> list[str]:
+    """Split HTML string on block-level element boundaries.
+
+    Returns a list of HTML fragments, each roughly corresponding to one
+    block element (or a run of inline content between blocks).
+    """
+    pattern = r"(<(?:" + "|".join(block_tags) + r")[\s>])"
+    parts = re.split(pattern, html, flags=re.IGNORECASE)
+
+    fragments: list[str] = []
+    buf = ""
+    for part in parts:
+        stripped = part.strip()
+        if not stripped:
+            continue
+        match = re.match(
+            r"<(" + "|".join(block_tags) + r")[\s>]", stripped, re.IGNORECASE
+        )
+        if match and buf.strip():
+            fragments.append(buf.strip())
+            buf = part
+        else:
+            buf += part
+    if buf.strip():
+        fragments.append(buf.strip())
+
+    return fragments
