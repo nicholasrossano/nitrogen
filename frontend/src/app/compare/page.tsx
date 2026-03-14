@@ -284,6 +284,7 @@ function ComparePageContent() {
 
   return (
     <div className="min-h-screen h-screen flex flex-col bg-background">
+      <header className="shrink-0 h-14" />
       <div className="flex flex-1 min-h-0">
         <SideDrawer
           variant="home"
@@ -294,7 +295,8 @@ function ComparePageContent() {
         />
         <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
           <main className="h-full bg-surface rounded-lg shadow-workspace overflow-auto">
-            <div className="max-w-2xl mx-auto py-12 px-6">
+            <div className="min-h-full flex flex-col items-center justify-center px-6 py-12">
+            <div className="w-full max-w-2xl">
               <div className="text-center mb-10">
                 <div className="w-14 h-14 rounded-lg bg-accent-wash flex items-center justify-center mx-auto mb-4">
                   <Scale className="w-7 h-7 text-accent" />
@@ -357,6 +359,7 @@ function ComparePageContent() {
                   </div>
                 </div>
               )}
+            </div>
             </div>
           </main>
         </div>

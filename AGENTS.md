@@ -56,5 +56,9 @@ Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about
 ## UI/Design
 Follow `Docs/STYLEGUIDE.md` as the source of truth.
 
+**Page layout chrome (non-negotiable):**
+- Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
+- The `<header className="shrink-0 h-14">` must always be present — even if empty — on every page state/branch. What changes is only the content inside it, never its presence. Never omit the header on any conditional render branch (e.g. a selection screen vs. an active workspace screen on the same route).
+
 ## Dev / local run
 When starting the "local emulator" or running the app locally, follow `.cursor/rules/dev-setup.mdc`: start **backend** (port 8000), **frontend** (port 3000), and **open** `http://localhost:3000` in the browser. All three are required (e.g. projects won’t load without the backend).
