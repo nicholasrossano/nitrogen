@@ -59,6 +59,8 @@ class EvidenceChunk(Base):
     # Chunk content
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
     # Vector embedding (1536 dimensions for OpenAI ada-002)
     embedding = mapped_column(Vector(1536))
