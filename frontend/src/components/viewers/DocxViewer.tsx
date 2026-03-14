@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { ZoomableContainer } from './ZoomableContainer';
 
 interface DocxViewerProps {
   fileData: ArrayBuffer;
@@ -9,10 +10,8 @@ interface DocxViewerProps {
 
 export function DocxViewer({ fileData }: DocxViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     if (!containerRef.current || !fileData) return;
@@ -51,18 +50,6 @@ export function DocxViewer({ fileData }: DocxViewerProps) {
     };
   }, [fileData]);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      setScale(prev => Math.min(3, Math.max(0.5, prev - e.deltaY * 0.01)));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
-
   return (
     <div className="flex flex-col h-full">
       {loading && (
@@ -80,12 +67,9 @@ export function DocxViewer({ fileData }: DocxViewerProps) {
         </div>
       )}
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-auto bg-[#e8e5e0] docx-viewer-host"
-      >
-        <div ref={containerRef} style={{ zoom: scale }} />
-      </div>
+      <ZoomableContainer className="flex-1 bg-[#e8e5e0] docx-viewer-host">
+        <div ref={containerRef} />
+      </ZoomableContainer>
 
       <style jsx global>{`
         .docx-viewer-host .docx-preview-wrapper {

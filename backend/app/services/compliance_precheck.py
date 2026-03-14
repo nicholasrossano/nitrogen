@@ -590,7 +590,7 @@ PROJECT MATERIALS:
                         "source_title": c.source_title,
                         "content": c.content[:400],
                         "similarity": round(c.similarity, 3),
-                        "evidence_doc_id": c.evidence_doc_id,
+                        "evidence_doc_id": c.source_doc_id,
                         "chunk_id": c.chunk_id,
                     }
                     for c in matching[:3]
