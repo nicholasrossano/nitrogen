@@ -131,7 +131,9 @@ class DocumentParserService:
             end = start + self.chunk_size
             chunk_tokens = tokens[start:end]
             chunk_text = self.tokenizer.decode(chunk_tokens)
-            chunk_text = self._clean_chunk(chunk_text)
+            chunk_text = self._clean_chunk_end(chunk_text)
+            if start > 0:
+                chunk_text = self._clean_chunk_start(chunk_text)
 
             if chunk_text.strip():
                 chunks.append(chunk_text.strip())
@@ -189,6 +191,20 @@ class DocumentParserService:
             frag_plain = _strip_tags(frag_html).strip()
             frag_tokens = self.count_tokens(frag_plain) if frag_plain else 0
 
+            if frag_tokens > self.chunk_size:
+                if current_html_parts:
+                    results.append((
+                        "\n\n".join(current_plain_parts),
+                        "\n".join(current_html_parts),
+                    ))
+                    current_html_parts = []
+                    current_plain_parts = []
+                    current_tokens = 0
+                sub_chunks = self.chunk_text(frag_plain)
+                for sc in sub_chunks:
+                    results.append((sc, f"<p>{_esc(sc)}</p>"))
+                continue
+
             if current_tokens + frag_tokens > self.chunk_size and current_html_parts:
                 results.append((
                     "\n\n".join(current_plain_parts),
@@ -218,14 +234,27 @@ class DocumentParserService:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _clean_chunk(self, text: str) -> str:
-        """Try to clean chunk boundaries at sentence ends."""
-        sentence_ends = ['.', '!', '?', '\n']
+    def _clean_chunk_end(self, text: str) -> str:
+        """Snap the chunk end back to the nearest sentence boundary."""
+        sentence_ends = {'.', '!', '?', '\n'}
 
         if len(text) > 50:
             for i in range(len(text) - 1, max(len(text) - 100, 0), -1):
                 if text[i] in sentence_ends:
                     return text[:i + 1]
+
+        return text
+
+    def _clean_chunk_start(self, text: str) -> str:
+        """Snap the chunk start forward to the nearest sentence boundary."""
+        sentence_ends = {'.', '!', '?', '\n'}
+        search_limit = min(100, len(text) // 2)
+
+        for i in range(search_limit):
+            if text[i] in sentence_ends:
+                rest = text[i + 1:].lstrip()
+                if rest:
+                    return rest
 
         return text
 
