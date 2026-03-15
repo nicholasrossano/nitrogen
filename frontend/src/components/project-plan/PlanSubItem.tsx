@@ -74,7 +74,7 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = f
           className={`px-3 py-2 rounded-md shadow-card flex items-center gap-2 transition-colors ${fullWidth ? 'w-full' : ''} ${
             isComplete
               ? 'bg-green-50/30 border border-green-200/50'
-              : `${styles.card} border border-transparent ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`
+              : `bg-surface border border-transparent ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`
           }`}
           onClick={isClickable && !isComplete ? () => onDeepDive!(item) : undefined}
           role={isClickable && !isComplete ? 'button' : undefined}
