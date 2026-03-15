@@ -17,8 +17,10 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, MockUser, AuthUser
 from app.core.database import get_db
+from app.core.permissions import require_viewer, require_editor
+from app.models.core_chat import CoreChatSession
 from app.models.gs_template import GSTemplateVersion
 from app.models.gs_workspace import GSCertificationWorkspace
 from app.services.gs_template_service import (
@@ -172,6 +174,19 @@ async def create_workspace(
     if template_type not in (TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW):
         template_type = TEMPLATE_TYPE_COVER_LETTER
 
+    # Validate the user has access to the linked initiative or session
+    if initiative_id:
+        await require_editor(db, initiative_id, user)
+    elif session_id:
+        sess_result = await db.execute(
+            select(CoreChatSession).where(
+                CoreChatSession.id == session_id,
+                CoreChatSession.user_id == user.uid,
+            )
+        )
+        if not sess_result.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
     # Check for existing workspace for this document type
     query = select(GSCertificationWorkspace).where(
         GSCertificationWorkspace.template_type == template_type,
@@ -213,6 +228,7 @@ async def get_workspace(
 ):
     """Get workspace state including field values and checklist."""
     workspace = await _load_workspace(db, workspace_id)
+    await _authorize_workspace(db, workspace, user)
     return _workspace_response(workspace)
 
 
@@ -224,6 +240,7 @@ async def get_workspace_by_initiative(
     user: MockUser = Depends(get_current_user),
 ):
     """Look up workspace by initiative ID and document type."""
+    await require_viewer(db, initiative_id, user)
     result = await db.execute(
         select(GSCertificationWorkspace).where(
             GSCertificationWorkspace.initiative_id == initiative_id,
@@ -244,6 +261,14 @@ async def get_workspace_by_session(
     user: MockUser = Depends(get_current_user),
 ):
     """Look up workspace by chat session ID and document type."""
+    sess_result = await db.execute(
+        select(CoreChatSession).where(
+            CoreChatSession.id == session_id,
+            CoreChatSession.user_id == user.uid,
+        )
+    )
+    if not sess_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     result = await db.execute(
         select(GSCertificationWorkspace).where(
             GSCertificationWorkspace.session_id == session_id,
@@ -268,6 +293,7 @@ async def get_fields(
 ):
     """Get current field values with completion status."""
     workspace = await _load_workspace(db, workspace_id)
+    await _authorize_workspace(db, workspace, user)
     template = await _load_template(db, workspace.template_version_id)
 
     svc = CoverLetterService()
@@ -288,6 +314,7 @@ async def update_fields(
 ):
     """Update one or more field values."""
     workspace = await _load_workspace(db, workspace_id)
+    await _authorize_workspace(db, workspace, user, write=True)
 
     current = dict(workspace.field_values or {})
     now = datetime.now(timezone.utc).isoformat()
@@ -349,6 +376,7 @@ async def update_checklist(
 ):
     """Update a checklist item status."""
     workspace = await _load_workspace(db, workspace_id)
+    await _authorize_workspace(db, workspace, user, write=True)
     cl_state = dict(workspace.checklist_state or {})
     cl_state[data.item_id] = {"status": data.status}
     workspace.checklist_state = cl_state
@@ -373,6 +401,7 @@ async def export_cover_letter(
 ):
     """Generate and return a filled DOCX from the workspace field values."""
     workspace = await _load_workspace(db, workspace_id)
+    await _authorize_workspace(db, workspace, user)
     template = await _load_template(db, workspace.template_version_id)
 
     svc = CoverLetterService()
@@ -417,6 +446,28 @@ async def _load_workspace(db: AsyncSession, workspace_id: UUID) -> GSCertificati
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace not found")
     return ws
+
+
+async def _authorize_workspace(
+    db: AsyncSession, workspace: GSCertificationWorkspace, user: AuthUser, *, write: bool = False,
+) -> None:
+    """Verify the authenticated user has access to this workspace's project or session."""
+    if workspace.initiative_id:
+        if write:
+            await require_editor(db, workspace.initiative_id, user)
+        else:
+            await require_viewer(db, workspace.initiative_id, user)
+    elif workspace.session_id:
+        result = await db.execute(
+            select(CoreChatSession).where(
+                CoreChatSession.id == workspace.session_id,
+                CoreChatSession.user_id == user.uid,
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
 
 async def _load_template(db: AsyncSession, version_id: UUID) -> GSTemplateVersion:

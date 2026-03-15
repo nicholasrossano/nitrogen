@@ -17,6 +17,14 @@ class CoreChatSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Nullable: landing-page chats have no project; project-scoped chats do
+    initiative_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("initiatives.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Compare mode: pair of initiative UUIDs (as strings), null for regular sessions
     compare_initiative_ids: Mapped[list | None] = mapped_column(JSONB)
 
