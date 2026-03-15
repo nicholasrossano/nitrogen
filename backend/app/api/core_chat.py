@@ -15,6 +15,7 @@ from openai import AsyncOpenAI
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
+from app.core.permissions import get_initiative_with_role
 from app.config import get_settings
 from app.services.core_chat import ComplianceChatService
 from app.models.core_chat import CoreChatSession, CoreChatMessage
@@ -70,6 +71,7 @@ async def _get_or_create_session(
     db: AsyncSession,
     user_id: str,
     session_id: Optional[str],
+    initiative_id: Optional[uuid.UUID] = None,
 ) -> CoreChatSession:
     """Return an existing session or create a new one."""
     if session_id:
@@ -86,9 +88,12 @@ async def _get_or_create_session(
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+        if initiative_id and not session.initiative_id:
+            session.initiative_id = initiative_id
+            await db.flush()
         return session
 
-    session = CoreChatSession(user_id=user_id)
+    session = CoreChatSession(user_id=user_id, initiative_id=initiative_id)
     db.add(session)
     await db.flush()
     return session
@@ -96,19 +101,25 @@ async def _get_or_create_session(
 
 @router.get("/chat/sessions")
 async def list_core_chat_sessions(
+    initiative_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Return all core chat sessions for the current user, most recent first."""
+    """Return core chat sessions for the current user, most recent first.
+
+    When initiative_id is provided, only sessions scoped to that project are
+    returned.  When omitted, all sessions (including unscoped ones) are returned.
+    """
     from sqlalchemy import func
 
-    result = await db.execute(
+    query = (
         select(
             CoreChatSession.id,
             CoreChatSession.title,
             CoreChatSession.created_at,
             CoreChatSession.updated_at,
             CoreChatSession.compare_initiative_ids,
+            CoreChatSession.initiative_id,
             func.count(CoreChatMessage.id).label("message_count"),
         )
         .outerjoin(CoreChatMessage, CoreChatMessage.session_id == CoreChatSession.id)
@@ -117,6 +128,15 @@ async def list_core_chat_sessions(
         .order_by(CoreChatSession.updated_at.desc())
         .limit(50)
     )
+
+    if initiative_id:
+        try:
+            init_uuid = uuid.UUID(initiative_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid initiative_id")
+        query = query.where(CoreChatSession.initiative_id == init_uuid)
+
+    result = await db.execute(query)
     rows = result.all()
 
     return {
@@ -128,6 +148,7 @@ async def list_core_chat_sessions(
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                 "message_count": r.message_count,
                 "compare_initiative_ids": r.compare_initiative_ids,
+                "initiative_id": str(r.initiative_id) if r.initiative_id else None,
             }
             for r in rows
             if r.message_count > 0
@@ -229,8 +250,18 @@ async def compliance_chat_stream(
 
     async def generate():
         try:
+            # Resolve initiative_id for session scoping
+            resolved_initiative_id: uuid.UUID | None = None
+            if data.initiative_id:
+                try:
+                    resolved_initiative_id = uuid.UUID(data.initiative_id)
+                except ValueError:
+                    pass
+
             # Persist session + user message upfront
-            session = await _get_or_create_session(db, user.uid, data.session_id)
+            session = await _get_or_create_session(
+                db, user.uid, data.session_id, initiative_id=resolved_initiative_id,
+            )
 
             user_msg = CoreChatMessage(
                 session_id=session.id,
@@ -262,21 +293,13 @@ async def compliance_chat_stream(
                 for cid in data.compare_initiative_ids:
                     try:
                         init_uuid = uuid.UUID(cid)
-                        result = await db.execute(
-                            select(Initiative).where(
-                                Initiative.id == init_uuid,
-                                Initiative.user_id == user.uid,
-                            )
-                        )
-                        initiative = result.scalar_one_or_none()
-                        if not initiative:
-                            raise ValueError(f"Initiative {cid} not found")
+                        initiative, _role = await get_initiative_with_role(db, init_uuid, user)
                         compare_contexts.append({
                             "initiative_id": cid,
                             "project_context": _build_project_context(initiative),
                             "title": initiative.title or "Untitled Project",
                         })
-                    except (ValueError, Exception) as e:
+                    except (ValueError, HTTPException, Exception) as e:
                         logger.warning(f"Failed to load compare initiative {cid}: {e}")
                         compare_contexts = None
                         break
@@ -307,16 +330,9 @@ async def compliance_chat_stream(
                 if data.initiative_id:
                     try:
                         init_uuid = uuid.UUID(data.initiative_id)
-                        result = await db.execute(
-                            select(Initiative).where(
-                                Initiative.id == init_uuid,
-                                Initiative.user_id == user.uid,
-                            )
-                        )
-                        initiative = result.scalar_one_or_none()
-                        if initiative:
-                            project_context = _build_project_context(initiative)
-                    except (ValueError, Exception) as e:
+                        initiative, _role = await get_initiative_with_role(db, init_uuid, user)
+                        project_context = _build_project_context(initiative)
+                    except (ValueError, HTTPException, Exception) as e:
                         logger.warning(f"Failed to load initiative context: {e}")
 
             if not compare_contexts:
@@ -630,6 +646,7 @@ class SaveSessionMessage(BaseModel):
 
 class SaveSessionRequest(BaseModel):
     title: Optional[str] = None
+    initiative_id: Optional[str] = None
     messages: list[SaveSessionMessage]
 
 
@@ -643,7 +660,15 @@ async def save_session_from_messages(
     if not data.messages:
         raise HTTPException(status_code=400, detail="No messages provided")
 
-    session = CoreChatSession(user_id=user.uid, title=data.title)
+    init_uuid: uuid.UUID | None = None
+    if data.initiative_id:
+        try:
+            init_uuid = uuid.UUID(data.initiative_id)
+            await get_initiative_with_role(db, init_uuid, user)
+        except (ValueError, HTTPException):
+            init_uuid = None
+
+    session = CoreChatSession(user_id=user.uid, title=data.title, initiative_id=init_uuid)
     db.add(session)
     await db.flush()
 

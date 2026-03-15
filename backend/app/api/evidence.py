@@ -221,7 +221,9 @@ async def get_evidence_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evidence document not found",
         )
-    
+
+    await require_viewer(db, evidence_doc.initiative_id, user)
+
     # Get all chunks ordered by index
     chunks_result = await db.execute(
         select(EvidenceChunk)

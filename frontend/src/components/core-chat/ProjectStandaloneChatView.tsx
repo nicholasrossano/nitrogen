@@ -116,7 +116,7 @@ export function ProjectStandaloneChatView({
       completion_meta: m.completion_meta ?? undefined,
     }));
     api
-      .saveSessionFromMessages(msgs, sessionTitle ?? undefined)
+      .saveSessionFromMessages(msgs, sessionTitle ?? undefined, initiativeId)
       .then(({ session_id }) => {
         setCurrentSessionId(session_id);
         // Add to session list so it appears immediately in history
@@ -133,9 +133,9 @@ export function ProjectStandaloneChatView({
       .catch((err) => console.warn('Failed to persist document flow session:', err));
   }, [localMessages, sessionTitle]);
 
-  // Load session list from DB on mount
+  // Load session list from DB on mount — scoped to this project
   useEffect(() => {
-    api.getCoreChatSessions()
+    api.getCoreChatSessions(initiativeId)
       .then(({ sessions }) => {
         setDbSessions(
           sessions.map((s) => ({
@@ -147,7 +147,7 @@ export function ProjectStandaloneChatView({
         );
       })
       .catch((err) => console.warn('Failed to load chat sessions:', err));
-  }, []);
+  }, [initiativeId]);
 
   // When showLanding transitions to true, clear current conversation
   // (it's already persisted to DB by the streaming endpoint)
@@ -155,7 +155,7 @@ export function ProjectStandaloneChatView({
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
       // Refresh sessions list so the just-finished conversation appears in history
-      api.getCoreChatSessions()
+      api.getCoreChatSessions(initiativeId)
         .then(({ sessions }) => {
           setDbSessions(
             sessions.map((s) => ({
