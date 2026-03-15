@@ -1,5 +1,6 @@
-import { Minus, Check, FileOutput, FlaskConical } from 'lucide-react';
+import { Minus, Check, FileCheck2, Calculator } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem } from '@/lib/api';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface PlanSubItemProps {
   item: ProjectPlanItem;
@@ -20,25 +21,25 @@ type ItemType = 'deliverable' | 'assessment';
 
 const ITEM_TYPE_STYLES: Record<ItemType, {
   badge: string;
-  label: string;
-  Icon: typeof FileOutput;
+  tooltip: string;
+  Icon: typeof FileCheck2;
 }> = {
   deliverable: {
-    badge: 'bg-accent/10 text-accent',
-    label: 'DEL',
-    Icon: FileOutput,
+    badge: 'bg-accent-secondary-wash text-accent-secondary',
+    tooltip: 'Deliverable',
+    Icon: FileCheck2,
   },
   assessment: {
-    badge: 'bg-violet-500/10 text-violet-600',
-    label: 'ASM',
-    Icon: FlaskConical,
+    badge: 'bg-indicator-green/10 text-indicator-green',
+    tooltip: 'Assessment',
+    Icon: Calculator,
   },
 };
 
 
 export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = false, onToggleComplete, hideBranchGutter = false, fullWidth = false }: PlanSubItemProps) {
   const itemType: ItemType = (item.item_type as ItemType) ?? 'deliverable';
-  const typeStyle = ITEM_TYPE_STYLES[itemType] ?? ITEM_TYPE_STYLES.deliverable;
+  const typeStyle = ITEM_TYPE_STYLES[itemType];
   const isClickable = Boolean(onDeepDive);
 
   return (
@@ -82,12 +83,14 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = f
           onKeyDown={isClickable && !isComplete ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDeepDive!(item); } } : undefined}
           aria-label={isClickable ? `Deep dive: ${item.title}` : undefined}
         >
-          {/* REQ / OPT badge — leading */}
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wide leading-none flex-shrink-0 transition-opacity ${
-            isComplete ? 'opacity-40' : ''
-          } ${styles.badge}`}>
-            {styles.label}
-          </span>
+          {/* Item type badge — leading */}
+          <Tooltip content={typeStyle.tooltip}>
+            <span className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-opacity ${
+              isComplete ? 'opacity-40' : ''
+            } ${typeStyle.badge}`}>
+              <typeStyle.Icon className="w-3 h-3" />
+            </span>
+          </Tooltip>
 
           {/* Title */}
           <span className={`flex-1 text-sm font-medium leading-snug transition-colors ${

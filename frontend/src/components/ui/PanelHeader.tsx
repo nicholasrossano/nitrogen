@@ -11,7 +11,7 @@ interface PanelHeaderProps {
 
 export function PanelHeader({ icon: Icon, title, subtitle, action }: PanelHeaderProps) {
   return (
-    <div className="flex items-center gap-2 px-4 py-3 border-b border-divider flex-shrink-0">
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-divider flex-shrink-0 bg-surface-header">
       <Icon className="w-4 h-4 text-text-tertiary flex-shrink-0" />
       {subtitle != null ? (
         <div className="flex-1 min-w-0">

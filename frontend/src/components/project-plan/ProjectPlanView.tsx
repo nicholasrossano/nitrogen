@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown, FileCheck2, Calculator } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar, ProjectPlanPhase } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
@@ -9,6 +9,7 @@ import { PlanSubItem } from './PlanSubItem';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { DeepDivePanel } from './DeepDivePanel';
 import { SurveyPopup, SurveyConfig, SurveyResponse } from '@/components/survey/SurveyPopup';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 
 // Gradient-ordered palette: cool blues → warm reds/browns → greens
 const PILLAR_COLORS = [
@@ -57,6 +58,7 @@ interface ProjectPlanViewProps {
   initiativeId: string;
   showInspector?: boolean;
   onInspectorChange?: (open: boolean, hasItem: boolean) => void;
+  onOpenFullDoc?: (citation: ResearchPanelCitation) => void;
 }
 
 interface DeepDiveState {
@@ -67,7 +69,7 @@ interface DeepDiveState {
   error: string | null;
 }
 
-export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange }: ProjectPlanViewProps) {
+export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange, onOpenFullDoc }: ProjectPlanViewProps) {
   const {
     projectPlan,
     projectPlanLoading,
@@ -83,6 +85,9 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [selectedPillarFilter, setSelectedPillarFilter] = useState<string | null>(null);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<'deliverable' | 'assessment' | null>(null);
+  const [typeFilterDropdownOpen, setTypeFilterDropdownOpen] = useState(false);
+  const typeFilterRef = useRef<HTMLDivElement>(null);
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [expandedPillars, setExpandedPillars] = useState<Set<string>>(new Set());
   // Derive completed set directly from persisted plan data
@@ -199,14 +204,17 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
   const runDeepDive = useCallback(
     async (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
-      // Return cached result immediately (opens the panel with data)
       const cached = deepDiveCache[item.id];
       if (cached) {
+        // Show cached LLM content instantly for immediate UX, but always call the
+        // API in the background — the backend strips evidence sources from its DB
+        // cache and re-fetches them fresh on every request, so we must hit the API
+        // even for previously-run items to get the document citations.
         setDeepDive({ item, pillar, result: cached, loading: false, error: null });
-        return;
+      } else {
+        setDeepDive({ item, pillar, result: null, loading: true, error: null });
       }
 
-      setDeepDive({ item, pillar, result: null, loading: true, error: null });
       try {
         const result = await api.deepDiveItem(initiativeId, item.id, {
           item_title: item.title,
@@ -216,14 +224,17 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
         });
         setLocalCache((prev) => ({ ...prev, [item.id]: result }));
         setDeepDive((prev) =>
-          prev ? { ...prev, result, loading: false } : null
+          prev?.item.id === item.id ? { ...prev, result, loading: false } : prev
         );
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Deep dive failed. Please try again.';
-        setDeepDive((prev) =>
-          prev ? { ...prev, loading: false, error: message } : null
-        );
+        // Only surface the error if there is no cached content to fall back on
+        if (!cached) {
+          const message =
+            err instanceof Error ? err.message : 'Deep dive failed. Please try again.';
+          setDeepDive((prev) =>
+            prev ? { ...prev, loading: false, error: message } : null
+          );
+        }
       }
     },
     [initiativeId, deepDiveCache]
@@ -333,6 +344,18 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [filterDropdownOpen]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (typeFilterRef.current && !typeFilterRef.current.contains(e.target as Node)) {
+        setTypeFilterDropdownOpen(false);
+      }
+    }
+    if (typeFilterDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [typeFilterDropdownOpen]);
 
   const pillars = useMemo(() => projectPlan?.pillars ?? [], [projectPlan?.pillars]);
   const phases = useMemo(() => projectPlan?.phases ?? [], [projectPlan?.phases]);
@@ -458,122 +481,151 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
             </div>
           )}
 
-          <div ref={outerContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Category / Phase toggle — in main white space, only when phase data exists */}
-          {hasPhases && (
-            <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
-              {/* Contextual controls slot — stable width, expand/collapse fades in on category, filter fades in on phase */}
-              <div className="relative">
-                {/* Expand / collapse all — category view */}
-                <div
-                  className={`transition-opacity duration-200 ease-in-out flex items-center bg-surface-subtle rounded-full p-0.5 ${
-                    viewMode === 'category'
-                      ? 'opacity-100 pointer-events-auto'
-                      : 'opacity-0 pointer-events-none absolute inset-0'
-                  }`}
-                >
-                  <button
-                    onClick={() => setExpandedPillars(allPillarsExpanded ? new Set() : new Set(pillars.map((p) => p.id)))}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium text-text-tertiary hover:text-text-secondary transition-colors whitespace-nowrap"
-                  >
-                    {allPillarsExpanded ? 'Collapse all' : 'Expand all'}
-                    <ChevronsUpDown className="w-3 h-3" />
-                  </button>
-                </div>
+          <div ref={outerContainerRef} className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+          {/* Toolbar row — view controls */}
+          <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
 
-                {/* Category filter dropdown — phase view */}
-                <div
-                  className={`transition-opacity duration-200 ease-in-out ${
-                    viewMode === 'phase'
-                      ? 'opacity-100 pointer-events-auto'
-                      : 'opacity-0 pointer-events-none absolute inset-0'
-                  }`}
+              {/* Expand / Collapse all */}
+              <div className="flex items-center bg-surface-subtle rounded-full p-0.5">
+                <button
+                  onClick={() => {
+                    if (viewMode === 'category') {
+                      setExpandedPillars(allPillarsExpanded ? new Set() : new Set(pillars.map((p) => p.id)));
+                    } else {
+                      setCollapsedPhases(collapsedPhases.size === 0 ? new Set(phases.map((p) => p.id)) : new Set());
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap bg-white text-text-primary shadow-sm border border-stroke-subtle"
                 >
-                  <div ref={filterDropdownRef} className="relative flex items-center bg-surface-subtle rounded-full p-0.5">
-                    <button
-                      onClick={() => setFilterDropdownOpen((v) => !v)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap ${
-                        selectedPillarFilter
-                          ? 'bg-white text-accent shadow-sm border border-accent/30'
-                          : 'bg-transparent text-text-tertiary hover:text-text-secondary'
-                      }`}
-                    >
-                      {selectedPillarFilter
-                        ? pillars.find((p) => p.id === selectedPillarFilter)?.name ?? 'Category'
-                        : 'All Categories'}
-                      <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {filterDropdownOpen && (
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[160px]">
-                        <button
-                          onClick={() => { setSelectedPillarFilter(null); setFilterDropdownOpen(false); }}
-                          className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                            !selectedPillarFilter
-                              ? 'text-accent bg-accent/5'
-                              : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-                          }`}
-                        >
-                          All Categories
-                        </button>
-                        {pillars.map((pillar, idx) => (
-                          <button
-                            key={pillar.id}
-                            onClick={() => { setSelectedPillarFilter(pillar.id); setFilterDropdownOpen(false); }}
-                            className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
-                              selectedPillarFilter === pillar.id
-                                ? 'text-accent bg-accent/5'
-                                : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-                            }`}
-                          >
-                            <span
-                              className="w-2 h-2 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: PILLAR_COLORS[idx % PILLAR_COLORS.length] }}
-                            />
-                            {pillar.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  {(viewMode === 'category' ? allPillarsExpanded : collapsedPhases.size === 0) ? 'Collapse all' : 'Expand all'}
+                  <ChevronsUpDown className="w-3 h-3" />
+                </button>
               </div>
 
-              {/* View mode toggle */}
-              <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit">
-                {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
+              {/* Categories filter */}
+              <div ref={filterDropdownRef} className="relative flex items-center bg-surface-subtle rounded-full p-0.5">
+                <button
+                  onClick={() => setFilterDropdownOpen((v) => !v)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap ${
+                    selectedPillarFilter
+                      ? 'bg-white text-accent shadow-sm border border-accent/30'
+                      : 'bg-transparent text-text-tertiary hover:text-text-secondary'
+                  }`}
+                >
+                  {selectedPillarFilter
+                    ? pillars.find((p) => p.id === selectedPillarFilter)?.name ?? 'Category'
+                    : 'All Categories'}
+                  <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {filterDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[160px]">
+                    <button
+                      onClick={() => { setSelectedPillarFilter(null); setFilterDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                        !selectedPillarFilter
+                          ? 'text-accent bg-accent/5'
+                          : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+                      }`}
+                    >
+                      All Categories
+                    </button>
+                    {pillars.map((pillar, idx) => (
+                      <button
+                        key={pillar.id}
+                        onClick={() => { setSelectedPillarFilter(pillar.id); setFilterDropdownOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
+                          selectedPillarFilter === pillar.id
+                            ? 'text-accent bg-accent/5'
+                            : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: PILLAR_COLORS[idx % PILLAR_COLORS.length] }}
+                        />
+                        {pillar.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+          {/* Type filter — always visible */}
+          <div ref={typeFilterRef} className="relative flex items-center bg-surface-subtle rounded-full p-0.5">
+            <button
+              onClick={() => setTypeFilterDropdownOpen((v) => !v)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap ${
+                selectedTypeFilter
+                  ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
+                  : 'bg-transparent text-text-tertiary hover:text-text-secondary'
+              }`}
+            >
+              {selectedTypeFilter === 'deliverable' && <FileCheck2 className="w-3 h-3" />}
+              {selectedTypeFilter === 'assessment' && <Calculator className="w-3 h-3" />}
+              {selectedTypeFilter === 'deliverable' ? 'Deliverables' : selectedTypeFilter === 'assessment' ? 'Assessments' : 'All Types'}
+              <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${typeFilterDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {typeFilterDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[140px]">
+                {([
+                  [null, null, 'All Types'],
+                  ['deliverable', FileCheck2, 'Deliverables'],
+                  ['assessment', Calculator, 'Assessments'],
+                ] as const).map(([value, Icon, label]) => (
                   <button
-                    key={mode}
-                    onClick={() => {
-                      setViewMode(mode);
-                      if (mode === 'category') setSelectedPillarFilter(null);
-                    }}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
-                      viewMode === mode
-                        ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
-                        : 'text-text-tertiary hover:text-text-secondary'
+                    key={String(value)}
+                    onClick={() => { setSelectedTypeFilter(value); setTypeFilterDropdownOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
+                      selectedTypeFilter === value
+                        ? 'text-accent bg-accent/5'
+                        : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
                     }`}
                   >
-                    <Icon className="w-3 h-3" />
+                    {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
                     {label}
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* View mode toggle */}
+          {hasPhases && (
+            <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit">
+              {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    setViewMode(mode);
+                    if (mode === 'category') setSelectedPillarFilter(null);
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
+                    viewMode === mode
+                      ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
+                      : 'text-text-tertiary hover:text-text-secondary border border-transparent'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {label}
+                </button>
+              ))}
             </div>
           )}
+          </div>
           {viewMode === 'category' ? (
-          <div className="flex-1 overflow-y-auto p-4 pt-2">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 pt-2">
             <div className="flex gap-6 items-start">
               {Array.from({ length: numCols }, (_, colIdx) => (
-                <div key={colIdx} className="flex-1 flex flex-col gap-6">
-                  {pillars
+                <div key={colIdx} className="flex-1 min-w-0 flex flex-col gap-6">
+                  {(selectedPillarFilter ? pillars.filter((p) => p.id === selectedPillarFilter) : pillars)
                     .filter((_, i) => i % numCols === colIdx)
                     .map((pillar) => {
                       const globalIdx = pillars.indexOf(pillar);
                       return (
                         <PillarColumn
                           key={pillar.id}
-                          pillar={pillar}
+                          pillar={selectedTypeFilter ? { ...pillar, items: pillar.items.filter(i => (i.item_type ?? 'deliverable') === selectedTypeFilter) } : pillar}
                           deepDiveCache={deepDiveCache}
                           onDeepDive={handleDeepDive}
                           onDeleteItem={handleDeleteItem}
@@ -598,13 +650,13 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
             </div>
           </div>
           ) : (
-          <div className="flex-1 overflow-y-auto p-4 pt-2">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 pt-2">
             <div className="max-w-3xl mx-auto space-y-6">
               {phaseGroups.map((group, groupIdx) => (
                 <PhaseSection
                   key={group.phase.id}
                   phase={group.phase}
-                  items={group.items}
+                  items={selectedTypeFilter ? group.items.filter(({ item }) => (item.item_type ?? 'deliverable') === selectedTypeFilter) : group.items}
                   phaseIndex={groupIdx}
                   totalPhases={phaseGroups.length}
                   pillars={pillars}
@@ -630,8 +682,8 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
           {/* Deep Dive panel — inline, respects header */}
           <div
-            className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-            style={{ width: inspectorVisible && deepDive ? 'min(420px, calc(100% - 280px))' : 0 }}
+            className="flex-shrink-0 overflow-hidden"
+            style={{ width: inspectorVisible && deepDive ? PANEL_WIDTH : 0 }}
           >
             {deepDive && (
               <DeepDivePanel
@@ -643,6 +695,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                 error={deepDive.error}
                 onClose={handleClosePanel}
                 onRetry={handleRetry}
+                onOpenFullDoc={onOpenFullDoc}
               />
             )}
           </div>

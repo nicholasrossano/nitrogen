@@ -291,6 +291,9 @@ export interface DeepDiveSource {
   url: string | null;
   source_type: string;
   publisher: string | null;
+  excerpt?: string | null;
+  evidence_doc_id?: string | null;
+  chunk_id?: string | null;
 }
 
 export interface DeepDiveResult {

@@ -31,6 +31,7 @@ from app.schemas.provenance import (
     SourceAttribution,
     source_attribution_from_retrieved_fact,
 )
+from app.services.rag import RAGService
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
 
 settings = get_settings()
@@ -245,6 +246,13 @@ DEEP_DIVE_FUNCTION = {
     },
 }
 
+UPLOADED_DOCS_BLOCK_TEMPLATE = """
+
+UPLOADED PROJECT DOCUMENTS (these are documents the user uploaded for this project;
+they may contain evidence that elements are already completed or in progress):
+{uploaded_docs}
+"""
+
 EVIDENCE_BLOCK_TEMPLATE = """
 
 RETRIEVED EVIDENCE (ground your classifications in these sources; cite form/checklist
@@ -284,6 +292,9 @@ class DeepDiveSource:
     url: str | None
     source_type: str
     publisher: str | None = None
+    excerpt: str | None = None
+    evidence_doc_id: str | None = None
+    chunk_id: str | None = None
 
 
 @dataclass
@@ -319,6 +330,7 @@ class DeepDiveService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.retrieval = TieredRetrievalService(db)
+        self.rag = RAGService(db)
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def generate(
@@ -356,24 +368,47 @@ class DeepDiveService:
 
         logger.info("Deep dive item=%r  queries=%r", item_id, queries)
 
-        # Step 2: Fire all queries in parallel
-        search_results = await asyncio.gather(
-            *[self.retrieval.search_web(q, max_results=5, max_content_length=800) for q in queries]
+        # Step 2: Fire web searches + evidence RAG in parallel
+        rag_query = f"{item_title} {item_rationale or ''}"
+        search_coros = [self.retrieval.search_web(q, max_results=5, max_content_length=800) for q in queries]
+        evidence_coro = self.rag.retrieve(
+            query=rag_query,
+            initiative_id=initiative.id,
+            sources=["evidence"],
+            evidence_top_k=5,
+            corpus_top_k=0,
         )
+        results = await asyncio.gather(*search_coros, evidence_coro, return_exceptions=True)
 
-        # Step 3: Deduplicate by URL (fall back to title)
+        web_batches = results[:-1]
+        evidence_chunks_result = results[-1]
+
+        # Collect web facts
         seen: set[str] = set()
         all_facts: list[RetrievedFact] = []
-        for batch in search_results:
+        for batch in web_batches:
+            if isinstance(batch, BaseException):
+                logger.warning("Web search batch failed: %s", batch)
+                continue
             for fact in batch:
                 key = (fact.source_url or fact.source_title).lower().strip()
                 if key not in seen:
                     seen.add(key)
                     all_facts.append(fact)
 
-        logger.info("Deep dive gathered %d unique web facts", len(all_facts))
+        # Collect evidence chunks (RAG results from uploaded documents)
+        evidence_chunks = []
+        if not isinstance(evidence_chunks_result, BaseException):
+            evidence_chunks = evidence_chunks_result
+        else:
+            logger.warning("Evidence RAG failed: %s", evidence_chunks_result)
 
-        # Step 4: Generate structured output
+        logger.info(
+            "Deep dive gathered %d unique web facts + %d evidence chunks",
+            len(all_facts), len(evidence_chunks),
+        )
+
+        # Step 3: Generate structured output
         result_data = await self._generate_structured(
             item_title=item_title,
             item_classification=item_classification,
@@ -381,6 +416,7 @@ class DeepDiveService:
             pillar_name=pillar_name,
             project_context=project_context,
             facts=all_facts,
+            evidence_chunks=evidence_chunks,
         )
 
         # Attach per-element provenance from LLM-emitted source_indices
@@ -408,8 +444,8 @@ class DeepDiveService:
                 provenance=prov,
             ))
 
-        # Build source list — only facts the LLM actually referenced
-        sources = [
+        # Build source list — web facts the LLM actually referenced
+        sources: list[DeepDiveSource] = [
             DeepDiveSource(
                 title=f.source_title,
                 url=f.source_url,
@@ -419,6 +455,9 @@ class DeepDiveService:
             for idx, f in enumerate(all_facts, 1)
             if idx in referenced_indices and f.source_url
         ]
+
+        # Evidence sources are NOT included here — they are added at the API layer
+        # (always re-fetched fresh so cached deep dives also get up-to-date citations)
 
         elapsed_ms = int((time.time() - start) * 1000)
         return DeepDiveResult(
@@ -497,8 +536,21 @@ class DeepDiveService:
         pillar_name: str,
         project_context: str,
         facts: list[RetrievedFact],
+        evidence_chunks: list | None = None,
     ) -> dict:
         """Call the LLM with forced function calling to produce the structured result."""
+
+        # Format uploaded evidence chunks (from RAG)
+        uploaded_docs_block = ""
+        if evidence_chunks:
+            doc_lines: list[str] = []
+            for i, chunk in enumerate(evidence_chunks[:5], 1):
+                doc_lines.append(f"[D{i}] [{chunk.source_title}]\n{chunk.content[:600]}")
+            uploaded_docs_block = UPLOADED_DOCS_BLOCK_TEMPLATE.format(
+                uploaded_docs="\n\n".join(doc_lines)
+            )
+
+        # Format web research facts
         if facts:
             lines: list[str] = []
             for i, f in enumerate(facts[:12], 1):
@@ -517,6 +569,15 @@ class DeepDiveService:
                 "numbered sources above that support it. Required elements MUST cite at least one source."
             )
 
+        uploaded_cite_instruction = ""
+        if evidence_chunks:
+            uploaded_cite_instruction = (
+                "\n\nThe project's uploaded documents are shown above as [D1], [D2], etc. "
+                "If any uploaded document provides evidence that an element has already been "
+                "completed or partially addressed, note this in the element's description "
+                "(e.g. 'The uploaded [document name] appears to satisfy this requirement.')."
+            )
+
         user_message = (
             f"PROJECT CONTEXT\n{project_context}\n\n"
             f"SUB-ITEM TO ANALYZE\n"
@@ -527,7 +588,7 @@ class DeepDiveService:
             f"TASK\nIdentify the key elements the applicant must produce or provide "
             f"to satisfy this requirement. Ground each element in the retrieved sources "
             f"where possible. Use noun-phrase titles (document/permit names), not verb instructions."
-            f"{evidence_block}{source_cite_instruction}"
+            f"{uploaded_docs_block}{evidence_block}{source_cite_instruction}{uploaded_cite_instruction}"
         )
 
         messages: list[dict] = [
@@ -554,3 +615,47 @@ class DeepDiveService:
         except Exception as exc:
             logger.error("Deep dive: failed to parse tool call arguments: %s", exc)
             return {"what_this_is": [], "elements": [], "dependencies": []}
+
+    async def get_evidence_sources(
+        self,
+        initiative: Initiative,
+        item_title: str,
+        item_rationale: str,
+    ) -> list[DeepDiveSource]:
+        """Run a fast evidence-only RAG lookup for an item.
+
+        Called at the API layer for both cached and fresh deep dives so that
+        document citations are always up-to-date regardless of cache age.
+        """
+        if not initiative.id:
+            return []
+        rag_query = f"{item_title} {item_rationale or ''}".strip()
+        try:
+            chunks = await self.rag.retrieve(
+                query=rag_query,
+                initiative_id=initiative.id,
+                sources=["evidence"],
+                evidence_top_k=5,
+                corpus_top_k=0,
+            )
+        except Exception as exc:
+            logger.warning("Evidence RAG failed for deep dive: %s", exc)
+            return []
+
+        seen_doc_ids: set[str] = set()
+        sources: list[DeepDiveSource] = []
+        for chunk in chunks:
+            doc_id = str(chunk.source_doc_id)
+            if doc_id in seen_doc_ids:
+                continue
+            seen_doc_ids.add(doc_id)
+            sources.append(DeepDiveSource(
+                title=chunk.source_title,
+                url=None,
+                source_type="evidence",
+                excerpt=chunk.content[:300] if chunk.content else None,
+                evidence_doc_id=doc_id,
+                chunk_id=str(chunk.chunk_id),
+            ))
+        logger.info("Deep dive evidence sources for item=%r: %d doc(s)", item_title, len(sources))
+        return sources

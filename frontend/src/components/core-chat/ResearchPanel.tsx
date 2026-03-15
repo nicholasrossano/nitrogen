@@ -72,7 +72,13 @@ function MiniPdfPage({ evidenceDocId, pageNumber }: { evidenceDocId: string; pag
 }
 
 function RichHtmlContent({ html }: { html: string }) {
-  const sanitized = DOMPurify.sanitize(html, {
+  // Patch orphaned <tr> fragments (legacy chunks split at row level):
+  // if the trimmed HTML starts with <tr but has no wrapping <table>, wrap it.
+  const patched = /^\s*<tr[\s>]/i.test(html) && !/<table[\s>]/i.test(html)
+    ? `<table>${html}</table>`
+    : html;
+
+  const sanitized = DOMPurify.sanitize(patched, {
     ALLOWED_TAGS: [
       'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'ul', 'ol', 'li',
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody',
@@ -92,9 +98,11 @@ function RichHtmlContent({ html }: { html: string }) {
 export function SnippetCard({
   citation,
   onOpenFull,
+  textOnly = false,
 }: {
   citation: ResearchPanelCitation;
   onOpenFull?: () => void;
+  textOnly?: boolean;
 }) {
   const [chunk, setChunk] = useState<EvidenceChunkDetail | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
@@ -133,11 +141,13 @@ export function SnippetCard({
   const renderContent = () => {
     if (!chunk) return null;
 
+    // Always render rich HTML when available (tables, formatted DOCX/XLSX content)
     if (chunk.content_html) {
       return <RichHtmlContent html={chunk.content_html} />;
     }
 
-    if (fileType === 'pdf' && chunk.page_number) {
+    // PDF page preview — suppressed in textOnly mode (e.g. deep dive panel)
+    if (!textOnly && fileType === 'pdf' && chunk.page_number) {
       return (
         <MiniPdfPage
           evidenceDocId={citation.evidence_doc_id}
@@ -210,71 +220,6 @@ export function ResearchPanel({ citation, onClose, onOpenFullDoc }: ResearchPane
         />
       </div>
 
-      <style jsx global>{`
-        .rich-snippet strong,
-        .rich-snippet b {
-          font-weight: 600;
-          color: var(--text-primary, #1C1C1E);
-        }
-        .rich-snippet em,
-        .rich-snippet i {
-          font-style: italic;
-        }
-        .rich-snippet a {
-          color: var(--accent, #005e72);
-          text-decoration: underline;
-          text-underline-offset: 2px;
-        }
-        .rich-snippet a:hover {
-          opacity: 0.8;
-        }
-        .rich-snippet ul,
-        .rich-snippet ol {
-          padding-left: 1.25em;
-          margin: 0.35em 0;
-        }
-        .rich-snippet li {
-          margin-bottom: 0.15em;
-        }
-        .rich-snippet ul { list-style-type: disc; }
-        .rich-snippet ol { list-style-type: decimal; }
-        .rich-snippet h1,
-        .rich-snippet h2,
-        .rich-snippet h3,
-        .rich-snippet h4 {
-          font-weight: 600;
-          color: var(--text-primary, #1C1C1E);
-          margin: 0.5em 0 0.25em;
-        }
-        .rich-snippet h1 { font-size: 1.1em; }
-        .rich-snippet h2 { font-size: 1.05em; }
-        .rich-snippet h3 { font-size: 1em; }
-        .rich-snippet table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 0.35em 0;
-          font-size: 0.9em;
-        }
-        .rich-snippet th,
-        .rich-snippet td {
-          border: 1px solid var(--stroke-subtle, #e5e3df);
-          padding: 4px 6px;
-          text-align: left;
-        }
-        .rich-snippet th {
-          background: var(--surface-subtle, #F7F5F2);
-          font-weight: 600;
-        }
-        .rich-snippet p {
-          margin: 0.3em 0;
-        }
-        .rich-snippet blockquote {
-          border-left: 2px solid var(--stroke-subtle, #e5e3df);
-          padding-left: 0.75em;
-          margin: 0.35em 0;
-          color: var(--text-secondary, #5A5A60);
-        }
-      `}</style>
     </div>
   );
 }

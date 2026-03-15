@@ -66,9 +66,8 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
   });
   const visibleItems = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
   const hiddenCount = items.length - DEFAULT_VISIBLE;
-  const requiredCount = items.filter(i => i.classification === 'required').length;
-  const unknownCount = items.filter(i => i.classification === 'unknown').length;
-  const optionalCount = items.length - requiredCount - unknownCount;
+  const deliverableCount = items.filter(i => (i.item_type ?? 'deliverable') === 'deliverable').length;
+  const assessmentCount = items.filter(i => i.item_type === 'assessment').length;
 
   return (
     <div className="flex flex-col min-h-0" ref={el => onRegisterRef?.(el)}>
@@ -83,13 +82,13 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
         <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: hexToRgba(color, 0.1), color }}>
           <PillarIcon name={pillar.icon} />
         </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-semibold text-text-primary leading-tight whitespace-nowrap">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-text-primary leading-tight truncate">
             {pillar.name}
           </h3>
-          <p className="text-[11px] text-text-tertiary mt-0.5 whitespace-nowrap">
-            {requiredCount} required &middot; {optionalCount} optional
-            {unknownCount > 0 && <> &middot; <span className="text-indicator-orange">{unknownCount} unknown</span></>}
+          <p className="text-[11px] text-text-tertiary mt-0.5 truncate">
+            {deliverableCount} deliverable{deliverableCount !== 1 ? 's' : ''}
+            {assessmentCount > 0 && <> &middot; {assessmentCount} assessment{assessmentCount !== 1 ? 's' : ''}</>}
           </p>
         </div>
         {itemsExpanded
