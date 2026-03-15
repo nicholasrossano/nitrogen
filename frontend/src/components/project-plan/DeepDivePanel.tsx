@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { X, ExternalLink, AlertCircle, Zap, HelpCircle } from 'lucide-react';
+import { X, ExternalLink, AlertCircle, Zap, HelpCircle, FileCheck2, Calculator } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { SnippetCard } from '@/components/core-chat/ResearchPanel';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 
 interface DeepDivePanelProps {
   initiativeId: string;
@@ -15,6 +17,7 @@ interface DeepDivePanelProps {
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
+  onOpenFullDoc?: (citation: ResearchPanelCitation) => void;
 }
 
 type Classification = 'required' | 'optional' | 'unknown';
@@ -53,6 +56,21 @@ function ClassificationBadge({ cls }: { cls: string }) {
   );
 }
 
+function ItemTypeBadge({ itemType }: { itemType?: string }) {
+  const isAssessment = itemType === 'assessment';
+  const Icon = isAssessment ? Calculator : FileCheck2;
+  const label = isAssessment ? 'Assessment' : 'Deliverable';
+  const style = isAssessment
+    ? 'bg-indicator-green/10 text-indicator-green'
+    : 'bg-accent-secondary-wash text-accent-secondary';
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold tracking-wide leading-none flex-shrink-0 inline-flex items-center gap-1 ${style}`}>
+      <Icon className="w-3 h-3" />
+      {label}
+    </span>
+  );
+}
+
 export function DeepDivePanel({
   item,
   pillar,
@@ -61,6 +79,7 @@ export function DeepDivePanel({
   error,
   onClose,
   onRetry,
+  onOpenFullDoc,
 }: DeepDivePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -93,15 +112,18 @@ export function DeepDivePanel({
     >
         {/* Header */}
         <div className="flex items-start gap-3 px-5 py-4 border-b border-stroke-subtle flex-shrink-0">
-          <div className="w-7 h-7 bg-accent/10 rounded flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Zap className="w-3.5 h-3.5 text-accent" />
+          <div className="flex flex-col items-center gap-1 flex-shrink-0">
+            <div className="w-full aspect-square min-w-0 bg-accent/10 rounded flex items-center justify-center">
+              <Zap className="w-3.5 h-3.5 text-accent" />
+            </div>
+            <ClassificationBadge cls={item.classification} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-wide">
                 {pillarLabel}
               </span>
-              <ClassificationBadge cls={item.classification} />
+              <ItemTypeBadge itemType={item.item_type} />
             </div>
             <h2 className="text-sm font-semibold text-text-primary leading-snug mt-0.5">
               {item.title}
@@ -117,7 +139,7 @@ export function DeepDivePanel({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {loading && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <PageLoader label="" />
@@ -202,38 +224,68 @@ export function DeepDivePanel({
                 </section>
               )}
 
-              {/* Sources */}
-              {result.sources.length > 0 && (
+              {/* Project documents (evidence sources) */}
+              {result.sources.some(s => s.source_type === 'evidence' && s.evidence_doc_id) && (
+                <section>
+                  <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
+                    Project documents
+                  </h3>
+                  <div className="space-y-2">
+                    {result.sources
+                      .filter(s => s.source_type === 'evidence' && s.evidence_doc_id)
+                      .map((src, i) => {
+                        const citation: ResearchPanelCitation = {
+                          evidence_doc_id: src.evidence_doc_id!,
+                          chunk_id: src.chunk_id ?? null,
+                          source_title: src.title,
+                        };
+                        return (
+                          <SnippetCard
+                            key={i}
+                            citation={citation}
+                            textOnly
+                            onOpenFull={onOpenFullDoc ? () => onOpenFullDoc(citation) : undefined}
+                          />
+                        );
+                      })}
+                  </div>
+                </section>
+              )}
+
+              {/* Web sources */}
+              {result.sources.some(s => s.source_type !== 'evidence') && (
                 <section>
                   <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
                     Sources
                   </h3>
                   <div className="space-y-1.5">
-                    {result.sources.map((src, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <ExternalLink className="w-3 h-3 text-text-tertiary flex-shrink-0 mt-0.5" />
-                        {src.url ? (
-                          <a
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-accent hover:underline leading-snug min-w-0 break-words"
-                          >
-                            {src.title}
-                            {src.publisher && (
-                              <span className="text-text-tertiary"> · {src.publisher}</span>
-                            )}
-                          </a>
-                        ) : (
-                          <span className="text-xs text-text-secondary leading-snug">
-                            {src.title}
-                            {src.publisher && (
-                              <span className="text-text-tertiary"> · {src.publisher}</span>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                    {result.sources
+                      .filter(s => s.source_type !== 'evidence')
+                      .map((src, i) => (
+                        <div key={i} className="flex items-start gap-2 min-w-0">
+                          <ExternalLink className="w-3 h-3 text-text-tertiary flex-shrink-0 mt-0.5" />
+                          {src.url ? (
+                            <a
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-accent hover:underline leading-snug min-w-0 break-words line-clamp-2 flex-1"
+                            >
+                              {src.title}
+                              {src.publisher && (
+                                <span className="text-text-tertiary"> · {src.publisher}</span>
+                              )}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-text-secondary leading-snug min-w-0 break-words line-clamp-2 flex-1">
+                              {src.title}
+                              {src.publisher && (
+                                <span className="text-text-tertiary"> · {src.publisher}</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 </section>
               )}
