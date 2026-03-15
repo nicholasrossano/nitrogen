@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 interface ZoomableContainerProps {
   children: ReactNode;
@@ -10,11 +10,9 @@ interface ZoomableContainerProps {
 }
 
 /**
- * Wraps any content and adds trackpad pinch-to-zoom (ctrl+wheel).
- *
- * Uses CSS zoom applied imperatively (no React re-renders) so the
- * browser's own layout engine handles the scrollable-area calculation.
- * Scroll position is adjusted each frame to keep the cursor point stable.
+ * Wraps content with trackpad pinch-to-zoom (ctrl+wheel).
+ * Uses React state + CSS zoom so the browser handles the scroll area natively,
+ * then useLayoutEffect to fix up the scroll position before paint.
  */
 export function ZoomableContainer({
   children,
@@ -22,49 +20,53 @@ export function ZoomableContainer({
   minScale = 0.5,
   maxScale = 3,
 }: ZoomableContainerProps) {
-  const outerRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const zoomTarget = useRef({ cx: 0, cy: 0, vx: 0, vy: 0, padL: 0, padT: 0 });
 
   useEffect(() => {
-    const outer = outerRef.current;
-    const content = contentRef.current;
-    if (!outer || !content) return;
+    const el = scrollRef.current;
+    if (!el) return;
 
-    let scale = 1;
-
-    const padL = parseFloat(getComputedStyle(outer).paddingLeft) || 0;
-    const padT = parseFloat(getComputedStyle(outer).paddingTop) || 0;
+    const cs = getComputedStyle(el);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
 
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
 
-      const rect = outer.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       const vx = e.clientX - rect.left;
       const vy = e.clientY - rect.top;
 
-      // Content coordinate under cursor (unscaled)
-      const cx = (outer.scrollLeft + vx - padL) / scale;
-      const cy = (outer.scrollTop + vy - padT) / scale;
+      setScale(prev => {
+        const cx = (el.scrollLeft + vx - padL) / prev;
+        const cy = (el.scrollTop + vy - padT) / prev;
+        zoomTarget.current = { cx, cy, vx, vy, padL, padT };
 
-      // Multiplicative scaling — smooth for both trackpad and mouse wheel
-      const factor = Math.pow(2, -e.deltaY * 0.01);
-      scale = Math.min(maxScale, Math.max(minScale, scale * factor));
-
-      content.style.zoom = String(scale);
-
-      // Adjust scroll so the point under the cursor stays put
-      outer.scrollLeft = cx * scale + padL - vx;
-      outer.scrollTop = cy * scale + padT - vy;
+        const factor = Math.pow(2, -e.deltaY * 0.01);
+        return Math.min(maxScale, Math.max(minScale, prev * factor));
+      });
     };
 
-    outer.addEventListener('wheel', onWheel, { passive: false });
-    return () => outer.removeEventListener('wheel', onWheel);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, [minScale, maxScale]);
 
+  // Synchronously adjust scroll position after React applies the new zoom,
+  // but before the browser paints — keeps the cursor point stable.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || scale === 1) return;
+    const { cx, cy, vx, vy, padL, padT } = zoomTarget.current;
+    el.scrollLeft = cx * scale + padL - vx;
+    el.scrollTop = cy * scale + padT - vy;
+  }, [scale]);
+
   return (
-    <div ref={outerRef} className={className} style={{ overflow: 'auto' }}>
-      <div ref={contentRef}>
+    <div ref={scrollRef} className={className} style={{ overflow: 'auto' }}>
+      <div style={{ zoom: scale }}>
         {children}
       </div>
     </div>

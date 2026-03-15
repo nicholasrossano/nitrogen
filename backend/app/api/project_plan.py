@@ -228,6 +228,9 @@ def _serialize_deep_dive(result) -> dict:
                 "url": s.url,
                 "source_type": s.source_type,
                 "publisher": s.publisher,
+                **({"excerpt": s.excerpt} if s.excerpt else {}),
+                **({"evidence_doc_id": s.evidence_doc_id} if s.evidence_doc_id else {}),
+                **({"chunk_id": s.chunk_id} if s.chunk_id else {}),
             }
             for s in result.sources
         ],
@@ -313,41 +316,67 @@ async def deep_dive_plan_item(
     """
     initiative = await require_editor(db, initiative_id, user)
 
-    # Check for cached result
+    service = DeepDiveService(db)
+
+    # Check for cached LLM result
     plan = initiative.project_plan or {}
     cached = plan.get("deep_dives", {}).get(item_id)
+
     if cached:
-        logger.info("Returning cached deep dive for item %s", item_id)
-        return cached
+        logger.info("Returning cached deep dive for item %s (+ fresh evidence lookup)", item_id)
+        serialized = cached
+    else:
+        try:
+            result = await service.generate(
+                initiative=initiative,
+                item_id=item_id,
+                item_title=body.item_title,
+                item_classification=body.item_classification,
+                item_rationale=body.item_rationale,
+                pillar_name=body.pillar_name,
+            )
+        except Exception:
+            logger.exception(
+                "Deep dive failed for item %s in initiative %s", item_id, initiative_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Deep dive failed. Please try again.",
+            )
 
-    service = DeepDiveService(db)
-    try:
-        result = await service.generate(
-            initiative=initiative,
-            item_id=item_id,
-            item_title=body.item_title,
-            item_classification=body.item_classification,
-            item_rationale=body.item_rationale,
-            pillar_name=body.pillar_name,
-        )
-    except Exception:
-        logger.exception(
-            "Deep dive failed for item %s in initiative %s", item_id, initiative_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Deep dive failed. Please try again.",
-        )
+        serialized = _serialize_deep_dive(result)
 
-    serialized = _serialize_deep_dive(result)
+        # Persist into project_plan.deep_dives (without evidence sources — those stay fresh)
+        if initiative.project_plan is None:
+            initiative.project_plan = {}
+        deep_dives = initiative.project_plan.setdefault("deep_dives", {})
+        deep_dives[item_id] = serialized
+        flag_modified(initiative, "project_plan")
+        initiative.touch()
+        await db.commit()
 
-    # Persist into project_plan.deep_dives
-    if initiative.project_plan is None:
-        initiative.project_plan = {}
-    deep_dives = initiative.project_plan.setdefault("deep_dives", {})
-    deep_dives[item_id] = serialized
-    flag_modified(initiative, "project_plan")
-    initiative.touch()
-    await db.commit()
+    # Always run a fresh evidence RAG lookup (fast, ~5 vector comparisons) so that
+    # document citations reflect current uploads regardless of when the LLM result was cached.
+    evidence_sources = await service.get_evidence_sources(
+        initiative=initiative,
+        item_title=body.item_title,
+        item_rationale=body.item_rationale,
+    )
+    if evidence_sources:
+        non_evidence = [s for s in serialized.get("sources", []) if s.get("source_type") != "evidence"]
+        serialized = {
+            **serialized,
+            "sources": non_evidence + [
+                {
+                    "title": s.title,
+                    "url": s.url,
+                    "source_type": s.source_type,
+                    **({"excerpt": s.excerpt} if s.excerpt else {}),
+                    **({"evidence_doc_id": s.evidence_doc_id} if s.evidence_doc_id else {}),
+                    **({"chunk_id": s.chunk_id} if s.chunk_id else {}),
+                }
+                for s in evidence_sources
+            ],
+        }
 
     return serialized
