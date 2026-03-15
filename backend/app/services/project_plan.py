@@ -180,7 +180,28 @@ If you cannot honestly fill in all three, omit the item or mark it unknown rathe
 
 5. Sub-item IDs use the pattern "<pillar_prefix>-<3digit_number>" (e.g. "auth-001", "cap-001", "des-001").
 
-6. All items start with status "not_started" unless existing generated outputs clearly satisfy them.
+6. All items start with status "not_started" unless uploaded documents or existing generated outputs clearly satisfy them.
+
+## Document-Based Completion Detection
+
+Carefully scan the UPLOADED DOCUMENTS section for evidence that work has already been completed.
+When an uploaded document demonstrates that a plan item has been fulfilled, you MUST:
+1. Set that item's `status` to "complete".
+2. In the `rationale`, explain what evidence you found AND cite the source document by name
+   (e.g. "Complete — the uploaded 'Ghana EPA Screening Report.pdf' contains the approved
+   environmental screening form with EPA reference number, satisfying this requirement.").
+3. Populate `evidence_basis` with the document filename(s) and a brief excerpt or description
+   of the relevant content found in each.
+
+Examples of what counts as evidence of completion:
+- An uploaded permit, certificate, or approval letter → the corresponding plan item is complete.
+- A feasibility study or assessment report → the corresponding assessment item is complete.
+- A signed MOU, stakeholder agreement, or letter of support → the engagement item is complete.
+- A completed application form or submission receipt → the submission item is complete.
+
+Be conservative: only mark "complete" when the document clearly satisfies the requirement.
+Partial evidence (e.g. a draft, an expired certificate) should leave status as "not_started"
+but the rationale should note what was found and what remains.
 
 ## Phase Assignment
 
@@ -192,6 +213,24 @@ You must also provide a top-level `phases` array that defines the project's phas
 - **General/infrastructure**: "Scoping & Assessment", "Design & Approvals", "Procurement & Construction", "Operations & Compliance"
 
 Use 3-5 phases. Phase IDs should be short lowercase slugs (e.g. "pre_dev", "permitting", "financial_close").
+
+## Assessment Chronology
+
+Assessments do NOT automatically belong only in the first phase. Typical pattern:
+- Phase 1: screening and preliminary assessments
+- Phase 2: formalized design, pathway, technical, environmental, and financing assessments
+- Later phases: verification, commissioning, monitoring, reporting, and as-built confirmation
+
+Many assessments begin early but some are refined in later phases; some only become relevant once the project reaches permitting, financing, validation, or deployment readiness.
+
+## BAR-HAP Treatment
+
+BAR-HAP and similar multi-component tools should be represented as separate assessment items rather than a single opaque acronym. For BAR-HAP, recommended items:
+- Intervention Cost & Affordability Assessment
+- Health & Exposure Benefit Assessment
+- Environmental & Carbon Benefit Assessment
+- (optional) Policy Intervention Scenario Assessment
+Place each into the category it most directly supports.
 
 You MUST respond with valid JSON matching the schema provided."""
 
@@ -372,6 +411,24 @@ PLAN_FUNCTION_SCHEMA = {
                                             "type": "array",
                                             "items": {"type": "integer"},
                                             "description": "Indices (1-based) of the WEB RESEARCH sources that support this item. Reference at least one source for required items.",
+                                        },
+                                        "evidence_basis": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "document_name": {
+                                                        "type": "string",
+                                                        "description": "Filename of the uploaded document (from UPLOADED DOCUMENTS section)",
+                                                    },
+                                                    "excerpt_or_description": {
+                                                        "type": "string",
+                                                        "description": "Brief description or excerpt of the relevant content found in this document",
+                                                    },
+                                                },
+                                                "required": ["document_name", "excerpt_or_description"],
+                                            },
+                                            "description": "When marking an item as 'complete' based on uploaded documents, cite the document(s) and what was found. Also useful for noting partial evidence in not_started items.",
                                         },
                                         "supports": {
                                             "type": "array",
@@ -581,11 +638,13 @@ of the sources that support that item. Required items MUST cite at least one sou
 
     @staticmethod
     def _attach_item_provenance(plan_data: dict, web_sources: list) -> None:
-        """Convert LLM-emitted source_indices into structured ItemProvenance on each item."""
+        """Convert LLM-emitted source_indices and evidence_basis into structured ItemProvenance."""
         for pillar in plan_data.get("pillars", []):
             for item in pillar.get("items", []):
                 indices = item.pop("source_indices", None) or []
+                evidence_basis = item.pop("evidence_basis", None) or []
                 sources: list[dict] = []
+
                 for idx in indices:
                     if 1 <= idx <= len(web_sources):
                         fact = web_sources[idx - 1]
@@ -593,7 +652,22 @@ of the sources that support that item. Required items MUST cite at least one sou
                             source_attribution_from_retrieved_fact(fact).model_dump()
                         )
 
-                derivation = Derivation.RESEARCHED if sources else Derivation.INFERRED
+                for eb in evidence_basis:
+                    sources.append(SourceAttribution(
+                        source_type="evidence",
+                        source_title=eb.get("document_name", "Uploaded document"),
+                        excerpt=eb.get("excerpt_or_description"),
+                    ).model_dump())
+
+                has_evidence = any(s.get("source_type") == "evidence" for s in sources)
+                has_web = any(s.get("source_type") != "evidence" for s in sources)
+                if has_evidence:
+                    derivation = Derivation.PROVIDED
+                elif has_web:
+                    derivation = Derivation.RESEARCHED
+                else:
+                    derivation = Derivation.INFERRED
+
                 item["provenance"] = ItemProvenance(
                     derivation=derivation,
                     sources=[SourceAttribution(**s) for s in sources],

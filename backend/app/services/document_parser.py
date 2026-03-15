@@ -171,9 +171,11 @@ class DocumentParserService:
         """
         from html.parser import HTMLParser
 
+        # Note: "tr" is intentionally excluded so entire <table> blocks stay
+        # together as a single fragment rather than being split row-by-row.
         block_tags = {
             "p", "h1", "h2", "h3", "h4", "h5", "h6",
-            "table", "tr", "ul", "ol", "li", "blockquote", "div", "section",
+            "table", "ul", "ol", "li", "blockquote", "div", "section",
         }
 
         fragments = _split_html_blocks(html, block_tags)

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { FileText, Loader2 } from 'lucide-react';
+import { FileText, Loader2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import { ZoomableContainer } from '@/components/viewers/ZoomableContainer';
@@ -35,11 +35,12 @@ interface DocumentViewerWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  onClose?: () => void;
 }
 
 type FileType = 'pdf' | 'docx' | 'xlsx' | 'xls' | 'text' | string;
 
-export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetProps) {
+export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewerWidgetProps) {
   const evidenceDocId = data.evidence_doc_id as string | undefined;
   const chunkId = data.chunk_id as string | null | undefined;
   const sourceTitle = data.source_title as string | undefined;
@@ -150,7 +151,16 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
       <div className="h-full flex flex-col">
         <div className="flex items-center gap-2 px-4 py-3 min-h-[3rem] border-b border-divider flex-shrink-0">
           <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-          <h3 className="text-sm font-medium text-text-primary truncate">{filename}</h3>
+          <h3 className="text-sm font-medium text-text-primary truncate flex-1 min-w-0">{filename}</h3>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-subtle transition-colors flex-shrink-0 text-text-tertiary hover:text-text-secondary"
+              aria-label="Close document viewer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="flex-1 min-h-0">
           {fileType === 'pdf' && (
@@ -172,7 +182,16 @@ export function DocumentViewerWidget({ data, isActive }: DocumentViewerWidgetPro
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 px-4 py-3 min-h-[3rem] border-b border-divider flex-shrink-0">
         <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-        <h3 className="text-sm font-medium text-text-primary truncate">{filename}</h3>
+        <h3 className="text-sm font-medium text-text-primary truncate flex-1 min-w-0">{filename}</h3>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-subtle transition-colors flex-shrink-0 text-text-tertiary hover:text-text-secondary"
+            aria-label="Close document viewer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <ZoomableContainer className="flex-1 px-5 py-4">

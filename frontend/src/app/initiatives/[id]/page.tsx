@@ -18,6 +18,7 @@ import { EvaluateView } from '@/components/evaluate/EvaluateView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 
 const MIN_STANDALONE_CHAT_PERCENT = 30;
 const MAX_STANDALONE_CHAT_PERCENT = 60;
@@ -25,6 +26,9 @@ const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
 const MIN_RESEARCH_PANEL_PERCENT = 20;
 const MAX_RESEARCH_PANEL_PERCENT = 25;
 const DEFAULT_RESEARCH_PANEL_PERCENT = 25;
+const MIN_PLAN_DOC_VIEWER_PERCENT = 25;
+const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
+const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
 
 type ProjectView = 'chat' | 'plan' | 'files' | 'evaluate';
 
@@ -40,6 +44,7 @@ function InitiativePageContent() {
     router.push('/');
   }, [signOut, router]);
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
+  const planContainerRef = useRef<HTMLDivElement>(null);
 
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
@@ -77,6 +82,11 @@ function InitiativePageContent() {
   const [showChatInChatView, setShowChatInChatView] = useState(true);
   // Research panel state (citation preview)
   const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
+  // Plan view: document viewer panel (opened from deep dive panel)
+  const [planDocViewer, setPlanDocViewer] = useState<ResearchPanelCitation | null>(null);
+  const lastPlanDocViewerCitation = useRef<ResearchPanelCitation | null>(null);
+  const [planDocViewerWidthPercent, setPlanDocViewerWidthPercent] = useState(DEFAULT_PLAN_DOC_VIEWER_PERCENT);
+  const [isResizingPlanDoc, setIsResizingPlanDoc] = useState(false);
 
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
@@ -211,6 +221,13 @@ function InitiativePageContent() {
     setShowEditorInChatView(true);
   }, []);
 
+  const handleOpenFullDocFromPlan = useCallback((citation: ResearchPanelCitation) => {
+    lastPlanDocViewerCitation.current = citation;
+    setPlanDocViewer((prev) =>
+      prev?.evidence_doc_id === citation.evidence_doc_id ? null : citation
+    );
+  }, []);
+
   const handleStandaloneMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizingStandalone || !standaloneContainerRef.current) return;
     const rect = standaloneContainerRef.current.getBoundingClientRect();
@@ -240,6 +257,34 @@ function InitiativePageContent() {
   const handleResearchMouseUp = useCallback(() => {
     setIsResizingResearch(false);
   }, []);
+
+  const handlePlanDocMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingPlanDoc || !planContainerRef.current) return;
+    const rect = planContainerRef.current.getBoundingClientRect();
+    const newPercent = ((rect.right - e.clientX) / rect.width) * 100;
+    setPlanDocViewerWidthPercent(
+      Math.min(MAX_PLAN_DOC_VIEWER_PERCENT, Math.max(MIN_PLAN_DOC_VIEWER_PERCENT, newPercent))
+    );
+  }, [isResizingPlanDoc]);
+
+  const handlePlanDocMouseUp = useCallback(() => {
+    setIsResizingPlanDoc(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizingPlanDoc) {
+      document.addEventListener('mousemove', handlePlanDocMouseMove);
+      document.addEventListener('mouseup', handlePlanDocMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    return () => {
+      document.removeEventListener('mousemove', handlePlanDocMouseMove);
+      document.removeEventListener('mouseup', handlePlanDocMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingPlanDoc, handlePlanDocMouseMove, handlePlanDocMouseUp]);
 
   useEffect(() => {
     if (isResizingStandalone) {
@@ -342,10 +387,16 @@ function InitiativePageContent() {
           readOnly={isViewer}
           {...(activeView === 'plan' ? {
             rightToggle: rightPanel === 'project_plan' ? {
-              active: showInspector,
-              disabled: !hasInspectorItem,
-              onClick: handleToggleInspector,
-              title: showInspector ? 'Hide inspector' : 'Show inspector',
+              active: planDocViewer !== null,
+              disabled: lastPlanDocViewerCitation.current === null,
+              onClick: () => {
+                if (planDocViewer !== null) {
+                  setPlanDocViewer(null);
+                } else if (lastPlanDocViewerCitation.current) {
+                  setPlanDocViewer(lastPlanDocViewerCitation.current);
+                }
+              },
+              title: planDocViewer !== null ? 'Hide document viewer' : 'Show document viewer',
             } : undefined,
           } : activeView === 'chat' && !isViewer ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
@@ -504,7 +555,7 @@ function InitiativePageContent() {
                 />
               </main>
             ) : activeView === 'plan' ? (
-              <main className="h-full min-w-0 flex overflow-hidden relative">
+              <main ref={planContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
                 {/* Plan-view overlay — covers chat panel + plan panel */}
                 {showPlanOverlay && (
                   <div
@@ -531,15 +582,41 @@ function InitiativePageContent() {
                 )}
 
                 {rightPanelOpen ? (
-                  <div className="flex-1 overflow-hidden">
+                  <>
+                  <div className="flex-1 overflow-hidden min-w-0">
                     {showProjectPlan && (
                       <ProjectPlanView
                         initiativeId={initiativeId}
                         showInspector={showInspector}
                         onInspectorChange={handleInspectorChange}
+                        onOpenFullDoc={handleOpenFullDocFromPlan}
                       />
                     )}
                   </div>
+                  {planDocViewer && (
+                    <div
+                      className="flex-shrink-0 border-l border-divider flex flex-col bg-surface overflow-hidden relative"
+                      style={{ width: `${planDocViewerWidthPercent}%` }}
+                    >
+                      {/* Resize handle on left edge */}
+                      <div
+                        onMouseDown={(e) => { e.preventDefault(); setIsResizingPlanDoc(true); }}
+                        className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10 ${isResizingPlanDoc ? 'bg-accent/50' : 'bg-transparent'}`}
+                      />
+                      <div className="flex-1 min-h-0">
+                        <DocumentViewerWidget
+                          data={{
+                            evidence_doc_id: planDocViewer.evidence_doc_id,
+                            chunk_id: planDocViewer.chunk_id,
+                            source_title: planDocViewer.source_title,
+                          }}
+                          initiativeId={initiativeId}
+                          onClose={() => setPlanDocViewer(null)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  </>
                   ) : !isViewer ? (
                   <div className="flex-1 overflow-hidden h-full">
                     <ChatPanel
