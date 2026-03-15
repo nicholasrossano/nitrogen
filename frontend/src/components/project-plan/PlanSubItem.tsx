@@ -1,4 +1,4 @@
-import { Minus, Check } from 'lucide-react';
+import { Minus, Check, FileOutput, FlaskConical } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem } from '@/lib/api';
 
 interface PlanSubItemProps {
@@ -16,38 +16,29 @@ interface PlanSubItemProps {
   fullWidth?: boolean;
 }
 
-type Classification = 'required' | 'optional' | 'unknown';
+type ItemType = 'deliverable' | 'assessment';
 
-const CLASSIFICATION_STYLES: Record<Classification, {
-  dot: string;
-  card: string;
+const ITEM_TYPE_STYLES: Record<ItemType, {
   badge: string;
   label: string;
+  Icon: typeof FileOutput;
 }> = {
-  required: {
-    dot: 'bg-stroke-muted',
-    card: 'bg-surface',
+  deliverable: {
     badge: 'bg-accent/10 text-accent',
-    label: 'REQ',
+    label: 'DEL',
+    Icon: FileOutput,
   },
-  optional: {
-    dot: 'bg-stroke-muted',
-    card: 'bg-surface',
-    badge: 'bg-surface-subtle text-text-tertiary',
-    label: 'OPT',
-  },
-  unknown: {
-    dot: 'bg-stroke-muted',
-    card: 'bg-surface',
-    badge: 'bg-indicator-orange/10 text-indicator-orange',
-    label: 'UNK',
+  assessment: {
+    badge: 'bg-violet-500/10 text-violet-600',
+    label: 'ASM',
+    Icon: FlaskConical,
   },
 };
 
 
 export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = false, onToggleComplete, hideBranchGutter = false, fullWidth = false }: PlanSubItemProps) {
-  const cls = (item.classification as Classification) ?? 'optional';
-  const styles = CLASSIFICATION_STYLES[cls] ?? CLASSIFICATION_STYLES.optional;
+  const itemType: ItemType = (item.item_type as ItemType) ?? 'deliverable';
+  const typeStyle = ITEM_TYPE_STYLES[itemType] ?? ITEM_TYPE_STYLES.deliverable;
   const isClickable = Boolean(onDeepDive);
 
   return (
@@ -62,7 +53,7 @@ export function PlanSubItem({ item, isLast, onDeepDive, onDelete, isComplete = f
           {/* Dot + delete button at intersection */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
             <div className="relative w-2 h-2">
-              <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete ? 'group-hover/item:opacity-0' : ''} ${styles.dot}`} />
+              <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete ? 'group-hover/item:opacity-0' : ''} bg-stroke-muted`} />
               {onDelete && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(); }}

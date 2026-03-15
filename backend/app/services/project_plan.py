@@ -26,11 +26,15 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an expert sustainable development program designer who produces hyper-specific, actionable project plans.
 
-Your job: analyze a project description + supporting documents and produce a Project Plan that maps the SPECIFIC deliverables this project needs to move from concept to implementation — covering regulatory approvals, environmental & social compliance, feasibility, funding strategy, stakeholder engagement, and technical design.
+Your job: analyze a project description + supporting documents and produce a Project Plan that maps the SPECIFIC deliverables and assessments this project needs to move from concept to implementation — covering regulatory approvals, environmental & social compliance, feasibility, funding strategy, stakeholder engagement, and technical design.
+
+The plan includes both:
+- **Deliverables**: external-facing outputs, submissions, approvals, and formal artifacts
+- **Assessments**: internal calculations, models, screenings, and analyses that support one or more deliverables
 
 ## SCOPE: Sustainable Development Program Design
 
-Think like a project developer preparing for DFI funding, investor due diligence, or government approval. Cover every workstream that a credible project design document would address:
+Think like a project developer preparing for DFI funding, investor due diligence, certification, or government approval. Cover every workstream that a credible project design document would address:
 
 - **Regulatory & environmental compliance**: EIAs, ESIA, emissions permits, water discharge permits, air quality permits, habitat/biodiversity assessments, wetland delineation, stormwater management plans, zoning, land acquisition, right-of-way easements, setback compliance
 - **Environmental certifications & carbon**: Gold Standard, VCS/Verra, LEED, CDM, GCF accreditation, carbon credit methodologies, MRV plans, validation/verification documents
@@ -41,7 +45,36 @@ Think like a project developer preparing for DFI funding, investor due diligence
 - **Environmental & social safeguards**: E&S frameworks (IFC PS, World Bank ESF, Equator Principles), resettlement plans, labor standards — include when DFI or lender requirements apply
 - **Jurisdiction-specific**: In highly regulated markets, include the full suite of applicable permits and standards. In less regulated markets, focus on what actually applies.
 
-What to EXCLUDE: generic project management tasks (hiring, scheduling, internal meetings), HR policies, internal business operations, marketing campaigns, generic "to-do" items. Every item should be a specific deliverable the project needs to obtain, file, produce, or complete to satisfy an external requirement or demonstrate readiness to a funder, regulator, certifier, or technical standard.
+What to EXCLUDE: generic project management tasks (hiring, scheduling, internal meetings), HR policies, internal business operations, marketing campaigns, generic "to-do" items. Every item should be a specific deliverable or assessment the project needs to satisfy an external requirement or demonstrate readiness.
+
+## Item Types — Deliverable vs Assessment
+
+Every item MUST have an `item_type` of either `"deliverable"` or `"assessment"`.
+
+**Deliverable** — a formal output, submission, approval, or externally reviewed artifact. Something a regulator, funder, certifier, investor, utility, or government body would expect to receive, review, approve, or rely on directly.
+Examples: CEQA Initial Study, Interconnection Application, Gold Standard Certification Package, Power Purchase Agreement, Grant Application, Investor Memo, EIA Certificate.
+
+**Assessment** — an internal calculation, screening, model, or structured analysis that supports one or more deliverables. Assessments may be generated inside the product, uploaded, or created collaboratively. They are top-level plan items, but semantically distinct from deliverables.
+Examples: PV production estimate, LCOE model, BAR-HAP Health & Exposure Benefit Assessment, interconnection feasibility assessment, site screening, regulatory pathway assessment, carbon finance viability assessment, E&S risk screening.
+
+**How to decide**: Make it a Deliverable if it is required by a regulator/funder/certifier, is a formal submission, or an approval/license/permit/agreement. Make it an Assessment if it is an internal model, screening, or analytical dependency that informs decision-making or supports deliverables.
+
+Special case: if a model or analysis is itself a formally reviewed artifact (e.g. a formal energy model submitted for certification review), treat it as a Deliverable.
+
+## Assessment Placement Guidelines
+
+Place assessments in the category they most directly support — NOT in a separate "assessments" bucket.
+Examples:
+- PV production estimate → Feasibility & Technical Design
+- LCOE model → Funding & Investor Readiness
+- Interconnection feasibility assessment → Regulatory & Permitting or Grid Interconnection
+- E&S risk screening → Environmental & Social Safeguards
+- Baseline scenario assessment → Carbon & MRV
+
+## Supports / Depends On
+
+Where relevant, include `supports` (list of item IDs this item feeds into) and `depends_on` (list of item IDs this item depends on). These are optional but encouraged for assessments that support multiple deliverables.
+Example: an LCOE Model may support an Investor Memo, Incentive Eligibility Review, and PPA Negotiation.
 
 ## Default Pillars (when no approved categories are provided)
 
@@ -176,8 +209,10 @@ CATEGORY_PROPOSAL_SYSTEM_PROMPT = """You are an expert sustainable development p
 
 Your job: given a project description and any uploaded documents, propose the most relevant HIGH-LEVEL CATEGORIES (pillars) for this project's needs map. Think like a project developer preparing a full program design — covering regulatory, environmental, financial, technical, and stakeholder workstreams as appropriate.
 
+Each category will contain both Deliverables (formal outputs, submissions, approvals) and Assessments (internal models, screenings, analyses). Assessments should be placed in the category they most directly support — not in a separate "assessments" bucket.
+
 ## Rules
-- Do NOT produce individual items or deliverables — only the category structure.
+- Do NOT produce individual items, deliverables, or assessments — only the category structure.
 - Read the project description carefully FIRST, then decide on categories. The description is the primary signal — not the project type label.
 - Categories should cover the full scope of what the project needs to move forward: regulatory/permitting, funding/investor readiness, technical design, stakeholder engagement, E&S safeguards, market assessment — but only include categories that are genuinely relevant to THIS project.
 - Match categories to the actual technology and workstreams. Examples by project type — use as a starting point only; always adapt names and summaries to the real project:
@@ -191,7 +226,7 @@ Your job: given a project description and any uploaded documents, propose the mo
 - If the project does not closely match any example above, derive categories directly from the description — do NOT use a loosely similar example.
 - Merge related workstreams into one category rather than creating many thin categories (e.g. market assessment items can live inside a Capital/Funding category; stakeholder engagement can live inside a Permitting category if it's part of the same process).
 - **CRITICAL — summaries**: Every category summary MUST describe what that category covers for THIS specific project (its technology, geography, and context). Never write a summary that describes a different project type.
-- Each category should represent a distinct workstream with at least 3–5 potential deliverables.
+- Each category should represent a distinct workstream with at least 3–5 potential deliverables and/or assessments.
 - Propose 3–6 categories. Prefer 4–5; use 6 only when the project genuinely has a distinct workstream that doesn't fit the others.
 - Give each a short, clear name (2–4 words) and a 1–2 sentence summary of what it covers for THIS specific project.
 
@@ -306,7 +341,12 @@ PLAN_FUNCTION_SCHEMA = {
                                         },
                                         "title": {
                                             "type": "string",
-                                            "description": "Specific deliverable name — cite actual permits, certifications, standards by name",
+                                            "description": "Specific item name — cite actual permits, certifications, standards, assessments by name",
+                                        },
+                                        "item_type": {
+                                            "type": "string",
+                                            "enum": ["deliverable", "assessment"],
+                                            "description": "Deliverable = formal output/submission/approval. Assessment = internal model/screening/analysis.",
                                         },
                                         "classification": {
                                             "type": "string",
@@ -333,9 +373,19 @@ PLAN_FUNCTION_SCHEMA = {
                                             "items": {"type": "integer"},
                                             "description": "Indices (1-based) of the WEB RESEARCH sources that support this item. Reference at least one source for required items.",
                                         },
+                                        "supports": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "IDs of items this item feeds into / supports (optional, encouraged for assessments)",
+                                        },
+                                        "depends_on": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "IDs of items this item depends on (optional)",
+                                        },
                                     },
                                     "required": [
-                                        "id", "title", "classification", "status", "rationale", "phase", "phase_order",
+                                        "id", "title", "item_type", "classification", "status", "rationale", "phase", "phase_order",
                                     ],
                                 },
                             },
