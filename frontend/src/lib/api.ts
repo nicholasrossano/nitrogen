@@ -243,11 +243,14 @@ export interface ProposedCategory {
 export interface ProjectPlanItem {
   id: string;
   title: string;
+  item_type?: 'deliverable' | 'assessment';
   classification: 'required' | 'optional' | 'unknown';
   status: 'not_started' | 'in_progress' | 'complete';
   rationale: string;
   phase?: string;
   phase_order?: number;
+  supports?: string[];
+  depends_on?: string[];
 }
 
 export interface ProjectPlanPillar {
@@ -1112,8 +1115,8 @@ export const api = {
       }
     ),
 
-  // Core chat sessions (standalone, not initiative-bound)
-  getCoreChatSessions: () =>
+  // Core chat sessions — optionally scoped to a single project
+  getCoreChatSessions: (initiativeId?: string) =>
     fetchApi<{
       sessions: {
         id: string;
@@ -1122,8 +1125,13 @@ export const api = {
         updated_at: string | null;
         message_count: number;
         compare_initiative_ids: string[] | null;
+        initiative_id: string | null;
       }[];
-    }>('/api/v1/chat/sessions'),
+    }>(
+      initiativeId
+        ? `/api/v1/chat/sessions?initiative_id=${encodeURIComponent(initiativeId)}`
+        : '/api/v1/chat/sessions',
+    ),
 
   getCoreChatSessionMessages: (sessionId: string) =>
     fetchApi<{
@@ -1159,12 +1167,13 @@ export const api = {
   saveSessionFromMessages: (
     messages: { role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; sources?: any[] | null; completion_meta?: Record<string, any> | null }[],
     title?: string,
+    initiativeId?: string,
   ) =>
     fetchApi<{ session_id: string; title: string | null }>(
       '/api/v1/chat/sessions/save',
       {
         method: 'POST',
-        body: JSON.stringify({ title, messages }),
+        body: JSON.stringify({ title, messages, initiative_id: initiativeId }),
       }
     ),
 
