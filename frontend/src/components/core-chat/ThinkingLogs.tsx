@@ -31,7 +31,7 @@ function tierLabel(tiers: string[]): string {
 }
 
 function formatElapsed(ms: number): string {
-  return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms / 1000)}s`;
 }
 
 interface TimelineItem {
