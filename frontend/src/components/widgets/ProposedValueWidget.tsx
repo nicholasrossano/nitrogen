@@ -10,7 +10,7 @@ interface ProposedValueWidgetProps {
     label?: string;
     unit?: string;
     proposed_value: number;
-    model_type: 'lcoe' | 'carbon';
+    model_type: 'lcoe' | 'carbon' | 'solar';
     confidence: 'high' | 'moderate' | 'low';
     explanation: string;
     confirmed?: boolean;

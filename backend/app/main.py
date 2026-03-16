@@ -15,7 +15,7 @@ import traceback
 
 from app.config import get_settings
 from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, pvwatts
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -111,6 +111,7 @@ app.include_router(shares.router, prefix="/api/v1", tags=["shares"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
 app.include_router(compliance_precheck.router, prefix="/api/v1", tags=["compliance-precheck"])
 app.include_router(pdd.router, prefix="/api/v1", tags=["pdd"])
+app.include_router(pvwatts.router, prefix="/api/v1", tags=["pvwatts"])
 
 
 @app.get("/")

@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     gs_preliminary_review_template_url: str = ""  # Optional: add when GS publishes direct DOCX URL
     gs_template_cache_ttl_hours: int = 24
 
+    # PVWatts (NREL Solar Production Estimate)
+    pvwatts_api_key: str = ""
+    pvwatts_base_url: str = "https://developer.nrel.gov/api/pvwatts/v8.json"
+
     # RAG settings
     enable_corpus_rag: bool = False
     chunk_size: int = 300

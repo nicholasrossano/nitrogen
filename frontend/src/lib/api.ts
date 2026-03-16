@@ -1412,6 +1412,59 @@ export const api = {
     return resp.blob();
   },
 
+  // Solar estimate (PVWatts) endpoints
+  async recalculateSolar(inputs: Record<string, any>): Promise<any> {
+    return fetchApi('/api/v1/pvwatts/recalculate', {
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
+    });
+  },
+
+  async updateSolarInput(
+    inputs: Record<string, any>,
+    fieldName: string,
+    value: any,
+    status: string = 'confirmed',
+  ): Promise<any> {
+    return fetchApi('/api/v1/pvwatts/update-input', {
+      method: 'POST',
+      body: JSON.stringify({
+        inputs,
+        field_name: fieldName,
+        value,
+        source: 'user',
+        status,
+      }),
+    });
+  },
+
+  async geocodeSolarAddress(address: string): Promise<any> {
+    return fetchApi('/api/v1/pvwatts/geocode', {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+    });
+  },
+
+  async autocompleteSolarAddress(query: string): Promise<{ results: Array<{ lat: number; lon: number; display_name: string; zoom?: number }> }> {
+    return fetchApi('/api/v1/pvwatts/autocomplete', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    });
+  },
+
+  async exportSolarExcel(inputs: Record<string, any>, result: Record<string, any>): Promise<Blob> {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/pvwatts/export`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ inputs, result }),
+    });
+    if (!response.ok) throw new Error(`Export failed: ${response.status}`);
+    return response.blob();
+  },
+
   // --- Gold Standard Certification ---
 
   async getGSTemplateStatus(): Promise<any> {

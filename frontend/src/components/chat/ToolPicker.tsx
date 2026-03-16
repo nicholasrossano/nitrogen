@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, Award, FileUp } from 'lucide-react';
+import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, Award, FileUp, Sun } from 'lucide-react';
 
 export interface ToolOption {
   id: string;
@@ -23,6 +23,12 @@ export const ALL_TOOLS: ToolOption[] = [
     name: 'Carbon Calculator',
     description: 'Estimate emission reductions (tCO₂e)',
     icon: <Leaf className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'solar_estimate',
+    name: 'Solar Production Estimate',
+    description: 'Estimate annual & monthly kWh',
+    icon: <Sun className="w-3.5 h-3.5" />,
   },
   {
     id: 'gs_certification',
@@ -57,7 +63,7 @@ export const ALL_TOOLS: ToolOption[] = [
 ];
 
 const ANALYSIS_TOOLS = ALL_TOOLS.filter(
-  (t) => t.id === 'lcoe_model' || t.id === 'carbon_model' || t.id === 'gs_certification'
+  (t) => t.id === 'lcoe_model' || t.id === 'carbon_model' || t.id === 'solar_estimate' || t.id === 'gs_certification'
 );
 
 interface ToolPickerProps {
