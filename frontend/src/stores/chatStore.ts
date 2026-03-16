@@ -56,6 +56,7 @@ interface ChatState {
 function buildModelInputsContext(messages: CoreChatMessage[]): string | null {
   let latestLcoe: Record<string, any> | null = null;
   let latestCarbon: Record<string, any> | null = null;
+  let latestSolar: Record<string, any> | null = null;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (!latestLcoe && (m.widget_type === 'lcoe_inputs' || m.widget_type === 'lcoe_output') && m.widget_data) {
@@ -64,11 +65,14 @@ function buildModelInputsContext(messages: CoreChatMessage[]): string | null {
     if (!latestCarbon && (m.widget_type === 'carbon_inputs' || m.widget_type === 'carbon_output') && m.widget_data) {
       latestCarbon = m.widget_data;
     }
-    if (latestLcoe && latestCarbon) break;
+    if (!latestSolar && (m.widget_type === 'solar_inputs' || m.widget_type === 'solar_output') && m.widget_data) {
+      latestSolar = m.widget_data;
+    }
+    if (latestLcoe && latestCarbon && latestSolar) break;
   }
 
   const parts: string[] = [];
-  for (const [label, wd] of [['LCOE Model', latestLcoe], ['Carbon Model', latestCarbon]] as const) {
+  for (const [label, wd] of [['LCOE Model', latestLcoe], ['Carbon Model', latestCarbon], ['Solar Production Estimate', latestSolar]] as const) {
     if (!wd) continue;
     const inputs = (wd as Record<string, any>).inputs as Record<string, any> | undefined;
     if (!inputs) continue;
@@ -81,7 +85,7 @@ function buildModelInputsContext(messages: CoreChatMessage[]): string | null {
       const valStr = val != null ? `${val}` : '—';
       const prov = (inp as any).provenance || {};
       const derivation: string = prov.derivation || '';
-      const rationale: string = prov.rationale || (inp as any).rationale || '';
+      const rationale: string = prov.rationale || (inp as any).rationale || (inp as any).notes || '';
       let provStr = '';
       if (derivation) provStr += ` derivation=${derivation}`;
       if (rationale) provStr += ` reason="${rationale}"`;
