@@ -12,12 +12,14 @@ import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequire
 import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
 import { PDDWorkspaceWidget } from '@/components/widgets/PDDWorkspaceWidget';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
+import { SolarEstimateWidget } from '@/components/widgets/SolarEstimateWidget';
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
 export const EDITOR_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
   'carbon_inputs', 'carbon_output',
+  'solar_inputs', 'solar_output',
   'gs_checklist', 'gs_cover_letter',
   'memo_viewer',
   'checklist_viewer',
@@ -33,6 +35,8 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   lcoe_output: 'lcoe',
   carbon_inputs: 'carbon',
   carbon_output: 'carbon',
+  solar_inputs: 'solar',
+  solar_output: 'solar',
   gs_checklist: 'gs',
   gs_cover_letter: 'gs',
   memo_viewer: 'memo',
@@ -60,6 +64,8 @@ const WIDGET_LABELS: Record<string, string> = {
   lcoe_output: 'LCOE Model',
   carbon_inputs: 'Carbon Calculator',
   carbon_output: 'Carbon Calculator',
+  solar_inputs: 'Solar Estimate',
+  solar_output: 'Solar Estimate',
   gs_checklist: 'GS Certification',
   gs_cover_letter: 'GS Certification',
   memo_viewer: 'Investment Memo',
@@ -133,6 +139,9 @@ function EditorWidgetRenderer({
     case 'carbon_inputs':
     case 'carbon_output':
       return <CarbonModelWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
+    case 'solar_inputs':
+    case 'solar_output':
+      return <SolarEstimateWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
     case 'gs_checklist':
     case 'gs_cover_letter':
       return <GSCertificationWidget data={data} initiativeId={initiativeId} messageId={messageId} />;

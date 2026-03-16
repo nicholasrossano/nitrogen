@@ -153,19 +153,44 @@ SEARCH_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "run_solar_estimate",
+            "description": (
+                "Generate a solar PV production estimate (annual and monthly kWh) using PVWatts. "
+                "ALWAYS use this when the user asks for: solar production estimate, PV energy yield, "
+                "annual or monthly kWh for a solar installation, solar feasibility, solar output, "
+                "or mentions system capacity/tilt/azimuth/location in a solar energy context. "
+                "Also use when the user says 'estimate solar production', 'how much will this system produce', "
+                "'solar production estimate for this site', or similar. "
+                "Extract any location, capacity, orientation, and system details from the conversation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "One sentence explaining why the solar estimate tool is appropriate here.",
+                    },
+                },
+                "required": ["reason"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "propose_input_value",
             "description": (
-                "Propose a specific value for a model input field (LCOE or Carbon). "
+                "Propose a specific value for a model input field (LCOE, Carbon, or Solar). "
                 "Use when the user asks to investigate, estimate, or determine a value for a "
                 "specific input (e.g. 'what should net capacity be?', 'investigate Total CAPEX', "
-                "'estimate capacity factor'). The value is shown in a confirmation widget."
+                "'estimate capacity factor', 'change tilt to 20°'). The value is shown in a confirmation widget."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "field_name": {
                         "type": "string",
-                        "description": "Exact field_name from the model inputs (e.g. 'net_capacity_kw').",
+                        "description": "Exact field_name from the model inputs (e.g. 'net_capacity_kw', 'system_capacity', 'tilt').",
                     },
                     "proposed_value": {
                         "type": "number",
@@ -173,7 +198,7 @@ SEARCH_TOOLS = [
                     },
                     "model_type": {
                         "type": "string",
-                        "enum": ["lcoe", "carbon"],
+                        "enum": ["lcoe", "carbon", "solar"],
                         "description": "Which model this input belongs to.",
                     },
                     "confidence": {
@@ -308,7 +333,8 @@ You have these data sources available — they are all equally valid and complem
 - search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
 - run_lcoe_model: builds a Levelized Cost of Energy model when the user wants energy project economics
 - run_carbon_model: builds a carbon emissions model when the user wants emission reduction estimates
-- propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE or Carbon model input field
+- run_solar_estimate: generates a solar PV production estimate (annual + monthly kWh) using PVWatts when the user wants solar energy yield
+- propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE, Carbon, or Solar model input field
 - start_gs_certification: starts the Gold Standard (GS4GG) certification workflow with a checklist and Cover Letter editor
 - propose_cover_letter_value: proposes a text value for a specific Gold Standard Cover Letter field
 - propose_template_value: proposes a value for a template/form requirement field when the user message contains [TEMPLATE_CONTEXT]
@@ -323,7 +349,9 @@ Call run_lcoe_model when the user wants a numerical energy cost model (LCOE, cos
 
 Call run_carbon_model when the user wants a numerical emissions model (carbon credits, tCO₂e, emission reductions, cookstove methodology, fNRB). This can be combined with search tools.
 
-Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia"). Combine with search tools (scholarly + web) to ground the proposal in evidence.
+Call run_solar_estimate when the user wants a solar PV production estimate (annual/monthly kWh, energy yield, solar feasibility). This can be combined with search tools.
+
+Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia", "change tilt to 20°"). Combine with search tools (scholarly + web) to ground the proposal in evidence.
 
 Call start_gs_certification when the user asks about Gold Standard certification, GS4GG submission, cover letter, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration. This opens the certification checklist and cover letter editor.
 
@@ -474,6 +502,7 @@ class ComplianceChatService:
         "lcoe_model": "run_lcoe_model",
         "carbon_model": "run_carbon_model",
         "gs_certification": "start_gs_certification",
+        "solar_estimate": "run_solar_estimate",
     }
 
     async def generate_response(
@@ -623,7 +652,7 @@ class ComplianceChatService:
                     all_facts.extend(facts)
                     tiers_used.append(label)
 
-        # Run model tools (LCOE / carbon) sequentially — they produce widgets
+        # Run model tools (LCOE / carbon / solar) sequentially — they produce widgets
         for fn_name, args in parsed_calls:
             if fn_name in ("run_lcoe_model", "run_carbon_model"):
                 from app.tools.lcoe_tool import LCOETool
@@ -651,6 +680,33 @@ class ComplianceChatService:
                 except Exception as e:
                     logger.error(f"{label.upper()} tool failed: {e}", exc_info=True)
                     await _think(f"{label.upper()} model encountered an error — falling back to text response")
+
+            elif fn_name == "run_solar_estimate":
+                from app.tools.pvwatts_tool import PVWattsTool
+
+                await _think("Generating solar production estimate...")
+                tiers_used.append("solar")
+
+                conversation_parts: list[str] = []
+                if project_context:
+                    conversation_parts.append(f"PROJECT CONTEXT:\n{project_context}")
+                conversation_parts.append("\n".join(
+                    f"{m['role']}: {m['content']}"
+                    for m in (history[-20:] if len(history) > 20 else history)
+                ))
+                conversation_parts.append(f"user: {user_message}")
+                conversation_text = "\n\n".join(conversation_parts)
+
+                try:
+                    solar_tool = PVWattsTool()
+                    widget_type, widget_data = await solar_tool.execute_from_conversation(
+                        conversation_text=conversation_text,
+                        planner_args=args,
+                        on_progress=_think,
+                    )
+                except Exception as e:
+                    logger.error(f"Solar estimate tool failed: {e}", exc_info=True)
+                    await _think("Solar estimate encountered an error — falling back to text response")
 
             elif fn_name == "propose_input_value":
                 await _think(f"Proposing value for {args.get('field_name', 'field')}...")
@@ -1351,7 +1407,7 @@ class ComplianceChatService:
                         },
                         "model_type": {
                             "type": "string",
-                            "enum": ["lcoe", "carbon"],
+                            "enum": ["lcoe", "carbon", "solar"],
                             "description": "Which model this field belongs to.",
                         },
                         "confidence": {
