@@ -15,8 +15,8 @@ export function PdfViewer({ fileData, initialPage }: PdfViewerProps) {
     try {
       const blob = new Blob([fileData], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      const page = initialPage && initialPage > 1 ? `#page=${initialPage}` : '';
-      return url + page;
+      const page = initialPage && initialPage > 1 ? `page=${initialPage}&` : '';
+      return `${url}#${page}pagemode=none`;
     } catch {
       setError(true);
       return null;

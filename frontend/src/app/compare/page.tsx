@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Scale, Search, ChevronDown, X, Loader2, MessageSquare, Trash2 } from 'lucide-react';
+import { Scale, Search, ChevronDown, X, Loader2, MessageSquare, Trash2, PanelRight } from 'lucide-react';
 import { api, Initiative, SourceCitation } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CompareStandaloneChatView } from '@/components/core-chat/CompareStandaloneChatView';
@@ -195,27 +195,47 @@ function ComparePageContent() {
     if (item === 'trash') router.push('/');
   }, [router]);
 
-  if (started && selectedA && selectedB) {
-    const hasEditor = !isCompareLanding && showEditor && editorWidgets.length > 0;
-    const hasResearch = !isCompareLanding && !!researchCitation;
-    const chatWidth = hasEditor
-      ? `${Math.min(hasResearch ? 100 - researchWidthPercent - 40 : MAX_CHAT_PERCENT, chatWidthPercent)}%`
-      : hasResearch
-        ? `${100 - researchWidthPercent}%`
-        : '100%';
+  const isActiveCompare = started && selectedA && selectedB;
+  const hasEditor = isActiveCompare && !isCompareLanding && showEditor && editorWidgets.length > 0;
+  const hasResearch = isActiveCompare && !isCompareLanding && !!researchCitation;
+  const chatWidth = hasEditor
+    ? `${Math.min(hasResearch ? 100 - researchWidthPercent - 40 : MAX_CHAT_PERCENT, chatWidthPercent)}%`
+    : hasResearch
+      ? `${100 - researchWidthPercent}%`
+      : '100%';
 
-    return (
-      <div className="min-h-screen h-screen flex flex-col bg-background">
-        <header className="shrink-0 h-14" />
-        <div className="flex flex-1 min-h-0">
-          <SideDrawer
-            variant="home"
-            activeItem="compare"
-            onItemSelect={handleNavChange}
-            onSignOut={handleSignOut}
-            userEmail={user?.email}
-          />
-          <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
+  return (
+    <div className="min-h-screen h-screen flex flex-col bg-background">
+      {/* Single persistent header across all compare states */}
+      <header className="shrink-0 h-14">
+        <div className="px-4 h-14 flex items-center relative">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <h1 className="text-[13px] font-medium text-text-primary">Compare</h1>
+          </div>
+          {isActiveCompare && editorWidgets.length > 0 && (
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => setShowEditor((p) => !p)}
+                title={showEditor ? 'Hide document viewer' : 'Show document viewer'}
+                className={`icon-btn p-1.5 ${showEditor ? 'text-accent' : 'text-text-tertiary'}`}
+              >
+                <PanelRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0">
+        <SideDrawer
+          variant="home"
+          activeItem="compare"
+          onItemSelect={handleNavChange}
+          onSignOut={handleSignOut}
+          userEmail={user?.email}
+        />
+        <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
+          {isActiveCompare ? (
             <main
               ref={containerRef}
               className="h-full bg-surface rounded-lg shadow-workspace overflow-hidden flex"
@@ -276,70 +296,53 @@ function ComparePageContent() {
                 </div>
               )}
             </main>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen h-screen flex flex-col bg-background">
-      <header className="shrink-0 h-14" />
-      <div className="flex flex-1 min-h-0">
-        <SideDrawer
-          variant="home"
-          activeItem="compare"
-          onItemSelect={handleNavChange}
-          onSignOut={handleSignOut}
-          userEmail={user?.email}
-        />
-        <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
-          <main className="h-full bg-surface rounded-lg shadow-workspace overflow-auto">
-            <div className="min-h-full flex flex-col items-center justify-center px-6 py-12">
-            <div className="w-full max-w-2xl">
-              <div className="text-center mb-10">
-                <div className="w-14 h-14 rounded-lg bg-accent-wash flex items-center justify-center mx-auto mb-4">
-                  <Scale className="w-7 h-7 text-accent" />
+          ) : (
+            <main className="h-full bg-surface rounded-lg shadow-workspace overflow-auto">
+              <div className="min-h-full flex flex-col items-center justify-center px-6 py-12">
+              <div className="w-full max-w-2xl">
+                <div className="text-center mb-10">
+                  <div className="w-14 h-14 rounded-lg bg-accent-wash flex items-center justify-center mx-auto mb-4">
+                    <Scale className="w-7 h-7 text-accent" />
+                  </div>
+                  <h1 className="text-xl font-semibold text-text-primary mb-2">
+                    Compare Projects
+                  </h1>
+                  <p className="text-sm text-text-secondary">
+                    Select two projects to compare side by side through grounded, conversational analysis.
+                  </p>
                 </div>
-                <h1 className="text-xl font-semibold text-text-primary mb-2">
-                  Compare Projects
-                </h1>
-                <p className="text-sm text-text-secondary">
-                  Select two projects to compare side by side through grounded, conversational analysis.
-                </p>
-              </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                <ProjectSlot
-                  label="Project A"
-                  color="blue"
-                  selected={selectedA}
-                  onSelect={setSelectedA}
-                  projects={projects}
-                  excludeId={selectedB?.id}
-                  loading={loading}
-                />
-                <ProjectSlot
-                  label="Project B"
-                  color="amber"
-                  selected={selectedB}
-                  onSelect={setSelectedB}
-                  projects={projects}
-                  excludeId={selectedA?.id}
-                  loading={loading}
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                  <ProjectSlot
+                    label="Project A"
+                    color="blue"
+                    selected={selectedA}
+                    onSelect={setSelectedA}
+                    projects={projects}
+                    excludeId={selectedB?.id}
+                    loading={loading}
+                  />
+                  <ProjectSlot
+                    label="Project B"
+                    color="amber"
+                    selected={selectedB}
+                    onSelect={setSelectedB}
+                    projects={projects}
+                    excludeId={selectedA?.id}
+                    loading={loading}
+                  />
+                </div>
 
-              <div className="flex justify-center">
-                <button
-                  onClick={() => { setInitialSessionId(null); setStarted(true); }}
-                  disabled={!selectedA || !selectedB}
-                  className="btn-primary !px-6"
-                >
-                  <Scale className="w-4 h-4" />
-                  Start Comparison
-                </button>
-              </div>
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => { setInitialSessionId(null); setStarted(true); }}
+                    disabled={!selectedA || !selectedB}
+                    className="btn-primary !px-6"
+                  >
+                    <Scale className="w-4 h-4" />
+                    Start Comparison
+                  </button>
+                </div>
 
               {compareSessions.length > 0 && (
                 <div className="mt-12">
@@ -359,9 +362,10 @@ function ComparePageContent() {
                   </div>
                 </div>
               )}
-            </div>
-            </div>
-          </main>
+              </div>
+              </div>
+            </main>
+          )}
         </div>
       </div>
     </div>
