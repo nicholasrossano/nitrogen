@@ -1,4 +1,4 @@
-# Contributing to Nitrogen
+# Contributing to Nitrogen AI
 
 Thanks for your interest in contributing! This guide will help you get started.
 
