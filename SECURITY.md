@@ -10,7 +10,7 @@
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Report security issues privately by emailing **nick@the-nitrogen.ai**. Include:
+Report security issues privately by emailing **nicholas.rossano@gmail.com**. Include:
 
 - A description of the vulnerability
 - Steps to reproduce
