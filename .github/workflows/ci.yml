@@ -8,7 +8,7 @@ on:
 
 jobs:
   frontend:
-    name: Frontend (lint + build)
+    name: Frontend (lint + build + test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,13 +22,16 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
+        env:
+          CI: true
       - run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
           NEXT_PUBLIC_ACCESS_CODE: ci-placeholder
 
   backend:
-    name: Backend (lint)
+    name: Backend (lint + test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,3 +45,9 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install ruff
       - run: ruff check .
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -x -q
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          OPENAI_API_KEY: test-key-not-real
+          FIREBASE_PROJECT_ID: test-project
