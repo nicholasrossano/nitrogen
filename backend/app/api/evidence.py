@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
+from app.core.filename_utils import deduplicate_filename
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.chat import ChatMessage
 from app.schemas.evidence import (
@@ -91,6 +92,9 @@ async def upload_evidence(
         file_size = None
         chunk_tuples = [(c, None, None) for c in parser.chunk_text(text)]
     
+    # Deduplicate filename within this initiative
+    filename = await deduplicate_filename(db, initiative_id, filename or "Untitled")
+
     # Create evidence doc
     evidence_doc = EvidenceDoc(
         initiative_id=initiative.id,

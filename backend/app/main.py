@@ -81,11 +81,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_DISK_FULL_NAMES = {"DiskFullError", "DiskFull"}
+
+
+def _is_disk_full(exc: Exception) -> bool:
+    """True when the exception (or any cause) is a database out-of-space error."""
+    seen: set[int] = set()
+    current: Exception | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = type(current).__name__
+        msg = str(current).lower()
+        if name in _DISK_FULL_NAMES or "project size limit" in msg or "disk full" in msg:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """Return CORS-safe JSON on unhandled errors so the browser doesn't hide them."""
     logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
     logger.error(traceback.format_exc())
+
+    if _is_disk_full(exc):
+        return JSONResponse(
+            status_code=507,
+            content={
+                "detail": "Storage limit reached — no new files can be uploaded. Please delete unused files or upgrade your storage plan.",
+                "error_type": "StorageLimitExceeded",
+            },
+        )
+
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "error_type": type(exc).__name__},

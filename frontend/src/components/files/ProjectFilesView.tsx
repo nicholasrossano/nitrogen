@@ -70,7 +70,7 @@ export function ProjectFilesView({
   const [uploadedPage, setUploadedPage] = useState(1);
   const [generatedPage, setGeneratedPage] = useState(1);
 
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 20;
 
   const loadFiles = useCallback(async () => {
     try {
