@@ -1,5 +1,8 @@
 # Nitrogen
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![CI](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml/badge.svg)](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml)
+
 Chat-first decision packet studio. Generate investment memos grounded in evidence through conversational AI.
 
 ## Overview
@@ -137,6 +140,10 @@ Nitrogen/
 | `/api/v1/initiatives/{id}/export` | POST | Export to DOCX |
 | `/api/v1/corpus` | GET/POST | Manage case study corpus |
 
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Check the [open issues](../../issues) for things to work on -- issues tagged `good first issue` are a great starting point.
+
 ## License
 
-Proprietary - All rights reserved
+[GNU Affero General Public License v3.0](LICENSE) -- any modifications must be open-sourced under the same license, including when deployed as a hosted service.

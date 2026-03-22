@@ -91,9 +91,10 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Accept mock token from access code bypass (both dev and production)
-    if credentials.credentials == 'REDACTED_DEV_TOKEN':
-        logger.debug("Access code mode: accepting mock token")
+    # Accept mock token from access code bypass (development only)
+    dev_mock_token = os.environ.get('DEV_MOCK_TOKEN', '')
+    if dev_mock_token and settings.debug and credentials.credentials == dev_mock_token:
+        logger.debug("Access code mode: accepting mock token (debug only)")
         return AuthUser(uid="shared-user", email="shared@nitrogen.ai")
     
     # Try to initialize Firebase
