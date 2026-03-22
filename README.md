@@ -31,15 +31,11 @@ The goal is not to replace domain expertise, but to make it easier to apply, ada
 - **Frontend**: Next.js 14 (TypeScript), Tailwind CSS, Zustand
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Database**: PostgreSQL with pgvector for vector search and RAG embeddings
-- **AI Models**: 
-  - OpenAI GPT for chat and memo generation
-  - text-embedding-ada-002 for RAG embeddings
 - **Auth**: Firebase Authentication
 - **Deployment**:
   - Frontend: Vercel
   - Backend: Railway
   - Database: Neon (serverless Postgres)
-- **Development**: Cursor AI coding assistant
 
 ## Quick Start
 
