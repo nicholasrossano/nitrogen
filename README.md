@@ -1,16 +1,26 @@
-# Nitrogen
+# Nitrogen AI
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![CI](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml/badge.svg)](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml)
 
-Chat-first decision packet studio. Generate investment memos grounded in evidence through conversational AI.
+Open-source software for sustainable development project design and implementation.
+
+Nitrogen AI helps teams design projects, run applied assessments, and generate materials such as investment memos, grant applications, and other implementation-ready documents. It brings together structured workflows, domain-specific tools, precedent, and AI assistance in one place.
 
 ## Overview
 
-Nitrogen helps users create structured decision documents by:
-1. **Conversational Intake** - Chat with an AI assistant to define your initiative
-2. **Evidence Upload** - Upload a document or paste text as supporting evidence
-3. **Memo Generation** - Generate an investment memo with citations from both your evidence and a curated case study corpus
+Sustainable development work is often shaped by unequal access to expertise, tools, and implementation support. Nitrogen AI is motivated by the idea that teams working in lower-resource environments — along with the global organizations that support them — should have better access to the analytical tools, structured workflows, and precedent needed to design and execute effective projects.
+
+In practice, those workflows are often fragmented across spreadsheets, consultant reports, internal notes, policy references, grant requirements, engineering assumptions, and institution-specific knowledge. Nitrogen AI is an attempt to bring more of that work into a shared, adaptable system.
+
+The platform is designed to help teams:
+
+- structure project information through guided and conversational workflows
+- run targeted assessments across technical, financial, and impact-related questions
+- incorporate precedent, datasets, and supporting evidence into project design
+- generate decision-ready materials such as memos, applications, and supporting documents
+
+The goal is not to replace domain expertise, but to make it easier to apply, adapt, and extend. The platform prioritizes simplicity and usability, with a straightforward interface that keeps users in control while shifting more of the technical complexity into the underlying system.
 
 ## Tech Stack
 
