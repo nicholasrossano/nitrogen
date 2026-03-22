@@ -26,7 +26,7 @@
     "docx-preview": "^0.3.7",
     "dompurify": "^3.3.3",
     "firebase": "^9.23.0",
-    "katex": "^0.16.33",
+    "katex": "^0.16.40",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.323.0",
     "next": "14.1.0",
