@@ -156,4 +156,4 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup inst
 
 ## License
 
-[GNU Affero General Public License v3.0](LICENSE) -- any modifications must be open-sourced under the same license, including when deployed as a hosted service.
+[GNU Affero General Public License v3.0](LICENSE): any modifications must be open-sourced under the same license, including when deployed as a hosted service.
