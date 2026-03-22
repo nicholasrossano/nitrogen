@@ -54,7 +54,7 @@ There are **two distinct chat/UI surfaces**. Assume the user is always referring
 Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about the generate flow tiles in `LandingInput.tsx`.
 
 ## UI/Design
-Follow `Docs/STYLEGUIDE.md` as the source of truth.
+Follow `docs/style-guide.md` as the source of truth.
 
 **Page layout chrome (non-negotiable):**
 - Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
