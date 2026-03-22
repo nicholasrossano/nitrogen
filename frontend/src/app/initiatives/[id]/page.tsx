@@ -18,6 +18,7 @@ import { EvaluateView } from '@/components/evaluate/EvaluateView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 
 const MIN_STANDALONE_CHAT_PERCENT = 30;
@@ -114,6 +115,7 @@ function InitiativePageContent() {
   } = useInitiativeStore();
 
   const isViewer = initiative?.shared_role === 'viewer';
+  const devMode = useSettingsStore((s) => s.devMode);
   const hasProjectPlan = !!projectPlan;
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
@@ -423,7 +425,7 @@ function InitiativePageContent() {
           onSignOut={handleSignOut}
           userEmail={user?.email}
           onUploadMaterial={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
-          hiddenItems={isViewer ? ['chat'] : undefined}
+          hiddenItems={isViewer ? ['chat', 'evaluate'] : devMode ? undefined : ['evaluate']}
         />
         </div>
 
