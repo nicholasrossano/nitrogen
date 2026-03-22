@@ -48,6 +48,6 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest tests/ -x -q
         env:
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          OPENAI_API_KEY: test-key-not-real
-          FIREBASE_PROJECT_ID: test-project
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          OPENAI_API_KEY: "test-key-not-real"
+          FIREBASE_PROJECT_ID: "test-project"
