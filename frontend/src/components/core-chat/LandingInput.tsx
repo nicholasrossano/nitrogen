@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/stores/chatStore';
 import { ALL_TOOLS } from '@/components/chat/ToolPicker';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 
 interface LandingInputProps {
@@ -34,6 +35,7 @@ function relativeTime(ts: number): string {
 }
 
 export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession, hideTiles, headerContent, placeholder = 'Ask anything' }: LandingInputProps) {
+  const devMode = useSettingsStore((s) => s.devMode);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -115,7 +117,7 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
         {headerContent}
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
-          {ALL_TOOLS.filter((tool) => tool.id !== 'template_fill' && tool.id !== 'gs_certification').map((tool) => {
+          {ALL_TOOLS.filter((tool) => devMode || !tool.beta).map((tool) => {
             const isTemplate = tool.id === 'template_fill';
             return (
               <button
