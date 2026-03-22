@@ -152,7 +152,7 @@ Nitrogen/
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Check the [open issues](../../issues) for things to work on -- issues tagged `good first issue` are a great starting point.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Check the [open issues](../../issues) for things to work on; issues tagged `good first issue` are a great starting point.
 
 ## License
 
