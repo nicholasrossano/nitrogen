@@ -9,6 +9,8 @@ export interface ToolOption {
   name: string;
   description: string;
   icon: React.ReactNode;
+  /** If true, only shown when Developer > Beta features is enabled in Settings. */
+  beta?: boolean;
 }
 
 export const ALL_TOOLS: ToolOption[] = [
@@ -35,6 +37,7 @@ export const ALL_TOOLS: ToolOption[] = [
     name: 'Gold Standard Certification',
     description: 'Gold Standard checklist',
     icon: <Award className="w-3.5 h-3.5" />,
+    beta: true,
   },
   {
     id: 'investment_memo',
@@ -53,12 +56,14 @@ export const ALL_TOOLS: ToolOption[] = [
     name: 'Project Design Document',
     description: 'Build a PDD from project materials',
     icon: <FileText className="w-3.5 h-3.5" />,
+    beta: true,
   },
   {
     id: 'template_fill',
     name: 'From Template',
     description: 'Complete a doc from project materials',
     icon: <FileUp className="w-3.5 h-3.5" />,
+    beta: true,
   },
 ];
 
