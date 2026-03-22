@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -56,6 +57,7 @@ export function SideDrawer({
   const longestLabelLength = useMemo(() => {
     const labels = items.map((item) => item.label);
     if (showFilesButton) labels.push('Files');
+    labels.push('Settings');
     if (onSignOut) labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
   }, [items, showFilesButton, onSignOut]);
@@ -71,6 +73,8 @@ export function SideDrawer({
   const [showToast, setShowToast] = useState(false);
   const dragCounter = useRef(0);
   const globalDragCounter = useRef(0);
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
   const [pendingDuplicates, setPendingDuplicates] = useState<{
@@ -336,6 +340,17 @@ export function SideDrawer({
         </button>
       )}
 
+      <button
+        onClick={() => setSettingsOpen(true)}
+        className="nav-row w-full"
+        title="Settings"
+      >
+        <Settings className="w-4 h-4 flex-shrink-0" />
+        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+          Settings
+        </span>
+      </button>
+
       {onSignOut && (
         <button
           onClick={onSignOut}
@@ -348,6 +363,8 @@ export function SideDrawer({
           </span>
         </button>
       )}
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
       {showToast && (
         <UploadToast
