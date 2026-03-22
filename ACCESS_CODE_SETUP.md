@@ -2,30 +2,25 @@
 
 ## Current Configuration
 
-**Access Code:** `REDACTED_ACCESS_CODE`
-
-The app now uses a simple access code gate instead of Firebase authentication in production. This allows you to share a single code with collaborators without requiring them to create accounts.
+The access code is loaded from the `NEXT_PUBLIC_ACCESS_CODE` environment variable. Set it in `frontend/.env.local` (see `frontend/.env.local.example`).
 
 ## How It Works
 
 1. User visits the app and sees the access code page
-2. They enter `REDACTED_ACCESS_CODE`
+2. They enter the access code
 3. Access is stored in localStorage
 4. They proceed directly to the app with a mock/shared user
 5. All Firebase auth code remains intact but bypassed
 
-## Files Modified
+## Files
 
-- `frontend/src/components/AccessCodeGate.tsx` - New access code gate component
-- `frontend/src/lib/auth.tsx` - Added access code bypass logic
-- `frontend/src/app/providers.tsx` - Wrapped app with AccessCodeGate
+- `frontend/src/components/AccessCodeGate.tsx` - Access code gate component
+- `frontend/src/lib/auth.tsx` - Access code bypass logic
+- `frontend/src/app/providers.tsx` - Wraps app with AccessCodeGate
 
 ## To Change the Access Code
 
-Edit this line in `frontend/src/components/AccessCodeGate.tsx`:
-```typescript
-const ACCESS_CODE = 'REDACTED_ACCESS_CODE';
-```
+Update the `NEXT_PUBLIC_ACCESS_CODE` environment variable in your `.env.local` file and restart the frontend dev server.
 
 ## To Re-enable Full Firebase Auth
 
@@ -48,13 +43,9 @@ When you want to bring back proper user accounts:
    - Delete the `isAccessCodeBypassEnabled()` function
    - Remove the access code checks from `useEffect`, `signOut`, and `getIdToken`
 
-That's it! Firebase auth will work exactly as before.
-
 ## Backend Compatibility
 
-The backend accepts the `REDACTED_DEV_TOKEN` from the access code bypass in both development and production. All projects use a shared user ID (`shared-user`).
-
-**Note:** The backend has been updated to accept mock tokens regardless of debug mode, enabling shared access code authentication in production.
+The backend accepts a dev mock token only when `DEBUG=true` and the `DEV_MOCK_TOKEN` environment variable is set. All projects use a shared user ID (`shared-user`).
 
 ### Migrating Existing Production Data
 

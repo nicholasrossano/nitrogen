@@ -7,7 +7,7 @@ interface AccessCodeGateProps {
   children: ReactNode;
 }
 
-const ACCESS_CODE = 'REDACTED_ACCESS_CODE';
+const ACCESS_CODE = process.env.NEXT_PUBLIC_ACCESS_CODE ?? '';
 const STORAGE_KEY = 'nitrogen_access_granted';
 
 export function AccessCodeGate({ children }: AccessCodeGateProps) {

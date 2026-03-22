@@ -6,8 +6,8 @@ from typing import Self
 
 
 class Settings(BaseSettings):
-    # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/nitrogen"
+    # Database (no default -- app will fail fast if DATABASE_URL is not set)
+    database_url: str
     
     # OpenAI - Model separation for cost/capability optimization
     openai_api_key: str = ""
