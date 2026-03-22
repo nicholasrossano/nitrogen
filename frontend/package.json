@@ -39,7 +39,7 @@
     "remark-math": "^6.0.0",
     "tailwind-merge": "^2.2.1",
     "xlsx": "^0.18.5",
-    "zustand": "^4.5.0"
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.21",
