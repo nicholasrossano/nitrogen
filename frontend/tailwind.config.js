@@ -8,22 +8,22 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Nitrogen Design System — warm workbench palette
+        // Nitrogen Design System — soft cool-grey workbench palette
         // Shell & Surfaces
         shell: {
-          DEFAULT: '#FAF8F5',
-          bar: '#FDFCFA',
-          subtle: '#F0EDE8',
+          DEFAULT: '#FCFBFB',
+          bar: '#FEFEFD',
+          subtle: '#F5F4F4',
         },
         background: {
-          DEFAULT: '#FAF8F5',
-          tinted: '#F0EDE8',
+          DEFAULT: '#FCFBFB',
+          tinted: '#F5F4F4',
         },
         surface: {
           DEFAULT: '#FFFFFF',
-          subtle: '#F7F5F2',
-          grey: '#F7F5F2',
-          header: '#FDFCFA',
+          subtle: '#F8F7F7',
+          grey: '#F8F7F7',
+          header: '#FEFEFD',
         },
         // Text
         text: {
@@ -40,10 +40,10 @@ module.exports = {
         },
         // Secondary Accent
         'accent-secondary': {
-          anchor: '#4a3812',
-          DEFAULT: '#6e5a1a',
-          tint: '#9a8a5a',
-          wash: '#e8e4cf',
+          anchor: '#2d3a4a',
+          DEFAULT: '#3d5068',
+          tint: '#7a90a8',
+          wash: '#e4e8ed',
         },
         // Semantic Indicators (meaning only) — ~20% less saturated for consistency
         indicator: {
@@ -93,10 +93,10 @@ module.exports = {
         },
         // Strokes & Dividers
         stroke: {
-          subtle: '#DDD9D3',
+          subtle: '#E3E2E0',
           accent: '#005e72',
         },
-        divider: '#E0DCD6',
+        divider: '#EDECEA',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

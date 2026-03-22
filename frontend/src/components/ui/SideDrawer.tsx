@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { UploadToast, UploadItem } from './UploadToast';
-import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
+import { useInitiativeStore } from '@/stores/initiativeStore';
+import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'evaluate';
 export type SideDrawerVariant = 'home' | 'project';
@@ -70,6 +72,13 @@ export function SideDrawer({
   const dragCounter = useRef(0);
   const globalDragCounter = useRef(0);
 
+  const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
+  const [pendingDuplicates, setPendingDuplicates] = useState<{
+    entries: DuplicateEntry[];
+    filesToUpload: File[];
+    cleanCount: number;
+  } | null>(null);
+
   useEffect(() => {
     if (!showMaterials) return;
 
@@ -105,11 +114,10 @@ export function SideDrawer({
 
   const uploading = toastItems.some((i) => i.status === 'uploading');
 
-  const handleUpload = useCallback(async (files: FileList | File[]) => {
+  const doUpload = useCallback(async (filesToUpload: File[]) => {
     if (!onUploadMaterial) return;
 
-    const fileArray = Array.from(files);
-    const initial: UploadItem[] = fileArray.map((f) => ({
+    const initial: UploadItem[] = filesToUpload.map((f) => ({
       id: `${f.name}-${Date.now()}-${Math.random()}`,
       filename: f.name,
       status: 'uploading',
@@ -117,8 +125,8 @@ export function SideDrawer({
     setToastItems(initial);
     setShowToast(true);
 
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
+    for (let i = 0; i < filesToUpload.length; i++) {
+      const file = filesToUpload[i];
       const item = initial[i];
       try {
         await onUploadMaterial(file);
@@ -136,6 +144,30 @@ export function SideDrawer({
       }
     }
   }, [onUploadMaterial]);
+
+  const handleUpload = useCallback(async (files: FileList | File[]) => {
+    if (!onUploadMaterial) return;
+    const fileArray = Array.from(files);
+    const existingNames = projectMaterials.map((m) => m.filename);
+    const results = checkDuplicates(fileArray, existingNames);
+
+    const duplicates = results.filter((r) => r.isDuplicate);
+    const clean = results.filter((r) => !r.isDuplicate).map((r) => r.file);
+
+    if (duplicates.length > 0) {
+      const renamedDuplicates = duplicates.map(
+        (r) => new File([r.file], r.newName, { type: r.file.type }),
+      );
+      setPendingDuplicates({
+        entries: duplicates.map((d) => ({ original: d.file.name, renamed: d.newName })),
+        filesToUpload: renamedDuplicates,
+        cleanCount: clean.length,
+      });
+      if (clean.length > 0) doUpload(clean);
+    } else {
+      doUpload(fileArray);
+    }
+  }, [onUploadMaterial, projectMaterials, doUpload]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -324,6 +356,22 @@ export function SideDrawer({
             setShowToast(false);
             setToastItems([]);
           }}
+        />
+      )}
+
+      {pendingDuplicates && (
+        <DuplicateFileDialog
+          duplicates={pendingDuplicates.entries}
+          cleanCount={pendingDuplicates.cleanCount}
+          onConfirm={(selectedOriginals) => {
+            const selected = new Set(selectedOriginals);
+            const files = pendingDuplicates.filesToUpload.filter((_, i) =>
+              selected.has(pendingDuplicates.entries[i].original),
+            );
+            setPendingDuplicates(null);
+            if (files.length > 0) doUpload(files);
+          }}
+          onCancel={() => setPendingDuplicates(null)}
         />
       )}
     </aside>

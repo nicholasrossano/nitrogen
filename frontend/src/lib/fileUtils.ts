@@ -80,3 +80,55 @@ export function filterSupportedFiles(files: File[]): {
 
   return { accepted, rejected };
 }
+
+/**
+ * Generate a unique filename by appending " (1)", " (2)", etc. to the stem.
+ * Follows the macOS Finder convention: "report (1).pdf".
+ */
+export function deduplicateFilename(
+  name: string,
+  existingNames: string[],
+): string {
+  const lower = existingNames.map((n) => n.toLowerCase());
+  if (!lower.includes(name.toLowerCase())) return name;
+
+  const dotIdx = name.lastIndexOf('.');
+  const stem = dotIdx > 0 ? name.slice(0, dotIdx) : name;
+  const ext = dotIdx > 0 ? name.slice(dotIdx) : '';
+
+  let counter = 1;
+  let candidate: string;
+  do {
+    candidate = `${stem} (${counter})${ext}`;
+    counter++;
+  } while (lower.includes(candidate.toLowerCase()));
+
+  return candidate;
+}
+
+export interface DuplicateCheckResult {
+  file: File;
+  isDuplicate: boolean;
+  newName: string;
+}
+
+/**
+ * Check a batch of files against existing names and compute deduplicated
+ * names for any collisions. Also avoids collisions *within* the batch itself.
+ */
+export function checkDuplicates(
+  files: File[],
+  existingNames: string[],
+): DuplicateCheckResult[] {
+  const taken = existingNames.map((n) => n.toLowerCase());
+  const results: DuplicateCheckResult[] = [];
+
+  for (const file of files) {
+    const isDuplicate = taken.includes(file.name.toLowerCase());
+    const newName = deduplicateFilename(file.name, taken.map((n) => n));
+    taken.push(newName.toLowerCase());
+    results.push({ file, isDuplicate, newName });
+  }
+
+  return results;
+}

@@ -4,7 +4,8 @@ import { useCallback, useRef, useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { FileUp, Loader2 } from 'lucide-react';
 import { UploadToast, UploadItem } from '@/components/ui/UploadToast';
-import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
+import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface DocumentRequestWidgetProps {
   initiativeId: string;
@@ -25,10 +26,16 @@ export function DocumentRequestWidget({
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, sendMessage } = useInitiativeStore();
+  const { uploadEvidence, sendMessage, projectMaterials } = useInitiativeStore();
 
-  const handleUpload = useCallback(async (files: File[]) => {
-    const initial: UploadItem[] = files.map((f) => ({
+  const [pendingDuplicates, setPendingDuplicates] = useState<{
+    entries: DuplicateEntry[];
+    filesToUpload: File[];
+    cleanCount: number;
+  } | null>(null);
+
+  const doUpload = useCallback(async (filesToUpload: File[]) => {
+    const initial: UploadItem[] = filesToUpload.map((f) => ({
       id: `${f.name}-${Date.now()}-${Math.random()}`,
       filename: f.name,
       status: 'uploading',
@@ -37,8 +44,8 @@ export function DocumentRequestWidget({
     setShowToast(true);
 
     let successCount = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (let i = 0; i < filesToUpload.length; i++) {
+      const file = filesToUpload[i];
       const item = initial[i];
       try {
         await uploadEvidence(initiativeId, file);
@@ -63,6 +70,27 @@ export function DocumentRequestWidget({
       }, 500);
     }
   }, [initiativeId, uploadEvidence, sendMessage]);
+
+  const handleUpload = useCallback(async (files: File[]) => {
+    const existingNames = projectMaterials.map((m) => m.filename);
+    const results = checkDuplicates(files, existingNames);
+    const duplicates = results.filter((r) => r.isDuplicate);
+    const clean = results.filter((r) => !r.isDuplicate).map((r) => r.file);
+
+    if (duplicates.length > 0) {
+      const renamedDuplicates = duplicates.map(
+        (r) => new File([r.file], r.newName, { type: r.file.type }),
+      );
+      setPendingDuplicates({
+        entries: duplicates.map((d) => ({ original: d.file.name, renamed: d.newName })),
+        filesToUpload: renamedDuplicates,
+        cleanCount: clean.length,
+      });
+      if (clean.length > 0) doUpload(clean);
+    } else {
+      doUpload(files);
+    }
+  }, [projectMaterials, doUpload]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -178,6 +206,22 @@ export function DocumentRequestWidget({
             setShowToast(false);
             setToastItems([]);
           }}
+        />
+      )}
+
+      {pendingDuplicates && (
+        <DuplicateFileDialog
+          duplicates={pendingDuplicates.entries}
+          cleanCount={pendingDuplicates.cleanCount}
+          onConfirm={(selectedOriginals) => {
+            const selected = new Set(selectedOriginals);
+            const files = pendingDuplicates.filesToUpload.filter((_, i) =>
+              selected.has(pendingDuplicates.entries[i].original),
+            );
+            setPendingDuplicates(null);
+            if (files.length > 0) doUpload(files);
+          }}
+          onCancel={() => setPendingDuplicates(null)}
         />
       )}
     </div>

@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage, get_storage
+from app.core.filename_utils import deduplicate_filename
 from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
@@ -76,9 +77,13 @@ async def upload_material(
     except Exception:
         logger.warning("Could not extract text from %s", file.filename, exc_info=True)
 
+    unique_filename = await deduplicate_filename(
+        db, initiative_id, file.filename or "Untitled"
+    )
+
     material = ProjectMaterial(
         initiative_id=initiative.id,
-        filename=file.filename or "Untitled",
+        filename=unique_filename,
         file_type=file_type,
         storage_path=storage_path,
         file_size=len(content),
