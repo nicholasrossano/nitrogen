@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Upload, FileText, Loader2, ClipboardPaste } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
-import { extractFilesFromDrop, filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
+import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface EvidenceInputWidgetProps {
   initiativeId: string;
@@ -18,15 +19,44 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const { uploadEvidence, pasteEvidence, loading } = useInitiativeStore();
+  const { uploadEvidence, pasteEvidence, loading, projectMaterials } = useInitiativeStore();
+
+  const [pendingDuplicates, setPendingDuplicates] = useState<{
+    entries: DuplicateEntry[];
+    filesToUpload: File[];
+    cleanCount: number;
+  } | null>(null);
+
+  const doUpload = useCallback(async (filesToUpload: File[]) => {
+    for (const file of filesToUpload) {
+      await uploadEvidence(initiativeId, file);
+    }
+  }, [initiativeId, uploadEvidence]);
 
   const handleFiles = async (files: File[]) => {
     const { accepted, rejected } = filterSupportedFiles(files);
     if (rejected.length > 0) {
       alert(`Skipped unsupported files:\n${rejected.join('\n')}\n\nAccepted: PDF, DOCX, XLSX, XLS`);
     }
-    for (const file of accepted) {
-      await uploadEvidence(initiativeId, file);
+    if (accepted.length === 0) return;
+
+    const existingNames = projectMaterials.map((m) => m.filename);
+    const results = checkDuplicates(accepted, existingNames);
+    const duplicates = results.filter((r) => r.isDuplicate);
+    const clean = results.filter((r) => !r.isDuplicate).map((r) => r.file);
+
+    if (duplicates.length > 0) {
+      const renamedDuplicates = duplicates.map(
+        (r) => new File([r.file], r.newName, { type: r.file.type }),
+      );
+      setPendingDuplicates({
+        entries: duplicates.map((d) => ({ original: d.file.name, renamed: d.newName })),
+        filesToUpload: renamedDuplicates,
+        cleanCount: clean.length,
+      });
+      if (clean.length > 0) doUpload(clean);
+    } else {
+      doUpload(accepted);
     }
   };
 
@@ -172,6 +202,22 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
         <div className="p-5 bg-white text-center">
           <p className="text-sm text-text-secondary">Evidence uploaded</p>
         </div>
+      )}
+
+      {pendingDuplicates && (
+        <DuplicateFileDialog
+          duplicates={pendingDuplicates.entries}
+          cleanCount={pendingDuplicates.cleanCount}
+          onConfirm={(selectedOriginals) => {
+            const selected = new Set(selectedOriginals);
+            const files = pendingDuplicates.filesToUpload.filter((_, i) =>
+              selected.has(pendingDuplicates.entries[i].original),
+            );
+            setPendingDuplicates(null);
+            if (files.length > 0) doUpload(files);
+          }}
+          onCancel={() => setPendingDuplicates(null)}
+        />
       )}
     </div>
   );

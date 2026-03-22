@@ -5,15 +5,15 @@
 @tailwind utilities;
 
 :root {
-  /* Nitrogen Design Tokens — warm workbench palette */
+  /* Nitrogen Design Tokens — soft cool-grey workbench palette */
   /* Shell & Surfaces */
-  --color-shell: #FAFAFA;
-  --color-shell-bar: #FCFCFC;
-  --color-shell-subtle: #F2F2F2;
-  --color-background: #FAFAFA;
-  --color-background-tinted: #F2F2F2;
+  --color-shell: #FCFBFB;
+  --color-shell-bar: #FEFEFD;
+  --color-shell-subtle: #F5F4F4;
+  --color-background: #FCFBFB;
+  --color-background-tinted: #F5F4F4;
   --color-surface: #FFFFFF;
-  --color-surface-subtle: #F5F5F5;
+  --color-surface-subtle: #F8F7F7;
   
   /* Text */
   --color-text-primary: #1C1C1E;
@@ -27,10 +27,10 @@
   --color-accent-wash: #e6f9fc;
   
   /* Secondary Accent */
-  --color-accent-secondary-anchor: #4a3812;
-  --color-accent-secondary: #6e5a1a;
-  --color-accent-secondary-tint: #9a8a5a;
-  --color-accent-secondary-wash: #e8e4cf;
+  --color-accent-secondary-anchor: #2d3a4a;
+  --color-accent-secondary: #3d5068;
+  --color-accent-secondary-tint: #7a90a8;
+  --color-accent-secondary-wash: #e4e8ed;
   
   /* Semantic Indicators — ~20% less saturated for consistency */
   --color-indicator-orange: #B97A5D;
@@ -39,8 +39,8 @@
   --color-indicator-red: #b03737;
   
   /* Strokes */
-  --color-divider: #E0DCD6;
-  --color-stroke-subtle: #DDD9D3;
+  --color-divider: #EDECEA;
+  --color-stroke-subtle: #E3E2E0;
   --color-stroke-accent: #005e72;
 }
 
@@ -372,7 +372,7 @@ textarea {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5;
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
   @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;

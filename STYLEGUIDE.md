@@ -41,15 +41,15 @@ These colors form the outer application frame — the background behind the work
 
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `ShellBackground` | `#FAF8F5` | App outer background, page body |
-| `ShellBar` | `#FDFCFA` | Top bar and nav rail fill |
-| `ShellSubtle` | `#F0EDE8` | Shell-level hover, secondary grouping |
+| `ShellBackground` | `#F8F7F6` | App outer background, page body |
+| `ShellBar` | `#FAFAF9` | Top bar and nav rail fill |
+| `ShellSubtle` | `#EFEEEC` | Shell-level hover, secondary grouping |
 
 ### Content Surfaces
 | Token | Hex | Usage |
 | --- | --- | --- |
 | `SurfacePrimary` | `#FFFFFF` | Main workspace container, cards, panels |
-| `SurfaceSubtle` | `#F7F5F2` | Forms, secondary panels, table rows |
+| `SurfaceSubtle` | `#F4F3F2` | Forms, secondary panels, table rows |
 
 ### Text
 | Token | Hex | Usage |
@@ -71,10 +71,10 @@ Blue is an affordance signal, not a structural or decorative color.
 ### Secondary Accent
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `AccentSecondaryAnchor` | `#4a3812` | Strong secondary emphasis |
-| `AccentSecondary` | `#6e5a1a` | Secondary highlights |
-| `AccentSecondaryTint` | `#9a8a5a` | Secondary hover fills |
-| `AccentSecondaryWash` | `#e8e4cf` | Secondary subtle highlight |
+| `AccentSecondaryAnchor` | `#2d3a4a` | Strong secondary emphasis |
+| `AccentSecondary` | `#3d5068` | Secondary highlights |
+| `AccentSecondaryTint` | `#7a90a8` | Secondary hover fills |
+| `AccentSecondaryWash` | `#e4e8ed` | Secondary subtle highlight |
 
 ### Semantic Indicators
 | Token | Hex | Usage |
@@ -86,12 +86,12 @@ Blue is an affordance signal, not a structural or decorative color.
 ### Strokes & Dividers
 | Token | Hex | Usage |
 | --- | --- | --- |
-| `Divider` | `#E0DCD6` | Structural separators (warm neutral) |
-| `StrokeSubtle` | `#DDD9D3` | Input borders, subtle separators |
+| `Divider` | `#E5E3E1` | Structural separators (warm grey) |
+| `StrokeSubtle` | `#DAD8D6` | Input borders, subtle separators |
 | `StrokeAccent` | `#005e72` | Focus / selected border (interactive only) |
 
 **Rules**
-- Default UI reads neutral — warm greys and off-whites
+- Default UI reads neutral — soft warm-greys and clean whites
 - `AccentPrimary` is not a background or decorative color — it appears only where a user can click, focus, or select
 - Dividers use warm neutrals (`Divider`), never blue
 - Indicator colors encode meaning only — do not reuse for decoration
@@ -217,7 +217,7 @@ useEffect(() => {
 The application is structured as two distinct visual layers:
 
 ### Layer 1: Shell (outer chrome)
-- Background: `ShellBackground` (`#FAF8F5`)
+- Background: `ShellBackground` (`#F5F6F8`)
 - Contains: top bar, nav rail, outer padding
 - The shell is always visible at the page edges — it frames the workspace
 - Top bar and nav rail are **transparent on the shell** — they share the shell background, not a separate white surface
@@ -268,7 +268,7 @@ Most data surfaces and workspace elements use no border radius (0px) for a preci
 | Icon-only action buttons (edit, delete, close) | 4–6px | `rounded-sm` / `rounded` |
 | Interactive pill tags (selection, toggle) | 4–6px | `rounded` |
 | Ghost row hovers (history items, nav rows) | 8–12px | `rounded-lg` / `rounded-xl` |
-| Primary / secondary buttons (`btn-primary`) | 20px | `rounded-[20px]` |
+| Primary / secondary buttons (`btn-primary`, `btn-secondary`) | 20px | `rounded-[20px]` |
 | Search inputs | 20px | `rounded-[20px]` |
 | Chat composer textarea | 28px | `rounded-[28px]` |
 | Message bubbles (user) | 16px | `rounded-2xl` |
@@ -965,6 +965,23 @@ Defined as a global CSS class — do not replicate inline.
 - Active: `scale(0.98)` (100ms)
 - Disabled: `opacity-50 cursor-not-allowed`
 
+### Secondary Button (`btn-secondary`)
+
+Defined as a global CSS class — do not replicate inline. Used for cancel/dismiss actions alongside a primary CTA.
+
+```css
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm;
+  /* Same shape as btn-primary; hover fills with surface-subtle */
+}
+```
+
+- `rounded-[20px]` — identical radius to `btn-primary`; both buttons in a pair must always match in shape
+- Hover: `surface-subtle` fill fades in (no accent color)
+- Active: `scale(0.98)` (100ms)
+- Disabled: `opacity-50 cursor-not-allowed`
+
 ### Widget Footer Action Bar
 
 Widget cards (alignment, plan structure, etc.) use a compact footer to confirm or trigger generation. The footer is always a horizontal flex row with a hint label on the left and a compact `btn-primary` on the right — never a full-width button.
@@ -1159,7 +1176,7 @@ import { Loader2 } from 'lucide-react';
 
 The UI should feel at home next to native macOS productivity apps, enterprise desktop tools, and high-end analytics platforms.
 
-The outer shell is a quiet, warm off-white frame. The workspace inside is clean white — distinct, elevated, and clearly the working area. Cards inside the workspace are soft surfaces with shadow edges, not wireframe rectangles.
+The outer shell is a quiet, soft warm-grey frame. The workspace inside is clean white — distinct, elevated, and clearly the working area. Cards inside the workspace are soft surfaces with shadow edges, not wireframe rectangles.
 
 If it feels like a browser-first admin template, it is off-spec.  
 If blue is prominent in the chrome or structure, it is off-spec.  

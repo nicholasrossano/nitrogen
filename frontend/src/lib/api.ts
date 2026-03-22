@@ -709,15 +709,16 @@ export const api = {
       );
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: `Upload failed with status ${response.status}` }));
-        throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+        const body = await response.json().catch(() => null);
+        const detail = body?.detail;
+        if (detail) throw new Error(detail);
+        throw new Error(`Upload failed (${response.status})`);
       }
 
       return response.json();
     } catch (error) {
-      // Provide more detailed error messages
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        throw new Error('Cannot reach the backend server. Please check if the backend is running on port 8000.');
+        throw new Error('Upload failed — could not connect to the server. Check your internet connection and try again.');
       }
       throw error;
     }
