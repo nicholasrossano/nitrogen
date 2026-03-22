@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey
+from sqlalchemy import String, Text, BigInteger, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -35,4 +35,4 @@ class ProjectMaterial(Base):
     initiative: Mapped["Initiative"] = relationship(back_populates="project_materials")
 
 
-from app.models.initiative import Initiative
+from app.models.initiative import Initiative  # noqa: E402

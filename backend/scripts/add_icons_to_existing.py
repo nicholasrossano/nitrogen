@@ -21,7 +21,7 @@ async def add_icons_to_existing_projects():
             select(Initiative).where(
                 Initiative.icon.is_(None),
                 Initiative.title.isnot(None),
-                Initiative.archived == False
+                not Initiative.archived
             )
         )
         initiatives = result.scalars().all()

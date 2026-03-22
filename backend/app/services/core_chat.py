@@ -1523,7 +1523,7 @@ class ComplianceChatService:
             return resp.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"Template investigate answer failed: {e}", exc_info=True)
-            return f"I was unable to fully research this requirement. Please try again."
+            return "I was unable to fully research this requirement. Please try again."
 
     @staticmethod
     def _enrich_proposal_from_context(proposal: dict, model_inputs_context: str) -> dict:

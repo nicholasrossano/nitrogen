@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.services.template_parser import TemplateStructure, TemplateField
+from app.services.template_parser import TemplateStructure
 from app.services.rag import RAGService, RetrievedChunk
 from app.models.project_material import ProjectMaterial
 

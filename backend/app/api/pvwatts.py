@@ -9,7 +9,7 @@ import logging
 
 from app.core.auth import get_current_user, MockUser
 from app.tools.pvwatts_tool import PVWattsTool
-from app.services.pvwatts_engine import PVWattsEngine, PVWattsInput, MONTH_LABELS, MODULE_TYPE_LABELS, ARRAY_TYPE_LABELS
+from app.services.pvwatts_engine import PVWattsEngine, MONTH_LABELS, MODULE_TYPE_LABELS, ARRAY_TYPE_LABELS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -143,7 +143,6 @@ async def export_solar_excel(
         return (inp.get(field) or {}).get("value", fallback)
 
     BLUE = "004D91"
-    AMBER = "B45309"
     header_font = Font(bold=True, size=11, color="FFFFFF")
     header_fill = PatternFill(start_color=BLUE, end_color=BLUE, fill_type="solid")
     title_font = Font(bold=True, size=14, color=BLUE)

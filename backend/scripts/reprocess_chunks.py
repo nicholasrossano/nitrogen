@@ -155,7 +155,7 @@ async def main():
     print("=== Reprocessing chunks for content_html / page_number ===\n")
     e_up, e_sk, e_err = await reprocess_evidence()
     c_up, c_sk, c_err = await reprocess_corpus()
-    print(f"\n=== Done ===")
+    print("\n=== Done ===")
     print(f"Total updated: {e_up + c_up}")
     print(f"Total skipped: {e_sk + c_sk}")
     print(f"Total errors:  {e_err + c_err}")

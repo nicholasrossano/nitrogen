@@ -12,7 +12,6 @@ are discounted back to year 0 at the given discount rate.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 

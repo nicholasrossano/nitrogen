@@ -1,6 +1,5 @@
 import io
 import re
-from typing import Optional
 import tiktoken
 
 from app.config import get_settings
@@ -169,7 +168,6 @@ class DocumentParserService:
         Splits on block-level element boundaries so tags stay balanced.
         Falls back to the plain-text chunker if the HTML has no block tags.
         """
-        from html.parser import HTMLParser
 
         # Note: "tr" is intentionally excluded so entire <table> blocks stay
         # together as a single fragment rather than being split row-by-row.

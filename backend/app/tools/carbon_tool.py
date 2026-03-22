@@ -37,8 +37,6 @@ from app.models.chat import ChatMessage
 from app.services.carbon_engine import (
     CarbonEngine,
     CarbonInput,
-    CarbonResult,
-    SensitivityPoint,
 )
 
 settings = get_settings()
