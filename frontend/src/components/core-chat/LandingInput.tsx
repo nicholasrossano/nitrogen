@@ -115,7 +115,7 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
         {headerContent}
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
-          {ALL_TOOLS.map((tool) => {
+          {ALL_TOOLS.filter((tool) => tool.id !== 'template_fill' && tool.id !== 'gs_certification').map((tool) => {
             const isTemplate = tool.id === 'template_fill';
             return (
               <button
