@@ -11,7 +11,7 @@ import logging
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
-from app.core.storage import get_uploads_storage, get_storage
+from app.core.storage import get_uploads_storage
 from app.models.project_material import ProjectMaterial
 from app.services.document_parser import DocumentParserService
 

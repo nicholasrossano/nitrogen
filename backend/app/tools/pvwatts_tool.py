@@ -278,7 +278,7 @@ class PVWattsTool(BaseTool):
                 widget_data["error"] = str(e)
                 widget_data["computable"] = False
                 widget_type = "solar_inputs"
-                await _progress(f"PVWatts API error — showing inputs for review")
+                await _progress("PVWatts API error — showing inputs for review")
         else:
             widget_type = "solar_inputs"
             await _progress(f"Need {len(missing)} more inputs to run estimate — showing input table")

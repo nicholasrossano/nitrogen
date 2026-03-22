@@ -1,41 +1,28 @@
 """Chat API endpoints with LLM-driven orchestration."""
 
-import re
-
-# Synthetic messages sent automatically by the UI that carry no real project info.
-# Skipping input extraction for these prevents the LLM from inferring junk titles
-# like "Document Upload" when initiative.title is still None.
-_SKIP_EXTRACTION_MESSAGES = {
-    "I've uploaded my documents.",
-    "I don't have any documents to upload.",
-}
+import asyncio
+import json
+import logging
 from typing import Callable, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from uuid import UUID
-import logging
-import json
-import asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
+from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
-from app.models.initiative import Initiative, InitiativeStage
 from app.models.chat import ChatMessage
-from app.models.evidence import EvidenceDoc
+from app.models.initiative import Initiative, InitiativeStage
 from app.schemas.chat import (
     ChatMessageCreate,
     ChatMessageResponse,
     ChatResponse,
     ChatHistoryResponse,
     StageStatus,
-    ExtractedFields,
     ToolAlignmentSchema,
-    AlignmentSectionSchema,
-    AlignmentParameterSchema,
     AlignmentFeedbackRequest,
     AlignmentConfirmRequest,
     AlignmentResponse,
@@ -55,13 +42,19 @@ from app.tools.base import ToolAlignment
 from app.api.alignment_helpers import (
     get_or_generate_alignment,
     build_alignment_widget_data,
-    build_deliverables_overview_data,
     get_alignment_intro_message,
-    get_deliverables_overview_message,
 )
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Synthetic messages sent automatically by the UI that carry no real project info.
+# Skipping input extraction for these prevents the LLM from inferring junk titles
+# like "Document Upload" when initiative.title is still None.
+_SKIP_EXTRACTION_MESSAGES = {
+    "I've uploaded my documents.",
+    "I don't have any documents to upload.",
+}
 
 
 def build_stage_status(initiative: Initiative) -> StageStatus:
@@ -90,7 +83,7 @@ def build_stage_status(initiative: Initiative) -> StageStatus:
 def build_tool_recommendations(registry, tool_ids: list[str], initiative: Initiative) -> dict:
     """Build tool recommendations widget data from tool IDs."""
     all_tools = registry.get_all_tools()
-    tools_by_id = {t.definition.id: t for t in all_tools}
+    {t.definition.id: t for t in all_tools}
     
     recommendations = []
     for tool in all_tools:
@@ -605,7 +598,6 @@ async def execute_action(
                     break
 
         try:
-            from app.services.core_chat import ComplianceChatService
             research_service = ComplianceChatService(db)
             research_result = await research_service.generate_response(
                 user_message=user_message,
@@ -988,7 +980,6 @@ async def update_message_widget(
 
     msg.widget_data = data.widget_data
 
-    from sqlalchemy.orm.attributes import flag_modified
     from datetime import datetime, timezone
 
     # Bump updated_at so the initiative sorts correctly in history
@@ -1035,7 +1026,7 @@ async def truncate_chat(
     user: AuthUser = Depends(get_current_user),
 ):
     """Delete a message and all messages after it (used by the Edit flow)."""
-    initiative = await require_editor(db, initiative_id, user)
+    await require_editor(db, initiative_id, user)
 
     # Fetch the target message to get its created_at timestamp
     from uuid import UUID as UUIDType

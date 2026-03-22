@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, union_all, literal, case
+from sqlalchemy import select
 from uuid import UUID
 
 from app.core.database import get_db
@@ -149,7 +149,7 @@ async def list_initiatives(
             .outerjoin(User, Initiative.user_id == User.id)
             .where(
                 ProjectShare.user_id == user.uid,
-                Initiative.archived == False,
+                not Initiative.archived,
             )
             .order_by(Initiative.updated_at.desc())
             .limit(limit)

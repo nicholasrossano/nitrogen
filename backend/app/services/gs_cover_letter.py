@@ -7,10 +7,7 @@ computes completion status, and produces export-ready documents.
 
 import io
 import logging
-import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Optional
 
 from docx import Document as DocxDocument
 from docx.oxml.ns import qn
@@ -24,7 +21,8 @@ def _get_fallback_field_schema() -> list[dict]:
     Used as a fast fallback when the template cannot be fetched from the web
     and no cached version exists in the database.
     """
-    loc = lambda i: {"type": "paragraph", "index": i}
+    def loc(i):
+        return {"type": "paragraph", "index": i}
     fields = [
         {"field_id": "project_title", "label": "Project Title", "field_type": "text",
          "section": "Project Information", "required": True, "docx_location": loc(0),

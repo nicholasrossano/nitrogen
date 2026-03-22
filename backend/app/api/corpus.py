@@ -10,7 +10,6 @@ from app.core.auth import get_current_user, MockUser
 from app.core.storage import get_uploads_storage
 from app.models.corpus import CorpusDocument, CorpusChunk
 from app.schemas.corpus import (
-    CorpusDocumentCreate,
     CorpusDocumentResponse,
     CorpusListResponse,
     CorpusTextInput,

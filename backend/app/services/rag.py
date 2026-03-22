@@ -4,8 +4,7 @@ from uuid import UUID
 from dataclasses import dataclass
 from typing import Literal
 
-from app.models.evidence import EvidenceDoc, EvidenceChunk
-from app.models.corpus import CorpusDocument, CorpusChunk
+from app.models.evidence import EvidenceDoc
 from app.services.embeddings import EmbeddingsService
 from app.config import get_settings
 

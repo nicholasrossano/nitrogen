@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import models to ensure they're registered with Base
-from app.models import *
+from app.models import (  # noqa: F401
+    Initiative, ChatMessage, EvidenceDoc, EvidenceChunk, MemoVersion, Citation,
+    CorpusDocument, CorpusChunk, CoreChatSession, CoreChatMessage, ProvenanceTrace,
+    GSTemplateVersion, GSCertificationWorkspace, ProjectMaterial, User, ProjectShare,
+    PDDWorkspace,
+)
 from app.core.database import Base
 from app.config import get_settings
 

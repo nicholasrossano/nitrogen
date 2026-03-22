@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete as sql_delete
+from sqlalchemy import select
 from uuid import UUID
 import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
-from app.core.storage import get_uploads_storage, get_storage
+from app.core.storage import get_uploads_storage
 from app.core.filename_utils import deduplicate_filename
 from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
