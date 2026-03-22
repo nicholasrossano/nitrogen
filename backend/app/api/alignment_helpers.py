@@ -1,8 +1,6 @@
 """Helper functions for tool alignment flow."""
 
 import logging
-from uuid import UUID
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

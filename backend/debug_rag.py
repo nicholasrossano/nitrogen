@@ -83,7 +83,7 @@ async def diagnose_rag(initiative_id_str: str):
                         print(f"        Similarity: {chunk.similarity:.3f}")
                         print(f"        Content: {chunk.content[:100]}...")
                 else:
-                    print(f"   ❌ No chunks found")
+                    print("   ❌ No chunks found")
         else:
             print("⚠️  No evidence documents to test retrieval")
         
@@ -102,14 +102,14 @@ async def diagnose_rag(initiative_id_str: str):
             latest = memos[0]
             content = latest.content
             citations = content.get("citations", [])
-            print(f"   Latest memo:")
+            print("   Latest memo:")
             print(f"   - Created: {latest.created_at}")
             print(f"   - Citations: {len(citations)}")
             if citations:
                 for citation in citations[:3]:  # Show first 3
                     print(f"      [{citation['number']}] {citation['source_type']}: {citation['source_title']}")
             else:
-                print(f"   ❌ No citations in latest memo")
+                print("   ❌ No citations in latest memo")
         print()
         
         # 5. Check embeddings are actually created
@@ -125,7 +125,7 @@ async def diagnose_rag(initiative_id_str: str):
                 if sample_chunk.embedding is not None:
                     print(f"✅ Sample chunk has embedding (dim: {len(sample_chunk.embedding)})")
                 else:
-                    print(f"❌ Sample chunk has NULL embedding!")
+                    print("❌ Sample chunk has NULL embedding!")
             print()
         
         # 6. Test vector search directly

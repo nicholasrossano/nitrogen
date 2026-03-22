@@ -45,8 +45,8 @@ async def create_pdd_workspace(
     service = PDDService(db)
 
     try:
-        ws = await service.create_workspace(initiative_id)
-        scan = await service.scan_project(initiative_id)
+        await service.create_workspace(initiative_id)
+        await service.scan_project(initiative_id)
     except Exception:
         logger.exception("PDD scan failed for %s", initiative_id)
         raise HTTPException(

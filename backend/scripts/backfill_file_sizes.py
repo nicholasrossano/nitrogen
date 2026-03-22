@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.core.storage import get_uploads_storage
 from app.models.evidence import EvidenceDoc

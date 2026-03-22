@@ -3,7 +3,6 @@ requirements, cross-reference against project materials, and surface gaps."""
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 from uuid import UUID

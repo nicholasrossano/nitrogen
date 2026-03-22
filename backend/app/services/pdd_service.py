@@ -6,7 +6,6 @@ scan -> outline -> section-by-section authoring -> consistency review -> assembl
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -23,7 +22,7 @@ from app.models.initiative import Initiative
 from app.models.pdd import PDDWorkspace
 from app.models.evidence import EvidenceDoc
 from app.models.project_material import ProjectMaterial
-from app.services.rag import RAGService, RetrievedChunk
+from app.services.rag import RAGService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -934,7 +933,6 @@ class PDDService:
         doc = Document()
         assembled = ws.assembled_document
 
-        from docx.shared import Pt
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         title_para = doc.add_heading(assembled.get("title", "Project Design Document"), level=0)

@@ -1,6 +1,5 @@
 import io
 from pathlib import Path
-from datetime import date
 
 from app.schemas.memo import MemoContent
 

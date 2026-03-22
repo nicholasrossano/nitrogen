@@ -13,7 +13,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -424,7 +424,7 @@ class GSTemplateService:
         for sdt in body.iter(qn('w:sdt')):
             alias_el = sdt.find(f'.//{qn("w:alias")}')
             tag_el = sdt.find(f'.//{qn("w:tag")}')
-            placeholder_el = sdt.find(f'.//{qn("w:showingPlcHdr")}')
+            sdt.find(f'.//{qn("w:showingPlcHdr")}')
 
             alias = alias_el.get(qn('w:val')) if alias_el is not None else None
             tag = tag_el.get(qn('w:val')) if tag_el is not None else None
@@ -452,7 +452,8 @@ class GSTemplateService:
 
     def _get_fallback_cover_letter_fields(self) -> list[FieldDef]:
         """Hardcoded cover letter fields when automatic parsing finds nothing."""
-        loc = lambda i: {"type": "paragraph", "index": i}
+        def loc(i):
+            return {"type": "paragraph", "index": i}
         return [
             FieldDef("project_title", "Project Title", "text", "Project Information", True, loc(0)),
             FieldDef("gs_id", "Gold Standard ID", "text", "Project Information", False, loc(1),
@@ -488,7 +489,8 @@ class GSTemplateService:
 
     def _get_fallback_preliminary_review_fields(self) -> list[FieldDef]:
         """Bespoke fields for Preliminary Review when no template URL is available."""
-        loc = lambda i: {"type": "paragraph", "index": i}
+        def loc(i):
+            return {"type": "paragraph", "index": i}
         return [
             FieldDef("project_title", "Project Title", "text", "Project Information", True, loc(0)),
             FieldDef("project_developer_name", "Project Developer / Proponent Name", "text", "Project Information", True, loc(1)),

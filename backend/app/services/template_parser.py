@@ -84,7 +84,6 @@ class TemplateParserService:
 
     def parse_docx_template(self, content: bytes) -> TemplateStructure:
         from docx import Document
-        from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
         doc = Document(io.BytesIO(content))
         sections: list[TemplateSection] = []

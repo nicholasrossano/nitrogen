@@ -37,8 +37,6 @@ from app.models.chat import ChatMessage
 from app.services.lcoe_engine import (
     LCOEEngine,
     LCOEInput,
-    LCOEResult,
-    SensitivityPoint,
 )
 
 settings = get_settings()

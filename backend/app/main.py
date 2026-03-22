@@ -4,18 +4,18 @@ from dotenv import load_dotenv
 # Load .env before any config reads (backend/.env when run from backend/)
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
-import logging
-import os
-import json
-import traceback
+from fastapi import FastAPI, Request  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import json  # noqa: E402
+import traceback  # noqa: E402
 
-from app.config import get_settings
-from app.core.database import engine, Base
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, pvwatts
+from app.config import get_settings  # noqa: E402
+from app.core.database import engine  # noqa: E402
+from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, pvwatts  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ logger.info(f"Final CORS origins: {cors_origins}")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    async with engine.begin() as conn:
+    async with engine.begin():
         # Tables are managed by Alembic, but this ensures connection works
         pass
     yield

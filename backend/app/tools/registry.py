@@ -1,7 +1,6 @@
 """Tool registry for managing and recommending tools."""
 
 from typing import TYPE_CHECKING
-from functools import lru_cache
 
 if TYPE_CHECKING:
     from app.tools.base import BaseTool, ToolDefinition

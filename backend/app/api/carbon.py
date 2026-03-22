@@ -7,7 +7,6 @@ from typing import Any
 import io
 import logging
 
-from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.tools.carbon_tool import CarbonTool
 from app.services.carbon_engine import (
@@ -172,7 +171,7 @@ async def export_carbon_excel(
     """
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.styles import Font, PatternFill, Border, Side
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
@@ -283,10 +282,15 @@ async def export_carbon_excel(
 
     # Fixed row layout
     R_SEC_INPUTS = 3
-    R_DEV = 4; R_USG = 5; R_ADPT = 6
-    R_BL_FUEL = 7; R_PJ_FUEL = 8
-    R_FNRB = 9; R_FNRB_PJ = 10
-    R_LEAK = 11; R_CREDIT = 12
+    R_DEV = 4
+    R_USG = 5
+    R_ADPT = 6
+    R_BL_FUEL = 7
+    R_PJ_FUEL = 8
+    R_FNRB = 9
+    R_FNRB_PJ = 10
+    R_LEAK = 11
+    R_CREDIT = 12
 
     ws.cell(R_SEC_INPUTS, 1, "KEY INPUTS").font = section_font
 
@@ -318,7 +322,8 @@ async def export_carbon_excel(
 
     # Emission factors (pre-computed)
     R_SEC_EF = 14
-    R_BL_EF = 15; R_PJ_EF = 16
+    R_BL_EF = 15
+    R_PJ_EF = 16
     ws.cell(R_SEC_EF, 1, "EMISSION FACTORS (per device)").font = section_font
 
     ws.cell(R_BL_EF, 1, "Baseline (tCO₂e/device/yr)")
@@ -332,7 +337,10 @@ async def export_carbon_excel(
 
     # Year 1 results (formulas)
     R_SEC_YR1 = 18
-    R_BL_EM = 19; R_PJ_EM = 20; R_LK_EM = 21; R_NET = 22
+    R_BL_EM = 19
+    R_PJ_EM = 20
+    R_LK_EM = 21
+    R_NET = 22
     ws.cell(R_SEC_YR1, 1, "YEAR 1 RESULTS").font = section_font
 
     ws.cell(R_BL_EM, 1, "Baseline Emissions (tCO₂e)")
@@ -355,7 +363,10 @@ async def export_carbon_excel(
 
     # Crediting period totals (formulas wired after ER Schedule is built)
     R_SEC_TOT = 24
-    R_TOT_BL = 25; R_TOT_PJ = 26; R_TOT_LK = 27; R_TOT_NET = 28
+    R_TOT_BL = 25
+    R_TOT_PJ = 26
+    R_TOT_LK = 27
+    R_TOT_NET = 28
     ws.cell(R_SEC_TOT, 1, "CREDITING PERIOD TOTALS").font = section_font
     ws.cell(R_TOT_BL, 1, "Total Baseline Emissions")
     ws.cell(R_TOT_BL, 2).number_format = dec4_fmt

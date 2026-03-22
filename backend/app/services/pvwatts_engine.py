@@ -7,7 +7,7 @@ Handles: input defaults, API call, geocoding, result parsing.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
@@ -335,14 +335,21 @@ class PVWattsEngine:
     @staticmethod
     def _place_rank_to_zoom(place_rank: int) -> int:
         """Convert Nominatim place_rank to an appropriate map zoom level."""
-        if place_rank <= 4:   return 5   # country
-        if place_rank <= 8:   return 7   # state / province
-        if place_rank <= 12:  return 10  # county / district
-        if place_rank <= 16:  return 12  # city
-        if place_rank <= 20:  return 14  # suburb / neighbourhood
-        if place_rank <= 25:  return 15  # locality / hamlet
-        if place_rank <= 26:  return 16  # street
-        return 18                        # building / address
+        if place_rank <= 4:
+            return 5   # country
+        if place_rank <= 8:
+            return 7   # state / province
+        if place_rank <= 12:
+            return 10  # county / district
+        if place_rank <= 16:
+            return 12  # city
+        if place_rank <= 20:
+            return 14  # suburb / neighbourhood
+        if place_rank <= 25:
+            return 15  # locality / hamlet
+        if place_rank <= 26:
+            return 16  # street
+        return 18      # building / address
 
     @staticmethod
     def _format_geocode_result(r: dict, fallback_name: str = "") -> dict[str, Any]:

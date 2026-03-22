@@ -75,4 +75,4 @@ class Citation(Base):
 
 
 # Import for relationship typing
-from app.models.initiative import Initiative
+from app.models.initiative import Initiative  # noqa: E402

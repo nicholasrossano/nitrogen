@@ -2,10 +2,9 @@
 
 from openai import AsyncOpenAI
 import json
-from typing import Optional
 
 from app.config import get_settings
-from app.models.initiative import Initiative, InitiativeStage
+from app.models.initiative import Initiative
 from app.models.chat import ChatMessage
 from app.tools import get_tool_registry
 
@@ -456,7 +455,7 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
                 max_tokens=40,
             )
             return response.choices[0].message.content
-        except:
+        except Exception:
             return "I'll use this to create more accurate outputs."
     
     async def select_project_icon(self, title: str, description: str = "") -> str:
@@ -526,6 +525,6 @@ RULES:
             if result.startswith('"') and result.endswith('"'):
                 result = result[1:-1]
             return result
-        except Exception as e:
+        except Exception:
             # Fallback to generic message if LLM fails
             return "For impact projects like this, teams often have supporting documentation. Do you have any existing materials such as pitch decks, feasibility studies, or financial projections?"

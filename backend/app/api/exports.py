@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
-from pathlib import Path
 from pydantic import BaseModel
-from typing import Any, Optional
+from typing import Any
 import re
 
 from app.core.database import get_db

@@ -9,8 +9,6 @@ is a framework_id and the value is that framework's pre-check result.
 Existing data is wrapped into { <framework_id>: <existing_data> }.
 """
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
 
 revision = '020'
 down_revision = '019'

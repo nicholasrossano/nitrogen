@@ -15,7 +15,6 @@ Seven methodology-specific calculation paths covering all Tier-1 avoidance types
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -413,7 +412,7 @@ class CarbonEngine:
         baseline_stove_eff = _v(inputs, "baseline_stove_efficiency", 0.10)
         bl_ef_co2 = _v(inputs, "bl_ef_co2_tco2_per_tj", 112.0)
         bl_ef_nonco2 = _v(inputs, "bl_ef_nonco2_tco2e_per_tj", 9.46)
-        bl_ncv = _v(inputs, "baseline_ncv_mj_kg", 15.6)
+        _v(inputs, "baseline_ncv_mj_kg", 15.6)
         fnrb = _v(inputs, "fnrb", 0.70)
 
         prop_already_safe = _v(inputs, "proportion_already_safe", 0.0)
@@ -566,7 +565,7 @@ class CarbonEngine:
         bl_ef_co2 = _v(inputs, "bl_ef_co2_tco2_per_tj", 112.0)
         bl_ef_nonco2 = _v(inputs, "bl_ef_nonco2_tco2e_per_tj", 9.46)
         fnrb = _v(inputs, "fnrb", 0.70)
-        bl_stove_eff = _v(inputs, "baseline_stove_efficiency", 0.10)
+        _v(inputs, "baseline_stove_efficiency", 0.10)
         leakage_thermal = _v(inputs, "leakage_thermal_factor", 0.05)
         crediting_years = int(_v(inputs, "crediting_period_years", 10))
 

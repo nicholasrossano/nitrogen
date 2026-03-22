@@ -339,7 +339,7 @@ async def seed_corpus():
                 select(CorpusDocument).where(CorpusDocument.title == study['title'])
             )
             if existing.scalar_one_or_none():
-                print(f"  Already exists, skipping...")
+                print("  Already exists, skipping...")
                 continue
             
             # Create document
@@ -359,7 +359,7 @@ async def seed_corpus():
             print(f"  Created {len(chunks)} chunks")
             
             # Generate embeddings
-            print(f"  Generating embeddings...")
+            print("  Generating embeddings...")
             embeddings = await embeddings_service.embed_texts(chunks)
             
             # Store chunks

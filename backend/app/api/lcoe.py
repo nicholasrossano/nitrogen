@@ -1,15 +1,12 @@
 """LCOE API endpoints — recalculate, sensitivity, and Excel export."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from uuid import UUID
 from typing import Any
 import io
 import logging
 
-from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.tools.lcoe_tool import LCOETool
 from app.services.lcoe_engine import LCOEEngine, LCOEInput
@@ -113,7 +110,7 @@ async def export_lcoe_excel(
     """
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+        from openpyxl.styles import Font, PatternFill, Border, Side
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
@@ -194,9 +191,16 @@ async def export_lcoe_excel(
 
     # Fixed row layout for stable cross-sheet references
     R_SEC_INPUTS = 3
-    R_CAP = 4;  R_CF = 5;  R_CAPEX = 6;  R_OPEX = 7
-    R_FUEL = 8; R_REPL = 9; R_DR = 10; R_LIFE = 11
-    R_CONSTR = 12; R_DEG = 13
+    R_CAP = 4
+    R_CF = 5
+    R_CAPEX = 6
+    R_OPEX = 7
+    R_FUEL = 8
+    R_REPL = 9
+    R_DR = 10
+    R_LIFE = 11
+    R_CONSTR = 12
+    R_DEG = 13
 
     ws.cell(R_SEC_INPUTS, 1, "KEY INPUTS").font = section_font
 
@@ -224,7 +228,8 @@ async def export_lcoe_excel(
 
     # Derived values
     R_SEC_DERIVED = 15
-    R_ENERGY = 16; R_CAPEX_YR = 17
+    R_ENERGY = 16
+    R_CAPEX_YR = 17
     ws.cell(R_SEC_DERIVED, 1, "DERIVED VALUES").font = section_font
 
     ws.cell(R_ENERGY, 1, "Base Annual Energy")
@@ -239,7 +244,9 @@ async def export_lcoe_excel(
 
     # Results (formulas wired after Cash Flows sheet is built)
     R_SEC_RESULTS = 19
-    R_NPV_COST = 20; R_NPV_ENERGY = 21; R_LCOE = 22
+    R_NPV_COST = 20
+    R_NPV_ENERGY = 21
+    R_LCOE = 22
     ws.cell(R_SEC_RESULTS, 1, "RESULTS").font = section_font
 
     ws.cell(R_NPV_COST, 1, "NPV Total Costs")
@@ -256,7 +263,10 @@ async def export_lcoe_excel(
 
     # Cost breakdown (formulas wired after Cash Flows sheet is built)
     R_SEC_BREAK = 24
-    R_CAPEX_SH = 25; R_OPEX_SH = 26; R_FUEL_SH = 27; R_REPL_SH = 28
+    R_CAPEX_SH = 25
+    R_OPEX_SH = 26
+    R_FUEL_SH = 27
+    R_REPL_SH = 28
     ws.cell(R_SEC_BREAK, 1, "COST BREAKDOWN (NPV)").font = section_font
     ws.cell(R_CAPEX_SH, 1, "CAPEX Share")
     ws.cell(R_OPEX_SH, 1, "O&M Share")

@@ -32,7 +32,7 @@ async def migrate_initiatives():
         print("❌ DATABASE_URL not set in environment")
         return
     
-    print(f"🔗 Connecting to database...")
+    print("🔗 Connecting to database...")
     engine = create_async_engine(
         settings.database_url,
         echo=False,
@@ -76,9 +76,9 @@ async def migrate_initiatives():
         )
         migrated = result.scalars().all()
         
-        print(f"\n✅ Migration complete!")
+        print("\n✅ Migration complete!")
         print(f"   {len(migrated)} initiative(s) now using shared user ID")
-        print(f"\n🎉 All projects will now be visible in shared access code mode")
+        print("\n🎉 All projects will now be visible in shared access code mode")
     
     await engine.dispose()
 

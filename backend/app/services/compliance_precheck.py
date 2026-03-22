@@ -28,7 +28,6 @@ from app.services.compliance_frameworks import (
     SCOPE_FACTS,
     FAMILY_LABELS,
     get_requirements_for_framework,
-    get_scope_facts_for_framework,
 )
 from app.services.rag import RAGService
 

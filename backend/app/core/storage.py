@@ -1,8 +1,6 @@
-import os
 import uuid
 import aiofiles
 from pathlib import Path
-from typing import Optional
 from abc import ABC, abstractmethod
 
 from app.config import get_settings

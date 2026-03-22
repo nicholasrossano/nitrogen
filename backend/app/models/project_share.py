@@ -41,6 +41,6 @@ class ProjectShare(Base):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship(
+    user: Mapped["User"] = relationship(  # noqa: F821
         "User", foreign_keys=[user_id], lazy="joined"
     )

@@ -11,7 +11,6 @@ from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
 from app.core.filename_utils import deduplicate_filename
 from app.models.evidence import EvidenceDoc, EvidenceChunk
-from app.models.chat import ChatMessage
 from app.schemas.evidence import (
     EvidenceTextInput,
     EvidenceDocResponse,
@@ -179,7 +178,7 @@ async def list_evidence(
     user: AuthUser = Depends(get_current_user),
 ):
     """List evidence documents for an initiative"""
-    initiative = await require_viewer(db, initiative_id, user)
+    await require_viewer(db, initiative_id, user)
     
     # Get evidence docs with chunk counts
     docs_result = await db.execute(

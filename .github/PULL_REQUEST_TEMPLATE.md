@@ -10,10 +10,3 @@ Closes #<!-- issue number -->
 
 -
 -
-
-## Checklist
-
-- [ ] CI passes (lint + build)
-- [ ] No secrets or credentials added to source files
-- [ ] Relevant docs updated if behavior changed
-- [ ] Tested locally

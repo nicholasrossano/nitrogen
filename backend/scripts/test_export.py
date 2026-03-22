@@ -53,7 +53,7 @@ async def test_export():
     try:
         # Test export service
         exporter = DocxExporterService()
-        print(f"✓ DocxExporterService initialized")
+        print("✓ DocxExporterService initialized")
         print(f"  Template path: {exporter.template_path}")
         print(f"  Template exists: {exporter.template_path.exists()}")
         print()

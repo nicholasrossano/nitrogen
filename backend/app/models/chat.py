@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import enum
@@ -64,4 +64,4 @@ class ChatMessage(Base):
 
 
 # Import for relationship typing
-from app.models.initiative import Initiative
+from app.models.initiative import Initiative  # noqa: E402

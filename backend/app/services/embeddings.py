@@ -1,5 +1,4 @@
 from openai import AsyncOpenAI
-from typing import Optional
 
 from app.config import get_settings
 

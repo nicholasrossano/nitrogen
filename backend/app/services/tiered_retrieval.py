@@ -13,18 +13,17 @@ Every fact is tracked with its source for citation.
 import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Literal, Optional, Awaitable
+from typing import Callable, Optional, Awaitable
 from uuid import UUID
 import logging
-import time
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from app.config import get_settings
-from app.services.rag import RAGService, RetrievedChunk
+from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial

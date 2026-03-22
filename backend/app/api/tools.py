@@ -1,6 +1,24 @@
 """API endpoints for tools."""
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.alignment_helpers import (
+    build_alignment_widget_data,
+    build_deliverables_overview_data,
+    get_alignment_intro_message,
+    get_deliverables_overview_message,
+    get_or_generate_alignment,
+)
+from app.core.auth import get_current_user, AuthUser
+from app.core.database import get_db
+from app.core.permissions import require_editor, require_viewer
+from app.models.chat import ChatMessage
+from app.models.initiative import InitiativeStage
+from app.tools import get_tool_registry
 
 _LOWERCASE_WORDS = frozenset(
     ["a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
@@ -19,25 +37,6 @@ def _to_title_case(text: str) -> str:
         else:
             result.append(word.lower())
     return " ".join(result)
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from uuid import UUID
-from pydantic import BaseModel
-
-from app.core.database import get_db
-from app.core.auth import get_current_user, AuthUser
-from app.core.permissions import require_editor, require_viewer
-from app.models.initiative import Initiative, InitiativeStage
-from app.models.chat import ChatMessage
-from app.tools import get_tool_registry
-from app.services.sdg_classifier import classify_sdg
-from app.api.alignment_helpers import (
-    get_or_generate_alignment,
-    build_alignment_widget_data,
-    build_deliverables_overview_data,
-    get_alignment_intro_message,
-    get_deliverables_overview_message,
-)
 
 router = APIRouter()
 
@@ -154,7 +153,6 @@ async def select_tools(
     user: AuthUser = Depends(get_current_user),
 ):
     """Select tools for an initiative."""
-    from app.services.chat_agent import ChatAgentService
 
     initiative = await require_editor(db, initiative_id, user)
     # Validate tool IDs
