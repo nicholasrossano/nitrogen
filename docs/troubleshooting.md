@@ -5,7 +5,7 @@
 ### Symptoms
 ```
 Access to fetch at 'https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/export' 
-from origin 'https://nitrogen-sandy.vercel.app' has been blocked by CORS policy: 
+from origin 'https://the-nitrogen.ai' has been blocked by CORS policy: 
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 
 POST https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/export 
@@ -78,7 +78,7 @@ This will test the DOCX generation in isolation.
 Set the `CORS_ORIGINS` environment variable in Railway:
 
 ```bash
-CORS_ORIGINS=["https://nitrogen-sandy.vercel.app"]
+CORS_ORIGINS=["https://the-nitrogen.ai"]
 ```
 
 **Why this matters**: Even though you have `allow_origin_regex` in the code, you need at least one valid origin in the environment variable.
@@ -219,7 +219,7 @@ To avoid this in the future:
 
 ```
 Access to fetch at 'https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/export' 
-from origin 'https://nitrogen-sandy.vercel.app' has been blocked by CORS policy: 
+from origin 'https://the-nitrogen.ai' has been blocked by CORS policy: 
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 
 POST .../export net::ERR_FAILED 500 (Internal Server Error)
@@ -263,7 +263,7 @@ Even though the CORS error is a symptom, you still need to fix it:
 
 **Set in Railway environment variables:**
 ```bash
-CORS_ORIGINS=["https://nitrogen-sandy.vercel.app"]
+CORS_ORIGINS=["https://the-nitrogen.ai"]
 ```
 
 Your code already has `allow_origin_regex=r"https://.*\.vercel\.app"` to handle preview deployments.
@@ -363,7 +363,7 @@ Based on what the logs show:
 
 Set `CORS_ORIGINS` to include your Vercel domain:
 ```bash
-CORS_ORIGINS=["https://nitrogen-sandy.vercel.app"]
+CORS_ORIGINS=["https://the-nitrogen.ai"]
 ```
 
 ### Step 4: Redeploy
@@ -418,7 +418,7 @@ Before deploying to production:
 ```bash
 DATABASE_URL=postgresql+asyncpg://...
 OPENAI_API_KEY=sk-...
-CORS_ORIGINS=["https://nitrogen-sandy.vercel.app"]
+CORS_ORIGINS=["https://the-nitrogen.ai"]
 STORAGE_TYPE=local
 EXPORTS_DIR=./exports
 ```
