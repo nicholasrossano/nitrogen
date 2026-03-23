@@ -21,7 +21,7 @@ EXPORTS_DIR=./exports
 UPLOADS_DIR=./uploads
 
 # CORS - CRITICAL for production
-CORS_ORIGINS=["https://nitrogen-sandy.vercel.app"]
+CORS_ORIGINS=["https://your-app.vercel.app"]
 # Note: The code also has allow_origin_regex for *.vercel.app preview deployments
 
 # Firebase Auth (optional if using access code bypass)
