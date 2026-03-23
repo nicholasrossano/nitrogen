@@ -17,7 +17,7 @@ Report security issues privately by emailing **nicholas.rossano@gmail.com**. Inc
 - Potential impact
 - Any suggested fix (optional)
 
-You can expect an acknowledgment within 48 hours and a response on whether the issue is confirmed within 5 business days.
+We will do our best to confirm receipt within 48 hours and a plan of action within 5 business days.
 
 ## Disclosure Policy
 
