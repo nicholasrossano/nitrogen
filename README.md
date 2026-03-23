@@ -13,7 +13,7 @@ Nitrogen AI is a collaborative platform for teams designing, evaluating, and adv
 
 ## Overview
 
-Sustainable development work is often shaped by unequal access to expertise, tools, and implementation support. Nitrogen AI is motivated by the idea that teams working in lower-resource environments — along with the global organizations that support them — should have better access to the analytical tools, structured workflows, and precedent needed to design and execute effective projects.
+Sustainable development work is often shaped by unequal access to expertise, tools, and implementation support. Nitrogen AI is motivated by the idea that teams working in lower-resource environments — along with the global organizations that support them — should have better access to the analytical tools, structured workflows, and precedent needed to design and execute successful projects.
 
 In practice, those workflows are often fragmented across spreadsheets, consultant reports, internal notes, policy references, grant requirements, engineering assumptions, and institution-specific knowledge. Nitrogen AI is an attempt to bring more of that work into a shared, adaptable system.
 
