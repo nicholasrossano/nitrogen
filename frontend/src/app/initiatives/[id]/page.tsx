@@ -13,6 +13,7 @@ import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandal
 import { ResearchPanel } from '@/components/core-chat/ResearchPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ProjectFilesView } from '@/components/files';
+import { api } from '@/lib/api';
 import type { SourceCitation } from '@/lib/api';
 import { EvaluateView } from '@/components/evaluate/EvaluateView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -44,6 +45,7 @@ function InitiativePageContent() {
     await signOut();
     router.push('/');
   }, [signOut, router]);
+
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
   const planContainerRef = useRef<HTMLDivElement>(null);
 
@@ -341,6 +343,11 @@ function InitiativePageContent() {
 
   const handleNavChange = (item: NavItem) => {
     if (item === 'home') {
+      // If the user never sent a message (abandoned the onboarding), clean up the empty project
+      const hasUserMessage = messages.some((m) => m.role === 'user');
+      if (!hasUserMessage && initiative) {
+        api.permanentlyDeleteInitiative(initiative.id).catch(() => {});
+      }
       router.push('/');
       return;
     }
