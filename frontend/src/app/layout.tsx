@@ -4,8 +4,8 @@ import 'katex/dist/katex.min.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'Nitrogen',
-  description: 'Generate investment memos through conversational AI',
+  title: 'Nitrogen AI',
+  description: 'Artificial intelligence powering sustainable development',
 };
 
 export default function RootLayout({
