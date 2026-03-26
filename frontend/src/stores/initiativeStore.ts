@@ -117,10 +117,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   loadChatHistory: async (id: string) => {
     try {
       const response = await api.getChatHistory(id);
-      console.log('loadChatHistory: response', response);
       const messages = response?.messages || [];
       const stage_status = response?.stage_status;
-      console.log('loadChatHistory: setting messages', { count: messages.length });
       // Hydrate feedback map from persisted message data
       const feedbackMap: Record<string, 'like' | 'dislike' | null> = {};
       for (const msg of messages) {
@@ -205,7 +203,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   // Send a message with streaming
   sendMessage: async (id: string, content: string, toolHint?: string) => {
     const { messages } = get();
-    console.log('sendMessage: starting', { id, content, currentMessageCount: messages?.length });
     
     // Set sending state first
     set({ 
@@ -228,7 +225,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     set({ 
       messages: [...currentMessages, userMessage],
     });
-    console.log('sendMessage: optimistic update done', { newCount: currentMessages.length + 1 });
 
     // Create a placeholder assistant message for streaming
     const streamingMessageId = `streaming-${Date.now()}`;
@@ -242,7 +238,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     };
 
     try {
-      console.log('sendMessage: calling streaming API');
       
       // Add the streaming message and mark it as streaming
       set(state => ({
@@ -270,8 +265,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         },
         // onComplete
         async (message: ChatMessage, stageStatus: any) => {
-          console.log('sendMessage: stream complete');
-          
           // Clear streaming state
           set({ 
             streamingMessageId: null,
@@ -279,8 +272,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
             stageStatus,
           });
 
-          // Reload initiative to get updated fields
-          console.log('sendMessage: reloading initiative');
           const initiative = await api.getInitiative(id);
           set({ initiative });
 
@@ -293,11 +284,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
             set({ compliancePrechecks: initiative.compliance_prechecks });
           }
 
-          // Reload chat history to get any additional messages the backend added
-          console.log('sendMessage: reloading chat history');
           const chatHistory = await api.getChatHistory(id);
           const finalMessages = chatHistory?.messages || [];
-          console.log('sendMessage: setting final messages', { count: finalMessages.length });
           set({ messages: finalMessages });
         },
         toolHint,
@@ -581,24 +569,14 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
 
   // Select tools for initiative
   selectTools: async (id: string, toolIds: string[]) => {
-    console.log('selectTools: starting', { id, toolIds });
     set({ loading: true, error: null });
     try {
-      console.log('selectTools: calling API');
       await api.selectTools(id, toolIds);
-      console.log('selectTools: API returned successfully');
       
-      // Reload everything
-      console.log('selectTools: reloading data');
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
       ]);
-      console.log('selectTools: data reloaded', { 
-        initiative: !!initiative, 
-        messageCount: messages?.length,
-        lastMessage: messages?.[messages.length - 1]
-      });
       
       set({
         initiative,
@@ -606,7 +584,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         stageStatus: stage_status,
         loading: false,
       });
-      console.log('selectTools: state updated');
     } catch (error) {
       console.error('selectTools: error', error);
       set({

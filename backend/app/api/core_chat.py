@@ -6,9 +6,9 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from openai import AsyncOpenAI
@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.services.core_chat import ComplianceChatService
 from app.models.core_chat import CoreChatSession, CoreChatMessage
 from app.models.initiative import Initiative
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,13 +51,13 @@ class ChatHistoryMessage(BaseModel):
 
 
 class ComplianceChatRequest(BaseModel):
-    content: str
-    history: list[ChatHistoryMessage] = []
-    session_id: Optional[str] = None  # UUID of existing session, or null to start a new one
-    tool_hint: Optional[str] = None  # Optional tool ID the user explicitly selected
-    model_inputs_context: Optional[str] = None  # Current LCOE/Carbon model inputs for context
-    initiative_id: Optional[str] = None  # Inject project context when chatting from a project
-    compare_initiative_ids: Optional[list[str]] = None  # Exactly 2 initiative IDs for compare mode
+    content: str = Field(..., max_length=50000)
+    history: list[ChatHistoryMessage] = Field(default=[], max_length=100)
+    session_id: Optional[str] = None
+    tool_hint: Optional[str] = None
+    model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
+    initiative_id: Optional[str] = None
+    compare_initiative_ids: Optional[list[str]] = None
 
 
 class TitleRequest(BaseModel):
@@ -234,7 +235,9 @@ async def delete_core_chat_session(
 
 
 @router.post("/chat/stream")
+@limiter.limit("20/minute")
 async def compliance_chat_stream(
+    request: Request,
     data: ComplianceChatRequest,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
@@ -283,7 +286,15 @@ async def compliance_chat_stream(
                 event = {"type": "research_step", "id": step_id, "label": label, "status": step_status}
                 await event_queue.put(json.dumps(event))
 
-            history = [{"role": m.role, "content": m.content} for m in data.history]
+            # Reconstruct history server-side from stored messages
+            prior_msgs_result = await db.execute(
+                select(CoreChatMessage)
+                .where(CoreChatMessage.session_id == session.id)
+                .where(CoreChatMessage.id != user_msg.id)
+                .order_by(CoreChatMessage.created_at)
+            )
+            prior_msgs = prior_msgs_result.scalars().all()
+            history = [{"role": m.role, "content": m.content} for m in prior_msgs]
             service = ComplianceChatService(db)
 
             # --- Compare mode ---
@@ -325,24 +336,27 @@ async def compliance_chat_stream(
 
             # --- Single project / normal mode ---
             if not compare_contexts:
-                # Load project context when chatting from a project workspace
                 project_context: str | None = None
+                verified_initiative: Initiative | None = None
                 if data.initiative_id:
                     try:
                         init_uuid = uuid.UUID(data.initiative_id)
-                        initiative, _role = await get_initiative_with_role(db, init_uuid, user)
-                        project_context = _build_project_context(initiative)
-                    except (ValueError, HTTPException, Exception) as e:
-                        logger.warning(f"Failed to load initiative context: {e}")
+                        verified_initiative, _role = await get_initiative_with_role(db, init_uuid, user)
+                        project_context = _build_project_context(verified_initiative)
+                    except (ValueError, HTTPException):
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
+                        return
 
             if not compare_contexts:
-                # Fast-path: PDD tool scans + generates outline in one shot
                 _tool_hint = data.tool_hint or ""
                 if _tool_hint == "pdd" and data.initiative_id:
+                    if not verified_initiative:
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for PDD generation.'})}\n\n"
+                        return
                     from app.services.pdd_service import PDDService
                     from app.services.core_chat import ComplianceChatResponse
 
-                    init_uuid = uuid.UUID(data.initiative_id)
+                    init_uuid = verified_initiative.id
 
                     async def _run_pdd_setup():
                         pdd_svc = PDDService(db)
@@ -374,12 +388,15 @@ async def compliance_chat_stream(
 
                     generation_task = asyncio.create_task(_run_pdd_setup())
                 elif _tool_hint.startswith("template_fill:") and data.initiative_id:
+                    if not verified_initiative:
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for template analysis.'})}\n\n"
+                        return
                     template_id_str = _tool_hint.split(":", 1)[1]
                     from app.tools.template_tool import TemplateFillTool
                     from app.services.core_chat import ComplianceChatResponse
 
                     tmpl_tool = TemplateFillTool()
-                    init_uuid = uuid.UUID(data.initiative_id)
+                    init_uuid = verified_initiative.id
 
                     async def _run_template():
                         wt, wd = await tmpl_tool.execute_from_template(
@@ -426,7 +443,7 @@ async def compliance_chat_stream(
                             model_inputs_context=data.model_inputs_context or None,
                             project_context=project_context,
                             on_research_step=on_research_step,
-                            initiative_id=data.initiative_id or None,
+                            initiative_id=data.initiative_id if verified_initiative else None,
                         )
                     )
 
@@ -492,7 +509,7 @@ async def compliance_chat_stream(
                 await db.rollback()
             except Exception:
                 pass
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'An unexpected error occurred. Please try again.'})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -665,8 +682,10 @@ async def save_session_from_messages(
         try:
             init_uuid = uuid.UUID(data.initiative_id)
             await get_initiative_with_role(db, init_uuid, user)
-        except (ValueError, HTTPException):
-            init_uuid = None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid initiative_id")
+        except HTTPException:
+            raise
 
     session = CoreChatSession(user_id=user.uid, title=data.title, initiative_id=init_uuid)
     db.add(session)
