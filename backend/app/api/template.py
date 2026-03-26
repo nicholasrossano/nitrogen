@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
+from app.core.filename_utils import safe_content_disposition
 from app.models.project_material import ProjectMaterial
 from app.services.document_parser import DocumentParserService
 
@@ -136,14 +137,15 @@ async def generate_from_template(
     await require_editor(db, init_uuid, user)
 
     result = await db.execute(
-        select(ProjectMaterial).where(ProjectMaterial.id == template_uuid)
+        select(ProjectMaterial).where(
+            ProjectMaterial.id == template_uuid,
+            ProjectMaterial.initiative_id == init_uuid,
+        )
     )
     material = result.scalar_one_or_none()
     if not material:
-        logger.error("Template material not found in DB: %s", template_uuid)
-        raise HTTPException(status_code=404, detail=f"Template material {template_uuid} not found in database")
+        raise HTTPException(status_code=404, detail="Template not found")
     if not material.storage_path:
-        logger.error("Template material has no storage_path: %s", template_uuid)
         raise HTTPException(status_code=404, detail="Template file missing from storage")
 
     storage = get_uploads_storage()
@@ -151,7 +153,7 @@ async def generate_from_template(
         template_bytes = await storage.load(material.storage_path)
     except Exception:
         logger.error("Failed to load template file from storage: %s", material.storage_path, exc_info=True)
-        raise HTTPException(status_code=404, detail=f"Template file not found at {material.storage_path}")
+        raise HTTPException(status_code=404, detail="Template file not found in storage")
 
     reqs = body.requirements or []
 
@@ -261,5 +263,5 @@ async def export_template(
     return Response(
         content=file_bytes,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{material.filename}"'},
+        headers={"Content-Disposition": safe_content_disposition(material.filename)},
     )

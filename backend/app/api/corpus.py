@@ -8,6 +8,7 @@ from typing import Optional
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.core.storage import get_uploads_storage
+from app.core.filename_utils import safe_content_disposition
 from app.models.corpus import CorpusDocument, CorpusChunk
 from app.schemas.corpus import (
     CorpusDocumentResponse,
@@ -287,7 +288,7 @@ async def download_corpus_document(
         content=file_bytes,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'inline; filename="{doc.title or "file"}"'
+            "Content-Disposition": safe_content_disposition(doc.title or "file")
         },
     )
 
@@ -309,6 +310,10 @@ async def delete_corpus_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Corpus document not found",
         )
-    
+
+    if doc.storage_path:
+        storage = get_uploads_storage()
+        await storage.delete(doc.storage_path)
+
     await db.delete(doc)
     await db.commit()

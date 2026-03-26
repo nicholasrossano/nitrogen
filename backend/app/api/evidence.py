@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
-from app.core.filename_utils import deduplicate_filename
+from app.core.filename_utils import deduplicate_filename, safe_content_disposition
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.schemas.evidence import (
     EvidenceTextInput,
@@ -336,7 +336,7 @@ async def download_evidence(
         content=file_bytes,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'inline; filename="{evidence_doc.filename or "file"}"'
+            "Content-Disposition": safe_content_disposition(evidence_doc.filename or "file")
         },
     )
 
@@ -361,7 +361,11 @@ async def delete_evidence(
         )
     
     await require_editor(db, evidence_doc.initiative_id, user)
-    
+
+    if evidence_doc.storage_path:
+        storage = get_uploads_storage()
+        await storage.delete(evidence_doc.storage_path)
+
     # Delete all chunks first
     await db.execute(
         sql_delete(EvidenceChunk).where(EvidenceChunk.evidence_doc_id == evidence_id)

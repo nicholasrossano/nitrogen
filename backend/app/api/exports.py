@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_viewer
 from app.core.storage import get_storage
+from app.core.filename_utils import safe_content_disposition
 from app.models.chat import ChatMessage
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
@@ -157,7 +158,7 @@ async def download_export(
         content=file_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
+            "Content-Disposition": safe_content_disposition(filename)
         }
     )
 
@@ -186,7 +187,7 @@ async def export_checklist(
         content=file_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
+            "Content-Disposition": safe_content_disposition(filename)
         }
     )
 
@@ -269,7 +270,7 @@ async def export_deliverable(
         return Response(
             content=file_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{safe_title}.docx"'},
+            headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
         )
 
     # ── Checklist → XLSX ─────────────────────────────────────────────────────
@@ -281,7 +282,7 @@ async def export_deliverable(
         return Response(
             content=file_bytes,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{safe_title}.xlsx"'},
+            headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.xlsx")},
         )
 
     # ── LCOE → XLSX ──────────────────────────────────────────────────────────
