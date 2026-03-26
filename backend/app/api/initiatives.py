@@ -1,8 +1,13 @@
+import logging
+import shutil
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 
+from app.config import get_settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import (
@@ -11,8 +16,10 @@ from app.core.permissions import (
     require_editor,
     require_owner,
 )
+from app.core.storage import get_storage
 from app.models.initiative import Initiative
 from app.models.chat import ChatMessage
+from app.models.memo import MemoVersion
 from app.models.project_share import ProjectShare
 from app.models.user import User
 from app.schemas.initiative import (
@@ -21,6 +28,8 @@ from app.schemas.initiative import (
     InitiativeResponse,
     InitiativeConfirmResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -234,6 +243,34 @@ async def permanently_delete_initiative(
 ):
     """Permanently delete an initiative and all related data - owner only"""
     initiative = await require_owner(db, initiative_id, user)
+
+    # Collect export file paths before CASCADE deletes the rows
+    memo_result = await db.execute(
+        select(MemoVersion.export_path)
+        .where(
+            MemoVersion.initiative_id == initiative_id,
+            MemoVersion.export_path.isnot(None),
+        )
+    )
+    export_paths = [p for p in memo_result.scalars().all() if p]
+
     await db.delete(initiative)
     await db.commit()
+
+    # Clean up storage blobs (best-effort, don't fail the request)
+    settings = get_settings()
+    try:
+        uploads_dir = Path(settings.uploads_dir) / str(initiative_id)
+        if uploads_dir.exists():
+            shutil.rmtree(uploads_dir, ignore_errors=True)
+    except Exception:
+        logger.warning("Failed to clean up uploads for initiative %s", initiative_id, exc_info=True)
+
+    try:
+        exports_storage = get_storage()
+        for path in export_paths:
+            await exports_storage.delete(path)
+    except Exception:
+        logger.warning("Failed to clean up exports for initiative %s", initiative_id, exc_info=True)
+
     return None

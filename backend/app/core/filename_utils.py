@@ -1,9 +1,23 @@
+import re
+from urllib.parse import quote
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.models.evidence import EvidenceDoc
 from app.models.project_material import ProjectMaterial
+
+
+def safe_content_disposition(filename: str, disposition: str = "attachment") -> str:
+    """Build a Content-Disposition header value safe from injection.
+
+    Uses RFC 5987 filename*= encoding so non-ASCII and special characters
+    (quotes, newlines, semicolons) are handled correctly by all modern browsers.
+    """
+    ascii_safe = re.sub(r'[^\w \-.]', '_', filename).strip() or "file"
+    encoded = quote(filename, safe='')
+    return f'{disposition}; filename="{ascii_safe}"; filename*=UTF-8\'\'{encoded}'
 
 
 async def deduplicate_filename(

@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
-from app.core.filename_utils import deduplicate_filename
+from app.core.filename_utils import deduplicate_filename, safe_content_disposition
 from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
@@ -404,6 +404,6 @@ async def download_material(
         content=file_bytes,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{material.filename}"'
+            "Content-Disposition": safe_content_disposition(material.filename)
         },
     )
