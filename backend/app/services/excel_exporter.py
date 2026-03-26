@@ -6,6 +6,16 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _sanitize_cell(value: str) -> str:
+    """Prefix formula-like strings with a tab to prevent Excel formula injection."""
+    if isinstance(value, str) and value and value[0] in _FORMULA_PREFIXES:
+        return "\t" + value
+    return value
+
+
 class ExcelExporterService:
     """Service for exporting checklists to Excel."""
     
@@ -49,7 +59,7 @@ class ExcelExporterService:
         
         # Title row
         ws.merge_cells('A1:E1')
-        ws['A1'] = content.get('title', 'Due Diligence Checklist')
+        ws['A1'] = _sanitize_cell(content.get('title', 'Due Diligence Checklist'))
         ws['A1'].font = Font(bold=True, size=16)
         ws['A1'].alignment = Alignment(horizontal='center')
         
@@ -76,7 +86,7 @@ class ExcelExporterService:
         for category in categories:
             # Category header
             ws.merge_cells(f'A{row}:E{row}')
-            cell = ws.cell(row=row, column=1, value=category.get('name', ''))
+            cell = ws.cell(row=row, column=1, value=_sanitize_cell(category.get('name', '')))
             cell.font = self.category_font
             cell.fill = self.category_fill
             cell.border = self.thin_border
@@ -90,7 +100,7 @@ class ExcelExporterService:
                 cell.border = self.thin_border
                 
                 # Item description
-                cell = ws.cell(row=row, column=2, value=item.get('item', ''))
+                cell = ws.cell(row=row, column=2, value=_sanitize_cell(item.get('item', '')))
                 cell.alignment = Alignment(wrap_text=True, vertical='top')
                 cell.border = self.thin_border
                 
@@ -103,7 +113,7 @@ class ExcelExporterService:
                 
                 # Questions
                 questions = item.get('questions', [])
-                cell = ws.cell(row=row, column=4, value='\n'.join(f"• {q}" for q in questions))
+                cell = ws.cell(row=row, column=4, value=_sanitize_cell('\n'.join(f"• {q}" for q in questions)))
                 cell.alignment = Alignment(wrap_text=True, vertical='top')
                 cell.border = self.thin_border
                 
@@ -140,7 +150,7 @@ class ExcelExporterService:
             row += 1
             for idx, item in enumerate(content['priority_items'], 1):
                 ws_priority.cell(row=row, column=1, value=idx).border = self.thin_border
-                ws_priority.cell(row=row, column=2, value=item).border = self.thin_border
+                ws_priority.cell(row=row, column=2, value=_sanitize_cell(item) if isinstance(item, str) else item).border = self.thin_border
                 ws_priority.cell(row=row, column=3, value='').border = self.thin_border
                 row += 1
         
@@ -167,7 +177,7 @@ class ExcelExporterService:
             row += 1
             for idx, step in enumerate(content['next_steps'], 1):
                 ws_steps.cell(row=row, column=1, value=idx).border = self.thin_border
-                ws_steps.cell(row=row, column=2, value=step).border = self.thin_border
+                ws_steps.cell(row=row, column=2, value=_sanitize_cell(step) if isinstance(step, str) else step).border = self.thin_border
                 ws_steps.cell(row=row, column=3, value='').border = self.thin_border
                 ws_steps.cell(row=row, column=4, value='').border = self.thin_border
                 row += 1

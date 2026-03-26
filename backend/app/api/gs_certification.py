@@ -6,6 +6,7 @@ checklist state, and DOCX export.
 """
 
 import logging
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -144,11 +145,18 @@ async def approve_template(
     user: MockUser = Depends(get_current_user),
 ):
     """Admin: approve a draft template version."""
+    admin_uids = os.environ.get("ADMIN_UIDS", "").split(",")
+    admin_uids = [uid.strip() for uid in admin_uids if uid.strip()]
+    if not admin_uids or user.uid not in admin_uids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
     svc = GSTemplateService(db)
     try:
         version = await svc.approve_template(version_id, data.approved_by)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid template version or state")
     return {
         "version_id": str(version.id),
         "status": version.status,
