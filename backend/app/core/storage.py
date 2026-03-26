@@ -99,7 +99,7 @@ class FirebaseStorage(StorageBackend):
 
         bucket = self._get_bucket()
         blob = bucket.blob(blob_path)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, blob.upload_from_string, content)
         return blob_path
 
@@ -108,7 +108,7 @@ class FirebaseStorage(StorageBackend):
 
         bucket = self._get_bucket()
         blob = bucket.blob(path)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, blob.download_as_bytes)
 
     async def delete(self, path: str) -> bool:
@@ -117,7 +117,7 @@ class FirebaseStorage(StorageBackend):
         bucket = self._get_bucket()
         blob = bucket.blob(path)
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, blob.delete)
             return True
         except Exception:
