@@ -25,14 +25,15 @@ class Settings(BaseSettings):
         return self.openai_generation_model
     
     # Storage
-    storage_type: str = "local"  # local | gcs
+    storage_type: str = "local"  # local | firebase
     exports_dir: str = "./exports"
     uploads_dir: str = "./uploads"
     gcs_bucket: str = ""
-    
-    # Firebase (optional)
+
+    # Firebase (used for auth and Storage)
     firebase_project_id: str = ""
     nitrogen_firebase_credentials: str = ""
+    firebase_storage_bucket: str = ""  # e.g. nitrogen-ai.firebasestorage.app
     
     # App - debug defaults to True if database_url points to localhost
     debug: bool | None = None
