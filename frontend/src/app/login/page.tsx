@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -12,7 +12,7 @@ function getSafeReturnUrl(raw: string | null): string {
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = getSafeReturnUrl(searchParams.get('returnUrl'));
@@ -289,5 +289,19 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="w-8 h-8 text-accent animate-spin" />
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }
