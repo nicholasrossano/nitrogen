@@ -23,11 +23,6 @@ class StorageBackend(ABC):
     async def delete(self, path: str) -> bool:
         """Delete content at path"""
         pass
-    
-    @abstractmethod
-    def get_url(self, path: str) -> str:
-        """Get URL/path for accessing the file"""
-        pass
 
 
 class LocalStorage(StorageBackend):
@@ -64,9 +59,6 @@ class LocalStorage(StorageBackend):
             return True
         except FileNotFoundError:
             return False
-    
-    def get_url(self, path: str) -> str:
-        return f"/files/{path}"
 
 
 class GCSStorage(StorageBackend):
@@ -87,10 +79,6 @@ class GCSStorage(StorageBackend):
     
     async def delete(self, path: str) -> bool:
         raise NotImplementedError("GCS storage not implemented for MVP")
-    
-    def get_url(self, path: str) -> str:
-        # Return signed URL in production
-        return f"https://storage.googleapis.com/{self.bucket_name}/{path}"
 
 
 def get_storage() -> StorageBackend:

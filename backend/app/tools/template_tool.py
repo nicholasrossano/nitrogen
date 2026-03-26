@@ -90,7 +90,10 @@ class TemplateFillTool(BaseTool):
         from app.services.template_analysis import TemplateAnalysisService
 
         result = await db.execute(
-            select(ProjectMaterial).where(ProjectMaterial.id == template_id)
+            select(ProjectMaterial).where(
+                ProjectMaterial.id == template_id,
+                ProjectMaterial.initiative_id == initiative_id,
+            )
         )
         material = result.scalar_one_or_none()
         if not material or not material.storage_path:
