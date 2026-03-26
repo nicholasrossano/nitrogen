@@ -83,8 +83,8 @@ async def generate_pdd_outline(
 
     try:
         outline = await service.generate_outline(initiative_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot generate outline. Ensure the project has been scanned first.")
     except Exception:
         logger.exception("PDD outline generation failed for %s", initiative_id)
         raise HTTPException(
@@ -108,8 +108,8 @@ async def update_pdd_outline(
 
     try:
         outline = await service.update_outline(initiative_id, body.sections)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid outline data")
 
     return {"outline": outline}
 
@@ -126,8 +126,8 @@ async def confirm_pdd_outline(
 
     try:
         result = await service.confirm_outline(initiative_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot confirm outline. Ensure outline has been generated.")
 
     return result
 
@@ -145,8 +145,8 @@ async def prepare_pdd_section(
 
     try:
         result = await service.prepare_section(initiative_id, section_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Section not found or not ready for preparation")
     except Exception:
         logger.exception("PDD section prepare failed for %s / %s", initiative_id, section_id)
         raise HTTPException(
@@ -174,8 +174,8 @@ async def draft_pdd_section(
 
     try:
         result = await service.draft_section(initiative_id, section_id, user_answers, general_guidance)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Section not found or not ready for drafting")
     except Exception:
         logger.exception("PDD section draft failed for %s / %s", initiative_id, section_id)
         raise HTTPException(
@@ -200,8 +200,8 @@ async def update_pdd_section(
 
     try:
         await service.update_section(initiative_id, section_id, body.content)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Section not found")
 
     return {"ok": True}
 
@@ -219,8 +219,8 @@ async def confirm_pdd_section(
 
     try:
         result = await service.confirm_section(initiative_id, section_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Section not found or not ready for confirmation")
 
     return result
 
@@ -237,8 +237,8 @@ async def run_pdd_consistency(
 
     try:
         findings = await service.run_consistency_check(initiative_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PDD workspace not ready for consistency check")
     except Exception:
         logger.exception("PDD consistency check failed for %s", initiative_id)
         raise HTTPException(
@@ -261,8 +261,8 @@ async def assemble_pdd(
 
     try:
         assembled = await service.assemble_document(initiative_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PDD workspace not ready for assembly")
     except Exception:
         logger.exception("PDD assembly failed for %s", initiative_id)
         raise HTTPException(
@@ -285,8 +285,8 @@ async def export_pdd(
 
     try:
         docx_bytes = await service.export_docx(initiative_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PDD not ready for export. Complete all sections first.")
     except Exception:
         logger.exception("PDD export failed for %s", initiative_id)
         raise HTTPException(

@@ -87,7 +87,7 @@ async def switch_method_pack(
             result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
             result_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
         except (ValueError, ZeroDivisionError) as e:
-            result_data["error"] = str(e)
+            result_data["error"] = "Calculation failed with current inputs"
             result_data["computable"] = False
 
     return result_data
@@ -103,8 +103,8 @@ async def recalculate_carbon(
     try:
         result = await tool.recalculate(data.inputs)
         return result
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for carbon calculation")
 
 
 @router.post("/carbon/update-input")
@@ -136,8 +136,8 @@ async def update_input_and_recalculate(
     try:
         result = await tool.recalculate(inputs)
         return result
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for carbon calculation")
 
 
 @router.post("/carbon/sensitivity")
@@ -154,8 +154,8 @@ async def run_sensitivity(
             delta=data.delta,
         )
         return {"sensitivity": [p.to_dict() for p in points]}
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for sensitivity analysis")
 
 
 @router.post("/carbon/export")
@@ -182,8 +182,8 @@ async def export_carbon_excel(
 
     try:
         result = CarbonEngine.calculate(engine_inputs)
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for carbon calculation")
 
     sensitivity_points: list = []
     try:

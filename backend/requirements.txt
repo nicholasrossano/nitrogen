@@ -24,6 +24,9 @@ mammoth>=1.6.0
 firebase-admin>=6.4.0
 python-jose[cryptography]>=3.3.0
 
+# Rate limiting
+slowapi>=0.1.9
+
 # Utilities
 pydantic>=2.5.3
 pydantic-settings>=2.1.0

@@ -125,8 +125,8 @@ async def run_precheck(
             framework_id=framework_id,
             confirmed_facts=body.confirmed_facts,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid pre-check parameters")
     except Exception:
         logger.exception("Compliance pre-check failed for %s / %s", initiative_id, framework_id)
         raise HTTPException(
@@ -156,8 +156,8 @@ async def rerun_precheck(
             updated_facts=body.updated_facts,
             additional_answers=body.additional_answers,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid pre-check parameters")
     except Exception:
         logger.exception("Compliance pre-check rerun failed for %s / %s", initiative_id, framework_id)
         raise HTTPException(
