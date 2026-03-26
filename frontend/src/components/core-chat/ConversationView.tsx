@@ -25,6 +25,7 @@ import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { sanitizeHref } from '@/lib/sanitizeHref';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -632,7 +633,7 @@ function makeMarkdownComponents(
     ),
     a: ({ href, children }: any) => (
       <a
-        href={href}
+        href={sanitizeHref(href)}
         className="text-accent hover:text-accent-anchor hover:underline"
         target="_blank"
         rel="noopener noreferrer"
