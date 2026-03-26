@@ -43,8 +43,8 @@ async def recalculate_lcoe(
     try:
         result = await tool.recalculate(data.inputs)
         return result
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for LCOE calculation")
 
 
 @router.post("/lcoe/update-input")
@@ -75,8 +75,8 @@ async def update_input_and_recalculate(
     try:
         result = await tool.recalculate(inputs)
         return result
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for LCOE calculation")
 
 
 @router.post("/lcoe/sensitivity")
@@ -93,8 +93,8 @@ async def run_sensitivity(
             delta=data.delta,
         )
         return {"sensitivity": [p.to_dict() for p in points]}
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for sensitivity analysis")
 
 
 @router.post("/lcoe/export")
@@ -121,8 +121,8 @@ async def export_lcoe_excel(
 
     try:
         result = LCOEEngine.calculate(engine_inputs)
-    except (ValueError, ZeroDivisionError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, ZeroDivisionError):
+        raise HTTPException(status_code=400, detail="Invalid inputs for LCOE calculation")
 
     sensitivity_points: list = []
     try:

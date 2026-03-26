@@ -48,12 +48,16 @@ class LocalStorage(StorageBackend):
         return str(file_path.relative_to(self.base_dir))
     
     async def load(self, path: str) -> bytes:
-        file_path = self.base_dir / path
+        file_path = (self.base_dir / path).resolve()
+        if not str(file_path).startswith(str(self.base_dir.resolve())):
+            raise ValueError("Invalid storage path")
         async with aiofiles.open(file_path, 'rb') as f:
             return await f.read()
     
     async def delete(self, path: str) -> bool:
-        file_path = self.base_dir / path
+        file_path = (self.base_dir / path).resolve()
+        if not str(file_path).startswith(str(self.base_dir.resolve())):
+            raise ValueError("Invalid storage path")
         try:
             file_path.unlink()
             return True

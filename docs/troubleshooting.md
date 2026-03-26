@@ -4,11 +4,11 @@
 
 ### Symptoms
 ```
-Access to fetch at 'https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/export' 
-from origin 'https://the-nitrogen.ai' has been blocked by CORS policy: 
+Access to fetch at 'https://your-app.up.railway.app/api/v1/initiatives/{id}/export' 
+from origin 'https://your-domain.com' has been blocked by CORS policy: 
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 
-POST https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/export 
+POST https://your-app.up.railway.app/api/v1/initiatives/{id}/export 
 net::ERR_FAILED 500 (Internal Server Error)
 ```
 
@@ -42,13 +42,13 @@ Common errors:
 
 ```bash
 # Test basic health
-curl https://nitrogen-production.up.railway.app/health
+curl https://your-app.up.railway.app/health
 
 # Check CORS configuration
-curl https://nitrogen-production.up.railway.app/debug/cors
+curl https://your-app.up.railway.app/debug/cors
 
 # Check application configuration
-curl https://nitrogen-production.up.railway.app/debug/config
+curl https://your-app.up.railway.app/debug/config
 ```
 
 #### Step 3: Test Memo Exists
@@ -57,7 +57,7 @@ curl https://nitrogen-production.up.railway.app/debug/config
 # Get the memo (replace {id} with your initiative ID)
 # Use your DEV_MOCK_TOKEN value or a valid Firebase token
 curl -H "Authorization: Bearer $DEV_MOCK_TOKEN" \
-  https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/memo
+  https://your-app.up.railway.app/api/v1/initiatives/{id}/memo
 ```
 
 If this returns 404, you need to generate a memo first.
@@ -78,7 +78,7 @@ This will test the DOCX generation in isolation.
 Set the `CORS_ORIGINS` environment variable in Railway:
 
 ```bash
-CORS_ORIGINS=["https://the-nitrogen.ai"]
+CORS_ORIGINS=["https://your-domain.com"]
 ```
 
 **Why this matters**: Even though you have `allow_origin_regex` in the code, you need at least one valid origin in the environment variable.
@@ -100,7 +100,7 @@ RUN mkdir -p /app/exports
 
 Check the debug endpoint:
 ```bash
-curl https://nitrogen-production.up.railway.app/debug/config
+curl https://your-app.up.railway.app/debug/config
 ```
 
 Look for:
@@ -218,8 +218,8 @@ To avoid this in the future:
 ## What You're Seeing
 
 ```
-Access to fetch at 'https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/export' 
-from origin 'https://the-nitrogen.ai' has been blocked by CORS policy: 
+Access to fetch at 'https://your-app.up.railway.app/api/v1/initiatives/{id}/export' 
+from origin 'https://your-domain.com' has been blocked by CORS policy: 
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 
 POST .../export net::ERR_FAILED 500 (Internal Server Error)
@@ -263,7 +263,7 @@ Even though the CORS error is a symptom, you still need to fix it:
 
 **Set in Railway environment variables:**
 ```bash
-CORS_ORIGINS=["https://the-nitrogen.ai"]
+CORS_ORIGINS=["https://your-domain.com"]
 ```
 
 Your code already has `allow_origin_regex=r"https://.*\.vercel\.app"` to handle preview deployments.
@@ -272,18 +272,18 @@ Your code already has `allow_origin_regex=r"https://.*\.vercel\.app"` to handle 
 
 ```bash
 # Check backend health
-curl https://nitrogen-production.up.railway.app/health
+curl https://your-app.up.railway.app/health
 
 # Check CORS config
-curl https://nitrogen-production.up.railway.app/debug/cors
+curl https://your-app.up.railway.app/debug/cors
 
 # Check file system and config
-curl https://nitrogen-production.up.railway.app/debug/config
+curl https://your-app.up.railway.app/debug/config
 
 # Check if memo exists (replace {id})
 # Use your DEV_MOCK_TOKEN value or a valid Firebase token
 curl -H "Authorization: Bearer $DEV_MOCK_TOKEN" \
-  https://nitrogen-production.up.railway.app/api/v1/initiatives/{id}/memo
+  https://your-app.up.railway.app/api/v1/initiatives/{id}/memo
 ```
 
 ## What I've Fixed in the Code
@@ -363,7 +363,7 @@ Based on what the logs show:
 
 Set `CORS_ORIGINS` to include your Vercel domain:
 ```bash
-CORS_ORIGINS=["https://the-nitrogen.ai"]
+CORS_ORIGINS=["https://your-domain.com"]
 ```
 
 ### Step 4: Redeploy
@@ -418,7 +418,7 @@ Before deploying to production:
 ```bash
 DATABASE_URL=postgresql+asyncpg://...
 OPENAI_API_KEY=sk-...
-CORS_ORIGINS=["https://the-nitrogen.ai"]
+CORS_ORIGINS=["https://your-domain.com"]
 STORAGE_TYPE=local
 EXPORTS_DIR=./exports
 ```

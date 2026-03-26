@@ -71,11 +71,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - use directly parsed origins + allow all Vercel deployments
+# Rate limiting
+from app.core.rate_limit import limiter  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+from slowapi import _rate_limit_exceeded_handler as rate_limit_handler  # noqa: E402
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+# CORS — only allow known origins + Nitrogen Vercel preview deploys
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+",
+    allow_origin_regex=r"https://nitrogen(-[a-z0-9-]+)?\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -115,7 +123,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "error_type": type(exc).__name__},
+        content={"detail": "Internal server error"},
     )
 
 
@@ -151,28 +159,4 @@ async def health():
     return {"status": "healthy"}
 
 
-@app.get("/debug/cors")
-async def debug_cors():
-    """Debug endpoint to check CORS configuration"""
-    return {
-        "cors_origins_env": os.environ.get('CORS_ORIGINS', 'NOT SET'),
-        "cors_origins_used": cors_origins,
-        "cors_origins_type": str(type(cors_origins)),
-    }
-
-
-@app.get("/debug/config")
-async def debug_config():
-    """Debug endpoint to check application configuration"""
-    return {
-        "storage_type": settings.storage_type,
-        "exports_dir": settings.exports_dir,
-        "uploads_dir": settings.uploads_dir,
-        "exports_dir_exists": os.path.exists(settings.exports_dir),
-        "uploads_dir_exists": os.path.exists(settings.uploads_dir),
-        "debug_mode": settings.debug,
-        "database_host": "***" if settings.database_url else None,  # Don't expose full URL
-        "openai_configured": bool(settings.openai_api_key),
-        "firebase_configured": bool(settings.firebase_project_id),
-    }
 

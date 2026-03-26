@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -8,7 +8,7 @@ from typing import Optional
 from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.core.storage import get_uploads_storage
-from app.core.filename_utils import safe_content_disposition
+from app.core.filename_utils import safe_content_disposition, validate_file_magic
 from app.models.corpus import CorpusDocument, CorpusChunk
 from app.schemas.corpus import (
     CorpusDocumentResponse,
@@ -17,6 +17,7 @@ from app.schemas.corpus import (
 )
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 
@@ -66,7 +67,9 @@ async def list_corpus(
 
 
 @router.post("/corpus", response_model=CorpusDocumentResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def add_corpus_document(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     title: str = None,
     source: Optional[str] = None,
@@ -96,8 +99,17 @@ async def add_corpus_document(
     embeddings_service = EmbeddingsService()
     storage = get_uploads_storage()
     
-    # Read and store file
     content = await file.read()
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds 50 MB limit",
+        )
+    if not validate_file_magic(content, file.content_type or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content does not match declared type",
+        )
     storage_path = await storage.save(content, file.filename, folder="corpus")
     
     # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
@@ -164,7 +176,9 @@ async def add_corpus_document(
 
 
 @router.post("/corpus/text", response_model=CorpusDocumentResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def add_corpus_text(
+    request: Request,
     data: CorpusTextInput,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),

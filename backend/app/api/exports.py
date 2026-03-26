@@ -116,7 +116,7 @@ async def export_memo(
         logger.error(f"Export failed for initiative {initiative_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Export failed: {str(e)}",
+            detail="Export failed. Please try again.",
         )
 
 
