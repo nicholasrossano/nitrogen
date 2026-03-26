@@ -41,11 +41,11 @@ async def recalculate_solar(
     try:
         result = await tool.recalculate(data.inputs)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid inputs for solar calculation")
     except Exception as e:
         logger.error(f"PVWatts recalculate failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Solar calculation failed. Please try again.")
 
 
 @router.post("/pvwatts/update-input")
@@ -76,11 +76,11 @@ async def update_input_and_recalculate(
     try:
         result = await tool.recalculate(inputs)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid inputs for solar calculation")
     except Exception as e:
         logger.error(f"PVWatts update-input failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Solar calculation failed. Please try again.")
 
 
 @router.post("/pvwatts/geocode")
@@ -92,11 +92,11 @@ async def geocode_address(
     try:
         result = await PVWattsEngine.geocode_address(data.address)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Location not found")
     except Exception as e:
         logger.error(f"Geocoding failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Geocoding service unavailable. Please try again.")
 
 
 class AutocompleteRequest(BaseModel):

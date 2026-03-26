@@ -1,6 +1,6 @@
 """Template upload, analysis, generation and export endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +15,7 @@ from app.core.storage import get_uploads_storage
 from app.core.filename_utils import safe_content_disposition
 from app.models.project_material import ProjectMaterial
 from app.services.document_parser import DocumentParserService
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,9 @@ TEMPLATE_CONTENT_TYPES = {
 # ── Upload ──────────────────────────────────────────────────────────
 
 @router.post("/template/upload")
+@limiter.limit("10/minute")
 async def upload_template(
+    request: Request,
     initiative_id: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -53,6 +56,11 @@ async def upload_template(
             )
 
     content = await file.read()
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit",
+        )
     storage = get_uploads_storage()
     storage_path = await storage.save(
         content, file.filename or "template", folder=f"{initiative_id}/templates",
@@ -153,7 +161,7 @@ async def generate_from_template(
         template_bytes = await storage.load(material.storage_path)
     except Exception:
         logger.error("Failed to load template file from storage: %s", material.storage_path, exc_info=True)
-        raise HTTPException(status_code=404, detail="Template file not found in storage")
+        raise HTTPException(status_code=404, detail="Template file not found")
 
     reqs = body.requirements or []
 
@@ -167,7 +175,7 @@ async def generate_from_template(
         )
     except Exception:
         logger.error("Failed to fill template: %s", template_uuid, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fill template with provided values")
+        raise HTTPException(status_code=500, detail="Failed to fill template. Please try again.")
 
     out_storage = get_uploads_storage()
     ext = "xlsx" if is_xlsx else "docx"

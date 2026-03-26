@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sql_delete
@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
-from app.core.filename_utils import deduplicate_filename, safe_content_disposition
+from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.schemas.evidence import (
     EvidenceTextInput,
@@ -18,12 +18,15 @@ from app.schemas.evidence import (
 )
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 
 
 @router.post("/initiatives/{initiative_id}/evidence", response_model=EvidenceUploadResponse)
+@limiter.limit("10/minute")
 async def upload_evidence(
+    request: Request,
     initiative_id: UUID,
     file: Optional[UploadFile] = File(None),
     text_content: Optional[str] = Form(None),
@@ -61,8 +64,17 @@ async def upload_evidence(
                 detail="File must be PDF, DOCX, or Excel (XLSX/XLS)",
             )
         
-        # Read and store file
         content = await file.read()
+        if len(content) > 50 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File size exceeds 50 MB limit",
+            )
+        if not validate_file_magic(content, file.content_type or ""):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File content does not match declared type",
+            )
         storage_path = await storage.save(content, file.filename, folder=str(initiative_id))
         
         # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
@@ -154,6 +166,7 @@ async def upload_evidence(
 
 @router.post("/initiatives/{initiative_id}/evidence/text", response_model=EvidenceUploadResponse)
 async def paste_evidence_text(
+    request: Request,
     initiative_id: UUID,
     data: EvidenceTextInput,
     db: AsyncSession = Depends(get_db),
@@ -162,6 +175,7 @@ async def paste_evidence_text(
     """Paste text as evidence (alternative to file upload)"""
     # Reuse upload endpoint logic with text
     return await upload_evidence(
+        request=request,
         initiative_id=initiative_id,
         file=None,
         text_content=data.content,

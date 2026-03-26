@@ -27,6 +27,7 @@ import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
 import { MessageVariants } from './MessageVariants';
 import { ThinkingLogs } from '@/components/core-chat/ThinkingLogs';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import { sanitizeHref } from '@/lib/sanitizeHref';
 
 function preprocessMath(content: string): string {
   return content
@@ -240,7 +241,7 @@ export function ChatMessage({
                   h3: ({ children }) => <h3 className="text-sm font-semibold">{children}</h3>,
                   code: ({ children }) => <code className="text-xs bg-surface-subtle px-1.5 py-0.5 rounded-sm border border-stroke-subtle">{children}</code>,
                   pre: ({ children }) => <pre className="text-xs bg-surface-subtle p-3 rounded border border-stroke-subtle overflow-x-auto">{children}</pre>,
-                  a: ({ href, children }) => <a href={href} className="text-accent hover:text-accent-anchor hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                  a: ({ href, children }) => <a href={sanitizeHref(href)} className="text-accent hover:text-accent-anchor hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
                   blockquote: ({ children }) => <blockquote className="border-l border-divider pl-3 text-text-secondary">{children}</blockquote>,
                 }}
               >

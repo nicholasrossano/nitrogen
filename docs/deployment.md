@@ -21,11 +21,11 @@ EXPORTS_DIR=./exports
 UPLOADS_DIR=./uploads
 
 # CORS - CRITICAL for production
-CORS_ORIGINS=["https://the-nitrogen.ai"]
+CORS_ORIGINS=["https://your-domain.com"]
 
 
 # Firebase Auth (optional if using access code bypass)
-FIREBASE_PROJECT_ID=nitrogen-ai
+FIREBASE_PROJECT_ID=your-firebase-project
 # Note: For GOOGLE_APPLICATION_CREDENTIALS, upload the JSON file to Railway
 # and set this to the file path in the container
 ```
@@ -49,7 +49,7 @@ The `railway.toml` file configures:
 #### Required Environment Variables
 
 ```bash
-NEXT_PUBLIC_API_URL=https://nitrogen-production.up.railway.app
+NEXT_PUBLIC_API_URL=https://your-app.up.railway.app
 ```
 
 #### Automatic Deployments

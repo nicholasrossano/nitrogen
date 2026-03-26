@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
-from app.core.filename_utils import deduplicate_filename, safe_content_disposition
+from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.models.evidence import EvidenceDoc
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
@@ -20,6 +20,7 @@ from app.schemas.project_material import (
     ProjectFilesResponse,
 )
 from app.services.document_parser import DocumentParserService
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,9 @@ ALLOWED_CONTENT_TYPES = {
     "/initiatives/{initiative_id}/materials",
     response_model=ProjectMaterialUploadResponse,
 )
+@limiter.limit("10/minute")
 async def upload_material(
+    request: Request,
     initiative_id: UUID,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -58,6 +61,16 @@ async def upload_material(
         )
 
     content = await file.read()
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit",
+        )
+    if not validate_file_magic(content, file.content_type or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content does not match declared type",
+        )
     storage = get_uploads_storage()
     storage_path = await storage.save(
         content, file.filename or "file", folder=f"{initiative_id}/materials"
