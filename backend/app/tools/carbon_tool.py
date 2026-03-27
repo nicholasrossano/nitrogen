@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.tools.base import (
     BaseTool,
     ExecutionModel,
@@ -33,7 +34,7 @@ from app.tools.base import (
     ToolOutput,
 )
 from app.models.initiative import Initiative
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.services.carbon_engine import (
     CarbonEngine,
     CarbonInput,
@@ -129,6 +130,14 @@ class CarbonTool(BaseTool):
                 "biodigester", "manure", "methane", "livestock", "anaerobic",
                 "efficient lighting", "led", "cfl", "incandescent", "lamp",
             ],
+            export_format="xlsx",
+        )
+
+    def is_exportable(self, content: dict) -> bool:
+        return bool(
+            isinstance(content, dict)
+            and content.get("computable", False)
+            and content.get("inputs")
         )
 
     @property
@@ -195,9 +204,11 @@ class CarbonTool(BaseTool):
         self,
         conversation_text: str,
         method_pack: str | None = None,
+        user_id: str | None = None,
+        db: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """Extract carbon inputs from raw conversation text via LLM."""
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        client, is_byok = await get_openai_client(user_id, db)
         try:
             resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
@@ -235,6 +246,8 @@ class CarbonTool(BaseTool):
                 tool_choice={"type": "function", "function": {"name": "extract_carbon_inputs"}},
                 temperature=0,
             )
+            if user_id and db:
+                await record_usage_from_response(user_id, settings.openai_orchestration_model, resp, db, is_byok=is_byok)
             tool_call = resp.choices[0].message.tool_calls[0]
             extracted = json.loads(tool_call.function.arguments)
             return {k: v for k, v in extracted.items() if v is not None}
@@ -246,6 +259,7 @@ class CarbonTool(BaseTool):
         self,
         db: AsyncSession,
         initiative_id: UUID,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         """Extract carbon inputs from DB-stored chat history and project context."""
         result = await db.execute(
@@ -274,7 +288,9 @@ class CarbonTool(BaseTool):
         )
 
         return await self.extract_inputs_from_text(
-            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}"
+            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}",
+            user_id=user_id,
+            db=db,
         )
 
     async def execute(

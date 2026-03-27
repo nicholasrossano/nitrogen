@@ -195,6 +195,49 @@ export interface ProjectFilesResponse {
   generated: GeneratedFile[];
 }
 
+export interface BillingStatus {
+  allowed: boolean;
+  tier: 'trial' | 'starter' | 'pro' | 'byok' | 'none' | 'unlimited';
+  used_usd: number;
+  limit_usd: number;
+  trial_messages_remaining?: number | null;
+  access_code_redeemed?: boolean;
+  access_code_available?: boolean;
+  status?: string;
+}
+
+export interface DriveLinkedFile {
+  id: string;
+  evidence_doc_id: string | null;
+  drive_file_id: string;
+  drive_file_name: string;
+  drive_mime_type: string;
+  drive_modified_time: string;
+  last_synced_at: string;
+}
+
+export interface DriveImportedFile {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number | null;
+  created_at: string;
+  source: string;
+  drive_link_id: string;
+  chunk_count: number;
+}
+
+export interface DriveImportResult {
+  imported: DriveImportedFile[];
+  errors: { file_id: string; error: string }[];
+}
+
+export interface DriveSyncResult {
+  checked: number;
+  updated: number;
+  errors: { file_id: string; error: string }[];
+}
+
 // Alignment types
 export interface AlignmentSection {
   id: string;
@@ -509,6 +552,18 @@ export interface PDDWorkspace {
   updated_at: string | null;
 }
 
+function isDevMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem('nitrogen-settings');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.devMode === true;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -517,15 +572,18 @@ async function fetchApi<T>(
   
   // Get auth token
   const token = await getAuthToken();
+  const devMode = isDevMode();
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
   
-  // Add auth header if token exists
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (devMode) {
+    headers['X-Billing-Test'] = 'true';
   }
   
   const response = await fetch(url, {
@@ -535,7 +593,11 @@ async function fetchApi<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
+    if (response.status === 402 && devMode) {
+      const paywall = new CustomEvent('nitrogen:paywall', { detail: error.detail ?? error });
+      window.dispatchEvent(paywall);
+    }
+    throw new Error(error.detail?.message || error.detail || `HTTP ${response.status}`);
   }
 
   return response.json();
@@ -1119,8 +1181,8 @@ export const api = {
       }
     ),
 
-  // Core chat sessions — optionally scoped to a single project
-  getCoreChatSessions: (initiativeId?: string) =>
+  // Chat sessions — optionally scoped to a single project
+  getChatSessions: (initiativeId?: string) =>
     fetchApi<{
       sessions: {
         id: string;
@@ -1137,20 +1199,20 @@ export const api = {
         : '/api/v1/chat/sessions',
     ),
 
-  getCoreChatSessionMessages: (sessionId: string) =>
+  getChatSessionMessages: (sessionId: string) =>
     fetchApi<{
       session_id: string;
       title: string | null;
       messages: ChatMessage[];
     }>(`/api/v1/chat/sessions/${sessionId}/messages`),
 
-  deleteCoreChatSession: (sessionId: string) =>
+  deleteChatSession: (sessionId: string) =>
     fetchApi<{ deleted: boolean; session_id: string }>(
       `/api/v1/chat/sessions/${sessionId}`,
       { method: 'DELETE' },
     ),
 
-  setCoreChatMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) =>
+  setChatMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) =>
     fetchApi<{ message_id: string; feedback: string | null }>(
       `/api/v1/chat/messages/${messageId}/feedback`,
       {
@@ -1181,7 +1243,59 @@ export const api = {
       }
     ),
 
-  sendComplianceChatStream: async (
+  confirmChatAlignment: (
+    sessionId: string,
+    toolId: string,
+    sections?: AlignmentSection[],
+    parameters?: AlignmentParameter[]
+  ) =>
+    fetchApi<{
+      alignment: ToolAlignment;
+      message: string;
+      new_messages: {
+        id: string;
+        role: string;
+        content: string;
+        widget_type?: string | null;
+        widget_data?: Record<string, any> | null;
+        created_at?: string | null;
+      }[];
+    }>(
+      `/api/v1/chat/sessions/${sessionId}/alignment/confirm`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tool_id: toolId,
+          ...(sections && { sections }),
+          ...(parameters && { parameters }),
+        }),
+      }
+    ),
+
+  provideChatAlignmentFeedback: (sessionId: string, toolId: string, feedback: string) =>
+    fetchApi<{
+      alignment: ToolAlignment;
+      message: string;
+      new_messages: {
+        id: string;
+        role: string;
+        content: string;
+        widget_type?: string | null;
+        widget_data?: Record<string, any> | null;
+        created_at?: string | null;
+      }[];
+    }>(
+      `/api/v1/chat/sessions/${sessionId}/alignment/feedback`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tool_id: toolId,
+          feedback,
+        }),
+      }
+    ),
+
+  sendChatStream: async (
     history: { role: string; content: string }[],
     content: string,
     onThinking: (text: string) => void,
@@ -1208,9 +1322,13 @@ export const api = {
     compareInitiativeIds?: string[] | null,
   ) => {
     const token = await getAuthToken();
+    const devMode = isDevMode();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+    if (devMode) {
+      headers['X-Billing-Test'] = 'true';
     }
 
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
@@ -1229,7 +1347,11 @@ export const api = {
 
     if (!response.ok || !response.body) {
       const err = await response.json().catch(() => ({ detail: 'Stream failed' }));
-      onError(err.detail || `HTTP ${response.status}`);
+      if (response.status === 402 && devMode) {
+        const paywall = new CustomEvent('nitrogen:paywall', { detail: err.detail ?? err });
+        window.dispatchEvent(paywall);
+      }
+      onError(err.detail?.message || err.detail || `HTTP ${response.status}`);
       return;
     }
 
@@ -1764,4 +1886,83 @@ export const api = {
     return resp.blob();
   },
 
+  // ── Google Drive ────────────────────────────────────────────────────────────
+
+  getGoogleAuthUrl: (initiativeId: string) =>
+    fetchApi<{ auth_url: string }>(
+      '/api/v1/google/connect',
+      { method: 'POST', body: JSON.stringify({ initiative_id: initiativeId }) }
+    ),
+
+  getGoogleDriveStatus: () =>
+    fetchApi<{ connected: boolean; email: string | null }>('/api/v1/google/status'),
+
+  getGoogleDriveAccessToken: () =>
+    fetchApi<{ access_token: string }>('/api/v1/google/access-token'),
+
+  disconnectGoogleDrive: () =>
+    fetchApi<{ success: boolean }>('/api/v1/google/disconnect', { method: 'DELETE' }),
+
+  importFromDrive: (initiativeId: string, fileIds: string[]) =>
+    fetchApi<DriveImportResult>(
+      `/api/v1/initiatives/${initiativeId}/drive/import`,
+      { method: 'POST', body: JSON.stringify({ file_ids: fileIds }) }
+    ),
+
+  getDriveLinkedFiles: (initiativeId: string) =>
+    fetchApi<DriveLinkedFile[]>(`/api/v1/initiatives/${initiativeId}/drive/linked`),
+
+  syncDriveFiles: (initiativeId: string) =>
+    fetchApi<DriveSyncResult>(
+      `/api/v1/initiatives/${initiativeId}/drive/sync`,
+      { method: 'POST' }
+    ),
+
+  unlinkDriveFile: (initiativeId: string, linkedId: string) =>
+    fetchApi<{ success: boolean }>(
+      `/api/v1/initiatives/${initiativeId}/drive/linked/${linkedId}`,
+      { method: 'DELETE' }
+    ),
+
+  // ── Billing ──────────────────────────────────────────────────────
+
+  getBillingStatus: () =>
+    fetchApi<BillingStatus>('/api/v1/billing/status'),
+
+  createCheckout: (priceId: string, successUrl: string, cancelUrl: string) =>
+    fetchApi<{ url: string }>('/api/v1/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ price_id: priceId, success_url: successUrl, cancel_url: cancelUrl }),
+    }),
+
+  createPortalSession: (returnUrl: string) =>
+    fetchApi<{ url: string }>('/api/v1/billing/portal', {
+      method: 'POST',
+      body: JSON.stringify({ return_url: returnUrl }),
+    }),
+
+  redeemAccessCode: (code: string) =>
+    fetchApi<{ success: boolean; error?: string } & Partial<BillingStatus>>(
+      '/api/v1/billing/redeem-code',
+      { method: 'POST', body: JSON.stringify({ code }) }
+    ),
+
+  // ── API Keys (BYOK) ─────────────────────────────────────────────
+
+  listApiKeys: () =>
+    fetchApi<{ provider: string; masked_key: string; created_at: string }[]>(
+      '/api/v1/settings/api-keys'
+    ),
+
+  storeApiKey: (apiKey: string, provider: string = 'openai') =>
+    fetchApi<{ provider: string; masked_key: string; created_at: string }>(
+      '/api/v1/settings/api-keys',
+      { method: 'POST', body: JSON.stringify({ api_key: apiKey, provider }) }
+    ),
+
+  deleteApiKey: (provider: string = 'openai') =>
+    fetchApi<{ success: boolean }>(
+      `/api/v1/settings/api-keys/${provider}`,
+      { method: 'DELETE' }
+    ),
 };

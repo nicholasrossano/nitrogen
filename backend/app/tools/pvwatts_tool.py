@@ -18,8 +18,10 @@ import logging
 from typing import Any
 
 from openai import AsyncOpenAI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.tools.base import (
     BaseTool,
     ExecutionModel,
@@ -112,6 +114,14 @@ class PVWattsTool(BaseTool):
                 "pvwatts", "solar feasibility", "capacity factor",
                 "tilt", "azimuth", "irradiance", "solar radiation",
             ],
+            export_format="xlsx",
+        )
+
+    def is_exportable(self, content: dict) -> bool:
+        return bool(
+            isinstance(content, dict)
+            and content.get("result")
+            and content.get("inputs")
         )
 
     @property
@@ -155,9 +165,11 @@ class PVWattsTool(BaseTool):
     async def extract_inputs_from_text(
         self,
         conversation_text: str,
+        user_id: str | None = None,
+        db: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """Extract solar estimate inputs from conversation text via LLM."""
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        client, is_byok = await get_openai_client(user_id, db)
         try:
             resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
@@ -200,6 +212,8 @@ class PVWattsTool(BaseTool):
                 tool_choice={"type": "function", "function": {"name": "extract_solar_inputs"}},
                 temperature=0,
             )
+            if user_id and db:
+                await record_usage_from_response(user_id, settings.openai_orchestration_model, resp, db, is_byok=is_byok)
             tool_call = resp.choices[0].message.tool_calls[0]
             extracted = json.loads(tool_call.function.arguments)
             return {k: v for k, v in extracted.items() if v is not None}

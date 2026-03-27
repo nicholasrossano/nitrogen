@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, FlaskConical } from 'lucide-react';
+import { X, FlaskConical, CreditCard, Key, Loader2, ExternalLink } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useBillingStore } from '@/stores/billingStore';
+import { api } from '@/lib/api';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -76,6 +78,196 @@ function SettingsRow({
   );
 }
 
+const TIER_LABELS: Record<string, string> = {
+  trial: 'Free Trial',
+  starter: 'Starter',
+  pro: 'Pro',
+  byok: 'BYOK',
+  none: 'No Plan',
+  unlimited: 'Unlimited',
+};
+
+function PlanBillingSection() {
+  const { tier, usedUsd, limitUsd, usagePercent, trialMessagesRemaining, accessCodeAvailable, accessCodeRedeemed, loaded } = useBillingStore();
+  const redeemAccessCode = useBillingStore((s) => s.redeemAccessCode);
+  const fetchBillingStatus = useBillingStore((s) => s.fetchBillingStatus);
+
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState('');
+  const [showCodeInput, setShowCodeInput] = useState(false);
+
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeyLoading, setApiKeyLoading] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState('');
+  const [apiKeys, setApiKeys] = useState<{ provider: string; masked_key: string }[]>([]);
+  const [keysLoaded, setKeysLoaded] = useState(false);
+
+  useEffect(() => {
+    api.listApiKeys().then(setApiKeys).catch(() => {}).finally(() => setKeysLoaded(true));
+  }, []);
+
+  if (!loaded || tier === 'unlimited') return null;
+
+  const handleManageSubscription = async () => {
+    setPortalLoading(true);
+    try {
+      const { url } = await api.createPortalSession(window.location.href);
+      window.location.href = url;
+    } catch {
+      setPortalLoading(false);
+    }
+  };
+
+  const handleRedeemCode = async () => {
+    if (!codeInput.trim()) return;
+    setCodeLoading(true);
+    setCodeError('');
+    const result = await redeemAccessCode(codeInput.trim());
+    if (!result.success) setCodeError(result.error || 'Invalid code');
+    setCodeLoading(false);
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!apiKeyInput.trim()) return;
+    setApiKeyLoading(true);
+    setApiKeyError('');
+    try {
+      const saved = await api.storeApiKey(apiKeyInput.trim());
+      setApiKeys([saved]);
+      setApiKeyInput('');
+      await fetchBillingStatus();
+    } catch (e: unknown) {
+      setApiKeyError(e instanceof Error ? e.message : 'Failed to save key');
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  const handleDeleteApiKey = async (provider: string) => {
+    try {
+      await api.deleteApiKey(provider);
+      setApiKeys((keys) => keys.filter((k) => k.provider !== provider));
+      await fetchBillingStatus();
+    } catch {}
+  };
+
+  const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
+
+  return (
+    <>
+      <SettingsSection title="Plan & Billing">
+        <div className="px-4 py-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-text-primary">{TIER_LABELS[tier ?? 'none'] ?? tier}</span>
+              {tier === 'trial' && trialMessagesRemaining != null && (
+                <span className="text-[10px] font-medium bg-surface-subtle text-text-secondary px-1.5 py-0.5 rounded-full">
+                  {trialMessagesRemaining} msgs left
+                </span>
+              )}
+            </div>
+            {(tier === 'starter' || tier === 'pro') && (
+              <button
+                onClick={handleManageSubscription}
+                disabled={portalLoading}
+                className="text-[11px] text-accent enabled:hover:underline disabled:opacity-50 flex items-center gap-1"
+              >
+                {portalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                Manage
+              </button>
+            )}
+          </div>
+
+          {limitUsd > 0 && (
+            <div>
+              <div className="flex justify-between text-[10px] text-text-tertiary mb-1">
+                <span>${usedUsd.toFixed(2)} used</span>
+                <span>${limitUsd.toFixed(2)} limit</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-surface-subtle overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, usagePercent)}%` }} />
+              </div>
+            </div>
+          )}
+
+          {tier === 'trial' && accessCodeAvailable && !accessCodeRedeemed && (
+            <div>
+              {!showCodeInput ? (
+                <button onClick={() => setShowCodeInput(true)} className="text-[11px] text-accent hover:underline">
+                  Have an access code?
+                </button>
+              ) : (
+                <div className="flex gap-1.5">
+                  <input
+                    value={codeInput}
+                    onChange={(e) => setCodeInput(e.target.value)}
+                    placeholder="Enter code"
+                    className="flex-1 text-xs px-2 py-1 rounded-lg border border-stroke-subtle bg-white focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                  <button
+                    onClick={handleRedeemCode}
+                    disabled={codeLoading || !codeInput.trim()}
+                    className="text-[11px] px-2 py-1 bg-accent text-white rounded-lg enabled:hover:bg-accent/90 disabled:opacity-50"
+                  >
+                    {codeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Redeem'}
+                  </button>
+                </div>
+              )}
+              {codeError && <p className="text-[10px] text-red-500 mt-1">{codeError}</p>}
+            </div>
+          )}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="API Key">
+        <div className="px-4 py-3 space-y-3">
+          {keysLoaded && apiKeys.length > 0 ? (
+            <div className="space-y-2">
+              {apiKeys.map((k) => (
+                <div key={k.provider} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key className="w-3.5 h-3.5 text-text-tertiary" />
+                    <span className="text-xs text-text-secondary font-mono">{k.masked_key}</span>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteApiKey(k.provider)}
+                    className="text-[10px] text-red-500 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-1.5">
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="sk-..."
+                className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-stroke-subtle bg-white focus:outline-none focus:ring-1 focus:ring-accent font-mono"
+              />
+              <button
+                onClick={handleSaveApiKey}
+                disabled={apiKeyLoading || !apiKeyInput.trim()}
+                className="text-[11px] px-2.5 py-1.5 bg-accent text-white rounded-lg enabled:hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1"
+              >
+                {apiKeyLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+              </button>
+            </div>
+          )}
+          {apiKeyError && <p className="text-[10px] text-red-500">{apiKeyError}</p>}
+          <p className="text-[10px] text-text-tertiary">
+            Bring your own OpenAI key for free unlimited access.
+          </p>
+        </div>
+      </SettingsSection>
+    </>
+  );
+}
+
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [visible, setVisible] = useState(false);
   const { devMode, setDevMode } = useSettingsStore();
@@ -116,12 +308,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <SettingsSection title="Developer">
             <SettingsRow
               icon={FlaskConical}
-              label="Beta features"
-              description="Unhides experimental features currently under development."
+              label="Developer Mode"
+              description="Enables billing, usage tracking, and other features under development."
               checked={devMode}
               onChange={setDevMode}
             />
           </SettingsSection>
+
+          {devMode && <PlanBillingSection />}
         </div>
       </div>
     </div>

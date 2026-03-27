@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import { api } from '@/lib/api';
 import { 
   Check, 
   Loader2, 
@@ -21,43 +22,88 @@ interface ToolInfo {
   output_type: string;
 }
 
+export interface AlignmentNewMessage {
+  id: string;
+  role: string;
+  content: string;
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
+  created_at?: string | null;
+}
+
 interface AlignmentWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  onConfirmed?: (newMessages: AlignmentNewMessage[]) => void;
 }
 
 
-export function AlignmentWidget({ data, initiativeId, isActive = true }: AlignmentWidgetProps) {
+export function AlignmentWidget({ data, initiativeId, isActive = true, onConfirmed }: AlignmentWidgetProps) {
   const { confirmAlignment, alignmentLoading, generating, error: storeError } = useInitiativeStore();
   
   const alignment = data?.alignment as ToolAlignment | undefined;
   const tool = data?.tool as ToolInfo | undefined;
   const pendingTools = (data?.pending_tools || []) as ToolInfo[];
   const sections = (alignment?.sections || []) as AlignmentSection[];
+  const sessionId = data?.session_id as string | undefined;
   
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [localSections, setLocalSections] = useState<AlignmentSection[]>(sections);
   const [hasConfirmed, setHasConfirmed] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
   
-  // Reset hasConfirmed when loading finishes (success or error) so the
-  // button isn't stuck on "Confirming..."
+  const isChatFlow = !!sessionId;
+  const isLoading = isChatFlow ? chatLoading : (alignmentLoading || generating);
+
   useEffect(() => {
-    if (hasConfirmed && !alignmentLoading && !generating) {
+    if (hasConfirmed && !isLoading) {
       setHasConfirmed(false);
     }
-  }, [hasConfirmed, alignmentLoading, generating]);
+  }, [hasConfirmed, isLoading]);
 
-  // Surface store errors as local error when this widget triggered the action
   useEffect(() => {
-    if (hasConfirmed && storeError) {
+    if (!isChatFlow && hasConfirmed && storeError) {
       setLocalError(storeError);
       setHasConfirmed(false);
     }
-  }, [hasConfirmed, storeError]);
+  }, [isChatFlow, hasConfirmed, storeError]);
   
-  const isGenerating = hasConfirmed && (alignmentLoading || generating) && pendingTools.length === 0;
+  const isGenerating = hasConfirmed && isLoading && pendingTools.length === 0;
+
+  const handleConfirm = useCallback(async () => {
+    if (!alignment) return;
+    setLocalError(null);
+    setHasConfirmed(true);
+    const sectionsModified = JSON.stringify(localSections) !== JSON.stringify(data.alignment.sections);
+    const modifiedSections = sectionsModified ? localSections : undefined;
+
+    try {
+      if (isChatFlow) {
+        setChatLoading(true);
+        const result = await api.confirmChatAlignment(
+          sessionId!,
+          alignment.tool_id,
+          modifiedSections,
+          undefined,
+        );
+        setChatLoading(false);
+        onConfirmed?.(result.new_messages);
+      } else {
+        await confirmAlignment(
+          initiativeId,
+          alignment.tool_id,
+          modifiedSections,
+          undefined,
+        );
+      }
+    } catch {
+      setLocalError('Something went wrong during generation. Please try again.');
+      setHasConfirmed(false);
+      setChatLoading(false);
+    }
+  }, [alignment, localSections, data, isChatFlow, sessionId, onConfirmed, confirmAlignment, initiativeId]);
 
   if (!alignment || !tool) {
     return (
@@ -68,6 +114,7 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
   }
   
   const ToolIcon = getIconByName(tool.icon);
+  const includedCount = localSections.filter(s => s.include).length;
   
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -85,29 +132,8 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
     );
   };
   
-  const handleConfirm = async () => {
-    setLocalError(null);
-    setHasConfirmed(true);
-    const sectionsModified = JSON.stringify(localSections) !== JSON.stringify(data.alignment.sections);
-    
-    try {
-      await confirmAlignment(
-        initiativeId, 
-        alignment.tool_id,
-        sectionsModified ? localSections : undefined,
-        undefined
-      );
-    } catch {
-      setLocalError('Something went wrong during generation. Please try again.');
-      setHasConfirmed(false);
-    }
-  };
-  
-  const includedCount = localSections.filter(s => s.include).length;
-  
   return (
     <div className="card-elevated overflow-hidden">
-      {/* Header — hidden while generating */}
       {!isGenerating && (
         <PanelHeader
           icon={ToolIcon}
@@ -120,7 +146,6 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
         <WidgetGeneratingProgress steps={ALIGNMENT_STEPS} subtitle="This usually takes 2–3 minutes" />
       ) : (
         <>
-          {/* Sections */}
           <div className="bg-white">
             <div className="divide-y divide-divider">
               {localSections.map((section) => {
@@ -171,7 +196,6 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
             </div>
           </div>
 
-          {/* Error banner */}
           {localError && (
             <div className="px-5 py-3 bg-red-50 border-t border-red-100 flex items-center justify-between gap-3">
               <p className="text-xs text-red-700 flex-1">{localError}</p>
@@ -184,7 +208,6 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
             </div>
           )}
 
-          {/* Actions */}
           {isActive && (
             <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
               <p className="text-[10px] text-text-tertiary">
@@ -192,10 +215,10 @@ export function AlignmentWidget({ data, initiativeId, isActive = true }: Alignme
               </p>
               <button
                 onClick={handleConfirm}
-                disabled={alignmentLoading || includedCount === 0}
+                disabled={isLoading || includedCount === 0}
                 className="btn-primary !text-xs !px-4 !py-1.5"
               >
-                {alignmentLoading ? (
+                {isLoading ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     Confirming...

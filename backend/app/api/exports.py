@@ -12,7 +12,7 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_viewer
 from app.core.storage import get_storage
 from app.core.filename_utils import safe_content_disposition
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
@@ -192,6 +192,140 @@ async def export_checklist(
     )
 
 
+async def _handle_memo_export(content, safe_title, initiative, initiative_id, db, user):
+    memo_res = await db.execute(
+        select(MemoVersion)
+        .where(MemoVersion.initiative_id == initiative_id)
+        .order_by(MemoVersion.created_at.desc())
+        .limit(1)
+    )
+    memo = memo_res.scalar_one_or_none()
+    if not memo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No memo found")
+
+    storage = get_storage()
+    if memo.export_path:
+        file_bytes = await storage.load(memo.export_path)
+    else:
+        exporter = DocxExporterService()
+        if "sections" in (memo.content or {}):
+            file_bytes = exporter.generate_from_sections(
+                memo_content=memo.content,
+                initiative_title=initiative.title or "Untitled",
+            )
+        else:
+            memo_content_obj = MemoContent(**memo.content)
+            file_bytes = exporter.generate(
+                memo_content=memo_content_obj,
+                initiative_title=initiative.title or "Untitled",
+            )
+        export_path = await storage.save(file_bytes, f"{safe_title}_{memo.id}.docx", folder="exports")
+        memo.export_path = export_path
+        await db.commit()
+
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
+    )
+
+
+async def _handle_checklist_export(content, safe_title, initiative, initiative_id, db, user):
+    exporter = ExcelExporterService()
+    filepath = await exporter.export_checklist(content)
+    with open(filepath, "rb") as f:
+        file_bytes = f.read()
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.xlsx")},
+    )
+
+
+async def _handle_lcoe_export(content, safe_title, initiative, initiative_id, db, user):
+    from app.api.lcoe import export_lcoe_excel, RecalculateRequest as LCOEReq
+    inputs: dict[str, Any] = content.get("inputs") or {}
+    if not inputs:
+        inputs = await _recover_model_inputs(db, initiative_id, ("lcoe_output", "lcoe_inputs"))
+    if not inputs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LCOE model inputs are not available for export. "
+                   "Open the model in the chat and recalculate to refresh the data.",
+        )
+    return await export_lcoe_excel(data=LCOEReq(inputs=inputs), user=user)
+
+
+async def _handle_carbon_export(content, safe_title, initiative, initiative_id, db, user):
+    from app.api.carbon import export_carbon_excel, RecalculateRequest as CarbonReq
+    inputs: dict[str, Any] = content.get("inputs") or {}
+    if not inputs:
+        inputs = await _recover_model_inputs(db, initiative_id, ("carbon_output", "carbon_inputs"))
+    if not inputs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Carbon model inputs are not available for export. "
+                   "Open the model in the chat and recalculate to refresh the data.",
+        )
+    return await export_carbon_excel(data=CarbonReq(inputs=inputs), user=user)
+
+
+async def _handle_solar_export(content, safe_title, initiative, initiative_id, db, user):
+    from app.api.pvwatts import export_solar_excel, ExportRequest as SolarReq
+    inputs: dict[str, Any] = content.get("inputs") or {}
+    result: dict[str, Any] = content.get("result") or {}
+    if not inputs or not result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solar estimate data is not available for export. "
+                   "Open the model in the chat and recalculate to refresh the data.",
+        )
+    return await export_solar_excel(data=SolarReq(inputs=inputs, result=result), user=user)
+
+
+async def _handle_template_export(content, safe_title, initiative, initiative_id, db, user):
+    from app.models.project_material import ProjectMaterial
+    material_id = content.get("material_id") if isinstance(content, dict) else None
+    if not material_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Template deliverable is missing the material reference.",
+        )
+    mat_result = await db.execute(
+        select(ProjectMaterial).where(
+            ProjectMaterial.id == UUID(material_id),
+            ProjectMaterial.initiative_id == initiative_id,
+        )
+    )
+    material = mat_result.scalar_one_or_none()
+    if not material or not material.storage_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template file not found")
+    from app.core.storage import get_uploads_storage
+    storage = get_uploads_storage()
+    file_bytes = await storage.load(material.storage_path)
+    ext = material.filename.rsplit(".", 1)[-1] if "." in material.filename else "docx"
+    mime = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if ext == "xlsx"
+        else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    return Response(
+        content=file_bytes,
+        media_type=mime,
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.{ext}")},
+    )
+
+
+_EXPORT_HANDLERS: dict[str, Any] = {
+    "memo": _handle_memo_export,
+    "checklist": _handle_checklist_export,
+    "lcoe": _handle_lcoe_export,
+    "carbon": _handle_carbon_export,
+    "solar": _handle_solar_export,
+    "template": _handle_template_export,
+}
+
+
 @router.get("/initiatives/{initiative_id}/deliverables/{tool_id}/export")
 async def export_deliverable(
     initiative_id: UUID,
@@ -235,88 +369,13 @@ async def export_deliverable(
     title: str = data.get("title", tool_id.replace("_", " ").title())
     safe_title = re.sub(r"[^\w\s\-.]", "_", title).replace(" ", "_")[:60]
 
-    # ── Memo → DOCX ──────────────────────────────────────────────────────────
-    if output_type == "memo":
-        memo_res = await db.execute(
-            select(MemoVersion)
-            .where(MemoVersion.initiative_id == initiative_id)
-            .order_by(MemoVersion.created_at.desc())
-            .limit(1)
+    handler = _EXPORT_HANDLERS.get(output_type)
+    if not handler:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Export not supported for output type: {output_type}",
         )
-        memo = memo_res.scalar_one_or_none()
-        if not memo:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No memo found")
-
-        storage = get_storage()
-        if memo.export_path:
-            file_bytes = await storage.load(memo.export_path)
-        else:
-            exporter = DocxExporterService()
-            if "sections" in (memo.content or {}):
-                file_bytes = exporter.generate_from_sections(
-                    memo_content=memo.content,
-                    initiative_title=initiative.title or "Untitled",
-                )
-            else:
-                memo_content_obj = MemoContent(**memo.content)
-                file_bytes = exporter.generate(
-                    memo_content=memo_content_obj,
-                    initiative_title=initiative.title or "Untitled",
-                )
-            export_path = await storage.save(file_bytes, f"{safe_title}_{memo.id}.docx", folder="exports")
-            memo.export_path = export_path
-            await db.commit()
-
-        return Response(
-            content=file_bytes,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
-        )
-
-    # ── Checklist → XLSX ─────────────────────────────────────────────────────
-    if output_type == "checklist":
-        exporter = ExcelExporterService()
-        filepath = await exporter.export_checklist(content)
-        with open(filepath, "rb") as f:
-            file_bytes = f.read()
-        return Response(
-            content=file_bytes,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.xlsx")},
-        )
-
-    # ── LCOE → XLSX ──────────────────────────────────────────────────────────
-    if output_type == "lcoe":
-        from app.api.lcoe import export_lcoe_excel, RecalculateRequest as LCOEReq
-        inputs: dict[str, Any] = content.get("inputs") or {}
-        if not inputs:
-            inputs = await _recover_model_inputs(db, initiative_id, ("lcoe_output", "lcoe_inputs"))
-        if not inputs:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="LCOE model inputs are not available for export. "
-                       "Open the model in the chat and recalculate to refresh the data.",
-            )
-        return await export_lcoe_excel(data=LCOEReq(inputs=inputs), user=user)
-
-    # ── Carbon → XLSX ────────────────────────────────────────────────────────
-    if output_type == "carbon":
-        from app.api.carbon import export_carbon_excel, RecalculateRequest as CarbonReq
-        inputs = content.get("inputs") or {}
-        if not inputs:
-            inputs = await _recover_model_inputs(db, initiative_id, ("carbon_output", "carbon_inputs"))
-        if not inputs:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Carbon model inputs are not available for export. "
-                       "Open the model in the chat and recalculate to refresh the data.",
-            )
-        return await export_carbon_excel(data=CarbonReq(inputs=inputs), user=user)
-
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Export not supported for output type: {output_type}",
-    )
+    return await handler(content, safe_title, initiative, initiative_id, db, user)
 
 
 async def _recover_model_inputs(

@@ -8,6 +8,7 @@ import { GSCertificationWidget } from '@/components/widgets/GSCertificationWidge
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
+import type { AlignmentNewMessage } from '@/components/widgets/AlignmentWidget';
 import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequirementsWidget';
 import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
 import { PDDWorkspaceWidget } from '@/components/widgets/PDDWorkspaceWidget';
@@ -57,6 +58,7 @@ export interface EditorWidget {
 interface EditorSidePanelProps {
   widgets: EditorWidget[];
   initiativeId?: string;
+  onAlignmentConfirmed?: (newMessages: AlignmentNewMessage[]) => void;
 }
 
 const WIDGET_LABELS: Record<string, string> = {
@@ -77,7 +79,7 @@ const WIDGET_LABELS: Record<string, string> = {
   document_viewer: 'Document',
 };
 
-export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelProps) {
+export function EditorSidePanel({ widgets, initiativeId = '', onAlignmentConfirmed }: EditorSidePanelProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const displayIndex = activeIndex ?? widgets.length - 1;
@@ -114,6 +116,7 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
             data={widget.data}
             initiativeId={initiativeId}
             messageId={widget.messageId}
+            onAlignmentConfirmed={onAlignmentConfirmed}
           />
         </ErrorBoundary>
       </div>
@@ -126,11 +129,13 @@ function EditorWidgetRenderer({
   data,
   initiativeId,
   messageId,
+  onAlignmentConfirmed,
 }: {
   type: string;
   data: Record<string, any>;
   initiativeId: string;
   messageId: string;
+  onAlignmentConfirmed?: (newMessages: AlignmentNewMessage[]) => void;
 }) {
   switch (type) {
     case 'lcoe_inputs':
@@ -150,7 +155,7 @@ function EditorWidgetRenderer({
     case 'checklist_viewer':
       return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'alignment':
-      return <AlignmentWidget data={data} initiativeId={initiativeId} isActive />;
+      return <AlignmentWidget data={data} initiativeId={initiativeId} isActive onConfirmed={onAlignmentConfirmed} />;
     case 'template_requirements':
       return <TemplateRequirementsWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
     case 'template_viewer':

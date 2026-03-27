@@ -45,7 +45,7 @@ async def upload_evidence(
         )
     
     parser = DocumentParserService()
-    embeddings_service = EmbeddingsService()
+    embeddings_service = EmbeddingsService(user_id=user.uid, db=db)
     storage = get_uploads_storage()
     
     # Process file upload

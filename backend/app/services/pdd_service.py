@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.initiative import Initiative
 from app.models.pdd import PDDWorkspace
 from app.models.evidence import EvidenceDoc
@@ -252,11 +253,18 @@ CONSISTENCY_CHECK_SCHEMA = {
 class PDDService:
     """Orchestrates multi-step PDD authoring."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.user_id = user_id
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.orchestration_model = settings.openai_orchestration_model
         self.generation_model = settings.openai_generation_model
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
 
     # -- helpers -------------------------------------------------------------
 
@@ -362,7 +370,8 @@ class PDDService:
             f"Goal: {initiative.goal or 'Not specified'}\n"
         )
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.orchestration_model,
             messages=[
                 {
@@ -384,6 +393,7 @@ class PDDService:
             tool_choice={"type": "function", "function": {"name": "scan_project"}},
             temperature=0.3,
         )
+        await record_usage_from_response(self.user_id, self.orchestration_model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         scan_data = json.loads(tool_call.function.arguments)
@@ -407,7 +417,8 @@ class PDDService:
         initiative = await self._get_initiative(initiative_id)
         scan = ws.project_scan or {}
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.orchestration_model,
             messages=[
                 {
@@ -441,6 +452,7 @@ class PDDService:
             tool_choice={"type": "function", "function": {"name": "generate_outline"}},
             temperature=0.5,
         )
+        await record_usage_from_response(self.user_id, self.orchestration_model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         outline_data = json.loads(tool_call.function.arguments)
@@ -544,7 +556,8 @@ class PDDService:
             evidence_context = "(No relevant evidence found.)"
 
         # LLM analysis
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.orchestration_model,
             messages=[
                 {
@@ -572,6 +585,7 @@ class PDDService:
             tool_choice={"type": "function", "function": {"name": "prepare_section"}},
             temperature=0.3,
         )
+        await record_usage_from_response(self.user_id, self.orchestration_model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         prep_data = json.loads(tool_call.function.arguments)
@@ -683,7 +697,8 @@ class PDDService:
                 "Mark any statements that are assumptions or require verification."
             )
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.generation_model,
             messages=[
                 {"role": "system", "content": system_content},
@@ -704,6 +719,7 @@ class PDDService:
             tool_choice={"type": "function", "function": {"name": "draft_section"}},
             temperature=0.6,
         )
+        await record_usage_from_response(self.user_id, self.generation_model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         draft_data = json.loads(tool_call.function.arguments)
@@ -811,7 +827,8 @@ class PDDService:
         if not doc_text.strip():
             return []
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.orchestration_model,
             messages=[
                 {
@@ -834,6 +851,7 @@ class PDDService:
             tool_choice={"type": "function", "function": {"name": "consistency_check"}},
             temperature=0.2,
         )
+        await record_usage_from_response(self.user_id, self.orchestration_model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         check_data = json.loads(tool_call.function.arguments)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   FileText,
   Download,
@@ -9,15 +9,23 @@ import {
   Upload,
   Zap,
   FolderOpen,
+  RefreshCw,
+  ChevronDown,
 } from 'lucide-react';
 
 type TabType = 'uploaded' | 'generated';
-import { api, ProjectMaterial, GeneratedFile, ProjectFilesResponse } from '@/lib/api';
+import { api, ProjectMaterial, GeneratedFile, ProjectFilesResponse, DriveLinkedFile } from '@/lib/api';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface ProjectFilesViewProps {
   initiativeId: string;
   materials: ProjectMaterial[];
   onDeleteMaterial?: (materialId: string) => Promise<void>;
+  onUploadFile?: (file: File) => Promise<void>;
+  onImportFromDrive?: () => Promise<void>;
+  driveLinkedFiles?: DriveLinkedFile[];
+  onSyncDriveFiles?: () => Promise<void>;
 }
 
 const FILE_TYPE_LABELS: Record<string, string> = {
@@ -61,6 +69,10 @@ export function ProjectFilesView({
   initiativeId,
   materials,
   onDeleteMaterial,
+  onUploadFile,
+  onImportFromDrive,
+  driveLinkedFiles = [],
+  onSyncDriveFiles,
 }: ProjectFilesViewProps) {
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +81,19 @@ export function ProjectFilesView({
   const [activeTab, setActiveTab] = useState<TabType>('uploaded');
   const [uploadedPage, setUploadedPage] = useState(1);
   const [generatedPage, setGeneratedPage] = useState(1);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ updated: number } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const uploadMenuRef = useRef<HTMLDivElement>(null);
+
+  // Set of evidence_doc_ids that are linked to Drive (for badge display)
+  const driveLinkedIds = new Set(
+    driveLinkedFiles.map((l) => l.evidence_doc_id).filter(Boolean) as string[]
+  );
 
   const PAGE_SIZE = 20;
 
@@ -136,6 +161,68 @@ export function ProjectFilesView({
     }
   };
 
+  const handleSyncDrive = useCallback(async () => {
+    if (!onSyncDriveFiles) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      await onSyncDriveFiles();
+      setSyncResult({ updated: 1 }); // result detail handled in store
+    } catch (err) {
+      console.error('Drive sync failed:', err);
+    } finally {
+      setSyncing(false);
+    }
+  }, [onSyncDriveFiles]);
+
+  const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUploadFile) return;
+    e.target.value = '';
+    setUploading(true);
+    try {
+      await onUploadFile(file);
+    } finally {
+      setUploading(false);
+    }
+  }, [onUploadFile]);
+
+  const handleFolderInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!onUploadFile) return;
+    const all = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    const { accepted, rejected } = filterSupportedFiles(all);
+    if (rejected.length > 0) console.warn('Skipped unsupported files:', rejected.join(', '));
+    if (accepted.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of accepted) {
+        await onUploadFile(file);
+      }
+    } finally {
+      setUploading(false);
+    }
+  }, [onUploadFile]);
+
+  useEffect(() => {
+    if (!uploadMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!uploadMenuRef.current?.contains(e.target as Node)) setUploadMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [uploadMenuOpen]);
+
+  const handleDriveImport = useCallback(async () => {
+    if (!onImportFromDrive) return;
+    setDriveImporting(true);
+    try {
+      await onImportFromDrive();
+    } finally {
+      setDriveImporting(false);
+    }
+  }, [onImportFromDrive]);
+
   const hasUploaded = materials.length > 0;
   const hasGenerated = generatedFiles.length > 0;
 
@@ -158,20 +245,34 @@ export function ProjectFilesView({
               Uploaded project materials and generated outputs.
             </p>
           </div>
-          <div className="flex items-center bg-black/[0.04] rounded-lg p-0.5 self-center">
-            {(['uploaded', 'generated'] as TabType[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === tab
-                    ? 'bg-white text-text-primary shadow-sm'
-                    : 'text-text-tertiary hover:text-text-secondary'
-                }`}
-              >
-                {tab === 'uploaded' ? 'Uploaded' : 'Generated'}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            {driveLinkedFiles.length > 0 && onSyncDriveFiles && (
+              <Tooltip content="Updates linked files with latest versions from Google Drive.">
+                <button
+                  onClick={handleSyncDrive}
+                  disabled={syncing}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Sync Drive</span>
+                </button>
+              </Tooltip>
+            )}
+            <div className="flex items-center bg-black/[0.04] rounded-lg p-0.5 ring-1 ring-inset ring-black/[0.08]">
+              {(['uploaded', 'generated'] as TabType[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1 rounded-[5px] text-xs font-medium transition-colors ${
+                    activeTab === tab
+                      ? 'bg-white text-text-primary shadow-sm'
+                      : 'text-text-tertiary hover:text-text-secondary'
+                  }`}
+                >
+                  {tab === 'uploaded' ? 'Uploaded' : 'Generated'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -181,13 +282,91 @@ export function ProjectFilesView({
           </div>
         ) : activeTab === 'uploaded' ? (
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Upload className="w-4 h-4 text-text-tertiary" />
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Uploaded</h2>
-              {hasUploaded && (
-                <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
-                  {materials.length}
-                </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept={SUPPORTED_EXTENSIONS}
+              multiple
+              onChange={handleFileInputChange}
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={handleFolderInputChange}
+              {...{ webkitdirectory: '' }}
+            />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-text-tertiary" />
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Uploaded</h2>
+                {hasUploaded && (
+                  <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
+                    {materials.length}
+                  </span>
+                )}
+              </div>
+              {(onUploadFile || onImportFromDrive) && (
+                <div className="flex items-center gap-1.5">
+                  {onUploadFile && (
+                    <div ref={uploadMenuRef} className="relative">
+                      <button
+                        onClick={() => setUploadMenuOpen((o) => !o)}
+                        disabled={uploading}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {uploading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        <span>Upload</span>
+                        <ChevronDown className="w-3 h-3 opacity-60" />
+                      </button>
+                      {uploadMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] bg-white rounded-lg shadow-lg border border-gray-100 py-1 text-xs">
+                          <button
+                            onClick={() => { fileInputRef.current?.click(); setUploadMenuOpen(false); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-text-secondary hover:bg-black/[0.04] transition-colors"
+                          >
+                            <Upload className="w-3.5 h-3.5 flex-shrink-0" />
+                            Files
+                          </button>
+                          <button
+                            onClick={() => { folderInputRef.current?.click(); setUploadMenuOpen(false); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-text-secondary hover:bg-black/[0.04] transition-colors"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
+                            Folder
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {onImportFromDrive && (
+                    <button
+                      onClick={handleDriveImport}
+                      disabled={driveImporting}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {driveImporting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                          <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                          <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                          <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                          <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                          <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                          <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 27.5h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                        </svg>
+                      )}
+                      <span>Import from Drive</span>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
             {hasUploaded ? (
@@ -205,14 +384,32 @@ export function ProjectFilesView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-divider">
-                  {pagedMaterials.map((mat) => (
+                  {pagedMaterials.map((mat) => {
+                    const isDrive = driveLinkedIds.has(mat.id);
+                    return (
                     <tr key={mat.id}>
                       <td className="px-4 py-2.5 max-w-0 w-full">
                         <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                          {isDrive ? (
+                            <svg className="w-4 h-4 flex-shrink-0 text-[#4285F4]" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg" aria-label="Google Drive">
+                              <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                              <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                              <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                              <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                              <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                              <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 27.5h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                            </svg>
+                          ) : (
+                            <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                          )}
                           <span className="text-text-primary truncate min-w-0" title={mat.filename}>
                             {mat.filename}
                           </span>
+                          {isDrive && (
+                            <span className="text-[9px] font-medium text-[#4285F4] bg-[#4285F4]/10 rounded px-1 py-0.5 flex-shrink-0">
+                              Drive
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
@@ -254,7 +451,8 @@ export function ProjectFilesView({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
               </div>

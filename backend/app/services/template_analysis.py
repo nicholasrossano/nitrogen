@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.services.template_parser import TemplateStructure
 from app.services.rag import RAGService, RetrievedChunk
 from app.models.project_material import ProjectMaterial
@@ -163,8 +164,16 @@ class TemplateAnalysisService:
     """Orchestrates requirement extraction (via LLM) and cross-referencing
     against project evidence/materials."""
 
-    def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(self, user_id: str | None = None, db: AsyncSession | None = None):
+        self.user_id = user_id
+        self.db = db
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
 
     # ── 1. Extract requirements ─────────────────────────────────────
 
@@ -345,12 +354,14 @@ class TemplateAnalysisService:
             {"role": "user", "content": user_content},
         ]
 
-        resp = await self.client.chat.completions.create(
+        client = await self._get_client()
+        resp = await client.chat.completions.create(
             model=settings.openai_orchestration_model,
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.1,
         )
+        await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
         raw = resp.choices[0].message.content or "{}"
         try:
@@ -516,12 +527,14 @@ class TemplateAnalysisService:
             },
         ]
 
-        resp = await self.client.chat.completions.create(
+        client = await self._get_client()
+        resp = await client.chat.completions.create(
             model=settings.openai_orchestration_model,
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.1,
         )
+        await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
         raw = resp.choices[0].message.content or "{}"
         try:

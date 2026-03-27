@@ -796,7 +796,7 @@ function MessageBubble({
         {!isUser && message.widget_type && message.widget_data &&
           !(EDITOR_WIDGET_TYPES as readonly string[]).includes(message.widget_type) && (
           <div className="mt-3 w-full">
-            <ComplianceChatWidget
+            <ChatWidget
               type={message.widget_type}
               data={message.widget_data}
               messageId={message.id}
@@ -811,7 +811,7 @@ function MessageBubble({
   );
 }
 
-function ComplianceChatWidget({
+function ChatWidget({
   type,
   data,
   messageId,

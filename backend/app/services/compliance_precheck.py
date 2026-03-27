@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project_material import ProjectMaterial
 from app.services.compliance_frameworks import (
@@ -215,11 +216,18 @@ ACTIVATION_SCHEMA = {
 class CompliancePrecheckService:
     """Performs compliance pre-check analysis against the project workspace."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.user_id = user_id
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.model = settings.openai_orchestration_model
         self.rag = RAGService(db)
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
 
     # ── Framework routing ────────────────────────────────────────────
 
@@ -320,7 +328,8 @@ UPLOADED DOCUMENTS:
 PROJECT MATERIALS:
 {materials_text}"""
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -330,6 +339,7 @@ PROJECT MATERIALS:
             tool_choice={"type": "function", "function": {"name": "recommend_framework"}},
             temperature=0.3,
         )
+        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         result = json.loads(tool_call.function.arguments)
@@ -644,7 +654,8 @@ POSSIBLE CONDITIONS:
 
 Determine which of these conditions are triggered by this project."""
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -654,6 +665,7 @@ Determine which of these conditions are triggered by this project."""
             tool_choice={"type": "function", "function": {"name": "determine_active_requirements"}},
             temperature=0.2,
         )
+        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         result = json.loads(tool_call.function.arguments)
@@ -732,7 +744,8 @@ PROJECT MATERIALS:
 
 Evaluate each requirement listed above."""
 
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -742,6 +755,7 @@ Evaluate each requirement listed above."""
             tool_choice={"type": "function", "function": {"name": "evaluate_requirements"}},
             temperature=0.2,
         )
+        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         result = json.loads(tool_call.function.arguments)

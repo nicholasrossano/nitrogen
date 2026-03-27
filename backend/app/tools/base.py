@@ -190,6 +190,7 @@ class ToolDefinition:
     output_type: str
     category: str  # "analysis", "documentation", "technical", etc.
     keywords: list[str] = field(default_factory=list)  # For recommendation matching
+    export_format: str | None = None  # "xlsx", "docx", or None if not directly exportable
     
     def to_dict(self) -> dict:
         return {
@@ -247,6 +248,15 @@ class BaseTool(ABC):
         """Backward-compatible: derived from review_strategy."""
         return self.review_strategy == ReviewStrategy.OUTLINE_REVIEW
     
+    def is_exportable(self, content: dict) -> bool:
+        """Whether this deliverable content is in a state that can produce a downloadable file.
+
+        Default: True when the tool declares an export_format.
+        Override in subclasses with stricter requirements (e.g. model tools
+        that need a completed computation).
+        """
+        return self.definition.export_format is not None
+
     def get_questions_for_chat(self) -> list[str]:
         """Generate conversational questions to gather inputs."""
         questions = []

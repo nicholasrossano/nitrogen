@@ -21,6 +21,8 @@ import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
+import { useGoogleDriveStore } from '@/stores/googleDriveStore';
+import { openGooglePicker } from '@/lib/googlePicker';
 
 const MIN_STANDALONE_CHAT_PERCENT = 30;
 const MAX_STANDALONE_CHAT_PERCENT = 60;
@@ -80,6 +82,7 @@ function InitiativePageContent() {
   const [showInspector, setShowInspector] = useState(false);
   const [hasInspectorItem, setHasInspectorItem] = useState(false);
   // Standalone chat view panel state
+  const alignmentCallbackRef = useRef<((msgs: { id: string; role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; created_at?: string | null }[]) => void) | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [showEditorInChatView, setShowEditorInChatView] = useState(false);
   const [showChatInChatView, setShowChatInChatView] = useState(true);
@@ -100,6 +103,7 @@ function InitiativePageContent() {
     messages,
     projectPlan,
     projectMaterials,
+    driveLinkedFiles,
     loading, 
     sending,
     generating,
@@ -109,6 +113,9 @@ function InitiativePageContent() {
     loadEvidence,
     loadMaterials,
     loadProjectPlan,
+    loadDriveLinkedFiles,
+    syncDriveFiles,
+    importFromDrive,
     sendMessage,
     updateTitle,
     uploadMaterial,
@@ -118,6 +125,29 @@ function InitiativePageContent() {
 
   const isViewer = initiative?.shared_role === 'viewer';
   const devMode = useSettingsStore((s) => s.devMode);
+  const getDriveAccessToken = useGoogleDriveStore((s) => s.getAccessToken);
+  const driveConnected = useGoogleDriveStore((s) => s.connected);
+  const connectDrive = useGoogleDriveStore((s) => s.connect);
+
+  const handleFilesViewDriveImport = useCallback(async () => {
+    if (!driveConnected) {
+      connectDrive(initiativeId);
+      return;
+    }
+    const accessToken = await getDriveAccessToken();
+    return new Promise<void>((resolve, reject) => {
+      openGooglePicker(accessToken, async (files) => {
+        if (files.length === 0) { resolve(); return; }
+        try {
+          await importFromDrive(initiativeId, files.map((f) => f.id));
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+  }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, initiativeId]);
+
   const hasProjectPlan = !!projectPlan;
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
@@ -145,9 +175,13 @@ function InitiativePageContent() {
         loadEvidence(initiativeId),
         loadMaterials(initiativeId),
         loadProjectPlan(initiativeId),
+        loadDriveLinkedFiles(initiativeId).then(() => {
+          // Silently sync any Drive-linked files in the background
+          syncDriveFiles(initiativeId).catch(() => {});
+        }),
       ]).finally(() => setPageReady(true));
     }
-  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan]);
+  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan, loadDriveLinkedFiles]);
 
   // Fade the overlay out after loads complete, then unmount it
   useEffect(() => {
@@ -433,6 +467,7 @@ function InitiativePageContent() {
           userEmail={user?.email}
           onUploadMaterial={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
           hiddenItems={isViewer ? ['chat', 'evaluate'] : devMode ? undefined : ['evaluate']}
+          initiativeId={initiativeId}
         />
         </div>
 
@@ -508,6 +543,7 @@ function InitiativePageContent() {
                               onBack={handleNewChat}
                               onEditorWidgetsChange={handleChatEditorWidgetsChange}
                               onCitationClick={handleCitationClick}
+                              onAlignmentConfirmedRef={alignmentCallbackRef}
                             />
                           </div>
                           {/* Resize handle only shown when editor is open */}
@@ -547,6 +583,7 @@ function InitiativePageContent() {
                             <EditorSidePanel
                               widgets={chatEditorWidgets}
                               initiativeId={initiativeId}
+                              onAlignmentConfirmed={(msgs) => alignmentCallbackRef.current?.(msgs)}
                             />
                           </div>
                         )}
@@ -561,6 +598,10 @@ function InitiativePageContent() {
                   initiativeId={initiativeId}
                   materials={projectMaterials}
                   onDeleteMaterial={isViewer ? undefined : deleteMaterial}
+                  onUploadFile={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
+                  onImportFromDrive={isViewer ? undefined : handleFilesViewDriveImport}
+                  driveLinkedFiles={driveLinkedFiles}
+                  onSyncDriveFiles={isViewer ? undefined : () => syncDriveFiles(initiativeId)}
                 />
               </main>
             ) : activeView === 'plan' ? (

@@ -22,9 +22,6 @@ export interface CoreChatMessage {
   widget_data?: Record<string, any> | null;
 }
 
-/** @deprecated Use CoreChatMessage */
-export type ComplianceChatMessage = CoreChatMessage;
-
 export interface ChatSession {
   id: string;
   title: string;
@@ -164,7 +161,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const assistantLocalId = nextId();
 
     try {
-      await api.sendComplianceChatStream(
+      await api.sendChatStream(
         history.slice(0, -1),
         content,
         (text) => {
@@ -267,7 +264,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const msg = get().messages.find(m => m.id === messageId);
     const dbId = msg?.db_id;
     if (dbId) {
-      api.setCoreChatMessageFeedback(dbId, feedback).catch((err) => {
+      api.setChatMessageFeedback(dbId, feedback).catch((err) => {
         console.warn('[chatStore] Failed to persist feedback:', err);
         set(state => ({
           messageFeedback: { ...state.messageFeedback, [messageId]: null },

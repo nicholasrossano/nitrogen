@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser, get_current_user
+from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.services.pdd_service import PDDService
@@ -38,11 +39,11 @@ class UpdateSectionRequest(BaseModel):
 async def create_pdd_workspace(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Create a PDD workspace and trigger the project scan."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         await service.create_workspace(initiative_id)
@@ -66,7 +67,7 @@ async def get_pdd_workspace(
 ):
     """Return the current PDD workspace state, or null."""
     await require_viewer(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
     workspace_state = await service.get_workspace(initiative_id)
     return {"workspace": workspace_state}
 
@@ -75,11 +76,11 @@ async def get_pdd_workspace(
 async def generate_pdd_outline(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Generate a draft PDD outline from the project scan."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         outline = await service.generate_outline(initiative_id)
@@ -104,7 +105,7 @@ async def update_pdd_outline(
 ):
     """Update the PDD outline with user edits."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         outline = await service.update_outline(initiative_id, body.sections)
@@ -122,7 +123,7 @@ async def confirm_pdd_outline(
 ):
     """Confirm the outline and transition to section authoring."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         result = await service.confirm_outline(initiative_id)
@@ -137,11 +138,11 @@ async def prepare_pdd_section(
     initiative_id: UUID,
     section_id: str,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Gather evidence and identify gaps for a section."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         result = await service.prepare_section(initiative_id, section_id)
@@ -163,11 +164,11 @@ async def draft_pdd_section(
     section_id: str,
     body: DraftSectionRequest | None = None,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Draft a section with citations."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     user_answers = body.user_answers if body else None
     general_guidance = body.general_guidance if body else False
@@ -196,7 +197,7 @@ async def update_pdd_section(
 ):
     """Save user edits to a section draft."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         await service.update_section(initiative_id, section_id, body.content)
@@ -215,7 +216,7 @@ async def confirm_pdd_section(
 ):
     """Confirm a section and advance to the next."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         result = await service.confirm_section(initiative_id, section_id)
@@ -229,11 +230,11 @@ async def confirm_pdd_section(
 async def run_pdd_consistency(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Run cross-section consistency check."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         findings = await service.run_consistency_check(initiative_id)
@@ -257,7 +258,7 @@ async def assemble_pdd(
 ):
     """Compile the final PDD document."""
     await require_editor(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         assembled = await service.assemble_document(initiative_id)
@@ -281,7 +282,7 @@ async def export_pdd(
 ):
     """Export the assembled PDD as a DOCX file."""
     await require_viewer(db, initiative_id, user)
-    service = PDDService(db)
+    service = PDDService(db, user_id=user.uid)
 
     try:
         docx_bytes = await service.export_docx(initiative_id)

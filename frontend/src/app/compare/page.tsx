@@ -64,7 +64,7 @@ function ComparePageContent() {
   }, []);
 
   const fetchCompareSessions = useCallback(() => {
-    api.getCoreChatSessions()
+    api.getChatSessions()
       .then(({ sessions }) => {
         setCompareSessions(
           sessions
@@ -93,7 +93,7 @@ function ComparePageContent() {
 
   const handleDeleteHistorySession = useCallback((id: string) => {
     setCompareSessions((prev) => prev.filter((s) => s.id !== id));
-    api.deleteCoreChatSession(id).catch(() => {});
+    api.deleteChatSession(id).catch(() => {});
   }, []);
 
   const handleLandingChange = useCallback((isLanding: boolean) => {

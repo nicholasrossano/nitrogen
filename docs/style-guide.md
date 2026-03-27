@@ -965,6 +965,33 @@ Defined as a global CSS class — do not replicate inline.
 - Active: `scale(0.98)` (100ms)
 - Disabled: `opacity-50 cursor-not-allowed`
 
+### Small Action Chip Button
+
+Used for compact toolbar/header actions (e.g. Upload, Sync Drive, Import from Drive). Matches the visual weight of a selected toggle tab — white surface, subtle shadow lift.
+
+```tsx
+<button
+  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary
+             bg-surface-subtle ring-1 ring-inset ring-black/[0.08]
+             enabled:hover:bg-black/[0.07]
+             disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+>
+  <Icon className="w-3.5 h-3.5" />
+  Label
+</button>
+```
+
+**Rules**
+- `bg-surface-subtle` — off-white fill that contrasts with the white workspace container
+- `ring-1 ring-inset ring-black/[0.08]` — hairline inset border gives a clear button edge on white backgrounds without using shadow
+- `hover:bg-black/[0.07]` — slightly darker fill on hover
+- `text-text-secondary` — never tertiary; the button must be clearly legible
+- `px-2.5 py-1.5 rounded-md` — compact, not pill-shaped (reserved for `btn-primary`)
+- Use this pattern for all small action buttons in toolbar rows that sit on a white (`bg-surface`) container
+- Do **not** use `bg-white shadow-sm` — shadow blends into the white workspace; Do **not** use `bg-black/[0.04]` alone — reads as disabled/inactive without the ring
+
+---
+
 ### Secondary Button (`btn-secondary`)
 
 Defined as a global CSS class — do not replicate inline. Used for cancel/dismiss actions alongside a primary CTA.

@@ -1,5 +1,5 @@
 """
-Compliance Chat Service
+Chat Service
 
 Two-step orchestration:
   1. A lightweight planning call (function-calling) decides which data
@@ -24,6 +24,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.services.tiered_retrieval import (
     RetrievedFact,
     SourceType,
@@ -483,7 +484,7 @@ _CITATION_RE = re.compile(r'\[(?:([AB])-)?([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\
 # ---------------------------------------------------------------------------
 
 @dataclass
-class ComplianceChatResponse:
+class ChatResponse:
     content: str
     sources: list[RetrievedFact]
     tiers_used: list[str]
@@ -496,7 +497,7 @@ class ComplianceChatResponse:
 # Service
 # ---------------------------------------------------------------------------
 
-class ComplianceChatService:
+class ChatService:
     """
     Orchestrates compliance chat using a plan-then-retrieve-then-generate loop.
 
@@ -507,10 +508,17 @@ class ComplianceChatService:
     Step 4  — Filter returned sources to only those cited in the answer
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
+        self.user_id = user_id
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.retrieval = TieredRetrievalService(db)
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
 
     _HINT_TO_PLANNER_TOOL: dict[str, str] = {
         "lcoe_model": "run_lcoe_model",
@@ -531,7 +539,7 @@ class ComplianceChatService:
         on_research_step: ResearchStepCallback | None = None,
         initiative_id: str | None = None,
         compare_contexts: list[dict] | None = None,
-    ) -> ComplianceChatResponse:
+    ) -> ChatResponse:
         start = time.time()
 
         if compare_contexts:
@@ -891,7 +899,7 @@ class ComplianceChatService:
             ).model_dump()
 
         elapsed_ms = int((time.time() - start) * 1000)
-        return ComplianceChatResponse(
+        return ChatResponse(
             content=content,
             sources=cited_sources,
             tiers_used=tiers_used,
@@ -913,7 +921,7 @@ class ComplianceChatService:
         on_thinking: ThinkingCallback | None = None,
         on_research_step: ResearchStepCallback | None = None,
         start_time: float,
-    ) -> ComplianceChatResponse:
+    ) -> ChatResponse:
         """Handle compare mode: dual-project retrieval + comparative answer generation."""
         from uuid import UUID as _UUID
 
@@ -1017,7 +1025,7 @@ class ComplianceChatService:
         cited_sources = self._extract_cited_sources(content, all_facts)
         elapsed_ms = int((time.time() - start_time) * 1000)
 
-        return ComplianceChatResponse(
+        return ChatResponse(
             content=content,
             sources=cited_sources,
             tiers_used=tiers_used,
@@ -1107,12 +1115,14 @@ class ComplianceChatService:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
 
-        resp = await self.client.chat.completions.create(
+        client = await self._get_client()
+        resp = await client.chat.completions.create(
             model=settings.openai_generation_model,
             messages=messages,
             temperature=0.4,
             max_tokens=3200,
         )
+        await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
         return resp.choices[0].message.content or ""
 
     # -----------------------------------------------------------------------
@@ -1192,12 +1202,14 @@ class ComplianceChatService:
         messages.append({"role": "assistant", "content": carbon_context})
 
         try:
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model=settings.openai_generation_model,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=400,
             )
+            await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content or carbon_context
         except Exception:
             return carbon_context
@@ -1277,12 +1289,14 @@ class ComplianceChatService:
         messages.append({"role": "assistant", "content": lcoe_context})
 
         try:
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model=settings.openai_generation_model,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=400,
             )
+            await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content or lcoe_context
         except Exception:
             return lcoe_context
@@ -1309,7 +1323,8 @@ class ComplianceChatService:
         messages.append({"role": "user", "content": user_message})
 
         try:
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
                 messages=messages,
                 tools=SEARCH_TOOLS,
@@ -1317,6 +1332,7 @@ class ComplianceChatService:
                 temperature=0,
                 max_tokens=200,
             )
+            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
             calls = resp.choices[0].message.tool_calls or []
             if calls:
                 names = [c.function.name for c in calls]
@@ -1339,7 +1355,8 @@ class ComplianceChatService:
         try:
             recent = history[-6:] if len(history) > 6 else history
             context = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
                 messages=[
                     {
@@ -1358,6 +1375,7 @@ class ComplianceChatService:
                 temperature=0,
                 max_tokens=60,
             )
+            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content.strip() or user_message
         except Exception as e:
             logger.warning(f"Query rewrite failed, using raw message: {e}")
@@ -1441,7 +1459,8 @@ class ComplianceChatService:
             extraction_prompt += f"\n\nHint: the field being investigated is likely '{hint_field_name}' ({hint_model_type} model)."
 
         try:
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
                 messages=[{"role": "user", "content": extraction_prompt}],
                 tools=[tool_def],
@@ -1449,6 +1468,7 @@ class ComplianceChatService:
                 temperature=0,
                 max_tokens=300,
             )
+            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
             tool_calls = resp.choices[0].message.tool_calls
             if not tool_calls:
                 return None
@@ -1528,12 +1548,14 @@ class ComplianceChatService:
         messages.append({"role": "user", "content": user_message})
 
         try:
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model=settings.openai_generation_model,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=800,
             )
+            await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"Template investigate answer failed: {e}", exc_info=True)
@@ -1625,12 +1647,14 @@ class ComplianceChatService:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
 
-        resp = await self.client.chat.completions.create(
+        client = await self._get_client()
+        resp = await client.chat.completions.create(
             model=settings.openai_generation_model,
             messages=messages,
             temperature=0.4,
             max_tokens=1200,
         )
+        await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
         return resp.choices[0].message.content or ""
 
     def _extract_cited_sources(

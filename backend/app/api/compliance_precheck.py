@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser, get_current_user
+from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.services.compliance_frameworks import get_framework_list, FRAMEWORK_FAMILIES
@@ -67,7 +68,7 @@ async def route_framework(
     initiative_id: UUID,
     framework_id: str,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Analyze project context and return scope facts for the given framework."""
     initiative = await require_editor(db, initiative_id, user)
@@ -84,7 +85,7 @@ async def route_framework(
             detail="Project needs a description before framework routing can run.",
         )
 
-    service = CompliancePrecheckService(db)
+    service = CompliancePrecheckService(db, user_id=user.uid)
     try:
         result = await service.route_framework(initiative, framework_id)
     except Exception:
@@ -103,7 +104,7 @@ async def run_precheck(
     framework_id: str,
     body: RunPrecheckRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Run the compliance pre-check for the specified framework.
 
@@ -118,7 +119,7 @@ async def run_precheck(
             detail=f"A pre-check for {framework_id} already exists. Use rerun to update, or pass force=true.",
         )
 
-    service = CompliancePrecheckService(db)
+    service = CompliancePrecheckService(db, user_id=user.uid)
     try:
         result = await service.run_precheck(
             initiative=initiative,
@@ -143,12 +144,12 @@ async def rerun_precheck(
     framework_id: str,
     body: RerunPrecheckRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Rerun the compliance pre-check with updated facts."""
     initiative = await require_editor(db, initiative_id, user)
 
-    service = CompliancePrecheckService(db)
+    service = CompliancePrecheckService(db, user_id=user.uid)
     try:
         result = await service.rerun_precheck(
             initiative=initiative,

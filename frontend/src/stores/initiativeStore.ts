@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial, CompliancePrecheck, FrameworkRoutingResult, ScopeFact } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial, CompliancePrecheck, FrameworkRoutingResult, ScopeFact, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -15,6 +15,7 @@ interface InitiativeState {
   memoId: string | null;
   evidenceDocs: EvidenceDoc[];
   projectMaterials: ProjectMaterial[];
+  driveLinkedFiles: DriveLinkedFile[];
   projectPlan: ProjectPlan | null;
   compliancePrechecks: Record<string, CompliancePrecheck>;
   
@@ -44,6 +45,9 @@ interface InitiativeState {
   loadMaterials: (id: string) => Promise<void>;
   uploadMaterial: (id: string, file: File) => Promise<void>;
   deleteMaterial: (materialId: string) => Promise<void>;
+  loadDriveLinkedFiles: (id: string) => Promise<void>;
+  importFromDrive: (id: string, fileIds: string[]) => Promise<DriveLinkedFile[]>;
+  syncDriveFiles: (id: string) => Promise<DriveSyncResult>;
   sendMessage: (id: string, content: string, toolHint?: string) => Promise<void>;
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
   retryMessage: (id: string, messageId: string) => Promise<void>;
@@ -83,6 +87,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   memoId: null,
   evidenceDocs: [],
   projectMaterials: [],
+  driveLinkedFiles: [],
   projectPlan: null,
   compliancePrechecks: {},
   loading: false,
@@ -198,6 +203,57 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       console.error('Failed to delete material:', error);
       throw error;
     }
+  },
+
+  // Load Drive-linked file records for this initiative
+  loadDriveLinkedFiles: async (id: string) => {
+    try {
+      const links = await api.getDriveLinkedFiles(id);
+      set({ driveLinkedFiles: links });
+    } catch (error) {
+      console.error('Failed to load Drive linked files:', error);
+    }
+  },
+
+  // Import files from Google Drive and add them to the materials list
+  importFromDrive: async (id: string, fileIds: string[]) => {
+    const result = await api.importFromDrive(id, fileIds);
+    if (result.imported.length > 0) {
+      const newMaterials: ProjectMaterial[] = result.imported.map((f) => ({
+        id: f.id,
+        filename: f.filename,
+        file_type: f.file_type,
+        file_size: f.file_size,
+        created_at: f.created_at,
+        source: 'evidence',
+      }));
+      // Reload linked files to reflect the new links
+      const links = await api.getDriveLinkedFiles(id);
+      set((state) => ({
+        projectMaterials: [...newMaterials, ...state.projectMaterials],
+        driveLinkedFiles: links,
+      }));
+    }
+    return result.imported.map((f) => ({
+      id: f.drive_link_id,
+      evidence_doc_id: f.id,
+      drive_file_id: fileIds[result.imported.indexOf(f)] ?? '',
+      drive_file_name: f.filename,
+      drive_mime_type: '',
+      drive_modified_time: f.created_at,
+      last_synced_at: f.created_at,
+    }));
+  },
+
+  // Check Drive-linked files for changes and re-index updated ones
+  syncDriveFiles: async (id: string) => {
+    const result = await api.syncDriveFiles(id);
+    if (result.updated > 0) {
+      // Reload materials so updated file sizes/dates are reflected
+      const projectMaterials = await api.getMaterials(id);
+      set({ projectMaterials });
+    }
+    return result;
   },
 
   // Send a message with streaming
@@ -852,6 +908,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       memoId: null,
       evidenceDocs: [],
       projectMaterials: [],
+      driveLinkedFiles: [],
       projectPlan: null,
       compliancePrechecks: {},
       loading: false,

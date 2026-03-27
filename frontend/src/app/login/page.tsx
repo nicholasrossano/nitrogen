@@ -199,7 +199,7 @@ function LoginPageContent() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     required
-                    className="w-full h-11 pl-10 pr-4 bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors"
+                    className="w-full h-11 pl-10 pr-4 rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -219,7 +219,7 @@ function LoginPageContent() {
                       placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
                       required
                       minLength={6}
-                      className="w-full h-11 pl-10 pr-4 bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors"
+                      className="w-full h-11 pl-10 pr-4 rounded-[20px] bg-white border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors"
                     />
                   </div>
                 </div>

@@ -75,7 +75,7 @@ export function CompareStandaloneChatView({
   useEffect(() => {
     if (!initialSessionId || loadedRef.current) return;
     loadedRef.current = true;
-    api.getCoreChatSessionMessages(initialSessionId)
+    api.getChatSessionMessages(initialSessionId)
       .then(({ messages, title }) => {
         setLocalMessages(messages);
         setSessionTitle(title || `${titleA} vs ${titleB}`);
@@ -117,7 +117,7 @@ export function CompareStandaloneChatView({
       setError(null);
       setResearchSteps([]);
 
-      await api.sendComplianceChatStream(
+      await api.sendChatStream(
         history,
         content,
         (text) => setThinkingLines((prev) => [...prev, text]),
