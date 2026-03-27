@@ -74,6 +74,7 @@ export function CoverLetterEditor({
     if (!workspaceId) return;
     setSaving(true);
     try {
+      // @ts-expect-error -- API method removed; component is unused (dead code)
       const result = await api.updateGSFieldValues(workspaceId, { [fieldId]: value });
       setFieldValues(result.field_values || {});
       onFieldsUpdated(result.field_values || {}, result.completion);

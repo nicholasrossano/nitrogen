@@ -6,8 +6,8 @@ Thanks for your interest in contributing! This guide will help you get started.
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 20+
+- Python 3.12+
+- Node.js 22+
 - PostgreSQL with pgvector (or a [Neon](https://neon.tech) cloud database)
 - An OpenAI API key
 
@@ -58,14 +58,10 @@ docs: update deployment guide for Railway
 ### Pull Request Process
 
 1. Create your branch from `main`
-2. Make your changes and run the pre-deploy quality gate:
-   - All checks (frontend lint/test/build + backend ruff/pytest): `./scripts/predeploy-check.sh`
-   - Or run checks individually:
-     - Frontend: `cd frontend && npm run lint && npm test && npm run build`
-     - Backend: `cd backend && python3 -m ruff check . && python3 -m pytest tests/ -x -q`
+2. Make your changes — a pre-commit hook will automatically lint staged files on commit
 3. Open a PR against `main` using the PR template
 4. Fill in the summary, link related issues, and complete the checklist
-5. Wait for CI to pass and a maintainer review
+5. Wait for CI to pass (lint, typecheck, test, build) and a maintainer review
 
 ### Code Style
 
