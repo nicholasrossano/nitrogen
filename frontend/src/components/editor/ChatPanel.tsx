@@ -16,7 +16,7 @@ import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
-import { ToolChecklistWidget } from '@/components/widgets/ToolChecklistWidget';
+import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { PlanCategoriesWidget } from '@/components/widgets/PlanCategoriesWidget';
@@ -708,7 +708,7 @@ function ChatWidget({
     case 'tool_checklist':
       return (
         <ErrorBoundary>
-          <ToolChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <ModuleChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
     case 'deliverables_overview':
