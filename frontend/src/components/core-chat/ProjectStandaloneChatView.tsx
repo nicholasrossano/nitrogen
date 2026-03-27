@@ -7,6 +7,8 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
+import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
+import type { CompareProject } from './CompareProjectPicker';
 import { TemplateUploadInterstitial } from '@/components/widgets/TemplateUploadInterstitial';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
@@ -26,6 +28,8 @@ interface AlignmentNewMessage {
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
   showLanding?: boolean;
+  /** When true, hides the module tile grid on the landing page (Explore mode) */
+  hideTiles?: boolean;
   onMessageSent?: () => void;
   onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
@@ -34,6 +38,8 @@ interface ProjectStandaloneChatViewProps {
   onCitationClick?: (citation: SourceCitation) => void;
   /** Callback for EditorSidePanel to thread through to AlignmentWidget */
   onAlignmentConfirmedRef?: React.MutableRefObject<((msgs: AlignmentNewMessage[]) => void) | null>;
+  /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
+  onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -58,11 +64,13 @@ function toCoreMessage(m: ChatMessage): CoreChatMessage {
 export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
+  hideTiles = false,
   onMessageSent,
   onBack,
   onEditorWidgetsChange,
   onCitationClick,
   onAlignmentConfirmedRef,
+  onSendRef,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -78,6 +86,7 @@ export function ProjectStandaloneChatView({
   const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
   const [showTemplateInterstitial, setShowTemplateInterstitial] = useState(false);
   const [templateUploading, setTemplateUploading] = useState(false);
+  const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
 
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
@@ -142,6 +151,7 @@ export function ProjectStandaloneChatView({
       setFeedbackMap({});
       setShowTemplateInterstitial(false);
       setTemplateUploading(false);
+      setCompareProject(null);
     }
     prevShowLanding.current = showLanding;
   }, [showLanding, localMessages, initiativeId]);
@@ -203,6 +213,10 @@ export function ProjectStandaloneChatView({
       setStreamingContent('');
       setError(null);
       setResearchSteps([]);
+
+      const compareIds = compareProject
+        ? [initiativeId, compareProject.id]
+        : null;
 
       await api.sendChatStream(
         history,
@@ -267,9 +281,10 @@ export function ProjectStandaloneChatView({
             return [...prev, step];
           });
         },
+        compareIds,
       );
     },
-    [initiativeId, currentSessionId],
+    [initiativeId, currentSessionId, compareProject],
   );
 
   const handleTemplateUpload = useCallback(
@@ -497,6 +512,14 @@ export function ProjectStandaloneChatView({
     [],
   );
 
+  // Expose handleSend to parent via ref so ModuleLandingPage can trigger a send
+  useEffect(() => {
+    if (onSendRef) onSendRef.current = handleSend;
+    return () => {
+      if (onSendRef) onSendRef.current = null;
+    };
+  }, [onSendRef, handleSend]);
+
   const isOnLanding = showLanding || localMessages.length === 0;
 
   if (isOnLanding) {
@@ -508,6 +531,25 @@ export function ProjectStandaloneChatView({
           sessions={sessions}
           onLoadSession={handleLoadSession}
           onDeleteSession={handleDeleteSession}
+          hideTiles={hideTiles}
+          headerContent={hideTiles ? (
+            <div className="text-center mb-8">
+              <h1 className="text-lg font-semibold text-text-primary mb-1.5">Explore</h1>
+              <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
+                Search academic research and past precedent, summarize elements of the current project, or ask any question.
+              </p>
+            </div>
+          ) : undefined}
+          extraInputActions={hideTiles ? (
+            <CompareProjectPicker
+              currentProjectId={initiativeId}
+              selected={compareProject}
+              onSelect={setCompareProject}
+            />
+          ) : undefined}
+          inputChips={compareProject ? (
+            <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
+          ) : undefined}
         />
         {showTemplateInterstitial && (
           <TemplateUploadInterstitial
@@ -541,6 +583,16 @@ export function ProjectStandaloneChatView({
       title={sessionTitle}
       initiativeId={initiativeId}
       onCitationClick={onCitationClick}
+      extraInputActions={hideTiles ? (
+        <CompareProjectPicker
+          currentProjectId={initiativeId}
+          selected={compareProject}
+          onSelect={setCompareProject}
+        />
+      ) : undefined}
+      inputChips={compareProject ? (
+        <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
+      ) : undefined}
     />
   );
 }
