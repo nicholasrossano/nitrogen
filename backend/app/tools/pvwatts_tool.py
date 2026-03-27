@@ -17,7 +17,6 @@ import json
 import logging
 from typing import Any
 
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings

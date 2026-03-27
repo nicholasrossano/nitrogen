@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import field_validator, model_validator, computed_field
 from functools import lru_cache
 import json
-from typing import Self, Optional
+from typing import Self
 
 
 class Settings(BaseSettings):
