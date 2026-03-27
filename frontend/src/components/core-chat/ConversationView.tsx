@@ -48,6 +48,10 @@ export interface ConversationViewProps {
   initiativeId?: string;
   /** Called when user clicks an internal citation (corpus/evidence) */
   onCitationClick?: (citation: SourceCitation) => void;
+  /** Extra action buttons rendered in the composer toolbar (before paperclip) */
+  extraInputActions?: React.ReactNode;
+  /** Chips rendered above the textarea (e.g. compare project chip) */
+  inputChips?: React.ReactNode;
 }
 
 function preprocessMath(content: string): string {
@@ -92,6 +96,8 @@ export function ConversationView({
   title,
   initiativeId,
   onCitationClick,
+  extraInputActions,
+  inputChips,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -307,24 +313,22 @@ export function ConversationView({
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
           >
-            {draftTag && (
+            {(draftTag || inputChips || attachedFiles.length > 0) && (
               <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
-                  {draftTag}
-                  <button
-                    type="button"
-                    onClick={() => { setDraftTag(null); setInput(''); }}
-                    className="hover:opacity-60 transition-opacity"
-                    aria-label="Remove"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              </div>
-            )}
-
-            {attachedFiles.length > 0 && (
-              <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+                {draftTag && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
+                    {draftTag}
+                    <button
+                      type="button"
+                      onClick={() => { setDraftTag(null); setInput(''); }}
+                      className="hover:opacity-60 transition-opacity"
+                      aria-label="Remove"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {inputChips}
                 {attachedFiles.map((file, i) => (
                   <span
                     key={i}
@@ -360,8 +364,9 @@ export function ConversationView({
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
             />
 
-            {/* Bottom row: attach + send */}
+            {/* Bottom row: extra actions + attach + send */}
             <div className="flex items-center justify-end gap-1.5 px-4 pb-2.5">
+              {extraInputActions}
               <input
                 ref={fileInputRef}
                 type="file"

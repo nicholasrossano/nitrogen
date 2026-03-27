@@ -191,8 +191,7 @@ function ComparePageContent() {
 
   const handleNavChange = useCallback((item: NavItem) => {
     if (item === 'home') router.push('/');
-    if (item === 'compare') return; // already here
-    if (item === 'trash') router.push('/');
+    if (item === 'compare') return;
   }, [router]);
 
   const isActiveCompare = started && selectedA && selectedB;
@@ -228,7 +227,6 @@ function ComparePageContent() {
 
       <div className="flex flex-1 min-h-0">
         <SideDrawer
-          variant="home"
           activeItem="compare"
           onItemSelect={handleNavChange}
           onSignOut={handleSignOut}
