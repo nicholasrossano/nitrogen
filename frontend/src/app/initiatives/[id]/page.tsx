@@ -181,7 +181,7 @@ function InitiativePageContent() {
         }),
       ]).finally(() => setPageReady(true));
     }
-  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan, loadDriveLinkedFiles]);
+  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan, loadDriveLinkedFiles, syncDriveFiles]);
 
   // Fade the overlay out after loads complete, then unmount it
   useEffect(() => {
@@ -601,7 +601,7 @@ function InitiativePageContent() {
                   onUploadFile={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
                   onImportFromDrive={isViewer ? undefined : handleFilesViewDriveImport}
                   driveLinkedFiles={driveLinkedFiles}
-                  onSyncDriveFiles={isViewer ? undefined : () => syncDriveFiles(initiativeId)}
+                  onSyncDriveFiles={isViewer ? undefined : async () => { await syncDriveFiles(initiativeId); }}
                 />
               </main>
             ) : activeView === 'plan' ? (

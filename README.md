@@ -77,7 +77,7 @@ docker-compose exec backend python scripts/seed_corpus.py
 
 **Prerequisites:**
 - Python 3.11+ 
-- Node.js 18+
+- Node.js 20+
 - PostgreSQL with pgvector (or use Neon cloud database)
 
 **Backend:**
