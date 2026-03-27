@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/stores/chatStore';
-import { ALL_TOOLS } from '@/components/chat/ToolPicker';
+import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 
@@ -117,14 +117,14 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
         {headerContent}
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
-          {ALL_TOOLS.filter((tool) => devMode || !tool.beta).map((tool) => {
-            const isTemplate = tool.id === 'template_fill';
+          {ALL_MODULES.filter((module) => devMode || !module.beta).map((module) => {
+            const isTemplate = module.id === 'template_fill';
             return (
               <button
-                key={tool.id}
+                key={module.id}
                 type="button"
                 disabled={disabled}
-                onClick={() => onSend(`Generate ${tool.name}`, tool.id)}
+                onClick={() => onSend(`Generate ${module.name}`, module.id)}
                 className={`relative flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default ${
                   isTemplate
                     ? 'border-2 border-dashed border-accent-secondary/30 bg-accent-secondary/[0.05] hover:border-accent-secondary/50 hover:bg-accent-secondary/[0.09]'
@@ -136,8 +136,8 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                     BETA
                   </span>
                 )}
-                <span className={`[&>svg]:w-4.5 [&>svg]:h-4.5 ${isTemplate ? 'text-accent-secondary/70' : 'text-accent/70'}`}>{tool.icon}</span>
-                <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{tool.name}</span>
+                <span className={`[&>svg]:w-4.5 [&>svg]:h-4.5 ${isTemplate ? 'text-accent-secondary/70' : 'text-accent/70'}`}>{module.icon}</span>
+                <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{module.name}</span>
               </button>
             );
           })}
