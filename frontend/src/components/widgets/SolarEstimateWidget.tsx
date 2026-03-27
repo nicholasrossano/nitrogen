@@ -170,7 +170,7 @@ export function SolarEstimateWidget({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  const inputs: Record<string, any> = data.inputs || {};
+  const inputs = useMemo<Record<string, any>>(() => data.inputs ?? {}, [data.inputs]);
   const result = data.result;
   const missingEssentials: string[] = data.missing_essentials || [];
   const hasResult = !!result;
