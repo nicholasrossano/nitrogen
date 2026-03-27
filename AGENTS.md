@@ -25,6 +25,11 @@
 - Fix any linter errors introduced by the change before responding.
 - For JSX in particular: watch for ternary branches with multiple sibling elements — they must be wrapped in a fragment (`<>...</>`).
 
+**Import integrity after deletions (non-trivial changes):**
+- After deleting any backend Python file, immediately `grep` the entire backend for imports of the deleted module before finalizing. Key aggregator files to check: `models/__init__.py`, `alembic/env.py`, `app/main.py`, and any API/service file that might lazy-import it.
+- After deleting any frontend file, check its barrel exports (`index.ts`) and any files that import it by name.
+- If the local servers are running (`localhost:8000`, `localhost:3000`), do a quick `curl http://localhost:8000/health` after backend edits to confirm the reload succeeded cleanly.
+
 **Scope discipline:**
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.

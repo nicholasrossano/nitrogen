@@ -4,14 +4,12 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LCOEModelWidget } from '@/components/widgets/LCOEModelWidget';
 import { CarbonModelWidget } from '@/components/widgets/CarbonModelWidget';
-import { GSCertificationWidget } from '@/components/widgets/GSCertificationWidget';
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import type { AlignmentNewMessage } from '@/components/widgets/AlignmentWidget';
 import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequirementsWidget';
 import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
-import { PDDWorkspaceWidget } from '@/components/widgets/PDDWorkspaceWidget';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { SolarEstimateWidget } from '@/components/widgets/SolarEstimateWidget';
 
@@ -21,13 +19,11 @@ export const EDITOR_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
   'carbon_inputs', 'carbon_output',
   'solar_inputs', 'solar_output',
-  'gs_checklist', 'gs_cover_letter',
   'memo_viewer',
   'checklist_viewer',
   'alignment',
   'template_requirements',
   'template_viewer',
-  'pdd_workspace',
   'document_viewer',
 ] as const;
 
@@ -38,14 +34,11 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   carbon_output: 'carbon',
   solar_inputs: 'solar',
   solar_output: 'solar',
-  gs_checklist: 'gs',
-  gs_cover_letter: 'gs',
   memo_viewer: 'memo',
   checklist_viewer: 'checklist',
   alignment: 'alignment',
   template_requirements: 'template',
   template_viewer: 'template',
-  pdd_workspace: 'pdd',
   document_viewer: 'document_viewer',
 };
 
@@ -68,14 +61,11 @@ const WIDGET_LABELS: Record<string, string> = {
   carbon_output: 'Carbon Calculator',
   solar_inputs: 'Solar Estimate',
   solar_output: 'Solar Estimate',
-  gs_checklist: 'GS Certification',
-  gs_cover_letter: 'GS Certification',
   memo_viewer: 'Investment Memo',
   checklist_viewer: 'Due Diligence',
   alignment: 'Memo Outline',
   template_requirements: 'Template',
   template_viewer: 'Template Output',
-  pdd_workspace: 'Project Design Document',
   document_viewer: 'Document',
 };
 
@@ -147,9 +137,6 @@ function EditorWidgetRenderer({
     case 'solar_inputs':
     case 'solar_output':
       return <SolarEstimateWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
-    case 'gs_checklist':
-    case 'gs_cover_letter':
-      return <GSCertificationWidget data={data} initiativeId={initiativeId} messageId={messageId} />;
     case 'memo_viewer':
       return <MemoViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'checklist_viewer':
@@ -160,8 +147,6 @@ function EditorWidgetRenderer({
       return <TemplateRequirementsWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
     case 'template_viewer':
       return <TemplateViewerWidget data={data} initiativeId={initiativeId} isActive />;
-    case 'pdd_workspace':
-      return <PDDWorkspaceWidget data={data} initiativeId={initiativeId} isActive />;
     case 'document_viewer':
       return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
     default:

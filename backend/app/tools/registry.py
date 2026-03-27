@@ -24,7 +24,6 @@ class ToolRegistry:
         from app.tools.lcoe_tool import LCOETool
         from app.tools.carbon_tool import CarbonTool
         from app.tools.template_tool import TemplateFillTool
-        from app.tools.pdd_tool import PDDTool
         from app.tools.pvwatts_tool import PVWattsTool
         
         tools = [
@@ -33,7 +32,6 @@ class ToolRegistry:
             LCOETool(),
             CarbonTool(),
             TemplateFillTool(),
-            PDDTool(),
             PVWattsTool(),
         ]
         

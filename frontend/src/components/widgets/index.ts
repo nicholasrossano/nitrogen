@@ -15,8 +15,6 @@ export { CarbonOutputWidget } from './CarbonOutputWidget';
 export { LCOEModelWidget } from './LCOEModelWidget';
 export { CarbonModelWidget } from './CarbonModelWidget';
 export { ProposedValueWidget } from './ProposedValueWidget';
-export { GSCertificationWidget } from './GSCertificationWidget';
 export { CoverLetterEditor } from './CoverLetterEditor';
 export { CoverLetterProposedValueWidget } from './CoverLetterProposedValueWidget';
-export { PDDWorkspaceWidget } from './PDDWorkspaceWidget';
 export { SolarEstimateWidget } from './SolarEstimateWidget';

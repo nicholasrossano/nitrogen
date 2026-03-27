@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale, Settings, HardDriveDownload, RefreshCw, Unlink } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, Scale, Settings, HardDriveDownload, RefreshCw, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -13,7 +13,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
-export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'evaluate';
+export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat';
 export type SideDrawerVariant = 'home' | 'project';
 
 interface NavItemConfig {
@@ -42,7 +42,6 @@ const HOME_ITEMS: NavItemConfig[] = [
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'home', label: 'Projects', Icon: LayoutGrid },
   { key: 'plan', label: 'Plan', Icon: Map },
-  { key: 'evaluate', label: 'Evaluate', Icon: FlaskConical },
   { key: 'chat', label: 'Generate', Icon: Zap },
 ];
 
