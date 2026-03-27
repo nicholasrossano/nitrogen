@@ -3,9 +3,12 @@
 from openai import AsyncOpenAI
 import json
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.initiative import Initiative
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.tools import get_tool_registry
 
 settings = get_settings()
@@ -14,10 +17,18 @@ settings = get_settings()
 class ChatAgentService:
     """Service for conversational intake and workflow agent."""
     
-    def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(self, user_id: str | None = None, db: AsyncSession | None = None):
+        self.user_id = user_id
+        self.db = db
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.model = settings.openai_model
         self.registry = get_tool_registry()
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
     
     def _get_system_prompt(self, initiative: Initiative, widget_type: str | None = None) -> str:
         """Get system prompt based on current context."""
@@ -154,12 +165,14 @@ If tools are selected and you notice missing required inputs, gently ask about t
         # Use lower max_tokens to enforce brevity
         max_tokens = 120 if widget_type else 200
         
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.model,
             messages=api_messages,
             temperature=0.7,
             max_tokens=max_tokens,
         )
+        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         return response.choices[0].message.content
     
@@ -184,7 +197,8 @@ If tools are selected and you notice missing required inputs, gently ask about t
         context = self._build_context(initiative)
         
         try:
-            response = await self.client.chat.completions.create(
+            client = await self._get_client()
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -272,6 +286,7 @@ IMPORTANT:
                 tool_choice={"type": "function", "function": {"name": "analyze_message"}},
                 timeout=30.0,
             )
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
             
             tool_call = response.choices[0].message.tool_calls[0]
             result = json.loads(tool_call.function.arguments)
@@ -308,7 +323,8 @@ IMPORTANT:
             for msg in messages
         ])
         
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {
@@ -378,6 +394,7 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
             }],
             tool_choice={"type": "function", "function": {"name": "extract_project_info"}},
         )
+        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
@@ -407,7 +424,8 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
             for msg in messages
         ])
         
-        response = await self.client.chat.completions.create(
+        client = await self._get_client()
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {
@@ -432,6 +450,7 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
             }],
             tool_choice={"type": "function", "function": {"name": "extract_inputs"}},
         )
+        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
@@ -439,7 +458,8 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
     async def quick_doc_summary(self, preview_text: str) -> str:
         """Generate a ONE sentence summary of what the document appears to be about."""
         try:
-            response = await self.client.chat.completions.create(
+            client = await self._get_client()
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -454,6 +474,7 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
                 temperature=0.5,
                 max_tokens=40,
             )
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
             return response.choices[0].message.content
         except Exception:
             return "I'll use this to create more accurate outputs."
@@ -465,7 +486,8 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
             context += f". {description[:300]}"
         
         try:
-            response = await self.client.chat.completions.create(
+            client = await self._get_client()
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -484,6 +506,7 @@ Examples: solar/energy → Sun, water/sanitation → Droplet, agriculture/farmin
                 temperature=0.3,
                 max_tokens=10,
             )
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
             icon_name = response.choices[0].message.content.strip()
             return icon_name
         except Exception as e:
@@ -494,7 +517,8 @@ Examples: solar/energy → Sun, water/sanitation → Droplet, agriculture/farmin
     async def generate_materials_request_v2(self, user_description: str) -> str:
         """Generate a contextual materials request based on user's project description."""
         try:
-            response = await self.client.chat.completions.create(
+            client = await self._get_client()
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -520,6 +544,7 @@ RULES:
                 temperature=0.7,
                 max_tokens=120,
             )
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
             # Strip any quotes the LLM might add
             result = response.choices[0].message.content.strip()
             if result.startswith('"') and result.endswith('"'):

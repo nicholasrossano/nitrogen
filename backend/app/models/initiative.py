@@ -273,7 +273,7 @@ class Initiative(Base):
 
 
 # Import for relationship typing
-from app.models.chat import ChatMessage  # noqa: E402
+from app.models.onboarding import ChatMessage  # noqa: E402
 from app.models.evidence import EvidenceDoc  # noqa: E402
 from app.models.memo import MemoVersion  # noqa: E402
 from app.models.project_material import ProjectMaterial  # noqa: E402

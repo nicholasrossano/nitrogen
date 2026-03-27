@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.tools.base import (
     BaseTool,
     ExecutionModel,
@@ -33,7 +34,7 @@ from app.tools.base import (
     ToolOutput,
 )
 from app.models.initiative import Initiative
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.services.lcoe_engine import (
     LCOEEngine,
     LCOEInput,
@@ -115,6 +116,14 @@ class LCOETool(BaseTool):
                 "discount rate", "wacc", "capacity factor",
                 "solar", "wind", "battery", "mini-grid", "clean cooking",
             ],
+            export_format="xlsx",
+        )
+
+    def is_exportable(self, content: dict) -> bool:
+        return bool(
+            isinstance(content, dict)
+            and content.get("computable", False)
+            and content.get("inputs")
         )
 
     @property
@@ -188,9 +197,11 @@ class LCOETool(BaseTool):
         self,
         conversation_text: str,
         tech_type: str | None = None,
+        user_id: str | None = None,
+        db: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """Extract LCOE inputs from raw conversation text via LLM."""
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        client, is_byok = await get_openai_client(user_id, db)
         try:
             resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
@@ -218,6 +229,8 @@ class LCOETool(BaseTool):
                 tool_choice={"type": "function", "function": {"name": "extract_lcoe_inputs"}},
                 temperature=0,
             )
+            if user_id and db:
+                await record_usage_from_response(user_id, settings.openai_orchestration_model, resp, db, is_byok=is_byok)
             tool_call = resp.choices[0].message.tool_calls[0]
             extracted = json.loads(tool_call.function.arguments)
             return {k: v for k, v in extracted.items() if v is not None}
@@ -229,6 +242,7 @@ class LCOETool(BaseTool):
         self,
         db: AsyncSession,
         initiative_id: UUID,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         """Extract LCOE inputs from DB-stored chat history and project context."""
         result = await db.execute(
@@ -257,7 +271,9 @@ class LCOETool(BaseTool):
         )
 
         return await self.extract_inputs_from_text(
-            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}"
+            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}",
+            user_id=user_id,
+            db=db,
         )
 
     async def execute(

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import field_validator, model_validator, computed_field
 from functools import lru_cache
 import json
-from typing import Self
+from typing import Self, Optional
 
 
 class Settings(BaseSettings):
@@ -64,6 +64,38 @@ class Settings(BaseSettings):
     chunk_size: int = 300
     chunk_overlap: int = 75
     retrieval_top_k: int = 5
+
+    # Google Drive OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/v1/google/callback"
+    frontend_url: str = "http://localhost:3000"
+
+    # Stripe billing
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_starter_price_id: str = ""
+    stripe_pro_price_id: str = ""
+    billing_testing_mode: bool = False
+
+    # Free trial limits
+    trial_message_limit: int = 10
+    trial_cost_limit_usd: float = 1.0
+
+    # Access code — upgrades trial to Starter-equivalent budget (one-time)
+    access_code: str = ""
+
+    # Usage limits (API cost in USD per billing period)
+    starter_usage_limit_usd: float = 14.0
+    pro_usage_limit_usd: float = 42.0
+
+    # Encryption key for BYOK API keys at rest (Fernet key)
+    api_key_encryption_key: str = ""
+
+    @computed_field
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(self.stripe_secret_key)
     
     @field_validator('cors_origins', mode='before')
     @classmethod

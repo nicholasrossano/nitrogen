@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.tools.base import (
     BaseTool,
     ExecutionModel,
@@ -100,9 +101,17 @@ DEFAULT_MEMO_SECTIONS = [
 class InvestmentMemoTool(BaseTool):
     """Tool for generating investment memos with RAG-grounded citations."""
     
-    def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(self, user_id: str | None = None, db: AsyncSession | None = None):
+        self.user_id = user_id
+        self.db = db
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.model = settings.openai_model
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
     
     @property
     def definition(self) -> ToolDefinition:
@@ -114,6 +123,7 @@ class InvestmentMemoTool(BaseTool):
             output_type="memo",
             category="documentation",
             keywords=["investment", "memo", "recommendation", "funding", "grant", "decision"],
+            export_format="docx",
         )
     
     @property
@@ -277,6 +287,7 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
     
     async def _generate_outline(self, project_summary: str) -> dict:
         """Use LLM to generate a context-aware memo outline."""
+        client = await self._get_client()
         system_prompt = """You are an expert at structuring investment memos for development projects.
 
 Given a project description, generate a tailored memo outline that will help the user understand what the memo will cover.
@@ -293,7 +304,7 @@ Also identify:
 
 Tailor the key points to the specific project context - don't just use generic points."""
 
-        response = await self.client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -357,6 +368,8 @@ Create a structured outline with sections tailored to this specific project type
             tool_choice={"type": "function", "function": {"name": "generate_outline"}},
             temperature=0.7,
         )
+        if self.user_id and self.db:
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
@@ -411,7 +424,8 @@ The user might ask to:
 Apply their feedback thoughtfully. If they ask to change one thing, change that thing. If they ask for broader changes, make broader changes. Keep the rest intact."""
 
         try:
-            response = await self.client.chat.completions.create(
+            client = await self._get_client()
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -456,6 +470,8 @@ Return the updated outline.
                 tool_choice={"type": "function", "function": {"name": "update_outline"}},
                 temperature=0.4,
             )
+            if self.user_id and self.db:
+                await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
             
             tool_call = response.choices[0].message.tool_calls[0]
             updated_data = json.loads(tool_call.function.arguments)
@@ -678,6 +694,7 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
     
     async def _generate_content(self, project_summary: str, context: str, alignment_instructions: str | None = None, alignment: "ToolAlignment | None" = None, valid_citations: list[int] | None = None) -> dict:
         """Generate memo content using GPT."""
+        client = await self._get_client()
         
         # Build citation rules based on what's actually available
         if valid_citations and len(valid_citations) > 0:
@@ -736,7 +753,7 @@ Generate a structured memo. Use citation numbers [1], [2], etc. to reference evi
         # Build dynamic schema based on alignment sections if provided
         if alignment and alignment.sections:
             # Dynamic schema based on user's custom sections
-            response = await self.client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -778,7 +795,7 @@ Generate a structured memo. Use citation numbers [1], [2], etc. to reference evi
             )
         else:
             # Default hardcoded schema
-            response = await self.client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -827,6 +844,8 @@ Generate a structured memo. Use citation numbers [1], [2], etc. to reference evi
                 temperature=0.7,
             )
         
+        if self.user_id and self.db:
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
     

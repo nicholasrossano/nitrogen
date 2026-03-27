@@ -36,6 +36,7 @@ class PDDTool(BaseTool):
             output_type="pdd",
             category="documentation",
             keywords=["pdd", "project design", "design document", "carbon", "methodology"],
+            export_format="docx",
         )
 
     @property

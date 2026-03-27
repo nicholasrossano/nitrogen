@@ -200,13 +200,17 @@ async def delete_material(
     return {"success": True, "message": "Material deleted"}
 
 
-EXPORT_FORMAT_MAP = {
-    "memo": "docx",
-    "checklist": "xlsx",
-    "spreadsheet": "xlsx",
-    "lcoe": "xlsx",
-    "carbon": "xlsx",
-}
+def _resolve_tool(tool_id: str, output_type: str):
+    """Look up the BaseTool for a deliverable, matching on tool_id first, then output_type."""
+    from app.tools.registry import get_tool_registry
+    registry = get_tool_registry()
+    tool = registry.get_tool(tool_id)
+    if tool:
+        return tool
+    for t in registry.get_all_tools():
+        if t.definition.output_type == output_type:
+            return t
+    return None
 
 
 @router.get(
@@ -272,7 +276,11 @@ async def list_project_files(
         if "error" in data and "title" not in data:
             continue
         output_type = data.get("output_type", "document")
-        export_fmt = EXPORT_FORMAT_MAP.get(output_type)
+        content = data.get("content") or {}
+
+        tool = _resolve_tool(tool_id, output_type)
+        export_fmt = tool.definition.export_format if tool else None
+        exportable = tool.is_exportable(content) if tool else False
 
         exported = False
         download_url = None
@@ -280,17 +288,15 @@ async def list_project_files(
             exported = True
             download_url = f"/api/v1/exports/{latest_memo.id}"
 
-        content = data.get("content") or {}
-
-        if output_type in ("lcoe", "carbon"):
-            exportable = bool(
-                export_fmt is not None
-                and isinstance(content, dict)
-                and content.get("computable", False)
-                and content.get("inputs")
-            )
-        else:
-            exportable = export_fmt is not None
+        # Templates stored as deliverables point at a ProjectMaterial row
+        if output_type == "template":
+            material_id = content.get("material_id") if isinstance(content, dict) else None
+            if material_id:
+                exportable = True
+                exported = True
+                download_url = f"/api/v1/template/{material_id}/export"
+                ext = (content.get("filename") or "").rsplit(".", 1)[-1] or "docx"
+                export_fmt = ext
 
         export_data = None
         if output_type == "checklist":
@@ -317,6 +323,8 @@ async def list_project_files(
         d.get("output_type") == "memo" for d in deliverables.values()
     )
     if not has_memo_in_deliverables and latest_memo:
+        from app.tools.registry import get_tool_registry
+        memo_tool = get_tool_registry().get_tool("investment_memo")
         memo_title = (latest_memo.content or {}).get("title", "Investment Memo")
         exported = bool(latest_memo.export_path)
         download_url = f"/api/v1/exports/{latest_memo.id}" if exported else None
@@ -326,7 +334,7 @@ async def list_project_files(
             output_type="memo",
             created_at=latest_memo.created_at,
             exportable=True,
-            export_format="docx",
+            export_format=memo_tool.definition.export_format if memo_tool else "docx",
             exported=exported,
             download_url=download_url,
         ))

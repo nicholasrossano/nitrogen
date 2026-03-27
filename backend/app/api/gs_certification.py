@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user, MockUser, AuthUser
 from app.core.database import get_db
 from app.core.permissions import require_viewer, require_editor
-from app.models.core_chat import CoreChatSession
+from app.models.chat import CoreChatSession
 from app.models.gs_template import GSTemplateVersion
 from app.models.gs_workspace import GSCertificationWorkspace
 from app.services.gs_template_service import (

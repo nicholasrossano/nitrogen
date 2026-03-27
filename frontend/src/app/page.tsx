@@ -193,7 +193,7 @@ function HomePageContent() {
                     ? 'Try a different search.'
                     : isTrashView
                       ? 'Projects you delete will appear here.'
-                      : 'Create your first project to get started with investment memos and due diligence.'}
+                      : 'Create your first project.'}
                 </p>
                 {!isTrashView && !searchQuery.trim() && (
                   <button

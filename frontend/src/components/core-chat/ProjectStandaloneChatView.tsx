@@ -12,8 +12,16 @@ import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
 
-const DOCUMENT_TOOL_IDS = ['investment_memo', 'due_diligence_checklist'];
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+
+interface AlignmentNewMessage {
+  id: string;
+  role: string;
+  content: string;
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
+  created_at?: string | null;
+}
 
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
@@ -24,6 +32,8 @@ interface ProjectStandaloneChatViewProps {
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   /** Called when user clicks an internal citation */
   onCitationClick?: (citation: SourceCitation) => void;
+  /** Callback for EditorSidePanel to thread through to AlignmentWidget */
+  onAlignmentConfirmedRef?: React.MutableRefObject<((msgs: AlignmentNewMessage[]) => void) | null>;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -52,6 +62,7 @@ export function ProjectStandaloneChatView({
   onBack,
   onEditorWidgetsChange,
   onCitationClick,
+  onAlignmentConfirmedRef,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -68,74 +79,32 @@ export function ProjectStandaloneChatView({
   const [showTemplateInterstitial, setShowTemplateInterstitial] = useState(false);
   const [templateUploading, setTemplateUploading] = useState(false);
 
-  // Subscribe to initiative store for alignment confirm / feedback flows
-  const storeMessages = useInitiativeStore((s) => s.messages);
-  const storeAlignmentLoading = useInitiativeStore((s) => s.alignmentLoading);
-  const storeGenerating = useInitiativeStore((s) => s.generating);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
-  const documentFlowRef = useRef(false);
-  const lastSyncedIdRef = useRef<string | null>(null);
-  const prevLoadingRef = useRef(false);
-  const documentFlowPersistedRef = useRef(false);
+  const handleAlignmentConfirmed = useCallback(
+    (newMessages: AlignmentNewMessage[]) => {
+      const chatMessages: ChatMessage[] = newMessages.map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        widget_type: m.widget_type ?? null,
+        widget_data: m.widget_data ?? null,
+        created_at: m.created_at ?? new Date().toISOString(),
+      }));
+      setLocalMessages((prev) => [...prev, ...chatMessages]);
+    },
+    [],
+  );
 
   useEffect(() => {
-    const wasLoading = prevLoadingRef.current;
-    const isLoading = storeAlignmentLoading || storeGenerating;
-    prevLoadingRef.current = isLoading;
-
-    if (!documentFlowRef.current || !lastSyncedIdRef.current) return;
-    if (!(wasLoading && !isLoading)) return;
-
-    const anchorIdx = storeMessages.findIndex((m) => m.id === lastSyncedIdRef.current);
-    if (anchorIdx >= 0 && anchorIdx < storeMessages.length - 1) {
-      const newMsgs = storeMessages.slice(anchorIdx + 1);
-      if (newMsgs.length > 0) {
-        setLocalMessages((prev) => [...prev, ...newMsgs]);
-        lastSyncedIdRef.current = newMsgs[newMsgs.length - 1].id;
-      }
+    if (onAlignmentConfirmedRef) {
+      onAlignmentConfirmedRef.current = handleAlignmentConfirmed;
     }
-  }, [storeAlignmentLoading, storeGenerating, storeMessages]);
-
-  // Persist document flow conversation as a core_chat session once
-  // deliverable messages appear (so it shows in chat history)
-  useEffect(() => {
-    if (!documentFlowRef.current || documentFlowPersistedRef.current) return;
-    const hasDeliverable = localMessages.some(
-      (m) => m.widget_type && DELIVERABLE_WIDGET_TYPES.includes(m.widget_type),
-    );
-    if (!hasDeliverable) return;
-
-    documentFlowPersistedRef.current = true;
-    const msgs = localMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      widget_type: m.widget_type ?? undefined,
-      widget_data: m.widget_data ?? undefined,
-      sources: m.sources ?? undefined,
-      completion_meta: m.completion_meta ?? undefined,
-    }));
-    api
-      .saveSessionFromMessages(msgs, sessionTitle ?? undefined, initiativeId)
-      .then(({ session_id }) => {
-        setCurrentSessionId(session_id);
-        // Add to session list so it appears immediately in history
-        setDbSessions((prev) => [
-          {
-            id: session_id,
-            title: sessionTitle || 'Deliverable generation',
-            createdAt: Date.now(),
-            messages: [],
-          },
-          ...prev,
-        ]);
-      })
-      .catch((err) => console.warn('Failed to persist document flow session:', err));
-  }, [localMessages, sessionTitle]);
+  }, [onAlignmentConfirmedRef, handleAlignmentConfirmed]);
 
   // Load session list from DB on mount — scoped to this project
   useEffect(() => {
-    api.getCoreChatSessions(initiativeId)
+    api.getChatSessions(initiativeId)
       .then(({ sessions }) => {
         setDbSessions(
           sessions.map((s) => ({
@@ -155,7 +124,7 @@ export function ProjectStandaloneChatView({
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
       // Refresh sessions list so the just-finished conversation appears in history
-      api.getCoreChatSessions(initiativeId)
+      api.getChatSessions(initiativeId)
         .then(({ sessions }) => {
           setDbSessions(
             sessions.map((s) => ({
@@ -171,9 +140,6 @@ export function ProjectStandaloneChatView({
       setSessionTitle(null);
       setCurrentSessionId(null);
       setFeedbackMap({});
-      documentFlowRef.current = false;
-      documentFlowPersistedRef.current = false;
-      lastSyncedIdRef.current = null;
       setShowTemplateInterstitial(false);
       setTemplateUploading(false);
     }
@@ -238,7 +204,7 @@ export function ProjectStandaloneChatView({
       setError(null);
       setResearchSteps([]);
 
-      await api.sendComplianceChatStream(
+      await api.sendChatStream(
         history,
         content,
         (text) => setThinkingLines((prev) => [...prev, text]),
@@ -304,47 +270,6 @@ export function ProjectStandaloneChatView({
       );
     },
     [initiativeId, currentSessionId],
-  );
-
-  const sendViaInitiativePipeline = useCallback(
-    async (content: string, currentMessages: ChatMessage[], toolHint: string) => {
-      const words: string[] = [];
-      setThinkingLines([]);
-      setStreamingContent('');
-      setError(null);
-
-      await api.sendMessageStream(
-        initiativeId,
-        content,
-        (word) => {
-          words.push(word);
-          setStreamingContent(words.join(' '));
-        },
-        (message, _stageStatus) => {
-          setStreamingContent('');
-          setThinkingLines([]);
-          const assistantMsg: ChatMessage = {
-            id: message.id,
-            role: 'assistant',
-            content: message.content,
-            sources: message.sources ?? null,
-            thinking_lines: message.thinking_lines ?? undefined,
-            completion_meta: message.completion_meta ?? null,
-            widget_type: message.widget_type ?? null,
-            widget_data: message.widget_data ?? null,
-            created_at: message.created_at ?? new Date().toISOString(),
-          };
-          setLocalMessages((prev) => [...prev, assistantMsg]);
-          setSending(false);
-
-          // Track the flow so we can sync follow-up messages after alignment confirm/feedback
-          documentFlowRef.current = true;
-          lastSyncedIdRef.current = message.id;
-        },
-        toolHint,
-      );
-    },
-    [initiativeId],
   );
 
   const handleTemplateUpload = useCallback(
@@ -462,11 +387,7 @@ export function ProjectStandaloneChatView({
       setSending(true);
 
       try {
-        if (toolHint && DOCUMENT_TOOL_IDS.includes(toolHint)) {
-          await sendViaInitiativePipeline(content, updatedMessages, toolHint);
-        } else {
-          await sendViaStream(content, updatedMessages, toolHint);
-        }
+        await sendViaStream(content, updatedMessages, toolHint);
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
@@ -474,7 +395,7 @@ export function ProjectStandaloneChatView({
         setSending(false);
       }
     },
-    [localMessages, onMessageSent, sendViaStream, sendViaInitiativePipeline],
+    [localMessages, onMessageSent, sendViaStream],
   );
 
   const handleEditMessage = useCallback(
@@ -549,7 +470,7 @@ export function ProjectStandaloneChatView({
   const handleLoadSession = useCallback(
     async (session: ChatSession) => {
       try {
-        const { messages, title } = await api.getCoreChatSessionMessages(session.id);
+        const { messages, title } = await api.getChatSessionMessages(session.id);
         setLocalMessages(messages);
         setSessionTitle(title || session.title);
         setCurrentSessionId(session.id);
@@ -569,7 +490,7 @@ export function ProjectStandaloneChatView({
   const handleDeleteSession = useCallback(
     (id: string) => {
       setDbSessions((prev) => prev.filter((s) => s.id !== id));
-      api.deleteCoreChatSession(id).catch((err) => {
+      api.deleteChatSession(id).catch((err) => {
         console.error('Failed to delete session:', err);
       });
     },

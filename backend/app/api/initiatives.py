@@ -18,7 +18,7 @@ from app.core.permissions import (
 )
 from app.core.storage import get_storage
 from app.models.initiative import Initiative
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.models.project_share import ProjectShare
 from app.models.user import User
@@ -158,7 +158,7 @@ async def list_initiatives(
             .outerjoin(User, Initiative.user_id == User.id)
             .where(
                 ProjectShare.user_id == user.uid,
-                not Initiative.archived,
+                Initiative.archived == False,  # noqa: E712
             )
             .order_by(Initiative.updated_at.desc())
             .limit(limit)

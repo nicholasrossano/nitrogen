@@ -487,30 +487,28 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
           <div className="flex-shrink-0 px-4 pt-4 pb-2 flex items-center justify-end gap-2">
 
               {/* Expand / Collapse all */}
-              <div className="flex items-center bg-surface-subtle rounded-full p-0.5">
-                <button
-                  onClick={() => {
-                    if (viewMode === 'category') {
-                      setExpandedPillars(allPillarsExpanded ? new Set() : new Set(pillars.map((p) => p.id)));
-                    } else {
-                      setCollapsedPhases(collapsedPhases.size === 0 ? new Set(phases.map((p) => p.id)) : new Set());
-                    }
-                  }}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap bg-white text-text-primary shadow-sm border border-stroke-subtle"
-                >
-                  {(viewMode === 'category' ? allPillarsExpanded : collapsedPhases.size === 0) ? 'Collapse all' : 'Expand all'}
-                  <ChevronsUpDown className="w-3 h-3" />
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  if (viewMode === 'category') {
+                    setExpandedPillars(allPillarsExpanded ? new Set() : new Set(pillars.map((p) => p.id)));
+                  } else {
+                    setCollapsedPhases(collapsedPhases.size === 0 ? new Set(phases.map((p) => p.id)) : new Set());
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] hover:bg-black/[0.07] transition-colors whitespace-nowrap"
+              >
+                {(viewMode === 'category' ? allPillarsExpanded : collapsedPhases.size === 0) ? 'Collapse all' : 'Expand all'}
+                <ChevronsUpDown className="w-3 h-3" />
+              </button>
 
               {/* Categories filter */}
-              <div ref={filterDropdownRef} className="relative flex items-center bg-surface-subtle rounded-full p-0.5">
+              <div ref={filterDropdownRef} className="relative">
                 <button
                   onClick={() => setFilterDropdownOpen((v) => !v)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap bg-surface-subtle ring-1 ring-inset hover:bg-black/[0.07] ${
                     selectedPillarFilter
-                      ? 'bg-white text-accent shadow-sm border border-accent/30'
-                      : 'bg-transparent text-text-tertiary hover:text-text-secondary'
+                      ? 'ring-accent/40 text-accent'
+                      : 'ring-black/[0.08] text-text-secondary'
                   }`}
                 >
                   {selectedPillarFilter
@@ -552,13 +550,13 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
               </div>
 
           {/* Type filter — always visible */}
-          <div ref={typeFilterRef} className="relative flex items-center bg-surface-subtle rounded-full p-0.5">
+          <div ref={typeFilterRef} className="relative">
             <button
               onClick={() => setTypeFilterDropdownOpen((v) => !v)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 whitespace-nowrap ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap bg-surface-subtle ring-1 ring-inset hover:bg-black/[0.07] ${
                 selectedTypeFilter
-                  ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
-                  : 'bg-transparent text-text-tertiary hover:text-text-secondary'
+                  ? 'ring-accent/40 text-accent'
+                  : 'ring-black/[0.08] text-text-secondary'
               }`}
             >
               {selectedTypeFilter === 'deliverable' && <FileCheck2 className="w-3 h-3" />}
@@ -592,7 +590,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
           {/* View mode toggle */}
           {hasPhases && (
-            <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit">
+            <div className="flex items-center bg-surface-subtle rounded-full p-0.5 w-fit ring-1 ring-inset ring-black/[0.08]">
               {([['category', LayoutGrid, 'Category'], ['phase', Clock, 'Phases']] as const).map(([mode, Icon, label]) => (
                 <button
                   key={mode}
@@ -600,10 +598,10 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                     setViewMode(mode);
                     if (mode === 'category') setSelectedPillarFilter(null);
                   }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150 ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150 ${
                     viewMode === mode
-                      ? 'bg-white text-text-primary shadow-sm border border-stroke-subtle'
-                      : 'text-text-tertiary hover:text-text-secondary border border-transparent'
+                      ? 'bg-white text-text-primary shadow-sm'
+                      : 'text-text-tertiary hover:text-text-secondary'
                   }`}
                 >
                   <Icon className="w-3 h-3" />

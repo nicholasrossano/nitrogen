@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import AuthUser, get_current_user
+from app.core.billing_guard import require_ai_access
 from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.services.deep_dive import DeepDiveService
 from app.services.project_plan import ProjectPlanService
@@ -51,7 +52,7 @@ async def get_project_plan(
 async def generate_project_plan(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Generate a new project plan (or refresh the existing one)."""
     initiative = await require_editor(db, initiative_id, user)
@@ -62,7 +63,7 @@ async def generate_project_plan(
             detail="Project needs a description before a plan can be generated.",
         )
 
-    service = ProjectPlanService(db)
+    service = ProjectPlanService(db, user_id=user.uid)
     existing_plan = initiative.project_plan
 
     try:
@@ -89,7 +90,7 @@ async def generate_project_plan(
 async def propose_plan_categories(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Propose high-level plan categories adapted to the project."""
     initiative = await require_editor(db, initiative_id, user)
@@ -110,7 +111,7 @@ async def propose_plan_categories(
     recent_messages = list(reversed(result.scalars().all()))
     chat_history = [{"role": m.role, "content": m.content} for m in recent_messages]
 
-    service = ProjectPlanService(db)
+    service = ProjectPlanService(db, user_id=user.uid)
     try:
         categories = await service.propose_categories(initiative=initiative, chat_history=chat_history)
     except Exception:
@@ -128,12 +129,12 @@ async def confirm_plan_categories(
     initiative_id: UUID,
     body: ConfirmCategoriesRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Accept confirmed categories and generate the full project plan."""
     initiative = await require_editor(db, initiative_id, user)
 
-    service = ProjectPlanService(db)
+    service = ProjectPlanService(db, user_id=user.uid)
     existing_plan = initiative.project_plan
 
     try:
@@ -307,7 +308,7 @@ async def deep_dive_plan_item(
     item_id: str,
     body: DeepDiveRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Run a targeted research deep dive on a specific project plan sub-item.
 
@@ -316,7 +317,7 @@ async def deep_dive_plan_item(
     """
     initiative = await require_editor(db, initiative_id, user)
 
-    service = DeepDiveService(db)
+    service = DeepDiveService(db, user_id=user.uid)
 
     # Check for cached LLM result
     plan = initiative.project_plan or {}
