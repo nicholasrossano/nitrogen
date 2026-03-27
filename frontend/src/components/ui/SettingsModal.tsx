@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, FlaskConical, CreditCard, Key, Loader2, ExternalLink } from 'lucide-react';
+import { X, FlaskConical, CreditCard, Loader2, ExternalLink } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useBillingStore } from '@/stores/billingStore';
@@ -87,10 +87,9 @@ const TIER_LABELS: Record<string, string> = {
   unlimited: 'Unlimited',
 };
 
-function PlanBillingSection() {
+function PlanBillingSection({ onOpenPaywall }: { onOpenPaywall: () => void }) {
   const { tier, usedUsd, limitUsd, usagePercent, trialMessagesRemaining, accessCodeAvailable, accessCodeRedeemed, loaded } = useBillingStore();
   const redeemAccessCode = useBillingStore((s) => s.redeemAccessCode);
-  const fetchBillingStatus = useBillingStore((s) => s.fetchBillingStatus);
 
   const [portalLoading, setPortalLoading] = useState(false);
   const [codeInput, setCodeInput] = useState('');
@@ -98,19 +97,15 @@ function PlanBillingSection() {
   const [codeError, setCodeError] = useState('');
   const [showCodeInput, setShowCodeInput] = useState(false);
 
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [apiKeyLoading, setApiKeyLoading] = useState(false);
-  const [apiKeyError, setApiKeyError] = useState('');
-  const [apiKeys, setApiKeys] = useState<{ provider: string; masked_key: string }[]>([]);
-  const [keysLoaded, setKeysLoaded] = useState(false);
+  if (!loaded) return null;
 
-  useEffect(() => {
-    api.listApiKeys().then(setApiKeys).catch(() => {}).finally(() => setKeysLoaded(true));
-  }, []);
-
-  if (!loaded || tier === 'unlimited') return null;
+  const isStripeManagedTier = tier === 'starter' || tier === 'pro';
 
   const handleManageSubscription = async () => {
+    if (!isStripeManagedTier) {
+      onOpenPaywall();
+      return;
+    }
     setPortalLoading(true);
     try {
       const { url } = await api.createPortalSession(window.location.href);
@@ -129,30 +124,6 @@ function PlanBillingSection() {
     setCodeLoading(false);
   };
 
-  const handleSaveApiKey = async () => {
-    if (!apiKeyInput.trim()) return;
-    setApiKeyLoading(true);
-    setApiKeyError('');
-    try {
-      const saved = await api.storeApiKey(apiKeyInput.trim());
-      setApiKeys([saved]);
-      setApiKeyInput('');
-      await fetchBillingStatus();
-    } catch (e: unknown) {
-      setApiKeyError(e instanceof Error ? e.message : 'Failed to save key');
-    } finally {
-      setApiKeyLoading(false);
-    }
-  };
-
-  const handleDeleteApiKey = async (provider: string) => {
-    try {
-      await api.deleteApiKey(provider);
-      setApiKeys((keys) => keys.filter((k) => k.provider !== provider));
-      await fetchBillingStatus();
-    } catch {}
-  };
-
   const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
 
   return (
@@ -168,16 +139,18 @@ function PlanBillingSection() {
                 </span>
               )}
             </div>
-            {(tier === 'starter' || tier === 'pro') && (
-              <button
-                onClick={handleManageSubscription}
-                disabled={portalLoading}
-                className="text-[11px] text-accent enabled:hover:underline disabled:opacity-50 flex items-center gap-1"
-              >
-                {portalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
-                Manage
-              </button>
-            )}
+            <button
+              onClick={handleManageSubscription}
+              disabled={isStripeManagedTier && portalLoading}
+              className="text-[11px] text-accent enabled:hover:underline disabled:opacity-50 flex items-center gap-1"
+            >
+              {isStripeManagedTier ? (
+                portalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />
+              ) : (
+                <CreditCard className="w-3 h-3" />
+              )}
+              Manage
+            </button>
           </div>
 
           {limitUsd > 0 && (
@@ -220,50 +193,6 @@ function PlanBillingSection() {
           )}
         </div>
       </SettingsSection>
-
-      <SettingsSection title="API Key">
-        <div className="px-4 py-3 space-y-3">
-          {keysLoaded && apiKeys.length > 0 ? (
-            <div className="space-y-2">
-              {apiKeys.map((k) => (
-                <div key={k.provider} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Key className="w-3.5 h-3.5 text-text-tertiary" />
-                    <span className="text-xs text-text-secondary font-mono">{k.masked_key}</span>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteApiKey(k.provider)}
-                    className="text-[10px] text-red-500 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex gap-1.5">
-              <input
-                type="password"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder="sk-..."
-                className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-stroke-subtle bg-white focus:outline-none focus:ring-1 focus:ring-accent font-mono"
-              />
-              <button
-                onClick={handleSaveApiKey}
-                disabled={apiKeyLoading || !apiKeyInput.trim()}
-                className="text-[11px] px-2.5 py-1.5 bg-accent text-white rounded-lg enabled:hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1"
-              >
-                {apiKeyLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
-              </button>
-            </div>
-          )}
-          {apiKeyError && <p className="text-[10px] text-red-500">{apiKeyError}</p>}
-          <p className="text-[10px] text-text-tertiary">
-            Bring your own OpenAI key for free unlimited access.
-          </p>
-        </div>
-      </SettingsSection>
     </>
   );
 }
@@ -271,6 +200,7 @@ function PlanBillingSection() {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [visible, setVisible] = useState(false);
   const { devMode, setDevMode } = useSettingsStore();
+  const triggerPaywall = useBillingStore((s) => s.triggerPaywall);
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -279,6 +209,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const handleClose = () => {
     setVisible(false);
     setTimeout(onClose, 150);
+  };
+
+  const handleOpenPaywallFromSettings = () => {
+    handleClose();
+    setTimeout(() => triggerPaywall({ source: 'settings_manage' }), 160);
   };
 
   const modal = (
@@ -305,6 +240,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* Body — add new <SettingsSection> blocks here */}
         <div className="px-5 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
+          {devMode && <PlanBillingSection onOpenPaywall={handleOpenPaywallFromSettings} />}
+
           <SettingsSection title="Developer">
             <SettingsRow
               icon={FlaskConical}
@@ -314,8 +251,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               onChange={setDevMode}
             />
           </SettingsSection>
-
-          {devMode && <PlanBillingSection />}
         </div>
       </div>
     </div>
