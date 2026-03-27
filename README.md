@@ -9,7 +9,7 @@
 
 Open-source software for sustainable development project design and implementation.
 
-Nitrogen AI is a collaborative platform for teams designing, evaluating, and advancing sustainable development projects, with tooling for micro-model assessments like solar yield, levelized cost of electricity, health impact analyses, and more. It can then turn project materials and assessments into deliverables like investment memos, landscape assessments, and other decision-ready materials with clear, traceable logs across citations and decisions.
+Nitrogen AI is a collaborative platform for teams designing, evaluating, and advancing sustainable development projects, orchestrating micro-model assessments like solar yield, levelized cost of electricity, health impact analyses, and more all within one tool. It can then turn project materials and assessments into deliverables like investment memos, landscape assessments, and other decision-ready materials with clear, traceable logs across citations and decisions.
 
 ## Overview
 
