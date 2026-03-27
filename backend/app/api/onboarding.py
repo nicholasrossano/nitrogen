@@ -553,41 +553,6 @@ async def execute_action(
             logger.error(f"propose_input_value action failed: {e}", exc_info=True)
             assistant_response = params.get("message", "I wasn't able to research this value right now.")
 
-    elif action == "start_gs_certification":
-        import asyncio as _asyncio
-        from app.services.gs_cover_letter import GS_CHECKLIST_ITEMS, _get_fallback_field_schema
-        from app.services.gs_template_service import GSTemplateService, TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW
-        try:
-            template_svc = GSTemplateService(db)
-            template = await _asyncio.wait_for(
-                template_svc.get_or_fetch_active_template(TEMPLATE_TYPE_COVER_LETTER),
-                timeout=30.0,
-            )
-            section_context = template_svc.get_section_contexts(TEMPLATE_TYPE_COVER_LETTER)
-            widget_type = "gs_checklist"
-            widget_data = {
-                "checklist_items": GS_CHECKLIST_ITEMS,
-                "template_version_id": str(template.id),
-                "template_version_label": template.version_label,
-                "template_status": template.status,
-                "field_schema": template.field_schema or [],
-                "section_context": section_context,
-                "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
-            }
-        except Exception as e:
-            logger.error(f"GS certification tool failed: {e}", exc_info=True)
-            section_context = GSTemplateService(db).get_section_contexts(TEMPLATE_TYPE_COVER_LETTER)
-            widget_type = "gs_checklist"
-            widget_data = {
-                "checklist_items": GS_CHECKLIST_ITEMS,
-                "template_version_id": None,
-                "template_version_label": None,
-                "template_status": None,
-                "field_schema": _get_fallback_field_schema(),
-                "section_context": section_context,
-                "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
-            }
-
     # Generic deliverable persistence for tools that produce output via the
     # research pipeline (e.g. solar).  LCOE/carbon have dedicated handlers
     # above that already call save_deliverable, so skip those here.

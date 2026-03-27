@@ -15,7 +15,6 @@ import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel
 import { ProjectFilesView } from '@/components/files';
 import { api } from '@/lib/api';
 import type { SourceCitation } from '@/lib/api';
-import { EvaluateView } from '@/components/evaluate/EvaluateView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { SideDrawer, NavItem } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -34,7 +33,7 @@ const MIN_PLAN_DOC_VIEWER_PERCENT = 25;
 const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
 const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
 
-type ProjectView = 'chat' | 'plan' | 'files' | 'evaluate';
+type ProjectView = 'chat' | 'plan' | 'files';
 
 function InitiativePageContent() {
   const params = useParams();
@@ -54,11 +53,9 @@ function InitiativePageContent() {
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
     viewParam === 'chat' ? 'chat' :
-    viewParam === 'files' ? 'files' :
-    viewParam === 'evaluate' ? 'evaluate' : 'plan';
+    viewParam === 'files' ? 'files' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
-  const [evaluateKey, setEvaluateKey] = useState(0);
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
@@ -152,9 +149,9 @@ function InitiativePageContent() {
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
 
-  // Viewers cannot access the generate/evaluate views; redirect to plan.
+  // Viewers cannot access the generate view; redirect to plan.
   useEffect(() => {
-    if (isViewer && (activeView === 'chat' || activeView === 'evaluate')) {
+    if (isViewer && activeView === 'chat') {
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
@@ -406,11 +403,6 @@ function InitiativePageContent() {
       router.replace(`/initiatives/${initiativeId}?view=plan`);
       return;
     }
-    if (item === 'evaluate') {
-      setActiveView('evaluate');
-      setEvaluateKey((k) => k + 1);
-      router.replace(`/initiatives/${initiativeId}?view=evaluate`);
-    }
   };
 
   const handleNewChat = () => {
@@ -466,7 +458,7 @@ function InitiativePageContent() {
           onSignOut={handleSignOut}
           userEmail={user?.email}
           onUploadMaterial={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
-          hiddenItems={isViewer ? ['chat', 'evaluate'] : devMode ? undefined : ['evaluate']}
+          hiddenItems={isViewer ? ['chat'] : undefined}
           initiativeId={initiativeId}
         />
         </div>
@@ -684,10 +676,6 @@ function InitiativePageContent() {
                     <p className="text-sm text-text-tertiary">No project plan yet</p>
                   </div>
                 )}
-              </main>
-              ) : activeView === 'evaluate' ? (
-              <main className="h-full min-w-0 overflow-hidden">
-                <EvaluateView key={evaluateKey} initiativeId={initiativeId} />
               </main>
               ) : null}
               </>

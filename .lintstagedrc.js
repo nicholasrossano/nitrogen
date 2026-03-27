@@ -10,5 +10,5 @@ module.exports = {
       .join(' ');
     return `cd frontend && npx next lint --fix ${fileArgs}`;
   },
-  'backend/**/*.py': 'ruff check --fix',
+  'backend/**/*.py': '/Users/nicholasrossano/Library/Python/3.12/bin/ruff check --fix',
 };
