@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, Award, FileUp, Sun } from 'lucide-react';
+import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, FileUp, Sun } from 'lucide-react';
 
 export interface ToolOption {
   id: string;
@@ -33,13 +33,6 @@ export const ALL_TOOLS: ToolOption[] = [
     icon: <Sun className="w-3.5 h-3.5" />,
   },
   {
-    id: 'gs_certification',
-    name: 'Gold Standard Certification',
-    description: 'Gold Standard checklist',
-    icon: <Award className="w-3.5 h-3.5" />,
-    beta: true,
-  },
-  {
     id: 'investment_memo',
     name: 'Investment Memo',
     description: 'Generate investment recommendation',
@@ -52,13 +45,6 @@ export const ALL_TOOLS: ToolOption[] = [
     icon: <CheckSquare className="w-3.5 h-3.5" />,
   },
   {
-    id: 'pdd',
-    name: 'Project Design Document',
-    description: 'Build a PDD from project materials',
-    icon: <FileText className="w-3.5 h-3.5" />,
-    beta: true,
-  },
-  {
     id: 'template_fill',
     name: 'From Template',
     description: 'Complete a doc from project materials',
@@ -68,7 +54,7 @@ export const ALL_TOOLS: ToolOption[] = [
 ];
 
 const ANALYSIS_TOOLS = ALL_TOOLS.filter(
-  (t) => t.id === 'lcoe_model' || t.id === 'carbon_model' || t.id === 'solar_estimate' || t.id === 'gs_certification'
+  (t) => t.id === 'lcoe_model' || t.id === 'carbon_model' || t.id === 'solar_estimate'
 );
 
 interface ToolPickerProps {

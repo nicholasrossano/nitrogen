@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial, CompliancePrecheck, FrameworkRoutingResult, ScopeFact, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ToolAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -17,15 +17,13 @@ interface InitiativeState {
   projectMaterials: ProjectMaterial[];
   driveLinkedFiles: DriveLinkedFile[];
   projectPlan: ProjectPlan | null;
-  compliancePrechecks: Record<string, CompliancePrecheck>;
-  
+
   // UI State
   loading: boolean;
   sending: boolean;
   generating: boolean;
   alignmentLoading: boolean;
   projectPlanLoading: boolean;
-  compliancePrecheckLoading: boolean;
   error: string | null;
   streamingMessageId: string | null;
 
@@ -71,10 +69,6 @@ interface InitiativeState {
   updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
-  loadCompliancePrechecks: (id: string) => Promise<void>;
-  routeFramework: (id: string, frameworkId: string) => Promise<FrameworkRoutingResult>;
-  runCompliancePrecheck: (id: string, frameworkId: string, confirmedFacts: ScopeFact[], force?: boolean) => Promise<void>;
-  rerunCompliancePrecheck: (id: string, frameworkId: string, updatedFacts: ScopeFact[]) => Promise<void>;
   reset: () => void;
 }
 
@@ -89,13 +83,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   projectMaterials: [],
   driveLinkedFiles: [],
   projectPlan: null,
-  compliancePrechecks: {},
   loading: false,
   sending: false,
   generating: false,
   alignmentLoading: false,
   projectPlanLoading: false,
-  compliancePrecheckLoading: false,
   error: null,
   streamingMessageId: null,
   messageFeedback: {},
@@ -334,10 +326,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           // Sync the project plan from the initiative (covers both initial generation and chat-driven updates)
           if (initiative.project_plan) {
             set({ projectPlan: initiative.project_plan });
-          }
-
-          if (initiative.compliance_prechecks) {
-            set({ compliancePrechecks: initiative.compliance_prechecks });
           }
 
           const chatHistory = await api.getChatHistory(id);
@@ -851,53 +839,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  loadCompliancePrechecks: async (id: string) => {
-    try {
-      const response = await api.getAllCompliancePrechecks(id);
-      set({ compliancePrechecks: response.compliance_prechecks || {} });
-    } catch (error) {
-      console.error('Failed to load compliance prechecks:', error);
-    }
-  },
-
-  routeFramework: async (id: string, frameworkId: string) => {
-    set({ compliancePrecheckLoading: true });
-    try {
-      const result = await api.routeFramework(id, frameworkId);
-      return result;
-    } finally {
-      set({ compliancePrecheckLoading: false });
-    }
-  },
-
-  runCompliancePrecheck: async (id: string, frameworkId: string, confirmedFacts: ScopeFact[], force = false) => {
-    set({ compliancePrecheckLoading: true });
-    try {
-      const response = await api.runCompliancePrecheck(id, frameworkId, confirmedFacts, force);
-      set(state => ({
-        compliancePrechecks: { ...state.compliancePrechecks, [frameworkId]: response.compliance_precheck },
-        compliancePrecheckLoading: false,
-      }));
-    } catch (error) {
-      set({ compliancePrecheckLoading: false });
-      throw error;
-    }
-  },
-
-  rerunCompliancePrecheck: async (id: string, frameworkId: string, updatedFacts: ScopeFact[]) => {
-    set({ compliancePrecheckLoading: true });
-    try {
-      const response = await api.rerunCompliancePrecheck(id, frameworkId, updatedFacts);
-      set(state => ({
-        compliancePrechecks: { ...state.compliancePrechecks, [frameworkId]: response.compliance_precheck },
-        compliancePrecheckLoading: false,
-      }));
-    } catch (error) {
-      set({ compliancePrecheckLoading: false });
-      throw error;
-    }
-  },
-
   // Reset state
   reset: () => {
     set({
@@ -910,13 +851,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       projectMaterials: [],
       driveLinkedFiles: [],
       projectPlan: null,
-      compliancePrechecks: {},
       loading: false,
       sending: false,
       generating: false,
       alignmentLoading: false,
       projectPlanLoading: false,
-      compliancePrecheckLoading: false,
       error: null,
       streamingMessageId: null,
       messageFeedback: {},

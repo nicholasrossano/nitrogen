@@ -21,7 +21,6 @@ import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
 import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
 import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
-import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
 import { MessageVariants } from './MessageVariants';
@@ -440,8 +439,6 @@ function MessageWidget({
       return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
     case 'proposed_value':
       return <ProposedValueWidget data={data as any} messageId={messageId} />;
-    case 'gs_proposed_field':
-      return <CoverLetterProposedValueWidget data={data as any} messageId={messageId} />;
     default:
       return null;
   }
