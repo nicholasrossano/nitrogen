@@ -148,7 +148,7 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
               {modifying ? (
                 <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
               ) : null}
-              <span className="text-center leading-tight">Change Tools</span>
+              <span className="text-center leading-tight">Change Modules</span>
             </button>
             <button
               onClick={handleGenerate}

@@ -3,7 +3,7 @@ export { DocumentRequestWidget } from './DocumentRequestWidget';
 export { EvidenceInputWidget } from './EvidenceInputWidget';
 export { GenerateOptionsWidget } from './GenerateOptionsWidget';
 export { MemoViewerWidget } from './MemoViewerWidget';
-export { ToolChecklistWidget } from './ToolChecklistWidget';
+export { ModuleChecklistWidget } from './ModuleChecklistWidget';
 export { DeliverablesOverviewWidget } from './DeliverablesOverviewWidget';
 export { ChecklistViewerWidget } from './ChecklistViewerWidget';
 export { DeliverablesListWidget } from './DeliverablesListWidget';
