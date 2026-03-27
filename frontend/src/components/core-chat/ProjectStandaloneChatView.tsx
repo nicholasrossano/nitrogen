@@ -144,7 +144,7 @@ export function ProjectStandaloneChatView({
       setTemplateUploading(false);
     }
     prevShowLanding.current = showLanding;
-  }, [showLanding, localMessages]);
+  }, [showLanding, localMessages, initiativeId]);
 
   // Persist the AI-generated title to the DB session once both are available
   const titlePersistedRef = useRef(false);
