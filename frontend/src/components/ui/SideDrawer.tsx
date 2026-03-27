@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, Scale, Settings, HardDriveDownload, RefreshCw, Unlink } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Search, Plus, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, RefreshCw, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -13,8 +13,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
-export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat';
-export type SideDrawerVariant = 'home' | 'project';
+export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'explore' | 'modules';
 
 interface NavItemConfig {
   key: NavItem;
@@ -23,7 +22,6 @@ interface NavItemConfig {
 }
 
 interface SideDrawerProps {
-  variant: SideDrawerVariant;
   activeItem: NavItem;
   onItemSelect: (item: NavItem) => void;
   onSignOut?: () => void;
@@ -33,16 +31,14 @@ interface SideDrawerProps {
   initiativeId?: string;
 }
 
-const HOME_ITEMS: NavItemConfig[] = [
-  { key: 'home', label: 'Projects', Icon: LayoutGrid },
-  { key: 'compare', label: 'Compare', Icon: Scale },
-  { key: 'trash', label: 'Trash', Icon: Trash2 },
+const GLOBAL_ITEMS: NavItemConfig[] = [
+  { key: 'home', label: 'All Projects', Icon: LayoutGrid },
 ];
 
 const PROJECT_ITEMS: NavItemConfig[] = [
-  { key: 'home', label: 'Projects', Icon: LayoutGrid },
+  { key: 'modules', label: 'New Module', Icon: Plus },
+  { key: 'explore', label: 'Explore', Icon: Search },
   { key: 'plan', label: 'Plan', Icon: Map },
-  { key: 'chat', label: 'Generate', Icon: Zap },
 ];
 
 function UsagePill() {
@@ -79,7 +75,6 @@ function UsagePill() {
 }
 
 export function SideDrawer({
-  variant,
   activeItem,
   onItemSelect,
   onSignOut,
@@ -88,17 +83,23 @@ export function SideDrawer({
   hiddenItems,
   initiativeId,
 }: SideDrawerProps) {
-  const allItems = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
-  const items = hiddenItems ? allItems.filter(i => !hiddenItems.includes(i.key)) : allItems;
-  const showMaterials = variant === 'project' && !!onUploadMaterial;
-  const showFilesButton = variant === 'project';
+  const hasProject = !!initiativeId;
+  const showMaterials = hasProject && !!onUploadMaterial;
+
+  const projectItems = hiddenItems
+    ? PROJECT_ITEMS.filter(i => !hiddenItems.includes(i.key))
+    : PROJECT_ITEMS;
+
   const longestLabelLength = useMemo(() => {
-    const labels = items.map((item) => item.label);
-    if (showFilesButton) labels.push('Files');
+    const labels = GLOBAL_ITEMS.map((item) => item.label);
+    if (hasProject) {
+      projectItems.forEach((item) => labels.push(item.label));
+      labels.push('Files');
+    }
     labels.push('Settings');
     if (onSignOut) labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
-  }, [items, showFilesButton, onSignOut]);
+  }, [hasProject, projectItems, onSignOut]);
   const drawerStyle = {
     '--side-drawer-expanded-width': `calc(${longestLabelLength}ch + 3.75rem)`,
   } as CSSProperties;
@@ -128,7 +129,7 @@ export function SideDrawer({
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportError, setDriveImportError] = useState<string | null>(null);
 
-  // Check Drive status on mount (only for project variant with upload enabled)
+  // Check Drive status on mount (only when upload is enabled)
   useEffect(() => {
     if (showMaterials && !driveStatusChecked) {
       checkDriveStatus();
@@ -339,7 +340,7 @@ export function SideDrawer({
       style={drawerStyle}
     >
       <nav className="flex-1 pt-1">
-        {items.map(({ key, label, Icon }) => (
+        {GLOBAL_ITEMS.map(({ key, label, Icon }) => (
           <button
             key={key}
             onClick={() => onItemSelect(key)}
@@ -354,6 +355,30 @@ export function SideDrawer({
             </span>
           </button>
         ))}
+        {hasProject && (
+          <>
+            <div className="px-3 pt-3 pb-1">
+              <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary whitespace-nowrap">
+                Current Project
+              </span>
+            </div>
+            {projectItems.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                onClick={() => onItemSelect(key)}
+                className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
+              >
+                <Icon
+                  className="w-4 h-4 flex-shrink-0"
+                  {...(activeItem === key && { fill: 'currentColor' })}
+                />
+                <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+                  {label}
+                </span>
+              </button>
+            ))}
+          </>
+        )}
       </nav>
 
       {showMaterials && (
@@ -483,7 +508,7 @@ export function SideDrawer({
           </div>
         </div>
       )}
-      {showFilesButton && (
+      {hasProject && (
         <button
           onClick={() => onItemSelect('files')}
           className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''}`}

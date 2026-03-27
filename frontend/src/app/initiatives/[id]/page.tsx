@@ -10,6 +10,7 @@ import { ProjectHeader, ChatPanel, EditorSidePanel } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
+import { ModuleLandingPage } from '@/components/chat/ModuleLandingPage';
 import { ResearchPanel } from '@/components/core-chat/ResearchPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ProjectFilesView } from '@/components/files';
@@ -33,7 +34,7 @@ const MIN_PLAN_DOC_VIEWER_PERCENT = 25;
 const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
 const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
 
-type ProjectView = 'chat' | 'plan' | 'files';
+type ProjectView = 'explore' | 'modules' | 'plan' | 'files';
 
 function InitiativePageContent() {
   const params = useParams();
@@ -49,10 +50,12 @@ function InitiativePageContent() {
 
   const standaloneContainerRef = useRef<HTMLDivElement>(null);
   const planContainerRef = useRef<HTMLDivElement>(null);
+  const chatSendRef = useRef<((content: string, toolHint?: string) => void) | null>(null);
 
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
-    viewParam === 'chat' ? 'chat' :
+    viewParam === 'explore' ? 'explore' :
+    viewParam === 'modules' ? 'modules' :
     viewParam === 'files' ? 'files' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
@@ -149,9 +152,9 @@ function InitiativePageContent() {
   const showProjectPlan = rightPanel === 'project_plan';
   const rightPanelOpen = rightPanel !== 'closed';
 
-  // Viewers cannot access the generate view; redirect to plan.
+  // Viewers cannot access the generate/explore/modules views; redirect to plan.
   useEffect(() => {
-    if (isViewer && activeView === 'chat') {
+    if (isViewer && (activeView === 'explore' || activeView === 'modules')) {
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
@@ -382,12 +385,17 @@ function InitiativePageContent() {
       router.push('/');
       return;
     }
-    if (item === 'chat') {
-      setActiveView('chat');
+    if (item === 'explore') {
+      setActiveView('explore');
       setShowChatLanding(true);
       setShowEditorInChatView(false);
       setResearchCitation(null);
-      router.replace(`/initiatives/${initiativeId}?view=chat`);
+      router.replace(`/initiatives/${initiativeId}?view=explore`);
+      return;
+    }
+    if (item === 'modules') {
+      setActiveView('modules');
+      router.replace(`/initiatives/${initiativeId}?view=modules`);
       return;
     }
     if (item === 'files') {
@@ -411,6 +419,18 @@ function InitiativePageContent() {
     setResearchCitation(null);
   };
 
+  const handleModuleSelect = useCallback((moduleId: string, moduleName: string) => {
+    setActiveView('explore');
+    setShowChatLanding(false);
+    setShowEditorInChatView(false);
+    setResearchCitation(null);
+    router.replace(`/initiatives/${initiativeId}?view=explore`);
+    // Give React one tick to mount/show the chat view, then trigger the send
+    setTimeout(() => {
+      chatSendRef.current?.(`Generate ${moduleName}`, moduleId);
+    }, 0);
+  }, [initiativeId, router]);
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* ProjectHeader — shows as soon as initiative loads, independent of secondary data */}
@@ -433,7 +453,7 @@ function InitiativePageContent() {
               },
               title: planDocViewer !== null ? 'Hide document viewer' : 'Show document viewer',
             } : undefined,
-          } : activeView === 'chat' && !isViewer ? {
+          } : activeView === 'explore' && !isViewer ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
@@ -452,13 +472,12 @@ function InitiativePageContent() {
       <div className="flex flex-1 min-h-0">
         <div className={`flex-shrink-0 transition-opacity duration-300 ${chromeReady ? 'opacity-100' : 'opacity-0'} ${!chromeReady ? 'pointer-events-none' : ''}`}>
         <SideDrawer
-          variant="project"
           activeItem={activeView}
           onItemSelect={handleNavChange}
           onSignOut={handleSignOut}
           userEmail={user?.email}
           onUploadMaterial={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
-          hiddenItems={isViewer ? ['chat'] : undefined}
+          hiddenItems={isViewer ? ['explore', 'modules'] : undefined}
           initiativeId={initiativeId}
         />
         </div>
@@ -503,10 +522,10 @@ function InitiativePageContent() {
               ) : <div className="h-full" />
             ) : (
               <>
-                {/* Chat view — always mounted to preserve conversation state across view switches */}
+                {/* Explore (chat) view — always mounted to preserve conversation state across view switches */}
                 <main
                   ref={standaloneContainerRef}
-                  className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'chat' ? 'hidden' : ''}`}
+                  className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'explore' ? 'hidden' : ''}`}
                 >
                   {/* Left: chat column */}
                   {(() => {
@@ -531,11 +550,13 @@ function InitiativePageContent() {
                             <ProjectStandaloneChatView
                               initiativeId={initiativeId}
                               showLanding={showChatLanding}
+                              hideTiles={true}
                               onMessageSent={() => setShowChatLanding(false)}
                               onBack={handleNewChat}
                               onEditorWidgetsChange={handleChatEditorWidgetsChange}
                               onCitationClick={handleCitationClick}
                               onAlignmentConfirmedRef={alignmentCallbackRef}
+                              onSendRef={chatSendRef}
                             />
                           </div>
                           {/* Resize handle only shown when editor is open */}
@@ -583,6 +604,12 @@ function InitiativePageContent() {
                     );
                   })()}
                 </main>
+
+                {activeView === 'modules' && (
+                  <main className="h-full min-w-0 overflow-hidden">
+                    <ModuleLandingPage onSelectModule={handleModuleSelect} />
+                  </main>
+                )}
 
                 {activeView === 'files' ? (
               <main className="h-full min-w-0 overflow-hidden">
