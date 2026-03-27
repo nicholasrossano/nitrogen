@@ -1,13 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale, Settings } from 'lucide-react';
+import { LayoutGrid, Trash2, LogOut, Map, Zap, FileUp, FolderOpen, Loader2, FlaskConical, Scale, Settings, HardDriveDownload, RefreshCw, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useGoogleDriveStore } from '@/stores/googleDriveStore';
+import { useBillingStore } from '@/stores/billingStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import { openGooglePicker } from '@/lib/googlePicker';
 
 export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'evaluate';
 export type SideDrawerVariant = 'home' | 'project';
@@ -26,6 +30,7 @@ interface SideDrawerProps {
   userEmail?: string | null;
   onUploadMaterial?: (file: File) => Promise<void>;
   hiddenItems?: NavItem[];
+  initiativeId?: string;
 }
 
 const HOME_ITEMS: NavItemConfig[] = [
@@ -41,6 +46,39 @@ const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'chat', label: 'Generate', Icon: Zap },
 ];
 
+function UsagePill() {
+  const devMode = useSettingsStore((s) => s.devMode);
+  const { tier, usagePercent, trialMessagesRemaining, loaded } = useBillingStore();
+  if (!devMode || !loaded || tier === 'unlimited' || tier === 'byok' || tier === 'none' || !tier) return null;
+
+  const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
+
+  if (tier === 'trial' && trialMessagesRemaining != null) {
+    return (
+      <div className="w-full px-1.5 opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 transition-opacity duration-150">
+        <div className="text-[9px] text-text-tertiary text-center whitespace-nowrap">
+          {trialMessagesRemaining} free msg{trialMessagesRemaining !== 1 ? 's' : ''} left
+        </div>
+      </div>
+    );
+  }
+
+  if (tier === 'starter' || tier === 'pro') {
+    return (
+      <div className="w-full px-1.5 opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 transition-opacity duration-150">
+        <div className="h-1 rounded-full bg-surface-subtle overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, usagePercent)}%` }} />
+        </div>
+        <div className="text-[9px] text-text-tertiary text-center mt-0.5 whitespace-nowrap">
+          {Math.round(usagePercent)}% used
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export function SideDrawer({
   variant,
   activeItem,
@@ -49,6 +87,7 @@ export function SideDrawer({
   userEmail,
   onUploadMaterial,
   hiddenItems,
+  initiativeId,
 }: SideDrawerProps) {
   const allItems = variant === 'home' ? HOME_ITEMS : PROJECT_ITEMS;
   const items = hiddenItems ? allItems.filter(i => !hiddenItems.includes(i.key)) : allItems;
@@ -77,6 +116,68 @@ export function SideDrawer({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
+  const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
+
+  const driveConnected = useGoogleDriveStore((s) => s.connected);
+  const driveEmail = useGoogleDriveStore((s) => s.email);
+  const driveStatusChecked = useGoogleDriveStore((s) => s.statusChecked);
+  const checkDriveStatus = useGoogleDriveStore((s) => s.checkStatus);
+  const connectDrive = useGoogleDriveStore((s) => s.connect);
+  const disconnectDrive = useGoogleDriveStore((s) => s.disconnect);
+  const getDriveAccessToken = useGoogleDriveStore((s) => s.getAccessToken);
+
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [driveImportError, setDriveImportError] = useState<string | null>(null);
+
+  // Check Drive status on mount (only for project variant with upload enabled)
+  useEffect(() => {
+    if (showMaterials && !driveStatusChecked) {
+      checkDriveStatus();
+    }
+  }, [showMaterials, driveStatusChecked, checkDriveStatus]);
+
+  // Detect OAuth callback redirect (?drive_connected=true) and refresh status
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.search.includes('drive_connected=true')) {
+      checkDriveStatus();
+      const clean = window.location.pathname + window.location.search
+        .replace(/[?&]drive_connected=true/, '')
+        .replace(/^&/, '?');
+      window.history.replaceState(null, '', clean);
+    }
+  }, [checkDriveStatus]);
+
+  const handleDriveConnect = useCallback(() => {
+    if (!initiativeId) return;
+    connectDrive(initiativeId);
+  }, [initiativeId, connectDrive]);
+
+  const handleDriveImport = useCallback(async () => {
+    if (!initiativeId) return;
+    setDriveImportError(null);
+    try {
+      const accessToken = await getDriveAccessToken();
+      openGooglePicker(
+        accessToken,
+        async (files) => {
+          if (files.length === 0) return;
+          setDriveImporting(true);
+          try {
+            const fileIds = files.map((f) => f.id);
+            await importFromDrive(initiativeId, fileIds);
+          } catch (err) {
+            setDriveImportError(err instanceof Error ? err.message : 'Import failed');
+          } finally {
+            setDriveImporting(false);
+          }
+        },
+      );
+    } catch (err) {
+      setDriveImportError(err instanceof Error ? err.message : 'Could not open Drive picker');
+    }
+  }, [initiativeId, getDriveAccessToken, importFromDrive]);
+
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
     filesToUpload: File[];
@@ -319,9 +420,67 @@ export function SideDrawer({
                 <FileUp className={`w-4 h-4 ${isDragging ? 'text-accent' : 'text-text-secondary'}`} />
               )}
               <span className={`text-[11px] text-center leading-tight ${isDragging ? 'text-accent' : 'text-text-secondary'}`}>
-                {isDragging ? 'Drop files' : 'Upload files'}
+                {isDragging ? 'Drop files or folder' : 'Upload files'}
               </span>
             </div>
+            <button
+              onClick={handleFolderSelect}
+              disabled={uploading}
+              className="flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-text-secondary bg-black/[0.04] enabled:hover:bg-black/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
+              Select folder
+            </button>
+
+            {/* Google Drive section */}
+            {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">
+                  Google Drive
+                </span>
+
+                {driveConnected ? (
+                  <>
+                    <button
+                      onClick={handleDriveImport}
+                      disabled={driveImporting}
+                      className="flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-text-secondary bg-black/[0.04] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {driveImporting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                      ) : (
+                        <HardDriveDownload className="w-3.5 h-3.5 flex-shrink-0" />
+                      )}
+                      {driveImporting ? 'Importing…' : 'Import'}
+                    </button>
+                    {driveImportError && (
+                      <p className="text-[10px] text-red-400 px-1 leading-tight">{driveImportError}</p>
+                    )}
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] text-text-tertiary truncate max-w-[120px]" title={driveEmail ?? ''}>
+                        {driveEmail ?? 'Connected'}
+                      </span>
+                      <button
+                        onClick={() => disconnectDrive()}
+                        className="text-[10px] text-text-tertiary enabled:hover:text-red-400 transition-colors flex items-center gap-0.5"
+                        title="Disconnect Google Drive"
+                      >
+                        <Unlink className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleDriveConnect}
+                    disabled={!initiativeId}
+                    className="flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-text-secondary bg-black/[0.04] enabled:hover:bg-black/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <HardDriveDownload className="w-3.5 h-3.5 flex-shrink-0" />
+                    Connect
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -339,6 +498,8 @@ export function SideDrawer({
           </span>
         </button>
       )}
+
+      <UsagePill />
 
       <button
         onClick={() => setSettingsOpen(true)}

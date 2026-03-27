@@ -39,7 +39,7 @@ class TemplateFillTool(BaseTool):
             output_type="template",
             category="documentation",
             keywords=["template", "form", "fill", "complete", "docx", "xlsx"],
-        )
+        )  # no export_format — templates use ProjectMaterial storage with their own download route
 
     @property
     def required_inputs(self) -> list[ToolInput]:

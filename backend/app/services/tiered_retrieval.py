@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
 from app.models.initiative import Initiative
@@ -135,11 +136,18 @@ class TieredRetrievalService:
     
     CORPUS_RELEVANCE_THRESHOLD = 0.55
     
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
+        self.user_id = user_id
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.rag = RAGService(db)
         self.openalex = OpenAlexService()
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
     
     async def retrieve(
         self,
@@ -401,7 +409,8 @@ class TieredRetrievalService:
         try:
             from urllib.parse import urlparse
 
-            resp = await self.client.responses.create(
+            client = await self._get_client()
+            resp = await client.responses.create(
                 model=settings.openai_orchestration_model,
                 tools=[{"type": "web_search", "search_context_size": "medium"}],
                 input=(
@@ -409,6 +418,7 @@ class TieredRetrievalService:
                     "Summarize the most relevant findings, citing authoritative sources."
                 ),
             )
+            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
             facts: list[RetrievedFact] = []
             seen_urls: set[str] = set()

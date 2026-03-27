@@ -16,7 +16,7 @@ from app.api.alignment_helpers import (
 from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.tools import get_tool_registry
 

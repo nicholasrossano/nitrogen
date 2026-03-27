@@ -96,7 +96,7 @@ async def add_corpus_document(
         )
     
     parser = DocumentParserService()
-    embeddings_service = EmbeddingsService()
+    embeddings_service = EmbeddingsService(user_id=user.uid, db=db)
     storage = get_uploads_storage()
     
     content = await file.read()
@@ -185,7 +185,7 @@ async def add_corpus_text(
 ):
     """Add text content to the corpus"""
     parser = DocumentParserService()
-    embeddings_service = EmbeddingsService()
+    embeddings_service = EmbeddingsService(user_id=user.uid, db=db)
     
     # Create corpus document
     corpus_doc = CorpusDocument(

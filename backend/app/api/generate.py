@@ -5,10 +5,11 @@ from uuid import UUID
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
+from app.core.billing_guard import require_ai_access
 from app.core.permissions import require_editor, require_viewer
 from app.models.initiative import InitiativeStage
 from app.models.memo import MemoVersion
-from app.models.chat import ChatMessage
+from app.models.onboarding import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
 from app.services.memo_generator import MemoGeneratorService
 from app.tools import get_tool_registry
@@ -22,7 +23,7 @@ async def generate_memo(
     initiative_id: UUID,
     data: MemoGenerateRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Generate an investment memo using RAG"""
     initiative = await require_editor(db, initiative_id, user)
@@ -34,7 +35,7 @@ async def generate_memo(
         )
     
     # Generate memo
-    generator = MemoGeneratorService(db)
+    generator = MemoGeneratorService(db, user_id=user.uid)
     memo_content, citations = await generator.generate(
         initiative=initiative,
         include_corpus=data.include_corpus,
@@ -122,7 +123,7 @@ async def get_latest_memo(
 async def generate_all_deliverables(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Generate all selected deliverables for an initiative."""
     initiative = await require_editor(db, initiative_id, user)

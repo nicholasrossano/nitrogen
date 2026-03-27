@@ -15,7 +15,7 @@ import traceback  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
-from app.api import initiatives, chat, evidence, generate, exports, corpus, tools, core_chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, pvwatts  # noqa: E402
+from app.api import initiatives, onboarding, evidence, generate, exports, corpus, tools, chat, project_plan, lcoe, carbon, gs_certification, project_materials, template, shares, users, compliance_precheck, pdd, pvwatts, google_drive, billing, api_keys  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -129,13 +129,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(initiatives.router, prefix="/api/v1", tags=["initiatives"])
-app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
+app.include_router(onboarding.router, prefix="/api/v1", tags=["onboarding"])
 app.include_router(evidence.router, prefix="/api/v1", tags=["evidence"])
 app.include_router(generate.router, prefix="/api/v1", tags=["generate"])
 app.include_router(exports.router, prefix="/api/v1", tags=["exports"])
 app.include_router(corpus.router, prefix="/api/v1", tags=["corpus"])
 app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
-app.include_router(core_chat.router, prefix="/api/v1", tags=["core-chat"])
+app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(project_plan.router, prefix="/api/v1", tags=["project-plan"])
 app.include_router(lcoe.router, prefix="/api/v1", tags=["lcoe"])
 app.include_router(carbon.router, prefix="/api/v1", tags=["carbon"])
@@ -147,6 +147,9 @@ app.include_router(users.router, prefix="/api/v1", tags=["users"])
 app.include_router(compliance_precheck.router, prefix="/api/v1", tags=["compliance-precheck"])
 app.include_router(pdd.router, prefix="/api/v1", tags=["pdd"])
 app.include_router(pvwatts.router, prefix="/api/v1", tags=["pvwatts"])
+app.include_router(google_drive.router, prefix="/api/v1", tags=["google-drive"])
+app.include_router(billing.router, prefix="/api/v1", tags=["billing"])
+app.include_router(api_keys.router, prefix="/api/v1", tags=["api-keys"])
 
 
 @app.get("/")

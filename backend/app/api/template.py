@@ -142,7 +142,7 @@ async def generate_from_template(
     init_uuid = UUID(body.initiative_id)
     template_uuid = UUID(body.template_id)
     logger.info("generate_from_template: initiative=%s template=%s", init_uuid, template_uuid)
-    await require_editor(db, init_uuid, user)
+    initiative = await require_editor(db, init_uuid, user)
 
     result = await db.execute(
         select(ProjectMaterial).where(
@@ -193,6 +193,14 @@ async def generate_from_template(
         file_size=len(filled_bytes),
     )
     db.add(filled_material)
+
+    initiative.save_deliverable(
+        f"template_{filled_material.id}",
+        out_filename,
+        "template",
+        {"material_id": str(filled_material.id), "filename": out_filename},
+    )
+
     await db.commit()
     await db.refresh(filled_material)
 

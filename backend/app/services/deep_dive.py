@@ -24,6 +24,7 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.initiative import Initiative
 from app.schemas.provenance import (
     Derivation,
@@ -327,11 +328,18 @@ class DeepDiveService:
       5. Return typed DeepDiveResult.
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
+        self.user_id = user_id
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.retrieval = TieredRetrievalService(db)
         self.rag = RAGService(db)
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
 
     async def generate(
         self,
@@ -500,7 +508,8 @@ class DeepDiveService:
         )
 
         try:
-            resp = await self.client.chat.completions.create(
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": QUERY_GEN_SYSTEM_PROMPT},
@@ -511,6 +520,7 @@ class DeepDiveService:
                 temperature=0.2,
                 max_tokens=300,
             )
+            await record_usage_from_response(self.user_id, "gpt-4o-mini", resp, self.db, is_byok=self._is_byok)
             tool_calls = resp.choices[0].message.tool_calls
             if tool_calls:
                 data = json.loads(tool_calls[0].function.arguments)
@@ -596,7 +606,8 @@ class DeepDiveService:
             {"role": "user", "content": user_message},
         ]
 
-        resp = await self.client.chat.completions.create(
+        client = await self._get_client()
+        resp = await client.chat.completions.create(
             model=settings.openai_orchestration_model,
             messages=messages,
             tools=[DEEP_DIVE_FUNCTION],
@@ -604,6 +615,7 @@ class DeepDiveService:
             temperature=0.3,
             max_tokens=2000,
         )
+        await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
         tool_calls = resp.choices[0].message.tool_calls
         if not tool_calls:

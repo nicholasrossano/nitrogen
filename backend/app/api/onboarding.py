@@ -12,38 +12,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
+from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
-from app.models.chat import ChatMessage
-from app.models.initiative import Initiative, InitiativeStage
+from app.models.onboarding import ChatMessage
+from app.models.initiative import Initiative
 from app.schemas.chat import (
     ChatMessageCreate,
     ChatMessageResponse,
     ChatResponse,
     ChatHistoryResponse,
     StageStatus,
-    ToolAlignmentSchema,
-    AlignmentFeedbackRequest,
-    AlignmentConfirmRequest,
-    AlignmentResponse,
     SourceCitation,
     TruncateChatRequest,
     TruncateChatResponse,
-    RetryResponse,
     MessageFeedbackRequest,
     MessageWidgetUpdateRequest,
 )
 from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
-from app.services.core_chat import ComplianceChatService
+from app.services.chat import ChatService
 from app.services.project_plan import ProjectPlanService
 from app.tools import get_tool_registry
-from app.tools.base import ToolAlignment
-from app.api.alignment_helpers import (
-    get_or_generate_alignment,
-    build_alignment_widget_data,
-    get_alignment_intro_message,
-)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -80,32 +70,12 @@ def build_stage_status(initiative: Initiative) -> StageStatus:
     )
 
 
-def build_tool_recommendations(registry, tool_ids: list[str], initiative: Initiative) -> dict:
-    """Build tool recommendations widget data from tool IDs."""
-    all_tools = registry.get_all_tools()
-    {t.definition.id: t for t in all_tools}
-    
-    recommendations = []
-    for tool in all_tools:
-        is_recommended = tool.definition.id in tool_ids
-        recommendations.append({
-            "tool": tool.definition.to_dict(),
-            "confidence": 1.0 if is_recommended else 0.3,
-            "recommended": is_recommended,
-        })
-    
-    return {
-        "recommendations": recommendations,
-        "project_type": initiative.project_type,
-    }
-
-
 @router.post("/initiatives/{initiative_id}/chat/stream")
 async def send_chat_message_stream(
     initiative_id: UUID,
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Send a chat message and get streaming assistant response."""
     initiative = await require_editor(db, initiative_id, user)
@@ -130,7 +100,7 @@ async def send_chat_message_stream(
             messages = list(history_result.scalars().all())
 
             # Use orchestration service
-            orchestration = OrchestrationService(db)
+            orchestration = OrchestrationService(db, user_id=user.uid)
 
             # Extract inputs from the user's message first (skip synthetic UI messages)
             if data.content not in _SKIP_EXTRACTION_MESSAGES:
@@ -181,6 +151,7 @@ async def send_chat_message_stream(
                     chat_history=messages, tool_hint=tool_hint,
                     model_inputs_context=_model_inputs_ctx,
                     on_thinking=on_thinking,
+                    user_id=user.uid,
                 )
             )
 
@@ -284,12 +255,6 @@ def _build_project_context(initiative: Initiative) -> str:
     return "\n".join(parts) if parts else ""
 
 
-_ALIGNMENT_TOOL_NAMES: dict[str, str] = {
-    "investment_memo": "Investment Memo",
-    "due_diligence_checklist": "Due Diligence Checklist",
-}
-
-
 async def execute_action(
     db: AsyncSession,
     initiative: Initiative,
@@ -299,6 +264,7 @@ async def execute_action(
     tool_hint: str | None = None,
     model_inputs_context: str | None = None,
     on_thinking: Optional[Callable] = None,
+    user_id: str | None = None,
 ) -> tuple[str | None, dict | None, str, list]:
     """
     Execute an orchestration action and return widget/response.
@@ -306,49 +272,6 @@ async def execute_action(
     Returns:
         (widget_type, widget_data, assistant_response, sources)
     """
-    # Shortcut: if the user explicitly selected a document tool via the picker,
-    # skip the tool-checklist widget and go straight to alignment (outline review).
-    if tool_hint and tool_hint in _ALIGNMENT_TOOL_NAMES:
-        registry = get_tool_registry()
-        tool = registry.get_tool(tool_hint)
-        if tool and tool.requires_alignment:
-            from sqlalchemy.orm.attributes import flag_modified
-
-            # Replace selected_tools with only this tool so a single-tool picker
-            # action never pulls in other previously-selected tools that happen to
-            # have confirmed alignments, which would cause both to be generated
-            # simultaneously when this alignment is confirmed.
-            existing = list(initiative.selected_tools or [])
-            if existing != [tool_hint]:
-                initiative.selected_tools = [tool_hint]
-                # Clear the confirmed flag for any other tool that was previously
-                # in selected_tools so stale alignments don't interfere.
-                tool_alignments = dict(initiative.tool_alignments or {})
-                for other_id in existing:
-                    if other_id != tool_hint and other_id in tool_alignments:
-                        del tool_alignments[other_id]
-                initiative.tool_alignments = tool_alignments
-                flag_modified(initiative, "selected_tools")
-                flag_modified(initiative, "tool_alignments")
-                await db.commit()
-                await db.refresh(initiative)
-
-            # Generate (or reuse) alignment and return the alignment widget
-            alignment_data = await get_or_generate_alignment(db, initiative, tool_hint)
-            if alignment_data:
-                tool_name = _ALIGNMENT_TOOL_NAMES[tool_hint]
-                pending = initiative.get_pending_alignment_tools()
-                return (
-                    "alignment",
-                    build_alignment_widget_data(
-                        tool_id=tool_hint,
-                        alignment_data=alignment_data,
-                        pending_tool_ids=[t for t in pending if t != tool_hint],
-                    ),
-                    get_alignment_intro_message(tool_name),
-                    [],
-                )
-
     action = action_result.action
     params = action_result.parameters
     sources = action_result.sources_used
@@ -383,7 +306,7 @@ async def execute_action(
                     break
 
         try:
-            research_service = ComplianceChatService(db)
+            research_service = ChatService(db, user_id=user_id)
             research_result = await research_service.generate_response(
                 user_message=user_message,
                 history=history_dicts,
@@ -414,7 +337,7 @@ async def execute_action(
         }
 
     elif action == "generate_project_plan":
-        plan_service = ProjectPlanService(db)
+        plan_service = ProjectPlanService(db, user_id=user_id)
         try:
             categories = await plan_service.propose_categories(initiative=initiative, chat_history=chat_history)
             widget_type = "plan_categories"
@@ -426,7 +349,7 @@ async def execute_action(
             widget_data = None
 
     elif action == "update_project_plan":
-        plan_service = ProjectPlanService(db)
+        plan_service = ProjectPlanService(db, user_id=user_id)
         existing_plan = initiative.project_plan
         user_request = params.get("user_request", "")
         try:
@@ -598,7 +521,7 @@ async def execute_action(
                     break
 
         try:
-            research_service = ComplianceChatService(db)
+            research_service = ChatService(db, user_id=user_id)
             research_result = await research_service.generate_response(
                 user_message=user_message,
                 history=history_dicts,
@@ -664,6 +587,37 @@ async def execute_action(
                 "section_context": section_context,
                 "supported_template_types": [TEMPLATE_TYPE_COVER_LETTER, TEMPLATE_TYPE_PRELIMINARY_REVIEW],
             }
+
+    # Generic deliverable persistence for tools that produce output via the
+    # research pipeline (e.g. solar).  LCOE/carbon have dedicated handlers
+    # above that already call save_deliverable, so skip those here.
+    _ALREADY_SAVED = {"lcoe_output", "lcoe_inputs", "carbon_output", "carbon_inputs"}
+    _WIDGET_TYPE_TO_TOOL_ID: dict[str, str] = {
+        "solar_output": "solar_estimate",
+        "solar_inputs": "solar_estimate",
+    }
+    if (
+        widget_type
+        and widget_type not in _ALREADY_SAVED
+        and widget_data
+        and isinstance(widget_data, dict)
+    ):
+        from app.tools.registry import get_tool_registry
+        _registry = get_tool_registry()
+        _tool_id = _WIDGET_TYPE_TO_TOOL_ID.get(widget_type, "")
+        _tool = _registry.get_tool(_tool_id)
+        if _tool and _tool.is_exportable(widget_data):
+            title = _tool.definition.name
+            if widget_type == "solar_output":
+                annual = (widget_data.get("result") or {}).get("annual_kwh")
+                if annual:
+                    title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
+            initiative.save_deliverable(
+                _tool_id,
+                title,
+                _tool.definition.output_type,
+                widget_data,
+            )
 
     return widget_type, widget_data, assistant_response, sources
 
@@ -742,7 +696,7 @@ async def send_chat_message(
     initiative_id: UUID,
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Send a chat message and get assistant response using LLM-driven orchestration."""
     initiative = await require_editor(db, initiative_id, user)
@@ -773,7 +727,7 @@ async def send_chat_message(
     # - Conversation history
     # ============================================================
     
-    orchestration = OrchestrationService(db)
+    orchestration = OrchestrationService(db, user_id=user.uid)
     
     # Extract inputs from the user's message first (skip synthetic UI messages)
     if data.content not in _SKIP_EXTRACTION_MESSAGES:
@@ -801,6 +755,7 @@ async def send_chat_message(
     widget_type, widget_data, assistant_response, sources = await execute_action(
         db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint,
         model_inputs_context=_model_inputs_ctx2,
+        user_id=user.uid,
     )
     
     # Convert sources to citation format
@@ -985,33 +940,40 @@ async def update_message_widget(
     # Bump updated_at so the initiative sorts correctly in history
     initiative.updated_at = datetime.now(timezone.utc)
 
-    # Keep initiative.deliverables in sync for LCOE/Carbon models.
-    # Only update when the widget has a real computed result AND non-empty inputs —
-    # both are required so we never store a deliverable with missing/corrupt input data.
-    lcoe_types = ("lcoe_output", "lcoe_inputs")
-    carbon_types = ("carbon_output", "carbon_inputs")
-    if msg.widget_type in lcoe_types + carbon_types:
+    # Keep initiative.deliverables in sync when model widgets are recalculated.
+    _WIDGET_TO_TOOL: dict[str, str] = {
+        "lcoe_output": "lcoe_model",
+        "lcoe_inputs": "lcoe_model",
+        "carbon_output": "carbon_model",
+        "carbon_inputs": "carbon_model",
+        "solar_output": "solar_estimate",
+        "solar_inputs": "solar_estimate",
+    }
+    _tool_id_for_widget = _WIDGET_TO_TOOL.get(msg.widget_type or "")
+    if _tool_id_for_widget:
+        from app.tools.registry import get_tool_registry
+        _tool = get_tool_registry().get_tool(_tool_id_for_widget)
         content = data.widget_data
-        has_real_result = bool(content.get("result") and content.get("computable", False))
-        has_inputs = bool(content.get("inputs"))
-        if has_real_result and has_inputs:
-            if msg.widget_type in lcoe_types:
-                lcoe_val = content["result"].get("lcoe", 0)
-                currency = content["result"].get("currency", "USD")
-                initiative.save_deliverable(
-                    "lcoe_model",
-                    f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
-                    "lcoe",
-                    content,
-                )
-            elif msg.widget_type in carbon_types:
-                net_er = content["result"].get("net_er_tco2e", 0)
-                initiative.save_deliverable(
-                    "carbon_model",
-                    f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
-                    "carbon",
-                    content,
-                )
+        if _tool and _tool.is_exportable(content):
+            result = content.get("result") or {}
+            if _tool_id_for_widget == "lcoe_model":
+                lcoe_val = result.get("lcoe", 0)
+                currency = result.get("currency", "USD")
+                title = f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)"
+            elif _tool_id_for_widget == "carbon_model":
+                net_er = result.get("net_er_tco2e", 0)
+                title = f"Carbon ER Model ({net_er:,.2f} tCO\u2082e/yr)"
+            elif _tool_id_for_widget == "solar_estimate":
+                annual = result.get("annual_kwh", 0)
+                title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
+            else:
+                title = _tool.definition.name
+            initiative.save_deliverable(
+                _tool_id_for_widget,
+                title,
+                _tool.definition.output_type,
+                content,
+            )
 
     await db.commit()
 
@@ -1086,400 +1048,3 @@ async def truncate_chat(
     )
 
 
-@router.post("/initiatives/{initiative_id}/chat/retry/{message_id}", response_model=RetryResponse)
-async def retry_assistant_message(
-    initiative_id: UUID,
-    message_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Delete an assistant message and regenerate it from the same preceding context."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    # Fetch the target assistant message
-    msg_result = await db.execute(
-        select(ChatMessage).where(
-            ChatMessage.id == message_id,
-            ChatMessage.initiative_id == initiative_id,
-        )
-    )
-    target_msg = msg_result.scalar_one_or_none()
-    if not target_msg:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
-    if target_msg.role != "assistant":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can only retry assistant messages")
-
-    # Get full history up to (but not including) the target message
-    all_msgs_result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative_id)
-        .order_by(ChatMessage.created_at)
-    )
-    all_msgs = list(all_msgs_result.scalars().all())
-    history_before = [m for m in all_msgs if m.created_at < target_msg.created_at]
-
-    # Delete the target message and all messages after it
-    to_delete = [m for m in all_msgs if m.created_at >= target_msg.created_at]
-    for m in to_delete:
-        await db.delete(m)
-    await db.commit()
-
-    # Re-run orchestration from the same history
-    orchestration = OrchestrationService(db)
-    action_result = await orchestration.get_next_action(
-        messages=history_before,
-        initiative=initiative,
-    )
-
-    from app.services.orchestration import OrchestrationService as _OrchestratorRef3
-    _model_inputs_ctx3 = _OrchestratorRef3._format_model_inputs_from_messages(history_before)
-
-    widget_type, widget_data, assistant_response, sources = await execute_action(
-        db, initiative, action_result, orchestration, chat_history=history_before,
-        model_inputs_context=_model_inputs_ctx3,
-    )
-
-    source_citations = [
-        SourceCitation(
-            source_type=s.source_type.value,
-            source_title=s.source_title,
-            source_url=s.source_url,
-            chunk_id=s.chunk_id,
-            confidence=s.confidence,
-        )
-        for s in sources
-    ] if sources else None
-
-    sources_list = [s.to_dict() for s in sources] if sources else None
-    verified_count = len([s for s in sources if s.source_type.value != "llm_estimate"]) if sources else 0
-    retry_completion_meta = {
-        "citation_count": verified_count,
-        "tiers_used": list({s.source_type.value for s in sources}) if sources else [],
-    }
-
-    new_message = ChatMessage(
-        initiative_id=initiative.id,
-        role="assistant",
-        content=assistant_response,
-        widget_type=widget_type,
-        widget_data=widget_data,
-        sources=sources_list,
-        completion_meta=retry_completion_meta,
-    )
-    db.add(new_message)
-    initiative.touch()
-    await db.commit()
-    await db.refresh(new_message)
-
-    return RetryResponse(
-        message=ChatMessageResponse(
-            id=new_message.id,
-            role=new_message.role,
-            content=new_message.content,
-            widget_type=new_message.widget_type,
-            widget_data=new_message.widget_data,
-            sources=source_citations,
-            thinking_lines=new_message.thinking_lines,
-            completion_meta=new_message.completion_meta,
-            feedback=new_message.feedback,
-            created_at=new_message.created_at,
-        ),
-        stage_status=build_stage_status(initiative),
-    )
-
-
-@router.post("/initiatives/{initiative_id}/alignment/confirm", response_model=AlignmentResponse)
-async def confirm_alignment(
-    initiative_id: UUID,
-    data: AlignmentConfirmRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Confirm an alignment, optionally with modifications."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    # Get existing alignment
-    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
-    if not alignment_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No alignment found for tool {data.tool_id}",
-        )
-    
-    # Apply modifications if provided
-    if data.sections:
-        alignment_data["sections"] = [s.model_dump() for s in data.sections]
-    if data.parameters:
-        alignment_data["parameters"] = [p.model_dump() for p in data.parameters]
-    
-    # Mark as confirmed
-    alignment_data["confirmed"] = True
-    alignment_data["feedback"] = None
-    
-    # Save updated alignment
-    initiative.set_alignment_for_tool(data.tool_id, alignment_data)
-    await db.commit()
-    await db.refresh(initiative)
-    
-    # Add confirmation message to chat
-    registry = get_tool_registry()
-    tool = registry.get_tool(data.tool_id)
-    tool_name = tool.definition.name if tool else data.tool_id
-    
-    # Check if there are more alignments needed
-    pending = initiative.get_pending_alignment_tools()
-    widget_type = None
-    widget_data = None
-    
-    if pending:
-        # Show alignment widget for the next tool
-        next_tool_id = pending[0]
-        next_tool = registry.get_tool(next_tool_id)
-        
-        if next_tool and next_tool.requires_alignment:
-            next_alignment_data = await get_or_generate_alignment(db, initiative, next_tool_id)
-            
-            if next_alignment_data:
-                widget_type = "alignment"
-                widget_data = build_alignment_widget_data(
-                    tool_id=next_tool_id,
-                    alignment_data=next_alignment_data,
-                    pending_tool_ids=pending[1:],
-                )
-                message = f"Great, I've confirmed the {tool_name} outline. {get_alignment_intro_message(next_tool.definition.name)}"
-            else:
-                pending = []
-        
-        if not widget_type:
-            next_tool_name = next_tool.definition.name if next_tool else pending[0]
-            message = f"Great, I've confirmed the {tool_name} outline. Let's review the {next_tool_name} next."
-    
-    # If no pending alignments, generate deliverables immediately
-    if not pending:
-        message = f"Perfect! The {tool_name} outline is confirmed. Generating your deliverables now..."
-
-        # Save a brief confirmation message
-        confirm_msg = ChatMessage(
-            initiative_id=initiative.id,
-            role="assistant",
-            content=message,
-        )
-        db.add(confirm_msg)
-        await db.commit()
-
-        # Prepare inputs
-        inputs = initiative.tool_inputs or {}
-        if initiative.title:
-            inputs.setdefault("project_title", initiative.title)
-        if initiative.geography:
-            inputs.setdefault("geography", initiative.geography)
-        if initiative.target_population:
-            inputs.setdefault("target_beneficiaries", initiative.target_population)
-        if initiative.goal:
-            inputs.setdefault("project_goal", initiative.goal)
-        if initiative.budget_range:
-            inputs.setdefault("budget_range", initiative.budget_range)
-        if initiative.timeline:
-            inputs.setdefault("timeline", initiative.timeline)
-
-        tool_alignments = initiative.tool_alignments or {}
-
-        WIDGET_TYPES = {"memo": "memo_viewer", "checklist": "checklist_viewer"}
-        WIDGET_LABELS = {"memo_viewer": "Investment Memo", "checklist_viewer": "Due Diligence Checklist"}
-
-        for sel_tool_id in (initiative.selected_tools or []):
-            sel_tool = registry.get_tool(sel_tool_id)
-            if not sel_tool or not sel_tool.requires_alignment:
-                continue
-            sel_alignment_data = tool_alignments.get(sel_tool_id, {})
-            if not sel_alignment_data.get("confirmed"):
-                continue
-
-            try:
-                alignment_obj = ToolAlignment.from_dict(sel_alignment_data)
-                output = await sel_tool.execute(
-                    db=db,
-                    initiative_id=initiative.id,
-                    inputs=inputs,
-                    include_corpus=True,
-                    alignment=alignment_obj,
-                )
-                initiative.save_deliverable(
-                    sel_tool_id, output.title, output.output_type, output.content,
-                )
-                w_type = WIDGET_TYPES.get(output.output_type, "document_viewer")
-                label = WIDGET_LABELS.get(w_type, sel_tool.definition.name)
-                deliverable_msg = ChatMessage(
-                    initiative_id=initiative.id,
-                    role="assistant",
-                    content=f"Here's your **{label}** — review it in the editor and export when ready.",
-                    widget_type=w_type,
-                    widget_data={"content": output.content},
-                )
-                db.add(deliverable_msg)
-            except Exception as e:
-                logger.error(f"Failed to generate {sel_tool_id}: {e}", exc_info=True)
-                err_msg = ChatMessage(
-                    initiative_id=initiative.id,
-                    role="assistant",
-                    content=f"I wasn't able to generate the {sel_tool.definition.name} right now. Please try again.",
-                )
-                db.add(err_msg)
-
-        initiative.stage = InitiativeStage.COMPLETE.value
-        await db.commit()
-    else:
-        # Save assistant message for the next alignment
-        assistant_message = ChatMessage(
-            initiative_id=initiative.id,
-            role="assistant",
-            content=message,
-            widget_type=widget_type,
-            widget_data=widget_data,
-        )
-        db.add(assistant_message)
-        await db.commit()
-    
-    return AlignmentResponse(
-        alignment=ToolAlignmentSchema(**alignment_data),
-        message=message,
-    )
-
-
-@router.post("/initiatives/{initiative_id}/alignment/feedback", response_model=AlignmentResponse)
-async def provide_alignment_feedback(
-    initiative_id: UUID,
-    data: AlignmentFeedbackRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Provide feedback to update an alignment."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    # Get existing alignment
-    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
-    if not alignment_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No alignment found for tool {data.tool_id}",
-        )
-    
-    # Get the tool and update alignment based on feedback
-    registry = get_tool_registry()
-    tool = registry.get_tool(data.tool_id)
-    
-    if not tool:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool {data.tool_id} not found",
-        )
-    
-    # Reconstruct alignment object
-    current_alignment = ToolAlignment.from_dict(alignment_data)
-    
-    # Update alignment based on feedback
-    try:
-        updated_alignment = await tool.update_alignment_from_feedback(
-            current_alignment=current_alignment,
-            feedback=data.feedback,
-            db=db,
-            initiative_id=initiative_id,
-        )
-        updated_data = updated_alignment.to_dict()
-    except Exception as e:
-        logger.error(f"Failed to update alignment from feedback: {e}")
-        alignment_data["feedback"] = data.feedback
-        updated_data = alignment_data
-    
-    # Save updated alignment
-    initiative.set_alignment_for_tool(data.tool_id, updated_data)
-    await db.commit()
-    await db.refresh(initiative)
-    
-    # Save user's feedback as a chat message
-    user_msg = ChatMessage(
-        initiative_id=initiative.id,
-        role="user",
-        content=data.feedback,
-    )
-    db.add(user_msg)
-    await db.commit()
-    
-    # Save assistant response
-    tool_name = tool.definition.name
-    pending = initiative.get_pending_alignment_tools()
-    pending_others = [tid for tid in pending if tid != data.tool_id]
-    
-    assistant_message = ChatMessage(
-        initiative_id=initiative.id,
-        role="assistant",
-        content=f"I've updated the {tool_name} outline based on your feedback. Please review the changes.",
-        widget_type="alignment",
-        widget_data=build_alignment_widget_data(
-            tool_id=data.tool_id,
-            alignment_data=updated_data,
-            pending_tool_ids=pending_others,
-        ),
-    )
-    db.add(assistant_message)
-    await db.commit()
-    
-    return AlignmentResponse(
-        alignment=ToolAlignmentSchema(**updated_data),
-        message=f"Updated {tool_name} outline based on your feedback.",
-    )
-
-
-@router.get("/initiatives/{initiative_id}/alignment/{tool_id}")
-async def get_alignment(
-    initiative_id: UUID,
-    tool_id: str,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Get the current alignment for a specific tool."""
-    initiative = await require_viewer(db, initiative_id, user)
-
-    # Get alignment
-    alignment_data = initiative.get_alignment_for_tool(tool_id)
-    
-    if not alignment_data:
-        # Generate alignment if it doesn't exist
-        registry = get_tool_registry()
-        tool = registry.get_tool(tool_id)
-        
-        if not tool:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tool {tool_id} not found",
-            )
-        
-        if not tool.requires_alignment:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tool {tool_id} does not require alignment",
-            )
-        
-        try:
-            alignment_obj = await tool.generate_alignment(
-                db=db,
-                initiative_id=initiative_id,
-                inputs=initiative.tool_inputs or {},
-            )
-            alignment_data = alignment_obj.to_dict()
-            
-            # Save alignment to initiative
-            initiative.set_alignment_for_tool(tool_id, alignment_data)
-            await db.commit()
-            await db.refresh(initiative)
-        except Exception as e:
-            logger.error(f"Failed to generate alignment for {tool_id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to generate alignment: {str(e)}",
-            )
-    
-    return {
-        "alignment": alignment_data,
-        "tool_id": tool_id,
-    }

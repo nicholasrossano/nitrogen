@@ -1,4 +1,4 @@
-"""Standalone compliance & program design chat endpoint with SSE streaming."""
+"""Chat endpoint with SSE streaming."""
 
 import uuid
 import json
@@ -14,11 +14,13 @@ from sqlalchemy import select
 from openai import AsyncOpenAI
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, MockUser
+from app.core.auth import get_current_user, AuthUser, MockUser
+from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_initiative_with_role
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
-from app.services.core_chat import ComplianceChatService
-from app.models.core_chat import CoreChatSession, CoreChatMessage
+from app.services.chat import ChatService
+from app.models.chat import CoreChatSession, CoreChatMessage
 from app.models.initiative import Initiative
 from app.core.rate_limit import limiter
 
@@ -50,7 +52,7 @@ class ChatHistoryMessage(BaseModel):
     content: str
 
 
-class ComplianceChatRequest(BaseModel):
+class ChatStreamRequest(BaseModel):
     content: str = Field(..., max_length=50000)
     history: list[ChatHistoryMessage] = Field(default=[], max_length=100)
     session_id: Optional[str] = None
@@ -101,7 +103,7 @@ async def _get_or_create_session(
 
 
 @router.get("/chat/sessions")
-async def list_core_chat_sessions(
+async def list_sessions(
     initiative_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
@@ -158,7 +160,7 @@ async def list_core_chat_sessions(
 
 
 @router.get("/chat/sessions/{session_id}/messages")
-async def get_core_chat_session_messages(
+async def get_session_messages(
     session_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
@@ -208,7 +210,7 @@ async def get_core_chat_session_messages(
 
 
 @router.delete("/chat/sessions/{session_id}")
-async def delete_core_chat_session(
+async def delete_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
@@ -236,11 +238,11 @@ async def delete_core_chat_session(
 
 @router.post("/chat/stream")
 @limiter.limit("20/minute")
-async def compliance_chat_stream(
+async def chat_stream(
     request: Request,
-    data: ComplianceChatRequest,
+    data: ChatStreamRequest,
     db: AsyncSession = Depends(get_db),
-    user: MockUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """
     Standalone compliance chat with SSE streaming.
@@ -295,7 +297,7 @@ async def compliance_chat_stream(
             )
             prior_msgs = prior_msgs_result.scalars().all()
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
-            service = ComplianceChatService(db)
+            service = ChatService(db)
 
             # --- Compare mode ---
             compare_contexts: list[dict] | None = None
@@ -354,7 +356,7 @@ async def compliance_chat_stream(
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for PDD generation.'})}\n\n"
                         return
                     from app.services.pdd_service import PDDService
-                    from app.services.core_chat import ComplianceChatResponse
+                    from app.services.chat import ChatResponse
 
                     init_uuid = verified_initiative.id
 
@@ -377,7 +379,7 @@ async def compliance_chat_stream(
                             "you can rename, reorder, add, or remove sections. "
                             "When you're happy with it, click **Confirm Outline** to start drafting."
                         )
-                        return ComplianceChatResponse(
+                        return ChatResponse(
                             content=text,
                             sources=[],
                             tiers_used=["pdd_scan"],
@@ -387,13 +389,68 @@ async def compliance_chat_stream(
                         )
 
                     generation_task = asyncio.create_task(_run_pdd_setup())
+                elif _tool_hint in ("investment_memo", "due_diligence_checklist") and data.initiative_id:
+                    if not verified_initiative:
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for document generation.'})}\n\n"
+                        return
+                    from app.api.alignment_helpers import (
+                        get_or_generate_alignment,
+                        build_alignment_widget_data,
+                        get_alignment_intro_message,
+                    )
+                    from app.tools import get_tool_registry as _get_registry
+                    from app.services.chat import ChatResponse
+                    from sqlalchemy.orm.attributes import flag_modified
+
+                    _registry = _get_registry()
+                    _align_tool = _registry.get_tool(_tool_hint)
+                    _align_initiative = verified_initiative
+
+                    async def _run_alignment():
+                        if on_thinking:
+                            await on_thinking("Preparing outline...")
+                        existing = list(_align_initiative.selected_tools or [])
+                        if existing != [_tool_hint]:
+                            _align_initiative.selected_tools = [_tool_hint]
+                            ta = dict(_align_initiative.tool_alignments or {})
+                            for oid in existing:
+                                if oid != _tool_hint and oid in ta:
+                                    del ta[oid]
+                            _align_initiative.tool_alignments = ta
+                            flag_modified(_align_initiative, "selected_tools")
+                            flag_modified(_align_initiative, "tool_alignments")
+                            await db.commit()
+                            await db.refresh(_align_initiative)
+
+                        alignment_data = await get_or_generate_alignment(db, _align_initiative, _tool_hint)
+                        if not alignment_data:
+                            return ChatResponse(
+                                content=f"I wasn't able to generate an outline for {_align_tool.definition.name}. Please try again.",
+                                sources=[], tiers_used=[], latency_ms=0,
+                            )
+
+                        pending = _align_initiative.get_pending_alignment_tools()
+                        wd = build_alignment_widget_data(
+                            tool_id=_tool_hint,
+                            alignment_data=alignment_data,
+                            pending_tool_ids=[t for t in pending if t != _tool_hint],
+                        )
+                        wd["session_id"] = str(session.id)
+                        intro = get_alignment_intro_message(_align_tool.definition.name)
+                        return ChatResponse(
+                            content=intro,
+                            sources=[], tiers_used=["alignment"], latency_ms=0,
+                            widget_type="alignment", widget_data=wd,
+                        )
+
+                    generation_task = asyncio.create_task(_run_alignment())
                 elif _tool_hint.startswith("template_fill:") and data.initiative_id:
                     if not verified_initiative:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for template analysis.'})}\n\n"
                         return
                     template_id_str = _tool_hint.split(":", 1)[1]
                     from app.tools.template_tool import TemplateFillTool
-                    from app.services.core_chat import ComplianceChatResponse
+                    from app.services.chat import ChatResponse
 
                     tmpl_tool = TemplateFillTool()
                     init_uuid = verified_initiative.id
@@ -423,7 +480,7 @@ async def compliance_chat_stream(
                             "values, provide missing information directly, or click any "
                             "requirement to investigate it."
                         )
-                        return ComplianceChatResponse(
+                        return ChatResponse(
                             content=text,
                             sources=[],
                             tiers_used=["template_analysis"],
@@ -484,6 +541,44 @@ async def compliance_chat_stream(
                 widget_data=result.widget_data,
             )
             db.add(assistant_msg)
+
+            # Sync generated deliverables when a project is in context and the
+            # result widget represents a completed, exportable tool output.
+            if verified_initiative and result.widget_type and result.widget_data:
+                _WIDGET_TO_TOOL: dict[str, str] = {
+                    "lcoe_output": "lcoe_model",
+                    "lcoe_inputs": "lcoe_model",
+                    "carbon_output": "carbon_model",
+                    "carbon_inputs": "carbon_model",
+                    "solar_output": "solar_estimate",
+                    "solar_inputs": "solar_estimate",
+                }
+                _tool_id = _WIDGET_TO_TOOL.get(result.widget_type or "")
+                if _tool_id:
+                    from app.tools.registry import get_tool_registry
+                    _tool = get_tool_registry().get_tool(_tool_id)
+                    _content = result.widget_data or {}
+                    if _tool and _tool.is_exportable(_content):
+                        _res = _content.get("result") or {}
+                        if _tool_id == "lcoe_model":
+                            _lcoe = _res.get("lcoe", 0)
+                            _cur = _res.get("currency", "USD")
+                            _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
+                        elif _tool_id == "carbon_model":
+                            _er = _res.get("net_er_tco2e", 0)
+                            _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
+                        elif _tool_id == "solar_estimate":
+                            _kwh = _res.get("annual_kwh", 0)
+                            _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
+                        else:
+                            _title = _tool.definition.name
+                        verified_initiative.save_deliverable(
+                            _tool_id,
+                            _title,
+                            _tool.definition.output_type,
+                            _content,
+                        )
+
             await db.commit()
 
             complete = {
@@ -504,7 +599,7 @@ async def compliance_chat_stream(
             yield f"data: {json.dumps(complete)}\n\n"
 
         except Exception as e:
-            logger.error(f"Compliance chat stream error: {e}", exc_info=True)
+            logger.error(f"Chat stream error: {e}", exc_info=True)
             try:
                 await db.rollback()
             except Exception:
@@ -523,7 +618,7 @@ async def compliance_chat_stream(
 
 
 @router.patch("/chat/messages/{message_id}/feedback")
-async def set_compliance_message_feedback(
+async def set_message_feedback(
     message_id: str,
     data: FeedbackRequest,
     db: AsyncSession = Depends(get_db),
@@ -560,7 +655,7 @@ class WidgetUpdateRequest(BaseModel):
 
 
 @router.patch("/chat/messages/{message_id}/widget")
-async def update_core_chat_message_widget(
+async def update_message_widget(
     message_id: str,
     data: WidgetUpdateRequest,
     db: AsyncSession = Depends(get_db),
@@ -588,6 +683,53 @@ async def update_core_chat_message_widget(
 
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(msg, "widget_data")
+
+    # Keep initiative.deliverables in sync when a model widget is recalculated.
+    session = await db.get(CoreChatSession, msg.session_id)
+    if session and session.initiative_id:
+        try:
+            init_uuid = uuid.UUID(str(session.initiative_id))
+            initiative_result = await db.execute(
+                select(Initiative).where(Initiative.id == init_uuid)
+            )
+            init_obj = initiative_result.scalar_one_or_none()
+            if init_obj:
+                _WIDGET_TO_TOOL: dict[str, str] = {
+                    "lcoe_output": "lcoe_model",
+                    "lcoe_inputs": "lcoe_model",
+                    "carbon_output": "carbon_model",
+                    "carbon_inputs": "carbon_model",
+                    "solar_output": "solar_estimate",
+                    "solar_inputs": "solar_estimate",
+                }
+                _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
+                if _tool_id:
+                    from app.tools.registry import get_tool_registry
+                    _tool = get_tool_registry().get_tool(_tool_id)
+                    _content = data.widget_data or {}
+                    if _tool and _tool.is_exportable(_content):
+                        _res = _content.get("result") or {}
+                        if _tool_id == "lcoe_model":
+                            _lcoe = _res.get("lcoe", 0)
+                            _cur = _res.get("currency", "USD")
+                            _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
+                        elif _tool_id == "carbon_model":
+                            _er = _res.get("net_er_tco2e", 0)
+                            _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
+                        elif _tool_id == "solar_estimate":
+                            _kwh = _res.get("annual_kwh", 0)
+                            _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
+                        else:
+                            _title = _tool.definition.name
+                        init_obj.save_deliverable(
+                            _tool_id,
+                            _title,
+                            _tool.definition.output_type,
+                            _content,
+                        )
+        except Exception:
+            pass  # Never block the widget update if deliverable sync fails
+
     await db.commit()
 
     return {"message_id": str(msg.id), "updated": True}
@@ -624,10 +766,11 @@ async def update_session_title(
 @router.post("/chat/title")
 async def generate_chat_title(
     data: TitleRequest,
-    user: MockUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_ai_access),
 ):
     """Generate a brief 3-5 word title for a chat based on the first message."""
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    client, is_byok = await get_openai_client(user.uid, db)
     try:
         resp = await client.chat.completions.create(
             model=settings.openai_orchestration_model,
@@ -645,6 +788,7 @@ async def generate_chat_title(
             temperature=0,
             max_tokens=20,
         )
+        await record_usage_from_response(user.uid, settings.openai_orchestration_model, resp, db, is_byok=is_byok)
         title = (resp.choices[0].message.content or "").strip().strip('"').strip("'")
         return {"title": title or data.message[:40]}
     except Exception as e:
@@ -673,7 +817,7 @@ async def save_session_from_messages(
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Create a core_chat session from a list of messages (e.g. document flow)."""
+    """Create a chat session from a list of messages (e.g. document flow)."""
     if not data.messages:
         raise HTTPException(status_code=400, detail="No messages provided")
 
@@ -705,3 +849,245 @@ async def save_session_from_messages(
 
     await db.commit()
     return {"session_id": str(session.id), "title": session.title}
+
+
+# ---------------------------------------------------------------------------
+# Alignment endpoints (for memo / checklist generation via the chat flow)
+# ---------------------------------------------------------------------------
+
+class AlignmentConfirmRequest(BaseModel):
+    tool_id: str
+    sections: list[dict] | None = None
+    parameters: list[dict] | None = None
+
+
+class AlignmentFeedbackRequest(BaseModel):
+    tool_id: str
+    feedback: str = Field(..., min_length=1, max_length=5000)
+
+
+class AlignmentMessageOut(BaseModel):
+    id: str
+    role: str
+    content: str
+    widget_type: str | None = None
+    widget_data: dict | None = None
+    created_at: str | None = None
+
+
+class AlignmentConfirmResponse(BaseModel):
+    alignment: dict
+    message: str
+    new_messages: list[AlignmentMessageOut] = []
+
+
+@router.post("/chat/sessions/{session_id}/alignment/confirm")
+async def confirm_chat_alignment(
+    session_id: str,
+    data: AlignmentConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_ai_access),
+):
+    """Confirm alignment and generate the deliverable, saving messages to the chat session."""
+    session = await db.get(CoreChatSession, uuid.UUID(session_id))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    from app.core.permissions import require_editor
+    initiative = await require_editor(db, session.initiative_id, user)
+
+    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
+    if not alignment_data:
+        raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
+
+    if data.sections:
+        alignment_data["sections"] = data.sections
+    if data.parameters:
+        alignment_data["parameters"] = data.parameters
+
+    alignment_data["confirmed"] = True
+    alignment_data["feedback"] = None
+    initiative.set_alignment_for_tool(data.tool_id, alignment_data)
+    await db.commit()
+    await db.refresh(initiative)
+
+    from app.tools import get_tool_registry
+    from app.tools.base import ToolAlignment
+
+    registry = get_tool_registry()
+    tool = registry.get_tool(data.tool_id)
+    tool_name = tool.definition.name if tool else data.tool_id
+
+    new_messages: list[AlignmentMessageOut] = []
+
+    confirm_text = f"Perfect! The {tool_name} outline is confirmed. Generating your deliverable now..."
+    confirm_msg = CoreChatMessage(
+        session_id=session.id, role="assistant", content=confirm_text,
+    )
+    db.add(confirm_msg)
+    await db.flush()
+    new_messages.append(AlignmentMessageOut(
+        id=str(confirm_msg.id), role="assistant", content=confirm_text,
+        created_at=confirm_msg.created_at.isoformat() if confirm_msg.created_at else None,
+    ))
+
+    inputs = initiative.tool_inputs or {}
+    if initiative.title:
+        inputs.setdefault("project_title", initiative.title)
+    if initiative.geography:
+        inputs.setdefault("geography", initiative.geography)
+    if initiative.target_population:
+        inputs.setdefault("target_beneficiaries", initiative.target_population)
+    if initiative.goal:
+        inputs.setdefault("project_goal", initiative.goal)
+    if initiative.budget_range:
+        inputs.setdefault("budget_range", initiative.budget_range)
+    if initiative.timeline:
+        inputs.setdefault("timeline", initiative.timeline)
+
+    WIDGET_TYPES = {"memo": "memo_viewer", "checklist": "checklist_viewer"}
+    WIDGET_LABELS = {"memo_viewer": "Investment Memo", "checklist_viewer": "Due Diligence Checklist"}
+
+    if tool and tool.requires_alignment:
+        try:
+            alignment_obj = ToolAlignment.from_dict(alignment_data)
+            output = await tool.execute(
+                db=db,
+                initiative_id=initiative.id,
+                inputs=inputs,
+                include_corpus=True,
+                alignment=alignment_obj,
+            )
+            initiative.save_deliverable(
+                data.tool_id, output.title, output.output_type, output.content,
+            )
+            w_type = WIDGET_TYPES.get(output.output_type, "document_viewer")
+            label = WIDGET_LABELS.get(w_type, tool_name)
+            deliverable_msg = CoreChatMessage(
+                session_id=session.id,
+                role="assistant",
+                content=f"Here's your **{label}** — review it in the editor and export when ready.",
+                widget_type=w_type,
+                widget_data={"content": output.content},
+            )
+            db.add(deliverable_msg)
+            await db.flush()
+            new_messages.append(AlignmentMessageOut(
+                id=str(deliverable_msg.id), role="assistant",
+                content=deliverable_msg.content,
+                widget_type=w_type,
+                widget_data={"content": output.content},
+                created_at=deliverable_msg.created_at.isoformat() if deliverable_msg.created_at else None,
+            ))
+        except Exception as e:
+            logger.error(f"Failed to generate {data.tool_id}: {e}", exc_info=True)
+            err_msg = CoreChatMessage(
+                session_id=session.id, role="assistant",
+                content=f"I wasn't able to generate the {tool_name} right now. Please try again.",
+            )
+            db.add(err_msg)
+            await db.flush()
+            new_messages.append(AlignmentMessageOut(
+                id=str(err_msg.id), role="assistant", content=err_msg.content,
+                created_at=err_msg.created_at.isoformat() if err_msg.created_at else None,
+            ))
+
+    await db.commit()
+    return AlignmentConfirmResponse(
+        alignment=alignment_data,
+        message=confirm_text,
+        new_messages=new_messages,
+    )
+
+
+@router.post("/chat/sessions/{session_id}/alignment/feedback")
+async def provide_chat_alignment_feedback(
+    session_id: str,
+    data: AlignmentFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_ai_access),
+):
+    """Provide feedback to update an alignment within a chat session."""
+    session = await db.get(CoreChatSession, uuid.UUID(session_id))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    from app.core.permissions import require_editor
+    initiative = await require_editor(db, session.initiative_id, user)
+
+    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
+    if not alignment_data:
+        raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
+
+    from app.tools import get_tool_registry
+    from app.tools.base import ToolAlignment
+    from app.api.alignment_helpers import build_alignment_widget_data
+
+    registry = get_tool_registry()
+    tool = registry.get_tool(data.tool_id)
+    if not tool:
+        raise HTTPException(status_code=400, detail=f"Tool {data.tool_id} not found")
+
+    current_alignment = ToolAlignment.from_dict(alignment_data)
+    try:
+        updated_alignment = await tool.update_alignment_from_feedback(
+            current_alignment=current_alignment,
+            feedback=data.feedback,
+            db=db,
+            initiative_id=initiative.id,
+        )
+        updated_data = updated_alignment.to_dict()
+    except Exception as e:
+        logger.error(f"Failed to update alignment from feedback: {e}")
+        alignment_data["feedback"] = data.feedback
+        updated_data = alignment_data
+
+    initiative.set_alignment_for_tool(data.tool_id, updated_data)
+    await db.commit()
+    await db.refresh(initiative)
+
+    user_msg = CoreChatMessage(
+        session_id=session.id, role="user", content=data.feedback,
+    )
+    db.add(user_msg)
+
+    tool_name = tool.definition.name
+    pending = initiative.get_pending_alignment_tools()
+    pending_others = [tid for tid in pending if tid != data.tool_id]
+
+    wd = build_alignment_widget_data(
+        tool_id=data.tool_id,
+        alignment_data=updated_data,
+        pending_tool_ids=pending_others,
+    )
+    wd["session_id"] = str(session.id)
+
+    assistant_msg = CoreChatMessage(
+        session_id=session.id,
+        role="assistant",
+        content=f"I've updated the {tool_name} outline based on your feedback. Please review the changes.",
+        widget_type="alignment",
+        widget_data=wd,
+    )
+    db.add(assistant_msg)
+    await db.flush()
+    await db.commit()
+
+    new_messages = [
+        AlignmentMessageOut(
+            id=str(user_msg.id), role="user", content=data.feedback,
+            created_at=user_msg.created_at.isoformat() if user_msg.created_at else None,
+        ),
+        AlignmentMessageOut(
+            id=str(assistant_msg.id), role="assistant",
+            content=assistant_msg.content,
+            widget_type="alignment", widget_data=wd,
+            created_at=assistant_msg.created_at.isoformat() if assistant_msg.created_at else None,
+        ),
+    ]
+
+    return AlignmentConfirmResponse(
+        alignment=updated_data,
+        message=f"Updated {tool_name} outline based on your feedback.",
+        new_messages=new_messages,
+    )

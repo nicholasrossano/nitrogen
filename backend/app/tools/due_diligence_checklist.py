@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.tools.base import (
     BaseTool,
     ExecutionModel,
@@ -100,9 +101,17 @@ DEFAULT_CHECKLIST_CATEGORIES = [
 class DueDiligenceChecklistTool(BaseTool):
     """Tool for generating due diligence assessment checklists."""
     
-    def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(self, user_id: str | None = None, db: AsyncSession | None = None):
+        self.user_id = user_id
+        self.db = db
+        self._client: AsyncOpenAI | None = None
+        self._is_byok: bool = False
         self.model = settings.openai_model
+
+    async def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
+        return self._client
     
     @property
     def definition(self) -> ToolDefinition:
@@ -114,6 +123,7 @@ class DueDiligenceChecklistTool(BaseTool):
             output_type="checklist",
             category="assessment",
             keywords=["due diligence", "checklist", "assessment", "risk", "evaluation", "audit", "review"],
+            export_format="xlsx",
         )
     
     @property
@@ -266,6 +276,7 @@ Key Concerns: {inputs.get('key_concerns', 'None specified')}
     
     async def _generate_checklist_alignment(self, project_summary: str) -> dict:
         """Use LLM to generate context-aware checklist categories."""
+        client = await self._get_client()
         system_prompt = """You are an expert in due diligence for development projects.
 
 Given a project description, generate tailored checklist categories and focus areas.
@@ -282,7 +293,7 @@ Also identify:
 
 Tailor everything to the specific project type, geography, and stage."""
 
-        response = await self.client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -346,6 +357,8 @@ Create categories and focus areas tailored to this specific project type and con
             tool_choice={"type": "function", "function": {"name": "generate_alignment"}},
             temperature=0.7,
         )
+        if self.user_id and self.db:
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
@@ -400,7 +413,8 @@ The user might ask to:
 Apply their feedback thoughtfully. If they ask to change one thing, change that thing. If they ask for broader changes, make broader changes. Keep the rest intact."""
 
         try:
-            response = await self.client.chat.completions.create(
+            client = await self._get_client()
+            response = await client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -445,6 +459,8 @@ Return the updated checklist.
                 tool_choice={"type": "function", "function": {"name": "update_checklist"}},
                 temperature=0.4,
             )
+            if self.user_id and self.db:
+                await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
             
             tool_call = response.choices[0].message.tool_calls[0]
             updated_data = json.loads(tool_call.function.arguments)
@@ -602,6 +618,7 @@ Key Concerns: {inputs.get('key_concerns', 'None specified')}
     
     async def _generate_checklist(self, project_summary: str, context: str, alignment_instructions: str | None = None) -> dict:
         """Generate checklist content using GPT."""
+        client = await self._get_client()
         
         base_system_prompt = """You are an expert in development project due diligence. Generate a comprehensive checklist covering all aspects that should be assessed before funding or implementing a project.
 
@@ -647,7 +664,7 @@ Generate a comprehensive, actionable checklist tailored to this specific project
         if alignment_instructions:
             user_message += "\n\nFollow the specified structure and focus areas from the alignment instructions."
         
-        response = await self.client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -716,6 +733,8 @@ Generate a comprehensive, actionable checklist tailored to this specific project
             tool_choice={"type": "function", "function": {"name": "generate_checklist"}},
             temperature=0.7,
         )
+        if self.user_id and self.db:
+            await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
