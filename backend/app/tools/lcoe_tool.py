@@ -17,7 +17,6 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 

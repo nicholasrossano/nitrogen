@@ -86,7 +86,7 @@ async def switch_method_pack(
             sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
             result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
             result_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
-        except (ValueError, ZeroDivisionError) as e:
+        except (ValueError, ZeroDivisionError):
             result_data["error"] = "Calculation failed with current inputs"
             result_data["computable"] = False
 
