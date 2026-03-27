@@ -57,6 +57,25 @@ const ANALYSIS_MODULES = ALL_MODULES.filter(
   (m) => m.id === 'lcoe_model' || m.id === 'carbon_model' || m.id === 'solar_estimate'
 );
 
+/** Modules available in the New Module landing page (standalone, not project-side-chat only) */
+export const STANDALONE_MODULE_IDS = new Set(['lcoe_model', 'carbon_model', 'solar_estimate']);
+
+export interface ModuleCategory {
+  id: string;
+  name: string;
+  moduleIds: string[];
+}
+
+export const MODULE_CATEGORIES: ModuleCategory[] = [
+  { id: 'opportunity', name: 'Opportunity Discovery', moduleIds: [] },
+  { id: 'definition', name: 'Project Definition', moduleIds: [] },
+  { id: 'feasibility', name: 'Feasibility & Option Analysis', moduleIds: ['lcoe_model', 'solar_estimate'] },
+  { id: 'impact', name: 'Impact Assessment', moduleIds: ['carbon_model'] },
+  { id: 'financing', name: 'Financing & Incentives', moduleIds: ['investment_memo'] },
+  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['due_diligence_checklist'] },
+  { id: 'deliverables', name: 'Deliverables & Execution', moduleIds: ['template_fill'] },
+];
+
 interface ModulePickerProps {
   selected: ModuleOption | null;
   onSelect: (module: ModuleOption | null) => void;

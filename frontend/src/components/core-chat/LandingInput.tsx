@@ -20,6 +20,10 @@ interface LandingInputProps {
   headerContent?: React.ReactNode;
   /** Override the default placeholder text */
   placeholder?: string;
+  /** Extra action buttons rendered in the composer toolbar (before paperclip) */
+  extraInputActions?: React.ReactNode;
+  /** Chips rendered above the textarea (e.g. compare project chip) */
+  inputChips?: React.ReactNode;
 }
 
 function relativeTime(ts: number): string {
@@ -34,7 +38,7 @@ function relativeTime(ts: number): string {
   return `${days}d ago`;
 }
 
-export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession, hideTiles, headerContent, placeholder = 'Ask anything' }: LandingInputProps) {
+export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession, hideTiles, headerContent, placeholder = 'Ask anything', extraInputActions, inputChips }: LandingInputProps) {
   const devMode = useSettingsStore((s) => s.devMode);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
@@ -150,8 +154,9 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
           >
-            {attachedFiles.length > 0 && (
+            {(inputChips || attachedFiles.length > 0) && (
               <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+                {inputChips}
                 {attachedFiles.map((file, i) => (
                   <span
                     key={i}
@@ -189,8 +194,9 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                 className="w-full resize-none bg-transparent px-5 py-3.5 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
-              {/* Bottom-right: attach + send */}
+              {/* Bottom-right: extra actions + attach + send */}
               <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+                {extraInputActions}
                 <input
                   ref={fileInputRef}
                   type="file"
