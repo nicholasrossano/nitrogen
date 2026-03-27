@@ -65,6 +65,20 @@ When creating a PR with `gh pr create`, always fill in the `.github/PULL_REQUEST
 - **Summary**: 1–3 sentences on what the PR does and why. Include `Closes #N` only if there is a known issue number, otherwise omit that line.
 - **Changes**: bullet points listing the key changes (one per logical change area).
 
+## Environment Files
+
+There is **one `.env` file** at the repo root. `backend/.env` and `frontend/.env.local` are **symlinks** to it.
+
+- `Nitrogen/.env` — the only real env file; edit this, both services read it automatically.
+- `backend/.env` → symlink to `../.env`
+- `frontend/.env.local` → symlink to `../.env`
+- `.env.example` — committed template for open-source contributors (no secrets).
+
+**Rules:**
+- NEVER create, overwrite, or delete `backend/.env` or `frontend/.env.local` — they are symlinks. Edit `Nitrogen/.env` only.
+- To add a new env var: add it to `Nitrogen/.env` and `.env.example`.
+- If a symlink is missing, recreate it: `ln -sf ../.env backend/.env` or `ln -sf ../.env frontend/.env.local`.
+
 ## Dev / local run
 When starting the "local emulator" or running the app locally, follow `.cursor/rules/dev-setup.mdc`: start **backend** (port 8000), **frontend** (port 3000), and **open** `http://localhost:3000` in the browser. All three are required (e.g. projects won't load without the backend).
 
