@@ -110,32 +110,14 @@ npm run dev
 - CORS is configured to allow localhost:3000 and localhost:3001
 - If you get CORS errors, check that backend/.env has the correct CORS_ORIGINS
 
-## Project Structure
+## Key Entry Points
 
-```
-Nitrogen/
-├── docker-compose.yml
-├── frontend/           # Next.js app
-│   ├── src/
-│   │   ├── app/       # App router pages
-│   │   ├── components/# React components
-│   │   ├── hooks/     # Custom hooks
-│   │   ├── lib/       # Utilities
-│   │   └── stores/    # Zustand stores
-│   └── ...
-├── backend/            # FastAPI app
-│   ├── app/
-│   │   ├── api/       # Route handlers
-│   │   ├── models/    # SQLAlchemy models
-│   │   ├── schemas/   # Pydantic schemas
-│   │   ├── services/  # Business logic
-│   │   ├── core/      # Auth, DB, storage
-│   │   └── prompts/   # AI prompt templates
-│   ├── alembic/       # Database migrations
-│   ├── scripts/       # CLI tools
-│   └── templates/     # DOCX templates
-└── exports/           # Generated documents
-```
+- **Chat orchestration** — `backend/app/services/orchestration.py` drives the LLM conversation loop, tool dispatch, and RAG retrieval.
+- **AI prompts** — `backend/app/prompts/` contains all prompt templates; start here when tuning model behavior.
+- **API routes** — `backend/app/api/` maps HTTP endpoints to service calls; live docs at `http://localhost:8000/docs`.
+- **Frontend pages** — `frontend/src/app/` (Next.js App Router); the main chat surface is `page.tsx` and the project workspace is `projects/[id]/`.
+- **State management** — `frontend/src/stores/` (Zustand); one store per major domain (chat, project, files).
+- **DB migrations** — `backend/alembic/versions/`; run `alembic upgrade head` after pulling changes that touch models.
 
 ## API Endpoints
 
