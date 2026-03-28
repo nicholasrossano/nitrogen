@@ -69,6 +69,7 @@ interface InitiativeState {
   updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
+  addPlanItem: (id: string, pillarId: string, title: string, itemType?: 'deliverable' | 'assessment', phaseId?: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -836,6 +837,49 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     } catch (error) {
       set({ projectPlan });
       console.error('Failed to delete plan item:', error);
+    }
+  },
+
+  // Add a new item to a pillar (optimistic); optionally assign to a phase
+  addPlanItem: async (id: string, pillarId: string, title: string, itemType: 'deliverable' | 'assessment' = 'deliverable', phaseId?: string) => {
+    const { projectPlan } = get();
+    if (!projectPlan) return;
+
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    const newItem = {
+      id: tempId,
+      title,
+      item_type: itemType,
+      classification: 'optional' as const,
+      status: 'not_started' as const,
+      rationale: '',
+      user_added: true,
+      ...(phaseId ? { phase: phaseId, phase_order: 999 } : {}),
+    };
+
+    const updatedPillars = projectPlan.pillars.map((p) =>
+      p.id === pillarId ? { ...p, items: [...p.items, newItem] } : p
+    );
+    set({ projectPlan: { ...projectPlan, pillars: updatedPillars } });
+
+    try {
+      const result = await api.addPlanItem(id, pillarId, title, itemType, phaseId);
+      const currentPlan = get().projectPlan;
+      if (!currentPlan) return;
+      const finalPillars = currentPlan.pillars.map((p) =>
+        p.id === pillarId
+          ? { ...p, items: p.items.map((i) => (i.id === tempId ? result.item : i)) }
+          : p
+      );
+      set({ projectPlan: { ...currentPlan, pillars: finalPillars } });
+    } catch (error) {
+      const currentPlan = get().projectPlan;
+      if (!currentPlan) return;
+      const rollbackPillars = currentPlan.pillars.map((p) =>
+        p.id === pillarId ? { ...p, items: p.items.filter((i) => i.id !== tempId) } : p
+      );
+      set({ projectPlan: { ...currentPlan, pillars: rollbackPillars } });
+      console.error('Failed to add plan item:', error);
     }
   },
 

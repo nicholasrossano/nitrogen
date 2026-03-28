@@ -1,7 +1,7 @@
 """API endpoints for the 3-pillar Project Plan."""
 
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -35,6 +35,12 @@ class DeepDiveRequest(BaseModel):
     item_classification: str
     item_rationale: str = ""
     pillar_name: str = ""
+
+
+class AddPlanItemRequest(BaseModel):
+    title: str
+    item_type: str = "deliverable"
+    phase_id: str | None = None
 
 
 @router.get("/initiatives/{initiative_id}/project-plan")
@@ -300,6 +306,55 @@ async def delete_plan_element(
     await db.commit()
 
     return {"success": True, "item_id": item_id, "element_index": element_index}
+
+
+@router.post("/initiatives/{initiative_id}/project-plan/pillars/{pillar_id}/items")
+async def add_plan_item(
+    initiative_id: UUID,
+    pillar_id: str,
+    body: AddPlanItemRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Add a new item to a specific pillar in the project plan."""
+    initiative = await require_editor(db, initiative_id, user)
+
+    if not initiative.project_plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title cannot be empty")
+
+    item_type = body.item_type if body.item_type in ("deliverable", "assessment") else "deliverable"
+    new_item: dict = {
+        "id": str(uuid4()),
+        "title": title,
+        "item_type": item_type,
+        "classification": "optional",
+        "status": "not_started",
+        "rationale": "",
+        "user_added": True,
+    }
+    if body.phase_id:
+        new_item["phase"] = body.phase_id
+        new_item["phase_order"] = 999
+
+    found = False
+    for pillar in initiative.project_plan.get("pillars", []):
+        if pillar.get("id") == pillar_id:
+            pillar.setdefault("items", []).append(new_item)
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Pillar '{pillar_id}' not found")
+
+    flag_modified(initiative, "project_plan")
+    initiative.touch()
+    await db.commit()
+
+    return {"success": True, "item": new_item}
 
 
 @router.post("/initiatives/{initiative_id}/project-plan/items/{item_id}/deep-dive")

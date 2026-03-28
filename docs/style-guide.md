@@ -580,6 +580,41 @@ Use when a side panel — sidebar, chat panel, inspector — should open or clos
 
 ---
 
+### Modal Pattern (Settings-Style Header)
+
+Use this as the default modal shell for feature/configuration dialogs.
+
+```tsx
+<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div className="relative w-full max-w-3xl max-h-[84vh] mx-4 rounded-2xl bg-surface border border-stroke-subtle shadow-2xl flex flex-col overflow-hidden">
+    {/* Header */}
+    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
+      <h2 className="text-sm font-semibold text-text-primary">Modal Title</h2>
+      <button className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+
+    {/* Scrollable body */}
+    <div className="flex-1 min-h-0 overflow-y-auto px-6 md:px-8 py-8">
+      <p className="text-sm text-text-tertiary mb-8">
+        Context and guidance live in the body, not the header.
+      </p>
+      {/* modal content */}
+    </div>
+  </div>
+</div>
+```
+
+**Rules**
+- Header stays compact and consistent: title + close button only; put descriptive copy in the body
+- Default shell: `rounded-2xl`, `border-stroke-subtle`, `shadow-2xl`, `flex flex-col`, `overflow-hidden`
+- Width by intent: use `max-w-sm` for lightweight settings; `max-w-2xl` to `max-w-3xl` for content-rich pickers/workflows
+- Body should be independently scrollable: `flex-1 min-h-0 overflow-y-auto` so header remains fixed while content grows
+- Use stronger horizontal body padding for dense module/grid content: `px-6 md:px-8`
+
+---
+
 ### Resizable Chat Side Panel (Split-View Pattern)
 
 A horizontally resizable chat panel docked to the left of a main content area. The panel slides in/out via the Panel Slide pattern and can be dragged to any width within a clamped range using a drag handle on its right edge.

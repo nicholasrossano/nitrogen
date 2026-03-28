@@ -360,13 +360,16 @@ export function ConversationView({
               placeholder="Ask anything"
               disabled={sending}
               rows={1}
-              className="w-full resize-none bg-transparent px-5 pt-3 pb-1 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+              className="w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
             />
 
-            {/* Bottom row: extra actions + attach + send */}
-            <div className="flex items-center justify-end gap-1.5 px-4 pb-2.5">
-              {extraInputActions}
+            {/* Bottom row: left actions + attach + send */}
+            <div className="flex items-center justify-between gap-2 px-4 pb-2.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                {extraInputActions}
+              </div>
+              <div className="flex items-center gap-1.5">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -395,6 +398,7 @@ export function ConversationView({
                   <ArrowUp className="w-[11px] h-[11px] text-white" />
                 )}
               </button>
+              </div>
             </div>
           </div>
         </form>

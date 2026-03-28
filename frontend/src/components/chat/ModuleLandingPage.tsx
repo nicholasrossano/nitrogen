@@ -5,9 +5,10 @@ import { useSettingsStore } from '@/stores/settingsStore';
 
 interface ModuleLandingPageProps {
   onSelectModule: (moduleId: string, moduleName: string) => void;
+  showIntro?: boolean;
 }
 
-export function ModuleLandingPage({ onSelectModule }: ModuleLandingPageProps) {
+export function ModuleLandingPage({ onSelectModule, showIntro = true }: ModuleLandingPageProps) {
   const devMode = useSettingsStore((s) => s.devMode);
 
   const moduleMap = new Map(ALL_MODULES.map((m) => [m.id, m]));
@@ -25,12 +26,22 @@ export function ModuleLandingPage({ onSelectModule }: ModuleLandingPageProps) {
   }).filter((cat) => devMode || cat.resolvedModules.length > 0);
 
   return (
-    <div className="flex flex-col items-center h-full px-4 py-10 overflow-y-auto">
-      <div className="w-full max-w-2xl">
-        <h1 className="text-lg font-semibold text-text-primary mb-1">New Module</h1>
-        <p className="text-sm text-text-tertiary mb-8">
-          Select a module to create a structured output.
-        </p>
+    <div className="flex flex-col items-center h-full px-6 md:px-8 py-8 overflow-y-auto">
+      <div className="w-full max-w-3xl">
+        {showIntro ? (
+          <>
+            <h1 className="text-lg font-semibold text-text-primary mb-1">New Module</h1>
+            <p className="text-sm text-text-tertiary mb-8">
+              Choose a module to generate a structured output tailored to your project context, from feasibility models
+              and impact estimates to planning and delivery documents.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-text-tertiary mb-8">
+            Choose a module to generate a structured output tailored to your project context, from feasibility models
+            and impact estimates to planning and delivery documents.
+          </p>
+        )}
 
         <div className="flex flex-col gap-8">
           {visibleCategories.map((category) => {
@@ -52,7 +63,7 @@ export function ModuleLandingPage({ onSelectModule }: ModuleLandingPageProps) {
                     </div>
                   )
                 ) : (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-3">
                     {category.resolvedModules.map((module) => {
                       const isTemplate = module.id === 'template_fill';
                       return (
@@ -60,25 +71,23 @@ export function ModuleLandingPage({ onSelectModule }: ModuleLandingPageProps) {
                           key={module.id}
                           type="button"
                           onClick={() => onSelectModule(module.id, module.name)}
-                          className={`relative flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg transition-colors duration-150 cursor-pointer ${
-                            isTemplate
-                              ? 'border-2 border-dashed border-accent-secondary/30 bg-accent-secondary/[0.05] hover:border-accent-secondary/50 hover:bg-accent-secondary/[0.09]'
-                              : 'border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08]'
-                          }`}
+                          className="relative flex items-center gap-3 px-4 py-3.5 card-interactive border border-black/[0.04]"
                         >
                           {isTemplate && (
                             <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
                               BETA
                             </span>
                           )}
-                          <span
-                            className={`[&>svg]:w-4.5 [&>svg]:h-4.5 ${
-                              isTemplate ? 'text-accent-secondary/70' : 'text-accent/70'
-                            }`}
-                          >
-                            {module.icon}
-                          </span>
-                          <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">
+                          <div className={`w-10 h-10 flex-shrink-0 rounded flex items-center justify-center ${
+                            isTemplate ? 'bg-accent-secondary/10' : 'bg-accent-wash'
+                          }`}>
+                            <span className={`[&>svg]:w-5 [&>svg]:h-5 ${
+                              isTemplate ? 'text-accent-secondary' : 'text-accent'
+                            }`}>
+                              {module.icon}
+                            </span>
+                          </div>
+                          <span className="text-xs font-medium text-text-secondary leading-snug text-left">
                             {module.name}
                           </span>
                         </button>

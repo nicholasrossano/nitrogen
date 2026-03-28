@@ -293,6 +293,7 @@ export interface ProjectPlanItem {
   phase_order?: number;
   supports?: string[];
   depends_on?: string[];
+  user_added?: boolean;
 }
 
 export interface ProjectPlanPillar {
@@ -945,6 +946,15 @@ export const api = {
       {
         method: 'PATCH',
         body: JSON.stringify({ status }),
+      }
+    ),
+
+  addPlanItem: (initiativeId: string, pillarId: string, title: string, itemType: 'deliverable' | 'assessment' = 'deliverable', phaseId?: string) =>
+    fetchApi<{ success: boolean; item: ProjectPlanItem }>(
+      `/api/v1/initiatives/${initiativeId}/project-plan/pillars/${pillarId}/items`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ title, item_type: itemType, ...(phaseId ? { phase_id: phaseId } : {}) }),
       }
     ),
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown, FileCheck2, Calculator } from 'lucide-react';
+import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown, FileCheck2, Calculator, Plus } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar, ProjectPlanPhase } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
@@ -76,6 +76,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     error,
     deletePlanItem,
     updatePlanItemStatus,
+    addPlanItem,
   } = useInitiativeStore();
 
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
@@ -204,6 +205,14 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
   const runDeepDive = useCallback(
     async (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
+      // User-added items can't be researched — open panel with disclaimer state.
+      // Guard on both the flag and the temp-id prefix so the check is robust even
+      // if user_added didn't survive serialisation through the backend.
+      if (item.user_added || item.id.startsWith('temp-')) {
+        setDeepDive({ item, pillar, result: null, loading: false, error: null });
+        return;
+      }
+
       const cached = deepDiveCache[item.id];
       if (cached) {
         // Show cached LLM content instantly for immediate UX, but always call the
@@ -640,6 +649,8 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                               return next;
                             })
                           }
+                          phases={hasPhases ? phases : undefined}
+                          onAddItem={(pillarId, title, phaseId) => addPlanItem(initiativeId, pillarId, title, 'deliverable', phaseId)}
                         />
                       );
                     })}
@@ -671,6 +682,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                       return next;
                     })
                   }
+                  onAddItem={(pillarId, title, phaseId) => addPlanItem(initiativeId, pillarId, title, 'deliverable', phaseId)}
                 />
               ))}
             </div>
@@ -717,6 +729,14 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
 
 // ── Phase view section ───────────────────────────────────────────────
 
+// Dotted line style shared with PillarColumn
+const DOTTED_LINE_STYLE_V = {
+  backgroundImage: 'repeating-linear-gradient(to bottom, #C8C4BE 0px, #C8C4BE 3px, transparent 3px, transparent 7px)',
+} as const;
+const DOTTED_LINE_STYLE_H = {
+  backgroundImage: 'repeating-linear-gradient(to right, #C8C4BE 0px, #C8C4BE 3px, transparent 3px, transparent 7px)',
+} as const;
+
 interface PhaseSectionProps {
   phase: ProjectPlanPhase;
   items: { item: ProjectPlanItem; pillar: ProjectPlanPillar }[];
@@ -730,6 +750,7 @@ interface PhaseSectionProps {
   onToggleComplete: (id: string) => void;
   collapsed: boolean;
   onToggleCollapsed: (id: string) => void;
+  onAddItem?: (pillarId: string, title: string, phaseId: string) => Promise<void>;
 }
 
 function PhaseSection({
@@ -745,8 +766,45 @@ function PhaseSection({
   onToggleComplete,
   collapsed,
   onToggleCollapsed,
+  onAddItem,
 }: PhaseSectionProps) {
   const completedInPhase = items.filter(({ item }) => completedIds.has(item.id)).length;
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [selectedPillarId, setSelectedPillarId] = useState(() => pillars[0]?.id ?? '');
+  const [addingSaving, setAddingSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartAdding = () => {
+    setIsAdding(true);
+    setNewItemTitle('');
+    setSelectedPillarId(pillars[0]?.id ?? '');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleCancelAdding = () => {
+    setIsAdding(false);
+    setNewItemTitle('');
+  };
+
+  const handleCommitItem = async () => {
+    const title = newItemTitle.trim();
+    if (!title || !onAddItem || addingSaving || !selectedPillarId) return;
+    setAddingSaving(true);
+    try {
+      await onAddItem(selectedPillarId, title, phase.id);
+    } finally {
+      setAddingSaving(false);
+      setIsAdding(false);
+      setNewItemTitle('');
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleCommitItem(); }
+    else if (e.key === 'Escape') { handleCancelAdding(); }
+  };
 
   // Build a color map so pillar badges match the category view
   const pillarColorMap = useMemo(() => {
@@ -782,7 +840,9 @@ function PhaseSection({
       {/* Phase items */}
       {!collapsed && (
         <div className="ml-3.5 border-l border-stroke-subtle pl-4 pb-2">
-          {/* Single grid so tile column is shared — all tiles same width, badges vary */}
+          {/* Single grid so tile column is shared — all tiles same width, badges vary.
+              The add-item input lives inside the grid spanning all columns so it
+              naturally matches the full row width of [card + badge]. */}
           <div className="grid gap-y-1.5 items-center" style={{ gridTemplateColumns: '1fr auto' }}>
             {items.map(({ item, pillar }) => (
               <React.Fragment key={item.id}>
@@ -808,9 +868,67 @@ function PhaseSection({
                 </span>
               </React.Fragment>
             ))}
+
+            {/* Input node — inside the grid, spanning all columns to match item row width */}
+            {onAddItem && isAdding && (
+              <div style={{ gridColumn: '1 / -1' }} className="py-1.5">
+                <div className="px-3 py-2 rounded-md shadow-card border border-green-400/50 bg-surface flex flex-col gap-2">
+                  <input
+                    ref={inputRef}
+                    value={newItemTitle}
+                    onChange={(e) => setNewItemTitle(e.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    onBlur={() => { if (!newItemTitle.trim()) handleCancelAdding(); }}
+                    placeholder="New item title…"
+                    disabled={addingSaving}
+                    className="flex-1 text-sm font-medium bg-transparent outline-none text-text-primary placeholder:text-text-tertiary disabled:opacity-50"
+                  />
+                  {/* Pillar selector */}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {pillars.map((p, i) => {
+                      const c = PILLAR_COLORS[i % PILLAR_COLORS.length];
+                      const selected = selectedPillarId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); setSelectedPillarId(p.id); }}
+                          className={`text-[9px] font-medium px-1.5 py-0.5 rounded transition-all ${selected ? 'ring-1 ring-offset-1 opacity-100' : 'opacity-50 hover:opacity-80'}`}
+                          style={{
+                            backgroundColor: `${c}20`,
+                            color: c,
+                            ...(selected ? { outlineColor: c, ringColor: c } : {}),
+                          }}
+                        >
+                          {p.name}
+                        </button>
+                      );
+                    })}
+                    {addingSaving && (
+                      <div className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin ml-1" />
+                    )}
+                  </div>
+                </div>
+                <p className="text-[10px] text-text-tertiary mt-1 pl-1">Enter to save · Esc to cancel</p>
+              </div>
+            )}
           </div>
-          {items.length === 0 && (
+
+          {items.length === 0 && !isAdding && (
             <p className="text-xs text-text-tertiary italic py-2">No items in this phase</p>
+          )}
+
+          {/* Plus button — outside the grid, centered */}
+          {onAddItem && !isAdding && (
+            <div className="flex justify-center py-2">
+              <button
+                onClick={handleStartAdding}
+                className="w-4 h-4 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors duration-150 shadow-sm"
+                aria-label="Add item to phase"
+              >
+                <Plus className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
+              </button>
+            </div>
           )}
         </div>
       )}

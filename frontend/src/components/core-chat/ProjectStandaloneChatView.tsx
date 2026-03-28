@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ChatMessage, ResearchStep, SourceCitation } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -534,9 +535,12 @@ export function ProjectStandaloneChatView({
           hideTiles={hideTiles}
           headerContent={hideTiles ? (
             <div className="text-center mb-8">
-              <h1 className="text-lg font-semibold text-text-primary mb-1.5">Explore</h1>
+              <div className="flex items-center justify-center gap-2.5 mb-3">
+                <Search className="w-7 h-7 text-accent" strokeWidth={1.75} />
+                <h1 className="text-[32px] font-semibold text-text-primary tracking-tight font-display">Explore</h1>
+              </div>
               <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-                Search academic research and past precedent, summarize elements of the current project, or ask any question.
+                Explore and analyze project materials, compare against another project, or ask about past academic research and case studies.
               </p>
             </div>
           ) : undefined}

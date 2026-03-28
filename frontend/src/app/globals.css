@@ -740,13 +740,13 @@ textarea {
   transition: box-shadow 200ms ease-out, transform 200ms ease-out, border-color 200ms ease-out;
 }
 
-.card-interactive:hover {
+.card-interactive:hover:not(:disabled) {
   box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.14), 0 4px 12px -4px rgba(0, 0, 0, 0.07);
   border-color: var(--color-accent) !important;
   transform: translateY(-3px) scale(1.012);
 }
 
-.card-interactive:active {
+.card-interactive:active:not(:disabled) {
   @apply shadow-card;
   transform: scale(0.98);
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
