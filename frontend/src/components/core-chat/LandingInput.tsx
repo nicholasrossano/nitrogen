@@ -120,7 +120,7 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
       <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
         {headerContent}
         {!hideTiles && (
-        <div className="w-[70%] grid grid-cols-3 gap-2 mb-12">
+        <div className="w-[70%] grid grid-cols-3 gap-3 mb-12">
           {ALL_MODULES.filter((module) => devMode || !module.beta).map((module) => {
             const isTemplate = module.id === 'template_fill';
             return (
@@ -129,19 +129,17 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                 type="button"
                 disabled={disabled}
                 onClick={() => onSend(`Generate ${module.name}`, module.id)}
-                className={`relative flex flex-col items-center justify-center gap-1.5 px-2 h-[72px] rounded-lg transition-colors duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-default ${
-                  isTemplate
-                    ? 'border-2 border-dashed border-accent-secondary/30 bg-accent-secondary/[0.05] hover:border-accent-secondary/50 hover:bg-accent-secondary/[0.09]'
-                    : 'border border-accent/15 bg-accent/[0.04] hover:border-accent/40 hover:bg-accent/[0.08]'
-                }`}
+                className="relative flex items-center gap-3 px-4 py-3.5 card-interactive border border-black/[0.04] disabled:opacity-40 disabled:cursor-default"
               >
                 {isTemplate && (
                   <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
                     BETA
                   </span>
                 )}
-                <span className={`[&>svg]:w-4.5 [&>svg]:h-4.5 ${isTemplate ? 'text-accent-secondary/70' : 'text-accent/70'}`}>{module.icon}</span>
-                <span className="text-[11px] font-medium text-text-secondary leading-snug text-center">{module.name}</span>
+                <div className={`w-10 h-10 flex-shrink-0 rounded flex items-center justify-center ${isTemplate ? 'bg-accent-secondary/10' : 'bg-accent-wash'}`}>
+                  <span className={`[&>svg]:w-5 [&>svg]:h-5 ${isTemplate ? 'text-accent-secondary' : 'text-accent'}`}>{module.icon}</span>
+                </div>
+                <span className="text-xs font-medium text-text-secondary leading-snug text-left">{module.name}</span>
               </button>
             );
           })}
@@ -191,12 +189,16 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                 placeholder={placeholder}
                 disabled={disabled}
                 rows={1}
-                className="w-full resize-none bg-transparent px-5 py-3.5 pb-8 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+                className="w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
-              {/* Bottom-right: extra actions + attach + send */}
+              {extraInputActions && (
+                <div className="absolute left-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+                  {extraInputActions}
+                </div>
+              )}
+              {/* Bottom-right: attach + send */}
               <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-                {extraInputActions}
                 <input
                   ref={fileInputRef}
                   type="file"
