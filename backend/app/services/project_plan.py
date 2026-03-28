@@ -484,7 +484,7 @@ class ProjectPlanService:
     async def propose_categories(self, initiative, chat_history: list | None = None) -> list[dict]:
         """Propose high-level plan categories adapted to the project (lightweight LLM call)."""
         evidence_text = await self._gather_evidence_text(initiative.id)
-        deliverables_summary = self._summarize_deliverables(initiative.deliverables)
+        deliverables_summary = self._summarize_deliverables(initiative.get_deliverables_dict())
 
         desc = initiative.project_description or "(No description provided.)"
         project_type = initiative.project_type or "unclassified"
@@ -557,7 +557,7 @@ EXISTING GENERATED OUTPUTS:
             self._gather_evidence_text(initiative.id),
             self._gather_web_research(initiative, approved_categories=approved_categories),
         )
-        deliverables_summary = self._summarize_deliverables(initiative.deliverables)
+        deliverables_summary = self._summarize_deliverables(initiative.get_deliverables_dict())
 
         user_content = self._build_user_prompt(
             initiative=initiative,

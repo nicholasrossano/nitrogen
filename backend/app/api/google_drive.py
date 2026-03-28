@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core import google_oauth
-from app.core.auth import AuthUser, get_current_user
+from app.core.auth import AuthUser, get_current_user, get_optional_user
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
@@ -153,9 +153,11 @@ async def google_oauth_callback(
 @router.get("/google/status")
 async def get_drive_status(
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser | None = Depends(get_optional_user),
 ):
     """Return whether the current user has an active Google Drive connection."""
+    if not user:
+        return {"connected": False, "email": None}
     connection = await _get_connection(db, user.uid)
     if not connection:
         return {"connected": False, "email": None}

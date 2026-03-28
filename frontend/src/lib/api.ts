@@ -1,6 +1,9 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Get the current user's ID token for API requests
+// Get the current user's ID token for API requests.
+// Uses authStateReady() so calls made immediately after a page load/redirect
+// (e.g. the OAuth callback redirect) still get a token once Firebase has
+// restored the session — without blocking after auth state is already known.
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
@@ -8,6 +11,7 @@ async function getAuthToken(): Promise<string | null> {
     const { getAuth } = await import('firebase/auth');
     const { app } = await import('./firebase');
     const auth = getAuth(app);
+    await auth.authStateReady();
     const user = auth.currentUser;
     if (!user) return null;
     return await user.getIdToken();
@@ -42,9 +46,22 @@ export interface Initiative {
   tool_alignments: Record<string, ToolAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
+  module_instances: ModuleInstance[] | null;
   // Sharing fields
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
+}
+
+export interface ModuleInstance {
+  id: string;
+  tool_id: string;
+  status: 'started' | 'alignment_proposed' | 'alignment_confirmed' | 'generating' | 'complete' | 'error';
+  title: string | null;
+  started_by: string;
+  started_by_email: string | null;
+  started_at: string;
+  updated_at: string;
+  session_id: string | null;
 }
 
 export interface ProjectShare {
@@ -415,7 +432,10 @@ export const api = {
 
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
-  
+
+  listModuleInstances: (initiativeId: string) =>
+    fetchApi<ModuleInstance[]>(`/api/v1/initiatives/${initiativeId}/modules`),
+
   updateInitiative: (id: string, data: { title?: string; icon?: string }) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
       method: 'PATCH',

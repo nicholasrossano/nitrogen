@@ -19,6 +19,7 @@ from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
 from app.services.chat import ChatService
+from app.services import module_service
 from app.models.chat import CoreChatSession, CoreChatMessage
 from app.models.initiative import Initiative
 from app.core.rate_limit import limiter
@@ -373,24 +374,27 @@ async def chat_stream(
                         existing = list(_align_initiative.selected_tools or [])
                         if existing != [_tool_hint]:
                             _align_initiative.selected_tools = [_tool_hint]
-                            ta = dict(_align_initiative.tool_alignments or {})
-                            for oid in existing:
-                                if oid != _tool_hint and oid in ta:
-                                    del ta[oid]
-                            _align_initiative.tool_alignments = ta
                             flag_modified(_align_initiative, "selected_tools")
-                            flag_modified(_align_initiative, "tool_alignments")
                             await db.commit()
                             await db.refresh(_align_initiative)
 
-                        alignment_data = await get_or_generate_alignment(db, _align_initiative, _tool_hint)
+                        # Create / find module instance for this session
+                        await module_service.get_or_create_instance(
+                            db, _align_initiative.id, _tool_hint, user.uid, session_id=session.id,
+                        )
+
+                        alignment_data = await get_or_generate_alignment(
+                            db, _align_initiative, _tool_hint, user_id=user.uid, session_id=session.id,
+                        )
                         if not alignment_data:
                             return ChatResponse(
                                 content=f"I wasn't able to generate an outline for {_align_tool.definition.name}. Please try again.",
                                 sources=[], tiers_used=[], latency_ms=0,
                             )
 
-                        pending = _align_initiative.get_pending_alignment_tools()
+                        pending = await module_service.get_pending_alignment_tools(
+                            db, _align_initiative.id, _align_initiative.selected_tools or [],
+                        )
                         wd = build_alignment_widget_data(
                             tool_id=_tool_hint,
                             alignment_data=alignment_data,
@@ -533,11 +537,10 @@ async def chat_stream(
                             _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
                         else:
                             _title = _tool.definition.name
-                        verified_initiative.save_deliverable(
-                            _tool_id,
-                            _title,
-                            _tool.definition.output_type,
-                            _content,
+                        await module_service.save_deliverable(
+                            db, verified_initiative.id, _tool_id,
+                            _title, _tool.definition.output_type, _content,
+                            user_id=user.uid, session_id=session.id,
                         )
 
             await db.commit()
@@ -645,51 +648,44 @@ async def update_message_widget(
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(msg, "widget_data")
 
-    # Keep initiative.deliverables in sync when a model widget is recalculated.
-    session = await db.get(CoreChatSession, msg.session_id)
-    if session and session.initiative_id:
+    # Keep module instance in sync when a model widget is recalculated.
+    chat_session = await db.get(CoreChatSession, msg.session_id)
+    if chat_session and chat_session.initiative_id:
         try:
-            init_uuid = uuid.UUID(str(session.initiative_id))
-            initiative_result = await db.execute(
-                select(Initiative).where(Initiative.id == init_uuid)
-            )
-            init_obj = initiative_result.scalar_one_or_none()
-            if init_obj:
-                _WIDGET_TO_TOOL: dict[str, str] = {
-                    "lcoe_output": "lcoe_model",
-                    "lcoe_inputs": "lcoe_model",
-                    "carbon_output": "carbon_model",
-                    "carbon_inputs": "carbon_model",
-                    "solar_output": "solar_estimate",
-                    "solar_inputs": "solar_estimate",
-                }
-                _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
-                if _tool_id:
-                    from app.tools.registry import get_tool_registry
-                    _tool = get_tool_registry().get_tool(_tool_id)
-                    _content = data.widget_data or {}
-                    if _tool and _tool.is_exportable(_content):
-                        _res = _content.get("result") or {}
-                        if _tool_id == "lcoe_model":
-                            _lcoe = _res.get("lcoe", 0)
-                            _cur = _res.get("currency", "USD")
-                            _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
-                        elif _tool_id == "carbon_model":
-                            _er = _res.get("net_er_tco2e", 0)
-                            _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
-                        elif _tool_id == "solar_estimate":
-                            _kwh = _res.get("annual_kwh", 0)
-                            _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
-                        else:
-                            _title = _tool.definition.name
-                        init_obj.save_deliverable(
-                            _tool_id,
-                            _title,
-                            _tool.definition.output_type,
-                            _content,
-                        )
+            _WIDGET_TO_TOOL: dict[str, str] = {
+                "lcoe_output": "lcoe_model",
+                "lcoe_inputs": "lcoe_model",
+                "carbon_output": "carbon_model",
+                "carbon_inputs": "carbon_model",
+                "solar_output": "solar_estimate",
+                "solar_inputs": "solar_estimate",
+            }
+            _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
+            if _tool_id:
+                from app.tools.registry import get_tool_registry
+                _tool = get_tool_registry().get_tool(_tool_id)
+                _content = data.widget_data or {}
+                if _tool and _tool.is_exportable(_content):
+                    _res = _content.get("result") or {}
+                    if _tool_id == "lcoe_model":
+                        _lcoe = _res.get("lcoe", 0)
+                        _cur = _res.get("currency", "USD")
+                        _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
+                    elif _tool_id == "carbon_model":
+                        _er = _res.get("net_er_tco2e", 0)
+                        _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
+                    elif _tool_id == "solar_estimate":
+                        _kwh = _res.get("annual_kwh", 0)
+                        _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
+                    else:
+                        _title = _tool.definition.name
+                    await module_service.save_deliverable(
+                        db, chat_session.initiative_id, _tool_id,
+                        _title, _tool.definition.output_type, _content,
+                        user_id=user.uid, session_id=chat_session.id,
+                    )
         except Exception:
-            pass  # Never block the widget update if deliverable sync fails
+            pass
 
     await db.commit()
 
@@ -857,7 +853,7 @@ async def confirm_chat_alignment(
     from app.core.permissions import require_editor
     initiative = await require_editor(db, session.initiative_id, user)
 
-    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
+    alignment_data = await module_service.get_alignment(db, initiative.id, data.tool_id)
     if not alignment_data:
         raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
 
@@ -868,7 +864,10 @@ async def confirm_chat_alignment(
 
     alignment_data["confirmed"] = True
     alignment_data["feedback"] = None
-    initiative.set_alignment_for_tool(data.tool_id, alignment_data)
+    await module_service.save_alignment(
+        db, initiative.id, data.tool_id, alignment_data,
+        user_id=user.uid, session_id=session.id,
+    )
     await db.commit()
     await db.refresh(initiative)
 
@@ -919,8 +918,10 @@ async def confirm_chat_alignment(
                 include_corpus=True,
                 alignment=alignment_obj,
             )
-            initiative.save_deliverable(
-                data.tool_id, output.title, output.output_type, output.content,
+            await module_service.save_deliverable(
+                db, initiative.id, data.tool_id,
+                output.title, output.output_type, output.content,
+                user_id=user.uid, session_id=session.id,
             )
             w_type = WIDGET_TYPES.get(output.output_type, "document_viewer")
             label = WIDGET_LABELS.get(w_type, tool_name)
@@ -976,7 +977,7 @@ async def provide_chat_alignment_feedback(
     from app.core.permissions import require_editor
     initiative = await require_editor(db, session.initiative_id, user)
 
-    alignment_data = initiative.get_alignment_for_tool(data.tool_id)
+    alignment_data = await module_service.get_alignment(db, initiative.id, data.tool_id)
     if not alignment_data:
         raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
 
@@ -1003,7 +1004,10 @@ async def provide_chat_alignment_feedback(
         alignment_data["feedback"] = data.feedback
         updated_data = alignment_data
 
-    initiative.set_alignment_for_tool(data.tool_id, updated_data)
+    await module_service.save_alignment(
+        db, initiative.id, data.tool_id, updated_data,
+        user_id=user.uid, session_id=session.id,
+    )
     await db.commit()
     await db.refresh(initiative)
 
@@ -1013,7 +1017,9 @@ async def provide_chat_alignment_feedback(
     db.add(user_msg)
 
     tool_name = tool.definition.name
-    pending = initiative.get_pending_alignment_tools()
+    pending = await module_service.get_pending_alignment_tools(
+        db, initiative.id, initiative.selected_tools or [],
+    )
     pending_others = [tid for tid in pending if tid != data.tool_id]
 
     wd = build_alignment_widget_data(

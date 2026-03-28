@@ -116,9 +116,10 @@ If tools are selected and you notice missing required inputs, gently ask about t
         if initiative.evidence_ready:
             parts.append("Evidence documents: Uploaded")
         
-        # Check for deliverables
-        if initiative.deliverables:
-            deliverable_names = list(initiative.deliverables.keys())
+        # Check for deliverables (computed from module instances)
+        deliverables = initiative.get_deliverables_dict()
+        if deliverables:
+            deliverable_names = list(deliverables.keys())
             if deliverable_names:
                 parts.append(f"Generated outputs: {', '.join(deliverable_names)}")
         

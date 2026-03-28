@@ -20,6 +20,7 @@ from app.schemas.project_material import (
     ProjectFilesResponse,
 )
 from app.services.document_parser import DocumentParserService
+from app.services import module_service
 from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -260,9 +261,9 @@ async def list_project_files(
         ))
     uploaded.sort(key=lambda r: r.created_at, reverse=True)
 
-    # Generated outputs from initiative.deliverables
+    # Generated outputs from module instances (single source of truth)
     generated: list[GeneratedFileResponse] = []
-    deliverables = initiative.deliverables or {}
+    deliverables = initiative.get_deliverables_dict()
 
     memo_result = await db.execute(
         select(MemoVersion)
@@ -350,9 +351,10 @@ async def delete_deliverable(
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove a generated deliverable from the project."""
-    initiative = await require_editor(db, initiative_id, user)
+    await require_editor(db, initiative_id, user)
 
-    if initiative.remove_deliverable(tool_id):
+    removed = await module_service.remove_instance_by_tool(db, initiative_id, tool_id)
+    if removed:
         await db.commit()
     else:
         # tool_id may be a MemoVersion UUID (fallback path)

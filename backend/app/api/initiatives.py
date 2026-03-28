@@ -28,6 +28,8 @@ from app.schemas.initiative import (
     InitiativeResponse,
     InitiativeConfirmResponse,
 )
+from app.schemas.module_instance import ModuleInstanceResponse
+from app.services import module_service
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +37,38 @@ router = APIRouter()
 
 
 def _initiative_to_response(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
-    """Convert an Initiative ORM object to a response dict with sharing fields."""
+    """Convert an Initiative ORM object to a response dict with sharing fields.
+
+    Computes ``deliverables`` and ``tool_alignments`` from module_instances
+    (single source of truth).  The JSONB columns on the initiative are ignored.
+    """
     data = InitiativeResponse.model_validate(initiative).model_dump()
+
+    instances = initiative.module_instances or []
+
+    deliverables: dict = {}
+    alignments: dict = {}
+    deliverables_ts: dict = {}
+    alignments_ts: dict = {}
+
+    for inst in instances:
+        if inst.deliverable and inst.status == "complete":
+            prev = deliverables_ts.get(inst.tool_id)
+            if prev is None or inst.updated_at > prev:
+                deliverables[inst.tool_id] = inst.deliverable
+                deliverables_ts[inst.tool_id] = inst.updated_at
+        if inst.alignment:
+            prev = alignments_ts.get(inst.tool_id)
+            if prev is None or inst.updated_at > prev:
+                alignments[inst.tool_id] = inst.alignment
+                alignments_ts[inst.tool_id] = inst.updated_at
+
+    data["deliverables"] = deliverables or None
+    data["tool_alignments"] = alignments or None
+    data["module_instances"] = [
+        ModuleInstanceResponse.model_validate(i).model_dump()
+        for i in instances
+    ]
     data["shared_role"] = shared_role
     data["owner_email"] = owner_email
     return data
@@ -233,6 +265,35 @@ async def restore_initiative(
     await db.refresh(initiative)
     
     return initiative
+
+
+@router.get(
+    "/initiatives/{initiative_id}/modules",
+    response_model=list[ModuleInstanceResponse],
+)
+async def list_module_instances(
+    initiative_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """List all module instances for a project (Open picker)."""
+    await ensure_user_exists(db, user)
+    await get_initiative_with_role(db, initiative_id, user)
+    instances = await module_service.list_instances(db, initiative_id)
+
+    # Resolve user emails in a single query
+    uids = list({i.started_by for i in instances})
+    email_map: dict[str, str] = {}
+    if uids:
+        rows = await db.execute(select(User.id, User.email).where(User.id.in_(uids)))
+        email_map = {row.id: row.email for row in rows if row.email}
+
+    result = []
+    for inst in instances:
+        data = ModuleInstanceResponse.model_validate(inst).model_dump()
+        data["started_by_email"] = email_map.get(inst.started_by)
+        result.append(data)
+    return result
 
 
 @router.delete("/initiatives/{initiative_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
