@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.project_share import ProjectShare
 from app.models.google_drive import UserGoogleConnection, DriveLinkedFile
 from app.models.subscription import Subscription, UsageRecord, UserApiKey
+from app.models.module_instance import ModuleInstance
 
 __all__ = [
     "Initiative",
@@ -31,4 +32,5 @@ __all__ = [
     "Subscription",
     "UsageRecord",
     "UserApiKey",
+    "ModuleInstance",
 ]

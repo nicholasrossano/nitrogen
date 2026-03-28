@@ -33,6 +33,7 @@ from app.services.orchestration import OrchestrationService
 from app.services.chat_agent import ChatAgentService
 from app.services.chat import ChatService
 from app.services.project_plan import ProjectPlanService
+from app.services import module_service
 from app.tools import get_tool_registry
 
 router = APIRouter()
@@ -417,11 +418,10 @@ async def execute_action(
                     "Review the inputs below — you can edit any value and I'll recalculate instantly."
                 )
 
-                initiative.save_deliverable(
-                    "lcoe_model",
-                    f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)",
-                    "lcoe",
-                    content,
+                await module_service.save_deliverable(
+                    db, initiative.id, "lcoe_model",
+                    f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)", "lcoe", content,
+                    user_id=user_id or initiative.user_id,
                 )
             else:
                 missing = content.get("missing_essentials", [])
@@ -473,11 +473,10 @@ async def execute_action(
                     "Review the inputs below — you can edit any value and I'll recalculate instantly."
                 )
 
-                initiative.save_deliverable(
-                    "carbon_model",
-                    f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)",
-                    "carbon",
-                    content,
+                await module_service.save_deliverable(
+                    db, initiative.id, "carbon_model",
+                    f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)", "carbon", content,
+                    user_id=user_id or initiative.user_id,
                 )
             else:
                 missing = content.get("missing_essentials", [])
@@ -577,11 +576,10 @@ async def execute_action(
                 annual = (widget_data.get("result") or {}).get("annual_kwh")
                 if annual:
                     title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
-            initiative.save_deliverable(
-                _tool_id,
-                title,
-                _tool.definition.output_type,
-                widget_data,
+            await module_service.save_deliverable(
+                db, initiative.id, _tool_id,
+                title, _tool.definition.output_type, widget_data,
+                user_id=user_id or initiative.user_id,
             )
 
     return widget_type, widget_data, assistant_response, sources
@@ -933,11 +931,10 @@ async def update_message_widget(
                 title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
             else:
                 title = _tool.definition.name
-            initiative.save_deliverable(
-                _tool_id_for_widget,
-                title,
-                _tool.definition.output_type,
-                content,
+            await module_service.save_deliverable(
+                db, initiative.id, _tool_id_for_widget,
+                title, _tool.definition.output_type, content,
+                user_id=user.uid,
             )
 
     await db.commit()

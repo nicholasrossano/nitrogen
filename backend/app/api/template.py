@@ -15,6 +15,7 @@ from app.core.storage import get_uploads_storage
 from app.core.filename_utils import safe_content_disposition
 from app.models.project_material import ProjectMaterial
 from app.services.document_parser import DocumentParserService
+from app.services import module_service
 from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ async def generate_from_template(
     init_uuid = UUID(body.initiative_id)
     template_uuid = UUID(body.template_id)
     logger.info("generate_from_template: initiative=%s template=%s", init_uuid, template_uuid)
-    initiative = await require_editor(db, init_uuid, user)
+    await require_editor(db, init_uuid, user)
 
     result = await db.execute(
         select(ProjectMaterial).where(
@@ -194,11 +195,11 @@ async def generate_from_template(
     )
     db.add(filled_material)
 
-    initiative.save_deliverable(
-        f"template_{filled_material.id}",
-        out_filename,
-        "template",
+    await module_service.save_deliverable(
+        db, init_uuid, f"template_{filled_material.id}",
+        out_filename, "template",
         {"material_id": str(filled_material.id), "filename": out_filename},
+        user_id=user.uid,
     )
 
     await db.commit()

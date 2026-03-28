@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Search, Plus, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Search, Plus, FileUp, FolderOpen, File as FileIcon, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
-export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'explore' | 'modules';
+export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'explore' | 'modules' | 'open';
 
 interface NavItemConfig {
   key: NavItem;
@@ -30,6 +30,7 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'modules', label: 'New Module', Icon: Plus },
+  { key: 'open', label: 'Open', Icon: FileIcon },
   { key: 'explore', label: 'Explore', Icon: Search },
   { key: 'plan', label: 'Plan', Icon: Map },
 ];
@@ -99,7 +100,7 @@ export function SideDrawer() {
   const showMaterials = hasProject && !isViewer;
 
   const projectItems = isViewer
-    ? PROJECT_ITEMS.filter(i => !(['explore', 'modules'] as NavItem[]).includes(i.key))
+    ? PROJECT_ITEMS.filter(i => !(['explore', 'modules', 'open'] as NavItem[]).includes(i.key))
     : PROJECT_ITEMS;
 
   const longestLabelLength = useMemo(() => {

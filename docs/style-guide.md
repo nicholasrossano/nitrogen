@@ -293,6 +293,7 @@ Surfaces are separated through **shadow and tonal contrast**, not visible border
 | `shadow-card` | `0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03)` | Cards, panels at rest |
 | `shadow-card-hover` | `0 8px 24px -6px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.04)` | Interactive card hover |
 | `shadow-subtle` | `0 1px 2px rgba(0,0,0,0.04)` | Minimal lift |
+| `shadow-modal` | `0 16px 48px -8px rgba(0,0,0,0.16), 0 4px 12px -4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)` | Floating modals (no overlay) |
 
 ### Card treatment
 Cards do **not** use visible borders. They use `shadow-card` — a subtle ring-style shadow that reads as a soft edge against the white surface. On hover, shadow lifts to `shadow-card-hover`.
@@ -582,36 +583,48 @@ Use when a side panel — sidebar, chat panel, inspector — should open or clos
 
 ### Modal Pattern (Settings-Style Header)
 
-Use this as the default modal shell for feature/configuration dialogs.
+Use `ModalShell` (`@/components/ui/ModalShell`) as the default wrapper for all feature/configuration dialogs. It handles portal mounting, Escape key, and click-outside-to-close. Depth is conveyed by `shadow-modal` — **no background overlay**.
 
 ```tsx
-<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-  <div className="relative w-full max-w-3xl max-h-[84vh] mx-4 rounded-2xl bg-surface border border-stroke-subtle shadow-2xl flex flex-col overflow-hidden">
-    {/* Header */}
-    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
-      <h2 className="text-sm font-semibold text-text-primary">Modal Title</h2>
-      <button className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors">
-        <X className="w-4 h-4" />
-      </button>
-    </div>
+import { ModalShell } from '@/components/ui/ModalShell';
 
-    {/* Scrollable body */}
-    <div className="flex-1 min-h-0 overflow-y-auto px-6 md:px-8 py-8">
-      <p className="text-sm text-text-tertiary mb-8">
-        Context and guidance live in the body, not the header.
-      </p>
-      {/* modal content */}
-    </div>
+<ModalShell onClose={onClose} maxWidth="max-w-2xl" className="flex flex-col max-h-[80vh]">
+  {/* Header */}
+  <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
+    <h2 className="text-sm font-semibold text-text-primary">Modal Title</h2>
+    <button
+      onClick={onClose}
+      className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
+    >
+      <X className="w-4 h-4" />
+    </button>
   </div>
-</div>
+
+  {/* Scrollable body */}
+  <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+    <p className="text-sm text-text-tertiary mb-6">
+      Context and guidance live in the body, not the header.
+    </p>
+    {/* modal content */}
+  </div>
+</ModalShell>
 ```
 
+**`ModalShell` props**
+
+| Prop | Default | Description |
+| --- | --- | --- |
+| `onClose` | required | Called on Escape, click-outside, or close button |
+| `maxWidth` | `'max-w-md'` | Tailwind max-width class for the panel |
+| `className` | `''` | Extra classes on the panel (e.g. `flex flex-col max-h-[80vh]`) |
+
 **Rules**
-- Header stays compact and consistent: title + close button only; put descriptive copy in the body
-- Default shell: `rounded-2xl`, `border-stroke-subtle`, `shadow-2xl`, `flex flex-col`, `overflow-hidden`
-- Width by intent: use `max-w-sm` for lightweight settings; `max-w-2xl` to `max-w-3xl` for content-rich pickers/workflows
-- Body should be independently scrollable: `flex-1 min-h-0 overflow-y-auto` so header remains fixed while content grows
-- Use stronger horizontal body padding for dense module/grid content: `px-6 md:px-8`
+- Always use `ModalShell` — never hand-roll `fixed inset-0` modal wrappers
+- No background overlay (`bg-black/…`, `backdrop-blur`) — `shadow-modal` provides depth
+- Header stays compact: title + close button only; put descriptive copy in the body
+- Width by intent: `max-w-sm` for lightweight settings, `max-w-2xl`–`max-w-3xl` for content-rich pickers
+- Add `flex flex-col max-h-[80vh]` via `className` when the body needs to scroll independently
+- Body scrollable pattern: `flex-1 min-h-0 overflow-y-auto`
 
 ---
 

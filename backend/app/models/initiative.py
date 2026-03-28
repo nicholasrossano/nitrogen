@@ -95,6 +95,12 @@ class Initiative(Base):
         back_populates="initiative",
         cascade="all, delete-orphan",
     )
+    module_instances: Mapped[list["ModuleInstance"]] = relationship(
+        back_populates="initiative",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ModuleInstance.started_at.desc()",
+    )
     
     # New workflow methods
     def has_project_description(self) -> bool:
@@ -137,95 +143,40 @@ class Initiative(Base):
             len(self.get_missing_tool_inputs()) == 0
         )
     
-    def get_alignment_for_tool(self, tool_id: str) -> dict | None:
-        """Get alignment configuration for a specific tool."""
-        if not self.tool_alignments:
-            return None
-        return self.tool_alignments.get(tool_id)
-    
-    def set_alignment_for_tool(self, tool_id: str, alignment: dict):
-        """Set alignment configuration for a specific tool."""
-        if self.tool_alignments is None:
-            self.tool_alignments = {}
-        self.tool_alignments[tool_id] = alignment
-        # Force SQLAlchemy to detect the JSONB change by reassigning the dict
-        from sqlalchemy.orm.attributes import flag_modified
-        flag_modified(self, "tool_alignments")
-    
-    def has_confirmed_alignments(self) -> bool:
-        """Check if all selected tools have confirmed alignments."""
-        if not self.selected_tools:
-            return True  # No tools selected
-        if not self.tool_alignments:
-            return False
-        
-        from app.tools import get_tool_registry
-        registry = get_tool_registry()
-        
-        for tool_id in self.selected_tools:
-            tool = registry.get_tool(tool_id)
-            if tool and tool.requires_alignment:
-                alignment = self.tool_alignments.get(tool_id)
-                if not alignment or not alignment.get("confirmed"):
-                    return False
-        return True
-    
-    def get_pending_alignment_tools(self) -> list[str]:
-        """Get list of tool IDs that require alignment but haven't been confirmed."""
-        if not self.selected_tools:
-            return []
-        
-        from app.tools import get_tool_registry
-        registry = get_tool_registry()
-        
-        pending = []
-        alignments = self.tool_alignments or {}
-        
-        for tool_id in self.selected_tools:
-            tool = registry.get_tool(tool_id)
-            if tool and tool.requires_alignment:
-                alignment = alignments.get(tool_id)
-                if not alignment or not alignment.get("confirmed"):
-                    pending.append(tool_id)
-        return pending
-    
-    def save_deliverable(
-        self,
-        tool_id: str,
-        title: str,
-        output_type: str,
-        content,
-    ):
-        """Persist a generated deliverable with a per-item timestamp.
+    # ── Computed views from module_instances (replaces JSONB reads) ──
 
-        Handles JSONB mutation detection and updates ``updated_at`` so the
-        Files page always reflects the latest generation.
+    def get_deliverables_dict(self) -> dict:
+        """Build a backward-compatible deliverables dict from module_instances.
+
+        Returns the latest complete instance's deliverable per tool_id.
         """
-        from sqlalchemy.orm.attributes import flag_modified
+        result: dict[str, dict] = {}
+        for inst in self.module_instances:
+            if inst.deliverable and inst.status == "complete":
+                existing = result.get(inst.tool_id)
+                if existing is None or inst.updated_at > existing.get("_updated_at", inst.updated_at):
+                    d = dict(inst.deliverable)
+                    d["_updated_at"] = inst.updated_at
+                    d["_instance_id"] = str(inst.id)
+                    result[inst.tool_id] = d
+        for v in result.values():
+            v.pop("_updated_at", None)
+        return result
 
-        deliverables = dict(self.deliverables or {})
-        deliverables[tool_id] = {
-            "title": title,
-            "output_type": output_type,
-            "content": content,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        self.deliverables = deliverables
-        flag_modified(self, "deliverables")
-        self.touch()
+    def get_tool_alignments_dict(self) -> dict:
+        """Build a backward-compatible tool_alignments dict from module_instances.
 
-    def remove_deliverable(self, tool_id: str) -> bool:
-        """Remove a deliverable by tool_id. Returns True if it existed."""
-        from sqlalchemy.orm.attributes import flag_modified
-
-        deliverables = dict(self.deliverables or {})
-        if tool_id not in deliverables:
-            return False
-        del deliverables[tool_id]
-        self.deliverables = deliverables
-        flag_modified(self, "deliverables")
-        self.touch()
-        return True
+        Returns the latest instance's alignment per tool_id.
+        """
+        result: dict[str, dict] = {}
+        latest_ts: dict[str, datetime] = {}
+        for inst in self.module_instances:
+            if inst.alignment:
+                prev = latest_ts.get(inst.tool_id)
+                if prev is None or inst.updated_at > prev:
+                    result[inst.tool_id] = dict(inst.alignment)
+                    latest_ts[inst.tool_id] = inst.updated_at
+        return result
 
     def touch(self):
         """Update the updated_at timestamp to mark this initiative as recently modified."""
@@ -276,3 +227,4 @@ from app.models.onboarding import ChatMessage  # noqa: E402
 from app.models.evidence import EvidenceDoc  # noqa: E402
 from app.models.memo import MemoVersion  # noqa: E402
 from app.models.project_material import ProjectMaterial  # noqa: E402
+from app.models.module_instance import ModuleInstance  # noqa: E402

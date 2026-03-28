@@ -14,6 +14,7 @@ from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
 from app.services.memo_generator import MemoGeneratorService
 from app.tools import get_tool_registry
 from app.tools.base import ToolAlignment
+from app.services import module_service
 
 router = APIRouter()
 
@@ -57,11 +58,10 @@ async def generate_memo(
     await db.commit()
     
     initiative.stage = "complete"
-    initiative.save_deliverable(
-        "investment_memo",
-        memo_content.title,
-        "memo",
-        memo_content.model_dump(mode="json"),
+    await module_service.save_deliverable(
+        db, initiative.id, "investment_memo",
+        memo_content.title, "memo", memo_content.model_dump(mode="json"),
+        user_id=user.uid,
     )
     await db.commit()
     
@@ -153,10 +153,8 @@ async def generate_all_deliverables(
     if initiative.timeline:
         inputs.setdefault("timeline", initiative.timeline)
     
-    # Get tool alignments
-    tool_alignments = initiative.tool_alignments or {}
-    
     deliverable_widgets = []
+    deliverables: dict = {}
 
     for tool_id in initiative.selected_tools:
         tool = registry.get_tool(tool_id)
@@ -165,10 +163,9 @@ async def generate_all_deliverables(
 
         try:
             alignment = None
-            if tool_id in tool_alignments:
-                alignment_data = tool_alignments[tool_id]
-                if alignment_data.get("confirmed"):
-                    alignment = ToolAlignment.from_dict(alignment_data)
+            alignment_data = await module_service.get_alignment(db, initiative_id, tool_id)
+            if alignment_data and alignment_data.get("confirmed"):
+                alignment = ToolAlignment.from_dict(alignment_data)
 
             output = await tool.execute(
                 db=db,
@@ -178,9 +175,12 @@ async def generate_all_deliverables(
                 alignment=alignment,
             )
 
-            initiative.save_deliverable(
-                tool_id, output.title, output.output_type, output.content,
+            inst = await module_service.save_deliverable(
+                db, initiative_id, tool_id,
+                output.title, output.output_type, output.content,
+                user_id=user.uid,
             )
+            deliverables[tool_id] = inst.deliverable
 
             if output.output_type == "memo":
                 widget_type = "memo_viewer"
@@ -197,9 +197,9 @@ async def generate_all_deliverables(
             })
 
         except Exception as e:
-            deliverables = dict(initiative.deliverables or {})
-            deliverables[tool_id] = {"error": str(e)}
-            initiative.deliverables = deliverables
+            await module_service.set_instance_error(
+                db, initiative_id, tool_id, str(e), user_id=user.uid,
+            )
 
     initiative.stage = InitiativeStage.COMPLETE.value
     await db.commit()
