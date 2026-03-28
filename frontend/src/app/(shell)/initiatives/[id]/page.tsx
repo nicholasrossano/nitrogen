@@ -12,6 +12,7 @@ import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { ModuleLandingPage } from '@/components/chat/ModuleLandingPage';
 import { OpenModuleModal } from '@/components/chat/OpenModuleModal';
+import { ModalShell } from '@/components/ui/ModalShell';
 import type { ModuleInstance } from '@/lib/api';
 import { ResearchPanel } from '@/components/core-chat/ResearchPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -595,29 +596,21 @@ function InitiativePageContent() {
               )}
 
               {showModuleModal && (
-                <div
-                  className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-                  onClick={() => setShowModuleModal(false)}
-                >
-                  <div
-                    className="relative bg-surface rounded-2xl shadow-2xl border border-stroke-subtle w-full max-w-3xl max-h-[84vh] overflow-hidden mx-4 flex flex-col"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
-                      <h2 className="text-sm font-semibold text-text-primary">New Module</h2>
-                      <button
-                        onClick={() => setShowModuleModal(false)}
-                        className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
-                        aria-label="Close"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex-1 min-h-0">
-                      <ModuleLandingPage onSelectModule={handleModuleSelect} showIntro={false} />
-                    </div>
+                <ModalShell onClose={() => setShowModuleModal(false)} maxWidth="max-w-3xl" className="flex flex-col max-h-[84vh]">
+                  <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
+                    <h2 className="text-sm font-semibold text-text-primary">New Module</h2>
+                    <button
+                      onClick={() => setShowModuleModal(false)}
+                      className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
+                      aria-label="Close"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                </div>
+                  <div className="flex-1 min-h-0">
+                    <ModuleLandingPage onSelectModule={handleModuleSelect} showIntro={false} />
+                  </div>
+                </ModalShell>
               )}
 
               {activeView === 'files' ? (
