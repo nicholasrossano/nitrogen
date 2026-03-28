@@ -596,8 +596,8 @@ function InitiativePageContent() {
               )}
 
               {showModuleModal && (
-                <ModalShell onClose={() => setShowModuleModal(false)} maxWidth="max-w-3xl" className="flex flex-col max-h-[84vh]">
-                  <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
+                <ModalShell onClose={() => setShowModuleModal(false)} maxWidth="max-w-3xl">
+                  <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle">
                     <h2 className="text-sm font-semibold text-text-primary">New Module</h2>
                     <button
                       onClick={() => setShowModuleModal(false)}
@@ -607,7 +607,8 @@ function InitiativePageContent() {
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="flex-1 min-h-0">
+                  {/* max-h on the element itself gives overflow-y-auto a definite bound */}
+                  <div className="max-h-[calc(90vh-4rem)] overflow-y-auto">
                     <ModuleLandingPage onSelectModule={handleModuleSelect} showIntro={false} />
                   </div>
                 </ModalShell>
