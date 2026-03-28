@@ -73,9 +73,9 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
   });
 
   const content = (
-    <ModalShell onClose={onClose} maxWidth="max-w-2xl">
+    <ModalShell onClose={onClose} maxWidth="max-w-2xl" className="flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stroke-subtle">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stroke-subtle flex-shrink-0">
           <h2 className="text-sm font-semibold text-text-primary">Open Module</h2>
           <button
             onClick={onClose}
@@ -86,7 +86,7 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 max-h-[62vh] overflow-y-auto">
+        <div className="px-6 py-5 flex-1 min-h-0 overflow-y-auto">
           <p className="text-sm text-text-tertiary mb-6">
             Pick up where you or a collaborator left off in any module started in this project.
           </p>
