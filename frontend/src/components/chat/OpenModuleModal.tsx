@@ -104,9 +104,9 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {enriched.map((inst) => {
-                const module = MODULE_MAP.get(inst.tool_id);
-                const displayName = module
-                  ? inst.index ? `${module.name} #${inst.index}` : module.name
+                const mod = MODULE_MAP.get(inst.tool_id);
+                const displayName = mod
+                  ? inst.index ? `${mod.name} #${inst.index}` : mod.name
                   : inst.index
                     ? `${inst.tool_id.replace(/_/g, ' ')} #${inst.index}`
                     : inst.tool_id.replace(/_/g, ' ');
@@ -126,7 +126,7 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
 
                     {/* Module icon */}
                     <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash [&>svg]:w-5 [&>svg]:h-5 text-accent">
-                      {module?.icon}
+                      {mod?.icon}
                     </div>
 
                     {/* Info */}
