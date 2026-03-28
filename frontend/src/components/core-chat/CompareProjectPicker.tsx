@@ -60,10 +60,6 @@ export function CompareProjectPicker({
   };
 
   const handleOpen = () => {
-    if (selected) {
-      onSelect(null);
-      return;
-    }
     updatePosition();
     setOpen((v) => !v);
     if (!open) {
@@ -172,14 +168,17 @@ export function CompareProjectPicker({
         type="button"
         disabled={disabled}
         onClick={handleOpen}
-        title={selected ? `Comparing with: ${selected.title}` : 'Compare with another project'}
-        className={`w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:opacity-40 disabled:cursor-default ${
+        title={selected ? `Compare against ${selected.title}` : 'Compare against another project'}
+        className={`h-6 inline-flex items-center gap-1.5 px-2 rounded-md border text-[11px] font-medium transition-colors duration-150 disabled:opacity-40 disabled:cursor-default ${
           selected
-            ? 'bg-accent/10 text-accent enabled:hover:bg-accent/20'
-            : 'text-text-tertiary enabled:hover:text-text-secondary'
+            ? 'border-accent/30 bg-accent/10 text-accent enabled:hover:bg-accent/20'
+            : 'border-stroke-subtle text-text-tertiary enabled:hover:text-text-secondary enabled:hover:border-stroke-muted enabled:hover:bg-surface-subtle'
         }`}
       >
-        <Scale className="w-[13px] h-[13px]" />
+        <Scale className="w-3 h-3 shrink-0" />
+        <span className="truncate max-w-[14rem]">
+          Compare against...
+        </span>
       </button>
       {typeof document !== 'undefined' && dropdown
         ? createPortal(dropdown, document.body)
@@ -197,8 +196,7 @@ export function CompareChip({
 }) {
   return (
     <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
-      <Scale className="w-2.5 h-2.5" />
-      vs {project.title}
+      <span className="truncate max-w-[20rem]">Compare against {project.title}</span>
       <button
         type="button"
         onClick={onRemove}

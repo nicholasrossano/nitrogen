@@ -1,15 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { LayoutGrid, LogOut, Map, Search, Plus, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, RefreshCw, Unlink } from 'lucide-react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
+import { LayoutGrid, LogOut, Map, Search, Plus, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
+import { ShellNavContext } from './ShellContext';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
@@ -21,16 +24,6 @@ interface NavItemConfig {
   Icon: LucideIcon;
 }
 
-interface SideDrawerProps {
-  activeItem: NavItem;
-  onItemSelect: (item: NavItem) => void;
-  onSignOut?: () => void;
-  userEmail?: string | null;
-  onUploadMaterial?: (file: File) => Promise<void>;
-  hiddenItems?: NavItem[];
-  initiativeId?: string;
-}
-
 const GLOBAL_ITEMS: NavItemConfig[] = [
   { key: 'home', label: 'All Projects', Icon: LayoutGrid },
 ];
@@ -40,6 +33,8 @@ const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'explore', label: 'Explore', Icon: Search },
   { key: 'plan', label: 'Plan', Icon: Map },
 ];
+
+const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
 
 function UsagePill() {
   const devMode = useSettingsStore((s) => s.devMode);
@@ -74,36 +69,64 @@ function UsagePill() {
   return null;
 }
 
-export function SideDrawer({
-  activeItem,
-  onItemSelect,
-  onSignOut,
-  userEmail,
-  onUploadMaterial,
-  hiddenItems,
-  initiativeId,
-}: SideDrawerProps) {
-  const hasProject = !!initiativeId;
-  const showMaterials = hasProject && !!onUploadMaterial;
+export function SideDrawer() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { navHandlerRef } = useContext(ShellNavContext);
+  const { user, signOut } = useAuth();
 
-  const projectItems = hiddenItems
-    ? PROJECT_ITEMS.filter(i => !hiddenItems.includes(i.key))
+  const initiativeId = useMemo(() => {
+    const m = INITIATIVE_RE.exec(pathname);
+    return m ? m[1] : undefined;
+  }, [pathname]);
+
+  const activeItem: NavItem = useMemo(() => {
+    if (pathname === '/compare') return 'compare';
+    if (!initiativeId) return 'home';
+    const view = searchParams.get('view');
+    if (view === 'explore') return 'explore';
+    if (view === 'modules') return 'modules';
+    if (view === 'files') return 'files';
+    return 'plan';
+  }, [pathname, initiativeId, searchParams]);
+
+  const hasProject = !!initiativeId;
+  const initiative = useInitiativeStore((s) => s.initiative);
+  const isViewer = initiative?.shared_role === 'viewer';
+  const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+
+  const showMaterials = hasProject && !isViewer;
+
+  const projectItems = isViewer
+    ? PROJECT_ITEMS.filter(i => !(['explore', 'modules'] as NavItem[]).includes(i.key))
     : PROJECT_ITEMS;
 
   const longestLabelLength = useMemo(() => {
     const labels = GLOBAL_ITEMS.map((item) => item.label);
-    if (hasProject) {
-      projectItems.forEach((item) => labels.push(item.label));
-      labels.push('Files');
-    }
+    projectItems.forEach((item) => labels.push(item.label));
+    labels.push('Files');
     labels.push('Settings');
-    if (onSignOut) labels.push('Log out');
+    labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
-  }, [hasProject, projectItems, onSignOut]);
+  }, [projectItems]);
+
   const drawerStyle = {
     '--side-drawer-expanded-width': `calc(${longestLabelLength}ch + 3.75rem)`,
   } as CSSProperties;
 
+  const handleNav = useCallback((item: NavItem) => {
+    if (navHandlerRef.current?.(item)) return;
+    if (item === 'home') { router.push('/'); return; }
+    if (item === 'compare') { router.push('/compare'); return; }
+  }, [navHandlerRef, router]);
+
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    router.push('/');
+  }, [signOut, router]);
+
+  // --- Upload / materials logic (self-contained) ---
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -129,14 +152,12 @@ export function SideDrawer({
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportError, setDriveImportError] = useState<string | null>(null);
 
-  // Check Drive status on mount (only when upload is enabled)
   useEffect(() => {
     if (showMaterials && !driveStatusChecked) {
       checkDriveStatus();
     }
   }, [showMaterials, driveStatusChecked, checkDriveStatus]);
 
-  // Detect OAuth callback redirect (?drive_connected=true) and refresh status
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.location.search.includes('drive_connected=true')) {
@@ -220,7 +241,7 @@ export function SideDrawer({
   const uploading = toastItems.some((i) => i.status === 'uploading');
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
-    if (!onUploadMaterial) return;
+    if (!initiativeId) return;
 
     const initial: UploadItem[] = filesToUpload.map((f) => ({
       id: `${f.name}-${Date.now()}-${Math.random()}`,
@@ -234,7 +255,7 @@ export function SideDrawer({
       const file = filesToUpload[i];
       const item = initial[i];
       try {
-        await onUploadMaterial(file);
+        await uploadMaterial(initiativeId, file);
         setToastItems((prev) =>
           prev.map((t) => t.id === item.id ? { ...t, status: 'done' } : t)
         );
@@ -248,10 +269,10 @@ export function SideDrawer({
         );
       }
     }
-  }, [onUploadMaterial]);
+  }, [initiativeId, uploadMaterial]);
 
   const handleUpload = useCallback(async (files: FileList | File[]) => {
-    if (!onUploadMaterial) return;
+    if (!initiativeId) return;
     const fileArray = Array.from(files);
     const existingNames = projectMaterials.map((m) => m.filename);
     const results = checkDuplicates(fileArray, existingNames);
@@ -272,7 +293,7 @@ export function SideDrawer({
     } else {
       doUpload(fileArray);
     }
-  }, [onUploadMaterial, projectMaterials, doUpload]);
+  }, [initiativeId, projectMaterials, doUpload]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -333,17 +354,23 @@ export function SideDrawer({
     }
   }, [handleUpload]);
 
+  const gridCollapse = 'grid transition-[grid-template-rows,opacity] duration-200 ease-in-out';
+  const gridOpen = 'grid-rows-[1fr] opacity-100';
+  const gridClosed = 'grid-rows-[0fr] opacity-0 pointer-events-none';
+
   return (
     <aside
       data-open={isGlobalDragging || undefined}
       className="group w-12 hover:w-[var(--side-drawer-expanded-width)] data-[open]:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out pb-2"
       style={drawerStyle}
     >
+      {/* Spacer matches the h-14 header in the content column */}
+      <div className="shrink-0 h-14" />
       <nav className="flex-1 pt-1">
         {GLOBAL_ITEMS.map(({ key, label, Icon }) => (
           <button
             key={key}
-            onClick={() => onItemSelect(key)}
+            onClick={() => handleNav(key)}
             className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
           >
             <Icon
@@ -355,9 +382,15 @@ export function SideDrawer({
             </span>
           </button>
         ))}
-        {hasProject && (
-          <>
-            <div className="px-3 pt-3 pb-1">
+
+        {/* Project nav — always in the DOM, collapses/expands via CSS grid */}
+        <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
+          <div className="overflow-hidden">
+            {/* Original header — made relative so the collapsed divider can overlay it
+                without affecting layout. pt-3 pb-1 are the original values. */}
+            <div className="relative px-3 pt-3 pb-1">
+              {/* Collapsed-only divider — absolute, zero layout impact */}
+              <div className="absolute bottom-3 left-2 right-2 h-px bg-black/[0.16] opacity-100 group-hover:opacity-0 group-data-[open]:opacity-0 transition-opacity duration-150" />
               <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary whitespace-nowrap">
                 Current Project
               </span>
@@ -365,7 +398,7 @@ export function SideDrawer({
             {projectItems.map(({ key, label, Icon }) => (
               <button
                 key={key}
-                onClick={() => onItemSelect(key)}
+                onClick={() => handleNav(key)}
                 className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
               >
                 <Icon
@@ -377,10 +410,12 @@ export function SideDrawer({
                 </span>
               </button>
             ))}
-          </>
-        )}
+          </div>
+        </div>
       </nav>
 
+      {/* Upload materials — conditionally rendered (absolute-positioned
+          children are incompatible with the grid-rows collapse technique) */}
       {showMaterials && (
         <div className="relative px-2 pb-0">
           <input
@@ -391,7 +426,6 @@ export function SideDrawer({
             multiple
             onChange={handleFileChange}
           />
-          {/* Folder picker — webkitdirectory is non-standard but widely supported */}
           <input
             ref={folderInputRef}
             type="file"
@@ -402,7 +436,6 @@ export function SideDrawer({
             onChange={handleFileChange}
           />
 
-          {/* Collapsed: icon pinned at bottom-left, fades out when expanded */}
           <button
             onClick={handleFileSelect}
             className="group-hover:opacity-0 group-data-[open]:opacity-0 group-hover:pointer-events-none group-data-[open]:pointer-events-none transition-opacity duration-150 flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:bg-white/40"
@@ -415,14 +448,11 @@ export function SideDrawer({
             )}
           </button>
 
-          {/* Expanded: absolutely positioned so it doesn't push the icon up when invisible */}
           <div
             className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:pointer-events-auto group-data-[open]:pointer-events-auto group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150"
           >
-            {/* Upload header */}
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
 
-            {/* Drop zone */}
             <div
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
@@ -456,7 +486,6 @@ export function SideDrawer({
               Select folder
             </button>
 
-            {/* Google Drive section */}
             {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">
@@ -508,20 +537,34 @@ export function SideDrawer({
           </div>
         </div>
       )}
-      {hasProject && (
-        <button
-          onClick={() => onItemSelect('files')}
-          className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''}`}
-        >
-          <FolderOpen
-            className="w-4 h-4 flex-shrink-0"
-            {...(activeItem === 'files' && { fill: 'currentColor' })}
-          />
-          <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-            Files
-          </span>
-        </button>
+
+      {/* Spacer + collapsed-only divider between upload and files icons.
+          h-6 creates the visual gap; top-1/2 -translate-y-1/2 centers the line
+          inside that gap, which also centers it between the two icon midpoints.
+          The expanded panel is absolute so it's unaffected by this height. */}
+      {showMaterials && (
+        <div className="relative h-6">
+          <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-px bg-black/[0.16] opacity-100 group-hover:opacity-0 group-data-[open]:opacity-0 transition-opacity duration-150" />
+        </div>
       )}
+
+      {/* Files button — collapses with project items */}
+      <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
+        <div className="overflow-hidden">
+          <button
+            onClick={() => handleNav('files')}
+            className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''}`}
+          >
+            <FolderOpen
+              className="w-4 h-4 flex-shrink-0"
+              {...(activeItem === 'files' && { fill: 'currentColor' })}
+            />
+            <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+              Files
+            </span>
+          </button>
+        </div>
+      </div>
 
       <UsagePill />
 
@@ -536,18 +579,16 @@ export function SideDrawer({
         </span>
       </button>
 
-      {onSignOut && (
-        <button
-          onClick={onSignOut}
-          className="nav-row w-full"
-          title={userEmail || 'Log out'}
-        >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-            Log out
-          </span>
-        </button>
-      )}
+      <button
+        onClick={handleSignOut}
+        className="nav-row w-full"
+        title={user?.email || 'Log out'}
+      >
+        <LogOut className="w-4 h-4 flex-shrink-0" />
+        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+          Log out
+        </span>
+      </button>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
