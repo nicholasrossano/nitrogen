@@ -18,6 +18,7 @@ from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
+from app.services import module_service
 from app.tools import get_tool_registry
 
 _LOWERCASE_WORDS = frozenset(
@@ -201,7 +202,9 @@ async def select_tools(
         await db.refresh(initiative)
         
         # Check for tools that need alignment
-        pending_alignment_tools = initiative.get_pending_alignment_tools()
+        pending_alignment_tools = await module_service.get_pending_alignment_tools(
+            db, initiative.id, initiative.selected_tools or [],
+        )
         
         if pending_alignment_tools:
             # Show alignment widget for the first tool needing alignment

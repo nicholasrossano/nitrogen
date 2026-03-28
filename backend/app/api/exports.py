@@ -340,7 +340,7 @@ async def export_deliverable(
     """
     initiative = await require_viewer(db, initiative_id, user)
 
-    deliverables: dict[str, Any] = initiative.deliverables or {}
+    deliverables: dict[str, Any] = initiative.get_deliverables_dict()
     data = deliverables.get(tool_id)
 
     # Fallback: tool_id might be a MemoVersion UUID (legacy path)

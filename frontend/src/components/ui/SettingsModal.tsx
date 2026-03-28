@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { X, FlaskConical, CreditCard, Loader2, ExternalLink } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { api } from '@/lib/api';
+import { ModalShell } from '@/components/ui/ModalShell';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -198,63 +198,41 @@ function PlanBillingSection({ onOpenPaywall }: { onOpenPaywall: () => void }) {
 }
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const [visible, setVisible] = useState(false);
   const { devMode, setDevMode } = useSettingsStore();
   const triggerPaywall = useBillingStore((s) => s.triggerPaywall);
 
-  useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
-  }, []);
-
-  const handleClose = () => {
-    setVisible(false);
-    setTimeout(onClose, 150);
-  };
-
   const handleOpenPaywallFromSettings = () => {
-    handleClose();
+    onClose();
     setTimeout(() => triggerPaywall({ source: 'settings_manage' }), 160);
   };
 
-  const modal = (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 ${
-        visible ? 'opacity-100' : 'opacity-0'
-      }`}
-      style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
-    >
-      <div className="relative w-full max-w-sm mx-4 rounded-2xl bg-white shadow-2xl border border-stroke-subtle flex flex-col max-h-[80vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
-          <h2 className="text-sm font-semibold text-text-primary">Settings</h2>
-          <button
-            onClick={handleClose}
-            className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Body — add new <SettingsSection> blocks here */}
-        <div className="px-5 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
-          {devMode && <PlanBillingSection onOpenPaywall={handleOpenPaywallFromSettings} />}
-
-          <SettingsSection title="Developer">
-            <SettingsRow
-              icon={FlaskConical}
-              label="Developer Mode"
-              description="Enables billing, usage tracking, and other features under development."
-              checked={devMode}
-              onChange={setDevMode}
-            />
-          </SettingsSection>
-        </div>
+  return (
+    <ModalShell onClose={onClose} maxWidth="max-w-sm" className="flex flex-col max-h-[80vh]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
+        <h2 className="text-sm font-semibold text-text-primary">Settings</h2>
+        <button
+          onClick={onClose}
+          className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
-    </div>
-  );
 
-  return createPortal(modal, document.body);
+      {/* Body — add new <SettingsSection> blocks here */}
+      <div className="px-5 py-4 space-y-5 overflow-y-auto flex-1 min-h-0">
+        {devMode && <PlanBillingSection onOpenPaywall={handleOpenPaywallFromSettings} />}
+
+        <SettingsSection title="Developer">
+          <SettingsRow
+            icon={FlaskConical}
+            label="Developer Mode"
+            description="Enables billing, usage tracking, and other features under development."
+            checked={devMode}
+            onChange={setDevMode}
+          />
+        </SettingsSection>
+      </div>
+    </ModalShell>
+  );
 }

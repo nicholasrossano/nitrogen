@@ -1,18 +1,23 @@
 """Helper functions for tool alignment flow."""
 
 import logging
+import uuid as _uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.initiative import Initiative
 from app.tools import get_tool_registry
 from app.services.sdg_classifier import classify_sdg
+from app.services import module_service
 
 
 async def get_or_generate_alignment(
     db: AsyncSession,
     initiative: Initiative,
     tool_id: str,
+    *,
+    user_id: str | None = None,
+    session_id: _uuid.UUID | None = None,
 ) -> dict | None:
     """
     Get existing alignment or generate a new one for a tool.
@@ -25,13 +30,10 @@ async def get_or_generate_alignment(
     if not tool or not tool.requires_alignment:
         return None
     
-    # Check if alignment already exists
-    existing_alignment = initiative.get_alignment_for_tool(tool_id)
-    
+    existing_alignment = await module_service.get_alignment(db, initiative.id, tool_id)
     if existing_alignment:
         return existing_alignment
     
-    # Generate new alignment
     try:
         alignment_obj = await tool.generate_alignment(
             db=db,
@@ -40,8 +42,11 @@ async def get_or_generate_alignment(
         )
         alignment_data = alignment_obj.to_dict()
         
-        # Save alignment to initiative
-        initiative.set_alignment_for_tool(tool_id, alignment_data)
+        await module_service.save_alignment(
+            db, initiative.id, tool_id, alignment_data,
+            user_id=user_id or initiative.user_id,
+            session_id=session_id,
+        )
         await db.commit()
         await db.refresh(initiative)
         
@@ -124,7 +129,7 @@ def build_deliverables_overview_data(initiative: Initiative) -> dict:
         "project_summary": initiative.to_summary_dict(),
         "selected_tools": tools_info,
         "tool_inputs": tool_inputs,
-        "alignments": initiative.tool_alignments,
+        "alignments": initiative.get_tool_alignments_dict(),
     }
 
 

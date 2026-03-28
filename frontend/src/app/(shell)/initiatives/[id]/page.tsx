@@ -11,6 +11,8 @@ import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { ModuleLandingPage } from '@/components/chat/ModuleLandingPage';
+import { OpenModuleModal } from '@/components/chat/OpenModuleModal';
+import type { ModuleInstance } from '@/lib/api';
 import { ResearchPanel } from '@/components/core-chat/ResearchPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ProjectFilesView } from '@/components/files';
@@ -53,6 +55,7 @@ function InitiativePageContent() {
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
   const [showModuleModal, setShowModuleModal] = useState(false);
+  const [showOpenModal, setShowOpenModal] = useState(false);
   const [showChatLanding, setShowChatLanding] = useState(true);
   const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
   const [isResizingStandalone, setIsResizingStandalone] = useState(false);
@@ -161,6 +164,10 @@ function InitiativePageContent() {
     }
     if (item === 'modules') {
       setShowModuleModal(true);
+      return true;
+    }
+    if (item === 'open') {
+      setShowOpenModal(true);
       return true;
     }
     if (item === 'files') {
@@ -393,6 +400,27 @@ function InitiativePageContent() {
     setResearchCitation(null);
   };
 
+  const handleOpenInstanceSelect = useCallback((instance: ModuleInstance) => {
+    setShowOpenModal(false);
+    setActiveView('explore');
+    setShowChatLanding(false);
+    setShowEditorInChatView(false);
+    setResearchCitation(null);
+    router.replace(`/initiatives/${initiativeId}?view=explore`);
+    const TOOL_NAMES: Record<string, string> = {
+      lcoe_model: 'LCOE Model',
+      carbon_model: 'Carbon Calculator',
+      solar_estimate: 'Solar Estimate',
+      investment_memo: 'Investment Memo',
+      due_diligence_checklist: 'Due Diligence',
+      template_fill: 'Template',
+    };
+    const name = TOOL_NAMES[instance.tool_id] ?? instance.tool_id.replace(/_/g, ' ');
+    setTimeout(() => {
+      chatSendRef.current?.(`Generate ${name}`, instance.tool_id);
+    }, 0);
+  }, [initiativeId, router]);
+
   const handleModuleSelect = useCallback((moduleId: string, moduleName: string) => {
     setShowModuleModal(false);
     setActiveView('explore');
@@ -557,6 +585,14 @@ function InitiativePageContent() {
                   );
                 })()}
               </main>
+
+              {showOpenModal && (
+                <OpenModuleModal
+                  initiativeId={initiativeId}
+                  onSelect={handleOpenInstanceSelect}
+                  onClose={() => setShowOpenModal(false)}
+                />
+              )}
 
               {showModuleModal && (
                 <div

@@ -61,6 +61,8 @@ class InitiativeResponse(BaseModel):
     tool_alignments: Optional[dict] = None
     deliverables: Optional[dict] = None
     project_plan: Optional[dict] = None
+    # Module instances
+    module_instances: Optional[list] = None
     # Sharing fields (null = owned by current user)
     shared_role: Optional[str] = None
     owner_email: Optional[str] = None
