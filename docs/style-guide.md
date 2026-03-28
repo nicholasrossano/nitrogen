@@ -583,7 +583,7 @@ Use when a side panel — sidebar, chat panel, inspector — should open or clos
 
 ### Modal Pattern (Settings-Style Header)
 
-Use `ModalShell` (`@/components/ui/ModalShell`) as the default wrapper for all feature/configuration dialogs. It handles portal mounting, Escape key, and click-outside-to-close. Depth is conveyed by `shadow-modal` — **no background overlay**.
+Use `ModalShell` (`@/components/ui/ModalShell`) as the default wrapper for all feature/configuration dialogs. It handles portal mounting, Escape key, and click-outside-to-close. Depth is conveyed by a frosted backdrop (`bg-black/40 backdrop-blur-sm`) combined with `shadow-modal`.
 
 ```tsx
 import { ModalShell } from '@/components/ui/ModalShell';
@@ -620,7 +620,7 @@ import { ModalShell } from '@/components/ui/ModalShell';
 
 **Rules**
 - Always use `ModalShell` — never hand-roll `fixed inset-0` modal wrappers
-- No background overlay (`bg-black/…`, `backdrop-blur`) — `shadow-modal` provides depth
+- Frosted backdrop (`bg-black/40 backdrop-blur-sm`) + `shadow-modal` provide depth and focus
 - Header stays compact: title + close button only; put descriptive copy in the body
 - Width by intent: `max-w-sm` for lightweight settings, `max-w-2xl`–`max-w-3xl` for content-rich pickers
 - Add `flex flex-col max-h-[80vh]` via `className` when the body needs to scroll independently
