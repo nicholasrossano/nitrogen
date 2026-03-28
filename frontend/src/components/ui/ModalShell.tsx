@@ -13,7 +13,7 @@ interface ModalShellProps {
 }
 
 /**
- * Reusable modal shell — no background overlay, depth via shadow-modal.
+ * Reusable modal shell — frosted backdrop blur + shadow-modal depth.
  * Handles portal mounting, Escape key, and click-outside-to-close.
  */
 export function ModalShell({ onClose, maxWidth = 'max-w-md', className = '', children }: ModalShellProps) {
@@ -32,11 +32,12 @@ export function ModalShell({ onClose, maxWidth = 'max-w-md', className = '', chi
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
       <div
         className={`relative w-full ${maxWidth} mx-4 bg-surface rounded-2xl shadow-modal border border-stroke-subtle overflow-hidden animate-fade-in ${className}`}
+        onClick={(e) => e.stopPropagation()}
       >
         {children}
       </div>
