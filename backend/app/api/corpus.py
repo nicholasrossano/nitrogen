@@ -43,26 +43,30 @@ async def list_corpus(
     count_result = await db.execute(select(func.count(CorpusDocument.id)))
     total = count_result.scalar() or 0
     
-    # Build response with chunk counts
-    response_docs = []
-    for doc in docs:
-        chunk_count_result = await db.execute(
-            select(func.count(CorpusChunk.id)).where(
-                CorpusChunk.corpus_doc_id == doc.id
-            )
+    # Build response with chunk counts in a single query
+    chunk_counts_result = await db.execute(
+        select(
+            CorpusChunk.corpus_doc_id,
+            func.count(CorpusChunk.id).label("chunk_count"),
         )
-        chunk_count = chunk_count_result.scalar() or 0
-        
-        response_docs.append(CorpusDocumentResponse(
+        .where(CorpusChunk.corpus_doc_id.in_([d.id for d in docs]))
+        .group_by(CorpusChunk.corpus_doc_id)
+    )
+    chunk_counts = {row.corpus_doc_id: row.chunk_count for row in chunk_counts_result.all()}
+
+    response_docs = [
+        CorpusDocumentResponse(
             id=doc.id,
             title=doc.title,
             source=doc.source,
             file_type=doc.file_type,
             metadata=doc.doc_metadata,
-            chunk_count=chunk_count,
+            chunk_count=chunk_counts.get(doc.id, 0),
             created_at=doc.created_at,
-        ))
-    
+        )
+        for doc in docs
+    ]
+
     return CorpusListResponse(documents=response_docs, total=total)
 
 
