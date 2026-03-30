@@ -46,7 +46,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           return (
             <ChecklistViewerWidget
               key={idx}
-              data={{ content: deliverable.content, tool_name: deliverable.tool_name }}
+              data={{ content: deliverable.content, module_name: deliverable.module_name }}
               initiativeId={initiativeId}
               isActive={isActive}
             />
@@ -55,7 +55,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           // Generic document viewer fallback
           return (
             <div key={idx} className="card-elevated overflow-hidden">
-              <PanelHeader icon={FileText} title={deliverable.tool_name} />
+              <PanelHeader icon={FileText} title={deliverable.module_name} />
               <div className="p-5 bg-white">
                 <pre className="text-sm text-text-secondary whitespace-pre-wrap">
                   {JSON.stringify(deliverable.content, null, 2)}
