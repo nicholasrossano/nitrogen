@@ -45,7 +45,7 @@ async def _resolve_instance(
             .where(
                 ModuleInstance.initiative_id == initiative_id,
                 ModuleInstance.session_id == session_id,
-                ModuleInstance.tool_id == tool_id,
+                ModuleInstance.module_id == tool_id,
             )
             .limit(1)
         )
@@ -59,7 +59,7 @@ async def _resolve_instance(
 
     inst = ModuleInstance(
         initiative_id=initiative_id,
-        tool_id=tool_id,
+        module_id=tool_id,
         status="started",
         started_by=user_id,
         session_id=session_id,
@@ -176,7 +176,7 @@ async def get_alignment(
         select(ModuleInstance)
         .where(
             ModuleInstance.initiative_id == initiative_id,
-            ModuleInstance.tool_id == tool_id,
+            ModuleInstance.module_id == tool_id,
             ModuleInstance.alignment.isnot(None),
         )
         .order_by(ModuleInstance.updated_at.desc())
@@ -247,7 +247,7 @@ async def remove_instance_by_tool(
         select(ModuleInstance)
         .where(
             ModuleInstance.initiative_id == initiative_id,
-            ModuleInstance.tool_id == tool_id,
+            ModuleInstance.module_id == tool_id,
         )
         .order_by(ModuleInstance.updated_at.desc())
         .limit(1)
@@ -264,11 +264,19 @@ async def remove_instance_by_tool(
 async def list_instances(
     db: AsyncSession,
     initiative_id: uuid.UUID,
+    *,
+    archived: bool = False,
 ) -> list[ModuleInstance]:
-    """All instances for a project, newest first."""
+    """All instances for a project, newest first.
+
+    Pass ``archived=True`` to list soft-deleted (trashed) instances instead.
+    """
     stmt = (
         select(ModuleInstance)
-        .where(ModuleInstance.initiative_id == initiative_id)
+        .where(
+            ModuleInstance.initiative_id == initiative_id,
+            ModuleInstance.archived == archived,
+        )
         .order_by(ModuleInstance.started_at.desc())
     )
     result = await db.execute(stmt)

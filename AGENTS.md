@@ -61,6 +61,15 @@ Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about
 ## UI/Design
 Follow `docs/style-guide.md` as the source of truth.
 
+**Buttons (non-negotiable):**
+- ALWAYS use one of the three global button classes. NEVER build a custom button with raw Tailwind.
+  - `btn-primary` — primary / confirming actions (Export, Confirm, Generate, Submit). Accent border, fills with accent on hover.
+  - `btn-secondary` — secondary / cancel actions. Neutral border, subtle hover.
+  - `btn-danger` — destructive actions only (Delete, Remove).
+- Full-width buttons: add `w-full` + size override `!px-4 !py-2` (or `!py-1.5` for compact panels).
+- With icon: put the Lucide icon inside the button alongside the label — the class already provides `gap-2`.
+- See `docs/style-guide.md § K) Buttons` for the full spec and examples.
+
 **Page layout chrome (non-negotiable):**
 - Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
 - The `<header className="shrink-0 h-14">` must always be present — even if empty — on every page state/branch. What changes is only the content inside it, never its presence. Never omit the header on any conditional render branch (e.g. a selection screen vs. an active workspace screen on the same route).

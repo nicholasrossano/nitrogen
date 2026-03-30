@@ -391,7 +391,53 @@ All structural dividers use warm neutral tones, not blue.
 
 ---
 
-## K) Motion & Interaction Feedback (Web-Equivalent Haptics)
+## K) Buttons
+
+Three button classes are defined in `globals.css`. Always use these — never roll your own button styles.
+
+### `btn-primary` — Primary action (accent fill on hover)
+Use for the main confirming action in any panel or widget: Export, Confirm, Generate, Submit.
+
+```tsx
+<button className="btn-primary">Export to Word</button>
+
+// Full-width (e.g. inside a panel footer):
+<button className="btn-primary w-full !px-4 !py-2">Confirm & Begin Build</button>
+
+// With icon:
+<button className="btn-primary">
+  <Download className="w-4 h-4" />
+  Export to Word
+</button>
+```
+
+**Appearance**: `border border-accent text-accent bg-surface`, pill-shaped (`rounded-[20px]`). Hover fills with accent color via `::before` opacity fade. Press compresses to `scale(0.98)`.
+
+### `btn-secondary` — Secondary / cancel
+Use for secondary actions: Cancel, Re-draft, Settings, less critical triggers.
+
+```tsx
+<button className="btn-secondary">Cancel</button>
+```
+
+**Appearance**: `border border-stroke-subtle text-text-primary bg-surface`.
+
+### `btn-danger` — Destructive
+Use only for irreversible destructive actions: Delete, Remove, Revoke.
+
+```tsx
+<button className="btn-danger">Delete project</button>
+```
+
+### Rules
+- **Never** create custom button styles with raw Tailwind when one of the three classes fits.
+- **Disabled hover**: always add `:disabled:hover::before { opacity: 0 }` suppression — already included in the global classes.
+- Size overrides use Tailwind `!important` modifiers: `!px-4 !py-1.5` to make a smaller button, `!px-6 !py-3` for a larger one.
+- `w-full` makes any button full-width inside its container.
+
+---
+
+## K2) Motion & Interaction Feedback (Web-Equivalent Haptics)
 
 Motion replaces haptics on the web. Feedback should feel **immediate, weighted, and deliberate**, never playful.
 
