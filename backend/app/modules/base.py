@@ -34,7 +34,7 @@ class RefinementModel(str, Enum):
 
 
 @dataclass
-class ToolInput:
+class ModuleInput:
     """Definition of an input field for a tool."""
     name: str
     label: str
@@ -103,7 +103,7 @@ class AlignmentParameter:
 
 
 @dataclass
-class ToolAlignment:
+class ModuleAlignment:
     """
     Alignment configuration for a tool before generation.
     
@@ -111,7 +111,7 @@ class ToolAlignment:
     what will be generated. The assistant proposes defaults, the user can
     modify them, and once confirmed, this guides generation.
     """
-    tool_id: str
+    module_id: str
     title: str  # Title of the alignment (e.g., "Investment Memo Outline")
     description: str  # Brief explanation of what user is confirming
     sections: list[AlignmentSection] = field(default_factory=list)
@@ -122,7 +122,7 @@ class ToolAlignment:
     
     def to_dict(self) -> dict:
         return {
-            "tool_id": self.tool_id,
+            "module_id": self.module_id,
             "title": self.title,
             "description": self.description,
             "sections": [s.to_dict() for s in self.sections],
@@ -133,7 +133,7 @@ class ToolAlignment:
         }
     
     @classmethod
-    def from_dict(cls, data: dict) -> "ToolAlignment":
+    def from_dict(cls, data: dict) -> "ModuleAlignment":
         """Create alignment from dictionary (e.g., from database)."""
         sections = [
             AlignmentSection(
@@ -159,7 +159,7 @@ class ToolAlignment:
             for p in data.get("parameters", [])
         ]
         return cls(
-            tool_id=data["tool_id"],
+            module_id=data.get("module_id") or data.get("tool_id", ""),
             title=data["title"],
             description=data["description"],
             sections=sections,
@@ -171,9 +171,9 @@ class ToolAlignment:
 
 
 @dataclass
-class ToolOutput:
+class ModuleOutput:
     """Result from running a tool."""
-    tool_id: str
+    module_id: str
     output_type: str  # "memo", "checklist", "spreadsheet", "chart", etc.
     title: str
     content: dict[str, Any]  # Structured content
@@ -181,7 +181,7 @@ class ToolOutput:
 
 
 @dataclass
-class ToolDefinition:
+class ModuleDefinition:
     """Metadata about a tool."""
     id: str
     name: str
@@ -203,28 +203,28 @@ class ToolDefinition:
         }
 
 
-class BaseTool(ABC):
+class BaseModule(ABC):
     """Abstract base class for all Nitrogen tools."""
     
     @property
     @abstractmethod
-    def definition(self) -> ToolDefinition:
+    def definition(self) -> ModuleDefinition:
         """Return tool metadata."""
         pass
     
     @property
     @abstractmethod
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         """Return list of required input fields."""
         pass
     
     @property
-    def optional_inputs(self) -> list[ToolInput]:
+    def optional_inputs(self) -> list[ModuleInput]:
         """Return list of optional input fields. Override in subclass."""
         return []
     
     @property
-    def all_inputs(self) -> list[ToolInput]:
+    def all_inputs(self) -> list[ModuleInput]:
         """Return all inputs (required + optional)."""
         return self.required_inputs + self.optional_inputs
     
@@ -277,7 +277,7 @@ class BaseTool(ABC):
         db: AsyncSession,
         initiative_id: UUID,
         inputs: dict[str, Any],
-    ) -> ToolAlignment | None:
+    ) -> ModuleAlignment | None:
         """
         Generate a proposed alignment configuration for this tool.
         
@@ -291,11 +291,11 @@ class BaseTool(ABC):
     
     async def update_alignment_from_feedback(
         self,
-        current_alignment: ToolAlignment,
+        current_alignment: ModuleAlignment,
         feedback: str,
         db: AsyncSession,
         initiative_id: UUID,
-    ) -> ToolAlignment:
+    ) -> ModuleAlignment:
         """
         Update alignment based on user feedback.
         
@@ -312,8 +312,8 @@ class BaseTool(ABC):
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment: ToolAlignment | None = None,
-    ) -> ToolOutput:
+        alignment: ModuleAlignment | None = None,
+    ) -> ModuleOutput:
         """Execute the tool and return output.
         
         If alignment is provided, use it to guide generation.
@@ -339,7 +339,7 @@ class BaseTool(ABC):
 
     async def export(
         self,
-        output: ToolOutput,
+        output: ModuleOutput,
         format: str = "docx",
     ) -> str:
         """Export output to file. Override in subclass for custom export."""

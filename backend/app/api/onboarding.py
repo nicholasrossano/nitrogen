@@ -34,7 +34,7 @@ from app.services.chat_agent import ChatAgentService
 from app.services.chat import ChatService
 from app.services.project_plan import ProjectPlanService
 from app.services import module_service
-from app.tools import get_tool_registry
+from app.modules import get_module_registry
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -390,7 +390,7 @@ async def execute_action(
             widget_data = None
 
     elif action == "run_lcoe_tool":
-        from app.tools.lcoe_tool import LCOETool
+        from app.modules.lcoe_module import LCOETool
         lcoe_tool = LCOETool()
         try:
             yield_msg = params.get("message", "Building your LCOE model…")
@@ -446,7 +446,7 @@ async def execute_action(
             widget_data = None
 
     elif action == "run_carbon_tool":
-        from app.tools.carbon_tool import CarbonTool
+        from app.modules.carbon_module import CarbonTool
         carbon_tool = CarbonTool()
         try:
             yield_msg = params.get("message", "Building your carbon emissions model…")
@@ -566,10 +566,10 @@ async def execute_action(
         and widget_data
         and isinstance(widget_data, dict)
     ):
-        from app.tools.registry import get_tool_registry
-        _registry = get_tool_registry()
+        from app.modules.registry import get_module_registry
+        _registry = get_module_registry()
         _tool_id = _WIDGET_TYPE_TO_TOOL_ID.get(widget_type, "")
-        _tool = _registry.get_tool(_tool_id)
+        _tool = _registry.get_module(_tool_id)
         if _tool and _tool.is_exportable(widget_data):
             title = _tool.definition.name
             if widget_type == "solar_output":
@@ -794,8 +794,8 @@ async def get_chat_history(
     messages = messages_result.scalars().all()
     
     # Rehydrate tool_checklist widget_data with current tool definitions
-    registry = get_tool_registry()
-    tools_by_id = {t.definition.id: t.definition for t in registry.get_all_tools()}
+    registry = get_module_registry()
+    tools_by_id = {t.definition.id: t.definition for t in registry.get_all_modules()}
     
     def rehydrate_widget_data(widget_data: dict | None) -> dict | None:
         if not widget_data or "recommendations" not in widget_data:
@@ -914,8 +914,8 @@ async def update_message_widget(
     }
     _tool_id_for_widget = _WIDGET_TO_TOOL.get(msg.widget_type or "")
     if _tool_id_for_widget:
-        from app.tools.registry import get_tool_registry
-        _tool = get_tool_registry().get_tool(_tool_id_for_widget)
+        from app.modules.registry import get_module_registry
+        _tool = get_module_registry().get_tool(_tool_id_for_widget)
         content = data.widget_data
         if _tool and _tool.is_exportable(content):
             result = content.get("result") or {}

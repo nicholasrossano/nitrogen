@@ -6,8 +6,8 @@ import { FileText } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 
 interface DeliverableItem {
-  tool_id: string;
-  tool_name: string;
+  module_id: string;
+  module_name: string;
   widget_type: string;
   content: any;
 }
@@ -37,7 +37,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           return (
             <MemoViewerWidget
               key={idx}
-              data={{ content: deliverable.content, memo_id: deliverable.tool_id }}
+              data={{ content: deliverable.content, memo_id: deliverable.module_id }}
               initiativeId={initiativeId}
               isActive={isActive}
             />

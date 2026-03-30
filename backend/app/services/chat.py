@@ -611,8 +611,8 @@ class ChatService:
         # Run model tools (LCOE / carbon / solar) sequentially — they produce widgets
         for fn_name, args in parsed_calls:
             if fn_name in ("run_lcoe_model", "run_carbon_model"):
-                from app.tools.lcoe_tool import LCOETool
-                from app.tools.carbon_tool import CarbonTool
+                from app.modules.lcoe_module import LCOETool
+                from app.modules.carbon_module import CarbonTool
 
                 is_lcoe = fn_name == "run_lcoe_model"
                 tool = LCOETool() if is_lcoe else CarbonTool()
@@ -638,7 +638,7 @@ class ChatService:
                     await _think(f"{label.upper()} model encountered an error — falling back to text response")
 
             elif fn_name == "run_solar_estimate":
-                from app.tools.pvwatts_tool import PVWattsTool
+                from app.modules.pvwatts_module import PVWattsTool
 
                 await _think("Generating solar production estimate...")
                 tiers_used.append("solar")
@@ -804,6 +804,7 @@ class ChatService:
     ) -> ChatResponse:
         """Handle compare mode: dual-project retrieval + comparative answer generation."""
         from uuid import UUID as _UUID
+        from app.core.database import AsyncSessionLocal
 
         async def _think(text: str) -> None:
             if on_thinking:
@@ -820,25 +821,26 @@ class ChatService:
 
         search_query = await self._build_search_query(user_message, history)
 
-        # Parallel retrieval across both projects
         await _step("scan_a", f"Scanning {title_a} documents", "running")
         await _step("scan_b", f"Scanning {title_b} documents", "running")
 
         async def _search_project(ctx: dict, label: str) -> list[RetrievedFact]:
+            """Search a single project using its own DB session for isolation."""
             iid = _UUID(ctx["initiative_id"])
-            facts: list[RetrievedFact] = []
-            corpus_facts = await self.retrieval.search_corpus(
-                search_query, iid, corpus_top_k=12, evidence_top_k=12,
-            )
-            if not corpus_facts:
-                corpus_facts = await self.retrieval.search_project_materials(
-                    search_query, iid, max_results=10,
+            async with AsyncSessionLocal() as session:
+                retrieval = TieredRetrievalService(session)
+                corpus_facts = await retrieval.search_corpus(
+                    search_query, iid, corpus_top_k=12, evidence_top_k=12,
                 )
+                if not corpus_facts:
+                    corpus_facts = await retrieval.search_project_materials(
+                        search_query, iid, max_results=10,
+                    )
             for f in corpus_facts:
                 f.project_label = label
-            facts.extend(corpus_facts)
-            return facts
+            return corpus_facts
 
+        # Each project gets its own session, so parallel execution is safe.
         facts_a, facts_b = await asyncio.gather(
             _search_project(ctx_a, "A"),
             _search_project(ctx_b, "B"),

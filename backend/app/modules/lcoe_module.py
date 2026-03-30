@@ -22,15 +22,15 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.tools.base import (
-    BaseTool,
+from app.modules.base import (
+    BaseModule,
     ExecutionModel,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
-    ToolDefinition,
-    ToolInput,
-    ToolOutput,
+    ModuleDefinition,
+    ModuleInput,
+    ModuleOutput,
 )
 from app.models.initiative import Initiative
 from app.models.onboarding import ChatMessage
@@ -97,12 +97,12 @@ INPUT_EXTRACTION_SCHEMA = {
 }
 
 
-class LCOETool(BaseTool):
+class LCOETool(BaseModule):
     """LCOE modeling tool for chat-based energy project economics."""
 
     @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
+    def definition(self) -> ModuleDefinition:
+        return ModuleDefinition(
             id="lcoe_model",
             name="LCOE Model",
             description="Calculate the Levelized Cost of Energy for a project — extracts inputs from conversation and documents, fills gaps with assumptions, and produces transparent cost estimates.",
@@ -126,23 +126,23 @@ class LCOETool(BaseTool):
         )
 
     @property
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         return [
-            ToolInput(
+            ModuleInput(
                 name="net_capacity_kw",
                 label="Net Capacity (kW)",
                 description="What is the installed capacity of the project in kW?",
                 input_type="number",
                 placeholder="e.g. 500",
             ),
-            ToolInput(
+            ModuleInput(
                 name="total_capex",
                 label="Total CAPEX",
                 description="What is the total capital expenditure?",
                 input_type="number",
                 placeholder="e.g. 750000",
             ),
-            ToolInput(
+            ModuleInput(
                 name="annual_opex",
                 label="Annual O&M Cost",
                 description="What is the estimated annual operations & maintenance cost?",
@@ -152,9 +152,9 @@ class LCOETool(BaseTool):
         ]
 
     @property
-    def optional_inputs(self) -> list[ToolInput]:
+    def optional_inputs(self) -> list[ModuleInput]:
         return [
-            ToolInput(
+            ModuleInput(
                 name="capacity_factor",
                 label="Capacity Factor",
                 description="Expected capacity factor (0-1). Will use technology default if not provided.",
@@ -162,7 +162,7 @@ class LCOETool(BaseTool):
                 required=False,
                 placeholder="e.g. 0.18",
             ),
-            ToolInput(
+            ModuleInput(
                 name="discount_rate",
                 label="Discount Rate / WACC",
                 description="Discount rate as a decimal. Default 8%.",
@@ -170,7 +170,7 @@ class LCOETool(BaseTool):
                 required=False,
                 default=0.08,
             ),
-            ToolInput(
+            ModuleInput(
                 name="project_life_years",
                 label="Project Lifetime (years)",
                 description="Operational lifetime in years. Default depends on technology.",
@@ -282,7 +282,7 @@ class LCOETool(BaseTool):
         inputs: dict[str, Any],
         include_corpus: bool = True,
         alignment=None,
-    ) -> ToolOutput:
+    ) -> ModuleOutput:
         """Full LCOE execution: extract → fill defaults → calculate → return structured output."""
 
         extracted = await self.extract_inputs_from_context(db, initiative_id)
@@ -318,8 +318,8 @@ class LCOETool(BaseTool):
                 result_data["error"] = str(e)
                 result_data["computable"] = False
 
-        return ToolOutput(
-            tool_id="lcoe_model",
+        return ModuleOutput(
+            module_id="lcoe_model",
             output_type="lcoe",
             title="LCOE Analysis",
             content=result_data,

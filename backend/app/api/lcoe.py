@@ -8,7 +8,7 @@ import io
 import logging
 
 from app.core.auth import get_current_user, MockUser
-from app.tools.lcoe_tool import LCOETool
+from app.modules.lcoe_module import LCOETool
 from app.services.lcoe_engine import LCOEEngine, LCOEInput
 
 router = APIRouter()

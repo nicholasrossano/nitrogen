@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Sprout, TreeDeciduous, X } from 'lucide-react';
 
 import dynamic from 'next/dynamic';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
 import { useShallow } from 'zustand/react/shallow';
 import { ProjectHeader, ChatPanel, EditorSidePanel } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
@@ -40,7 +41,7 @@ const MIN_PLAN_DOC_VIEWER_PERCENT = 25;
 const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
 const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
 
-type ProjectView = 'explore' | 'plan' | 'files';
+type ProjectView = 'research' | 'plan' | 'files' | 'module';
 
 function InitiativePageContent() {
   const params = useParams();
@@ -54,10 +55,11 @@ function InitiativePageContent() {
 
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
-    viewParam === 'explore' ? 'explore' :
+    viewParam === 'research' || viewParam === 'explore' ? 'research' :
     viewParam === 'files' ? 'files' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
+  const [activeModule, setActiveModule] = useState<{ instanceId: string; moduleId: string } | null>(null);
   const [showModuleModal, setShowModuleModal] = useState(false);
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showChatLanding, setShowChatLanding] = useState(true);
@@ -169,12 +171,13 @@ function InitiativePageContent() {
       router.push('/');
       return true;
     }
-    if (item === 'explore') {
-      setActiveView('explore');
+    if (item === 'research') {
+      setActiveView('research');
       setShowChatLanding(true);
       setShowEditorInChatView(false);
       setResearchCitation(null);
-      router.replace(`/initiatives/${initiativeId}?view=explore`);
+      setActiveModule(null);
+      router.replace(`/initiatives/${initiativeId}?view=research`);
       return true;
     }
     if (item === 'modules') {
@@ -202,7 +205,7 @@ function InitiativePageContent() {
   }, [messages, initiative, router, initiativeId, loadProjectPlan, handlePlanReady]));
 
   useEffect(() => {
-    if (isViewer && activeView === 'explore') {
+    if (isViewer && activeView === 'research') {
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
@@ -415,38 +418,28 @@ function InitiativePageContent() {
     setResearchCitation(null);
   };
 
+  const handleExitModule = useCallback(() => {
+    setActiveView('research');
+    setShowChatLanding(true);
+    setActiveModule(null);
+  }, []);
+
   const handleOpenInstanceSelect = useCallback((instance: ModuleInstance) => {
     setShowOpenModal(false);
-    setActiveView('explore');
-    setShowChatLanding(false);
-    setShowEditorInChatView(false);
-    setResearchCitation(null);
-    router.replace(`/initiatives/${initiativeId}?view=explore`);
-    const TOOL_NAMES: Record<string, string> = {
-      lcoe_model: 'LCOE Model',
-      carbon_model: 'Carbon Calculator',
-      solar_estimate: 'Solar Estimate',
-      investment_memo: 'Investment Memo',
-      due_diligence_checklist: 'Due Diligence',
-      template_fill: 'Template',
-    };
-    const name = TOOL_NAMES[instance.tool_id] ?? instance.tool_id.replace(/_/g, ' ');
-    setTimeout(() => {
-      chatSendRef.current?.(`Generate ${name}`, instance.tool_id);
-    }, 0);
-  }, [initiativeId, router]);
+    setActiveModule({ instanceId: instance.id, moduleId: instance.module_id });
+    setActiveView('module');
+  }, []);
 
-  const handleModuleSelect = useCallback((moduleId: string, moduleName: string) => {
+  const handleModuleSelect = useCallback(async (moduleId: string, _moduleName?: string) => {
     setShowModuleModal(false);
-    setActiveView('explore');
-    setShowChatLanding(false);
-    setShowEditorInChatView(false);
-    setResearchCitation(null);
-    router.replace(`/initiatives/${initiativeId}?view=explore`);
-    setTimeout(() => {
-      chatSendRef.current?.(`Generate ${moduleName}`, moduleId);
-    }, 0);
-  }, [initiativeId, router]);
+    try {
+      const inst = await api.createModuleInstance(initiativeId, moduleId);
+      setActiveModule({ instanceId: inst.id, moduleId: inst.module_id });
+      setActiveView('module');
+    } catch {
+      // silently ignore — user stays on current view
+    }
+  }, [initiativeId]);
 
   return (
     <>
@@ -470,7 +463,7 @@ function InitiativePageContent() {
               },
               title: planDocViewer !== null ? 'Hide document viewer' : 'Show document viewer',
             } : undefined,
-          } : activeView === 'explore' && !isViewer ? {
+          } : activeView === 'module' ? {} : activeView === 'research' && !isViewer ? {
             onNewChat: !showChatLanding ? handleNewChat : undefined,
             rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
               active: showEditorInChatView,
@@ -525,10 +518,10 @@ function InitiativePageContent() {
             ) : <div className="h-full" />
           ) : (
             <>
-              {/* Explore (chat) view — always mounted to preserve conversation state */}
+              {/* Research (chat) view — always mounted to preserve conversation state */}
               <main
                 ref={standaloneContainerRef}
-                className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'explore' ? 'hidden' : ''}`}
+                className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'research' ? 'hidden' : ''}`}
               >
                 {(() => {
                   const hasEditor = showEditorInChatView && chatEditorWidgets.length > 0;
@@ -626,6 +619,17 @@ function InitiativePageContent() {
                     <ModuleLandingPage onSelectModule={handleModuleSelect} showIntro={false} />
                   </div>
                 </ModalShell>
+              )}
+
+              {activeView === 'module' && activeModule && (
+                <main className="h-full min-w-0 overflow-hidden">
+                  <ModuleWorkspace
+                    instanceId={activeModule.instanceId}
+                    moduleId={activeModule.moduleId}
+                    initiativeId={initiativeId}
+                    onBack={handleExitModule}
+                  />
+                </main>
               )}
 
               {activeView === 'files' ? (

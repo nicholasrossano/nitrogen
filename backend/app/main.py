@@ -11,11 +11,13 @@ from contextlib import asynccontextmanager  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
 import json  # noqa: E402
+import re  # noqa: E402
 import traceback  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
-from app.api import initiatives, onboarding, evidence, generate, exports, corpus, tools, chat, project_plan, lcoe, carbon, project_materials, template, shares, users, pvwatts, google_drive, billing, api_keys  # noqa: E402
+import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
+from app.api import initiatives, onboarding, evidence, generate, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, template, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,6 +53,24 @@ def get_cors_origins():
 
 cors_origins = get_cors_origins()
 logger.info(f"Final CORS origins: {cors_origins}")
+
+_VERCEL_PREVIEW_ORIGIN_RE = re.compile(
+    r"https://nitrogen(-[a-z0-9-]+)?\.vercel\.app\Z"
+)
+
+
+def cors_headers_for_request(request: Request) -> dict[str, str]:
+    """Mirror CORSMiddleware allowlist so error responses still expose CORS headers."""
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    allowed = origin in cors_origins or bool(_VERCEL_PREVIEW_ORIGIN_RE.fullmatch(origin))
+    if not allowed:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+    }
 
 
 @asynccontextmanager
@@ -120,11 +140,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
                 "detail": "Storage limit reached — no new files can be uploaded. Please delete unused files or upgrade your storage plan.",
                 "error_type": "StorageLimitExceeded",
             },
+            headers=cors_headers_for_request(request),
         )
 
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
+        headers=cors_headers_for_request(request),
     )
 
 
@@ -135,7 +157,8 @@ app.include_router(evidence.router, prefix="/api/v1", tags=["evidence"])
 app.include_router(generate.router, prefix="/api/v1", tags=["generate"])
 app.include_router(exports.router, prefix="/api/v1", tags=["exports"])
 app.include_router(corpus.router, prefix="/api/v1", tags=["corpus"])
-app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
+app.include_router(module_catalog.router, prefix="/api/v1", tags=["modules"])
+app.include_router(module_workflow.router, prefix="/api/v1", tags=["module-workflow"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(project_plan.router, prefix="/api/v1", tags=["project-plan"])
 app.include_router(lcoe.router, prefix="/api/v1", tags=["lcoe"])

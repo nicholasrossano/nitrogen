@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 import { getIconByName } from '@/lib/icons';
-import type { AlignmentSection, ToolAlignment } from '@/lib/api';
+import type { AlignmentSection, ModuleAlignment } from '@/lib/api';
 import { WidgetGeneratingProgress, ALIGNMENT_STEPS } from './WidgetGeneratingProgress';
 
 interface ToolInfo {
@@ -42,7 +42,7 @@ interface AlignmentWidgetProps {
 export function AlignmentWidget({ data, initiativeId, isActive = true, onConfirmed }: AlignmentWidgetProps) {
   const { confirmAlignment, alignmentLoading, generating, error: storeError } = useInitiativeStore();
   
-  const alignment = data?.alignment as ToolAlignment | undefined;
+  const alignment = data?.alignment as ModuleAlignment | undefined;
   const tool = data?.tool as ToolInfo | undefined;
   const pendingTools = (data?.pending_tools || []) as ToolInfo[];
   const sections = (alignment?.sections || []) as AlignmentSection[];
@@ -84,7 +84,7 @@ export function AlignmentWidget({ data, initiativeId, isActive = true, onConfirm
         setChatLoading(true);
         const result = await api.confirmChatAlignment(
           sessionId!,
-          alignment.tool_id,
+          alignment.module_id,
           modifiedSections,
           undefined,
         );
@@ -93,7 +93,7 @@ export function AlignmentWidget({ data, initiativeId, isActive = true, onConfirm
       } else {
         await confirmAlignment(
           initiativeId,
-          alignment.tool_id,
+          alignment.module_id,
           modifiedSections,
           undefined,
         );

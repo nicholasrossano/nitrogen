@@ -20,7 +20,7 @@ class ModuleInstance(Base):
     __tablename__ = "module_instances"
 
     __table_args__ = (
-        Index("ix_mi_initiative_tool", "initiative_id", "tool_id"),
+        Index("ix_mi_initiative_module", "initiative_id", "tool_id"),
         Index("ix_mi_initiative_session", "initiative_id", "session_id"),
     )
 
@@ -43,6 +43,7 @@ class ModuleInstance(Base):
     )
     alignment: Mapped[dict | None] = mapped_column(JSONB)
     deliverable: Mapped[dict | None] = mapped_column(JSONB)
+    workflow_state: Mapped[dict | None] = mapped_column(JSONB)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

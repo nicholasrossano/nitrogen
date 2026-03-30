@@ -193,11 +193,11 @@ async def has_confirmed_alignments(
     tool_ids: list[str],
 ) -> bool:
     """Check whether every tool in *tool_ids* has at least one confirmed instance."""
-    from app.tools import get_tool_registry
-    registry = get_tool_registry()
+    from app.modules import get_module_registry
+    registry = get_module_registry()
 
     for tool_id in tool_ids:
-        tool = registry.get_tool(tool_id)
+        tool = registry.get_module(tool_id)
         if tool and tool.requires_alignment:
             alignment = await get_alignment(db, initiative_id, tool_id)
             if not alignment or not alignment.get("confirmed"):
@@ -211,12 +211,12 @@ async def get_pending_alignment_tools(
     tool_ids: list[str],
 ) -> list[str]:
     """Return tool IDs that require alignment but have no confirmed instance."""
-    from app.tools import get_tool_registry
-    registry = get_tool_registry()
+    from app.modules import get_module_registry
+    registry = get_module_registry()
 
     pending: list[str] = []
     for tool_id in tool_ids:
-        tool = registry.get_tool(tool_id)
+        tool = registry.get_module(tool_id)
         if tool and tool.requires_alignment:
             alignment = await get_alignment(db, initiative_id, tool_id)
             if not alignment or not alignment.get("confirmed"):
