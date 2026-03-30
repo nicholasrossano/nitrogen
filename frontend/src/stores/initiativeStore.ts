@@ -97,12 +97,16 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   draftMessage: null,
   setDraftMessage: (msg) => set({ draftMessage: msg }),
 
-  // Load initiative details
+  // Load initiative details (also populates projectPlan from the response)
   loadInitiative: async (id: string) => {
     set({ loading: true, error: null });
     try {
       const initiative = await api.getInitiative(id);
-      set({ initiative, loading: false });
+      set({
+        initiative,
+        loading: false,
+        ...(initiative.project_plan ? { projectPlan: initiative.project_plan } : {}),
+      });
     } catch (error) {
       set({ 
         error: error instanceof Error ? error.message : 'Failed to load initiative',
@@ -295,27 +299,28 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       }));
       
       const words: string[] = [];
-      
+      let wordFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const flushWords = () => {
+        wordFlushTimer = null;
+        const joined = words.join(' ');
+        set(state => ({
+          messages: state.messages.map(m =>
+            m.id === streamingMessageId ? { ...m, content: joined } : m
+          ),
+        }));
+      };
+
       await api.sendMessageStream(
         id,
         content,
-        // onWord
         (word: string) => {
           words.push(word);
-          
-          set(state => {
-            const updatedMessages = state.messages.map(m =>
-              m.id === streamingMessageId
-                ? { ...m, content: words.join(' ') }
-                : m
-            );
-            return { messages: updatedMessages };
-          });
+          if (!wordFlushTimer) wordFlushTimer = setTimeout(flushWords, 80);
         },
-        // onComplete
         async (message: ChatMessage, stageStatus: any) => {
-          // Clear streaming state
-          set({ 
+          if (wordFlushTimer) { clearTimeout(wordFlushTimer); wordFlushTimer = null; }
+          set({
             streamingMessageId: null,
             sending: false,
             stageStatus,
@@ -745,9 +750,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Load project plan
+  // Load project plan (keeps stale data visible until fresh data arrives)
   loadProjectPlan: async (id: string) => {
-    set({ projectPlan: null });
     try {
       const response = await api.getProjectPlan(id);
       set({ projectPlan: response.project_plan });
