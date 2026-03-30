@@ -1,5 +1,6 @@
 'use client';
 
+import 'katex/dist/katex.min.css';
 import { Suspense, useRef } from 'react';
 import { SideDrawer } from '@/components/ui';
 import { ShellNavContext } from '@/components/ui/ShellContext';

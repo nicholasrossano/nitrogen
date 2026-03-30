@@ -2,6 +2,9 @@
 const nextConfig = {
   output: 'standalone',
   transpilePackages: ['undici'],
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'recharts'],
+  },
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,

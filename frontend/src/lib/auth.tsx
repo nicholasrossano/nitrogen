@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import type { User, Auth } from 'firebase/auth';
 
 interface AuthContextType {
@@ -53,55 +53,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signInWithEmail = async (email: string, password: string) => {
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!auth) throw new Error('Auth not initialized');
     const { signInWithEmailAndPassword } = await import('firebase/auth');
     await signInWithEmailAndPassword(auth, email, password);
-  };
+  }, [auth]);
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const signUpWithEmail = useCallback(async (email: string, password: string) => {
     if (!auth) throw new Error('Auth not initialized');
     const { createUserWithEmailAndPassword } = await import('firebase/auth');
     await createUserWithEmailAndPassword(auth, email, password);
-  };
+  }, [auth]);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     if (!auth) throw new Error('Auth not initialized');
     const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
-  };
+  }, [auth]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (!auth) throw new Error('Auth not initialized');
     const { signOut: firebaseSignOut } = await import('firebase/auth');
     await firebaseSignOut(auth);
-  };
+  }, [auth]);
 
-  const resetPassword = async (email: string) => {
+  const resetPassword = useCallback(async (email: string) => {
     if (!auth) throw new Error('Auth not initialized');
     const { sendPasswordResetEmail } = await import('firebase/auth');
     await sendPasswordResetEmail(auth, email);
-  };
+  }, [auth]);
 
-  const getIdToken = async (): Promise<string | null> => {
+  const getIdToken = useCallback(async (): Promise<string | null> => {
     if (!user) return null;
     return user.getIdToken();
-  };
+  }, [user]);
+
+  const value = useMemo(() => ({
+    user,
+    loading,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signOut,
+    resetPassword,
+    getIdToken,
+  }), [user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signOut, resetPassword, getIdToken]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        signInWithEmail,
-        signUpWithEmail,
-        signInWithGoogle,
-        signOut,
-        resetPassword,
-        getIdToken,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
