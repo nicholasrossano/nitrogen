@@ -55,24 +55,17 @@ class RAGService:
         # Generate query embedding
         query_embedding = await self.embeddings.embed_text(query)
         
-        results = []
-        
-        # Search evidence chunks
+        import asyncio
+
+        tasks = []
         if "evidence" in sources:
-            evidence_results = await self._search_evidence(
-                query_embedding, 
-                initiative_id, 
-                evidence_top_k
-            )
-            results.extend(evidence_results)
-        
-        # Search corpus chunks
+            tasks.append(self._search_evidence(query_embedding, initiative_id, evidence_top_k))
         if "corpus" in sources:
-            corpus_results = await self._search_corpus(
-                query_embedding, 
-                corpus_top_k
-            )
-            results.extend(corpus_results)
+            tasks.append(self._search_corpus(query_embedding, corpus_top_k))
+
+        results = []
+        for batch in await asyncio.gather(*tasks):
+            results.extend(batch)
         
         # Sort by similarity (descending) and deduplicate
         results.sort(key=lambda x: x.similarity, reverse=True)
@@ -202,8 +195,9 @@ class RAGService:
             "risks_and_assumptions": "What are the risks, challenges, and assumptions? What could go wrong?",
         }
         
-        results = {}
-        for section, query in section_queries.items():
+        import asyncio
+
+        async def _fetch_section(section: str, query: str) -> tuple[str, list[RetrievedChunk]]:
             chunks = await self.retrieve(
                 query=query,
                 initiative_id=initiative_id,
@@ -211,6 +205,9 @@ class RAGService:
                 evidence_top_k=3,
                 corpus_top_k=4 if include_corpus else 0,
             )
-            results[section] = chunks
-        
-        return results
+            return section, chunks
+
+        pairs = await asyncio.gather(
+            *[_fetch_section(s, q) for s, q in section_queries.items()]
+        )
+        return dict(pairs)

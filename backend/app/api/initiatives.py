@@ -74,6 +74,25 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
     return data
 
 
+def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
+    """Lightweight version for list endpoints — skips heavy fields."""
+    data = InitiativeResponse.model_validate(initiative).model_dump()
+    # Derive a simple deliverable count without iterating module instances
+    instances = initiative.module_instances or []
+    seen_tools: set[str] = set()
+    for inst in instances:
+        if inst.deliverable and inst.status == "complete":
+            seen_tools.add(inst.tool_id)
+    data["deliverables"] = {t: True for t in seen_tools} if seen_tools else None
+    data["tool_alignments"] = None
+    data["tool_inputs"] = None
+    data["project_plan"] = None
+    data["module_instances"] = None
+    data["shared_role"] = shared_role
+    data["owner_email"] = owner_email
+    return data
+
+
 @router.post("/initiatives", response_model=InitiativeResponse, status_code=status.HTTP_201_CREATED)
 async def create_initiative(
     data: InitiativeCreate,
@@ -202,10 +221,10 @@ async def list_initiatives(
 
     results = []
     for init in owned_initiatives:
-        results.append(_initiative_to_response(init, owner_email=user.email))
+        results.append(_initiative_to_list_item(init, owner_email=user.email))
 
     for init, role, owner_email in shared_initiatives:
-        results.append(_initiative_to_response(init, shared_role=role, owner_email=owner_email))
+        results.append(_initiative_to_list_item(init, shared_role=role, owner_email=owner_email))
 
     results.sort(key=lambda x: x["updated_at"], reverse=True)
     return results

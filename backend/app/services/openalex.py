@@ -11,14 +11,11 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import httpx
-
 from app.config import get_settings
+from app.core.http_client import get_http_client
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
-
-TIMEOUT_SECONDS = 10
 
 
 @dataclass
@@ -58,10 +55,10 @@ class OpenAlexService:
             params["mailto"] = self.email
 
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
-                resp = await client.get(f"{self.base_url}/works", params=params)
-                resp.raise_for_status()
-                data = resp.json()
+            client = get_http_client()
+            resp = await client.get(f"{self.base_url}/works", params=params)
+            resp.raise_for_status()
+            data = resp.json()
         except Exception as e:
             logger.warning(f"OpenAlex request failed: {e}")
             return []

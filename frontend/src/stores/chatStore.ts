@@ -160,21 +160,49 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     const assistantLocalId = nextId();
 
+    const thinkingBuffer: string[] = [];
+    const wordBuffer: string[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flushBuffers = () => {
+      flushTimer = null;
+      const hasThinking = thinkingBuffer.length > 0;
+      const hasWords = wordBuffer.length > 0;
+      if (!hasThinking && !hasWords) return;
+      const newThinking = hasThinking ? thinkingBuffer.splice(0) : [];
+      const newWords = hasWords ? wordBuffer.splice(0) : [];
+      set((s) => {
+        const updatedThinking = hasThinking ? [...s.thinkingLines, ...newThinking] : s.thinkingLines;
+        let updatedContent = s.streamingContent;
+        if (hasWords) {
+          for (const w of newWords) {
+            const sep = !updatedContent || updatedContent.endsWith('\n') ? '' : ' ';
+            updatedContent = updatedContent + sep + w;
+          }
+        }
+        return { thinkingLines: updatedThinking, streamingContent: updatedContent };
+      });
+    };
+
+    const scheduleFlush = () => {
+      if (!flushTimer) flushTimer = setTimeout(flushBuffers, 80);
+    };
+
     try {
       await api.sendChatStream(
         history.slice(0, -1),
         content,
         (text) => {
-          set((s) => ({ thinkingLines: [...s.thinkingLines, text] }));
+          thinkingBuffer.push(text);
+          scheduleFlush();
         },
         (word) => {
-          set((s) => {
-            const prev = s.streamingContent;
-            const separator = !prev || prev.endsWith('\n') ? '' : ' ';
-            return { streamingContent: prev + separator + word };
-          });
+          wordBuffer.push(word);
+          scheduleFlush();
         },
         (payload) => {
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+          flushBuffers();
           const thinkingLines = get().thinkingLines;
 
           const meta: CompletionMeta = {

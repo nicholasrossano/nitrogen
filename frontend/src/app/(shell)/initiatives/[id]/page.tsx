@@ -5,27 +5,30 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Sprout, TreeDeciduous, X } from 'lucide-react';
 
+import dynamic from 'next/dynamic';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useShallow } from 'zustand/react/shallow';
 import { ProjectHeader, ChatPanel, EditorSidePanel } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
-import { ProjectPlanView } from '@/components/project-plan';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
-import { ModuleLandingPage } from '@/components/chat/ModuleLandingPage';
-import { OpenModuleModal } from '@/components/chat/OpenModuleModal';
 import { ModalShell } from '@/components/ui/ModalShell';
 import type { ModuleInstance } from '@/lib/api';
-import { ResearchPanel } from '@/components/core-chat/ResearchPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
-import { ProjectFilesView } from '@/components/files';
 import { api } from '@/lib/api';
 import type { SourceCitation } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { openGooglePicker } from '@/lib/googlePicker';
+
+const ProjectPlanView = dynamic(() => import('@/components/project-plan').then(m => ({ default: m.ProjectPlanView })), { ssr: false });
+const ProjectFilesView = dynamic(() => import('@/components/files').then(m => ({ default: m.ProjectFilesView })), { ssr: false });
+const ResearchPanel = dynamic(() => import('@/components/core-chat/ResearchPanel').then(m => ({ default: m.ResearchPanel })), { ssr: false });
+const ModuleLandingPage = dynamic(() => import('@/components/chat/ModuleLandingPage').then(m => ({ default: m.ModuleLandingPage })), { ssr: false });
+const OpenModuleModal = dynamic(() => import('@/components/chat/OpenModuleModal').then(m => ({ default: m.OpenModuleModal })), { ssr: false });
+const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
 
 const MIN_STANDALONE_CHAT_PERCENT = 30;
 const MAX_STANDALONE_CHAT_PERCENT = 60;
@@ -89,30 +92,41 @@ function InitiativePageContent() {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
   }, [viewFromUrl]);
   
-  const { 
-    initiative, 
+  const {
+    initiative,
     messages,
     projectPlan,
     projectMaterials,
     driveLinkedFiles,
-    loading, 
+    loading,
     sending,
     generating,
-    error, 
-    loadInitiative, 
-    loadChatHistory,
-    loadEvidence,
-    loadMaterials,
-    loadProjectPlan,
-    loadDriveLinkedFiles,
-    syncDriveFiles,
-    importFromDrive,
-    sendMessage,
-    updateTitle,
-    uploadMaterial,
-    deleteMaterial,
-    reset,
-  } = useInitiativeStore();
+    error,
+  } = useInitiativeStore(useShallow((s) => ({
+    initiative: s.initiative,
+    messages: s.messages,
+    projectPlan: s.projectPlan,
+    projectMaterials: s.projectMaterials,
+    driveLinkedFiles: s.driveLinkedFiles,
+    loading: s.loading,
+    sending: s.sending,
+    generating: s.generating,
+    error: s.error,
+  })));
+
+  const loadInitiative = useInitiativeStore((s) => s.loadInitiative);
+  const loadChatHistory = useInitiativeStore((s) => s.loadChatHistory);
+  const loadEvidence = useInitiativeStore((s) => s.loadEvidence);
+  const loadMaterials = useInitiativeStore((s) => s.loadMaterials);
+  const loadProjectPlan = useInitiativeStore((s) => s.loadProjectPlan);
+  const loadDriveLinkedFiles = useInitiativeStore((s) => s.loadDriveLinkedFiles);
+  const syncDriveFiles = useInitiativeStore((s) => s.syncDriveFiles);
+  const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
+  const sendMessage = useInitiativeStore((s) => s.sendMessage);
+  const updateTitle = useInitiativeStore((s) => s.updateTitle);
+  const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+  const deleteMaterial = useInitiativeStore((s) => s.deleteMaterial);
+  const reset = useInitiativeStore((s) => s.reset);
 
   const isViewer = initiative?.shared_role === 'viewer';
   const devMode = useSettingsStore((s) => s.devMode);
@@ -206,15 +220,15 @@ function InitiativePageContent() {
       Promise.all([
         initiativeLoad,
         loadChatHistory(initiativeId),
-        loadEvidence(initiativeId),
-        loadMaterials(initiativeId),
-        loadProjectPlan(initiativeId),
-        loadDriveLinkedFiles(initiativeId).then(() => {
-          syncDriveFiles(initiativeId).catch(() => {});
-        }),
       ]).finally(() => setPageReady(true));
+      // Non-critical: load in background, not blocking the overlay
+      loadEvidence(initiativeId);
+      loadMaterials(initiativeId);
+      loadDriveLinkedFiles(initiativeId).then(() => {
+        syncDriveFiles(initiativeId).catch(() => {});
+      });
     }
-  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadProjectPlan, loadDriveLinkedFiles, syncDriveFiles]);
+  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles]);
 
   useEffect(() => {
     if (!pageReady) return;
