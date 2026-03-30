@@ -54,18 +54,16 @@ class RAGService:
         """
         # Generate query embedding
         query_embedding = await self.embeddings.embed_text(query)
-        
-        import asyncio
 
-        tasks = []
-        if "evidence" in sources:
-            tasks.append(self._search_evidence(query_embedding, initiative_id, evidence_top_k))
-        if "corpus" in sources:
-            tasks.append(self._search_corpus(query_embedding, corpus_top_k))
-
+        # Run searches sequentially on the shared session — asyncio.gather over the
+        # same AsyncSession causes an InvalidRequestError when the session has not
+        # yet provisioned its first connection (which happens in compare mode where
+        # each project search gets a brand-new AsyncSessionLocal()).
         results = []
-        for batch in await asyncio.gather(*tasks):
-            results.extend(batch)
+        if "evidence" in sources:
+            results.extend(await self._search_evidence(query_embedding, initiative_id, evidence_top_k))
+        if "corpus" in sources:
+            results.extend(await self._search_corpus(query_embedding, corpus_top_k))
         
         # Sort by similarity (descending) and deduplicate
         results.sort(key=lambda x: x.similarity, reverse=True)
