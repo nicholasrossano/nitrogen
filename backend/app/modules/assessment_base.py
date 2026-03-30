@@ -14,13 +14,12 @@ import logging
 import uuid as _uuid
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import BaseModule, ModuleDefinition, ModuleInput, ModuleOutput
+from app.modules.base import BaseModule, ModuleInput, ModuleOutput
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -80,14 +79,14 @@ class AssessmentModuleDef:
             ],
             "build_layers": [
                 {
-                    "id": l.id,
-                    "name": l.name,
-                    "view_type": l.view_type,
-                    "description": l.description,
-                    "item_schema": l.item_schema,
-                    "removable": l.removable,
+                    "id": layer.id,
+                    "name": layer.name,
+                    "view_type": layer.view_type,
+                    "description": layer.description,
+                    "item_schema": layer.item_schema,
+                    "removable": layer.removable,
                 }
-                for l in self.build_layers
+                for layer in self.build_layers
             ],
             "output_type": self.output_type,
         }
@@ -345,7 +344,7 @@ class BaseAssessmentModule(BaseModule):
 
         client = get_openai_client()
         layer_def = next(
-            (l for l in self.assessment_definition.build_layers if l.id == layer_id),
+            (layer for layer in self.assessment_definition.build_layers if layer.id == layer_id),
             None,
         )
         layer_name = layer_def.name if layer_def else layer_id
