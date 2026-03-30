@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, FileUp, Sun } from 'lucide-react';
+import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, FileUp, Sun, Users, Map, ShieldCheck, BarChart2 } from 'lucide-react';
 
 export interface ModuleOption {
   id: string;
@@ -51,6 +51,32 @@ export const ALL_MODULES: ModuleOption[] = [
     icon: <FileUp className="w-3.5 h-3.5" />,
     beta: true,
   },
+  {
+    id: 'stakeholder_assessment',
+    name: 'Stakeholder Assessment',
+    description: 'Map and profile key stakeholders for your project',
+    icon: <Users className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'landscape_mapping',
+    name: 'Landscape Mapping',
+    description: 'Map the ecosystem of actors and initiatives',
+    icon: <Map className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'esmp',
+    name: 'Environmental & Social Management Plan',
+    description: 'Draft an IFC-aligned ESMP for DFI submission',
+    icon: <ShieldCheck className="w-3.5 h-3.5" />,
+    beta: true,
+  },
+  {
+    id: 'mel_plan',
+    name: 'Monitoring, Evaluation & Learning Plan',
+    description: 'Build a results framework and data collection plan',
+    icon: <BarChart2 className="w-3.5 h-3.5" />,
+    beta: true,
+  },
 ];
 
 const ANALYSIS_MODULES = ALL_MODULES.filter(
@@ -67,12 +93,12 @@ export interface ModuleCategory {
 }
 
 export const MODULE_CATEGORIES: ModuleCategory[] = [
-  { id: 'opportunity', name: 'Opportunity Discovery', moduleIds: [] },
-  { id: 'definition', name: 'Project Definition', moduleIds: [] },
+  { id: 'opportunity', name: 'Opportunity Discovery', moduleIds: ['landscape_mapping'] },
+  { id: 'definition', name: 'Project Definition', moduleIds: ['stakeholder_assessment'] },
   { id: 'feasibility', name: 'Feasibility & Option Analysis', moduleIds: ['lcoe_model', 'solar_estimate'] },
   { id: 'impact', name: 'Impact Assessment', moduleIds: ['carbon_model'] },
   { id: 'financing', name: 'Financing & Incentives', moduleIds: ['investment_memo'] },
-  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['due_diligence_checklist'] },
+  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['due_diligence_checklist', 'esmp', 'mel_plan'] },
   { id: 'deliverables', name: 'Deliverables & Execution', moduleIds: ['template_fill'] },
 ];
 

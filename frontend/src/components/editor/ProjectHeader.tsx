@@ -20,6 +20,8 @@ interface ProjectHeaderProps {
   rightToggle?: PanelToggle;
   /** SquarePen "new chat" button */
   onNewChat?: () => void;
+  /** Override the tooltip for the onNewChat button (default: "New chat") */
+  newChatTitle?: string;
   /** ArrowLeft back button — shown on the left side when provided */
   onBack?: () => void;
   /** Hide editing controls for read-only viewers */
@@ -32,6 +34,7 @@ export function ProjectHeader({
   leftToggle,
   rightToggle,
   onNewChat,
+  newChatTitle = 'New chat',
   onBack,
   readOnly = false,
 }: ProjectHeaderProps) {
@@ -187,7 +190,7 @@ export function ProjectHeader({
             {onNewChat && (
               <button
                 onClick={onNewChat}
-                title="New chat"
+                title={newChatTitle}
                 className="icon-btn p-1.5 text-text-tertiary"
               >
                 <SquarePen className="w-4 h-4" />

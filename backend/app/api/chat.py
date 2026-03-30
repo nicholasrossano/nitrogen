@@ -352,7 +352,60 @@ async def chat_stream(
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
-                if _tool_hint in ("investment_memo", "due_diligence_checklist") and data.initiative_id:
+                # Assessment module detection: emit assessment_workspace widget
+                if _tool_hint in ("stakeholder_assessment", "landscape_mapping", "esmp", "mel_plan") and data.initiative_id:
+                    if not verified_initiative:
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for this module.'})}\n\n"
+                        return
+                    from app.modules import get_module_registry as _get_registry
+                    from app.modules.assessment_base import (
+                        BaseAssessmentModule,
+                        make_initial_workflow_state,
+                    )
+                    from app.services.chat import ChatResponse
+
+                    async def _run_assessment_workspace():
+                        if on_thinking:
+                            await on_thinking("Setting up assessment workspace...")
+                        _registry = _get_registry()
+                        _module = _registry.get_module(_tool_hint)
+
+                        # Get or create instance for this session
+                        inst = await module_service.get_or_create_instance(
+                            db, verified_initiative.id, _tool_hint, user.uid, session_id=session.id,
+                        )
+
+                        # Initialise workflow_state if blank
+                        if inst.workflow_state is None and isinstance(_module, BaseAssessmentModule):
+                            init_state = make_initial_workflow_state(
+                                _tool_hint, _module.assessment_definition
+                            )
+                            # Auto-generate setup defaults
+                            context = {
+                                "project_title": verified_initiative.title or "",
+                                "project_description": verified_initiative.project_description or verified_initiative.goal or "",
+                                "geography": verified_initiative.geography or "",
+                            }
+                            try:
+                                defaults = await _module.generate_setup_defaults(db, verified_initiative.id, context)
+                                init_state["setup"]["fields"] = defaults
+                            except Exception:
+                                pass
+                            inst.workflow_state = init_state
+                            await db.commit()
+
+                        return ChatResponse(
+                            content=f"Here's your **{_module.definition.name}** workspace. Review the setup and work through each layer to build your assessment.",
+                            sources=[], tiers_used=["assessment"], latency_ms=0,
+                            widget_type="assessment_workspace",
+                            widget_data={
+                                "instance_id": str(inst.id),
+                                "module_id": _tool_hint,
+                            },
+                        )
+
+                    generation_task = asyncio.create_task(_run_assessment_workspace())
+                elif _tool_hint in ("investment_memo", "due_diligence_checklist") and data.initiative_id:
                     if not verified_initiative:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for document generation.'})}\n\n"
                         return

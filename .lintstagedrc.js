@@ -1,6 +1,7 @@
 const path = require('path');
 
 const frontendDir = path.resolve(__dirname, 'frontend');
+const backendDir = path.resolve(__dirname, 'backend');
 
 module.exports = {
   'frontend/src/**/*.{ts,tsx}': (absolutePaths) => {
@@ -10,5 +11,11 @@ module.exports = {
       .join(' ');
     return `cd frontend && npx next lint --fix ${fileArgs}`;
   },
-  'backend/**/*.py': '/Users/nicholasrossano/Library/Python/3.12/bin/ruff check --fix',
+  'backend/**/*.py': (absolutePaths) => {
+    const fileArgs = absolutePaths
+      .map((f) => path.relative(backendDir, f))
+      .map((f) => `"${f}"`)
+      .join(' ');
+    return `cd backend && python3 -m ruff check --fix ${fileArgs}`;
+  },
 };
