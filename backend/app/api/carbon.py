@@ -8,7 +8,7 @@ import io
 import logging
 
 from app.core.auth import get_current_user, MockUser
-from app.tools.carbon_tool import CarbonTool
+from app.modules.carbon_module import CarbonTool
 from app.services.carbon_engine import (
     CarbonEngine,
     CarbonInput,

@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.initiative import Initiative
 from app.models.onboarding import ChatMessage
-from app.tools import get_tool_registry
+from app.modules import get_module_registry
 
 settings = get_settings()
 
@@ -23,7 +23,7 @@ class ChatAgentService:
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
         self.model = settings.openai_model
-        self.registry = get_tool_registry()
+        self.registry = get_module_registry()
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -106,7 +106,7 @@ If tools are selected and you notice missing required inputs, gently ask about t
         if initiative.selected_tools:
             tool_names = []
             for tool_id in initiative.selected_tools:
-                tool = self.registry.get_tool(tool_id)
+                tool = self.registry.get_module(tool_id)
                 if tool:
                     tool_names.append(tool.definition.name)
             if tool_names:
@@ -410,7 +410,7 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
         # Get input definitions for selected tools
         input_schema = {}
         for tool_id in tool_ids:
-            tool = self.registry.get_tool(tool_id)
+            tool = self.registry.get_module(tool_id)
             if tool:
                 for inp in tool.all_inputs:
                     if inp.name not in input_schema:

@@ -11,27 +11,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.tools.base import (
-    BaseTool,
+from app.modules.base import (
+    BaseModule,
     ExecutionModel,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
-    ToolDefinition,
-    ToolInput,
-    ToolOutput,
+    ModuleDefinition,
+    ModuleInput,
+    ModuleOutput,
 )
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
-class TemplateFillTool(BaseTool):
+class TemplateFillTool(BaseModule):
     """Analyse an uploaded template and produce a requirements widget."""
 
     @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
+    def definition(self) -> ModuleDefinition:
+        return ModuleDefinition(
             id="template_fill",
             name="From Template",
             description="Complete a document template using project materials",
@@ -42,9 +42,9 @@ class TemplateFillTool(BaseTool):
         )  # no export_format — templates use ProjectMaterial storage with their own download route
 
     @property
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         return [
-            ToolInput(
+            ModuleInput(
                 name="template_id",
                 label="Template file",
                 description="The uploaded template to analyse",
@@ -71,7 +71,7 @@ class TemplateFillTool(BaseTool):
         inputs: dict[str, Any],
         include_corpus: bool = True,
         alignment=None,
-    ) -> ToolOutput:
+    ) -> ModuleOutput:
         raise NotImplementedError("Use execute_from_template instead")
 
     async def execute_from_template(

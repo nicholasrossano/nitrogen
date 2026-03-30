@@ -22,15 +22,15 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.tools.base import (
-    BaseTool,
+from app.modules.base import (
+    BaseModule,
     ExecutionModel,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
-    ToolDefinition,
-    ToolInput,
-    ToolOutput,
+    ModuleDefinition,
+    ModuleInput,
+    ModuleOutput,
 )
 from app.models.initiative import Initiative
 from app.models.onboarding import ChatMessage
@@ -105,12 +105,12 @@ INPUT_EXTRACTION_SCHEMA = {
 }
 
 
-class CarbonTool(BaseTool):
+class CarbonTool(BaseModule):
     """Carbon emissions calculator for chat-based ER estimation."""
 
     @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
+    def definition(self) -> ModuleDefinition:
+        return ModuleDefinition(
             id="carbon_model",
             name="Carbon Emissions Calculator",
             description="Estimate emission reductions (tCO₂e) by comparing baseline vs project scenarios — extracts inputs from conversation and documents, fills gaps with methodology-aligned assumptions, and produces transparent, auditable results.",
@@ -140,16 +140,16 @@ class CarbonTool(BaseTool):
         )
 
     @property
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         return [
-            ToolInput(
+            ModuleInput(
                 name="devices_households",
                 label="Devices / Households",
                 description="How many devices or households does this project cover?",
                 input_type="number",
                 placeholder="e.g. 5000",
             ),
-            ToolInput(
+            ModuleInput(
                 name="baseline_fuel_consumption_kg_yr",
                 label="Baseline Fuel Consumption (kg/yr per device)",
                 description="How much fuel does each household consume per year under the baseline scenario?",
@@ -159,9 +159,9 @@ class CarbonTool(BaseTool):
         ]
 
     @property
-    def optional_inputs(self) -> list[ToolInput]:
+    def optional_inputs(self) -> list[ModuleInput]:
         return [
-            ToolInput(
+            ModuleInput(
                 name="project_fuel_consumption_kg_yr",
                 label="Project Fuel Consumption (kg/yr per device)",
                 description="How much fuel per household per year under the project scenario? If not provided, will be derived from efficiency ratio.",
@@ -169,7 +169,7 @@ class CarbonTool(BaseTool):
                 required=False,
                 placeholder="e.g. 700",
             ),
-            ToolInput(
+            ModuleInput(
                 name="fnrb",
                 label="fNRB (fraction of non-renewable biomass)",
                 description="Fraction of non-renewable biomass. Default varies by methodology.",
@@ -177,7 +177,7 @@ class CarbonTool(BaseTool):
                 required=False,
                 default=0.70,
             ),
-            ToolInput(
+            ModuleInput(
                 name="crediting_period_years",
                 label="Crediting Period (years)",
                 description="How many years is the crediting period?",
@@ -299,7 +299,7 @@ class CarbonTool(BaseTool):
         inputs: dict[str, Any],
         include_corpus: bool = True,
         alignment=None,
-    ) -> ToolOutput:
+    ) -> ModuleOutput:
         """Full carbon execution: extract → fill defaults → calculate → return structured output."""
 
         extracted = await self.extract_inputs_from_context(db, initiative_id)
@@ -334,8 +334,8 @@ class CarbonTool(BaseTool):
                 result_data["error"] = str(e)
                 result_data["computable"] = False
 
-        return ToolOutput(
-            tool_id="carbon_model",
+        return ModuleOutput(
+            module_id="carbon_model",
             output_type="carbon",
             title="Carbon Emissions Analysis",
             content=result_data,

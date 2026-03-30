@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { FileText, Clock, Trash2, RotateCcw, Users } from 'lucide-react';
+import { Layers, Clock, Trash2, RotateCcw, Users } from 'lucide-react';
 import { Initiative, api } from '@/lib/api';
 import { getIconByName, ICON_NAMES } from '@/lib/icons';
 
@@ -40,7 +40,10 @@ function formatRelativeTime(dateString: string): string {
   });
 }
 
-function getOutputCount(project: Initiative): number {
+function getGeneratedModuleCount(project: Initiative): number {
+  if (typeof project.generated_modules_count === 'number') {
+    return project.generated_modules_count;
+  }
   if (!project.deliverables) return 0;
   return Object.keys(project.deliverables).length;
 }
@@ -54,7 +57,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const title = project.title || 'New Project';
-  const outputCount = getOutputCount(project);
+  const generatedModuleCount = getGeneratedModuleCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
   const IconComponent = getIconByName(currentIcon);
   const isShared = !!project.shared_role;
@@ -248,10 +251,10 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
         {/* Stats row */}
         <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-4 mt-1 border-t-[1.5px] border-black/[0.04]">
           <div className="flex items-center gap-3">
-            {outputCount > 0 && (
+            {generatedModuleCount > 0 && (
               <span className="flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5" />
-                {outputCount} output{outputCount !== 1 ? 's' : ''}
+                <Layers className="w-3.5 h-3.5" />
+                {generatedModuleCount} module{generatedModuleCount !== 1 ? 's' : ''}
               </span>
             )}
           </div>
@@ -265,8 +268,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
         {showDeleteConfirm && (
           <div className="absolute inset-0 bg-white flex flex-col items-center justify-center gap-3 p-5 rounded border-1 border-divider">
             <div className="text-center">
-              <p className="text-sm font-semibold text-text-primary mb-1">Permanently delete?</p>
-              <p className="text-xs text-text-secondary">This action cannot be undone.</p>
+              <p className="text-sm font-semibold text-text-primary">Permanently delete?</p>
             </div>
             <div className="flex gap-2 w-full">
               <button

@@ -12,8 +12,8 @@ from app.models.memo import MemoVersion
 from app.models.onboarding import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
 from app.services.memo_generator import MemoGeneratorService
-from app.tools import get_tool_registry
-from app.tools.base import ToolAlignment
+from app.modules import get_module_registry
+from app.modules.base import ModuleAlignment
 from app.services import module_service
 
 router = APIRouter()
@@ -135,7 +135,7 @@ async def generate_all_deliverables(
         )
     
     # Get tool registry
-    registry = get_tool_registry()
+    registry = get_module_registry()
     
     # Prepare inputs from initiative
     inputs = initiative.tool_inputs or {}
@@ -157,7 +157,7 @@ async def generate_all_deliverables(
     deliverables: dict = {}
 
     for tool_id in initiative.selected_tools:
-        tool = registry.get_tool(tool_id)
+        tool = registry.get_module(tool_id)
         if not tool:
             continue
 
@@ -165,7 +165,7 @@ async def generate_all_deliverables(
             alignment = None
             alignment_data = await module_service.get_alignment(db, initiative_id, tool_id)
             if alignment_data and alignment_data.get("confirmed"):
-                alignment = ToolAlignment.from_dict(alignment_data)
+                alignment = ModuleAlignment.from_dict(alignment_data)
 
             output = await tool.execute(
                 db=db,

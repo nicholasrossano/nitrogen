@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Search } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -99,27 +99,7 @@ function HomePageContent() {
         <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-auto">
           <div className="px-6 py-4">
           <div className="mb-6 flex items-center justify-between gap-4">
-            <button
-              onClick={() => setIsTrashView((v) => !v)}
-              className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
-            >
-              <Trash2 className="w-3 h-3" />
-              {isTrashView ? 'Back to Projects' : 'Trash'}
-            </button>
-            <div className="flex items-center gap-3 w-full max-w-xl ml-auto">
-              <div className="relative h-[36px] flex-1 min-w-0">
-                <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                  <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
-                </span>
-                <input
-                  type="search"
-                  placeholder={isTrashView ? 'Search trash' : 'Search projects'}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-[36px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
-                  aria-label={isTrashView ? 'Search trash' : 'Search projects'}
-                />
-              </div>
+            <div className="flex items-center gap-3 flex-1 min-w-0 max-w-2xl">
               {!isTrashView && (
                 <button
                   onClick={handleNewProject}
@@ -139,7 +119,27 @@ function HomePageContent() {
                   )}
                 </button>
               )}
+              <div className="relative h-[36px] flex-1 min-w-0">
+                <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
+                </span>
+                <input
+                  type="search"
+                  placeholder={isTrashView ? 'Search trash' : 'Search projects'}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-[36px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+                  aria-label={isTrashView ? 'Search trash' : 'Search projects'}
+                />
+              </div>
             </div>
+            <button
+              onClick={() => setIsTrashView((v) => !v)}
+              className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
+            >
+              {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+              {isTrashView ? 'Back to Projects' : 'Trash'}
+            </button>
           </div>
           {loading ? (
             <div className="flex items-center justify-center py-20">

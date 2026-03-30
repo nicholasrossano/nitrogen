@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Search, Plus, FileUp, FolderOpen, File as FileIcon, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Search, PlusCircle, FileUp, FolderOpen, File as FileIcon, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
-export type NavItem = 'home' | 'compare' | 'trash' | 'plan' | 'files' | 'chat' | 'explore' | 'modules' | 'open';
+export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'modules' | 'open';
 
 interface NavItemConfig {
   key: NavItem;
@@ -29,10 +29,10 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 ];
 
 const PROJECT_ITEMS: NavItemConfig[] = [
-  { key: 'modules', label: 'New Module', Icon: Plus },
-  { key: 'open', label: 'Open', Icon: FileIcon },
-  { key: 'explore', label: 'Explore', Icon: Search },
-  { key: 'plan', label: 'Plan', Icon: Map },
+  { key: 'plan', label: 'Project Plan', Icon: Map },
+  { key: 'modules', label: 'New Module', Icon: PlusCircle },
+  { key: 'open', label: 'Open Module', Icon: FileIcon },
+  { key: 'research', label: 'Research', Icon: Search },
 ];
 
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
@@ -83,10 +83,9 @@ export function SideDrawer() {
   }, [pathname]);
 
   const activeItem: NavItem = useMemo(() => {
-    if (pathname === '/compare') return 'compare';
     if (!initiativeId) return 'home';
     const view = searchParams.get('view');
-    if (view === 'explore') return 'explore';
+    if (view === 'research' || view === 'explore') return 'research';
     if (view === 'modules') return 'modules';
     if (view === 'files') return 'files';
     return 'plan';
@@ -100,7 +99,7 @@ export function SideDrawer() {
   const showMaterials = hasProject && !isViewer;
 
   const projectItems = isViewer
-    ? PROJECT_ITEMS.filter(i => !(['explore', 'modules', 'open'] as NavItem[]).includes(i.key))
+    ? PROJECT_ITEMS.filter(i => !(['research', 'modules', 'open'] as NavItem[]).includes(i.key))
     : PROJECT_ITEMS;
 
   const longestLabelLength = useMemo(() => {
@@ -119,7 +118,6 @@ export function SideDrawer() {
   const handleNav = useCallback((item: NavItem) => {
     if (navHandlerRef.current?.(item)) return;
     if (item === 'home') { router.push('/'); return; }
-    if (item === 'compare') { router.push('/compare'); return; }
   }, [navHandlerRef, router]);
 
   const handleSignOut = useCallback(async () => {

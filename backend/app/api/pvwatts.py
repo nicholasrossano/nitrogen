@@ -8,7 +8,7 @@ import io
 import logging
 
 from app.core.auth import get_current_user, MockUser
-from app.tools.pvwatts_tool import PVWattsTool
+from app.modules.pvwatts_module import PVWattsTool
 from app.services.pvwatts_engine import PVWattsEngine, MONTH_LABELS, MODULE_TYPE_LABELS, ARRAY_TYPE_LABELS
 
 router = APIRouter()

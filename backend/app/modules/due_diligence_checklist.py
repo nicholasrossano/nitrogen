@@ -11,15 +11,15 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.tools.base import (
-    BaseTool,
+from app.modules.base import (
+    BaseModule,
     ExecutionModel,
     RefinementModel,
     ReviewStrategy,
-    ToolDefinition,
-    ToolInput,
-    ToolOutput,
-    ToolAlignment,
+    ModuleDefinition,
+    ModuleInput,
+    ModuleOutput,
+    ModuleAlignment,
     AlignmentSection,
     AlignmentParameter,
 )
@@ -98,7 +98,7 @@ DEFAULT_CHECKLIST_CATEGORIES = [
 ]
 
 
-class DueDiligenceChecklistTool(BaseTool):
+class DueDiligenceChecklistTool(BaseModule):
     """Tool for generating due diligence assessment checklists."""
     
     def __init__(self, user_id: str | None = None, db: AsyncSession | None = None):
@@ -114,8 +114,8 @@ class DueDiligenceChecklistTool(BaseTool):
         return self._client
     
     @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
+    def definition(self) -> ModuleDefinition:
+        return ModuleDefinition(
             id="due_diligence_checklist",
             name="Due Diligence Checklist",
             description="Checklist covering technical, financial, operational, and regulatory aspects of the project",
@@ -139,15 +139,15 @@ class DueDiligenceChecklistTool(BaseTool):
         return RefinementModel.FEEDBACK_AND_REGENERATE
     
     @property
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         # Minimal required inputs - we'll infer the rest from project description
         return []
     
     @property
-    def optional_inputs(self) -> list[ToolInput]:
+    def optional_inputs(self) -> list[ModuleInput]:
         # All inputs are optional - we make smart defaults
         return [
-            ToolInput(
+            ModuleInput(
                 name="project_title",
                 label="Project Title",
                 description="What should we call this project?",
@@ -155,7 +155,7 @@ class DueDiligenceChecklistTool(BaseTool):
                 required=False,
                 placeholder="e.g., Solar Mini-Grid Pilot in Northern Kenya",
             ),
-            ToolInput(
+            ModuleInput(
                 name="project_type",
                 label="Project Type",
                 description="What type of project is this?",
@@ -163,7 +163,7 @@ class DueDiligenceChecklistTool(BaseTool):
                 required=False,
                 options=["Energy Access", "Clean Cooking", "Agriculture", "Water & Sanitation", "Health", "Other"],
             ),
-            ToolInput(
+            ModuleInput(
                 name="geography",
                 label="Geography",
                 description="Where will this project take place?",
@@ -171,7 +171,7 @@ class DueDiligenceChecklistTool(BaseTool):
                 required=False,
                 placeholder="e.g., Kenya, Northern Region",
             ),
-            ToolInput(
+            ModuleInput(
                 name="project_stage",
                 label="Project Stage",
                 description="What stage is this project in?",
@@ -179,7 +179,7 @@ class DueDiligenceChecklistTool(BaseTool):
                 required=False,
                 options=["Concept/Idea", "Feasibility Study", "Pilot", "Scale-up", "Operational"],
             ),
-            ToolInput(
+            ModuleInput(
                 name="key_concerns",
                 label="Key Concerns",
                 description="Any specific areas you want the checklist to focus on?",
@@ -194,7 +194,7 @@ class DueDiligenceChecklistTool(BaseTool):
         db: AsyncSession,
         initiative_id: UUID,
         inputs: dict[str, Any],
-    ) -> ToolAlignment:
+    ) -> ModuleAlignment:
         """
         Generate proposed checklist categories and focus areas based on project context.
         """
@@ -264,8 +264,8 @@ Key Concerns: {inputs.get('key_concerns', 'None specified')}
             ),
         ]
         
-        return ToolAlignment(
-            tool_id=self.definition.id,
+        return ModuleAlignment(
+            module_id=self.definition.id,
             title=f"Due Diligence Checklist: {project_title}",
             description="Review the checklist categories below. You can enable/disable categories, adjust focus areas, or add specific items you want covered.",
             sections=sections,
@@ -388,11 +388,11 @@ Create categories and focus areas tailored to this specific project type and con
     
     async def update_alignment_from_feedback(
         self,
-        current_alignment: ToolAlignment,
+        current_alignment: ModuleAlignment,
         feedback: str,
         db: AsyncSession,
         initiative_id: UUID,
-    ) -> ToolAlignment:
+    ) -> ModuleAlignment:
         """Update checklist alignment based on user feedback."""
         
         # Build current structure for LLM
@@ -494,8 +494,8 @@ Return the updated checklist.
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment: ToolAlignment | None = None,
-    ) -> ToolOutput:
+        alignment: ModuleAlignment | None = None,
+    ) -> ModuleOutput:
         """Generate the due diligence checklist, optionally using alignment configuration."""
         from app.models.initiative import Initiative
         
@@ -569,14 +569,14 @@ Key Concerns: {inputs.get('key_concerns', 'None specified')}
             "next_steps": checklist_data.get("next_steps", []),
         }
         
-        return ToolOutput(
-            tool_id=self.definition.id,
+        return ModuleOutput(
+            module_id=self.definition.id,
             output_type="checklist",
             title=checklist_content["title"],
             content=checklist_content,
         )
     
-    def _build_alignment_instructions(self, alignment: ToolAlignment) -> str:
+    def _build_alignment_instructions(self, alignment: ModuleAlignment) -> str:
         """Build generation instructions from alignment configuration."""
         instructions = []
         

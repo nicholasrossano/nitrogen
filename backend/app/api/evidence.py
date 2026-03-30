@@ -141,14 +141,6 @@ async def upload_evidence(
     initiative.touch()  # Update the initiative's updated_at timestamp
     await db.commit()
     
-    # Get chunk count
-    chunk_count_result = await db.execute(
-        select(func.count(EvidenceChunk.id)).where(
-            EvidenceChunk.evidence_doc_id == evidence_doc.id
-        )
-    )
-    chunk_count = chunk_count_result.scalar() or 0
-    
     return EvidenceUploadResponse(
         success=True,
         document=EvidenceDocResponse(
@@ -156,7 +148,7 @@ async def upload_evidence(
             filename=evidence_doc.filename,
             file_type=evidence_doc.file_type,
             created_at=evidence_doc.created_at,
-            chunk_count=chunk_count,
+            chunk_count=len(chunk_tuples),
         ),
         message=f"Evidence processed: {len(chunk_tuples)} chunks created",
         stage=initiative.stage,
@@ -194,30 +186,28 @@ async def list_evidence(
     """List evidence documents for an initiative"""
     await require_viewer(db, initiative_id, user)
     
-    # Get evidence docs with chunk counts
-    docs_result = await db.execute(
-        select(EvidenceDoc).where(EvidenceDoc.initiative_id == initiative_id)
-    )
-    docs = docs_result.scalars().all()
-    
-    response = []
-    for doc in docs:
-        chunk_count_result = await db.execute(
-            select(func.count(EvidenceChunk.id)).where(
-                EvidenceChunk.evidence_doc_id == doc.id
-            )
+    # Get evidence docs with chunk counts in a single query
+    stmt = (
+        select(
+            EvidenceDoc,
+            func.count(EvidenceChunk.id).label("chunk_count"),
         )
-        chunk_count = chunk_count_result.scalar() or 0
-        
-        response.append(EvidenceDocResponse(
+        .outerjoin(EvidenceChunk, EvidenceChunk.evidence_doc_id == EvidenceDoc.id)
+        .where(EvidenceDoc.initiative_id == initiative_id)
+        .group_by(EvidenceDoc.id)
+    )
+    rows = (await db.execute(stmt)).all()
+
+    return [
+        EvidenceDocResponse(
             id=doc.id,
             filename=doc.filename,
             file_type=doc.file_type,
             created_at=doc.created_at,
             chunk_count=chunk_count,
-        ))
-    
-    return response
+        )
+        for doc, chunk_count in rows
+    ]
 
 
 @router.get("/evidence/{evidence_id}/content")
@@ -241,23 +231,24 @@ async def get_evidence_content(
 
     await require_viewer(db, evidence_doc.initiative_id, user)
 
-    # Get all chunks ordered by index
+    # Get only the columns we need (exclude embedding vectors)
     chunks_result = await db.execute(
-        select(EvidenceChunk)
+        select(
+            EvidenceChunk.content,
+        )
         .where(EvidenceChunk.evidence_doc_id == evidence_id)
         .order_by(EvidenceChunk.chunk_index)
     )
-    chunks = chunks_result.scalars().all()
-    
-    # Combine chunk content
-    full_content = "\n\n".join([chunk.content for chunk in chunks])
-    
+    rows = chunks_result.all()
+
+    full_content = "\n\n".join([row.content for row in rows])
+
     return {
         "id": str(evidence_doc.id),
         "filename": evidence_doc.filename,
         "file_type": evidence_doc.file_type,
         "content": full_content,
-        "chunk_count": len(chunks),
+        "chunk_count": len(rows),
     }
 
 
@@ -282,11 +273,17 @@ async def get_evidence_chunks(
     await require_viewer(db, evidence_doc.initiative_id, user)
 
     chunks_result = await db.execute(
-        select(EvidenceChunk)
+        select(
+            EvidenceChunk.id,
+            EvidenceChunk.chunk_index,
+            EvidenceChunk.content,
+            EvidenceChunk.content_html,
+            EvidenceChunk.page_number,
+        )
         .where(EvidenceChunk.evidence_doc_id == evidence_id)
         .order_by(EvidenceChunk.chunk_index)
     )
-    chunks = chunks_result.scalars().all()
+    chunks = chunks_result.all()
 
     return {
         "id": str(evidence_doc.id),
@@ -340,7 +337,13 @@ async def download_evidence(
         )
 
     storage = get_uploads_storage()
-    file_bytes = await storage.load(evidence_doc.storage_path)
+    try:
+        file_bytes = await storage.load(evidence_doc.storage_path)
+    except (FileNotFoundError, Exception) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not available — it may have been uploaded in a different environment.",
+        ) from exc
 
     media_type = EVIDENCE_CONTENT_TYPE_MAP.get(
         evidence_doc.file_type or "", "application/octet-stream"

@@ -73,9 +73,10 @@ class Initiative(Base):
         nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
+        DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
     
     # Relationships
@@ -113,10 +114,10 @@ class Initiative(Base):
     
     def get_missing_tool_inputs(self) -> dict[str, list[str]]:
         """Get missing required inputs for selected tools."""
-        from app.tools import get_tool_registry
+        from app.modules import get_module_registry
         
         missing = {}
-        registry = get_tool_registry()
+        registry = get_module_registry()
         
         if not self.selected_tools:
             return missing
@@ -124,7 +125,7 @@ class Initiative(Base):
         tool_inputs = self.tool_inputs or {}
         
         for tool_id in self.selected_tools:
-            tool = registry.get_tool(tool_id)
+            tool = registry.get_module(tool_id)
             if tool:
                 tool_missing = []
                 for inp in tool.required_inputs:
@@ -153,12 +154,12 @@ class Initiative(Base):
         result: dict[str, dict] = {}
         for inst in self.module_instances:
             if inst.deliverable and inst.status == "complete":
-                existing = result.get(inst.tool_id)
+                existing = result.get(inst.module_id)
                 if existing is None or inst.updated_at > existing.get("_updated_at", inst.updated_at):
                     d = dict(inst.deliverable)
                     d["_updated_at"] = inst.updated_at
                     d["_instance_id"] = str(inst.id)
-                    result[inst.tool_id] = d
+                    result[inst.module_id] = d
         for v in result.values():
             v.pop("_updated_at", None)
         return result
@@ -172,10 +173,10 @@ class Initiative(Base):
         latest_ts: dict[str, datetime] = {}
         for inst in self.module_instances:
             if inst.alignment:
-                prev = latest_ts.get(inst.tool_id)
+                prev = latest_ts.get(inst.module_id)
                 if prev is None or inst.updated_at > prev:
-                    result[inst.tool_id] = dict(inst.alignment)
-                    latest_ts[inst.tool_id] = inst.updated_at
+                    result[inst.module_id] = dict(inst.alignment)
+                    latest_ts[inst.module_id] = inst.updated_at
         return result
 
     def touch(self):

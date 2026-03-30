@@ -60,9 +60,9 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
     return () => { cancelled = true; };
   }, [initiativeId]);
 
-  // Add instance numbering for duplicate tool_ids
+  // Add instance numbering for duplicate module_ids
   const enriched = instances.map((inst) => {
-    const sameToolInstances = instances.filter((i) => i.tool_id === inst.tool_id);
+    const sameToolInstances = instances.filter((i) => i.module_id === inst.module_id);
     const hasDuplicates = sameToolInstances.length > 1;
     const index = hasDuplicates
       ? [...sameToolInstances]
@@ -104,12 +104,12 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {enriched.map((inst) => {
-                const mod = MODULE_MAP.get(inst.tool_id);
+                const mod = MODULE_MAP.get(inst.module_id);
                 const displayName = mod
                   ? inst.index ? `${mod.name} #${inst.index}` : mod.name
                   : inst.index
-                    ? `${inst.tool_id.replace(/_/g, ' ')} #${inst.index}`
-                    : inst.tool_id.replace(/_/g, ' ');
+                    ? `${inst.module_id.replace(/_/g, ' ')} #${inst.index}`
+                    : inst.module_id.replace(/_/g, ' ');
                 const status = STATUS_LABELS[inst.status] ?? STATUS_LABELS.started;
                 const authorLabel = formatEmail(inst.started_by_email, inst.started_by);
 

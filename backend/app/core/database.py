@@ -8,6 +8,7 @@ settings = get_settings()
 _logger = logging.getLogger(__name__)
 
 _db_url = settings.database_url
+_is_sqlite = _db_url.startswith("sqlite")
 _is_remote = "localhost" not in _db_url and "127.0.0.1" not in _db_url
 if _is_remote and "ssl" not in _db_url and "sslmode" not in _db_url:
     _logger.warning(
@@ -15,14 +16,21 @@ if _is_remote and "ssl" not in _db_url and "sslmode" not in _db_url:
         "Database traffic may be unencrypted. Add ?ssl=require or &sslmode=require."
     )
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    pool_recycle=300,
-)
+# SQLite (e.g. CI smoke tests) uses StaticPool; pool_size/max_overflow are invalid.
+_engine_kw: dict = {
+    "echo": settings.debug,
+}
+if _is_sqlite:
+    engine = create_async_engine(settings.database_url, **_engine_kw)
+else:
+    engine = create_async_engine(
+        settings.database_url,
+        **_engine_kw,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=300,
+    )
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

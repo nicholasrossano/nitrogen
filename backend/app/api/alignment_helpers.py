@@ -6,7 +6,7 @@ import uuid as _uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.initiative import Initiative
-from app.tools import get_tool_registry
+from app.modules import get_module_registry
 from app.services.sdg_classifier import classify_sdg
 from app.services import module_service
 
@@ -24,8 +24,8 @@ async def get_or_generate_alignment(
     
     Returns alignment data dict or None if generation fails.
     """
-    registry = get_tool_registry()
-    tool = registry.get_tool(tool_id)
+    registry = get_module_registry()
+    tool = registry.get_module(tool_id)
     
     if not tool or not tool.requires_alignment:
         return None
@@ -72,8 +72,8 @@ def build_alignment_widget_data(
     Returns:
         Widget data dict for the alignment widget
     """
-    registry = get_tool_registry()
-    tool = registry.get_tool(tool_id)
+    registry = get_module_registry()
+    tool = registry.get_module(tool_id)
     
     if not tool:
         return {}
@@ -82,9 +82,9 @@ def build_alignment_widget_data(
         "alignment": alignment_data,
         "tool": tool.definition.to_dict(),
         "pending_tools": [
-            registry.get_tool(tid).definition.to_dict() 
+            registry.get_module(tid).definition.to_dict() 
             for tid in pending_tool_ids 
-            if registry.get_tool(tid)
+            if registry.get_module(tid)
         ],
     }
 
@@ -99,11 +99,11 @@ def build_deliverables_overview_data(initiative: Initiative) -> dict:
     Returns:
         Widget data dict for the deliverables_overview widget
     """
-    registry = get_tool_registry()
+    registry = get_module_registry()
     
     tools_info = []
     for tool_id in (initiative.selected_tools or []):
-        tool = registry.get_tool(tool_id)
+        tool = registry.get_module(tool_id)
         if tool:
             tools_info.append({
                 "id": tool.definition.id,
