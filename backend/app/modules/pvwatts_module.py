@@ -21,15 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.tools.base import (
-    BaseTool,
+from app.modules.base import (
+    BaseModule,
     ExecutionModel,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
-    ToolDefinition,
-    ToolInput,
-    ToolOutput,
+    ModuleDefinition,
+    ModuleInput,
+    ModuleOutput,
 )
 from app.services.pvwatts_engine import PVWattsEngine, PVWattsInput
 
@@ -95,12 +95,12 @@ INPUT_EXTRACTION_SCHEMA = {
 }
 
 
-class PVWattsTool(BaseTool):
+class PVWattsTool(BaseModule):
     """Solar production estimate tool using NREL PVWatts V8."""
 
     @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
+    def definition(self) -> ModuleDefinition:
+        return ModuleDefinition(
             id="solar_estimate",
             name="Solar Production Estimate",
             description="Estimate annual and monthly solar PV energy production (kWh) — extracts site and system inputs from conversation, calls the PVWatts API, and produces transparent energy yield estimates.",
@@ -124,23 +124,23 @@ class PVWattsTool(BaseTool):
         )
 
     @property
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         return [
-            ToolInput(
+            ModuleInput(
                 name="system_capacity",
                 label="System Capacity (kW DC)",
                 description="What is the DC nameplate capacity of the system?",
                 input_type="number",
                 placeholder="e.g. 100",
             ),
-            ToolInput(
+            ModuleInput(
                 name="lat",
                 label="Latitude",
                 description="Latitude of the site location",
                 input_type="number",
                 placeholder="e.g. -1.286",
             ),
-            ToolInput(
+            ModuleInput(
                 name="lon",
                 label="Longitude",
                 description="Longitude of the site location",
@@ -331,11 +331,11 @@ class PVWattsTool(BaseTool):
 
         return result_data
 
-    async def execute(self, db, initiative_id, inputs, **kwargs) -> ToolOutput:
+    async def execute(self, db, initiative_id, inputs, **kwargs) -> ModuleOutput:
         """Full execution for initiative-scoped tool runs (not used in core chat)."""
         result_data = await self.recalculate(inputs)
-        return ToolOutput(
-            tool_id="solar_estimate",
+        return ModuleOutput(
+            module_id="solar_estimate",
             output_type="solar",
             title="Solar Production Estimate",
             content=result_data,

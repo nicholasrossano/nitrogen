@@ -43,10 +43,12 @@ export interface Initiative {
   project_type: string | null;
   selected_tools: string[] | null;
   tool_inputs: Record<string, any> | null;
-  tool_alignments: Record<string, ToolAlignment> | null;
+  module_alignments: Record<string, ModuleAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
   module_instances: ModuleInstance[] | null;
+  /** Non-archived module instances with status complete + deliverable (grid tile). */
+  generated_modules_count?: number;
   // Sharing fields
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
@@ -54,7 +56,7 @@ export interface Initiative {
 
 export interface ModuleInstance {
   id: string;
-  tool_id: string;
+  module_id: string;
   status: 'started' | 'alignment_proposed' | 'alignment_confirmed' | 'generating' | 'complete' | 'error';
   title: string | null;
   started_by: string;
@@ -81,13 +83,100 @@ export interface UserSearchResult {
 }
 
 
-export interface ToolDefinition {
+export interface ModuleDefinition {
   id: string;
   name: string;
   description: string;
   icon: string;
   output_type: string;
   category: string;
+}
+
+// ── Assessment Workflow Types ──────────────────────────────────────────────
+
+export type BuildItemOrigin = 'inferred' | 'assumed' | 'provided' | 'researched' | 'user edited';
+
+export interface BuildItemProvenance {
+  derivation: string;
+  sources: Array<{
+    source_type: string;
+    source_title: string;
+    source_url?: string | null;
+    excerpt?: string | null;
+    confidence: number;
+  }>;
+  rationale: string;
+}
+
+export interface BuildItem {
+  id: string;
+  content: Record<string, any>;
+  origin: BuildItemOrigin;
+  provenance: BuildItemProvenance;
+  confirmed: boolean;
+  confirmed_at: string | null;
+  removable: boolean;
+}
+
+export interface BuildLayer {
+  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'error';
+  items: BuildItem[];
+}
+
+export interface WorkflowSetup {
+  fields: Record<string, string>;
+  confirmed: boolean;
+  confirmed_at: string | null;
+}
+
+export interface WorkflowBuild {
+  current_layer: string | null;
+  layers: Record<string, BuildLayer>;
+}
+
+export interface WorkflowOutput {
+  status: 'pending' | 'generating' | 'complete' | 'error';
+  content: Record<string, any> | null;
+}
+
+export interface WorkflowState {
+  module_type: string;
+  current_stage: 'setup' | 'build' | 'output';
+  setup: WorkflowSetup;
+  build: WorkflowBuild;
+  output: WorkflowOutput;
+}
+
+export interface SetupFieldDef {
+  name: string;
+  label: string;
+  description: string;
+  field_type: 'text' | 'textarea' | 'select';
+  required: boolean;
+  options?: string[] | null;
+  placeholder?: string | null;
+}
+
+export interface BuildLayerDef {
+  id: string;
+  name: string;
+  view_type: 'simple_list' | 'structured_list' | 'detail_node';
+  description: string;
+  item_schema: Record<string, any>;
+  removable: boolean;
+}
+
+export interface AssessmentModuleDefinition extends ModuleDefinition {
+  setup_fields: SetupFieldDef[];
+  build_layers: BuildLayerDef[];
+}
+
+export interface ModuleWorkflowState {
+  instance_id: string;
+  module_id: string;
+  status: string;
+  workflow_state: WorkflowState;
+  module_definition: AssessmentModuleDefinition;
 }
 
 export interface SourceCitation {
@@ -274,8 +363,8 @@ export interface AlignmentParameter {
   unit?: string | null;
 }
 
-export interface ToolAlignment {
-  tool_id: string;
+export interface ModuleAlignment {
+  module_id: string;
   title: string;
   description: string;
   sections: AlignmentSection[];
@@ -286,7 +375,7 @@ export interface ToolAlignment {
 }
 
 export interface AlignmentResponse {
-  alignment: ToolAlignment;
+  alignment: ModuleAlignment;
   message: string;
 }
 
@@ -416,7 +505,12 @@ async function fetchApi<T>(
     throw new Error(error.detail?.message || error.detail || `HTTP ${response.status}`);
   }
 
-  return response.json();
+  // 204 No Content and other empty bodies
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
 }
 
 export const api = {
@@ -433,8 +527,31 @@ export const api = {
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
 
-  listModuleInstances: (initiativeId: string) =>
-    fetchApi<ModuleInstance[]>(`/api/v1/initiatives/${initiativeId}/modules`),
+  listModuleInstances: (initiativeId: string, options?: { archived?: boolean }) =>
+    fetchApi<ModuleInstance[]>(
+      `/api/v1/initiatives/${initiativeId}/modules${options?.archived ? '?archived=true' : ''}`
+    ),
+
+  createModuleInstance: (initiativeId: string, moduleId: string) =>
+    fetchApi<ModuleInstance>(`/api/v1/initiatives/${initiativeId}/modules`, {
+      method: 'POST',
+      body: JSON.stringify({ module_id: moduleId }),
+    }),
+
+  deleteModuleInstance: (initiativeId: string, instanceId: string) =>
+    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/modules/${instanceId}`, {
+      method: 'DELETE',
+    }),
+
+  restoreModuleInstance: (initiativeId: string, instanceId: string) =>
+    fetchApi<ModuleInstance>(`/api/v1/initiatives/${initiativeId}/modules/${instanceId}/restore`, {
+      method: 'POST',
+    }),
+
+  permanentlyDeleteModuleInstance: (initiativeId: string, instanceId: string) =>
+    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/modules/${instanceId}/permanent`, {
+      method: 'DELETE',
+    }),
 
   updateInitiative: (id: string, data: { title?: string; icon?: string }) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
@@ -867,11 +984,11 @@ export const api = {
 
   // Tools
   getTools: () =>
-    fetchApi<ToolDefinition[]>('/api/v1/tools'),
+    fetchApi<ModuleDefinition[]>('/api/v1/tools'),
 
   getRecommendedTools: (initiativeId: string) =>
     fetchApi<{
-      recommendations: { tool: ToolDefinition; confidence: number; recommended: boolean }[];
+      recommendations: { tool: ModuleDefinition; confidence: number; recommended: boolean }[];
       project_type: string | null;
     }>(`/api/v1/initiatives/${initiativeId}/recommended-tools`),
 
@@ -899,9 +1016,96 @@ export const api = {
       { method: 'POST' }
     ),
 
+  // ── Assessment Workflow ──────────────────────────────────────────
+
+  getModuleWorkflowState: (instanceId: string) =>
+    fetchApi<ModuleWorkflowState>(`/api/v1/module-workflow/${instanceId}/state`),
+
+  generateSetupDefaults: (instanceId: string) =>
+    fetchApi<{ fields: Record<string, string> }>(
+      `/api/v1/module-workflow/${instanceId}/setup/generate`,
+      { method: 'POST' }
+    ),
+
+  confirmWorkflowSetup: (instanceId: string, fields: Record<string, string>) =>
+    fetchApi<{ ok: boolean; current_stage: string }>(
+      `/api/v1/module-workflow/${instanceId}/setup/confirm`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ fields }),
+      }
+    ),
+
+  generateBuildLayer: (instanceId: string, layerId: string) =>
+    fetchApi<{ items: BuildItem[]; layer_status: string }>(
+      `/api/v1/module-workflow/${instanceId}/build/${layerId}/generate`,
+      { method: 'POST' }
+    ),
+
+  editBuildItem: (instanceId: string, layerId: string, itemId: string, content: Record<string, any>) =>
+    fetchApi<{ item: BuildItem }>(
+      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ content }),
+      }
+    ),
+
+  confirmBuildItem: (instanceId: string, layerId: string, itemId: string) =>
+    fetchApi<{ item: BuildItem; layer_status: string }>(
+      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items/${itemId}/confirm`,
+      { method: 'POST' }
+    ),
+
+  deleteBuildItem: (instanceId: string, layerId: string, itemId: string) =>
+    fetchApi<{ ok: boolean; remaining_count: number }>(
+      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
+      { method: 'DELETE' }
+    ),
+
+  addBuildItem: (instanceId: string, layerId: string, content: Record<string, any>) =>
+    fetchApi<{ item: BuildItem }>(
+      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      }
+    ),
+
+  reorderBuildItems: (instanceId: string, layerId: string, itemIds: string[]) =>
+    fetchApi<{ ok: boolean }>(
+      `/api/v1/module-workflow/${instanceId}/build/${layerId}/reorder`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ item_ids: itemIds }),
+      }
+    ),
+
+  generateWorkflowOutput: (instanceId: string) =>
+    fetchApi<{ output: Record<string, any>; status: string }>(
+      `/api/v1/module-workflow/${instanceId}/output/generate`,
+      { method: 'POST' }
+    ),
+
+  exportModuleOutputDocx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/output/export`,
+      { headers }
+    );
+    if (!res.ok) throw new Error('Export failed');
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'assessment.docx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
   // Alignment
   getAlignment: (initiativeId: string, toolId: string) =>
-    fetchApi<{ alignment: ToolAlignment; tool_id: string }>(
+    fetchApi<{ alignment: ModuleAlignment; tool_id: string }>(
       `/api/v1/initiatives/${initiativeId}/alignment/${toolId}`
     ),
 
@@ -1078,7 +1282,7 @@ export const api = {
     parameters?: AlignmentParameter[]
   ) =>
     fetchApi<{
-      alignment: ToolAlignment;
+      alignment: ModuleAlignment;
       message: string;
       new_messages: {
         id: string;
@@ -1102,7 +1306,7 @@ export const api = {
 
   provideChatAlignmentFeedback: (sessionId: string, toolId: string, feedback: string) =>
     fetchApi<{
-      alignment: ToolAlignment;
+      alignment: ModuleAlignment;
       message: string;
       new_messages: {
         id: string;

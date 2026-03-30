@@ -11,15 +11,15 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.tools.base import (
-    BaseTool,
+from app.modules.base import (
+    BaseModule,
     ExecutionModel,
     RefinementModel,
     ReviewStrategy,
-    ToolDefinition,
-    ToolInput,
-    ToolOutput,
-    ToolAlignment,
+    ModuleDefinition,
+    ModuleInput,
+    ModuleOutput,
+    ModuleAlignment,
     AlignmentSection,
     AlignmentParameter,
 )
@@ -98,7 +98,7 @@ DEFAULT_MEMO_SECTIONS = [
 ]
 
 
-class InvestmentMemoTool(BaseTool):
+class InvestmentMemoTool(BaseModule):
     """Tool for generating investment memos with RAG-grounded citations."""
     
     def __init__(self, user_id: str | None = None, db: AsyncSession | None = None):
@@ -114,8 +114,8 @@ class InvestmentMemoTool(BaseTool):
         return self._client
     
     @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
+    def definition(self) -> ModuleDefinition:
+        return ModuleDefinition(
             id="investment_memo",
             name="Investment Memo",
             description="Structured memo with executive summary, rationale, risks, and evidence-backed citations",
@@ -139,15 +139,15 @@ class InvestmentMemoTool(BaseTool):
         return RefinementModel.FEEDBACK_AND_REGENERATE
     
     @property
-    def required_inputs(self) -> list[ToolInput]:
+    def required_inputs(self) -> list[ModuleInput]:
         # Minimal required inputs - we'll infer the rest from project description
         return []
     
     @property
-    def optional_inputs(self) -> list[ToolInput]:
+    def optional_inputs(self) -> list[ModuleInput]:
         # All inputs are optional - we make smart defaults from the project description
         return [
-            ToolInput(
+            ModuleInput(
                 name="project_title",
                 label="Project Title",
                 description="What should we call this project?",
@@ -155,7 +155,7 @@ class InvestmentMemoTool(BaseTool):
                 required=False,
                 placeholder="e.g., Solar Mini-Grid Pilot in Northern Kenya",
             ),
-            ToolInput(
+            ModuleInput(
                 name="geography",
                 label="Geography",
                 description="Where will this project take place?",
@@ -163,7 +163,7 @@ class InvestmentMemoTool(BaseTool):
                 required=False,
                 placeholder="e.g., Kenya, Northern Region",
             ),
-            ToolInput(
+            ModuleInput(
                 name="target_beneficiaries",
                 label="Target Beneficiaries",
                 description="Who will benefit from this project?",
@@ -171,7 +171,7 @@ class InvestmentMemoTool(BaseTool):
                 required=False,
                 placeholder="e.g., Rural households without grid access",
             ),
-            ToolInput(
+            ModuleInput(
                 name="project_goal",
                 label="Project Goal",
                 description="What is the main objective of this project?",
@@ -179,7 +179,7 @@ class InvestmentMemoTool(BaseTool):
                 required=False,
                 placeholder="e.g., Provide reliable electricity access",
             ),
-            ToolInput(
+            ModuleInput(
                 name="budget_range",
                 label="Budget Range",
                 description="What is the expected budget?",
@@ -187,7 +187,7 @@ class InvestmentMemoTool(BaseTool):
                 required=False,
                 placeholder="e.g., $500,000 - $750,000",
             ),
-            ToolInput(
+            ModuleInput(
                 name="key_risks",
                 label="Key Risks or Constraints",
                 description="Any known risks or constraints to consider?",
@@ -202,7 +202,7 @@ class InvestmentMemoTool(BaseTool):
         db: AsyncSession,
         initiative_id: UUID,
         inputs: dict[str, Any],
-    ) -> ToolAlignment:
+    ) -> ModuleAlignment:
         """
         Generate a proposed memo outline based on project context.
         
@@ -275,8 +275,8 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
             ),
         ]
         
-        return ToolAlignment(
-            tool_id=self.definition.id,
+        return ModuleAlignment(
+            module_id=self.definition.id,
             title=f"Investment Memo Outline: {project_title}",
             description="Review the proposed memo structure below. You can adjust sections, add specific points to cover, or request changes.",
             sections=sections,
@@ -399,11 +399,11 @@ Create a structured outline with sections tailored to this specific project type
     
     async def update_alignment_from_feedback(
         self,
-        current_alignment: ToolAlignment,
+        current_alignment: ModuleAlignment,
         feedback: str,
         db: AsyncSession,
         initiative_id: UUID,
-    ) -> ToolAlignment:
+    ) -> ModuleAlignment:
         """Update memo outline based on user feedback."""
         
         # Build current outline for LLM
@@ -505,8 +505,8 @@ Return the updated outline.
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment: ToolAlignment | None = None,
-    ) -> ToolOutput:
+        alignment: ModuleAlignment | None = None,
+    ) -> ModuleOutput:
         """Generate the investment memo, optionally using alignment configuration."""
         from sqlalchemy import select
         from app.models.initiative import Initiative
@@ -630,8 +630,8 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
             db.add(citation_obj)
         await db.commit()
         
-        return ToolOutput(
-            tool_id=self.definition.id,
+        return ModuleOutput(
+            module_id=self.definition.id,
             output_type="memo",
             title=memo_content["title"],
             content=memo_content,
@@ -652,7 +652,7 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
         
         return "\n".join(context_parts)
     
-    def _build_alignment_instructions(self, alignment: ToolAlignment) -> str:
+    def _build_alignment_instructions(self, alignment: ModuleAlignment) -> str:
         """Build generation instructions from alignment configuration."""
         instructions = []
         
@@ -692,7 +692,7 @@ Known Risks/Constraints: {inputs.get('key_risks', 'None specified')}
         
         return "\n".join(instructions)
     
-    async def _generate_content(self, project_summary: str, context: str, alignment_instructions: str | None = None, alignment: "ToolAlignment | None" = None, valid_citations: list[int] | None = None) -> dict:
+    async def _generate_content(self, project_summary: str, context: str, alignment_instructions: str | None = None, alignment: "ModuleAlignment | None" = None, valid_citations: list[int] | None = None) -> dict:
         """Generate memo content using GPT."""
         client = await self._get_client()
         
@@ -849,7 +849,7 @@ Generate a structured memo. Use citation numbers [1], [2], etc. to reference evi
         tool_call = response.choices[0].message.tool_calls[0]
         return json.loads(tool_call.function.arguments)
     
-    async def export(self, output: ToolOutput, format: str = "docx") -> str:
+    async def export(self, output: ModuleOutput, format: str = "docx") -> str:
         """Export memo to DOCX file."""
         exporter = DocxExporterService()
         return await exporter.export_memo(output.content)

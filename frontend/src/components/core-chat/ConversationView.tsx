@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { Fragment, useRef, useEffect, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -548,11 +548,13 @@ function injectCitationChips(
     return splitOnCitations(children, sources, keyPrefix, onCitationClick);
   }
   if (Array.isArray(children)) {
-    return children.map((child, i) =>
-      typeof child === 'string'
-        ? splitOnCitations(child, sources, `${keyPrefix}-${i}`, onCitationClick)
-        : child
-    );
+    return children.map((child, i) => (
+      <Fragment key={`${keyPrefix}-arr-${i}`}>
+        {typeof child === 'string'
+          ? splitOnCitations(child, sources, `${keyPrefix}-${i}`, onCitationClick)
+          : child}
+      </Fragment>
+    ));
   }
   return children;
 }
@@ -604,25 +606,37 @@ function makeMarkdownComponents(
   sources: SourceCitation[],
   onCitationClick?: (citation: SourceCitation) => void,
 ) {
+  let _keySeq = 0;
+
   const wrap = (Tag: string, className: string) => {
-    const Wrapped = ({ children }: any) =>
-      // @ts-expect-error dynamic tag
-      <Tag className={className}>{injectCitationChips(children, sources, '0', onCitationClick)}</Tag>;
+    const Wrapped = ({ children }: any) => {
+      const prefix = `${Tag}-${_keySeq++}`;
+      return (
+        // @ts-expect-error dynamic tag
+        <Tag className={className}>{injectCitationChips(children, sources, prefix, onCitationClick)}</Tag>
+      );
+    };
     Wrapped.displayName = `Wrapped_${Tag}`;
     return Wrapped;
   };
 
   return {
-    p: ({ children }: any) => (
-      <p className="text-sm leading-relaxed">
-        {injectCitationChips(children, sources, 'p', onCitationClick)}
-      </p>
-    ),
-    li: ({ children, node, ...rest }: any) => (
-      <li className="leading-relaxed" {...rest}>
-        {injectCitationChips(children, sources, 'li', onCitationClick)}
-      </li>
-    ),
+    p: ({ children }: any) => {
+      const prefix = `p-${_keySeq++}`;
+      return (
+        <p className="text-sm leading-relaxed">
+          {injectCitationChips(children, sources, prefix, onCitationClick)}
+        </p>
+      );
+    },
+    li: ({ children, node, ...rest }: any) => {
+      const prefix = `li-${_keySeq++}`;
+      return (
+        <li className="leading-relaxed" {...rest}>
+          {injectCitationChips(children, sources, prefix, onCitationClick)}
+        </li>
+      );
+    },
     strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
     em: ({ children }: any) => <em className="italic">{children}</em>,
     ul: ({ children }: any) => <ul className="text-sm list-disc">{children}</ul>,

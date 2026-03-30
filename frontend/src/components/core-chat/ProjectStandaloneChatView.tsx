@@ -29,7 +29,7 @@ interface AlignmentNewMessage {
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
   showLanding?: boolean;
-  /** When true, hides the module tile grid on the landing page (Explore mode) */
+  /** When true, hides the module tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
   onMessageSent?: () => void;
   onBack?: () => void;
@@ -537,10 +537,10 @@ export function ProjectStandaloneChatView({
             <div className="text-center mb-8">
               <div className="flex items-center justify-center gap-2.5 mb-3">
                 <Search className="w-7 h-7 text-accent" strokeWidth={1.75} />
-                <h1 className="text-[32px] font-semibold text-text-primary tracking-tight font-display">Explore</h1>
+                <h1 className="text-[32px] font-semibold text-text-primary tracking-tight font-display">Research</h1>
               </div>
               <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-                Explore and analyze project materials, compare against another project, or ask about past academic research and case studies.
+                Research and analyze project materials, compare against another project, or ask about past academic work and case studies.
               </p>
             </div>
           ) : undefined}

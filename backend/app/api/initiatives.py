@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -18,6 +19,7 @@ from app.core.permissions import (
 )
 from app.core.storage import get_storage
 from app.models.initiative import Initiative
+from app.models.module_instance import ModuleInstance
 from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.models.project_share import ProjectShare
@@ -34,6 +36,15 @@ from app.services import module_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
+    """Instances that finished generation (complete + deliverable), excluding trash."""
+    return sum(
+        1
+        for inst in instances
+        if not inst.archived and inst.status == "complete" and inst.deliverable
+    )
 
 
 def _initiative_to_response(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
@@ -53,18 +64,19 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
 
     for inst in instances:
         if inst.deliverable and inst.status == "complete":
-            prev = deliverables_ts.get(inst.tool_id)
+            prev = deliverables_ts.get(inst.module_id)
             if prev is None or inst.updated_at > prev:
-                deliverables[inst.tool_id] = inst.deliverable
-                deliverables_ts[inst.tool_id] = inst.updated_at
+                deliverables[inst.module_id] = inst.deliverable
+                deliverables_ts[inst.module_id] = inst.updated_at
         if inst.alignment:
-            prev = alignments_ts.get(inst.tool_id)
+            prev = alignments_ts.get(inst.module_id)
             if prev is None or inst.updated_at > prev:
-                alignments[inst.tool_id] = inst.alignment
-                alignments_ts[inst.tool_id] = inst.updated_at
+                alignments[inst.module_id] = inst.alignment
+                alignments_ts[inst.module_id] = inst.updated_at
 
     data["deliverables"] = deliverables or None
-    data["tool_alignments"] = alignments or None
+    data["module_alignments"] = alignments or None
+    data["generated_modules_count"] = _count_generated_module_instances(instances)
     data["module_instances"] = [
         ModuleInstanceResponse.model_validate(i).model_dump()
         for i in instances
@@ -82,8 +94,9 @@ def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = N
     seen_tools: set[str] = set()
     for inst in instances:
         if inst.deliverable and inst.status == "complete":
-            seen_tools.add(inst.tool_id)
+            seen_tools.add(inst.module_id)
     data["deliverables"] = {t: True for t in seen_tools} if seen_tools else None
+    data["generated_modules_count"] = _count_generated_module_instances(instances)
     data["tool_alignments"] = None
     data["tool_inputs"] = None
     data["project_plan"] = None
@@ -116,8 +129,11 @@ async def create_initiative(
     )
     db.add(initial_message)
     await db.commit()
-    
-    return initiative
+    await db.refresh(initiative)
+
+    owner_user = await db.get(User, initiative.user_id)
+    owner_email = owner_user.email if owner_user else None
+    return _initiative_to_response(initiative, shared_role=None, owner_email=owner_email)
 
 
 @router.get("/initiatives/{initiative_id}", response_model=InitiativeResponse)
@@ -238,17 +254,29 @@ async def update_initiative(
     user: AuthUser = Depends(get_current_user),
 ):
     """Update an initiative (title, icon). Owner or editor."""
-    initiative = await require_editor(db, initiative_id, user)
-    
+    await ensure_user_exists(db, user)
+    initiative, role = await get_initiative_with_role(db, initiative_id, user)
+    if role == "viewer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewers cannot modify this project",
+        )
+
     if data.title is not None:
         initiative.title = data.title
     if data.icon is not None:
         initiative.icon = data.icon
-    
+
     await db.commit()
     await db.refresh(initiative)
-    
-    return initiative
+
+    owner_user = await db.get(User, initiative.user_id)
+    owner_email = owner_user.email if owner_user else None
+    return _initiative_to_response(
+        initiative,
+        shared_role=role if role != "owner" else None,
+        owner_email=owner_email,
+    )
 
 
 @router.delete("/initiatives/{initiative_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -282,8 +310,10 @@ async def restore_initiative(
     initiative.archived = False
     await db.commit()
     await db.refresh(initiative)
-    
-    return initiative
+
+    owner_user = await db.get(User, initiative.user_id)
+    owner_email = owner_user.email if owner_user else None
+    return _initiative_to_response(initiative, shared_role=None, owner_email=owner_email)
 
 
 @router.get(
@@ -292,13 +322,14 @@ async def restore_initiative(
 )
 async def list_module_instances(
     initiative_id: UUID,
+    archived: bool = False,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List all module instances for a project (Open picker)."""
+    """List module instances for a project. Pass ?archived=true for the trash view."""
     await ensure_user_exists(db, user)
     await get_initiative_with_role(db, initiative_id, user)
-    instances = await module_service.list_instances(db, initiative_id)
+    instances = await module_service.list_instances(db, initiative_id, archived=archived)
 
     # Resolve user emails in a single query
     uids = list({i.started_by for i in instances})
@@ -313,6 +344,97 @@ async def list_module_instances(
         data["started_by_email"] = email_map.get(inst.started_by)
         result.append(data)
     return result
+
+
+@router.delete(
+    "/initiatives/{initiative_id}/modules/{instance_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def archive_module_instance(
+    initiative_id: UUID,
+    instance_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Soft-delete (trash) a module instance — editor or owner."""
+    await ensure_user_exists(db, user)
+    await require_editor(db, initiative_id, user)
+    inst = await db.get(ModuleInstance, instance_id)
+    if inst is None or inst.initiative_id != initiative_id:
+        raise HTTPException(status_code=404, detail="Module instance not found")
+    inst.archived = True
+    await db.commit()
+    return None
+
+
+@router.post(
+    "/initiatives/{initiative_id}/modules/{instance_id}/restore",
+    response_model=ModuleInstanceResponse,
+)
+async def restore_module_instance(
+    initiative_id: UUID,
+    instance_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Restore a trashed module instance."""
+    await ensure_user_exists(db, user)
+    await require_editor(db, initiative_id, user)
+    inst = await db.get(ModuleInstance, instance_id)
+    if inst is None or inst.initiative_id != initiative_id:
+        raise HTTPException(status_code=404, detail="Module instance not found")
+    inst.archived = False
+    await db.commit()
+    await db.refresh(inst)
+    return inst
+
+
+@router.delete(
+    "/initiatives/{initiative_id}/modules/{instance_id}/permanent",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def permanently_delete_module_instance(
+    initiative_id: UUID,
+    instance_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Permanently delete a module instance. Irreversible."""
+    await ensure_user_exists(db, user)
+    await require_editor(db, initiative_id, user)
+    inst = await db.get(ModuleInstance, instance_id)
+    if inst is None or inst.initiative_id != initiative_id:
+        raise HTTPException(status_code=404, detail="Module instance not found")
+    await db.delete(inst)
+    await db.commit()
+    return None
+
+
+class CreateModuleInstanceBody(BaseModel):
+    module_id: str
+
+
+@router.post(
+    "/initiatives/{initiative_id}/modules",
+    response_model=ModuleInstanceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_module_instance(
+    initiative_id: UUID,
+    body: CreateModuleInstanceBody,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Create a fresh module instance directly (no chat session required)."""
+    await ensure_user_exists(db, user)
+    await require_editor(db, initiative_id, user)
+    inst = await module_service.get_or_create_instance(
+        db, initiative_id, body.module_id, user.uid
+        # no session_id → always creates a fresh instance
+    )
+    await db.commit()
+    await db.refresh(inst)
+    return inst
 
 
 @router.delete("/initiatives/{initiative_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)

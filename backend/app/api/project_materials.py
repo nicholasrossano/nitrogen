@@ -202,13 +202,13 @@ async def delete_material(
 
 
 def _resolve_tool(tool_id: str, output_type: str):
-    """Look up the BaseTool for a deliverable, matching on tool_id first, then output_type."""
-    from app.tools.registry import get_tool_registry
-    registry = get_tool_registry()
-    tool = registry.get_tool(tool_id)
+    """Look up the BaseModule for a deliverable, matching on tool_id first, then output_type."""
+    from app.modules.registry import get_module_registry
+    registry = get_module_registry()
+    tool = registry.get_module(tool_id)
     if tool:
         return tool
-    for t in registry.get_all_tools():
+    for t in registry.get_all_modules():
         if t.definition.output_type == output_type:
             return t
     return None
@@ -324,8 +324,8 @@ async def list_project_files(
         d.get("output_type") == "memo" for d in deliverables.values()
     )
     if not has_memo_in_deliverables and latest_memo:
-        from app.tools.registry import get_tool_registry
-        memo_tool = get_tool_registry().get_tool("investment_memo")
+        from app.modules.registry import get_module_registry
+        memo_tool = get_module_registry().get_tool("investment_memo")
         memo_title = (latest_memo.content or {}).get("title", "Investment Memo")
         exported = bool(latest_memo.export_path)
         download_url = f"/api/v1/exports/{latest_memo.id}" if exported else None

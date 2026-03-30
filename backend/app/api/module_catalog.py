@@ -1,4 +1,4 @@
-"""API endpoints for tools."""
+"""API endpoints for module catalog."""
 
 from uuid import UUID
 
@@ -19,7 +19,7 @@ from app.core.permissions import require_editor, require_viewer
 from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.services import module_service
-from app.tools import get_tool_registry
+from app.modules import get_module_registry
 
 _LOWERCASE_WORDS = frozenset(
     ["a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
@@ -42,7 +42,7 @@ def _to_title_case(text: str) -> str:
 router = APIRouter()
 
 
-class ToolDefinitionResponse(BaseModel):
+class ModuleDefinitionResponse(BaseModel):
     id: str
     name: str
     description: str
@@ -51,22 +51,22 @@ class ToolDefinitionResponse(BaseModel):
     category: str
 
 
-class RecommendedTool(BaseModel):
-    tool: ToolDefinitionResponse
+class RecommendedModule(BaseModel):
+    tool: ModuleDefinitionResponse
     confidence: float
     recommended: bool = True
 
 
-class ToolRecommendationsResponse(BaseModel):
-    recommendations: list[RecommendedTool]
+class ModuleRecommendationsResponse(BaseModel):
+    recommendations: list[RecommendedModule]
     project_type: str | None
 
 
-class SelectToolsRequest(BaseModel):
+class SelectModulesRequest(BaseModel):
     tool_ids: list[str]
 
 
-class ToolInputDefinition(BaseModel):
+class ModuleInputDefinition(BaseModel):
     name: str
     label: str
     description: str
@@ -77,23 +77,23 @@ class ToolInputDefinition(BaseModel):
     placeholder: str | None = None
 
 
-class ToolInputsResponse(BaseModel):
-    tool_id: str
-    tool_name: str
-    inputs: list[ToolInputDefinition]
+class ModuleInputsResponse(BaseModel):
+    module_id: str
+    module_name: str
+    inputs: list[ModuleInputDefinition]
     current_values: dict
 
 
-@router.get("/tools", response_model=list[ToolDefinitionResponse])
+@router.get("/tools", response_model=list[ModuleDefinitionResponse])
 async def list_tools(
     user: AuthUser = Depends(get_current_user),
 ):
     """List all available tools."""
-    registry = get_tool_registry()
-    tools = registry.get_all_tools()
+    registry = get_module_registry()
+    tools = registry.get_all_modules()
     
     return [
-        ToolDefinitionResponse(
+        ModuleDefinitionResponse(
             id=tool.definition.id,
             name=tool.definition.name,
             description=tool.definition.description,
@@ -105,7 +105,7 @@ async def list_tools(
     ]
 
 
-@router.get("/initiatives/{initiative_id}/recommended-tools", response_model=ToolRecommendationsResponse)
+@router.get("/initiatives/{initiative_id}/recommended-tools", response_model=ModuleRecommendationsResponse)
 async def get_recommended_tools(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -120,16 +120,16 @@ async def get_recommended_tools(
         )
     
     # Get recommendations
-    registry = get_tool_registry()
-    recommendations = registry.recommend_tools(
+    registry = get_module_registry()
+    recommendations = registry.recommend_modules(
         project_description=initiative.project_description,
         project_type=initiative.project_type,
     )
     
-    return ToolRecommendationsResponse(
+    return ModuleRecommendationsResponse(
         recommendations=[
-            RecommendedTool(
-                tool=ToolDefinitionResponse(
+            RecommendedModule(
+                tool=ModuleDefinitionResponse(
                     id=tool.definition.id,
                     name=tool.definition.name,
                     description=tool.definition.description,
@@ -149,7 +149,7 @@ async def get_recommended_tools(
 @router.post("/initiatives/{initiative_id}/select-tools")
 async def select_tools(
     initiative_id: UUID,
-    data: SelectToolsRequest,
+    data: SelectModulesRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -157,10 +157,10 @@ async def select_tools(
 
     initiative = await require_editor(db, initiative_id, user)
     # Validate tool IDs
-    registry = get_tool_registry()
+    registry = get_module_registry()
     valid_tools = []
     for tool_id in data.tool_ids:
-        tool = registry.get_tool(tool_id)
+        tool = registry.get_module(tool_id)
         if tool:
             valid_tools.append(tool_id)
     
@@ -193,7 +193,7 @@ async def select_tools(
     # Check if we already have all required inputs
     missing = initiative.get_missing_tool_inputs()
     
-    tool_names = [registry.get_tool(tid).definition.name for tid in valid_tools]
+    tool_names = [registry.get_module(tid).definition.name for tid in valid_tools]
     
     if not missing:
         # All inputs available - check for pending alignments first
@@ -209,7 +209,7 @@ async def select_tools(
         if pending_alignment_tools:
             # Show alignment widget for the first tool needing alignment
             tool_id = pending_alignment_tools[0]
-            tool = registry.get_tool(tool_id)
+            tool = registry.get_module(tool_id)
             
             if tool and tool.requires_alignment:
                 alignment_data = await get_or_generate_alignment(db, initiative, tool_id)
@@ -250,7 +250,7 @@ async def select_tools(
         # Get the first missing input to ask about
         all_missing_inputs = []
         for tool_id, input_names in missing.items():
-            tool = registry.get_tool(tool_id)
+            tool = registry.get_module(tool_id)
             if tool:
                 for inp in tool.required_inputs:
                     if inp.name in input_names:
@@ -277,7 +277,7 @@ async def select_tools(
     }
 
 
-@router.get("/initiatives/{initiative_id}/tool-inputs", response_model=list[ToolInputsResponse])
+@router.get("/initiatives/{initiative_id}/tool-inputs", response_model=list[ModuleInputsResponse])
 async def get_tool_inputs(
     initiative_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -291,18 +291,18 @@ async def get_tool_inputs(
             detail="No tools selected"
         )
     
-    registry = get_tool_registry()
+    registry = get_module_registry()
     tool_inputs = initiative.tool_inputs or {}
     
     responses = []
     for tool_id in initiative.selected_tools:
-        tool = registry.get_tool(tool_id)
+        tool = registry.get_module(tool_id)
         if tool:
-            responses.append(ToolInputsResponse(
+            responses.append(ModuleInputsResponse(
                 tool_id=tool_id,
                 tool_name=tool.definition.name,
                 inputs=[
-                    ToolInputDefinition(
+                    ModuleInputDefinition(
                         name=inp.name,
                         label=inp.label,
                         description=inp.description,

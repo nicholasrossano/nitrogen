@@ -299,6 +299,8 @@ async def chat_stream(
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
             service = ChatService(db)
 
+            verified_initiative: Initiative | None = None
+
             # --- Compare mode ---
             compare_contexts: list[dict] | None = None
             if data.compare_initiative_ids and len(data.compare_initiative_ids) == 2:
@@ -339,7 +341,6 @@ async def chat_stream(
             # --- Single project / normal mode ---
             if not compare_contexts:
                 project_context: str | None = None
-                verified_initiative: Initiative | None = None
                 if data.initiative_id:
                     try:
                         init_uuid = uuid.UUID(data.initiative_id)
@@ -360,12 +361,12 @@ async def chat_stream(
                         build_alignment_widget_data,
                         get_alignment_intro_message,
                     )
-                    from app.tools import get_tool_registry as _get_registry
+                    from app.modules import get_module_registry as _get_registry
                     from app.services.chat import ChatResponse
                     from sqlalchemy.orm.attributes import flag_modified
 
                     _registry = _get_registry()
-                    _align_tool = _registry.get_tool(_tool_hint)
+                    _align_tool = _registry.get_module(_tool_hint)
                     _align_initiative = verified_initiative
 
                     async def _run_alignment():
@@ -414,7 +415,7 @@ async def chat_stream(
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for template analysis.'})}\n\n"
                         return
                     template_id_str = _tool_hint.split(":", 1)[1]
-                    from app.tools.template_tool import TemplateFillTool
+                    from app.modules.template_module import TemplateFillTool
                     from app.services.chat import ChatResponse
 
                     tmpl_tool = TemplateFillTool()
@@ -520,8 +521,8 @@ async def chat_stream(
                 }
                 _tool_id = _WIDGET_TO_TOOL.get(result.widget_type or "")
                 if _tool_id:
-                    from app.tools.registry import get_tool_registry
-                    _tool = get_tool_registry().get_tool(_tool_id)
+                    from app.modules.registry import get_module_registry
+                    _tool = get_module_registry().get_tool(_tool_id)
                     _content = result.widget_data or {}
                     if _tool and _tool.is_exportable(_content):
                         _res = _content.get("result") or {}
@@ -662,8 +663,8 @@ async def update_message_widget(
             }
             _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
             if _tool_id:
-                from app.tools.registry import get_tool_registry
-                _tool = get_tool_registry().get_tool(_tool_id)
+                from app.modules.registry import get_module_registry
+                _tool = get_module_registry().get_tool(_tool_id)
                 _content = data.widget_data or {}
                 if _tool and _tool.is_exportable(_content):
                     _res = _content.get("result") or {}
@@ -871,11 +872,11 @@ async def confirm_chat_alignment(
     await db.commit()
     await db.refresh(initiative)
 
-    from app.tools import get_tool_registry
-    from app.tools.base import ToolAlignment
+    from app.modules import get_module_registry
+    from app.modules.base import ModuleAlignment
 
-    registry = get_tool_registry()
-    tool = registry.get_tool(data.tool_id)
+    registry = get_module_registry()
+    tool = registry.get_module(data.tool_id)
     tool_name = tool.definition.name if tool else data.tool_id
 
     new_messages: list[AlignmentMessageOut] = []
@@ -910,7 +911,7 @@ async def confirm_chat_alignment(
 
     if tool and tool.requires_alignment:
         try:
-            alignment_obj = ToolAlignment.from_dict(alignment_data)
+            alignment_obj = ModuleAlignment.from_dict(alignment_data)
             output = await tool.execute(
                 db=db,
                 initiative_id=initiative.id,
@@ -981,16 +982,16 @@ async def provide_chat_alignment_feedback(
     if not alignment_data:
         raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
 
-    from app.tools import get_tool_registry
-    from app.tools.base import ToolAlignment
+    from app.modules import get_module_registry
+    from app.modules.base import ModuleAlignment
     from app.api.alignment_helpers import build_alignment_widget_data
 
-    registry = get_tool_registry()
-    tool = registry.get_tool(data.tool_id)
+    registry = get_module_registry()
+    tool = registry.get_module(data.tool_id)
     if not tool:
         raise HTTPException(status_code=400, detail=f"Tool {data.tool_id} not found")
 
-    current_alignment = ToolAlignment.from_dict(alignment_data)
+    current_alignment = ModuleAlignment.from_dict(alignment_data)
     try:
         updated_alignment = await tool.update_alignment_from_feedback(
             current_alignment=current_alignment,
