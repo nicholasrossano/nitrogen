@@ -11,20 +11,29 @@ from app.models.project_share import ProjectShare
 from app.models.user import User
 
 
+_LAST_SEEN_THROTTLE_SECONDS = 300  # only update last_seen_at every 5 minutes
+
+
 async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
     """Upsert the authenticated user into the users table."""
     if not user.uid or user.uid == "shared-user":
         return
     existing = await db.get(User, user.uid)
+    now = datetime.now(timezone.utc)
     if existing:
-        existing.last_seen_at = datetime.now(timezone.utc)
+        if (
+            existing.last_seen_at is None
+            or (now - existing.last_seen_at).total_seconds() > _LAST_SEEN_THROTTLE_SECONDS
+        ):
+            existing.last_seen_at = now
+            await db.commit()
     else:
         db.add(User(
             id=user.uid,
             email=user.email,
-            last_seen_at=datetime.now(timezone.utc),
+            last_seen_at=now,
         ))
-    await db.commit()
+        await db.commit()
 
 
 async def get_initiative_with_role(

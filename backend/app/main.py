@@ -57,10 +57,11 @@ logger.info(f"Final CORS origins: {cors_origins}")
 async def lifespan(app: FastAPI):
     # Startup
     async with engine.begin():
-        # Tables are managed by Alembic, but this ensures connection works
         pass
     yield
     # Shutdown
+    from app.core.http_client import close_http_client
+    await close_http_client()
     await engine.dispose()
 
 
