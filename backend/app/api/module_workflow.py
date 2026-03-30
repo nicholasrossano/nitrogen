@@ -16,11 +16,10 @@ from typing import Any
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import get_current_user, AuthUser
@@ -217,7 +216,7 @@ async def generate_build_layer(
         raise HTTPException(status_code=400, detail="Setup must be confirmed before generating build layers")
 
     # Validate layer exists
-    valid_layers = [l.id for l in module.assessment_definition.build_layers]
+    valid_layers = [layer.id for layer in module.assessment_definition.build_layers]
     if layer_id not in valid_layers:
         raise HTTPException(status_code=404, detail=f"Layer '{layer_id}' not found")
 

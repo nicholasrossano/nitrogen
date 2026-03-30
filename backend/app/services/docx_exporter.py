@@ -221,7 +221,7 @@ class DocxExporterService:
                     line = f"[{num}] {source_title}"
                     if publisher:
                         line += f" — {publisher}"
-                    ref_para = doc.add_paragraph(line)
+                    doc.add_paragraph(line)
                     if source_url:
                         url_para = doc.add_paragraph()
                         run = url_para.add_run(source_url)
