@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LCOEModelWidget } from '@/components/widgets/LCOEModelWidget';
-import { CarbonModelWidget } from '@/components/widgets/CarbonModelWidget';
-import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
-import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
-import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import type { AlignmentNewMessage } from '@/components/widgets/AlignmentWidget';
-import { TemplateRequirementsWidget } from '@/components/widgets/TemplateRequirementsWidget';
-import { TemplateViewerWidget } from '@/components/widgets/TemplateViewerWidget';
-import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
-import { SolarEstimateWidget } from '@/components/widgets/SolarEstimateWidget';
+
+const LCOEModelWidget = dynamic(() => import('@/components/widgets/LCOEModelWidget').then(m => ({ default: m.LCOEModelWidget })), { ssr: false });
+const CarbonModelWidget = dynamic(() => import('@/components/widgets/CarbonModelWidget').then(m => ({ default: m.CarbonModelWidget })), { ssr: false });
+const MemoViewerWidget = dynamic(() => import('@/components/widgets/MemoViewerWidget').then(m => ({ default: m.MemoViewerWidget })), { ssr: false });
+const ChecklistViewerWidget = dynamic(() => import('@/components/widgets/ChecklistViewerWidget').then(m => ({ default: m.ChecklistViewerWidget })), { ssr: false });
+const AlignmentWidget = dynamic(() => import('@/components/widgets/AlignmentWidget').then(m => ({ default: m.AlignmentWidget })), { ssr: false });
+const TemplateRequirementsWidget = dynamic(() => import('@/components/widgets/TemplateRequirementsWidget').then(m => ({ default: m.TemplateRequirementsWidget })), { ssr: false });
+const TemplateViewerWidget = dynamic(() => import('@/components/widgets/TemplateViewerWidget').then(m => ({ default: m.TemplateViewerWidget })), { ssr: false });
+const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
+const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
