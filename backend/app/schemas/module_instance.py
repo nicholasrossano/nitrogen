@@ -9,8 +9,7 @@ class ModuleInstanceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
-    # DB column / ORM attribute is tool_id; API surface keeps module_id for frontend compat
-    module_id: str = Field(alias="tool_id")
+    module_id: str
     status: str
     title: Optional[str] = None
     started_by: str

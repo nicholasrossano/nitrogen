@@ -144,6 +144,106 @@ class DocxExporterService:
         output.seek(0)
         return output.read()
     
+    def generate_assessment_docx(
+        self,
+        content: dict,
+        initiative_title: str,
+    ) -> bytes:
+        """Generate a DOCX for a module assessment output (landscape / stakeholder etc.).
+
+        Expects content with keys:
+          title, executive_summary, sections[{theme|category, body}],
+          strategic_implications|engagement_strategy, recommendations|risk_considerations,
+          citations[{number, source_title, source_url, publisher, excerpt}]  (optional)
+        """
+        from docx import Document
+        from docx.shared import Inches, Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            doc = Document()
+
+            # ── Title ──────────────────────────────────────────────────────
+            title_heading = doc.add_heading(content.get("title") or initiative_title, 0)
+            title_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_paragraph()
+
+            # ── Executive Summary ──────────────────────────────────────────
+            exec_sum = content.get("executive_summary", "")
+            if exec_sum:
+                doc.add_heading("Executive Summary", level=1)
+                doc.add_paragraph(exec_sum)
+                doc.add_paragraph()
+
+            # ── Theme / Category sections ──────────────────────────────────
+            sections = content.get("sections", [])
+            for sec in sections:
+                sec_title = sec.get("theme") or sec.get("category") or "Section"
+                sec_body = sec.get("body") or sec.get("content") or ""
+                if sec_title or sec_body:
+                    doc.add_heading(sec_title, level=2)
+                    doc.add_paragraph(sec_body)
+                    doc.add_paragraph()
+
+            # ── Trailing sections (any scalar extra keys) ──────────────────
+            trailing_keys = [
+                ("strategic_implications", "Strategic Implications"),
+                ("engagement_strategy", "Engagement Strategy"),
+                ("engagement_recommendations", "Engagement Recommendations"),
+                ("recommendations", "Recommendations & Next Steps"),
+                ("risk_considerations", "Risk Considerations"),
+            ]
+            for key, label in trailing_keys:
+                val = content.get(key)
+                if val:
+                    doc.add_heading(label, level=1)
+                    if isinstance(val, list):
+                        for item in val:
+                            doc.add_paragraph(f"• {item}")
+                    else:
+                        doc.add_paragraph(val)
+                    doc.add_paragraph()
+
+            # ── References ─────────────────────────────────────────────────
+            citations = content.get("citations", [])
+            if citations:
+                doc.add_heading("References", level=1)
+                for cit in citations:
+                    num = cit.get("number", "")
+                    source_title = cit.get("source_title", "Unknown source")
+                    source_url = cit.get("source_url") or ""
+                    publisher = cit.get("publisher") or ""
+                    excerpt = cit.get("excerpt") or ""
+
+                    line = f"[{num}] {source_title}"
+                    if publisher:
+                        line += f" — {publisher}"
+                    ref_para = doc.add_paragraph(line)
+                    if source_url:
+                        url_para = doc.add_paragraph()
+                        run = url_para.add_run(source_url)
+                        run.font.color.rgb = RGBColor(0, 94, 114)
+                        run.font.size = Pt(9)
+                        url_para.paragraph_format.left_indent = Inches(0.3)
+                    if excerpt:
+                        excerpt_para = doc.add_paragraph(f'"{excerpt[:250]}…"')
+                        excerpt_para.paragraph_format.left_indent = Inches(0.3)
+                        for run in excerpt_para.runs:
+                            run.font.size = Pt(9)
+                            run.font.color.rgb = RGBColor(90, 90, 96)
+
+            output = io.BytesIO()
+            doc.save(output)
+            output.seek(0)
+            return output.read()
+
+        except Exception as e:
+            logger.error(f"Failed to generate assessment DOCX: {e}", exc_info=True)
+            raise
+
     def _generate_basic(
         self,
         memo_content: MemoContent,

@@ -15,12 +15,12 @@ class ModuleInstance(Base):
     """A single run of a module template within a project.
 
     Each row represents one instance — e.g. "LCOE Model #2 for Project X".
-    A project can have many instances of the same tool_id.
+    A project can have many instances of the same module_id.
     """
     __tablename__ = "module_instances"
 
     __table_args__ = (
-        Index("ix_mi_initiative_module", "initiative_id", "tool_id"),
+        Index("ix_mi_initiative_module", "initiative_id", "module_id"),
         Index("ix_mi_initiative_session", "initiative_id", "session_id"),
     )
 
@@ -32,7 +32,7 @@ class ModuleInstance(Base):
         ForeignKey("initiatives.id", ondelete="CASCADE"),
         nullable=False,
     )
-    tool_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    module_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="started")
     title: Mapped[str | None] = mapped_column(String(255))
     started_by: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -41,6 +41,7 @@ class ModuleInstance(Base):
         ForeignKey("core_chat_sessions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    archived: Mapped[bool] = mapped_column(default=False, nullable=False)
     alignment: Mapped[dict | None] = mapped_column(JSONB)
     deliverable: Mapped[dict | None] = mapped_column(JSONB)
     workflow_state: Mapped[dict | None] = mapped_column(JSONB)

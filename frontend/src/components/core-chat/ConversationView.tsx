@@ -483,22 +483,11 @@ function CitationChip({
     label = sourceType;
   }
 
-  const badgeColor = projectLabel === 'A'
-    ? 'bg-accent-wash text-accent'
-    : projectLabel === 'B'
-      ? 'bg-accent-secondary-wash text-accent-secondary'
-      : '';
-
   const chip = (
     <span
       title={title.trim()}
       className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded border text-[10px] font-medium leading-none align-[0.1em] bg-surface-subtle border-stroke-subtle text-text-secondary hover:bg-accent/[0.07] hover:border-accent/30 hover:text-accent transition-colors cursor-pointer select-none"
     >
-      {projectLabel && (
-        <span className={`px-1 py-px rounded text-[9px] font-semibold leading-none ${badgeColor}`}>
-          {projectLabel}
-        </span>
-      )}
       {icon}
       {label}
     </span>

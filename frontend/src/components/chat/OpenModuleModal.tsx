@@ -1,21 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { X, Clock, User } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { X, Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { api, type ModuleInstance } from '@/lib/api';
 import { ModalShell } from '@/components/ui/ModalShell';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((m) => [m.id, m]));
-
-const STATUS_LABELS: Record<string, { label: string; bg: string; text: string }> = {
-  started: { label: 'Started', bg: 'bg-zinc-100', text: 'text-zinc-500' },
-  alignment_proposed: { label: 'Outline Proposed', bg: 'bg-yellow-50', text: 'text-yellow-700' },
-  alignment_confirmed: { label: 'Outline Confirmed', bg: 'bg-blue-50', text: 'text-blue-700' },
-  generating: { label: 'Generating', bg: 'bg-purple-50', text: 'text-purple-700' },
-  complete: { label: 'Complete', bg: 'bg-green-50', text: 'text-green-700' },
-  error: { label: 'Error', bg: 'bg-red-50', text: 'text-red-700' },
-};
 
 function formatRelativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -31,7 +22,6 @@ function formatRelativeTime(dateStr: string): string {
 
 function formatEmail(email: string | null, fallback: string): string {
   if (email) return email;
-  // Show a readable truncation of the UID if no email resolved
   return fallback.length > 16 ? `${fallback.slice(0, 8)}…` : fallback;
 }
 
@@ -41,27 +31,10 @@ interface OpenModuleModalProps {
   onClose: () => void;
 }
 
-export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleModalProps) {
-  const [instances, setInstances] = useState<ModuleInstance[]>([]);
-  const [loading, setLoading] = useState(true);
+type EnrichedInstance = ModuleInstance & { index: number | null; displayName: string };
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await api.listModuleInstances(initiativeId);
-        if (!cancelled) setInstances(data);
-      } catch {
-        if (!cancelled) setInstances([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [initiativeId]);
-
-  // Add instance numbering for duplicate module_ids
-  const enriched = instances.map((inst) => {
+function enrich(instances: ModuleInstance[]): EnrichedInstance[] {
+  return instances.map((inst) => {
     const sameToolInstances = instances.filter((i) => i.module_id === inst.module_id);
     const hasDuplicates = sameToolInstances.length > 1;
     const index = hasDuplicates
@@ -69,92 +42,224 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
           .sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime())
           .findIndex((i) => i.id === inst.id) + 1
       : null;
-    return { ...inst, index };
+    const mod = MODULE_MAP.get(inst.module_id);
+    const displayName = mod
+      ? index ? `${mod.name} #${index}` : mod.name
+      : index
+        ? `${inst.module_id.replace(/_/g, ' ')} #${index}`
+        : inst.module_id.replace(/_/g, ' ');
+    return { ...inst, index, displayName };
   });
+}
 
-  const content = (
+export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleModalProps) {
+  const [instances, setInstances] = useState<ModuleInstance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isTrashView, setIsTrashView] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const load = useCallback(async (archived: boolean) => {
+    setLoading(true);
+    try {
+      const data = await api.listModuleInstances(initiativeId, { archived });
+      setInstances(data);
+    } catch {
+      setInstances([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [initiativeId]);
+
+  useEffect(() => {
+    load(isTrashView);
+  }, [load, isTrashView]);
+
+  const handleTrashToggle = () => {
+    setIsTrashView((v) => !v);
+    setConfirmDeleteId(null);
+  };
+
+  const handleArchive = useCallback(async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await api.deleteModuleInstance(initiativeId, id);
+    setInstances((prev) => prev.filter((i) => i.id !== id));
+  }, [initiativeId]);
+
+  const handleRestore = useCallback(async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await api.restoreModuleInstance(initiativeId, id);
+    setInstances((prev) => prev.filter((i) => i.id !== id));
+  }, [initiativeId]);
+
+  const handlePermanentDelete = useCallback(async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await api.permanentlyDeleteModuleInstance(initiativeId, id);
+    setInstances((prev) => prev.filter((i) => i.id !== id));
+    setConfirmDeleteId(null);
+  }, [initiativeId]);
+
+  const enriched = enrich(instances);
+
+  return (
     <ModalShell onClose={onClose} maxWidth="max-w-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stroke-subtle">
-          <h2 className="text-sm font-semibold text-text-primary">Open Module</h2>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-stroke-subtle">
+        <h2 className="text-sm font-semibold text-text-primary">
+          {isTrashView ? 'Trash' : 'Open Module'}
+        </h2>
+        <button
+          onClick={onClose}
+          className="p-1.5 shrink-0 rounded-md text-text-tertiary enabled:hover:text-text-primary enabled:hover:bg-surface-hover transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="px-6 py-5 max-h-[calc(90vh-4rem)] overflow-y-auto">
+        {/* Same btn-secondary styling as the main project grid Trash control; button on the right */}
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <p className="text-sm text-text-tertiary flex-1 min-w-0">
+            {isTrashView
+              ? 'Deleted modules. Restore to bring them back, or permanently delete.'
+              : 'Pick up where you or a collaborator left off in any module started in this project.'}
+          </p>
           <button
-            onClick={onClose}
-            className="p-1.5 shrink-0 rounded-md text-text-tertiary enabled:hover:text-text-primary enabled:hover:bg-surface-hover transition-colors"
+            type="button"
+            onClick={handleTrashToggle}
+            className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
           >
-            <X className="w-4 h-4" />
+            {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+            {isTrashView ? 'Back to Modules' : 'Trash'}
           </button>
         </div>
 
-        {/* Body — max-h on the element itself so overflow-y-auto has a definite bound */}
-        <div className="px-6 py-5 max-h-[calc(90vh-4rem)] overflow-y-auto">
-          <p className="text-sm text-text-tertiary mb-6">
-            Pick up where you or a collaborator left off in any module started in this project.
-          </p>
-          {loading ? (
-            <div className="grid grid-cols-2 gap-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-[88px] rounded-lg bg-surface-subtle animate-pulse" />
-              ))}
-            </div>
-          ) : enriched.length === 0 ? (
-            <div className="py-12 text-center">
-              <p className="text-sm text-text-secondary">No modules started yet.</p>
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-[72px] rounded-lg bg-surface-subtle animate-pulse" />
+            ))}
+          </div>
+        ) : enriched.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-sm text-text-secondary">
+              {isTrashView ? 'Trash is empty.' : 'No modules started yet.'}
+            </p>
+            {!isTrashView && (
               <p className="text-xs text-text-tertiary mt-1">Use &quot;New Module&quot; to begin.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {enriched.map((inst) => {
-                const mod = MODULE_MAP.get(inst.module_id);
-                const displayName = mod
-                  ? inst.index ? `${mod.name} #${inst.index}` : mod.name
-                  : inst.index
-                    ? `${inst.module_id.replace(/_/g, ' ')} #${inst.index}`
-                    : inst.module_id.replace(/_/g, ' ');
-                const status = STATUS_LABELS[inst.status] ?? STATUS_LABELS.started;
-                const authorLabel = formatEmail(inst.started_by_email, inst.started_by);
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {enriched.map((inst) => {
+              const mod = MODULE_MAP.get(inst.module_id);
+              const authorLabel = formatEmail(inst.started_by_email, inst.started_by);
+              const isConfirmingDelete = confirmDeleteId === inst.id;
 
-                return (
-                  <button
-                    key={inst.id}
-                    onClick={() => onSelect(inst)}
-                    className="card-interactive border border-black/[0.04] relative flex items-start gap-3 px-4 py-3.5 text-left"
-                  >
-                    {/* Status pill — top right, confidence-tag style */}
-                    <span className={`absolute top-2.5 right-2.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider ${status.bg} ${status.text}`}>
-                      {status.label}
-                    </span>
+              const cardClass =
+                `w-full border border-black/[0.04] relative flex items-start gap-3 px-4 py-3.5 text-left group ${isTrashView ? 'card opacity-70 cursor-default' : 'card-interactive'}`;
 
-                    {/* Module icon */}
-                    <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash [&>svg]:w-5 [&>svg]:h-5 text-accent">
-                      {mod?.icon}
+              const cardInner = (
+                <>
+                  {/* Hover trash icon (normal view) */}
+                  {!isTrashView && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleArchive(e, inst.id)}
+                      title="Move to trash"
+                      className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Trash view: restore + permanent delete — must NOT wrap in disabled <button> or clicks never fire */}
+                  {isTrashView && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => handleRestore(e, inst.id)}
+                        title="Restore"
+                        className="project-action-btn project-action-btn-success absolute top-2 right-9 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity z-10"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(inst.id);
+                        }}
+                        title="Permanently delete"
+                        className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+
+                  <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash [&>svg]:w-5 [&>svg]:h-5 text-accent">
+                    {mod?.icon}
+                  </div>
+
+                  <div className="min-w-0 flex-1 pt-0.5 pr-6">
+                    <p className="text-xs font-medium text-text-secondary leading-snug truncate">
+                      {inst.displayName}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2.5 text-[11px] text-text-tertiary">
+                      <span className="flex items-center gap-0.5 shrink-0">
+                        <Clock className="w-3 h-3" />
+                        {formatRelativeTime(inst.updated_at)}
+                      </span>
+                      <span className="flex items-center gap-0.5 min-w-0">
+                        <User className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{authorLabel}</span>
+                      </span>
                     </div>
+                  </div>
+                </>
+              );
 
-                    {/* Info */}
-                    <div className="min-w-0 flex-1 pt-0.5 pr-20">
-                      <p className="text-xs font-medium text-text-secondary leading-snug truncate">
-                        {displayName}
-                      </p>
+              return (
+                <div key={inst.id} className="relative">
+                  {isTrashView ? (
+                    <div className={cardClass}>{cardInner}</div>
+                  ) : (
+                    <button type="button" onClick={() => onSelect(inst)} className={cardClass}>
+                      {cardInner}
+                    </button>
+                  )}
 
-                      {/* Meta row */}
-                      <div className="mt-2 flex items-center gap-2.5 text-[11px] text-text-tertiary">
-                        <span className="flex items-center gap-0.5 shrink-0">
-                          <Clock className="w-3 h-3" />
-                          {formatRelativeTime(inst.updated_at)}
-                        </span>
-                        <span className="flex items-center gap-0.5 min-w-0">
-                          <User className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{authorLabel}</span>
-                        </span>
+                  {/* Permanent delete confirmation overlay */}
+                  {isConfirmingDelete && (
+                    <div className="absolute inset-0 bg-surface rounded-lg border border-divider flex flex-col items-center justify-center gap-3 p-4 z-20">
+                      <div className="text-center">
+                        <p className="text-xs font-semibold text-text-primary">Permanently delete?</p>
+                      </div>
+                      <div className="flex gap-2 w-full">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                          className="btn-secondary flex-1 !py-1.5 text-xs"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handlePermanentDelete(e, inst.id)}
+                          className="btn-danger flex-1 !py-1.5 text-xs"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </ModalShell>
   );
-
-  return content;
 }

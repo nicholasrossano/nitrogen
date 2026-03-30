@@ -14,6 +14,7 @@ const TemplateRequirementsWidget = dynamic(() => import('@/components/widgets/Te
 const TemplateViewerWidget = dynamic(() => import('@/components/widgets/TemplateViewerWidget').then(m => ({ default: m.TemplateViewerWidget })), { ssr: false });
 const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
+const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
 
 export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
 
@@ -27,6 +28,7 @@ export const EDITOR_WIDGET_TYPES = [
   'template_requirements',
   'template_viewer',
   'document_viewer',
+  'assessment_workspace',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -42,6 +44,7 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   template_requirements: 'template',
   template_viewer: 'template',
   document_viewer: 'document_viewer',
+  assessment_workspace: 'assessment',
 };
 
 export interface EditorWidget {
@@ -69,6 +72,7 @@ const WIDGET_LABELS: Record<string, string> = {
   template_requirements: 'Template',
   template_viewer: 'Template Output',
   document_viewer: 'Document',
+  assessment_workspace: 'Assessment',
 };
 
 export function EditorSidePanel({ widgets, initiativeId = '', onAlignmentConfirmed }: EditorSidePanelProps) {
@@ -151,6 +155,14 @@ function EditorWidgetRenderer({
       return <TemplateViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'document_viewer':
       return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
+    case 'assessment_workspace':
+      return (
+        <ModuleWorkspace
+          instanceId={data.instance_id}
+          moduleId={data.module_id}
+          initiativeId={initiativeId}
+        />
+      );
     default:
       return null;
   }
