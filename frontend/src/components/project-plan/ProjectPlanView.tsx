@@ -367,6 +367,18 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   }, [typeFilterDropdownOpen]);
 
   const pillars = useMemo(() => projectPlan?.pillars ?? [], [projectPlan?.pillars]);
+  const pillarIdsFingerprint = useMemo(
+    () => pillars.map((p) => p.id).slice().sort().join('\0'),
+    [pillars]
+  );
+
+  // Category view: expand every pillar when the plan first appears or pillar set / initiative changes.
+  // Rebuild ids from fingerprint only so a new `pillars` array reference with the same ids does not reset toggles.
+  useEffect(() => {
+    if (!pillarIdsFingerprint) return;
+    setExpandedPillars(new Set(pillarIdsFingerprint.split('\0')));
+  }, [initiativeId, pillarIdsFingerprint]);
+
   const phases = useMemo(() => projectPlan?.phases ?? [], [projectPlan?.phases]);
   const hasPhases = phases.length > 0 && pillars.some((p) => p.items.some((i) => i.phase));
   const allPhasesCollapsed = phases.length > 0 && collapsedPhases.size >= phases.length;
