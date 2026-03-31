@@ -89,7 +89,7 @@ export function SideDrawer() {
     if (view === 'modules') return 'modules';
     if (view === 'files') return 'files';
     return 'plan';
-  }, [pathname, initiativeId, searchParams]);
+  }, [initiativeId, searchParams]);
 
   const hasProject = !!initiativeId;
   const initiative = useInitiativeStore((s) => s.initiative);
