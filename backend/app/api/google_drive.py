@@ -210,7 +210,7 @@ class DriveImportRequest(BaseModel):
 
 @router.post("/initiatives/{initiative_id}/drive/import")
 async def import_from_drive(
-    initiative_id: UUID,
+    initiative_id: str,
     body: DriveImportRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -262,7 +262,7 @@ async def import_from_drive(
             existing = await db.execute(
                 select(DriveLinkedFile).where(
                     DriveLinkedFile.drive_file_id == file_id,
-                    DriveLinkedFile.initiative_id == initiative_id,
+                    DriveLinkedFile.initiative_id == initiative.id,
                 )
             )
             if existing.scalar_one_or_none():
@@ -279,7 +279,7 @@ async def import_from_drive(
             ext = _EXT_MAP.get(file_type or "", "")
             storage_filename = filename if "." in filename else f"{filename}{ext}"
             storage_path = await storage.save(
-                file_bytes, storage_filename, folder=str(initiative_id)
+                file_bytes, storage_filename, folder=str(initiative.id)
             )
 
             evidence_doc, chunk_count = await store_evidence_doc(
@@ -298,7 +298,7 @@ async def import_from_drive(
                 else datetime.now(timezone.utc)
             )
             link = DriveLinkedFile(
-                initiative_id=initiative_id,
+                initiative_id=initiative.id,
                 evidence_doc_id=evidence_doc.id,
                 user_id=user.uid,
                 drive_file_id=file_id,
@@ -337,14 +337,14 @@ async def import_from_drive(
 
 @router.get("/initiatives/{initiative_id}/drive/linked")
 async def list_drive_linked_files(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all Drive-linked files for an initiative."""
-    await require_viewer(db, initiative_id, user)
+    initiative = await require_viewer(db, initiative_id, user)
     result = await db.execute(
-        select(DriveLinkedFile).where(DriveLinkedFile.initiative_id == initiative_id)
+        select(DriveLinkedFile).where(DriveLinkedFile.initiative_id == initiative.id)
     )
     links = result.scalars().all()
     return [
@@ -363,17 +363,17 @@ async def list_drive_linked_files(
 
 @router.delete("/initiatives/{initiative_id}/drive/linked/{linked_id}")
 async def unlink_drive_file(
-    initiative_id: UUID,
+    initiative_id: str,
     linked_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove the Drive link record (keeps the underlying evidence doc)."""
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
     result = await db.execute(
         select(DriveLinkedFile).where(
             DriveLinkedFile.id == linked_id,
-            DriveLinkedFile.initiative_id == initiative_id,
+            DriveLinkedFile.initiative_id == initiative.id,
         )
     )
     link = result.scalar_one_or_none()
@@ -388,7 +388,7 @@ async def unlink_drive_file(
 
 @router.post("/initiatives/{initiative_id}/drive/sync")
 async def sync_drive_files(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -408,7 +408,7 @@ async def sync_drive_files(
 
     result = await db.execute(
         select(DriveLinkedFile).where(
-            DriveLinkedFile.initiative_id == initiative_id,
+            DriveLinkedFile.initiative_id == initiative.id,
             DriveLinkedFile.user_id == user.uid,
         )
     )
@@ -464,7 +464,7 @@ async def sync_drive_files(
                         else f"{link.drive_file_name}{ext}"
                     )
                     new_storage_path = await storage.save(
-                        file_bytes, storage_filename, folder=str(initiative_id)
+                        file_bytes, storage_filename, folder=str(initiative.id)
                     )
                     doc.storage_path = new_storage_path
                     doc.file_size = len(file_bytes)

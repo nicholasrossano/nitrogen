@@ -43,21 +43,34 @@ async def get_initiative_with_role(
 ) -> tuple[Initiative, str]:
     """Return (initiative, role) where role is 'owner', 'editor', or 'viewer'.
 
-    Raises 404 if the user has no access.
+    Accepts either a UUID string or a slug. Raises 404 if the user has no access.
     """
-    result = await db.execute(
-        select(Initiative).where(Initiative.id == initiative_id)
-    )
-    initiative = result.scalar_one_or_none()
+    initiative: Initiative | None = None
+
+    # Try UUID lookup first, fall back to slug lookup
+    try:
+        uid = uuid.UUID(str(initiative_id))
+        result = await db.execute(select(Initiative).where(Initiative.id == uid))
+        initiative = result.scalar_one_or_none()
+    except (ValueError, AttributeError):
+        pass
+
+    if initiative is None:
+        result = await db.execute(
+            select(Initiative).where(Initiative.slug == str(initiative_id))
+        )
+        initiative = result.scalar_one_or_none()
+
     if not initiative:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
     if initiative.user_id == user.uid:
         return initiative, "owner"
 
+    # Use the real UUID for the share lookup
     share_result = await db.execute(
         select(ProjectShare).where(
-            ProjectShare.initiative_id == initiative_id,
+            ProjectShare.initiative_id == initiative.id,
             ProjectShare.user_id == user.uid,
         )
     )

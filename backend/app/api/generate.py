@@ -21,7 +21,7 @@ router = APIRouter()
 
 @router.post("/initiatives/{initiative_id}/generate", response_model=MemoResponse)
 async def generate_memo(
-    initiative_id: UUID,
+    initiative_id: str,
     data: MemoGenerateRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
@@ -89,7 +89,7 @@ async def generate_memo(
 
 @router.get("/initiatives/{initiative_id}/memo", response_model=MemoResponse)
 async def get_latest_memo(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -99,7 +99,7 @@ async def get_latest_memo(
     # Get latest memo
     memo_result = await db.execute(
         select(MemoVersion)
-        .where(MemoVersion.initiative_id == initiative_id)
+        .where(MemoVersion.initiative_id == initiative.id)
         .order_by(MemoVersion.created_at.desc())
         .limit(1)
     )
@@ -121,7 +121,7 @@ async def get_latest_memo(
 
 @router.post("/initiatives/{initiative_id}/generate-all")
 async def generate_all_deliverables(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
 ):
@@ -163,20 +163,20 @@ async def generate_all_deliverables(
 
         try:
             alignment = None
-            alignment_data = await module_service.get_alignment(db, initiative_id, tool_id)
+            alignment_data = await module_service.get_alignment(db, initiative.id, tool_id)
             if alignment_data and alignment_data.get("confirmed"):
                 alignment = ModuleAlignment.from_dict(alignment_data)
 
             output = await tool.execute(
                 db=db,
-                initiative_id=initiative_id,
+                initiative_id=initiative.id,
                 inputs=inputs,
                 include_corpus=True,
                 alignment=alignment,
             )
 
             inst = await module_service.save_deliverable(
-                db, initiative_id, tool_id,
+                db, initiative.id, tool_id,
                 output.title, output.output_type, output.content,
                 user_id=user.uid,
             )
@@ -198,7 +198,7 @@ async def generate_all_deliverables(
 
         except Exception as e:
             await module_service.set_instance_error(
-                db, initiative_id, tool_id, str(e), user_id=user.uid,
+                db, initiative.id, tool_id, str(e), user_id=user.uid,
             )
 
     initiative.stage = InitiativeStage.COMPLETE.value
@@ -212,7 +212,7 @@ async def generate_all_deliverables(
     for widget in deliverable_widgets:
         label = WIDGET_LABELS.get(widget["widget_type"], widget["tool_name"])
         deliverable_message = ChatMessage(
-            initiative_id=initiative_id,
+            initiative_id=initiative.id,
             role="assistant",
             content=f"Here's your **{label}** for review and export.",
             widget_type=widget["widget_type"],
