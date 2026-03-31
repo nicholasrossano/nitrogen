@@ -1,6 +1,5 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ChatInput } from '@/components/chat/ChatInput';
 
 const mockSendMessage = jest.fn();
@@ -43,28 +42,28 @@ describe('ChatInput', () => {
     expect(screen.getByRole('textbox')).toBeDisabled();
   });
 
-  it('calls onSend when form is submitted with text', async () => {
+  it('calls onSend when form is submitted with text', () => {
     const onSend = jest.fn();
     render(<ChatInput initiativeId={initiativeId} onSend={onSend} />);
     const textarea = screen.getByRole('textbox');
-    await userEvent.type(textarea, 'Hello world');
+    fireEvent.change(textarea, { target: { value: 'Hello world' } });
     fireEvent.submit(textarea.closest('form')!);
     expect(onSend).toHaveBeenCalledWith('Hello world');
   });
 
-  it('calls sendMessage from store when onSend is not provided', async () => {
+  it('calls sendMessage from store when onSend is not provided', () => {
     render(<ChatInput initiativeId={initiativeId} />);
     const textarea = screen.getByRole('textbox');
-    await userEvent.type(textarea, 'Test message');
+    fireEvent.change(textarea, { target: { value: 'Test message' } });
     fireEvent.submit(textarea.closest('form')!);
     expect(mockSendMessage).toHaveBeenCalledWith(initiativeId, 'Test message');
   });
 
-  it('clears input after submit', async () => {
+  it('clears input after submit', () => {
     const onSend = jest.fn();
     render(<ChatInput initiativeId={initiativeId} onSend={onSend} />);
     const textarea = screen.getByRole('textbox');
-    await userEvent.type(textarea, 'Hello');
+    fireEvent.change(textarea, { target: { value: 'Hello' } });
     fireEvent.submit(textarea.closest('form')!);
     expect(textarea).toHaveValue('');
   });
