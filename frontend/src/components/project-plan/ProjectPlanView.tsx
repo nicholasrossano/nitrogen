@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown, FileCheck2, Calculator, Plus } from 'lucide-react';
+import { Loader2, MessageSquare, LayoutGrid, Clock, ChevronDown, ChevronsUpDown, Plus } from 'lucide-react';
 import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar, ProjectPlanPhase } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { PillarColumn } from './PillarColumn';
@@ -86,9 +86,6 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
   const [selectedPillarFilter, setSelectedPillarFilter] = useState<string | null>(null);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<'deliverable' | 'assessment' | null>(null);
-  const [typeFilterDropdownOpen, setTypeFilterDropdownOpen] = useState(false);
-  const typeFilterRef = useRef<HTMLDivElement>(null);
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [expandedPillars, setExpandedPillars] = useState<Set<string>>(new Set());
   // Derive completed set directly from persisted plan data
@@ -354,17 +351,6 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
     }
   }, [filterDropdownOpen]);
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (typeFilterRef.current && !typeFilterRef.current.contains(e.target as Node)) {
-        setTypeFilterDropdownOpen(false);
-      }
-    }
-    if (typeFilterDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [typeFilterDropdownOpen]);
 
   const pillars = useMemo(() => projectPlan?.pillars ?? [], [projectPlan?.pillars]);
   const pillarIdsFingerprint = useMemo(
@@ -570,44 +556,6 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                 )}
               </div>
 
-          {/* Type filter — always visible */}
-          <div ref={typeFilterRef} className="relative">
-            <button
-              onClick={() => setTypeFilterDropdownOpen((v) => !v)}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap bg-surface-subtle ring-1 ring-inset hover:bg-black/[0.07] ${
-                selectedTypeFilter
-                  ? 'ring-accent/40 text-accent'
-                  : 'ring-black/[0.08] text-text-secondary'
-              }`}
-            >
-              {selectedTypeFilter === 'deliverable' && <FileCheck2 className="w-3 h-3" />}
-              {selectedTypeFilter === 'assessment' && <Calculator className="w-3 h-3" />}
-              {selectedTypeFilter === 'deliverable' ? 'Deliverables' : selectedTypeFilter === 'assessment' ? 'Assessments' : 'All Types'}
-              <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${typeFilterDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {typeFilterDropdownOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg border border-stroke-subtle shadow-md py-1 min-w-[140px]">
-                {([
-                  [null, null, 'All Types'],
-                  ['deliverable', FileCheck2, 'Deliverables'],
-                  ['assessment', Calculator, 'Assessments'],
-                ] as const).map(([value, Icon, label]) => (
-                  <button
-                    key={String(value)}
-                    onClick={() => { setSelectedTypeFilter(value); setTypeFilterDropdownOpen(false); }}
-                    className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 ${
-                      selectedTypeFilter === value
-                        ? 'text-accent bg-accent/5'
-                        : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-                    }`}
-                  >
-                    {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* View mode toggle */}
           {hasPhases && (
@@ -644,7 +592,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                       return (
                         <PillarColumn
                           key={pillar.id}
-                          pillar={selectedTypeFilter ? { ...pillar, items: pillar.items.filter(i => (i.item_type ?? 'deliverable') === selectedTypeFilter) } : pillar}
+                          pillar={pillar}
                           deepDiveCache={deepDiveCache}
                           onDeepDive={handleDeepDive}
                           onDeleteItem={handleDeleteItem}
@@ -677,7 +625,7 @@ export function ProjectPlanView({ initiativeId, showInspector, onInspectorChange
                 <PhaseSection
                   key={group.phase.id}
                   phase={group.phase}
-                  items={selectedTypeFilter ? group.items.filter(({ item }) => (item.item_type ?? 'deliverable') === selectedTypeFilter) : group.items}
+                  items={group.items}
                   phaseIndex={groupIdx}
                   totalPhases={phaseGroups.length}
                   pillars={pillars}
