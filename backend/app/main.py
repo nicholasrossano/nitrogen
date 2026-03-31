@@ -27,6 +27,7 @@ settings = get_settings()
 PRODUCTION_ORIGINS = [
     "https://the-nitrogen.ai",
     "https://www.the-nitrogen.ai",
+    "https://app.the-nitrogen.ai",
 ]
 
 # CORS origins: prefer settings (loaded from .env by pydantic) since os.environ
