@@ -16,18 +16,21 @@ jest.mock('@/lib/firebase', () => ({
 }));
 
 function mockOk(body: unknown) {
-  return Promise.resolve({
+  return {
     ok: true,
+    status: 200,
     json: () => Promise.resolve(body),
-  });
+    text: () => Promise.resolve(JSON.stringify(body)),
+  };
 }
 
 function mockError(status: number, detail: string) {
-  return Promise.resolve({
+  return {
     ok: false,
     status,
     json: () => Promise.resolve({ detail }),
-  });
+    text: () => Promise.resolve(JSON.stringify({ detail })),
+  };
 }
 
 describe('api', () => {
