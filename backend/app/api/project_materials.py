@@ -46,7 +46,7 @@ ALLOWED_CONTENT_TYPES = {
 @limiter.limit("10/minute")
 async def upload_material(
     request: Request,
-    initiative_id: UUID,
+    initiative_id: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -74,7 +74,7 @@ async def upload_material(
         )
     storage = get_uploads_storage()
     storage_path = await storage.save(
-        content, file.filename or "file", folder=f"{initiative_id}/materials"
+        content, file.filename or "file", folder=f"{initiative.id}/materials"
     )
 
     content_text = None
@@ -92,7 +92,7 @@ async def upload_material(
         logger.warning("Could not extract text from %s", file.filename, exc_info=True)
 
     unique_filename = await deduplicate_filename(
-        db, initiative_id, file.filename or "Untitled"
+        db, initiative.id, file.filename or "Untitled"
     )
 
     material = ProjectMaterial(
@@ -127,22 +127,22 @@ async def upload_material(
     response_model=list[ProjectMaterialResponse],
 )
 async def list_materials(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all uploaded files for an initiative — materials and evidence docs combined."""
-    await require_viewer(db, initiative_id, user)
+    initiative = await require_viewer(db, initiative_id, user)
 
     mat_result = await db.execute(
         select(ProjectMaterial)
-        .where(ProjectMaterial.initiative_id == initiative_id)
+        .where(ProjectMaterial.initiative_id == initiative.id)
         .order_by(ProjectMaterial.created_at.desc())
     )
     ev_result = await db.execute(
         select(EvidenceDoc)
         .where(
-            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.initiative_id == initiative.id,
             EvidenceDoc.storage_path.isnot(None),  # exclude text-paste entries
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -219,7 +219,7 @@ def _resolve_tool(tool_id: str, output_type: str):
     response_model=ProjectFilesResponse,
 )
 async def list_project_files(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -229,13 +229,13 @@ async def list_project_files(
     # Uploaded materials (project_materials + evidence_docs with files)
     mat_result = await db.execute(
         select(ProjectMaterial)
-        .where(ProjectMaterial.initiative_id == initiative_id)
+        .where(ProjectMaterial.initiative_id == initiative.id)
         .order_by(ProjectMaterial.created_at.desc())
     )
     ev_result = await db.execute(
         select(EvidenceDoc)
         .where(
-            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.initiative_id == initiative.id,
             EvidenceDoc.storage_path.isnot(None),
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -267,7 +267,7 @@ async def list_project_files(
 
     memo_result = await db.execute(
         select(MemoVersion)
-        .where(MemoVersion.initiative_id == initiative_id)
+        .where(MemoVersion.initiative_id == initiative.id)
         .order_by(MemoVersion.created_at.desc())
         .limit(1)
     )
@@ -345,25 +345,26 @@ async def list_project_files(
 
 @router.delete("/initiatives/{initiative_id}/deliverables/{tool_id}")
 async def delete_deliverable(
-    initiative_id: UUID,
+    initiative_id: str,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove a generated deliverable from the project."""
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
-    removed = await module_service.remove_instance_by_tool(db, initiative_id, tool_id)
+    removed = await module_service.remove_instance_by_tool(db, initiative.id, tool_id)
     if removed:
         await db.commit()
     else:
         # tool_id may be a MemoVersion UUID (fallback path)
         try:
-            memo_uuid = UUID(tool_id)
+            from uuid import UUID as _UUID
+            memo_uuid = _UUID(tool_id)
             memo_result = await db.execute(
                 select(MemoVersion).where(
                     MemoVersion.id == memo_uuid,
-                    MemoVersion.initiative_id == initiative_id,
+                    MemoVersion.initiative_id == initiative.id,
                 )
             )
             memo = memo_result.scalar_one_or_none()

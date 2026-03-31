@@ -45,7 +45,7 @@ class AddPlanItemRequest(BaseModel):
 
 @router.get("/initiatives/{initiative_id}/project-plan")
 async def get_project_plan(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -56,7 +56,7 @@ async def get_project_plan(
 
 @router.post("/initiatives/{initiative_id}/project-plan")
 async def generate_project_plan(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
 ):
@@ -94,7 +94,7 @@ async def generate_project_plan(
 
 @router.post("/initiatives/{initiative_id}/project-plan/propose-categories")
 async def propose_plan_categories(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
 ):
@@ -110,7 +110,7 @@ async def propose_plan_categories(
     # Load recent chat messages for richer context
     result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative_id)
+        .where(ChatMessage.initiative_id == initiative.id)
         .order_by(ChatMessage.created_at.desc())
         .limit(12)
     )
@@ -132,7 +132,7 @@ async def propose_plan_categories(
 
 @router.post("/initiatives/{initiative_id}/project-plan/confirm-categories")
 async def confirm_plan_categories(
-    initiative_id: UUID,
+    initiative_id: str,
     body: ConfirmCategoriesRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
@@ -168,7 +168,7 @@ async def confirm_plan_categories(
 
 @router.patch("/initiatives/{initiative_id}/project-plan/items/{item_id}/status")
 async def update_plan_item_status(
-    initiative_id: UUID,
+    initiative_id: str,
     item_id: str,
     body: StatusUpdate,
     db: AsyncSession = Depends(get_db),
@@ -248,7 +248,7 @@ def _serialize_deep_dive(result) -> dict:
 
 @router.delete("/initiatives/{initiative_id}/project-plan/items/{item_id}")
 async def delete_plan_item(
-    initiative_id: UUID,
+    initiative_id: str,
     item_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -279,7 +279,7 @@ async def delete_plan_item(
 
 @router.delete("/initiatives/{initiative_id}/project-plan/items/{item_id}/elements/{element_index}")
 async def delete_plan_element(
-    initiative_id: UUID,
+    initiative_id: str,
     item_id: str,
     element_index: int,
     db: AsyncSession = Depends(get_db),
@@ -310,7 +310,7 @@ async def delete_plan_element(
 
 @router.post("/initiatives/{initiative_id}/project-plan/pillars/{pillar_id}/items")
 async def add_plan_item(
-    initiative_id: UUID,
+    initiative_id: str,
     pillar_id: str,
     body: AddPlanItemRequest,
     db: AsyncSession = Depends(get_db),
@@ -359,7 +359,7 @@ async def add_plan_item(
 
 @router.post("/initiatives/{initiative_id}/project-plan/items/{item_id}/deep-dive")
 async def deep_dive_plan_item(
-    initiative_id: UUID,
+    initiative_id: str,
     item_id: str,
     body: DeepDiveRequest,
     db: AsyncSession = Depends(get_db),

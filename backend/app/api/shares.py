@@ -58,14 +58,14 @@ async def _resolve_user_by_email(db: AsyncSession, email: str) -> User | None:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_share(
-    initiative_id: uuid.UUID,
+    initiative_id: str,
     body: ShareCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Share a project with another user. Owner or editor."""
     await ensure_user_exists(db, user)
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     target_user = await _resolve_user_by_email(db, body.email)
     if not target_user:
@@ -82,7 +82,7 @@ async def create_share(
     existing = (
         await db.execute(
             select(ProjectShare).where(
-                ProjectShare.initiative_id == initiative_id,
+                ProjectShare.initiative_id == initiative.id,
                 ProjectShare.user_id == target_user.id,
             )
         )
@@ -94,7 +94,7 @@ async def create_share(
         )
 
     share = ProjectShare(
-        initiative_id=initiative_id,
+        initiative_id=initiative.id,
         user_id=target_user.id,
         role=body.role,
         shared_by=user.uid,
@@ -119,17 +119,17 @@ async def create_share(
     response_model=list[ShareResponse],
 )
 async def list_shares(
-    initiative_id: uuid.UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all shares for a project. Any user with access can view."""
     await ensure_user_exists(db, user)
-    await get_initiative_with_role(db, initiative_id, user)
+    initiative, _role = await get_initiative_with_role(db, initiative_id, user)
 
     result = await db.execute(
         select(ProjectShare)
-        .where(ProjectShare.initiative_id == initiative_id)
+        .where(ProjectShare.initiative_id == initiative.id)
         .order_by(ProjectShare.created_at)
     )
     shares = result.scalars().all()
@@ -153,7 +153,7 @@ async def list_shares(
     response_model=ShareResponse,
 )
 async def update_share(
-    initiative_id: uuid.UUID,
+    initiative_id: str,
     share_id: uuid.UUID,
     body: ShareUpdate,
     db: AsyncSession = Depends(get_db),
@@ -161,12 +161,12 @@ async def update_share(
 ):
     """Update a share's role. Owner-only."""
     await ensure_user_exists(db, user)
-    await require_owner(db, initiative_id, user)
+    initiative = await require_owner(db, initiative_id, user)
 
     result = await db.execute(
         select(ProjectShare).where(
             ProjectShare.id == share_id,
-            ProjectShare.initiative_id == initiative_id,
+            ProjectShare.initiative_id == initiative.id,
         )
     )
     share = result.scalar_one_or_none()
@@ -193,7 +193,7 @@ async def update_share(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_share(
-    initiative_id: uuid.UUID,
+    initiative_id: str,
     share_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -205,7 +205,7 @@ async def delete_share(
     result = await db.execute(
         select(ProjectShare).where(
             ProjectShare.id == share_id,
-            ProjectShare.initiative_id == initiative_id,
+            ProjectShare.initiative_id == initiative.id,
         )
     )
     share = result.scalar_one_or_none()

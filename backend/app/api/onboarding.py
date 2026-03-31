@@ -73,7 +73,7 @@ def build_stage_status(initiative: Initiative) -> StageStatus:
 
 @router.post("/initiatives/{initiative_id}/chat/stream")
 async def send_chat_message_stream(
-    initiative_id: UUID,
+    initiative_id: str,
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
@@ -95,7 +95,7 @@ async def send_chat_message_stream(
             # Get chat history
             history_result = await db.execute(
                 select(ChatMessage)
-                .where(ChatMessage.initiative_id == initiative_id)
+                .where(ChatMessage.initiative_id == initiative.id)
                 .order_by(ChatMessage.created_at)
             )
             messages = list(history_result.scalars().all())
@@ -656,7 +656,7 @@ async def update_initiative_from_inputs(
 
 @router.post("/initiatives/{initiative_id}/chat", response_model=ChatResponse)
 async def send_chat_message(
-    initiative_id: UUID,
+    initiative_id: str,
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
@@ -677,7 +677,7 @@ async def send_chat_message(
     # Get chat history
     history_result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative_id)
+        .where(ChatMessage.initiative_id == initiative.id)
         .order_by(ChatMessage.created_at)
     )
     messages = list(history_result.scalars().all())
@@ -778,7 +778,7 @@ async def send_chat_message(
 
 @router.get("/initiatives/{initiative_id}/chat", response_model=ChatHistoryResponse)
 async def get_chat_history(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -788,7 +788,7 @@ async def get_chat_history(
     # Get messages
     messages_result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative_id)
+        .where(ChatMessage.initiative_id == initiative.id)
         .order_by(ChatMessage.created_at)
     )
     messages = messages_result.scalars().all()
@@ -817,7 +817,7 @@ async def get_chat_history(
     # If no messages, add initial greeting
     if not messages:
         greeting = ChatMessage(
-            initiative_id=initiative_id,
+            initiative_id=initiative.id,
             role="assistant",
             content="Describe your project and I'll map out the specific permits, certifications, and deliverables you'll need to move forward.",
         )
@@ -850,19 +850,19 @@ async def get_chat_history(
 
 @router.patch("/initiatives/{initiative_id}/chat/{message_id}/feedback")
 async def set_message_feedback(
-    initiative_id: UUID,
-    message_id: UUID,
+    initiative_id: str,
+    message_id: str,
     data: MessageFeedbackRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Set or clear like/dislike feedback on a message."""
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     msg_result = await db.execute(
         select(ChatMessage).where(
             ChatMessage.id == message_id,
-            ChatMessage.initiative_id == initiative_id,
+            ChatMessage.initiative_id == initiative.id,
         )
     )
     msg = msg_result.scalar_one_or_none()
@@ -877,8 +877,8 @@ async def set_message_feedback(
 
 @router.patch("/initiatives/{initiative_id}/chat/{message_id}/widget")
 async def update_message_widget(
-    initiative_id: UUID,
-    message_id: UUID,
+    initiative_id: str,
+    message_id: str,
     data: MessageWidgetUpdateRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -889,7 +889,7 @@ async def update_message_widget(
     msg_result = await db.execute(
         select(ChatMessage).where(
             ChatMessage.id == message_id,
-            ChatMessage.initiative_id == initiative_id,
+            ChatMessage.initiative_id == initiative.id,
         )
     )
     msg = msg_result.scalar_one_or_none()
@@ -944,13 +944,13 @@ async def update_message_widget(
 
 @router.delete("/initiatives/{initiative_id}/chat/truncate", response_model=TruncateChatResponse)
 async def truncate_chat(
-    initiative_id: UUID,
+    initiative_id: str,
     data: TruncateChatRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Delete a message and all messages after it (used by the Edit flow)."""
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
 
     # Fetch the target message to get its created_at timestamp
     from uuid import UUID as UUIDType
@@ -962,7 +962,7 @@ async def truncate_chat(
     msg_result = await db.execute(
         select(ChatMessage).where(
             ChatMessage.id == target_id,
-            ChatMessage.initiative_id == initiative_id,
+            ChatMessage.initiative_id == initiative.id,
         )
     )
     target_msg = msg_result.scalar_one_or_none()
@@ -972,7 +972,7 @@ async def truncate_chat(
     # Delete the target message and everything after it (by created_at)
     all_msgs_result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative_id)
+        .where(ChatMessage.initiative_id == initiative.id)
         .order_by(ChatMessage.created_at)
     )
     all_msgs = all_msgs_result.scalars().all()
@@ -985,7 +985,7 @@ async def truncate_chat(
     # Return remaining messages
     remaining_result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative_id)
+        .where(ChatMessage.initiative_id == initiative.id)
         .order_by(ChatMessage.created_at)
     )
     remaining = remaining_result.scalars().all()

@@ -107,7 +107,7 @@ async def list_tools(
 
 @router.get("/initiatives/{initiative_id}/recommended-tools", response_model=ModuleRecommendationsResponse)
 async def get_recommended_tools(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -148,7 +148,7 @@ async def get_recommended_tools(
 
 @router.post("/initiatives/{initiative_id}/select-tools")
 async def select_tools(
-    initiative_id: UUID,
+    initiative_id: str,
     data: SelectModulesRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -221,7 +221,7 @@ async def select_tools(
                         pending_tool_ids=pending_alignment_tools[1:],
                     )
                     message = ChatMessage(
-                        initiative_id=initiative_id,
+                        initiative_id=initiative.id,
                         role="assistant",
                         content=get_alignment_intro_message(tool.definition.name),
                         widget_type="alignment",
@@ -237,7 +237,7 @@ async def select_tools(
         if not pending_alignment_tools:
             widget_data = build_deliverables_overview_data(initiative)
             message = ChatMessage(
-                initiative_id=initiative_id,
+                initiative_id=initiative.id,
                 role="assistant",
                 content=get_deliverables_overview_message(tool_names),
                 widget_type="deliverables_overview",
@@ -263,7 +263,7 @@ async def select_tools(
             question = f"Great! I'll help you prepare the **{', '.join(tool_names)}**. Tell me more about your project."
         
         message = ChatMessage(
-            initiative_id=initiative_id,
+            initiative_id=initiative.id,
             role="assistant",
             content=question,
         )
@@ -279,7 +279,7 @@ async def select_tools(
 
 @router.get("/initiatives/{initiative_id}/tool-inputs", response_model=list[ModuleInputsResponse])
 async def get_tool_inputs(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -326,7 +326,7 @@ async def get_tool_inputs(
 
 @router.post("/initiatives/{initiative_id}/update-inputs")
 async def update_tool_inputs(
-    initiative_id: UUID,
+    initiative_id: str,
     inputs: dict,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -367,7 +367,7 @@ async def update_tool_inputs(
 
 @router.post("/initiatives/{initiative_id}/proceed-to-review")
 async def proceed_to_review(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):

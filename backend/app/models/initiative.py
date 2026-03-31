@@ -35,6 +35,9 @@ class Initiative(Base):
     project_description: Mapped[str | None] = mapped_column(Text)
     project_type: Mapped[str | None] = mapped_column(String(100))  # Classified type
     
+    # Human-readable URL slug (generated once at creation, immutable by default)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+
     # Legacy fields (kept for backward compatibility)
     title: Mapped[str | None] = mapped_column(String(255))
     icon: Mapped[str | None] = mapped_column(String(50))  # lucide-react icon name

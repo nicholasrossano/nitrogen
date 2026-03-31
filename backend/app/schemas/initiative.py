@@ -37,6 +37,7 @@ class InitiativeSummary(BaseModel):
 class InitiativeResponse(BaseModel):
     """Full initiative response"""
     id: UUID
+    slug: str = ""
     user_id: str
     title: Optional[str] = None
     icon: Optional[str] = None
