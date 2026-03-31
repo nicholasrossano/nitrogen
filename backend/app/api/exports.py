@@ -27,7 +27,7 @@ class ChecklistExportRequest(BaseModel):
 
 @router.post("/initiatives/{initiative_id}/export", response_model=ExportResponse)
 async def export_memo(
-    initiative_id: UUID,
+    initiative_id: str,
     data: ExportRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -46,13 +46,13 @@ async def export_memo(
             memo_result = await db.execute(
                 select(MemoVersion).where(
                     MemoVersion.id == data.memo_version_id,
-                    MemoVersion.initiative_id == initiative_id,
+                    MemoVersion.initiative_id == initiative.id,
                 )
             )
         else:
             memo_result = await db.execute(
                 select(MemoVersion)
-                .where(MemoVersion.initiative_id == initiative_id)
+                .where(MemoVersion.initiative_id == initiative.id)
                 .order_by(MemoVersion.created_at.desc())
                 .limit(1)
             )
@@ -165,7 +165,7 @@ async def download_export(
 
 @router.post("/initiatives/{initiative_id}/export-checklist")
 async def export_checklist(
-    initiative_id: UUID,
+    initiative_id: str,
     data: ChecklistExportRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -195,7 +195,7 @@ async def export_checklist(
 async def _handle_memo_export(content, safe_title, initiative, initiative_id, db, user):
     memo_res = await db.execute(
         select(MemoVersion)
-        .where(MemoVersion.initiative_id == initiative_id)
+        .where(MemoVersion.initiative_id == initiative.id)
         .order_by(MemoVersion.created_at.desc())
         .limit(1)
     )
@@ -294,7 +294,7 @@ async def _handle_template_export(content, safe_title, initiative, initiative_id
     mat_result = await db.execute(
         select(ProjectMaterial).where(
             ProjectMaterial.id == UUID(material_id),
-            ProjectMaterial.initiative_id == initiative_id,
+            ProjectMaterial.initiative_id == initiative.id,
         )
     )
     material = mat_result.scalar_one_or_none()
@@ -328,7 +328,7 @@ _EXPORT_HANDLERS: dict[str, Any] = {
 
 @router.get("/initiatives/{initiative_id}/deliverables/{tool_id}/export")
 async def export_deliverable(
-    initiative_id: UUID,
+    initiative_id: str,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -350,7 +350,7 @@ async def export_deliverable(
             memo_res = await db.execute(
                 select(MemoVersion).where(
                     MemoVersion.id == memo_uuid,
-                    MemoVersion.initiative_id == initiative_id,
+                    MemoVersion.initiative_id == initiative.id,
                 )
             )
             memo = memo_res.scalar_one_or_none()
@@ -375,7 +375,7 @@ async def export_deliverable(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Export not supported for output type: {output_type}",
         )
-    return await handler(content, safe_title, initiative, initiative_id, db, user)
+    return await handler(content, safe_title, initiative, initiative.id, db, user)
 
 
 async def _recover_model_inputs(

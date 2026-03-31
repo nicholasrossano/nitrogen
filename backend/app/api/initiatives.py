@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -6,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from uuid import UUID
 
 from app.config import get_settings
 from app.core.database import get_db
@@ -36,6 +36,31 @@ from app.services import module_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _slugify(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '-', text)
+    return text[:80].strip('-') or 'project'
+
+
+async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | None) -> str:
+    """Return a slug unique within the user's namespace."""
+    base = _slugify(title) if title else 'project'
+    result = await db.execute(
+        select(Initiative.slug).where(
+            Initiative.user_id == user_id,
+            Initiative.slug.like(f"{base}%"),
+        )
+    )
+    existing = set(result.scalars().all())
+    if base not in existing:
+        return base
+    counter = 2
+    while f"{base}-{counter}" in existing:
+        counter += 1
+    return f"{base}-{counter}"
 
 
 def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
@@ -114,9 +139,11 @@ async def create_initiative(
 ):
     """Create a new initiative and start the intake process"""
     await ensure_user_exists(db, user)
+    slug = await _generate_unique_slug(db, user.uid, data.title)
     initiative = Initiative(
         user_id=user.uid,
         title=data.title,
+        slug=slug,
     )
     db.add(initiative)
     await db.commit()
@@ -138,11 +165,11 @@ async def create_initiative(
 
 @router.get("/initiatives/{initiative_id}", response_model=InitiativeResponse)
 async def get_initiative(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Get an initiative by ID (owner, editor, or viewer)"""
+    """Get an initiative by ID or slug (owner, editor, or viewer)"""
     await ensure_user_exists(db, user)
     initiative, role = await get_initiative_with_role(db, initiative_id, user)
 
@@ -158,7 +185,7 @@ async def get_initiative(
 
 @router.post("/initiatives/{initiative_id}/confirm", response_model=InitiativeConfirmResponse)
 async def confirm_initiative(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -248,7 +275,7 @@ async def list_initiatives(
 
 @router.patch("/initiatives/{initiative_id}", response_model=InitiativeResponse)
 async def update_initiative(
-    initiative_id: UUID,
+    initiative_id: str,
     data: InitiativeUpdate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -281,7 +308,7 @@ async def update_initiative(
 
 @router.delete("/initiatives/{initiative_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def archive_initiative(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -294,7 +321,7 @@ async def archive_initiative(
 
 @router.post("/initiatives/{initiative_id}/restore", response_model=InitiativeResponse)
 async def restore_initiative(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -321,15 +348,15 @@ async def restore_initiative(
     response_model=list[ModuleInstanceResponse],
 )
 async def list_module_instances(
-    initiative_id: UUID,
+    initiative_id: str,
     archived: bool = False,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List module instances for a project. Pass ?archived=true for the trash view."""
     await ensure_user_exists(db, user)
-    await get_initiative_with_role(db, initiative_id, user)
-    instances = await module_service.list_instances(db, initiative_id, archived=archived)
+    initiative, _role = await get_initiative_with_role(db, initiative_id, user)
+    instances = await module_service.list_instances(db, initiative.id, archived=archived)
 
     # Resolve user emails in a single query
     uids = list({i.started_by for i in instances})
@@ -351,16 +378,16 @@ async def list_module_instances(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def archive_module_instance(
-    initiative_id: UUID,
-    instance_id: UUID,
+    initiative_id: str,
+    instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Soft-delete (trash) a module instance — editor or owner."""
     await ensure_user_exists(db, user)
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
     inst = await db.get(ModuleInstance, instance_id)
-    if inst is None or inst.initiative_id != initiative_id:
+    if inst is None or inst.initiative_id != initiative.id:
         raise HTTPException(status_code=404, detail="Module instance not found")
     inst.archived = True
     await db.commit()
@@ -372,16 +399,16 @@ async def archive_module_instance(
     response_model=ModuleInstanceResponse,
 )
 async def restore_module_instance(
-    initiative_id: UUID,
-    instance_id: UUID,
+    initiative_id: str,
+    instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Restore a trashed module instance."""
     await ensure_user_exists(db, user)
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
     inst = await db.get(ModuleInstance, instance_id)
-    if inst is None or inst.initiative_id != initiative_id:
+    if inst is None or inst.initiative_id != initiative.id:
         raise HTTPException(status_code=404, detail="Module instance not found")
     inst.archived = False
     await db.commit()
@@ -394,16 +421,16 @@ async def restore_module_instance(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def permanently_delete_module_instance(
-    initiative_id: UUID,
-    instance_id: UUID,
+    initiative_id: str,
+    instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Permanently delete a module instance. Irreversible."""
     await ensure_user_exists(db, user)
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
     inst = await db.get(ModuleInstance, instance_id)
-    if inst is None or inst.initiative_id != initiative_id:
+    if inst is None or inst.initiative_id != initiative.id:
         raise HTTPException(status_code=404, detail="Module instance not found")
     await db.delete(inst)
     await db.commit()
@@ -420,16 +447,16 @@ class CreateModuleInstanceBody(BaseModel):
     status_code=status.HTTP_201_CREATED,
 )
 async def create_module_instance(
-    initiative_id: UUID,
+    initiative_id: str,
     body: CreateModuleInstanceBody,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Create a fresh module instance directly (no chat session required)."""
     await ensure_user_exists(db, user)
-    await require_editor(db, initiative_id, user)
+    initiative = await require_editor(db, initiative_id, user)
     inst = await module_service.get_or_create_instance(
-        db, initiative_id, body.module_id, user.uid
+        db, initiative.id, body.module_id, user.uid
         # no session_id → always creates a fresh instance
     )
     await db.commit()
@@ -439,7 +466,7 @@ async def create_module_instance(
 
 @router.delete("/initiatives/{initiative_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
 async def permanently_delete_initiative(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -450,7 +477,7 @@ async def permanently_delete_initiative(
     memo_result = await db.execute(
         select(MemoVersion.export_path)
         .where(
-            MemoVersion.initiative_id == initiative_id,
+            MemoVersion.initiative_id == initiative.id,
             MemoVersion.export_path.isnot(None),
         )
     )
@@ -462,7 +489,7 @@ async def permanently_delete_initiative(
     # Clean up storage blobs (best-effort, don't fail the request)
     settings = get_settings()
     try:
-        uploads_dir = Path(settings.uploads_dir) / str(initiative_id)
+        uploads_dir = Path(settings.uploads_dir) / str(initiative.id)
         if uploads_dir.exists():
             shutil.rmtree(uploads_dir, ignore_errors=True)
     except Exception:

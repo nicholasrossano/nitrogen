@@ -27,7 +27,7 @@ router = APIRouter()
 @limiter.limit("10/minute")
 async def upload_evidence(
     request: Request,
-    initiative_id: UUID,
+    initiative_id: str,
     file: Optional[UploadFile] = File(None),
     text_content: Optional[str] = Form(None),
     text_title: Optional[str] = Form(None),
@@ -75,7 +75,7 @@ async def upload_evidence(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File content does not match declared type",
             )
-        storage_path = await storage.save(content, file.filename, folder=str(initiative_id))
+        storage_path = await storage.save(content, file.filename, folder=str(initiative.id))
         
         # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
         if file_type == "pdf":
@@ -104,7 +104,7 @@ async def upload_evidence(
         chunk_tuples = [(c, None, None) for c in parser.chunk_text(text)]
     
     # Deduplicate filename within this initiative
-    filename = await deduplicate_filename(db, initiative_id, filename or "Untitled")
+    filename = await deduplicate_filename(db, initiative.id, filename or "Untitled")
 
     # Create evidence doc
     evidence_doc = EvidenceDoc(
@@ -159,7 +159,7 @@ async def upload_evidence(
 @router.post("/initiatives/{initiative_id}/evidence/text", response_model=EvidenceUploadResponse)
 async def paste_evidence_text(
     request: Request,
-    initiative_id: UUID,
+    initiative_id: str,
     data: EvidenceTextInput,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -179,13 +179,13 @@ async def paste_evidence_text(
 
 @router.get("/initiatives/{initiative_id}/evidence", response_model=list[EvidenceDocResponse])
 async def list_evidence(
-    initiative_id: UUID,
+    initiative_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List evidence documents for an initiative"""
-    await require_viewer(db, initiative_id, user)
-    
+    initiative = await require_viewer(db, initiative_id, user)
+
     # Get evidence docs with chunk counts in a single query
     stmt = (
         select(
@@ -193,7 +193,7 @@ async def list_evidence(
             func.count(EvidenceChunk.id).label("chunk_count"),
         )
         .outerjoin(EvidenceChunk, EvidenceChunk.evidence_doc_id == EvidenceDoc.id)
-        .where(EvidenceDoc.initiative_id == initiative_id)
+        .where(EvidenceDoc.initiative_id == initiative.id)
         .group_by(EvidenceDoc.id)
     )
     rows = (await db.execute(stmt)).all()

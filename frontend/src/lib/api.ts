@@ -22,6 +22,7 @@ async function getAuthToken(): Promise<string | null> {
 
 export interface Initiative {
   id: string;
+  slug: string;
   user_id: string;
   title: string | null;
   icon: string | null;
