@@ -427,13 +427,8 @@ class OrchestrationService:
                 sources_used=[],
             )
 
-        context_results = await self.retrieval.retrieve_for_context(initiative)
-        context_str = self.retrieval.format_context_for_prompt(context_results)
-
-        sources_used = []
-        for result in context_results.values():
-            sources_used.extend(result.facts)
-
+        # Compute message counters before any I/O so fast paths can short-circuit
+        # without paying the cost of retrieval or an LLM call.
         has_document_request = any(
             m.widget_type == "document_request" for m in messages if m.role == "assistant"
         )
@@ -443,19 +438,24 @@ class OrchestrationService:
         )
         user_message_count = sum(1 for m in messages if m.role == "user")
 
-        # Fast path: first user message always triggers ask_for_documents — skip the LLM entirely.
+        # Fast path: first user message always triggers ask_for_documents.
+        # Skip retrieval AND the LLM entirely — return a scripted response immediately.
         if not has_document_request and user_message_count == 1:
-            geo = initiative.geography
-            project_type = initiative.project_type or "project"
-            if geo:
-                msg = f"Thanks! Please upload any relevant documents for your {project_type} in {geo}, such as feasibility studies, site assessments, or permit applications."
-            else:
-                msg = f"Thanks! Please upload any relevant documents for your {project_type}, such as feasibility studies, site assessments, or permit applications."
             return OrchestrationResult(
                 action="ask_for_documents",
-                parameters={"message": msg, "suggested_types": []},
+                parameters={
+                    "message": "Please upload any relevant project materials, such as feasibility studies, site assessments, or permit applications.",
+                    "suggested_types": [],
+                },
                 sources_used=[],
             )
+
+        context_results = await self.retrieval.retrieve_for_context(initiative)
+        context_str = self.retrieval.format_context_for_prompt(context_results)
+
+        sources_used = []
+        for result in context_results.values():
+            sources_used.extend(result.facts)
 
         model_inputs_context = self._format_model_inputs_from_messages(messages)
 

@@ -102,13 +102,27 @@ async def send_chat_message_stream(
             # Use orchestration service
             orchestration = OrchestrationService(db, user_id=user.uid)
 
-            # Extract inputs from the user's message first (skip synthetic UI messages)
+            # Detect first user message (only the one we just saved exists)
+            user_message_count = sum(1 for m in messages if m.role == "user")
+            is_first_user_message = user_message_count == 1
+
+            extraction_task = None
             if data.content not in _SKIP_EXTRACTION_MESSAGES:
-                extracted = await orchestration.extract_inputs_from_message(
-                    message=data.content,
-                    initiative=initiative,
-                )
-                await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+                if is_first_user_message:
+                    # For the first message, kick off extraction concurrently so the
+                    # scripted response can stream immediately without waiting ~3s for LLM.
+                    extraction_task = asyncio.create_task(
+                        orchestration.extract_inputs_from_message(
+                            message=data.content,
+                            initiative=initiative,
+                        )
+                    )
+                else:
+                    extracted = await orchestration.extract_inputs_from_message(
+                        message=data.content,
+                        initiative=initiative,
+                    )
+                    await update_initiative_from_inputs(db, initiative, extracted, orchestration)
 
             tool_hint = data.tool_hint or None
             action_result = await orchestration.get_next_action(
@@ -221,9 +235,22 @@ async def send_chat_message_stream(
                 "stage_status": build_stage_status(initiative).__dict__,
             }
             yield f"data: {json.dumps(final_data)}\n\n"
-            
+
+            # For first-message fast-path: await the background extraction task now
+            # (after the client has already received the complete event).
+            if extraction_task is not None:
+                try:
+                    extracted = await asyncio.wait_for(extraction_task, timeout=20.0)
+                    await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+                except asyncio.TimeoutError:
+                    logger.warning("First-message input extraction timed out")
+                except Exception as exc:
+                    logger.warning(f"First-message input extraction failed: {exc}")
+
         except Exception as e:
             logger.error(f"Stream error: {e}", exc_info=True)
+            if extraction_task is not None and not extraction_task.done():
+                extraction_task.cancel()
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(
