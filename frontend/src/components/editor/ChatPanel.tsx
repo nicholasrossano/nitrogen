@@ -250,9 +250,18 @@ export function ChatPanel({
           <div className={fullWidth ? 'max-w-[52rem] mx-auto' : 'px-4'}>
           <div className={fullWidth ? 'w-[90%] mx-auto space-y-8' : 'space-y-8'}>
             {safeMessages.length === 0 ? (
-              <div className="text-center text-text-tertiary py-8">
-                No messages yet. Start a conversation!
-              </div>
+              isOnboardingTab ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 gap-3 text-center">
+                  <p className="text-sm font-medium text-text-secondary">Describe your project</p>
+                  <p className="text-xs text-text-tertiary max-w-xs leading-relaxed">
+                    Tell us what you&apos;re working on. You can upload supporting files and we&apos;ll help you build a project plan.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center text-text-tertiary py-8 text-sm">
+                  Start a conversation
+                </div>
+              )
             ) : (
               safeMessages.map((message, index) => {
                 const hasOutputWidget =

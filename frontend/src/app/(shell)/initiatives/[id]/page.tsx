@@ -213,6 +213,10 @@ function InitiativePageContent() {
 
   useEffect(() => {
     if (initiativeId) {
+      // Sync prevPlanRef BEFORE reset() so the [projectPlan] effect below won't mistake
+      // the stale plan from a previous initiative for a newly-generated plan and
+      // prematurely open the plan panel for a brand-new project.
+      prevPlanRef.current = !!useInitiativeStore.getState().projectPlan;
       reset();
       setRightPanel('closed');
       setPageReady(false);
