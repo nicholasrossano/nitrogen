@@ -20,8 +20,6 @@ interface DeepDivePanelProps {
   onOpenFullDoc?: (citation: ResearchPanelCitation) => void;
 }
 
-type Classification = 'required' | 'optional' | 'unknown';
-
 function InlineBold({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
@@ -36,38 +34,6 @@ function InlineBold({ text }: { text: string }) {
         ),
       )}
     </>
-  );
-}
-
-const CLS_BADGE: Record<Classification, { badge: string; label: string }> = {
-  required: { badge: 'bg-accent/10 text-accent', label: 'REQ' },
-  optional: { badge: 'bg-surface-subtle text-text-tertiary', label: 'OPT' },
-  unknown: { badge: 'bg-indicator-orange/10 text-indicator-orange', label: 'UNK' },
-};
-
-
-function ClassificationBadge({ cls }: { cls: string }) {
-  const safe = (cls as Classification) in CLS_BADGE ? (cls as Classification) : 'unknown';
-  const { badge, label } = CLS_BADGE[safe];
-  return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold uppercase tracking-wide leading-none flex-shrink-0 ${badge}`}>
-      {label}
-    </span>
-  );
-}
-
-function ItemTypeBadge({ itemType }: { itemType?: string }) {
-  const isAssessment = itemType === 'assessment';
-  const Icon = isAssessment ? Calculator : FileCheck2;
-  const label = isAssessment ? 'Assessment' : 'Deliverable';
-  const style = isAssessment
-    ? 'bg-indicator-green/10 text-indicator-green'
-    : 'bg-accent-secondary-wash text-accent-secondary';
-  return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-semibold tracking-wide leading-none flex-shrink-0 inline-flex items-center gap-1 ${style}`}>
-      <Icon className="w-3 h-3" />
-      {label}
-    </span>
   );
 }
 
@@ -112,11 +78,8 @@ export function DeepDivePanel({
     >
         {/* Header */}
         <div className="flex items-start gap-3 px-5 py-4 border-b border-stroke-subtle flex-shrink-0">
-          <div className="flex flex-col items-center gap-1 flex-shrink-0">
-            <div className="w-full aspect-square min-w-0 bg-accent/10 rounded flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-accent" />
-            </div>
-            <ClassificationBadge cls={item.classification} />
+          <div className="w-9 h-9 flex-shrink-0 bg-accent/10 rounded flex items-center justify-center">
+            <Zap className="w-3.5 h-3.5 text-accent" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
