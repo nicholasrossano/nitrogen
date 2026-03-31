@@ -1,6 +1,5 @@
 """API endpoints for module catalog."""
 
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel

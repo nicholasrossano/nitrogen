@@ -1,7 +1,7 @@
 """API endpoints for the 3-pillar Project Plan."""
 
 import logging
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
