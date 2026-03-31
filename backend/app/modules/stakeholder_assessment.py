@@ -108,6 +108,12 @@ class StakeholderAssessmentModule(BaseAssessmentModule):
                 "Based on the project context provided, suggest sensible default values for the setup fields. "
                 "Return a JSON object with keys: geography, sector. "
                 "Use the project information to infer the best defaults. "
+                "For geography, use this location specificity order: "
+                "1) If a project country is present in the provided project materials, default to that country as the base. "
+                "2) If subnational detail is also available (state/province/county/district/city/site), include it with the country "
+                "for higher granularity (for example: 'Northern Region, Ghana'). "
+                "3) If no country is available, fall back to the narrowest credible broader region. "
+                "Do not return a broad region when a country is available. "
                 "If a field cannot be inferred, return an empty string."
             ),
             user_msg=f"Project context:\n{json.dumps(context, indent=2)}",

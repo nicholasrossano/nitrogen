@@ -82,8 +82,6 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
   });
   const visibleItems = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
   const hiddenCount = items.length - DEFAULT_VISIBLE;
-  const deliverableCount = items.filter(i => (i.item_type ?? 'deliverable') === 'deliverable').length;
-  const assessmentCount = items.filter(i => i.item_type === 'assessment').length;
 
   const handleStartAdding = () => {
     setIsAdding(true);
@@ -138,10 +136,6 @@ export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteI
           <h3 className="text-sm font-semibold text-text-primary leading-tight truncate">
             {pillar.name}
           </h3>
-          <p className="text-[11px] text-text-tertiary mt-0.5 truncate">
-            {deliverableCount} deliverable{deliverableCount !== 1 ? 's' : ''}
-            {assessmentCount > 0 && <> &middot; {assessmentCount} assessment{assessmentCount !== 1 ? 's' : ''}</>}
-          </p>
         </div>
         {itemsExpanded
           ? <ChevronDown className="w-4 h-4 text-text-tertiary flex-shrink-0" />
