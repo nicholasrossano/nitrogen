@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { X, ExternalLink, AlertCircle, Zap, HelpCircle, FileCheck2, Calculator, PenLine } from 'lucide-react';
+import { X, ExternalLink, AlertCircle, Zap, HelpCircle, PenLine } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/api';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -123,7 +123,6 @@ export function DeepDivePanel({
               <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-wide">
                 {pillarLabel}
               </span>
-              <ItemTypeBadge itemType={item.item_type} />
             </div>
             <h2 className="text-sm font-semibold text-text-primary leading-snug mt-0.5">
               {item.title}
