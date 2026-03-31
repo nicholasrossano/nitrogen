@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 from typing import Callable, Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
