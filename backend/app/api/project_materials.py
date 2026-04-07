@@ -325,7 +325,7 @@ async def list_project_files(
     )
     if not has_memo_in_deliverables and latest_memo:
         from app.modules.registry import get_module_registry
-        memo_tool = get_module_registry().get_tool("memo")
+        memo_tool = get_module_registry().get_module("memo")
         memo_title = (latest_memo.content or {}).get("title", "memo")
         exported = bool(latest_memo.export_path)
         download_url = f"/api/v1/exports/{latest_memo.id}" if exported else None

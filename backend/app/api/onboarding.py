@@ -941,7 +941,7 @@ async def update_message_widget(
     _tool_id_for_widget = _WIDGET_TO_TOOL.get(msg.widget_type or "")
     if _tool_id_for_widget:
         from app.modules.registry import get_module_registry
-        _tool = get_module_registry().get_tool(_tool_id_for_widget)
+        _tool = get_module_registry().get_module(_tool_id_for_widget)
         content = data.widget_data
         if _tool and _tool.is_exportable(content):
             result = content.get("result") or {}
