@@ -16,6 +16,10 @@
   - Add minimal tests only when changing core logic, and keep them simple.
   - Otherwise provide a concrete manual verification checklist.
 - Always include: "How to verify" steps.
+- For adapter/resource/capability registries, prefer scalable contract tests: baseline `issubset` + shape checks, not exact full-set equality.
+- When adding/removing a baseline adapter/resource contract, update the corresponding registry contract tests in the same change.
+- For phased architecture migrations, add tests in-phase: contract tests immediately, targeted parity/regression tests at each wiring step (do not wait until the final phase).
+- For new test suites added during migration phases, include them in the default backend CI pytest path (or document why they are intentionally excluded).
 
 **Disabled button hover states:**
 - Whenever a button has both `hover:X` effects and `disabled:opacity-*`, replace `hover:X` with `enabled:hover:X` so hover animations are suppressed when disabled while the `disabled:cursor-not-allowed` cursor still shows. For `btn-primary/secondary/danger` classes in `globals.css`, add `:disabled:hover::before { opacity: 0 }` CSS overrides to suppress the pseudo-element fill animation.
