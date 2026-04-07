@@ -13,6 +13,9 @@ def register_all(registry: CapabilityRegistry) -> None:
     _register_standalone_tools(registry)
     _register_modules(registry)
     _register_prompts(registry)
+    _register_adapters(registry)
+    _register_resources(registry)
+    _register_canonical_aliases(registry)
 
 
 # ---------------------------------------------------------------------------
@@ -651,3 +654,76 @@ def _register_prompts(registry: CapabilityRegistry) -> None:
             ))
     except Exception:
         pass
+
+
+def _register_adapters(registry: CapabilityRegistry) -> None:
+    """Register adapter definitions from AdapterRegistry."""
+    try:
+        from app.adapters import get_adapter_registry
+
+        adapter_registry = get_adapter_registry()
+        for adapter in adapter_registry.list_all():
+            defn = adapter.definition
+            registry.register(
+                CapabilityEntry(
+                    id=f"adapter:{defn.adapter_id}",
+                    kind=CapabilityKind.ADAPTER,
+                    name=defn.name,
+                    description=defn.description,
+                    input_schema=defn.input_schema,
+                    output_schema=defn.output_schema,
+                    surfaces=["both"],
+                    visibility=defn.visibility,
+                )
+            )
+    except Exception:
+        pass
+
+
+def _register_resources(registry: CapabilityRegistry) -> None:
+    """Register resource definitions from ResourceRegistry."""
+    try:
+        from app.resources import get_resource_registry
+
+        resource_registry = get_resource_registry()
+        for definition in resource_registry.list_definitions():
+            registry.register(
+                CapabilityEntry(
+                    id=definition.uri_pattern,
+                    kind=CapabilityKind.RESOURCE,
+                    name=definition.name,
+                    description=definition.description,
+                    input_schema={"type": "object", "properties": {"uri": {"type": "string"}}},
+                    output_schema={"type": "object"},
+                    surfaces=["both"],
+                    visibility="internal" if definition.initiative_scoped else "public",
+                )
+            )
+    except Exception:
+        pass
+
+
+def _register_canonical_aliases(registry: CapabilityRegistry) -> None:
+    """Register non-callable canonical IDs for normalized capability lookup.
+
+    These aliases intentionally have no openai_tool_def so current runtime tool
+    selection/function-calling behavior remains unchanged.
+    """
+    registry.register(CapabilityEntry(
+        id="run_lcoe",
+        kind=CapabilityKind.INTERNAL_TOOL,
+        name="Run LCOE",
+        description="Canonical alias for LCOE tool capabilities across surfaces.",
+        surfaces=["both"],
+        visibility="internal",
+        openai_tool_def=None,
+    ))
+    registry.register(CapabilityEntry(
+        id="run_carbon",
+        kind=CapabilityKind.INTERNAL_TOOL,
+        name="Run Carbon",
+        description="Canonical alias for Carbon tool capabilities across surfaces.",
+        surfaces=["both"],
+        visibility="internal",
+        openai_tool_def=None,
+    ))

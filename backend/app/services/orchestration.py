@@ -12,6 +12,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.execution_context import ExecutionContext
 from app.services.tiered_retrieval import RetrievedFact
 
 logger = logging.getLogger(__name__)
@@ -138,10 +139,10 @@ class OrchestrationResult:
 class OrchestrationService:
     """Thin shim — delegates to ChatService(mode=PROJECT)."""
 
-    def __init__(self, db: AsyncSession, user_id: str | None = None):
+    def __init__(self, db: AsyncSession, ctx: ExecutionContext):
         from app.services.chat import ChatMode, ChatService
 
-        self._chat = ChatService(db, user_id=user_id, mode=ChatMode.PROJECT)
+        self._chat = ChatService(db, mode=ChatMode.PROJECT, ctx=ctx)
 
     async def get_next_action(self, messages, initiative, tool_hint=None) -> OrchestrationResult:
         return await self._chat.get_next_action(messages, initiative, tool_hint)
