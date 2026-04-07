@@ -34,6 +34,10 @@
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
 
+**Architecture migration posture:**
+- For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
+- If a temporary shim is unavoidable, mark it clearly with owner + removal trigger in the same PR; do not leave indefinite legacy paths.
+
 **Learning & iteration:**
 - When I receive feedback or correction from you, interpret whether it reflects a reusable pattern or preference.
 - If it seems fundamental enough (not just a one-off fix), add it to AGENTS.md automatically.
