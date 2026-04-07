@@ -31,12 +31,16 @@ interface ProjectStandaloneChatViewProps {
   showLanding?: boolean;
   /** When true, hides the module tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
+  initialSessionId?: string | null;
+  initialTitle?: string | null;
   onMessageSent?: () => void;
   onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   /** Called when user clicks an internal citation */
   onCitationClick?: (citation: SourceCitation) => void;
+  /** Called when the active thread/session metadata changes */
+  onSessionMetaChange?: (meta: { sessionId: string | null; title: string | null }) => void;
   /** Callback for EditorSidePanel to thread through to AlignmentWidget */
   onAlignmentConfirmedRef?: React.MutableRefObject<((msgs: AlignmentNewMessage[]) => void) | null>;
   /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
@@ -66,10 +70,13 @@ export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
   hideTiles = false,
+  initialSessionId = null,
+  initialTitle = null,
   onMessageSent,
   onBack,
   onEditorWidgetsChange,
   onCitationClick,
+  onSessionMetaChange,
   onAlignmentConfirmedRef,
   onSendRef,
 }: ProjectStandaloneChatViewProps) {
@@ -112,6 +119,12 @@ export function ProjectStandaloneChatView({
     }
   }, [onAlignmentConfirmedRef, handleAlignmentConfirmed]);
 
+  useEffect(() => {
+    if (initialTitle && !sessionTitle) {
+      setSessionTitle(initialTitle);
+    }
+  }, [initialTitle, sessionTitle]);
+
   // Load session list from DB on mount — scoped to this project
   useEffect(() => {
     api.getChatSessions(initiativeId)
@@ -127,6 +140,41 @@ export function ProjectStandaloneChatView({
       })
       .catch((err) => console.warn('Failed to load chat sessions:', err));
   }, [initiativeId]);
+
+  useEffect(() => {
+    if (!initialSessionId) return;
+    if (currentSessionId === initialSessionId || localMessages.length > 0) return;
+
+    let cancelled = false;
+    api.getChatSessionMessages(initialSessionId)
+      .then(({ messages, title }) => {
+        if (cancelled) return;
+        setLocalMessages(messages);
+        setSessionTitle(title || initialTitle || 'Untitled');
+        setCurrentSessionId(initialSessionId);
+        setFeedbackMap(
+          Object.fromEntries(
+            messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
+          ) as Record<string, 'like' | 'dislike' | null>,
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Failed to load initial session messages:', err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSessionId, initialTitle, currentSessionId, localMessages.length]);
+
+  useEffect(() => {
+    onSessionMetaChange?.({
+      sessionId: currentSessionId,
+      title: sessionTitle,
+    });
+  }, [currentSessionId, sessionTitle, onSessionMetaChange]);
 
   // When showLanding transitions to true, clear current conversation
   // (it's already persisted to DB by the streaming endpoint)
