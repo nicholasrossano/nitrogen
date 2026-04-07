@@ -585,7 +585,7 @@ async def chat_stream(
                 _tool_id = _WIDGET_TO_TOOL.get(result.widget_type or "")
                 if _tool_id:
                     from app.modules.registry import get_module_registry
-                    _tool = get_module_registry().get_tool(_tool_id)
+                    _tool = get_module_registry().get_module(_tool_id)
                     _content = result.widget_data or {}
                     if _tool and _tool.is_exportable(_content):
                         _res = _content.get("result") or {}
@@ -727,7 +727,7 @@ async def update_message_widget(
             _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
             if _tool_id:
                 from app.modules.registry import get_module_registry
-                _tool = get_module_registry().get_tool(_tool_id)
+                _tool = get_module_registry().get_module(_tool_id)
                 _content = data.widget_data or {}
                 if _tool and _tool.is_exportable(_content):
                     _res = _content.get("result") or {}
