@@ -1,13 +1,36 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen, ArrowLeft, Users } from 'lucide-react';
+import {
+  Pencil,
+  Check,
+  X,
+  PanelLeft,
+  PanelRight,
+  SquarePen,
+  ArrowLeft,
+  Users,
+  MessageSquare,
+  LayoutPanelLeft,
+  Plus,
+} from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
+
+type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'editor';
+
 interface PanelToggle {
   active: boolean;
   disabled?: boolean;
   onClick: () => void;
+  title?: string;
+  icon?: HeaderIcon;
+}
+
+interface HeaderPrimaryAction {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
   title?: string;
 }
 
@@ -18,6 +41,8 @@ interface ProjectHeaderProps {
   leftToggle?: PanelToggle;
   /** PanelRight button — shown on the right side when provided */
   rightToggle?: PanelToggle;
+  /** Header CTA styled like the New Project button */
+  primaryAction?: HeaderPrimaryAction;
   /** SquarePen "new chat" button */
   onNewChat?: () => void;
   /** Override the tooltip for the onNewChat button (default: "New chat") */
@@ -33,6 +58,7 @@ export function ProjectHeader({
   onTitleUpdate,
   leftToggle,
   rightToggle,
+  primaryAction,
   onNewChat,
   newChatTitle = 'New chat',
   onBack,
@@ -86,7 +112,23 @@ export function ProjectHeader({
     else if (e.key === 'Escape') handleCancel();
   };
 
-  const hasRightControls = onNewChat || leftToggle || rightToggle || canShare || initiative.shared_role;
+  const renderPanelIcon = (icon: HeaderIcon | undefined, fallback: 'left' | 'right') => {
+    switch (icon) {
+      case 'chat':
+        return <MessageSquare className="w-4 h-4" />;
+      case 'editor':
+        return <LayoutPanelLeft className="w-4 h-4" />;
+      case 'panel-right':
+        return <PanelRight className="w-4 h-4" />;
+      case 'panel-left':
+      default:
+        return fallback === 'left'
+          ? <PanelLeft className="w-4 h-4" />
+          : <PanelRight className="w-4 h-4" />;
+    }
+  };
+
+  const hasRightControls = primaryAction || onNewChat || leftToggle || rightToggle || canShare || initiative.shared_role;
 
   return (
     <header className="flex-shrink-0">
@@ -158,6 +200,17 @@ export function ProjectHeader({
         {/* Right controls: share + panel toggles + new chat */}
         {hasRightControls && (
           <div className="ml-auto flex items-center gap-1">
+            {primaryAction && !readOnly && (
+              <button
+                onClick={primaryAction.onClick}
+                disabled={primaryAction.disabled}
+                title={primaryAction.title}
+                className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
+              >
+                <Plus className="w-3 h-3" />
+                {primaryAction.label}
+              </button>
+            )}
             {canShare && (
               <button
                 onClick={() => setShowShareModal(true)}
@@ -174,7 +227,7 @@ export function ProjectHeader({
                 title={leftToggle.title}
                 className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelLeft className="w-4 h-4" />
+                {renderPanelIcon(leftToggle.icon, 'left')}
               </button>
             )}
             {rightToggle && (
@@ -184,7 +237,7 @@ export function ProjectHeader({
                 title={rightToggle.title}
                 className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelRight className="w-4 h-4" />
+                {renderPanelIcon(rightToggle.icon, 'right')}
               </button>
             )}
             {onNewChat && (
