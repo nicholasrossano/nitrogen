@@ -281,24 +281,42 @@ class BaseAssessmentModule(BaseModule):
         Returns (context_str_for_prompt, numbered_citations_list).
         Citations are deduplicated by source title.
         """
-        from app.services.tiered_retrieval import TieredRetrievalService
+        from app.adapters import get_adapter_registry
+        from app.core.execution_context import ExecutionContext
 
-        retrieval = TieredRetrievalService(db)
+        retrieval_adapter = get_adapter_registry().get("retrieval")
+        if retrieval_adapter is None:
+            raise RuntimeError("retrieval adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=initiative_id,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id=f"assessment-retrieval:{initiative_id}",
+        )
         all_facts: list = []
         seen_titles: set[str] = set()
 
         for query in queries:
             try:
-                result = await retrieval.retrieve(
-                    query=query,
-                    initiative_id=initiative_id,
-                    include_openalex=True,
-                    include_web_search=True,
-                    include_llm_fallback=False,
+                adapter_result = await retrieval_adapter.execute(
+                    ctx,
+                    db,
+                    {
+                        "query": query,
+                        "initiative_id": str(initiative_id),
+                        "include_openalex": True,
+                        "include_web_search": True,
+                        "include_llm_fallback": False,
+                        "require_citation": False,
+                    },
                 )
-                for fact in result.facts:
-                    if fact.source_title not in seen_titles:
-                        seen_titles.add(fact.source_title)
+                for fact in adapter_result.output.get("facts", []):
+                    source_title = fact.get("source_title", "")
+                    if source_title and source_title not in seen_titles:
+                        seen_titles.add(source_title)
                         all_facts.append(fact)
             except Exception as exc:
                 logger.warning(f"Retrieval failed for query '{query[:60]}': {exc}")
@@ -310,16 +328,16 @@ class BaseAssessmentModule(BaseModule):
         for i, fact in enumerate(all_facts, start=1):
             citations.append({
                 "number": i,
-                "source_type": fact.source_type.value,
-                "source_title": fact.source_title,
-                "source_url": fact.source_url or "",
-                "publisher": fact.publisher or "",
-                "excerpt": fact.content[:300],
+                "source_type": fact.get("source_type", ""),
+                "source_title": fact.get("source_title", ""),
+                "source_url": fact.get("source_url", "") or "",
+                "publisher": fact.get("publisher", "") or "",
+                "excerpt": (fact.get("content", "") or "")[:300],
             })
             context_lines.append(
-                f"[{i}] {fact.source_title}"
-                + (f" ({fact.publisher})" if fact.publisher else "")
-                + f": {fact.content[:400]}"
+                f"[{i}] {fact.get('source_title', '')}"
+                + (f" ({fact.get('publisher', '')})" if fact.get("publisher") else "")
+                + f": {(fact.get('content', '') or '')[:400]}"
             )
 
         context_str = "\n".join(context_lines) if context_lines else ""

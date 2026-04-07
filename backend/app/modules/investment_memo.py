@@ -9,7 +9,9 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
@@ -17,6 +19,7 @@ from app.modules.base import (
     RefinementModel,
     ReviewStrategy,
     ModuleDefinition,
+    ModuleManifest,
     ModuleInput,
     ModuleOutput,
     ModuleAlignment,
@@ -124,6 +127,23 @@ class InvestmentMemoTool(BaseModule):
             category="documentation",
             keywords=["investment", "memo", "recommendation", "funding", "grant", "decision"],
             export_format="docx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="funding_package",
+            goal="Produce an investment memo with recommendation and evidence-backed rationale.",
+            primary_ui_object="memo_viewer",
+            export_artifact_types=["docx"],
+            adapter_bindings={"core_engine": "memo_generation", "research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["investment_memo", "memo_citations"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="rag_grounded",
         )
     
     @property
@@ -524,6 +544,65 @@ Return the updated outline.
             inputs.setdefault("target_beneficiaries", initiative.target_population or "Target communities")
             inputs.setdefault("project_goal", initiative.goal or initiative.project_description or "Project objectives")
         
+        # Fast path: when no explicit alignment is provided, run memo generation through
+        # the registered adapter boundary.
+        if alignment is None:
+            adapter_registry = get_adapter_registry()
+            memo_adapter = adapter_registry.get("memo_generation")
+            retrieval_adapter = adapter_registry.get("retrieval")
+            if memo_adapter is None or retrieval_adapter is None:
+                raise RuntimeError("memo_generation/retrieval adapters must be registered.")
+
+            ctx = ExecutionContext(
+                user_id=self.user_id or "system",
+                user_email=None,
+                initiative_id=initiative_id,
+                initiative_role=None,
+                ai_access_granted=True,
+                is_byok=False,
+                request_id=f"memo:{initiative_id}",
+            )
+            adapter_result = await memo_adapter.execute(
+                ctx,
+                db,
+                {"initiative_id": str(initiative_id), "include_corpus": include_corpus},
+            )
+            memo_payload = adapter_result.output.get("memo") or {}
+            citations_payload = adapter_result.output.get("citations") or []
+            memo_title = memo_payload.get("title") or f"Investment Memo: {inputs.get('project_title', 'Untitled Project')}"
+            memo_content = dict(memo_payload)
+            memo_content.setdefault("title", memo_title)
+
+            memo_version = MemoVersion(
+                initiative_id=initiative_id,
+                content=memo_content,
+            )
+            db.add(memo_version)
+            await db.commit()
+            await db.refresh(memo_version)
+
+            for c in citations_payload:
+                chunk_id_raw = c.get("chunk_id")
+                chunk_uuid = UUID(chunk_id_raw) if chunk_id_raw else None
+                citation_obj = Citation(
+                    memo_version_id=memo_version.id,
+                    section_name=c.get("section_name") or "all",
+                    citation_number=int(c.get("citation_number") or 0),
+                    chunk_id=chunk_uuid,
+                    source_type=c.get("source_type") or "unknown",
+                    excerpt=c.get("excerpt") or "",
+                )
+                db.add(citation_obj)
+            await db.commit()
+
+            return ModuleOutput(
+                module_id=self.definition.id,
+                output_type="memo",
+                title=memo_content["title"],
+                content=memo_content,
+            )
+
+        # Alignment path keeps the existing generation pipeline.
         # Initialize RAG
         rag = RAGService(db)
         

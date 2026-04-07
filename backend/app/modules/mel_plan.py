@@ -17,7 +17,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import ModuleDefinition
+from app.modules.base import ModuleDefinition, ModuleManifest
 from app.modules.assessment_base import (
     AssessmentModuleDef,
     BaseAssessmentModule,
@@ -49,6 +49,24 @@ class MELPlanModule(BaseAssessmentModule):
                 "logframe", "indicators", "impact", "outcomes", "reporting", "iris",
                 "sdg", "theory of change", "data collection", "baseline",
             ],
+            export_format="docx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="analysis",
+            goal="Produce a MEL plan with indicators and data collection strategy for reporting.",
+            primary_ui_object="assessment_viewer",
+            export_artifact_types=["docx"],
+            adapter_bindings={"research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["mel_indicators", "mel_data_plan"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="rag_grounded",
         )
 
     @property
