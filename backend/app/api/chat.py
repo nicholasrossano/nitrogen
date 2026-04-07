@@ -265,12 +265,17 @@ async def chat_stream(
 
     async def generate():
         try:
-            # Resolve initiative_id for session scoping
+            # Resolve initiative_id for session scoping.
+            # Accept both UUID and slug identifiers.
             resolved_initiative_id: uuid.UUID | None = None
             if data.initiative_id:
                 try:
-                    resolved_initiative_id = uuid.UUID(data.initiative_id)
-                except ValueError:
+                    resolved_initiative, _ = await get_initiative_with_role(
+                        db, data.initiative_id, user
+                    )
+                    resolved_initiative_id = resolved_initiative.id
+                except HTTPException:
+                    # Keep session unscoped; access is enforced below where needed.
                     pass
 
             # Persist session + user message upfront
@@ -317,14 +322,13 @@ async def chat_stream(
                 compare_contexts = []
                 for cid in data.compare_initiative_ids:
                     try:
-                        init_uuid = uuid.UUID(cid)
-                        initiative, _role = await get_initiative_with_role(db, init_uuid, user)
+                        initiative, _role = await get_initiative_with_role(db, cid, user)
                         compare_contexts.append({
-                            "initiative_id": cid,
+                            "initiative_id": str(initiative.id),
                             "project_context": _build_project_context(initiative),
                             "title": initiative.title or "Untitled Project",
                         })
-                    except (ValueError, HTTPException, Exception) as e:
+                    except (HTTPException, Exception) as e:
                         logger.warning(f"Failed to load compare initiative {cid}: {e}")
                         compare_contexts = None
                         break
@@ -353,10 +357,11 @@ async def chat_stream(
                 project_context: str | None = None
                 if data.initiative_id:
                     try:
-                        init_uuid = uuid.UUID(data.initiative_id)
-                        verified_initiative, _role = await get_initiative_with_role(db, init_uuid, user)
+                        verified_initiative, _role = await get_initiative_with_role(
+                            db, data.initiative_id, user
+                        )
                         project_context = _build_project_context(verified_initiative)
-                    except (ValueError, HTTPException):
+                    except HTTPException:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
                         return
 
