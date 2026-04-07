@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
+from app.core.execution_context import build_context
 from app.core.auth import get_current_user, AuthUser, MockUser
 from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_initiative_with_role
@@ -312,7 +313,8 @@ async def chat_stream(
             )
             prior_msgs = prior_msgs_result.scalars().all()
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
-            service = ChatService(db)
+            ctx = await build_context(db, user, resolved_initiative_id)
+            service = ChatService(db, ctx=ctx)
 
             verified_initiative: Initiative | None = None
 

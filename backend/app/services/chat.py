@@ -458,12 +458,13 @@ class ChatService:
     def __init__(
         self,
         db: AsyncSession,
-        user_id: str | None = None,
+        ctx: "ExecutionContext",
         mode: ChatMode = ChatMode.STANDALONE,
-        ctx: "ExecutionContext | None" = None,
     ):
         self.db = db
-        self.user_id = user_id
+        if ctx is None:
+            raise ValueError("ChatService requires ExecutionContext")
+        self.user_id = ctx.user_id
         self.mode = mode
         self.ctx = ctx
         self._client: AsyncOpenAI | None = None
