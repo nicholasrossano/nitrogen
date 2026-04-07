@@ -7,8 +7,6 @@ from typing import Any, Awaitable, Callable, Literal
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.execution_context import ExecutionContext
-
 ProgressCallback = Callable[[str], Awaitable[None]]
 
 

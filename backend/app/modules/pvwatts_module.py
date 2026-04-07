@@ -34,7 +34,6 @@ from app.modules.base import (
     ModuleInput,
     ModuleOutput,
 )
-from app.services.pvwatts_engine import PVWattsEngine, PVWattsInput
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -271,17 +270,8 @@ class PVWattsTool(BaseModule):
         # When an address is present, ALWAYS geocode it — LLM-generated lat/lon
         # are often hallucinated and won't match the address string.
         address = extracted.get("address")
-        if address:
-            try:
-                await _progress(f"Geocoding: \"{address}\"...")
-                geo = await PVWattsEngine.geocode_address(address)
-                extracted["lat"] = geo["lat"]
-                extracted["lon"] = geo["lon"]
-                extracted["address"] = geo["display_name"]
-                await _progress(f"Location: {geo['lat']:.4f}, {geo['lon']:.4f}")
-            except Exception as e:
-                logger.error(f"Geocoding failed: {e}")
-                await _progress(f"Could not geocode \"{address}\" — please provide coordinates")
+        if address and ("lat" not in extracted or "lon" not in extracted):
+            await _progress(f"Geocoding: \"{address}\"...")
 
         extracted.pop("notes", None)
 
@@ -298,8 +288,20 @@ class PVWattsTool(BaseModule):
             request_id="pvwatts:conversation",
         )
         await _progress("Calling PVWatts API for production estimate...")
-        result = await adapter.execute(ctx, None, {"known_values": extracted})
+        result = await adapter.execute(
+            ctx,
+            None,
+            {
+                "known_values": extracted,
+                "resolve_address": True,
+            },
+        )
         widget_data: dict[str, Any] = dict(result.output)
+        geocode = widget_data.get("geocode")
+        if isinstance(geocode, dict) and "lat" in geocode and "lon" in geocode:
+            await _progress(f"Location: {geocode['lat']:.4f}, {geocode['lon']:.4f}")
+        elif address and ("lat" not in extracted or "lon" not in extracted):
+            await _progress(f"Could not geocode \"{address}\" — please provide coordinates")
         if widget_data.get("computable") and widget_data.get("result"):
             widget_type = "solar_output"
             solar_result = widget_data.get("result", {})
@@ -323,14 +325,6 @@ class PVWattsTool(BaseModule):
         """Recalculate from serialized inputs. Fast path for widget edits — no LLM.
         Always refreshes location-derived defaults (tilt, azimuth) from the current
         lat unless those fields have been user-confirmed."""
-        engine_inputs = {
-            k: PVWattsInput.from_dict(v) for k, v in inputs_dict.items()
-        }
-
-        # Re-derive orientation defaults from current lat for any non-confirmed values
-        engine_inputs = PVWattsEngine.refresh_location_defaults(engine_inputs)
-        known_values = {k: v.value for k, v in engine_inputs.items()}
-
         adapter = get_adapter_registry().get("pvwatts")
         if adapter is None:
             raise RuntimeError("pvwatts adapter is not registered.")
@@ -343,7 +337,13 @@ class PVWattsTool(BaseModule):
             is_byok=False,
             request_id="pvwatts:recalculate",
         )
-        result = await adapter.execute(ctx, None, {"known_values": known_values})
+        result = await adapter.execute(
+            ctx,
+            None,
+            {
+                "serialized_inputs": inputs_dict,
+            },
+        )
         return dict(result.output)
 
     async def execute(self, db, initiative_id, inputs, **kwargs) -> ModuleOutput:
