@@ -5,6 +5,7 @@ from app.modules.base import (
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
+    ModuleManifest,
     ModuleInput,
     ModuleOutput,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "ProgressCallback",
     "RefinementModel",
     "ReviewStrategy",
+    "ModuleManifest",
     "ModuleInput",
     "ModuleOutput",
 ]

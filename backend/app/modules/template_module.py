@@ -10,10 +10,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.modules.base import (
     BaseModule,
     ExecutionModel,
+    ModuleManifest,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
@@ -40,6 +43,23 @@ class TemplateFillTool(BaseModule):
             category="documentation",
             keywords=["template", "form", "fill", "complete", "docx", "xlsx"],
         )  # no export_format — templates use ProjectMaterial storage with their own download route
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="template_based",
+            workflow_category="execution_prep",
+            goal="Analyze an uploaded template and map missing requirements to project evidence.",
+            primary_ui_object="template_viewer",
+            export_artifact_types=[],
+            adapter_bindings={"research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["template_requirements", "template_gap_analysis"],
+            downstream_dependencies=[],
+            assumptions_behavior="none",
+            evidence_behavior="user_uploaded",
+        )
 
     @property
     def required_inputs(self) -> list[ModuleInput]:
@@ -127,6 +147,41 @@ class TemplateFillTool(BaseModule):
         statuses = await analysis.cross_reference_requirements(
             db, initiative_id, requirements, on_progress=on_progress,
         )
+        retrieval_preview: list[dict[str, Any]] = []
+        retrieval_adapter = get_adapter_registry().get("retrieval")
+        if retrieval_adapter is not None:
+            missing_labels = [s.label for s in statuses if s.status == "missing"][:3]
+            if missing_labels:
+                ctx = ExecutionContext(
+                    user_id="system",
+                    user_email=None,
+                    initiative_id=initiative_id,
+                    initiative_role=None,
+                    ai_access_granted=True,
+                    is_byok=False,
+                    request_id=f"template:{initiative_id}",
+                )
+                for label in missing_labels:
+                    try:
+                        adapter_result = await retrieval_adapter.execute(
+                            ctx,
+                            db,
+                            {
+                                "query": f"{label} template requirement",
+                                "initiative_id": str(initiative_id),
+                                "include_openalex": True,
+                                "include_web_search": True,
+                                "include_llm_fallback": False,
+                            },
+                        )
+                        retrieval_preview.append(
+                            {
+                                "requirement_label": label,
+                                "sources": adapter_result.output.get("facts", [])[:2],
+                            }
+                        )
+                    except Exception as exc:
+                        logger.warning("Template retrieval preview failed for '%s': %s", label, exc)
 
         if on_progress:
             supported = sum(1 for s in statuses if s.status == "supported")
@@ -146,6 +201,7 @@ class TemplateFillTool(BaseModule):
                 "missing": sum(1 for s in statuses if s.status == "missing"),
                 "needs_confirmation": sum(1 for s in statuses if s.status == "needs_confirmation"),
             },
+            "retrieval_preview": retrieval_preview,
         }
 
         return "template_requirements", widget_data

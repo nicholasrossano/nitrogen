@@ -1,9 +1,13 @@
 """Tool registry for managing and recommending tools."""
 
+import logging
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.modules.base import BaseModule, ModuleDefinition
+
+logger = logging.getLogger(__name__)
 
 
 class ModuleRegistry:
@@ -45,8 +49,71 @@ class ModuleRegistry:
         
         for tool in tools:
             self._modules[tool.definition.id] = tool
-        
+        invalid_modules = self._collect_manifest_errors()
+        if invalid_modules:
+            if self._should_fail_fast_on_manifest_errors():
+                details = "\n".join(
+                    f"- {module_id}: {'; '.join(errors)}"
+                    for module_id, errors in sorted(invalid_modules.items())
+                )
+                raise ValueError(f"Module manifest validation failed:\n{details}")
+
+            for module_id, errors in sorted(invalid_modules.items()):
+                logger.error(
+                    "Disabling invalid module '%s' due to manifest wiring issues: %s",
+                    module_id,
+                    "; ".join(errors),
+                )
+                self._modules.pop(module_id, None)
+
+            logger.warning(
+                "Loaded %d modules after disabling %d invalid module(s).",
+                len(self._modules),
+                len(invalid_modules),
+            )
         self._loaded = True
+
+    def _collect_manifest_errors(self) -> dict[str, list[str]]:
+        """Return module_id -> list of manifest validation errors."""
+        from app.adapters import get_adapter_registry
+
+        adapter_ids = {
+            adapter.definition.adapter_id
+            for adapter in get_adapter_registry().list_all()
+        }
+        module_ids = set(self._modules.keys())
+        errors_by_module: dict[str, list[str]] = {}
+
+        for module in self._modules.values():
+            manifest = module.manifest
+            for _role, adapter_id in manifest.adapter_bindings.items():
+                if adapter_id not in adapter_ids:
+                    errors_by_module.setdefault(module.definition.id, []).append(
+                        f"unknown adapter '{adapter_id}'"
+                    )
+            for dependency in manifest.input_dependencies:
+                if dependency not in module_ids:
+                    errors_by_module.setdefault(module.definition.id, []).append(
+                        f"unknown input dependency '{dependency}'"
+                    )
+            if manifest.export_artifact_types and module.definition.export_format is None:
+                errors_by_module.setdefault(module.definition.id, []).append(
+                    "declares export_artifact_types but has no definition.export_format"
+                )
+        return errors_by_module
+
+    def _should_fail_fast_on_manifest_errors(self) -> bool:
+        """Strict in dev/test; graceful degradation in production."""
+        from app.config import get_settings
+
+        override = os.getenv("NITROGEN_STRICT_MODULE_MANIFESTS")
+        if override is not None:
+            return override.strip().lower() in {"1", "true", "yes", "on"}
+
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return True
+
+        return bool(get_settings().debug)
     
     def get_module(self, module_id: str) -> "BaseModule | None":
         """Get a tool by ID."""

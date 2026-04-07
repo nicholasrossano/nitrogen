@@ -7,6 +7,8 @@ from typing import Any, Awaitable, Callable, Literal
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.execution_context import ExecutionContext
+
 ProgressCallback = Callable[[str], Awaitable[None]]
 
 
@@ -203,6 +205,22 @@ class ModuleDefinition:
         }
 
 
+@dataclass(kw_only=True)
+class ModuleManifest(ModuleDefinition):
+    """Full module contract metadata used for registry and exposure layers."""
+    module_class: Literal["foundational", "template_based"]
+    workflow_category: str
+    goal: str
+    primary_ui_object: str
+    export_artifact_types: list[str]
+    adapter_bindings: dict[str, str]
+    input_dependencies: list[str]
+    produced_outputs: list[str]
+    downstream_dependencies: list[str]
+    assumptions_behavior: Literal["tracks", "none"]
+    evidence_behavior: Literal["rag_grounded", "user_uploaded", "both", "none"]
+
+
 class BaseModule(ABC):
     """Abstract base class for all Nitrogen tools."""
     
@@ -211,6 +229,12 @@ class BaseModule(ABC):
     def definition(self) -> ModuleDefinition:
         """Return tool metadata."""
         pass
+
+    @property
+    @abstractmethod
+    def manifest(self) -> ModuleManifest:
+        """Return the full module manifest."""
+        raise NotImplementedError
     
     @property
     @abstractmethod

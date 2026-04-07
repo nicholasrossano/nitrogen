@@ -19,11 +19,14 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
     ExecutionModel,
+    ModuleManifest,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
@@ -114,6 +117,23 @@ class PVWattsTool(BaseModule):
                 "tilt", "azimuth", "irradiance", "solar radiation",
             ],
             export_format="xlsx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="design",
+            goal="Estimate annual and monthly solar generation from site and system assumptions.",
+            primary_ui_object="solar_output",
+            export_artifact_types=["xlsx"],
+            adapter_bindings={"core_engine": "pvwatts"},
+            input_dependencies=[],
+            produced_outputs=["solar_annual_kwh", "solar_monthly_kwh", "solar_inputs"],
+            downstream_dependencies=["lcoe_model"],
+            assumptions_behavior="tracks",
+            evidence_behavior="none",
         )
 
     def is_exportable(self, content: dict) -> bool:
@@ -265,36 +285,34 @@ class PVWattsTool(BaseModule):
 
         extracted.pop("notes", None)
 
-        engine_inputs = PVWattsEngine.build_default_inputs(known_values=extracted)
-        missing = PVWattsEngine.get_missing_essentials(engine_inputs)
-        computable = PVWattsEngine.is_computable(engine_inputs)
-
-        widget_data: dict = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-        }
-
-        if computable:
-            await _progress("Calling PVWatts API for production estimate...")
-            try:
-                result = await PVWattsEngine.call_pvwatts(engine_inputs)
-                widget_data["result"] = result.to_dict()
-                widget_type = "solar_output"
-                await _progress(
-                    f"Year 1 AC Energy: {result.ac_annual:,.0f} kWh | "
-                    f"Capacity Factor: {result.capacity_factor:.1f}% "
-                    f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
-                )
-            except Exception as e:
-                logger.error(f"PVWatts API call failed: {e}", exc_info=True)
-                widget_data["error"] = str(e)
-                widget_data["computable"] = False
-                widget_type = "solar_inputs"
-                await _progress("PVWatts API error — showing inputs for review")
+        adapter = get_adapter_registry().get("pvwatts")
+        if adapter is None:
+            raise RuntimeError("pvwatts adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="pvwatts:conversation",
+        )
+        await _progress("Calling PVWatts API for production estimate...")
+        result = await adapter.execute(ctx, None, {"known_values": extracted})
+        widget_data: dict[str, Any] = dict(result.output)
+        if widget_data.get("computable") and widget_data.get("result"):
+            widget_type = "solar_output"
+            solar_result = widget_data.get("result", {})
+            await _progress(
+                f"Year 1 AC Energy: {solar_result.get('ac_annual', 0):,.0f} kWh | "
+                f"Capacity Factor: {solar_result.get('capacity_factor', 0):.1f}% "
+                f"({solar_result.get('assumption_count', 0)} assumptions, {solar_result.get('quality_label', 'unknown')} confidence)"
+            )
         else:
             widget_type = "solar_inputs"
-            await _progress(f"Need {len(missing)} more inputs to run estimate — showing input table")
+            await _progress(
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to run estimate — showing input table"
+            )
 
         return widget_type, widget_data
 
@@ -311,25 +329,22 @@ class PVWattsTool(BaseModule):
 
         # Re-derive orientation defaults from current lat for any non-confirmed values
         engine_inputs = PVWattsEngine.refresh_location_defaults(engine_inputs)
+        known_values = {k: v.value for k, v in engine_inputs.items()}
 
-        computable = PVWattsEngine.is_computable(engine_inputs)
-        missing = PVWattsEngine.get_missing_essentials(engine_inputs)
-
-        result_data: dict[str, Any] = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-        }
-
-        if computable:
-            try:
-                result = await PVWattsEngine.call_pvwatts(engine_inputs)
-                result_data["result"] = result.to_dict()
-            except Exception as e:
-                result_data["error"] = str(e)
-                result_data["computable"] = False
-
-        return result_data
+        adapter = get_adapter_registry().get("pvwatts")
+        if adapter is None:
+            raise RuntimeError("pvwatts adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="pvwatts:recalculate",
+        )
+        result = await adapter.execute(ctx, None, {"known_values": known_values})
+        return dict(result.output)
 
     async def execute(self, db, initiative_id, inputs, **kwargs) -> ModuleOutput:
         """Full execution for initiative-scoped tool runs (not used in core chat)."""
