@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
+from app.core.execution_context import build_context
 from app.core.permissions import require_editor, require_viewer
 from app.models.onboarding import ChatMessage
 from app.models.initiative import Initiative
@@ -98,7 +99,12 @@ async def send_chat_message_stream(
             )
             messages = list(history_result.scalars().all())
 
-            chat_service = ChatService(db, user_id=user.uid, mode=ChatMode.PROJECT)
+            ctx = await build_context(db, user, initiative.id)
+            chat_service = ChatService(
+                db,
+                mode=ChatMode.PROJECT,
+                ctx=ctx,
+            )
 
             # Detect first user message (only the one we just saved exists)
             user_message_count = sum(1 for m in messages if m.role == "user")
@@ -324,7 +330,7 @@ async def execute_action(
                     break
 
         try:
-            research_service = ChatService(db, user_id=user_id)
+            research_service = ChatService(db, ctx=orchestration._chat.ctx)
             research_result = await research_service.generate_response(
                 user_message=user_message,
                 history=history_dicts,
@@ -537,7 +543,7 @@ async def execute_action(
                     break
 
         try:
-            research_service = ChatService(db, user_id=user_id)
+            research_service = ChatService(db, ctx=orchestration._chat.ctx)
             research_result = await research_service.generate_response(
                 user_message=user_message,
                 history=history_dicts,
@@ -706,7 +712,12 @@ async def send_chat_message(
     # - Conversation history
     # ============================================================
     
-    chat_service = ChatService(db, user_id=user.uid, mode=ChatMode.PROJECT)
+    ctx = await build_context(db, user, initiative.id)
+    chat_service = ChatService(
+        db,
+        mode=ChatMode.PROJECT,
+        ctx=ctx,
+    )
     
     if data.content not in _SKIP_EXTRACTION_MESSAGES:
         extracted = await chat_service.extract_inputs_from_message(
