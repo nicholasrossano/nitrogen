@@ -7,6 +7,12 @@ import { api, type ModuleInstance } from '@/lib/api';
 import { ModalShell } from '@/components/ui/ModalShell';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((m) => [m.id, m]));
+const ASSESSMENT_MODULE_IDS = new Set([
+  'stakeholder_assessment',
+  'landscape_mapping',
+  'esmp',
+  'mel_plan',
+]);
 
 function formatRelativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -34,7 +40,10 @@ interface OpenModuleModalProps {
 type EnrichedInstance = ModuleInstance & { index: number | null; displayName: string };
 
 function enrich(instances: ModuleInstance[]): EnrichedInstance[] {
-  return instances.map((inst) => {
+  const workspaceInstances = instances.filter((inst) =>
+    ASSESSMENT_MODULE_IDS.has(inst.module_id)
+  );
+  return workspaceInstances.map((inst) => {
     const sameToolInstances = instances.filter((i) => i.module_id === inst.module_id);
     const hasDuplicates = sameToolInstances.length > 1;
     const index = hasDuplicates

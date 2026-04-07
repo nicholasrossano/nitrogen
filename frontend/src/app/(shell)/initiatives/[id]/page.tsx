@@ -42,6 +42,21 @@ const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
 const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
 
 type ProjectView = 'research' | 'plan' | 'files' | 'module';
+const ASSESSMENT_MODULE_IDS = new Set([
+  'stakeholder_assessment',
+  'landscape_mapping',
+  'esmp',
+  'mel_plan',
+]);
+
+const MODULE_LAUNCH_MESSAGES: Record<string, string> = {
+  lcoe_model: 'Please run an LCOE model for this project.',
+  carbon_model: 'Please run a carbon emissions model for this project.',
+  solar_estimate: 'Please run a solar production estimate for this project.',
+  investment_memo: 'Please generate an investment memo for this project.',
+  due_diligence_checklist: 'Please generate a due diligence checklist for this project.',
+  template_fill: 'Please help me complete a template from my project materials.',
+};
 
 function InitiativePageContent() {
   const params = useParams();
@@ -430,12 +445,38 @@ function InitiativePageContent() {
 
   const handleOpenInstanceSelect = useCallback((instance: ModuleInstance) => {
     setShowOpenModal(false);
-    setActiveModule({ instanceId: instance.id, moduleId: instance.module_id });
-    setActiveView('module');
+    if (ASSESSMENT_MODULE_IDS.has(instance.module_id)) {
+      setActiveModule({ instanceId: instance.id, moduleId: instance.module_id });
+      setActiveView('module');
+      return;
+    }
+    setActiveModule(null);
+    setActiveView('research');
+    setShowChatLanding(false);
+    const send = chatSendRef.current;
+    if (send) {
+      const prompt =
+        MODULE_LAUNCH_MESSAGES[instance.module_id] ??
+        `Please run the ${instance.module_id.replace(/_/g, ' ')} module for this project.`;
+      send(prompt, instance.module_id);
+    }
   }, []);
 
   const handleModuleSelect = useCallback(async (moduleId: string, _moduleName?: string) => {
     setShowModuleModal(false);
+    if (!ASSESSMENT_MODULE_IDS.has(moduleId)) {
+      setActiveModule(null);
+      setActiveView('research');
+      setShowChatLanding(false);
+      const send = chatSendRef.current;
+      if (send) {
+        const prompt =
+          MODULE_LAUNCH_MESSAGES[moduleId] ??
+          `Please run the ${moduleId.replace(/_/g, ' ')} module for this project.`;
+        send(prompt, moduleId);
+      }
+      return;
+    }
     try {
       const inst = await api.createModuleInstance(initiativeId, moduleId);
       setActiveModule({ instanceId: inst.id, moduleId: inst.module_id });
