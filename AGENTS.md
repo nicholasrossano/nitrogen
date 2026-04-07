@@ -41,6 +41,7 @@
 **Architecture migration posture:**
 - For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
 - If a temporary shim is unavoidable, mark it clearly with owner + removal trigger in the same PR; do not leave indefinite legacy paths.
+- For noteworthy architecture changes, do not keep dual legacy + new infra paths; complete a migration audit in-phase (all callers moved, legacy path removed, CI/tests green).
 
 **Learning & iteration:**
 - When I receive feedback or correction from you, interpret whether it reflects a reusable pattern or preference.
