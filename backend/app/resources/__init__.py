@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
 from uuid import UUID
 
 from sqlalchemy import select
@@ -47,10 +48,17 @@ async def _read_initiative(uri: str, db: AsyncSession, ctx: ExecutionContext) ->
     }
 
 
+def _initiative_id_from_uri(uri: str) -> UUID:
+    parsed = urlparse(uri)
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if parsed.netloc != "initiatives" or not segments:
+        raise ValueError(f"Invalid initiative-scoped URI: {uri}")
+    return UUID(segments[0])
+
+
 async def _read_evidence_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    parts = uri.split("/")
-    initiative_id = UUID(parts[2])
-    doc_id = UUID(parts[-1])
+    initiative_id = _initiative_id_from_uri(uri)
+    doc_id = UUID(uri.rsplit("/", 1)[-1])
     await _ensure_initiative_access(db, ctx, initiative_id)
     doc = (
         await db.execute(
@@ -74,9 +82,8 @@ async def _read_evidence_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) 
 
 
 async def _read_evidence_chunk(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    parts = uri.split("/")
-    initiative_id = UUID(parts[2])
-    chunk_id = UUID(parts[-1])
+    initiative_id = _initiative_id_from_uri(uri)
+    chunk_id = UUID(uri.rsplit("/", 1)[-1])
     await _ensure_initiative_access(db, ctx, initiative_id)
     chunk = (
         await db.execute(
@@ -121,9 +128,8 @@ async def _read_corpus_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) ->
 
 
 async def _read_project_material(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    parts = uri.split("/")
-    initiative_id = UUID(parts[2])
-    material_id = UUID(parts[-1])
+    initiative_id = _initiative_id_from_uri(uri)
+    material_id = UUID(uri.rsplit("/", 1)[-1])
     await _ensure_initiative_access(db, ctx, initiative_id)
     material = (
         await db.execute(
@@ -150,9 +156,8 @@ async def _read_project_material(uri: str, db: AsyncSession, ctx: ExecutionConte
 
 
 async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    parts = uri.split("/")
-    initiative_id = UUID(parts[2])
-    version_id = UUID(parts[-1])
+    initiative_id = _initiative_id_from_uri(uri)
+    version_id = UUID(uri.rsplit("/", 1)[-1])
     await _ensure_initiative_access(db, ctx, initiative_id)
     memo = (
         await db.execute(
@@ -178,9 +183,8 @@ async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) 
 
 
 async def _read_module_instance(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    parts = uri.split("/")
-    initiative_id = UUID(parts[2])
-    instance_id = UUID(parts[-1])
+    initiative_id = _initiative_id_from_uri(uri)
+    instance_id = UUID(uri.rsplit("/", 1)[-1])
     await _ensure_initiative_access(db, ctx, initiative_id)
     instance = (
         await db.execute(
