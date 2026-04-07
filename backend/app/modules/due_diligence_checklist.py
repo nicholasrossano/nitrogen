@@ -9,7 +9,9 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
@@ -17,14 +19,13 @@ from app.modules.base import (
     RefinementModel,
     ReviewStrategy,
     ModuleDefinition,
+    ModuleManifest,
     ModuleInput,
     ModuleOutput,
     ModuleAlignment,
     AlignmentSection,
     AlignmentParameter,
 )
-from app.services.rag import RAGService
-
 settings = get_settings()
 
 # Default checklist categories
@@ -124,6 +125,23 @@ class DueDiligenceChecklistTool(BaseModule):
             category="assessment",
             keywords=["due diligence", "checklist", "assessment", "risk", "evaluation", "audit", "review"],
             export_format="xlsx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="risks_and_requirements",
+            goal="Generate a due diligence checklist across technical, financial, and operational risks.",
+            primary_ui_object="checklist_viewer",
+            export_artifact_types=["docx"],
+            adapter_bindings={"research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["due_diligence_checklist"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="rag_grounded",
         )
     
     @property
@@ -512,27 +530,44 @@ Return the updated checklist.
             inputs.setdefault("project_type", initiative.project_type or "general")
             inputs.setdefault("project_stage", "Concept/Idea")  # Default assumption
         
-        # Initialize RAG for context
-        rag = RAGService(db)
-        
-        # Retrieve relevant context from corpus
-        context_chunks = []
+        # Retrieve relevant context through adapter registry boundary.
+        context_chunks: list[dict[str, Any]] = []
         if include_corpus:
             query = f"Due diligence considerations for {inputs.get('project_type', 'development')} projects in {inputs.get('geography', 'developing countries')}"
-            chunks = await rag.retrieve(
-                query=query,
-                initiative_id=initiative_id,
-                sources=["corpus"],
-                corpus_top_k=5,
-            )
-            context_chunks = chunks
+            retrieval_adapter = get_adapter_registry().get("retrieval")
+            if retrieval_adapter is not None:
+                ctx = ExecutionContext(
+                    user_id=self.user_id or "system",
+                    user_email=None,
+                    initiative_id=initiative_id,
+                    initiative_role=None,
+                    ai_access_granted=True,
+                    is_byok=False,
+                    request_id=f"checklist:{initiative_id}",
+                )
+                adapter_result = await retrieval_adapter.execute(
+                    ctx,
+                    db,
+                    {
+                        "query": query,
+                        "initiative_id": str(initiative_id),
+                        "include_openalex": True,
+                        "include_web_search": True,
+                        "include_llm_fallback": False,
+                    },
+                )
+                context_chunks = adapter_result.output.get("facts", [])
+            else:
+                context_chunks = []
         
         # Build context string
         context = ""
         if context_chunks:
             context = "\n\nRelevant case study insights:\n"
             for i, chunk in enumerate(context_chunks):
-                context += f"- {chunk.source_title}: {chunk.content[:300]}...\n"
+                source_title = chunk.get("source_title") or "Source"
+                content = chunk.get("content") or ""
+                context += f"- {source_title}: {content[:300]}...\n"
         
         # Build project summary
         project_summary = f"""

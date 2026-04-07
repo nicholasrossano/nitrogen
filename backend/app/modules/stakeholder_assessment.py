@@ -16,7 +16,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import ModuleDefinition
+from app.modules.base import ModuleDefinition, ModuleManifest
 from app.modules.assessment_base import (
     AssessmentModuleDef,
     BaseAssessmentModule,
@@ -44,6 +44,24 @@ class StakeholderAssessmentModule(BaseAssessmentModule):
             output_type="assessment_document",
             category="assessment",
             keywords=["stakeholder", "actor", "mapping", "engagement", "community"],
+            export_format="docx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="risks_and_requirements",
+            goal="Produce a stakeholder assessment with engagement strategy and cited evidence.",
+            primary_ui_object="assessment_viewer",
+            export_artifact_types=["docx"],
+            adapter_bindings={"research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["stakeholder_map", "engagement_strategy"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="rag_grounded",
         )
 
     @property

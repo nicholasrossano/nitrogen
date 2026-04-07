@@ -17,7 +17,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import ModuleDefinition
+from app.modules.base import ModuleDefinition, ModuleManifest
 from app.modules.assessment_base import (
     AssessmentModuleDef,
     BaseAssessmentModule,
@@ -49,6 +49,24 @@ class ESMPModule(BaseAssessmentModule):
                 "mitigation", "monitoring", "dfi", "world bank", "impact assessment",
                 "esia", "esmf", "resettlement", "biodiversity", "community health",
             ],
+            export_format="docx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="risks_and_requirements",
+            goal="Draft an IFC-aligned ESMP with risk, mitigation, and monitoring commitments.",
+            primary_ui_object="assessment_viewer",
+            export_artifact_types=["docx"],
+            adapter_bindings={"research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["esmp_risk_register", "esmp_monitoring_plan"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="rag_grounded",
         )
 
     @property

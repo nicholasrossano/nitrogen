@@ -20,11 +20,14 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
     ExecutionModel,
+    ModuleManifest,
     ProgressCallback,
     RefinementModel,
     ReviewStrategy,
@@ -34,10 +37,6 @@ from app.modules.base import (
 )
 from app.models.initiative import Initiative
 from app.models.onboarding import ChatMessage
-from app.services.carbon_engine import (
-    CarbonEngine,
-    CarbonInput,
-)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -130,6 +129,23 @@ class CarbonTool(BaseModule):
                 "efficient lighting", "led", "cfl", "incandescent", "lamp",
             ],
             export_format="xlsx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            module_class="foundational",
+            workflow_category="analysis",
+            goal="Estimate project emission reductions and uncertainty sensitivity.",
+            primary_ui_object="carbon_output",
+            export_artifact_types=["xlsx"],
+            adapter_bindings={"core_engine": "carbon"},
+            input_dependencies=[],
+            produced_outputs=["annual_emission_reduction_tco2e", "carbon_sensitivity", "carbon_inputs"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="none",
         )
 
     def is_exportable(self, content: dict) -> bool:
@@ -307,32 +323,21 @@ class CarbonTool(BaseModule):
 
         method_pack = merged.pop("method_pack", None) or merged.pop("methodology_variant", None)
 
-        engine_inputs = CarbonEngine.build_default_inputs(
-            method_pack=method_pack,
-            known_values=merged,
+        adapter = get_adapter_registry().get("carbon")
+        if adapter is None:
+            raise RuntimeError("carbon adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id=getattr(self, "user_id", None) or "system",
+            user_email=None,
+            initiative_id=initiative_id,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id=f"carbon:{initiative_id}",
         )
-
-        missing = CarbonEngine.get_missing_essentials(engine_inputs)
-        computable = CarbonEngine.is_computable(engine_inputs)
-
-        result_data: dict[str, Any] = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-            "method_pack": method_pack,
-        }
-
-        if computable:
-            try:
-                carbon_result = CarbonEngine.calculate(engine_inputs)
-                result_data["result"] = carbon_result.to_dict()
-
-                sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
-                result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-                result_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
-            except (ValueError, ZeroDivisionError) as e:
-                result_data["error"] = str(e)
-                result_data["computable"] = False
+        result = await adapter.execute(ctx, db, {"method_pack": method_pack, "known_values": merged})
+        result_data: dict[str, Any] = dict(result.output)
+        result_data["method_pack"] = method_pack
 
         return ModuleOutput(
             module_id="carbon_model",
@@ -362,39 +367,34 @@ class CarbonTool(BaseModule):
         if not method_pack and extracted.get("method_pack"):
             method_pack = extracted.pop("method_pack", None)
 
-        engine_inputs = CarbonEngine.build_default_inputs(
-            method_pack=method_pack,
-            known_values=extracted,
+        adapter = get_adapter_registry().get("carbon")
+        if adapter is None:
+            raise RuntimeError("carbon adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id=getattr(self, "user_id", None) or "system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="carbon:conversation",
         )
-
-        missing = CarbonEngine.get_missing_essentials(engine_inputs)
-        computable = CarbonEngine.is_computable(engine_inputs)
-
-        widget_data: dict = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-            "method_pack": method_pack,
-        }
-
-        if computable:
-            await _progress("Calculating emission reductions...")
-            result = CarbonEngine.calculate(engine_inputs)
-            widget_data["result"] = result.to_dict()
-
-            await _progress("Running sensitivity analysis...")
-            sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
-            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-            widget_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
-
+        await _progress("Calculating emission reductions...")
+        result = await adapter.execute(ctx, None, {"method_pack": method_pack, "known_values": extracted})
+        widget_data: dict[str, Any] = dict(result.output)
+        widget_data["method_pack"] = method_pack
+        if widget_data.get("computable"):
             widget_type = "carbon_output"
+            carbon_result = widget_data.get("result") or {}
             await _progress(
-                f"Net ERs: {result.net_er_tco2e:,.2f} tCO₂e/yr "
-                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
+                f"Net ERs: {carbon_result.get('net_er_tco2e', 0):,.2f} tCO₂e/yr "
+                f"({carbon_result.get('assumption_count', 0)} assumptions, {carbon_result.get('quality_label', 'unknown')} confidence)"
             )
         else:
             widget_type = "carbon_inputs"
-            await _progress(f"Need {len(missing)} more inputs to compute — showing input table")
+            await _progress(
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to compute — showing input table"
+            )
 
         return widget_type, widget_data
 
@@ -406,29 +406,27 @@ class CarbonTool(BaseModule):
 
         Fast path for user edits — no LLM call, pure math.
         """
-        engine_inputs = {
-            k: CarbonInput.from_dict(v) for k, v in inputs_dict.items()
-        }
+        known_values: dict[str, Any] = {}
+        for key, value in inputs_dict.items():
+            if isinstance(value, dict):
+                known_values[key] = value.get("value")
+            else:
+                known_values[key] = value
+        method_pack = known_values.pop("method_pack", None)
 
-        computable = CarbonEngine.is_computable(engine_inputs)
-        missing = CarbonEngine.get_missing_essentials(engine_inputs)
-
-        result_data: dict[str, Any] = {
-            "inputs": inputs_dict,
-            "missing_essentials": missing,
-            "computable": computable,
-        }
-
-        if computable:
-            try:
-                carbon_result = CarbonEngine.calculate(engine_inputs)
-                result_data["result"] = carbon_result.to_dict()
-
-                sensitivity = CarbonEngine.run_sensitivity(engine_inputs)
-                result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-                result_data["is_unruly"] = CarbonEngine.is_unruly(engine_inputs)
-            except (ValueError, ZeroDivisionError) as e:
-                result_data["error"] = str(e)
-                result_data["computable"] = False
-
+        adapter = get_adapter_registry().get("carbon")
+        if adapter is None:
+            raise RuntimeError("carbon adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id=getattr(self, "user_id", None) or "system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="carbon:recalculate",
+        )
+        result = await adapter.execute(ctx, None, {"method_pack": method_pack, "known_values": known_values})
+        result_data = dict(result.output)
+        result_data["method_pack"] = method_pack
         return result_data
