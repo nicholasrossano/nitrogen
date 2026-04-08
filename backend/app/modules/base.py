@@ -206,10 +206,10 @@ class ModuleDefinition:
 @dataclass(kw_only=True)
 class ModuleManifest(ModuleDefinition):
     """Full module contract metadata used for registry and exposure layers."""
-    module_class: Literal["foundational", "template_based"]
-    workflow_category: str
     goal: str
     primary_ui_object: str
+    workspace_build_widget: str | None = None
+    workspace_output_widget: str | None = None
     export_artifact_types: list[str]
     adapter_bindings: dict[str, str]
     input_dependencies: list[str]

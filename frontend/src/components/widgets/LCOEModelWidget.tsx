@@ -25,9 +25,14 @@ import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGenerating
 async function persistWidgetToDb(
   initiativeId: string,
   messageId: string,
+  instanceId: string | undefined,
   widgetData: Record<string, any>,
 ): Promise<boolean> {
   try {
+    if (instanceId) {
+      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      return true;
+    }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
     useInitiativeStore.getState().updateMessageWidgetData(messageId, widgetData);
     useChatStore.getState().updateMessageWidgetData(messageId, widgetData);
@@ -42,6 +47,9 @@ interface LCOEModelWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   messageId?: string;
+  instanceId?: string;
+  onWorkflowUpdated?: () => void;
+  workspaceView?: 'build' | 'output';
   isActive?: boolean;
 }
 
@@ -74,6 +82,9 @@ export function LCOEModelWidget({
   data: initialData,
   initiativeId,
   messageId,
+  instanceId,
+  onWorkflowUpdated,
+  workspaceView = 'output',
   isActive = true,
 }: LCOEModelWidgetProps) {
   const [data, setDataRaw] = useState(initialData);
@@ -97,6 +108,7 @@ export function LCOEModelWidget({
   useEffect(() => { setMounted(true); }, []);
 
   const result = data?.result;
+  const forceInputsView = workspaceView === 'build';
   const inputs = useMemo(() => data?.inputs || {}, [data]);
   const missingEssentials: string[] = data?.missing_essentials || [];
   const sensitivity: any[] = data?.sensitivity || [];
@@ -113,14 +125,17 @@ export function LCOEModelWidget({
         try {
           const newData = await api.updateLCOEInput(inputs, fieldName, value, 'confirmed');
           setData(newData);
-          if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+          if ((messageId && initiativeId) || instanceId) {
+            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+            if (persisted && instanceId) onWorkflowUpdated?.();
+          }
         } catch { /* keep old */ }
         finally { setIsRecalculating(false); }
       })();
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId]);
+  }, [inputs, setData, messageId, initiativeId, instanceId]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -160,7 +175,10 @@ export function LCOEModelWidget({
     try {
       const newData = await api.updateLCOEInput(inputs, editingField, parsed);
       setData(newData);
-      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+      if ((messageId && initiativeId) || instanceId) {
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        if (persisted && instanceId) onWorkflowUpdated?.();
+      }
     } catch {
       // keep old values
     } finally {
@@ -168,7 +186,7 @@ export function LCOEModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -207,7 +225,10 @@ export function LCOEModelWidget({
     try {
       const newData = await api.updateLCOEInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
-      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+      if ((messageId && initiativeId) || instanceId) {
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        if (persisted && instanceId) onWorkflowUpdated?.();
+      }
     } catch {
       setData((prev: any) => ({
         ...prev,
@@ -219,7 +240,7 @@ export function LCOEModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
@@ -372,7 +393,7 @@ export function LCOEModelWidget({
 
   const isLoadingInputs = isActive && Object.keys(inputs).length === 0;
 
-  if (!result) {
+  if (!result || forceInputsView) {
     return (
       <>
         <div className="card-elevated overflow-hidden !rounded-none">

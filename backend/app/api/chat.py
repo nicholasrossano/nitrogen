@@ -369,163 +369,65 @@ async def chat_stream(
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
-                # Assessment module detection: emit assessment_workspace widget
-                if _tool_hint in ("stakeholder_assessment", "landscape_mapping", "esmp", "mel_plan") and data.initiative_id:
+                if _tool_hint and data.initiative_id:
+                    from app.modules import get_module_registry as _get_registry
+                    from app.services.chat import ChatResponse
+                    from app.services.module_workflow_service import (
+                        ensure_workflow_state,
+                        uses_alignment_build,
+                        uses_layered_build,
+                        uses_workspace_flow,
+                    )
+
+                    _registry = _get_registry()
+                    _workflow_module = _registry.get_module(_tool_hint)
+                else:
+                    _workflow_module = None
+
+                if _workflow_module and data.initiative_id and uses_workspace_flow(_workflow_module):
                     if not verified_initiative:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for this module.'})}\n\n"
                         return
-                    from app.modules import get_module_registry as _get_registry
-                    from app.modules.assessment_base import (
-                        BaseAssessmentModule,
-                        make_initial_workflow_state,
-                    )
-                    from app.services.chat import ChatResponse
 
-                    async def _run_assessment_workspace():
+                    async def _open_workflow_workspace():
                         if on_thinking:
-                            await on_thinking("Setting up assessment workspace...")
-                        _registry = _get_registry()
-                        _module = _registry.get_module(_tool_hint)
-
-                        # Get or create instance for this session
+                            await on_thinking(f"Opening {_workflow_module.definition.name} workspace...")
                         inst = await module_service.get_or_create_instance(
                             db, verified_initiative.id, _tool_hint, user.uid, session_id=session.id,
                         )
+                        await ensure_workflow_state(db, inst, _workflow_module)
+                        await db.commit()
 
-                        # Initialise workflow_state if blank
-                        if inst.workflow_state is None and isinstance(_module, BaseAssessmentModule):
-                            init_state = make_initial_workflow_state(
-                                _tool_hint, _module.assessment_definition
+                        if uses_layered_build(_workflow_module):
+                            intro = (
+                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                "Review the setup, work through the build stage, and finalize the output when you're ready."
                             )
-                            # Auto-generate setup defaults
-                            context = {
-                                "project_title": verified_initiative.title or "",
-                                "project_description": verified_initiative.project_description or verified_initiative.goal or "",
-                                "geography": verified_initiative.geography or "",
-                            }
-                            try:
-                                defaults = await _module.generate_setup_defaults(db, verified_initiative.id, context)
-                                init_state["setup"]["fields"] = defaults
-                            except Exception:
-                                pass
-                            inst.workflow_state = init_state
-                            await db.commit()
+                            tiers_used = ["workspace_setup"]
+                        elif uses_alignment_build(_workflow_module):
+                            intro = (
+                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                "Review the setup, confirm the build-stage outline, and then generate the final output."
+                            )
+                            tiers_used = ["workspace_build"]
+                        else:
+                            intro = (
+                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                "Review the setup context, refine the build-stage inputs, and continue in the editor."
+                            )
+                            tiers_used = ["workspace_build"]
 
                         return ChatResponse(
-                            content=f"Here's your **{_module.definition.name}** workspace. Review the setup and work through each layer to build your assessment.",
-                            sources=[], tiers_used=["assessment"], latency_ms=0,
-                            widget_type="assessment_workspace",
+                            content=intro,
+                            sources=[], tiers_used=tiers_used, latency_ms=0,
+                            widget_type="module_workspace",
                             widget_data={
                                 "instance_id": str(inst.id),
                                 "module_id": _tool_hint,
                             },
                         )
 
-                    generation_task = asyncio.create_task(_run_assessment_workspace())
-                elif _tool_hint in ("investment_memo", "due_diligence_checklist") and data.initiative_id:
-                    if not verified_initiative:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for document generation.'})}\n\n"
-                        return
-                    from app.api.alignment_helpers import (
-                        get_or_generate_alignment,
-                        build_alignment_widget_data,
-                        get_alignment_intro_message,
-                    )
-                    from app.modules import get_module_registry as _get_registry
-                    from app.services.chat import ChatResponse
-                    from sqlalchemy.orm.attributes import flag_modified
-
-                    _registry = _get_registry()
-                    _align_tool = _registry.get_module(_tool_hint)
-                    _align_initiative = verified_initiative
-
-                    async def _run_alignment():
-                        if on_thinking:
-                            await on_thinking("Preparing outline...")
-                        existing = list(_align_initiative.selected_tools or [])
-                        if existing != [_tool_hint]:
-                            _align_initiative.selected_tools = [_tool_hint]
-                            flag_modified(_align_initiative, "selected_tools")
-                            await db.commit()
-                            await db.refresh(_align_initiative)
-
-                        # Create / find module instance for this session
-                        await module_service.get_or_create_instance(
-                            db, _align_initiative.id, _tool_hint, user.uid, session_id=session.id,
-                        )
-
-                        alignment_data = await get_or_generate_alignment(
-                            db, _align_initiative, _tool_hint, user_id=user.uid, session_id=session.id,
-                        )
-                        if not alignment_data:
-                            return ChatResponse(
-                                content=f"I wasn't able to generate an outline for {_align_tool.definition.name}. Please try again.",
-                                sources=[], tiers_used=[], latency_ms=0,
-                            )
-
-                        pending = await module_service.get_pending_alignment_tools(
-                            db, _align_initiative.id, _align_initiative.selected_tools or [],
-                        )
-                        wd = build_alignment_widget_data(
-                            tool_id=_tool_hint,
-                            alignment_data=alignment_data,
-                            pending_tool_ids=[t for t in pending if t != _tool_hint],
-                        )
-                        wd["session_id"] = str(session.id)
-                        intro = get_alignment_intro_message(_align_tool.definition.name)
-                        return ChatResponse(
-                            content=intro,
-                            sources=[], tiers_used=["alignment"], latency_ms=0,
-                            widget_type="alignment", widget_data=wd,
-                        )
-
-                    generation_task = asyncio.create_task(_run_alignment())
-                elif _tool_hint.startswith("template_fill:") and data.initiative_id:
-                    if not verified_initiative:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for template analysis.'})}\n\n"
-                        return
-                    template_id_str = _tool_hint.split(":", 1)[1]
-                    from app.modules.template_module import TemplateFillTool
-                    from app.services.chat import ChatResponse
-
-                    tmpl_tool = TemplateFillTool()
-                    init_uuid = verified_initiative.id
-
-                    async def _run_template():
-                        wt, wd = await tmpl_tool.execute_from_template(
-                            db=db,
-                            initiative_id=init_uuid,
-                            template_id=uuid.UUID(template_id_str),
-                            on_progress=on_thinking,
-                        )
-                        summary = wd.get("summary", {})
-                        supported = summary.get("supported", 0)
-                        total = summary.get("total", 0)
-                        missing = summary.get("missing", 0)
-                        form_summary = wd.get("form_summary", "")
-                        text = (
-                            f"I've analyzed your template **{wd.get('filename', 'document')}** "
-                            f"and identified **{total}** requirements.\n\n"
-                        )
-                        if form_summary:
-                            text += f"{form_summary}\n\n"
-                        text += (
-                            f"- **{supported}** are already supported by your project materials\n"
-                            f"- **{missing}** are missing and need your input\n\n"
-                            "Review the requirements panel on the right. You can confirm "
-                            "values, provide missing information directly, or click any "
-                            "requirement to investigate it."
-                        )
-                        return ChatResponse(
-                            content=text,
-                            sources=[],
-                            tiers_used=["template_analysis"],
-                            latency_ms=0,
-                            widget_type=wt,
-                            widget_data=wd,
-                        )
-
-                    generation_task = asyncio.create_task(_run_template())
+                    generation_task = asyncio.create_task(_open_workflow_workspace())
                 else:
                     generation_task = asyncio.create_task(
                         service.generate_response(
@@ -580,6 +482,9 @@ async def chat_stream(
 
             # Sync generated deliverables when a project is in context and the
             # result widget represents a completed, exportable tool output.
+            # Additionally, always ensure a module instance exists for this
+            # session even for partial outputs (e.g. carbon_inputs, lcoe_inputs)
+            # so the Open Module browser can find and reopen in-progress work.
             if verified_initiative and result.widget_type and result.widget_data:
                 _WIDGET_TO_TOOL: dict[str, str] = {
                     "lcoe_output": "lcoe_model",
@@ -591,6 +496,13 @@ async def chat_stream(
                 }
                 _tool_id = _WIDGET_TO_TOOL.get(result.widget_type or "")
                 if _tool_id:
+                    # Always link this session to a module instance, even for
+                    # partial outputs, so the instance is discoverable via
+                    # Open Module and can reopen the chat session.
+                    await module_service.get_or_create_instance(
+                        db, verified_initiative.id, _tool_id, user.uid,
+                        session_id=session.id,
+                    )
                     from app.modules.registry import get_module_registry
                     _tool = get_module_registry().get_module(_tool_id)
                     _content = result.widget_data or {}
