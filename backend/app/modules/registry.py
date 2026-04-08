@@ -27,7 +27,6 @@ class ModuleRegistry:
         from app.modules.due_diligence_checklist import DueDiligenceChecklistTool
         from app.modules.lcoe_module import LCOETool
         from app.modules.carbon_module import CarbonTool
-        from app.modules.template_module import TemplateFillTool
         from app.modules.pvwatts_module import PVWattsTool
         from app.modules.stakeholder_assessment import StakeholderAssessmentModule
         from app.modules.landscape_mapping import LandscapeMappingModule
@@ -39,7 +38,6 @@ class ModuleRegistry:
             DueDiligenceChecklistTool(),
             LCOETool(),
             CarbonTool(),
-            TemplateFillTool(),
             PVWattsTool(),
             StakeholderAssessmentModule(),
             LandscapeMappingModule(),

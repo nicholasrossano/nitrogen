@@ -10,7 +10,6 @@ import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
-import { TemplateUploadInterstitial } from '@/components/widgets/TemplateUploadInterstitial';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
@@ -31,6 +30,8 @@ interface ProjectStandaloneChatViewProps {
   showLanding?: boolean;
   /** When true, hides the module tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
+  /** When false, empty state stays in conversation mode instead of showing the landing UI */
+  useLandingWhenEmpty?: boolean;
   initialSessionId?: string | null;
   initialTitle?: string | null;
   onMessageSent?: () => void;
@@ -41,6 +42,8 @@ interface ProjectStandaloneChatViewProps {
   onCitationClick?: (citation: SourceCitation) => void;
   /** Called when the active thread/session metadata changes */
   onSessionMetaChange?: (meta: { sessionId: string | null; title: string | null }) => void;
+  /** Called when this view enters or leaves its landing state */
+  onLandingStateChange?: (isOnLanding: boolean) => void;
   /** Callback for EditorSidePanel to thread through to AlignmentWidget */
   onAlignmentConfirmedRef?: React.MutableRefObject<((msgs: AlignmentNewMessage[]) => void) | null>;
   /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
@@ -70,6 +73,7 @@ export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
   hideTiles = false,
+  useLandingWhenEmpty = true,
   initialSessionId = null,
   initialTitle = null,
   onMessageSent,
@@ -77,6 +81,7 @@ export function ProjectStandaloneChatView({
   onEditorWidgetsChange,
   onCitationClick,
   onSessionMetaChange,
+  onLandingStateChange,
   onAlignmentConfirmedRef,
   onSendRef,
 }: ProjectStandaloneChatViewProps) {
@@ -92,9 +97,8 @@ export function ProjectStandaloneChatView({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
-  const [showTemplateInterstitial, setShowTemplateInterstitial] = useState(false);
-  const [templateUploading, setTemplateUploading] = useState(false);
   const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
+  const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
 
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
@@ -170,10 +174,19 @@ export function ProjectStandaloneChatView({
   }, [initialSessionId, initialTitle, currentSessionId, localMessages.length]);
 
   useEffect(() => {
-    onSessionMetaChange?.({
+    const nextMeta = {
       sessionId: currentSessionId,
       title: sessionTitle,
-    });
+    };
+    const prevMeta = lastReportedMetaRef.current;
+    if (
+      prevMeta?.sessionId === nextMeta.sessionId &&
+      prevMeta?.title === nextMeta.title
+    ) {
+      return;
+    }
+    lastReportedMetaRef.current = nextMeta;
+    onSessionMetaChange?.(nextMeta);
   }, [currentSessionId, sessionTitle, onSessionMetaChange]);
 
   // When showLanding transitions to true, clear current conversation
@@ -198,8 +211,6 @@ export function ProjectStandaloneChatView({
       setSessionTitle(null);
       setCurrentSessionId(null);
       setFeedbackMap({});
-      setShowTemplateInterstitial(false);
-      setTemplateUploading(false);
       setCompareProject(null);
     }
     prevShowLanding.current = showLanding;
@@ -336,78 +347,6 @@ export function ProjectStandaloneChatView({
     [initiativeId, currentSessionId, compareProject],
   );
 
-  const handleTemplateUpload = useCallback(
-    async (file: File) => {
-      setTemplateUploading(true);
-      try {
-        const result = await api.uploadTemplate(initiativeId, file);
-        setShowTemplateInterstitial(false);
-        onMessageSent?.();
-
-        const content = `Generate from template: ${file.name}`;
-        api.generateChatTitle(content).then(({ title }) => {
-          if (title) setSessionTitle(title);
-        }).catch(() => {});
-
-        const userMsg: ChatMessage = {
-          id: `user-${Date.now()}`,
-          role: 'user',
-          content,
-          widget_type: null,
-          widget_data: null,
-          created_at: new Date().toISOString(),
-        };
-        const updatedMessages = [...localMessages, userMsg];
-        setLocalMessages(updatedMessages);
-        setSending(true);
-
-        await sendViaStream(
-          content,
-          updatedMessages,
-          `template_fill:${result.template_id}`,
-        );
-      } catch (err) {
-        console.error('Template upload failed:', err);
-        setSending(false);
-      } finally {
-        setTemplateUploading(false);
-      }
-    },
-    [initiativeId, localMessages, onMessageSent, sendViaStream],
-  );
-
-  const handleRecentTemplateSelect = useCallback(
-    async (templateId: string, filename: string) => {
-      setShowTemplateInterstitial(false);
-      onMessageSent?.();
-
-      const content = `Generate from template: ${filename}`;
-      api.generateChatTitle(content).then(({ title }) => {
-        if (title) setSessionTitle(title);
-      }).catch(() => {});
-
-      const userMsg: ChatMessage = {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content,
-        widget_type: null,
-        widget_data: null,
-        created_at: new Date().toISOString(),
-      };
-      const updatedMessages = [...localMessages, userMsg];
-      setLocalMessages(updatedMessages);
-      setSending(true);
-
-      try {
-        await sendViaStream(content, updatedMessages, `template_fill:${templateId}`);
-      } catch (err) {
-        console.error('Recent template select failed:', err);
-        setSending(false);
-      }
-    },
-    [localMessages, onMessageSent, sendViaStream],
-  );
-
   const handleUploadFile = useCallback(
     async (file: File) => {
       const { accepted } = filterSupportedFiles([file]);
@@ -419,11 +358,6 @@ export function ProjectStandaloneChatView({
 
   const handleSend = useCallback(
     async (content: string, toolHint?: string) => {
-      if (toolHint === 'template_fill') {
-        setShowTemplateInterstitial(true);
-        return;
-      }
-
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -569,7 +503,11 @@ export function ProjectStandaloneChatView({
     };
   }, [onSendRef, handleSend]);
 
-  const isOnLanding = showLanding || localMessages.length === 0;
+  const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
+
+  useEffect(() => {
+    onLandingStateChange?.(isOnLanding);
+  }, [isOnLanding, onLandingStateChange]);
 
   if (isOnLanding) {
     return (
@@ -603,15 +541,6 @@ export function ProjectStandaloneChatView({
             <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
           ) : undefined}
         />
-        {showTemplateInterstitial && (
-          <TemplateUploadInterstitial
-            onUpload={handleTemplateUpload}
-            onCancel={() => setShowTemplateInterstitial(false)}
-            uploading={templateUploading}
-            initiativeId={initiativeId}
-            onSelectRecent={handleRecentTemplateSelect}
-          />
-        )}
       </>
     );
   }

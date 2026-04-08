@@ -122,10 +122,10 @@ class PVWattsTool(BaseModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            module_class="foundational",
-            workflow_category="design",
             goal="Estimate annual and monthly solar generation from site and system assumptions.",
             primary_ui_object="solar_output",
+            workspace_build_widget="solar_inputs",
+            workspace_output_widget="solar_output",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "pvwatts"},
             input_dependencies=[],

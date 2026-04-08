@@ -17,7 +17,7 @@ import traceback  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import initiatives, onboarding, evidence, generate, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, template, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
+from app.api import initiatives, onboarding, evidence, generate, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -165,7 +165,6 @@ app.include_router(project_plan.router, prefix="/api/v1", tags=["project-plan"])
 app.include_router(lcoe.router, prefix="/api/v1", tags=["lcoe"])
 app.include_router(carbon.router, prefix="/api/v1", tags=["carbon"])
 app.include_router(project_materials.router, prefix="/api/v1", tags=["project-materials"])
-app.include_router(template.router, prefix="/api/v1", tags=["template"])
 app.include_router(shares.router, prefix="/api/v1", tags=["shares"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
 app.include_router(pvwatts.router, prefix="/api/v1", tags=["pvwatts"])

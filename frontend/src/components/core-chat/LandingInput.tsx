@@ -122,7 +122,6 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-3 mb-12">
           {ALL_MODULES.filter((module) => devMode || !module.beta).map((module) => {
-            const isTemplate = module.id === 'template_fill';
             return (
               <button
                 key={module.id}
@@ -131,13 +130,8 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
                 onClick={() => onSend(`Generate ${module.name}`, module.id)}
                 className="relative flex items-center gap-3 px-4 py-3.5 card-interactive border border-black/[0.04] disabled:opacity-40 disabled:cursor-default"
               >
-                {isTemplate && (
-                  <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
-                    BETA
-                  </span>
-                )}
-                <div className={`w-10 h-10 flex-shrink-0 rounded flex items-center justify-center ${isTemplate ? 'bg-accent-secondary/10' : 'bg-accent-wash'}`}>
-                  <span className={`[&>svg]:w-5 [&>svg]:h-5 ${isTemplate ? 'text-accent-secondary' : 'text-accent'}`}>{module.icon}</span>
+                <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash">
+                  <span className="[&>svg]:w-5 [&>svg]:h-5 text-accent">{module.icon}</span>
                 </div>
                 <span className="text-xs font-medium text-text-secondary leading-snug text-left">{module.name}</span>
               </button>

@@ -121,10 +121,10 @@ class LCOETool(BaseModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            module_class="foundational",
-            workflow_category="design",
             goal="Estimate project levelized cost of energy and sensitivity ranges.",
             primary_ui_object="lcoe_output",
+            workspace_build_widget="lcoe_inputs",
+            workspace_output_widget="lcoe_output",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "lcoe"},
             input_dependencies=["solar_estimate"],

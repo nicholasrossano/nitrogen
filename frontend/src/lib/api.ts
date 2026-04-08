@@ -58,13 +58,15 @@ export interface Initiative {
 export interface ModuleInstance {
   id: string;
   module_id: string;
-  status: 'started' | 'alignment_proposed' | 'alignment_confirmed' | 'generating' | 'complete' | 'error';
+  status: 'draft' | 'started' | 'alignment_proposed' | 'alignment_confirmed' | 'generating' | 'complete' | 'error';
   title: string | null;
   started_by: string;
   started_by_email: string | null;
   started_at: string;
   updated_at: string;
   session_id: string | null;
+  deliverable?: Record<string, any> | null;
+  workflow_state?: Record<string, any> | null;
 }
 
 export interface ProjectShare {
@@ -125,19 +127,25 @@ export interface BuildLayer {
 }
 
 export interface WorkflowSetup {
-  fields: Record<string, string>;
+  mode?: 'form' | 'auto';
+  fields: Record<string, any>;
   confirmed: boolean;
   confirmed_at: string | null;
 }
 
 export interface WorkflowBuild {
+  status?: string;
   current_layer: string | null;
   layers: Record<string, BuildLayer>;
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
 }
 
 export interface WorkflowOutput {
   status: 'pending' | 'generating' | 'complete' | 'error';
   content: Record<string, any> | null;
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
 }
 
 export interface WorkflowState {
@@ -167,9 +175,11 @@ export interface BuildLayerDef {
   removable: boolean;
 }
 
-export interface AssessmentModuleDefinition extends ModuleDefinition {
-  setup_fields: SetupFieldDef[];
-  build_layers: BuildLayerDef[];
+export interface WorkflowModuleDefinition extends ModuleDefinition {
+  workspace_build_widget?: string | null;
+  workspace_output_widget?: string | null;
+  setup_fields?: SetupFieldDef[];
+  build_layers?: BuildLayerDef[];
 }
 
 export interface ModuleWorkflowState {
@@ -177,7 +187,7 @@ export interface ModuleWorkflowState {
   module_id: string;
   status: string;
   workflow_state: WorkflowState;
-  module_definition: AssessmentModuleDefinition;
+  module_definition: WorkflowModuleDefinition;
 }
 
 export interface SourceCitation {
@@ -1028,7 +1038,7 @@ export const api = {
       { method: 'POST' }
     ),
 
-  confirmWorkflowSetup: (instanceId: string, fields: Record<string, string>) =>
+  confirmWorkflowSetup: (instanceId: string, fields: Record<string, any>) =>
     fetchApi<{ ok: boolean; current_stage: string }>(
       `/api/v1/module-workflow/${instanceId}/setup/confirm`,
       {
@@ -1086,6 +1096,31 @@ export const api = {
     fetchApi<{ output: Record<string, any>; status: string }>(
       `/api/v1/module-workflow/${instanceId}/output/generate`,
       { method: 'POST' }
+    ),
+
+  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>) =>
+    fetchApi<{ instance_id: string; status: string; workflow_state: WorkflowState }>(
+      `/api/v1/module-workflow/${instanceId}/widget-state`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ widget_data: widgetData }),
+      }
+    ),
+
+  confirmWorkflowAlignment: (
+    instanceId: string,
+    sections?: AlignmentSection[],
+    parameters?: AlignmentParameter[],
+  ) =>
+    fetchApi<{ instance_id: string; status: string; workflow_state: WorkflowState; output: Record<string, any> }>(
+      `/api/v1/module-workflow/${instanceId}/alignment/confirm`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(sections ? { sections } : {}),
+          ...(parameters ? { parameters } : {}),
+        }),
+      }
     ),
 
   exportModuleOutputDocx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
@@ -1619,71 +1654,6 @@ export const api = {
     });
     if (!response.ok) throw new Error(`Export failed: ${response.status}`);
     return response.blob();
-  },
-
-  // --- Template Fill ---
-
-  getRecentTemplates: (initiativeId: string, limit = 5) =>
-    fetchApi<{ template_id: string; filename: string; file_type: string; created_at: string }[]>(
-      `/api/v1/template/recent?initiative_id=${encodeURIComponent(initiativeId)}&limit=${limit}`,
-    ),
-
-  uploadTemplate: async (initiativeId: string, file: File): Promise<{ template_id: string; filename: string; file_type: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('initiative_id', initiativeId);
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/template/upload`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(error.detail || 'Upload failed');
-    }
-    return response.json();
-  },
-
-  updateTemplateRequirement: (requirementId: string, value?: string | null, reqStatus?: string | null) =>
-    fetchApi<{ requirement_id: string; value: string | null; status: string | null; updated: boolean }>(
-      `/api/v1/template/requirements/${requirementId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ value: value ?? null, status: reqStatus ?? null }),
-      },
-    ),
-
-  generateFromTemplate: (initiativeId: string, templateId: string, requirements?: any[]) =>
-    fetchApi<{ template_id: string; output_path: string; file_type: string; filename: string; requirements: any[] }>(
-      '/api/v1/template/generate',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          initiative_id: initiativeId,
-          template_id: templateId,
-          requirements: requirements ?? null,
-        }),
-      },
-    ),
-
-  exportTemplate: async (templateId: string, filename: string) => {
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/template/${templateId}/export`, { headers });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
   },
 
   async exportGSCoverLetter(workspaceId: string): Promise<Blob> {

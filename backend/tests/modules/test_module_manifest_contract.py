@@ -11,13 +11,16 @@ def test_registered_modules_expose_manifest_contract() -> None:
         assert isinstance(manifest, ModuleManifest)
         assert manifest.id == module.definition.id
         assert manifest.name == module.definition.name
-        assert manifest.module_class in {"foundational", "template_based"}
         assert isinstance(manifest.adapter_bindings, dict)
         assert isinstance(manifest.input_dependencies, list)
         assert isinstance(manifest.produced_outputs, list)
         assert isinstance(manifest.downstream_dependencies, list)
         assert manifest.assumptions_behavior in {"tracks", "none"}
         assert manifest.evidence_behavior in {"rag_grounded", "user_uploaded", "both", "none"}
+        assert manifest.goal
+        assert manifest.primary_ui_object
+        assert manifest.workspace_build_widget
+        assert manifest.workspace_output_widget
 
 
 def test_manifest_adapter_bindings_resolve_to_registered_adapters() -> None:

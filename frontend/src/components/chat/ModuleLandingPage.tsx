@@ -65,7 +65,6 @@ export function ModuleLandingPage({ onSelectModule, showIntro = true }: ModuleLa
                 ) : (
                   <div className="grid grid-cols-3 gap-3">
                     {category.resolvedModules.map((module) => {
-                      const isTemplate = module.id === 'template_fill';
                       return (
                         <button
                           key={module.id}
@@ -73,17 +72,8 @@ export function ModuleLandingPage({ onSelectModule, showIntro = true }: ModuleLa
                           onClick={() => onSelectModule(module.id, module.name)}
                           className="relative flex items-center gap-3 px-4 py-3.5 card-interactive border border-black/[0.04]"
                         >
-                          {isTemplate && (
-                            <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-indicator-yellow/10 text-indicator-yellow leading-none">
-                              BETA
-                            </span>
-                          )}
-                          <div className={`w-10 h-10 flex-shrink-0 rounded flex items-center justify-center ${
-                            isTemplate ? 'bg-accent-secondary/10' : 'bg-accent-wash'
-                          }`}>
-                            <span className={`[&>svg]:w-5 [&>svg]:h-5 ${
-                              isTemplate ? 'text-accent-secondary' : 'text-accent'
-                            }`}>
+                          <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash">
+                            <span className="[&>svg]:w-5 [&>svg]:h-5 text-accent">
                               {module.icon}
                             </span>
                           </div>

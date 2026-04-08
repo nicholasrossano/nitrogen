@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Search, PlusCircle, FileUp, FolderOpen, File as FileIcon, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Search, PanelsTopLeft, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
-export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'modules' | 'open';
+export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'workspace';
 
 interface NavItemConfig {
   key: NavItem;
@@ -30,8 +30,7 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'plan', label: 'Project Plan', Icon: Map },
-  { key: 'modules', label: 'New Module', Icon: PlusCircle },
-  { key: 'open', label: 'Open Module', Icon: FileIcon },
+  { key: 'workspace', label: 'Workspace', Icon: PanelsTopLeft },
   { key: 'research', label: 'Research', Icon: Search },
 ];
 
@@ -86,7 +85,7 @@ export function SideDrawer() {
     if (!initiativeId) return 'home';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
-    if (view === 'modules') return 'modules';
+    if (view === 'workspace') return 'workspace';
     if (view === 'files') return 'files';
     return 'plan';
   }, [initiativeId, searchParams]);
@@ -99,7 +98,7 @@ export function SideDrawer() {
   const showMaterials = hasProject && !isViewer;
 
   const projectItems = isViewer
-    ? PROJECT_ITEMS.filter(i => !(['research', 'modules', 'open'] as NavItem[]).includes(i.key))
+    ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
     : PROJECT_ITEMS;
 
   const longestLabelLength = useMemo(() => {

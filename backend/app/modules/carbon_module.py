@@ -135,10 +135,10 @@ class CarbonTool(BaseModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            module_class="foundational",
-            workflow_category="analysis",
             goal="Estimate project emission reductions and uncertainty sensitivity.",
             primary_ui_object="carbon_output",
+            workspace_build_widget="carbon_inputs",
+            workspace_output_widget="carbon_output",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "carbon"},
             input_dependencies=[],

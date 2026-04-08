@@ -60,7 +60,7 @@ async def _resolve_instance(
     inst = ModuleInstance(
         initiative_id=initiative_id,
         module_id=tool_id,
-        status="started",
+        status="draft",
         started_by=user_id,
         session_id=session_id,
     )
@@ -279,5 +279,7 @@ async def list_instances(
         )
         .order_by(ModuleInstance.started_at.desc())
     )
+    if not archived:
+        stmt = stmt.where(ModuleInstance.status != "draft")
     result = await db.execute(stmt)
     return list(result.scalars().all())

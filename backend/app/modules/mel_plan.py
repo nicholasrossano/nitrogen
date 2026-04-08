@@ -56,10 +56,10 @@ class MELPlanModule(BaseAssessmentModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            module_class="foundational",
-            workflow_category="analysis",
             goal="Produce a MEL plan with indicators and data collection strategy for reporting.",
             primary_ui_object="assessment_viewer",
+            workspace_build_widget="assessment_build",
+            workspace_output_widget="assessment_output",
             export_artifact_types=["docx"],
             adapter_bindings={"research_source": "retrieval"},
             input_dependencies=[],

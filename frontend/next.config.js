@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: process.env.NITROGEN_NEXT_DIST_DIR || '.next',
   output: 'standalone',
   transpilePackages: ['undici'],
   experimental: {
