@@ -38,7 +38,7 @@ function HomePageContent() {
     setCreating(true);
     try {
       const initiative = await api.createInitiative();
-      router.push(`/initiatives/${initiative.slug || initiative.id}`);
+      router.push(`/initiatives/${initiative.id}`);
     } catch (error) {
       console.error('Failed to create project:', error);
       setCreating(false);

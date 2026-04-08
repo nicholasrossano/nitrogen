@@ -36,6 +36,54 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
         await db.commit()
 
 
+async def _get_role_for_initiative(
+    db: AsyncSession,
+    initiative: Initiative,
+    user: AuthUser,
+) -> str | None:
+    """Resolve the current user's role for a concrete initiative."""
+    if initiative.user_id == user.uid:
+        return "owner"
+
+    share_result = await db.execute(
+        select(ProjectShare).where(
+            ProjectShare.initiative_id == initiative.id,
+            ProjectShare.user_id == user.uid,
+        )
+    )
+    share = share_result.scalar_one_or_none()
+    if share:
+        return share.role
+
+    return None
+
+
+async def _get_accessible_initiatives_by_slug(
+    db: AsyncSession,
+    slug: str,
+    user: AuthUser,
+) -> list[tuple[Initiative, str]]:
+    """Return initiatives matching a legacy slug that this user can access."""
+    owned_result = await db.execute(
+        select(Initiative).where(
+            Initiative.slug == slug,
+            Initiative.user_id == user.uid,
+        )
+    )
+    owned_matches = [(initiative, "owner") for initiative in owned_result.scalars().all()]
+
+    shared_result = await db.execute(
+        select(Initiative, ProjectShare.role)
+        .join(ProjectShare, ProjectShare.initiative_id == Initiative.id)
+        .where(
+            Initiative.slug == slug,
+            ProjectShare.user_id == user.uid,
+        )
+    )
+    shared_matches = list(shared_result.all())
+    return owned_matches + shared_matches
+
+
 async def get_initiative_with_role(
     db: AsyncSession,
     initiative_id: uuid.UUID | str,
@@ -55,30 +103,30 @@ async def get_initiative_with_role(
     except (ValueError, AttributeError):
         pass
 
-    if initiative is None:
-        result = await db.execute(
-            select(Initiative).where(Initiative.slug == str(initiative_id))
-        )
-        initiative = result.scalar_one_or_none()
-
-    if not initiative:
+    if initiative is not None:
+        role = await _get_role_for_initiative(db, initiative, user)
+        if role:
+            return initiative, role
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
-    if initiative.user_id == user.uid:
-        return initiative, "owner"
+    matches = await _get_accessible_initiatives_by_slug(db, str(initiative_id), user)
+    if not matches:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
-    # Use the real UUID for the share lookup
-    share_result = await db.execute(
-        select(ProjectShare).where(
-            ProjectShare.initiative_id == initiative.id,
-            ProjectShare.user_id == user.uid,
-        )
+    if len(matches) == 1:
+        return matches[0]
+
+    owned_matches = [match for match in matches if match[1] == "owner"]
+    if len(owned_matches) == 1:
+        return owned_matches[0]
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "This legacy project URL matches multiple accessible projects. "
+            "Open the project from the projects list to use its canonical URL."
+        ),
     )
-    share = share_result.scalar_one_or_none()
-    if share:
-        return initiative, share.role
-
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
 
 async def require_owner(
