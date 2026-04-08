@@ -136,6 +136,12 @@ function InitiativePageContent() {
   const driveConnected = useGoogleDriveStore((s) => s.connected);
   const connectDrive = useGoogleDriveStore((s) => s.connect);
 
+  useEffect(() => {
+    if (!initiative?.id || initiativeId === initiative.id) return;
+    const query = searchParams.toString();
+    router.replace(query ? `/initiatives/${initiative.id}?${query}` : `/initiatives/${initiative.id}`);
+  }, [initiative?.id, initiativeId, router, searchParams]);
+
   const handleFilesViewDriveImport = useCallback(async () => {
     if (!driveConnected) {
       connectDrive(initiativeId);

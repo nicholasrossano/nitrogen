@@ -140,7 +140,7 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
   };
 
   const CardWrapper = isTrash ? 'div' : Link;
-  const cardProps = isTrash ? {} : { href: `/initiatives/${project.slug || project.id}` };
+  const cardProps = isTrash ? {} : { href: `/initiatives/${project.id}` };
 
   return (
     <CardWrapper {...cardProps as any}>
