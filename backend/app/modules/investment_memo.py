@@ -133,10 +133,10 @@ class InvestmentMemoTool(BaseModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            module_class="foundational",
-            workflow_category="funding_package",
             goal="Produce an investment memo with recommendation and evidence-backed rationale.",
             primary_ui_object="memo_viewer",
+            workspace_build_widget="alignment",
+            workspace_output_widget="memo_viewer",
             export_artifact_types=["docx"],
             adapter_bindings={"core_engine": "memo_generation", "research_source": "retrieval"},
             input_dependencies=[],

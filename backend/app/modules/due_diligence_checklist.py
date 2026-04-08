@@ -131,10 +131,10 @@ class DueDiligenceChecklistTool(BaseModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            module_class="foundational",
-            workflow_category="risks_and_requirements",
             goal="Generate a due diligence checklist across technical, financial, and operational risks.",
             primary_ui_object="checklist_viewer",
+            workspace_build_widget="alignment",
+            workspace_output_widget="checklist_viewer",
             export_artifact_types=["docx"],
             adapter_bindings={"research_source": "retrieval"},
             input_dependencies=[],

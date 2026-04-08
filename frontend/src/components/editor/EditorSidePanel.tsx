@@ -10,8 +10,6 @@ const CarbonModelWidget = dynamic(() => import('@/components/widgets/CarbonModel
 const MemoViewerWidget = dynamic(() => import('@/components/widgets/MemoViewerWidget').then(m => ({ default: m.MemoViewerWidget })), { ssr: false });
 const ChecklistViewerWidget = dynamic(() => import('@/components/widgets/ChecklistViewerWidget').then(m => ({ default: m.ChecklistViewerWidget })), { ssr: false });
 const AlignmentWidget = dynamic(() => import('@/components/widgets/AlignmentWidget').then(m => ({ default: m.AlignmentWidget })), { ssr: false });
-const TemplateRequirementsWidget = dynamic(() => import('@/components/widgets/TemplateRequirementsWidget').then(m => ({ default: m.TemplateRequirementsWidget })), { ssr: false });
-const TemplateViewerWidget = dynamic(() => import('@/components/widgets/TemplateViewerWidget').then(m => ({ default: m.TemplateViewerWidget })), { ssr: false });
 const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
 const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
@@ -25,10 +23,9 @@ export const EDITOR_WIDGET_TYPES = [
   'memo_viewer',
   'checklist_viewer',
   'alignment',
-  'template_requirements',
-  'template_viewer',
   'document_viewer',
   'assessment_workspace',
+  'module_workspace',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -41,10 +38,9 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   memo_viewer: 'memo',
   checklist_viewer: 'checklist',
   alignment: 'alignment',
-  template_requirements: 'template',
-  template_viewer: 'template',
   document_viewer: 'document_viewer',
   assessment_workspace: 'assessment',
+  module_workspace: 'module',
 };
 
 export interface EditorWidget {
@@ -69,10 +65,9 @@ const WIDGET_LABELS: Record<string, string> = {
   memo_viewer: 'Investment Memo',
   checklist_viewer: 'Due Diligence',
   alignment: 'Memo Outline',
-  template_requirements: 'Template',
-  template_viewer: 'Template Output',
   document_viewer: 'Document',
   assessment_workspace: 'Assessment',
+  module_workspace: 'Module',
 };
 
 export function EditorSidePanel({ widgets, initiativeId = '', onAlignmentConfirmed }: EditorSidePanelProps) {
@@ -149,13 +144,10 @@ function EditorWidgetRenderer({
       return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'alignment':
       return <AlignmentWidget data={data} initiativeId={initiativeId} isActive onConfirmed={onAlignmentConfirmed} />;
-    case 'template_requirements':
-      return <TemplateRequirementsWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
-    case 'template_viewer':
-      return <TemplateViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'document_viewer':
       return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'assessment_workspace':
+    case 'module_workspace':
       return (
         <ModuleWorkspace
           instanceId={data.instance_id}

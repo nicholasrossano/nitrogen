@@ -36,9 +36,14 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 async function persistWidgetToDb(
   initiativeId: string,
   messageId: string,
+  instanceId: string | undefined,
   widgetData: Record<string, any>,
 ): Promise<boolean> {
   try {
+    if (instanceId) {
+      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      return true;
+    }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
     useInitiativeStore.getState().updateMessageWidgetData(messageId, widgetData);
     useChatStore.getState().updateMessageWidgetData(messageId, widgetData);
@@ -53,6 +58,9 @@ interface SolarEstimateWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   messageId?: string;
+  instanceId?: string;
+  onWorkflowUpdated?: () => void;
+  workspaceView?: 'build' | 'output';
   isActive?: boolean;
 }
 
@@ -131,15 +139,20 @@ export function SolarEstimateWidget({
   data: initialData,
   initiativeId,
   messageId,
+  instanceId,
+  onWorkflowUpdated,
+  workspaceView = 'output',
   isActive = true,
 }: SolarEstimateWidgetProps) {
   const [data, setDataRaw] = useState(initialData);
   const setData = useCallback((newData: any) => {
     setDataRaw(newData);
-    if (messageId) {
-      persistWidgetToDb(initiativeId, messageId, newData);
+    if (messageId || instanceId) {
+      persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData).then((persisted) => {
+        if (persisted && instanceId) onWorkflowUpdated?.();
+      });
     }
-  }, [initiativeId, messageId]);
+  }, [initiativeId, messageId, instanceId, onWorkflowUpdated]);
 
   useEffect(() => { setDataRaw(initialData); }, [initialData]);
 
@@ -174,6 +187,7 @@ export function SolarEstimateWidget({
   const result = data.result;
   const missingEssentials: string[] = data.missing_essentials || [];
   const hasResult = !!result;
+  const forceInputsView = workspaceView === 'build';
   const error = data.error;
 
   const groupedInputs = useMemo(() => {
@@ -446,7 +460,7 @@ export function SolarEstimateWidget({
     : null;
 
   // ======================= INPUTS-ONLY MODE =======================
-  if (!hasResult) {
+  if (!hasResult || forceInputsView) {
     const displayError = recalcError || error;
     return (
       <div className="flex flex-col h-full bg-surface-primary">
@@ -495,14 +509,16 @@ export function SolarEstimateWidget({
             {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
             Powered by PVWatts V8 (NREL)
           </span>
-          <button
-            type="button"
-            onClick={handleRunEstimate}
-            disabled={missingEssentials.length > 0 || isRecalculating}
-            className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
-          >
-            {isRecalculating ? 'Running...' : 'Run Estimate'}
-          </button>
+          {!forceInputsView && (
+            <button
+              type="button"
+              onClick={handleRunEstimate}
+              disabled={missingEssentials.length > 0 || isRecalculating}
+              className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
+            >
+              {isRecalculating ? 'Running...' : 'Run Estimate'}
+            </button>
+          )}
         </div>
 
         {investigateTooltip}
