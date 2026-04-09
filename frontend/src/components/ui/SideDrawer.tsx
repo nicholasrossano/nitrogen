@@ -374,7 +374,6 @@ export function SideDrawer() {
           >
             <Icon
               className="w-4 h-4 flex-shrink-0"
-              {...(activeItem === key && { fill: 'currentColor' })}
             />
             <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               {label}
@@ -402,7 +401,6 @@ export function SideDrawer() {
               >
                 <Icon
                   className="w-4 h-4 flex-shrink-0"
-                  {...(activeItem === key && { fill: 'currentColor' })}
                 />
                 <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
                   {label}
@@ -556,7 +554,6 @@ export function SideDrawer() {
           >
             <FolderOpen
               className="w-4 h-4 flex-shrink-0"
-              {...(activeItem === 'files' && { fill: 'currentColor' })}
             />
             <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               Files
