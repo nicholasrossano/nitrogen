@@ -25,7 +25,6 @@ from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 from app.modules.assessment_base import (
     BaseAssessmentModule,
     get_build_stage,
-    layers_as_dict,
     make_initial_workflow_state,
 )
 from app.modules.base import BaseModule
