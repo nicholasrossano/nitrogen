@@ -134,20 +134,10 @@ async def list_sessions(
     )
 
     if initiative_id:
-        # Accept both UUID strings and slugs (slug → UUID resolution).
-        init_uuid: uuid.UUID | None = None
         try:
             init_uuid = uuid.UUID(initiative_id)
         except ValueError:
-            # Not a UUID — try slug lookup
-            slug_result = await db.execute(
-                select(Initiative.id).where(Initiative.slug == initiative_id)
-            )
-            raw = slug_result.scalar_one_or_none()
-            if raw is None:
-                # Unknown slug: return empty list (not an error — project may be new)
-                return {"sessions": []}
-            init_uuid = raw
+            raise HTTPException(status_code=400, detail="Invalid initiative_id")
         query = query.where(CoreChatSession.initiative_id == init_uuid)
 
     result = await db.execute(query)
@@ -267,7 +257,6 @@ async def chat_stream(
     async def generate():
         try:
             # Resolve initiative_id for session scoping.
-            # Accept both UUID and slug identifiers.
             resolved_initiative_id: uuid.UUID | None = None
             if data.initiative_id:
                 try:
