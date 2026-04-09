@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.module_instance import ModuleInstance
+from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 
 
 # ── Instance resolution ────────────────────────────────────────────
@@ -132,7 +132,7 @@ async def save_deliverable(
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     inst.title = title
-    inst.status = "complete"
+    inst.status = ModuleInstanceStatus.READY
     inst.updated_at = datetime.now(timezone.utc)
     await db.flush()
     return inst

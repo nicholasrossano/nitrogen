@@ -64,6 +64,18 @@ class AssessmentModuleDef:
     output_type: str = "assessment_document"
 
     def to_dict(self) -> dict:
+        layer_dicts = [
+            {
+                "id": layer.id,
+                "name": layer.name,
+                "view_type": layer.view_type,
+                "stage_type": layer.view_type,  # mirrors view_type for frontend
+                "description": layer.description,
+                "item_schema": layer.item_schema,
+                "removable": layer.removable,
+            }
+            for layer in self.build_layers
+        ]
         return {
             "setup_fields": [
                 {
@@ -77,17 +89,7 @@ class AssessmentModuleDef:
                 }
                 for f in self.setup_fields
             ],
-            "build_layers": [
-                {
-                    "id": layer.id,
-                    "name": layer.name,
-                    "view_type": layer.view_type,
-                    "description": layer.description,
-                    "item_schema": layer.item_schema,
-                    "removable": layer.removable,
-                }
-                for layer in self.build_layers
-            ],
+            "build_layers": layer_dicts,
             "output_type": self.output_type,
         }
 
@@ -96,14 +98,28 @@ class AssessmentModuleDef:
 # workflow_state helpers
 # ---------------------------------------------------------------------------
 
-def _make_empty_layer_state(layer_def: BuildLayerDef) -> dict:
+def build_stage_from_layer(layer_def: BuildLayerDef) -> dict:
+    """Convert a BuildLayerDef into a canonical build stage entry."""
     return {
+        "id": layer_def.id,
+        "name": layer_def.name,
+        "stage_type": layer_def.view_type,  # "simple_list" | "structured_list" | "detail_node"
         "status": "pending",
+        "widget_type": None,
+        "widget_data": None,
         "items": [],
+        "view_config": {
+            "removable": layer_def.removable,
+            "item_schema": layer_def.item_schema,
+            "description": layer_def.description,
+        },
     }
 
 
 def make_initial_workflow_state(module_type: str, assessment_def: AssessmentModuleDef) -> dict:
+    """Build the canonical workflow_state skeleton for an assessment module."""
+    stages = [build_stage_from_layer(layer) for layer in assessment_def.build_layers]
+    first_stage_id = stages[0]["id"] if stages else None
     return {
         "module_type": module_type,
         "current_stage": "setup",
@@ -113,16 +129,29 @@ def make_initial_workflow_state(module_type: str, assessment_def: AssessmentModu
             "confirmed_at": None,
         },
         "build": {
-            "current_layer": assessment_def.build_layers[0].id if assessment_def.build_layers else None,
-            "layers": {
-                layer.id: _make_empty_layer_state(layer)
-                for layer in assessment_def.build_layers
-            },
+            "stages": stages,
+            "current_stage_id": first_stage_id,
         },
         "output": {
             "status": "pending",
             "content": None,
         },
+    }
+
+
+def get_build_stage(build: dict, stage_id: str) -> dict | None:
+    """Return the stage entry matching stage_id from build.stages, or None."""
+    for s in build.get("stages", []):
+        if s["id"] == stage_id:
+            return s
+    return None
+
+
+def layers_as_dict(build: dict) -> dict[str, dict]:
+    """Return a {stage_id: {items, status}} dict for use in generate_layer prior_layers arg."""
+    return {
+        s["id"]: {"items": s.get("items") or [], "status": s.get("status", "pending")}
+        for s in build.get("stages", [])
     }
 
 
