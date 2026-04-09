@@ -108,6 +108,44 @@ class CarbonTool(BaseModule):
     """Carbon emissions calculator for chat-based ER estimation."""
 
     @property
+    def workspace_setup_fields(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "geography",
+                "label": "Geography",
+                "description": "Project geography or operating market.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Kenya",
+            },
+            {
+                "name": "method_pack",
+                "label": "Project Type",
+                "description": "Select the carbon methodology family that best matches the project.",
+                "field_type": "select",
+                "required": True,
+                "options": [
+                    "cookstoves",
+                    "fuel_switch",
+                    "safe_water",
+                    "grid_renewable",
+                    "solar_home",
+                    "biodigester",
+                    "efficient_lighting",
+                ],
+                "placeholder": None,
+            },
+            {
+                "name": "project_title",
+                "label": "Project Title",
+                "description": "Working title for this module run.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "Project title",
+            },
+        ]
+
+    @property
     def definition(self) -> ModuleDefinition:
         return ModuleDefinition(
             id="carbon_model",
@@ -430,3 +468,17 @@ class CarbonTool(BaseModule):
         result_data = dict(result.output)
         result_data["method_pack"] = method_pack
         return result_data
+
+    async def build_workspace_widget_data(
+        self,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.services.carbon_engine import CarbonEngine
+
+        method_pack = known_values.get("method_pack")
+        inputs = CarbonEngine.build_default_inputs(
+            method_pack=method_pack,
+            known_values=known_values,
+        )
+        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
+        return await self.recalculate(serialized_inputs)

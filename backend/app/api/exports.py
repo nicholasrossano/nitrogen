@@ -16,13 +16,8 @@ from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
-from app.services.excel_exporter import ExcelExporterService
 
 router = APIRouter()
-
-
-class ChecklistExportRequest(BaseModel):
-    content: dict  # The checklist content to export
 
 
 @router.post("/initiatives/{initiative_id}/export", response_model=ExportResponse)
@@ -163,33 +158,6 @@ async def download_export(
     )
 
 
-@router.post("/initiatives/{initiative_id}/export-checklist")
-async def export_checklist(
-    initiative_id: str,
-    data: ChecklistExportRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Export checklist to Excel"""
-    initiative = await require_viewer(db, initiative_id, user)
-    
-    # Generate Excel
-    exporter = ExcelExporterService()
-    filepath = await exporter.export_checklist(data.content)
-    
-    # Read the file
-    with open(filepath, 'rb') as f:
-        file_bytes = f.read()
-    
-    filename = f"due_diligence_checklist_{initiative.title or 'untitled'}.xlsx".replace(" ", "_")
-    
-    return Response(
-        content=file_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": safe_content_disposition(filename)
-        }
-    )
 
 
 async def _handle_memo_export(content, safe_title, initiative, initiative_id, db, user):
@@ -229,17 +197,6 @@ async def _handle_memo_export(content, safe_title, initiative, initiative_id, db
         headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
     )
 
-
-async def _handle_checklist_export(content, safe_title, initiative, initiative_id, db, user):
-    exporter = ExcelExporterService()
-    filepath = await exporter.export_checklist(content)
-    with open(filepath, "rb") as f:
-        file_bytes = f.read()
-    return Response(
-        content=file_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.xlsx")},
-    )
 
 
 async def _handle_lcoe_export(content, safe_title, initiative, initiative_id, db, user):
@@ -318,7 +275,6 @@ async def _handle_template_export(content, safe_title, initiative, initiative_id
 
 _EXPORT_HANDLERS: dict[str, Any] = {
     "memo": _handle_memo_export,
-    "checklist": _handle_checklist_export,
     "lcoe": _handle_lcoe_export,
     "carbon": _handle_carbon_export,
     "solar": _handle_solar_export,

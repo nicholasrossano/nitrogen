@@ -101,6 +101,35 @@ class PVWattsTool(BaseModule):
     """Solar production estimate tool using NREL PVWatts V8."""
 
     @property
+    def workspace_setup_fields(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "geography",
+                "label": "Geography",
+                "description": "Project geography or address context.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Nairobi, Kenya",
+            },
+            {
+                "name": "address",
+                "label": "Site Address",
+                "description": "Address or place name for the solar site.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Kisumu, Kenya",
+            },
+            {
+                "name": "project_title",
+                "label": "Project Title",
+                "description": "Working title for this module run.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "Project title",
+            },
+        ]
+
+    @property
     def definition(self) -> ModuleDefinition:
         return ModuleDefinition(
             id="solar_estimate",
@@ -355,3 +384,13 @@ class PVWattsTool(BaseModule):
             title="Solar Production Estimate",
             content=result_data,
         )
+
+    async def build_workspace_widget_data(
+        self,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.services.pvwatts_engine import PVWattsEngine
+
+        inputs = PVWattsEngine.build_default_inputs(known_values=known_values)
+        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
+        return await self.recalculate(serialized_inputs)

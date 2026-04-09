@@ -249,6 +249,17 @@ class BaseModule(ABC):
     def all_inputs(self) -> list[ModuleInput]:
         """Return all inputs (required + optional)."""
         return self.required_inputs + self.optional_inputs
+
+    @property
+    def workspace_setup_fields(self) -> list[dict[str, Any]]:
+        """Optional setup-field definitions for workspace-backed modules.
+
+        Launch modules all share the same setup/build/output lifecycle. Modules
+        that participate in the workspace flow should expose any setup form
+        fields here rather than relying on module_id branches in the workflow
+        service.
+        """
+        return []
     
     @property
     def review_strategy(self) -> ReviewStrategy:
@@ -357,6 +368,19 @@ class BaseModule(ABC):
         """
         raise NotImplementedError(
             f"{self.definition.name} does not support conversation-based execution"
+        )
+
+    async def build_workspace_widget_data(
+        self,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build initial widget-backed workflow state for single-layer modules.
+
+        Widget-backed modules should override this instead of depending on
+        central module_id branching in the workflow service.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not support widget-backed workspace build state"
         )
 
     async def export(

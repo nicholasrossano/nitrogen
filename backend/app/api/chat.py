@@ -374,7 +374,6 @@ async def chat_stream(
                     from app.services.chat import ChatResponse
                     from app.services.module_workflow_service import (
                         ensure_workflow_state,
-                        uses_alignment_build,
                         uses_layered_build,
                         uses_workspace_flow,
                     )
@@ -404,12 +403,6 @@ async def chat_stream(
                                 "Review the setup, work through the build stage, and finalize the output when you're ready."
                             )
                             tiers_used = ["workspace_setup"]
-                        elif uses_alignment_build(_workflow_module):
-                            intro = (
-                                f"Here's your **{_workflow_module.definition.name}** workspace. "
-                                "Review the setup, confirm the build-stage outline, and then generate the final output."
-                            )
-                            tiers_used = ["workspace_build"]
                         else:
                             intro = (
                                 f"Here's your **{_workflow_module.definition.name}** workspace. "
@@ -479,52 +472,6 @@ async def chat_stream(
                 widget_data=result.widget_data,
             )
             db.add(assistant_msg)
-
-            # Sync generated deliverables when a project is in context and the
-            # result widget represents a completed, exportable tool output.
-            # Additionally, always ensure a module instance exists for this
-            # session even for partial outputs (e.g. carbon_inputs, lcoe_inputs)
-            # so the Open Module browser can find and reopen in-progress work.
-            if verified_initiative and result.widget_type and result.widget_data:
-                _WIDGET_TO_TOOL: dict[str, str] = {
-                    "lcoe_output": "lcoe_model",
-                    "lcoe_inputs": "lcoe_model",
-                    "carbon_output": "carbon_model",
-                    "carbon_inputs": "carbon_model",
-                    "solar_output": "solar_estimate",
-                    "solar_inputs": "solar_estimate",
-                }
-                _tool_id = _WIDGET_TO_TOOL.get(result.widget_type or "")
-                if _tool_id:
-                    # Always link this session to a module instance, even for
-                    # partial outputs, so the instance is discoverable via
-                    # Open Module and can reopen the chat session.
-                    await module_service.get_or_create_instance(
-                        db, verified_initiative.id, _tool_id, user.uid,
-                        session_id=session.id,
-                    )
-                    from app.modules.registry import get_module_registry
-                    _tool = get_module_registry().get_module(_tool_id)
-                    _content = result.widget_data or {}
-                    if _tool and _tool.is_exportable(_content):
-                        _res = _content.get("result") or {}
-                        if _tool_id == "lcoe_model":
-                            _lcoe = _res.get("lcoe", 0)
-                            _cur = _res.get("currency", "USD")
-                            _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
-                        elif _tool_id == "carbon_model":
-                            _er = _res.get("net_er_tco2e", 0)
-                            _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
-                        elif _tool_id == "solar_estimate":
-                            _kwh = _res.get("annual_kwh", 0)
-                            _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
-                        else:
-                            _title = _tool.definition.name
-                        await module_service.save_deliverable(
-                            db, verified_initiative.id, _tool_id,
-                            _title, _tool.definition.output_type, _content,
-                            user_id=user.uid, session_id=session.id,
-                        )
 
             await db.commit()
 
@@ -630,45 +577,6 @@ async def update_message_widget(
 
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(msg, "widget_data")
-
-    # Keep module instance in sync when a model widget is recalculated.
-    chat_session = await db.get(CoreChatSession, msg.session_id)
-    if chat_session and chat_session.initiative_id:
-        try:
-            _WIDGET_TO_TOOL: dict[str, str] = {
-                "lcoe_output": "lcoe_model",
-                "lcoe_inputs": "lcoe_model",
-                "carbon_output": "carbon_model",
-                "carbon_inputs": "carbon_model",
-                "solar_output": "solar_estimate",
-                "solar_inputs": "solar_estimate",
-            }
-            _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
-            if _tool_id:
-                from app.modules.registry import get_module_registry
-                _tool = get_module_registry().get_module(_tool_id)
-                _content = data.widget_data or {}
-                if _tool and _tool.is_exportable(_content):
-                    _res = _content.get("result") or {}
-                    if _tool_id == "lcoe_model":
-                        _lcoe = _res.get("lcoe", 0)
-                        _cur = _res.get("currency", "USD")
-                        _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
-                    elif _tool_id == "carbon_model":
-                        _er = _res.get("net_er_tco2e", 0)
-                        _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
-                    elif _tool_id == "solar_estimate":
-                        _kwh = _res.get("annual_kwh", 0)
-                        _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
-                    else:
-                        _title = _tool.definition.name
-                    await module_service.save_deliverable(
-                        db, chat_session.initiative_id, _tool_id,
-                        _title, _tool.definition.output_type, _content,
-                        user_id=user.uid, session_id=chat_session.id,
-                    )
-        except Exception:
-            pass
 
     await db.commit()
 

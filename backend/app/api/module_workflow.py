@@ -3,6 +3,10 @@
 These endpoints drive the ModuleWorkspace frontend component. Each endpoint
 operates on a ModuleInstance identified by its UUID.
 
+The build stage is represented as ``workflow_state.build.stages[]`` — an ordered
+array where each entry has ``id``, ``name``, ``stage_type``, ``status``, and
+type-specific fields (``widget_data`` for widget stages, ``items`` for list stages).
+
 Mounted at: /api/v1/module-workflow
 """
 
@@ -24,22 +28,22 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
 from app.core.permissions import require_viewer, require_editor
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance
-from app.modules.base import BaseModule, ModuleAlignment
+from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
+from app.modules.base import BaseModule
 from app.modules.registry import get_module_registry
-from app.modules.assessment_base import BaseAssessmentModule
+from app.modules.assessment_base import BaseAssessmentModule, get_build_stage, layers_as_dict, make_build_item
 from app.services import module_service
 from app.services.module_workflow_service import (
     build_deliverable_title,
     ensure_workflow_state,
     get_workspace_setup_fields,
     get_initiative_context,
-    persist_calculator_widget_state,
+    persist_widget_stage_state,
     save_workflow_state,
-    uses_alignment_build,
     uses_layered_build,
     uses_recalculating_build,
     uses_workspace_flow,
+    _make_widget_stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,40 +143,12 @@ def _module_definition_payload(module: BaseModule) -> dict[str, Any]:
     return payload
 
 
-def _build_execution_inputs(
-    initiative: Initiative,
-    setup_fields: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Normalize initiative context into execution inputs for non-assessment modules."""
-    inputs = dict(initiative.tool_inputs or {})
-    if initiative.title:
-        inputs.setdefault("project_title", initiative.title)
-    if initiative.geography:
-        inputs.setdefault("geography", initiative.geography)
-        inputs.setdefault("address", initiative.geography)
-    if initiative.target_population:
-        inputs.setdefault("target_beneficiaries", initiative.target_population)
-    if initiative.goal:
-        inputs.setdefault("project_goal", initiative.goal)
-    if initiative.budget_range:
-        inputs.setdefault("budget_range", initiative.budget_range)
-    if initiative.timeline:
-        inputs.setdefault("timeline", initiative.timeline)
-    normalized = {
-        key: value
-        for key, value in inputs.items()
-        if value is not None
-    }
-    for key, value in (setup_fields or {}).items():
-        if value not in (None, ""):
-            normalized[key] = value
-    if normalized.get("geography") and "address" not in normalized:
-        normalized["address"] = normalized["geography"]
-    if normalized.get("project_description") and "project_goal" not in normalized:
-        normalized["project_goal"] = normalized["project_description"]
-    if normalized.get("target_population") and "target_beneficiaries" not in normalized:
-        normalized["target_beneficiaries"] = normalized["target_population"]
-    return normalized
+def _get_stage_or_404(build: dict, stage_id: str, instance_id: Any) -> dict:
+    """Return the stage dict or raise HTTP 404."""
+    stage = get_build_stage(build, stage_id)
+    if stage is None:
+        raise HTTPException(status_code=404, detail=f"Stage '{stage_id}' not found on instance {instance_id}")
+    return stage
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +185,7 @@ async def generate_setup_defaults(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """AI-generate default setup field values from project context."""
+    """AI-generate default setup field values from project context (assessment modules only)."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
     if not isinstance(module, BaseAssessmentModule):
         raise HTTPException(
@@ -247,13 +223,12 @@ async def confirm_setup(
     state["setup"]["confirmed"] = True
     state["setup"]["confirmed_at"] = datetime.now(timezone.utc).isoformat()
     state["current_stage"] = "build"
+
+    # If setup fields changed for a widget module, reset build and output
     if not uses_layered_build(module) and previous_fields != data.fields:
         state["build"] = {
-            "status": "pending",
-            "current_layer": None,
-            "layers": {},
-            "widget_type": module.manifest.workspace_build_widget,
-            "widget_data": None,
+            "stages": [_make_widget_stage(module)],
+            "current_stage_id": "main",
         }
         state["output"] = {
             "status": "pending",
@@ -261,80 +236,73 @@ async def confirm_setup(
             "widget_type": module.manifest.workspace_output_widget,
             "widget_data": None,
         }
-        inst.alignment = None
         inst.deliverable = None
-        flag_modified(inst, "alignment")
         flag_modified(inst, "deliverable")
+
     save_workflow_state(inst, state)
-    if uses_layered_build(module):
-        inst.status = "generating"
-    else:
-        inst.status = "started"
+    inst.status = ModuleInstanceStatus.GENERATING if uses_layered_build(module) else ModuleInstanceStatus.STARTED
     await db.commit()
 
     return {"ok": True, "current_stage": "build"}
 
 
 # ---------------------------------------------------------------------------
-# Build endpoints
+# Build endpoints (assessment / layered modules)
 # ---------------------------------------------------------------------------
 
-@router.post("/module-workflow/{instance_id}/build/{layer_id}/generate")
-async def generate_build_layer(
+@router.post("/module-workflow/{instance_id}/build/{stage_id}/generate")
+async def generate_build_stage(
     instance_id: _uuid.UUID,
-    layer_id: str,
+    stage_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Generate items for a build layer using the LLM."""
+    """Generate items for a build stage using the LLM (assessment modules only)."""
     inst, module = await _get_editable_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
 
     if not state["setup"].get("confirmed"):
-        raise HTTPException(status_code=400, detail="Setup must be confirmed before generating build layers")
+        raise HTTPException(status_code=400, detail="Setup must be confirmed before generating build stages")
 
-    # Validate layer exists
-    valid_layers = [layer.id for layer in module.assessment_definition.build_layers]
-    if layer_id not in valid_layers:
-        raise HTTPException(status_code=404, detail=f"Layer '{layer_id}' not found")
+    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
 
     context = await get_initiative_context(db, inst.initiative_id)
     setup_fields = state["setup"]["fields"]
-    prior_layers = state["build"]["layers"]
+    prior_layers = layers_as_dict(state["build"])
 
     # Mark as generating
-    state["build"]["layers"][layer_id]["status"] = "generating"
-    state["build"]["current_layer"] = layer_id
+    stage["status"] = "generating"
+    state["build"]["current_stage_id"] = stage_id
     save_workflow_state(inst, state)
     await db.commit()
 
     try:
         items = await module.generate_layer(
-            db, inst.initiative_id, layer_id, setup_fields, prior_layers, context
+            db, inst.initiative_id, stage_id, setup_fields, prior_layers, context
         )
-        state["build"]["layers"][layer_id]["items"] = items
-        state["build"]["layers"][layer_id]["status"] = "in_progress"
+        stage["items"] = items
+        stage["status"] = "in_progress"
         save_workflow_state(inst, state)
         await db.commit()
     except Exception as e:
-        logger.error(f"Layer generation failed for {instance_id}/{layer_id}: {e}", exc_info=True)
-        state["build"]["layers"][layer_id]["status"] = "error"
+        logger.error(f"Stage generation failed for {instance_id}/{stage_id}: {e}", exc_info=True)
+        stage["status"] = "error"
         save_workflow_state(inst, state)
         await db.commit()
         raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
 
-    return {"items": items, "layer_status": "in_progress"}
+    return {"items": items, "stage_status": "in_progress"}
 
 
 class EditItemRequest(BaseModel):
     content: dict[str, Any]
 
 
-@router.patch("/module-workflow/{instance_id}/build/{layer_id}/items/{item_id}")
+@router.patch("/module-workflow/{instance_id}/build/{stage_id}/items/{item_id}")
 async def edit_item(
     instance_id: _uuid.UUID,
-    layer_id: str,
+    stage_id: str,
     item_id: str,
     data: EditItemRequest,
     db: AsyncSession = Depends(get_db),
@@ -344,7 +312,8 @@ async def edit_item(
     inst, module = await _get_editable_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    items = state["build"]["layers"].get(layer_id, {}).get("items", [])
+    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
+    items = stage.get("items") or []
     item_idx = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
     if item_idx is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -352,17 +321,17 @@ async def edit_item(
     items[item_idx]["content"] = data.content
     items[item_idx]["origin"] = "user edited"
     items[item_idx]["provenance"]["derivation"] = "user_edited"
-    state["build"]["layers"][layer_id]["items"] = items
+    stage["items"] = items
     save_workflow_state(inst, state)
     await db.commit()
 
     return {"item": items[item_idx]}
 
 
-@router.post("/module-workflow/{instance_id}/build/{layer_id}/items/{item_id}/confirm")
+@router.post("/module-workflow/{instance_id}/build/{stage_id}/items/{item_id}/confirm")
 async def confirm_item(
     instance_id: _uuid.UUID,
-    layer_id: str,
+    stage_id: str,
     item_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -371,7 +340,8 @@ async def confirm_item(
     inst, module = await _get_editable_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    items = state["build"]["layers"].get(layer_id, {}).get("items", [])
+    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
+    items = stage.get("items") or []
     item_idx = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
     if item_idx is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -380,38 +350,39 @@ async def confirm_item(
     items[item_idx]["confirmed"] = now_confirmed
     items[item_idx]["confirmed_at"] = datetime.now(timezone.utc).isoformat() if now_confirmed else None
 
-    # If all items confirmed, mark layer as confirmed
+    # If all items confirmed, mark stage as confirmed
     if all(it.get("confirmed") for it in items):
-        state["build"]["layers"][layer_id]["status"] = "confirmed"
+        stage["status"] = "confirmed"
     else:
-        state["build"]["layers"][layer_id]["status"] = "in_progress"
+        stage["status"] = "in_progress"
 
-    state["build"]["layers"][layer_id]["items"] = items
+    stage["items"] = items
     save_workflow_state(inst, state)
     await db.commit()
 
-    return {"item": items[item_idx], "layer_status": state["build"]["layers"][layer_id]["status"]}
+    return {"item": items[item_idx], "stage_status": stage["status"]}
 
 
-@router.delete("/module-workflow/{instance_id}/build/{layer_id}/items/{item_id}")
+@router.delete("/module-workflow/{instance_id}/build/{stage_id}/items/{item_id}")
 async def delete_item(
     instance_id: _uuid.UUID,
-    layer_id: str,
+    stage_id: str,
     item_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Remove an item from a build layer."""
+    """Remove an item from a build stage."""
     inst, module = await _get_editable_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    items = state["build"]["layers"].get(layer_id, {}).get("items", [])
+    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
+    items = stage.get("items") or []
     original_len = len(items)
     items = [it for it in items if it["id"] != item_id]
     if len(items) == original_len:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    state["build"]["layers"][layer_id]["items"] = items
+    stage["items"] = items
     save_workflow_state(inst, state)
     await db.commit()
 
@@ -422,23 +393,25 @@ class AddItemRequest(BaseModel):
     content: dict[str, Any]
 
 
-@router.post("/module-workflow/{instance_id}/build/{layer_id}/items")
+@router.post("/module-workflow/{instance_id}/build/{stage_id}/items")
 async def add_item(
     instance_id: _uuid.UUID,
-    layer_id: str,
+    stage_id: str,
     data: AddItemRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Add a new manually-authored item to a build layer."""
+    """Add a new manually-authored item to a build stage."""
     inst, module = await _get_editable_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
+    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
 
-    from app.modules.assessment_base import make_build_item
     new_item = make_build_item(content=data.content, derivation="provided")
-    state["build"]["layers"][layer_id]["items"].append(new_item)
-    state["build"]["layers"][layer_id]["status"] = "in_progress"
+    if stage.get("items") is None:
+        stage["items"] = []
+    stage["items"].append(new_item)
+    stage["status"] = "in_progress"
     save_workflow_state(inst, state)
     await db.commit()
 
@@ -449,27 +422,27 @@ class ReorderItemsRequest(BaseModel):
     item_ids: list[str]
 
 
-@router.post("/module-workflow/{instance_id}/build/{layer_id}/reorder")
+@router.post("/module-workflow/{instance_id}/build/{stage_id}/reorder")
 async def reorder_items(
     instance_id: _uuid.UUID,
-    layer_id: str,
+    stage_id: str,
     data: ReorderItemsRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Reorder items in a build layer."""
+    """Reorder items in a build stage."""
     inst, module = await _get_editable_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    items = state["build"]["layers"].get(layer_id, {}).get("items", [])
+    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
+    items = stage.get("items") or []
 
     id_to_item = {it["id"]: it for it in items}
     reordered = [id_to_item[iid] for iid in data.item_ids if iid in id_to_item]
-    # Append any items not mentioned (safety net)
     mentioned = set(data.item_ids)
     reordered.extend(it for it in items if it["id"] not in mentioned)
 
-    state["build"]["layers"][layer_id]["items"] = reordered
+    stage["items"] = reordered
     save_workflow_state(inst, state)
     await db.commit()
 
@@ -477,12 +450,12 @@ async def reorder_items(
 
 
 # ---------------------------------------------------------------------------
-# Widget-backed workflow endpoints
+# Widget-backed workflow endpoints (calculator modules)
 # ---------------------------------------------------------------------------
-
 
 class PersistWidgetStateRequest(BaseModel):
     widget_data: dict[str, Any]
+    stage_id: str = "main"
 
 
 @router.post("/module-workflow/{instance_id}/widget-state")
@@ -497,83 +470,12 @@ async def persist_widget_state(
     if not uses_recalculating_build(module):
         raise HTTPException(status_code=400, detail="This workflow does not support widget persistence")
 
-    state = await persist_calculator_widget_state(db, inst, module, data.widget_data)
+    state = await persist_widget_stage_state(db, inst, module, data.widget_data, stage_id=data.stage_id)
     await db.commit()
     return {
         "instance_id": str(inst.id),
         "status": inst.status,
         "workflow_state": state,
-    }
-
-
-class ConfirmAlignmentRequest(BaseModel):
-    sections: list[dict[str, Any]] | None = None
-    parameters: list[dict[str, Any]] | None = None
-
-
-@router.post("/module-workflow/{instance_id}/alignment/confirm")
-async def confirm_workflow_alignment(
-    instance_id: _uuid.UUID,
-    data: ConfirmAlignmentRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Confirm an alignment workflow instance and generate its deliverable."""
-    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
-    if not uses_alignment_build(module):
-        raise HTTPException(status_code=400, detail="This workflow does not use alignment confirmation")
-
-    state = await ensure_workflow_state(db, inst, module)
-    alignment_data = dict(inst.alignment or state.get("build", {}).get("widget_data", {}).get("alignment") or {})
-    if not alignment_data:
-        raise HTTPException(status_code=400, detail="No alignment is available for this module instance")
-
-    if data.sections is not None:
-        alignment_data["sections"] = data.sections
-    if data.parameters is not None:
-        alignment_data["parameters"] = data.parameters
-    alignment_data["confirmed"] = True
-    alignment_data["feedback"] = None
-
-    await module_service.save_alignment(
-        db,
-        inst.initiative_id,
-        inst.module_id,
-        alignment_data,
-        user_id=user.uid,
-        instance_id=inst.id,
-    )
-
-    initiative = await db.get(Initiative, inst.initiative_id)
-    if initiative is None:
-        raise HTTPException(status_code=404, detail="Initiative not found")
-
-    output = await module.execute(
-        db=db,
-        initiative_id=initiative.id,
-        inputs=_build_execution_inputs(initiative, state.get("setup", {}).get("fields")),
-        include_corpus=True,
-        alignment=ModuleAlignment.from_dict(alignment_data),
-    )
-
-    await module_service.save_deliverable(
-        db,
-        initiative.id,
-        inst.module_id,
-        output.title,
-        output.output_type,
-        output.content,
-        user_id=user.uid,
-        instance_id=inst.id,
-    )
-    state = await ensure_workflow_state(db, inst, module)
-    await db.commit()
-
-    return {
-        "instance_id": str(inst.id),
-        "status": inst.status,
-        "workflow_state": state,
-        "output": output.content,
     }
 
 
@@ -592,21 +494,19 @@ async def generate_output(
 
     state = await ensure_workflow_state(db, inst, module)
 
-    # Require at least one item in the final layer
-    build_layers = module.assessment_definition.build_layers
-    last_layer_id = build_layers[-1].id if build_layers else None
-    if last_layer_id:
-        last_layer = state["build"]["layers"].get(last_layer_id, {})
-        if not last_layer.get("items"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Layer '{last_layer_id}' must have items before generating output",
-            )
+    # Require at least one item in the last stage
+    stages = state["build"].get("stages", [])
+    last_stage = stages[-1] if stages else None
+    if last_stage and not last_stage.get("items"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Stage '{last_stage['id']}' must have items before generating output",
+        )
 
-    # Pass all items from every layer to the output generator
+    # Build confirmed_build as {stage_id: {items}} for backward compat with generate_output hook
     confirmed_build = {
-        lid: {"items": layer_state.get("items", [])}
-        for lid, layer_state in state["build"]["layers"].items()
+        s["id"]: {"items": s.get("items") or []}
+        for s in stages
     }
 
     state["output"]["status"] = "generating"
@@ -623,6 +523,7 @@ async def generate_output(
         state["output"]["status"] = "complete"
         state["current_stage"] = "output"
         save_workflow_state(inst, state)
+        inst.status = ModuleInstanceStatus.COMPLETED
         await module_service.save_deliverable(
             db,
             inst.initiative_id,

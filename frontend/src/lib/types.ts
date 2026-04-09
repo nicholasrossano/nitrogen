@@ -1,10 +1,20 @@
 export type InitiativeStage = 'intake' | 'evidence' | 'generate' | 'complete';
 
-export type WidgetType = 
-  | 'confirmation' 
-  | 'evidence_input' 
-  | 'generate_options' 
-  | 'memo_viewer';
+/**
+ * Chat-surface interaction widget types.
+ * Module widgets (lcoe_inputs, carbon_inputs, etc.) are NOT included here —
+ * they render exclusively in the editor workspace via widgetRegistry.tsx.
+ */
+export type ChatWidgetType =
+  | 'confirmation'
+  | 'evidence_input'
+  | 'memo_viewer'
+  | 'proposed_value'
+  | 'template_proposed_value'
+  | 'module_workspace';
+
+/** @deprecated Use ChatWidgetType for chat surface widgets */
+export type WidgetType = ChatWidgetType;
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
