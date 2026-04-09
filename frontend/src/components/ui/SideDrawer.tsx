@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Search, PlusCircle, FileUp, FolderOpen, File as FileIcon, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Search, PanelsTopLeft, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 
-export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'modules' | 'open';
+export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'workspace';
 
 interface NavItemConfig {
   key: NavItem;
@@ -30,8 +30,7 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'plan', label: 'Project Plan', Icon: Map },
-  { key: 'modules', label: 'New Module', Icon: PlusCircle },
-  { key: 'open', label: 'Open Module', Icon: FileIcon },
+  { key: 'workspace', label: 'Workspace', Icon: PanelsTopLeft },
   { key: 'research', label: 'Research', Icon: Search },
 ];
 
@@ -86,7 +85,7 @@ export function SideDrawer() {
     if (!initiativeId) return 'home';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
-    if (view === 'modules') return 'modules';
+    if (view === 'workspace') return 'workspace';
     if (view === 'files') return 'files';
     return 'plan';
   }, [initiativeId, searchParams]);
@@ -99,13 +98,14 @@ export function SideDrawer() {
   const showMaterials = hasProject && !isViewer;
 
   const projectItems = isViewer
-    ? PROJECT_ITEMS.filter(i => !(['research', 'modules', 'open'] as NavItem[]).includes(i.key))
+    ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
     : PROJECT_ITEMS;
 
   const longestLabelLength = useMemo(() => {
     const labels = GLOBAL_ITEMS.map((item) => item.label);
     projectItems.forEach((item) => labels.push(item.label));
     labels.push('Files');
+    labels.push('Help');
     labels.push('Settings');
     labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
@@ -374,7 +374,6 @@ export function SideDrawer() {
           >
             <Icon
               className="w-4 h-4 flex-shrink-0"
-              {...(activeItem === key && { fill: 'currentColor' })}
             />
             <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               {label}
@@ -402,7 +401,6 @@ export function SideDrawer() {
               >
                 <Icon
                   className="w-4 h-4 flex-shrink-0"
-                  {...(activeItem === key && { fill: 'currentColor' })}
                 />
                 <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
                   {label}
@@ -556,7 +554,6 @@ export function SideDrawer() {
           >
             <FolderOpen
               className="w-4 h-4 flex-shrink-0"
-              {...(activeItem === 'files' && { fill: 'currentColor' })}
             />
             <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               Files
@@ -566,6 +563,19 @@ export function SideDrawer() {
       </div>
 
       <UsagePill />
+
+      <a
+        href="https://nitrogenai.mintlify.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="nav-row w-full"
+        title="Help"
+      >
+        <HelpCircle className="w-4 h-4 flex-shrink-0" />
+        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+          Help
+        </span>
+      </a>
 
       <button
         onClick={() => setSettingsOpen(true)}

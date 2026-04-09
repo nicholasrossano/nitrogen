@@ -1,13 +1,36 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Check, X, PanelLeft, PanelRight, SquarePen, ArrowLeft, Users } from 'lucide-react';
+import {
+  Pencil,
+  Check,
+  X,
+  PanelLeft,
+  PanelRight,
+  PanelsTopLeft,
+  SquarePen,
+  ArrowLeft,
+  Users,
+  MessageSquare,
+  Plus,
+} from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
+
+type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'editor' | 'workspace';
+
 interface PanelToggle {
   active: boolean;
   disabled?: boolean;
   onClick: () => void;
+  title?: string;
+  icon?: HeaderIcon;
+}
+
+interface HeaderPrimaryAction {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
   title?: string;
 }
 
@@ -18,6 +41,8 @@ interface ProjectHeaderProps {
   leftToggle?: PanelToggle;
   /** PanelRight button — shown on the right side when provided */
   rightToggle?: PanelToggle;
+  /** Header CTA styled like the New Project button */
+  primaryAction?: HeaderPrimaryAction;
   /** SquarePen "new chat" button */
   onNewChat?: () => void;
   /** Override the tooltip for the onNewChat button (default: "New chat") */
@@ -33,6 +58,7 @@ export function ProjectHeader({
   onTitleUpdate,
   leftToggle,
   rightToggle,
+  primaryAction,
   onNewChat,
   newChatTitle = 'New chat',
   onBack,
@@ -86,21 +112,51 @@ export function ProjectHeader({
     else if (e.key === 'Escape') handleCancel();
   };
 
+  const renderPanelIcon = (icon: HeaderIcon | undefined, fallback: 'left' | 'right') => {
+    switch (icon) {
+      case 'chat':
+        return <MessageSquare className="w-4 h-4" />;
+      case 'editor':
+      case 'workspace':
+        return <PanelsTopLeft className="w-4 h-4" />;
+      case 'panel-right':
+        return <PanelRight className="w-4 h-4" />;
+      case 'panel-left':
+      default:
+        return fallback === 'left'
+          ? <PanelLeft className="w-4 h-4" />
+          : <PanelRight className="w-4 h-4" />;
+    }
+  };
+
   const hasRightControls = onNewChat || leftToggle || rightToggle || canShare || initiative.shared_role;
 
   return (
     <header className="flex-shrink-0">
       <div className="px-4 h-14 flex items-center relative">
-        {/* Left: back arrow */}
-        {onBack && (
-          <button
-            onClick={onBack}
-            title="Back"
-            className="icon-btn p-1.5 text-text-tertiary"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {primaryAction && !readOnly && (
+            <button
+              onClick={primaryAction.onClick}
+              disabled={primaryAction.disabled}
+              title={primaryAction.title}
+              className="btn-primary shrink-0 !h-7 !text-xs !leading-none !px-3 !py-0"
+            >
+              <Plus className="w-3 h-3" />
+              {primaryAction.label}
+            </button>
+          )}
+
+          {onBack && (
+            <button
+              onClick={onBack}
+              title="Back"
+              className="icon-btn p-1.5 text-text-tertiary"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
 
         {/* Editable title — centered */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -174,7 +230,7 @@ export function ProjectHeader({
                 title={leftToggle.title}
                 className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelLeft className="w-4 h-4" />
+                {renderPanelIcon(leftToggle.icon, 'left')}
               </button>
             )}
             {rightToggle && (
@@ -184,7 +240,7 @@ export function ProjectHeader({
                 title={rightToggle.title}
                 className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
-                <PanelRight className="w-4 h-4" />
+                {renderPanelIcon(rightToggle.icon, 'right')}
               </button>
             )}
             {onNewChat && (

@@ -318,28 +318,6 @@ async def list_project_files(
             export_data=export_data,
         ))
 
-    # Fallback: if deliverables has no memo entry but a MemoVersion exists,
-    # surface it so previously-generated memos aren't invisible on the Files page.
-    has_memo_in_deliverables = any(
-        d.get("output_type") == "memo" for d in deliverables.values()
-    )
-    if not has_memo_in_deliverables and latest_memo:
-        from app.modules.registry import get_module_registry
-        memo_tool = get_module_registry().get_module("investment_memo")
-        memo_title = (latest_memo.content or {}).get("title", "Investment Memo")
-        exported = bool(latest_memo.export_path)
-        download_url = f"/api/v1/exports/{latest_memo.id}" if exported else None
-        generated.append(GeneratedFileResponse(
-            id=str(latest_memo.id),
-            title=memo_title,
-            output_type="memo",
-            created_at=latest_memo.created_at,
-            exportable=True,
-            export_format=memo_tool.definition.export_format if memo_tool else "docx",
-            exported=exported,
-            download_url=download_url,
-        ))
-
     return ProjectFilesResponse(uploaded=uploaded, generated=generated)
 
 

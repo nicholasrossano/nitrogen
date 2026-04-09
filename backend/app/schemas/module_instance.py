@@ -17,3 +17,5 @@ class ModuleInstanceResponse(BaseModel):
     started_at: datetime
     updated_at: datetime
     session_id: Optional[UUID] = None
+    deliverable: Optional[dict] = None
+    workflow_state: Optional[dict] = None

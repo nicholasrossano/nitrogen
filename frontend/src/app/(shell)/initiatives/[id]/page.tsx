@@ -7,13 +7,9 @@ import { ArrowLeft, Loader2, Sprout, TreeDeciduous, X } from 'lucide-react';
 
 import dynamic from 'next/dynamic';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
 import { useShallow } from 'zustand/react/shallow';
-import { ProjectHeader, ChatPanel, EditorSidePanel } from '@/components/editor';
+import { ProjectHeader, ChatPanel } from '@/components/editor';
 import type { EditorWidget, RightPanelMode } from '@/components/editor';
-import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
-import { ModalShell } from '@/components/ui/ModalShell';
-import type { ModuleInstance } from '@/lib/api';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { api } from '@/lib/api';
 import type { SourceCitation } from '@/lib/api';
@@ -23,17 +19,15 @@ import type { NavItem } from '@/components/ui/SideDrawer';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { openGooglePicker } from '@/lib/googlePicker';
+import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
+import { ProjectWorkspaceEditorPanel } from '@/components/editor/ProjectWorkspaceEditorPanel';
+import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 
 const ProjectPlanView = dynamic(() => import('@/components/project-plan').then(m => ({ default: m.ProjectPlanView })), { ssr: false });
 const ProjectFilesView = dynamic(() => import('@/components/files').then(m => ({ default: m.ProjectFilesView })), { ssr: false });
 const ResearchPanel = dynamic(() => import('@/components/core-chat/ResearchPanel').then(m => ({ default: m.ResearchPanel })), { ssr: false });
-const ModuleLandingPage = dynamic(() => import('@/components/chat/ModuleLandingPage').then(m => ({ default: m.ModuleLandingPage })), { ssr: false });
-const OpenModuleModal = dynamic(() => import('@/components/chat/OpenModuleModal').then(m => ({ default: m.OpenModuleModal })), { ssr: false });
 const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
 
-const MIN_STANDALONE_CHAT_PERCENT = 30;
-const MAX_STANDALONE_CHAT_PERCENT = 60;
-const DEFAULT_STANDALONE_CHAT_PERCENT = 55;
 const MIN_RESEARCH_PANEL_PERCENT = 20;
 const MAX_RESEARCH_PANEL_PERCENT = 25;
 const DEFAULT_RESEARCH_PANEL_PERCENT = 25;
@@ -41,7 +35,7 @@ const MIN_PLAN_DOC_VIEWER_PERCENT = 25;
 const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
 const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
 
-type ProjectView = 'research' | 'plan' | 'files' | 'module';
+type ProjectView = 'research' | 'workspace' | 'plan' | 'files';
 
 function InitiativePageContent() {
   const params = useParams();
@@ -49,22 +43,21 @@ function InitiativePageContent() {
   const searchParams = useSearchParams();
   const initiativeId = params.id as string;
 
-  const standaloneContainerRef = useRef<HTMLDivElement>(null);
+  const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const planContainerRef = useRef<HTMLDivElement>(null);
   const chatSendRef = useRef<((content: string, toolHint?: string) => void) | null>(null);
 
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
     viewParam === 'research' || viewParam === 'explore' ? 'research' :
+    viewParam === 'workspace' ? 'workspace' :
     viewParam === 'files' ? 'files' : 'plan';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
-  const [activeModule, setActiveModule] = useState<{ instanceId: string; moduleId: string } | null>(null);
-  const [showModuleModal, setShowModuleModal] = useState(false);
-  const [showOpenModal, setShowOpenModal] = useState(false);
-  const [showChatLanding, setShowChatLanding] = useState(true);
-  const [standaloneChatWidthPercent, setStandaloneChatWidthPercent] = useState(DEFAULT_STANDALONE_CHAT_PERCENT);
-  const [isResizingStandalone, setIsResizingStandalone] = useState(false);
+  const [surfacePanels, setSurfacePanels] = useState({
+    research: { chatOpen: true, editorOpen: false },
+    workspace: { chatOpen: false, editorOpen: true },
+  });
   const [researchPanelWidthPercent, setResearchPanelWidthPercent] = useState(DEFAULT_RESEARCH_PANEL_PERCENT);
   const [isResizingResearch, setIsResizingResearch] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -80,19 +73,64 @@ function InitiativePageContent() {
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
   const [showInspector, setShowInspector] = useState(false);
   const [hasInspectorItem, setHasInspectorItem] = useState(false);
-  const alignmentCallbackRef = useRef<((msgs: { id: string; role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; created_at?: string | null }[]) => void) | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
-  const [showEditorInChatView, setShowEditorInChatView] = useState(false);
-  const [showChatInChatView, setShowChatInChatView] = useState(true);
   const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
+  const [pendingEditorDocument, setPendingEditorDocument] = useState<ResearchPanelCitation | null>(null);
+  const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
+  const [pendingChatSessionToOpen, setPendingChatSessionToOpen] = useState<{ sessionId: string; title?: string | null } | null>(null);
+  const [preferArtifactsTab, setPreferArtifactsTab] = useState(false);
+  const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [planDocViewer, setPlanDocViewer] = useState<ResearchPanelCitation | null>(null);
   const lastPlanDocViewerCitation = useRef<ResearchPanelCitation | null>(null);
   const [planDocViewerWidthPercent, setPlanDocViewerWidthPercent] = useState(DEFAULT_PLAN_DOC_VIEWER_PERCENT);
   const [isResizingPlanDoc, setIsResizingPlanDoc] = useState(false);
+  const hasEnteredWorkspaceRef = useRef(false);
+  const activeSurfaceView = activeView === 'research' || activeView === 'workspace' ? activeView : null;
+  const chatPanelOpen = activeSurfaceView ? surfacePanels[activeSurfaceView].chatOpen : false;
+  const editorPanelOpen = activeSurfaceView ? surfacePanels[activeSurfaceView].editorOpen : false;
+
+  const setSurfacePanelState = useCallback(
+    (surface: 'research' | 'workspace', next: Partial<{ chatOpen: boolean; editorOpen: boolean }>) => {
+      setSurfacePanels((prev) => ({
+        ...prev,
+        [surface]: {
+          ...prev[surface],
+          ...next,
+        },
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
   }, [viewFromUrl]);
+
+  useEffect(() => {
+    if (activeView !== 'workspace' || hasEnteredWorkspaceRef.current) return;
+    setSurfacePanelState('workspace', { chatOpen: false, editorOpen: true });
+    hasEnteredWorkspaceRef.current = true;
+  }, [activeView, setSurfacePanelState]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail ?? {};
+      if (detail._workspaceForwarded) return;
+      if (activeView !== 'workspace' || chatPanelOpen) return;
+
+      setSurfacePanelState('workspace', { chatOpen: true, editorOpen: true });
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('nitrogen:draft', {
+            detail: { ...detail, _workspaceForwarded: true },
+          }),
+        );
+      }, 75);
+    };
+
+    window.addEventListener('nitrogen:draft', handler);
+    return () => window.removeEventListener('nitrogen:draft', handler);
+  }, [activeView, chatPanelOpen, setSurfacePanelState]);
   
   const {
     initiative,
@@ -178,20 +216,17 @@ function InitiativePageContent() {
       return true;
     }
     if (item === 'research') {
+      if (activeView === 'research') {
+        setResearchLandingResetSignal((prev) => prev + 1);
+      }
       setActiveView('research');
-      setShowChatLanding(true);
-      setShowEditorInChatView(false);
-      setResearchCitation(null);
-      setActiveModule(null);
+      setSurfacePanelState('research', { chatOpen: true, editorOpen: false });
       router.replace(`/initiatives/${initiativeId}?view=research`);
       return true;
     }
-    if (item === 'modules') {
-      setShowModuleModal(true);
-      return true;
-    }
-    if (item === 'open') {
-      setShowOpenModal(true);
+    if (item === 'workspace') {
+      setActiveView('workspace');
+      router.replace(`/initiatives/${initiativeId}?view=workspace`);
       return true;
     }
     if (item === 'files') {
@@ -208,10 +243,10 @@ function InitiativePageContent() {
       return true;
     }
     return false;
-  }, [messages, initiative, router, initiativeId, loadProjectPlan, handlePlanReady]));
+  }, [messages, initiative, router, initiativeId, loadProjectPlan, handlePlanReady, setSurfacePanelState, activeView]));
 
   useEffect(() => {
-    if (isViewer && activeView === 'research') {
+    if (isViewer && (activeView === 'research' || activeView === 'workspace')) {
       setActiveView('plan');
       router.replace(`/initiatives/${initiativeId}?view=plan`);
     }
@@ -219,6 +254,11 @@ function InitiativePageContent() {
 
   useEffect(() => {
     if (initiativeId) {
+      hasEnteredWorkspaceRef.current = false;
+      setSurfacePanels({
+        research: { chatOpen: true, editorOpen: false },
+        workspace: { chatOpen: false, editorOpen: true },
+      });
       // Sync prevPlanRef BEFORE reset() so the [projectPlan] effect below won't mistake
       // the stale plan from a previous initiative for a newly-generated plan and
       // prematurely open the plan panel for a brand-new project.
@@ -266,6 +306,9 @@ function InitiativePageContent() {
     const hasPlan = !!projectPlan;
     if (hasPlan && !prevPlanRef.current) {
       setRightPanel('project_plan');
+    } else if (!hasPlan && prevPlanRef.current) {
+      // If a plan disappears (or stale state is cleared), fall back to onboarding chat.
+      setRightPanel('closed');
     }
     prevPlanRef.current = hasPlan;
   }, [projectPlan]);
@@ -273,11 +316,15 @@ function InitiativePageContent() {
   const prevHadChatEditor = useRef(false);
   useEffect(() => {
     const hasWidgets = chatEditorWidgets.length > 0;
-    if (hasWidgets && !prevHadChatEditor.current) {
-      setShowEditorInChatView(true);
+    if (
+      hasWidgets &&
+      !prevHadChatEditor.current &&
+      (activeView === 'research' || activeView === 'workspace')
+    ) {
+      setSurfacePanelState(activeView, { editorOpen: true });
     }
     prevHadChatEditor.current = hasWidgets;
-  }, [chatEditorWidgets]);
+  }, [chatEditorWidgets, activeView, setSurfacePanelState]);
 
   const handleChatEditorWidgetsChange = useCallback((widgets: EditorWidget[]) => {
     setChatEditorWidgets(widgets);
@@ -299,21 +346,11 @@ function InitiativePageContent() {
   }, []);
 
   const handleOpenFullDoc = useCallback((citation: ResearchPanelCitation) => {
-    const viewerWidget: EditorWidget = {
-      type: 'document_viewer',
-      data: {
-        evidence_doc_id: citation.evidence_doc_id,
-        chunk_id: citation.chunk_id,
-        source_title: citation.source_title,
-      },
-      messageId: 'citation-nav',
-    };
-    setChatEditorWidgets((prev) => {
-      const filtered = prev.filter((w) => w.type !== 'document_viewer');
-      return [...filtered, viewerWidget];
-    });
-    setShowEditorInChatView(true);
-  }, []);
+    setPendingEditorDocument(citation);
+    if (activeView === 'research' || activeView === 'workspace') {
+      setSurfacePanelState(activeView, { editorOpen: true });
+    }
+  }, [activeView, setSurfacePanelState]);
 
   const handleOpenFullDocFromPlan = useCallback((citation: ResearchPanelCitation) => {
     lastPlanDocViewerCitation.current = citation;
@@ -322,25 +359,9 @@ function InitiativePageContent() {
     );
   }, []);
 
-  const handleStandaloneMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizingStandalone || !standaloneContainerRef.current) return;
-    const rect = standaloneContainerRef.current.getBoundingClientRect();
-    const newWidthPercent = ((e.clientX - rect.left) / rect.width) * 100;
-    const maxPercent = researchCitation
-      ? 100 - researchPanelWidthPercent - 40
-      : MAX_STANDALONE_CHAT_PERCENT;
-    setStandaloneChatWidthPercent(
-      Math.min(maxPercent, Math.max(MIN_STANDALONE_CHAT_PERCENT, newWidthPercent))
-    );
-  }, [isResizingStandalone, researchCitation, researchPanelWidthPercent]);
-
-  const handleStandaloneMouseUp = useCallback(() => {
-    setIsResizingStandalone(false);
-  }, []);
-
   const handleResearchMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizingResearch || !standaloneContainerRef.current) return;
-    const rect = standaloneContainerRef.current.getBoundingClientRect();
+    if (!isResizingResearch || !workspaceContainerRef.current) return;
+    const rect = workspaceContainerRef.current.getBoundingClientRect();
     const newResearchPercent = ((rect.right - e.clientX) / rect.width) * 100;
     setResearchPanelWidthPercent(
       Math.min(MAX_RESEARCH_PANEL_PERCENT, Math.max(MIN_RESEARCH_PANEL_PERCENT, newResearchPercent))
@@ -380,21 +401,6 @@ function InitiativePageContent() {
   }, [isResizingPlanDoc, handlePlanDocMouseMove, handlePlanDocMouseUp]);
 
   useEffect(() => {
-    if (isResizingStandalone) {
-      document.addEventListener('mousemove', handleStandaloneMouseMove);
-      document.addEventListener('mouseup', handleStandaloneMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
-    return () => {
-      document.removeEventListener('mousemove', handleStandaloneMouseMove);
-      document.removeEventListener('mouseup', handleStandaloneMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizingStandalone, handleStandaloneMouseMove, handleStandaloneMouseUp]);
-
-  useEffect(() => {
     if (isResizingResearch) {
       document.addEventListener('mousemove', handleResearchMouseMove);
       document.addEventListener('mouseup', handleResearchMouseUp);
@@ -422,35 +428,6 @@ function InitiativePageContent() {
     updateTitle(initiativeId, title);
   };
 
-  const handleNewChat = () => {
-    setShowChatLanding(true);
-    setShowEditorInChatView(false);
-    setResearchCitation(null);
-  };
-
-  const handleExitModule = useCallback(() => {
-    setActiveView('research');
-    setShowChatLanding(true);
-    setActiveModule(null);
-  }, []);
-
-  const handleOpenInstanceSelect = useCallback((instance: ModuleInstance) => {
-    setShowOpenModal(false);
-    setActiveModule({ instanceId: instance.id, moduleId: instance.module_id });
-    setActiveView('module');
-  }, []);
-
-  const handleModuleSelect = useCallback(async (moduleId: string, _moduleName?: string) => {
-    setShowModuleModal(false);
-    try {
-      const inst = await api.createModuleInstance(initiativeId, moduleId);
-      setActiveModule({ instanceId: inst.id, moduleId: inst.module_id });
-      setActiveView('module');
-    } catch {
-      // silently ignore — user stays on current view
-    }
-  }, [initiativeId]);
-
   return (
     <>
       {/* ProjectHeader — shows as soon as initiative loads */}
@@ -460,6 +437,16 @@ function InitiativePageContent() {
           initiative={initiative}
           onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
           readOnly={isViewer}
+          primaryAction={isViewer ? undefined : {
+            label: 'New Module',
+            onClick: () => {
+              setActiveView('workspace');
+              setSurfacePanelState('workspace', { editorOpen: true });
+              setWorkspaceLaunchMode('new');
+              router.replace(`/initiatives/${initiativeId}?view=workspace`);
+            },
+            title: 'Open workspace and start a new module',
+          }}
           {...(activeView === 'plan' ? {
             rightToggle: rightPanel === 'project_plan' ? {
               active: planDocViewer !== null,
@@ -472,17 +459,27 @@ function InitiativePageContent() {
                 }
               },
               title: planDocViewer !== null ? 'Hide document viewer' : 'Show document viewer',
+              icon: 'editor' as const,
             } : undefined,
-          } : activeView === 'module' ? {} : activeView === 'research' && !isViewer ? {
-            onNewChat: !showChatLanding ? handleNewChat : undefined,
-            rightToggle: !showChatLanding && chatEditorWidgets.length > 0 ? {
-              active: showEditorInChatView,
-              onClick: () => {
-                setShowEditorInChatView((p) => !p);
-                if (!showEditorInChatView) setShowChatInChatView(true);
-              },
-              title: showEditorInChatView ? 'Hide editor' : 'Show editor',
-            } : undefined,
+          } : (activeView === 'research' || activeView === 'workspace') && !isViewer ? {
+            leftToggle: {
+              active: chatPanelOpen,
+              disabled: !editorPanelOpen,
+              onClick: () => setSurfacePanelState(activeView, {
+                chatOpen: editorPanelOpen ? !chatPanelOpen : true,
+              }),
+              title: chatPanelOpen ? 'Hide chat' : 'Show chat',
+              icon: 'chat',
+            },
+            rightToggle: {
+              active: editorPanelOpen,
+              disabled: !chatPanelOpen,
+              onClick: () => setSurfacePanelState(activeView, {
+                editorOpen: chatPanelOpen ? !editorPanelOpen : true,
+              }),
+              title: editorPanelOpen ? 'Hide editor' : 'Show editor',
+              icon: 'workspace',
+            },
           } : {})}
         />
       )}
@@ -528,50 +525,40 @@ function InitiativePageContent() {
             ) : <div className="h-full" />
           ) : (
             <>
-              {/* Research (chat) view — always mounted to preserve conversation state */}
               <main
-                ref={standaloneContainerRef}
-                className={`h-full min-w-0 flex overflow-hidden relative ${activeView !== 'research' ? 'hidden' : ''}`}
+                ref={workspaceContainerRef}
+                className={`h-full min-w-0 flex overflow-hidden relative ${(activeView !== 'research' && activeView !== 'workspace') ? 'hidden' : ''}`}
               >
-                {(() => {
-                  const hasEditor = showEditorInChatView && chatEditorWidgets.length > 0;
-                  const hasResearch = !!researchCitation;
-                  const chatWidth = hasEditor
-                    ? `${Math.min(hasResearch ? 100 - researchPanelWidthPercent - 40 : MAX_STANDALONE_CHAT_PERCENT, standaloneChatWidthPercent)}%`
-                    : hasResearch
-                      ? `${100 - researchPanelWidthPercent}%`
-                      : '100%';
-
-                  return (
-                    <>
-                      <div
-                        className="flex-shrink-0 relative overflow-hidden"
-                        style={{ width: chatWidth }}
-                      >
-                        <div className="absolute inset-0 overflow-hidden">
-                          <ProjectStandaloneChatView
+                {chatPanelOpen && (
+                  <div
+                    className={`flex-shrink-0 overflow-hidden ${editorPanelOpen ? 'w-[46%] border-r border-divider' : 'flex-1'}`}
+                  >
+                    <div className="h-full flex overflow-hidden">
+                      <div className="flex-1 min-w-0">
+                        <div className={activeView === 'research' ? 'h-full' : 'hidden'}>
+                          <ProjectChatTabsPanel
                             initiativeId={initiativeId}
-                            showLanding={showChatLanding}
-                            hideTiles={true}
-                            onMessageSent={() => setShowChatLanding(false)}
-                            onBack={handleNewChat}
-                            onEditorWidgetsChange={handleChatEditorWidgetsChange}
-                            onCitationClick={handleCitationClick}
-                            onAlignmentConfirmedRef={alignmentCallbackRef}
+                            researchMode={true}
+                            resetToLandingSignal={researchLandingResetSignal}
+                            onEditorWidgetsChange={activeView === 'research' ? handleChatEditorWidgetsChange : undefined}
+                            onCitationClick={activeView === 'research' ? handleCitationClick : undefined}
+                          />
+                        </div>
+                        <div className={activeView === 'workspace' ? 'h-full' : 'hidden'}>
+                          <ProjectChatTabsPanel
+                            initiativeId={initiativeId}
+                            researchMode={false}
+                            pendingSessionToOpen={pendingChatSessionToOpen}
+                            onPendingSessionHandled={() => setPendingChatSessionToOpen(null)}
+                            onEditorWidgetsChange={activeView === 'workspace' ? handleChatEditorWidgetsChange : undefined}
+                            onCitationClick={activeView === 'workspace' ? handleCitationClick : undefined}
                             onSendRef={chatSendRef}
                           />
                         </div>
-                        {hasEditor && (
-                          <div
-                            onMouseDown={(e) => { e.preventDefault(); setIsResizingStandalone(true); }}
-                            className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors ${isResizingStandalone ? 'bg-accent/50' : 'bg-transparent'}`}
-                          />
-                        )}
                       </div>
-
-                      {hasResearch && (
+                      {researchCitation && (
                         <div
-                          className="flex-shrink-0 overflow-hidden relative"
+                          className="relative flex-shrink-0 overflow-hidden border-l border-divider"
                           style={{ width: `${researchPanelWidthPercent}%` }}
                         >
                           <div
@@ -579,68 +566,41 @@ function InitiativePageContent() {
                             className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10 ${isResizingResearch ? 'bg-accent/50' : 'bg-transparent'}`}
                           />
                           <ResearchPanel
-                            key={`${researchCitation!.evidence_doc_id}-${researchCitation!.chunk_id}`}
-                            citation={researchCitation!}
+                            key={`${researchCitation.evidence_doc_id}-${researchCitation.chunk_id}`}
+                            citation={researchCitation}
                             onClose={() => setResearchCitation(null)}
                             onOpenFullDoc={handleOpenFullDoc}
                           />
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
 
-                      {hasEditor && (
-                        <div
-                          className="flex-1 overflow-hidden border-l border-divider"
-                          style={{ minWidth: '40%' }}
-                        >
-                          <EditorSidePanel
-                            widgets={chatEditorWidgets}
-                            initiativeId={initiativeId}
-                            onAlignmentConfirmed={(msgs) => alignmentCallbackRef.current?.(msgs)}
-                          />
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
+                {editorPanelOpen && (
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <ProjectWorkspaceEditorPanel
+                      initiativeId={initiativeId}
+                      chatWidgets={chatEditorWidgets}
+                      pendingDocument={pendingEditorDocument}
+                      onPendingDocumentHandled={() => setPendingEditorDocument(null)}
+                      workspaceLaunchMode={workspaceLaunchMode}
+                      onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
+                      preferArtifactsTab={preferArtifactsTab}
+                      onArtifactsTabPreferredHandled={() => setPreferArtifactsTab(false)}
+                      onSendToChat={(content, toolHint) => {
+                        setSurfacePanelState('workspace', { chatOpen: true });
+                        chatSendRef.current?.(content, toolHint);
+                      }}
+                      onOpenChatSession={(session) => {
+                        setSurfacePanelState('workspace', { chatOpen: true, editorOpen: true });
+                        setPreferArtifactsTab(true);
+                        setPendingChatSessionToOpen(session);
+                      }}
+                    />
+                  </div>
+                )}
               </main>
-
-              {showOpenModal && (
-                <OpenModuleModal
-                  initiativeId={initiativeId}
-                  onSelect={handleOpenInstanceSelect}
-                  onClose={() => setShowOpenModal(false)}
-                />
-              )}
-
-              {showModuleModal && (
-                <ModalShell onClose={() => setShowModuleModal(false)} maxWidth="max-w-3xl">
-                  <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle">
-                    <h2 className="text-sm font-semibold text-text-primary">New Module</h2>
-                    <button
-                      onClick={() => setShowModuleModal(false)}
-                      className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
-                      aria-label="Close"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {/* max-h on the element itself gives overflow-y-auto a definite bound */}
-                  <div className="max-h-[calc(90vh-4rem)] overflow-y-auto">
-                    <ModuleLandingPage onSelectModule={handleModuleSelect} showIntro={false} />
-                  </div>
-                </ModalShell>
-              )}
-
-              {activeView === 'module' && activeModule && (
-                <main className="h-full min-w-0 overflow-hidden">
-                  <ModuleWorkspace
-                    instanceId={activeModule.instanceId}
-                    moduleId={activeModule.moduleId}
-                    initiativeId={initiativeId}
-                    onBack={handleExitModule}
-                  />
-                </main>
-              )}
 
               {activeView === 'files' ? (
             <main className="h-full min-w-0 overflow-hidden">

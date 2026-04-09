@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, FileText, CheckSquare, X, Check, FileUp, Sun, Users, Map, ShieldCheck, BarChart2 } from 'lucide-react';
+import { Plus, Calculator, Leaf, X, Check, Sun, Users, Map, ShieldCheck, BarChart2 } from 'lucide-react';
 
 export interface ModuleOption {
   id: string;
@@ -31,25 +31,6 @@ export const ALL_MODULES: ModuleOption[] = [
     name: 'Solar Production Estimate',
     description: 'Estimate annual & monthly kWh',
     icon: <Sun className="w-3.5 h-3.5" />,
-  },
-  {
-    id: 'investment_memo',
-    name: 'Investment Memo',
-    description: 'Generate investment recommendation',
-    icon: <FileText className="w-3.5 h-3.5" />,
-  },
-  {
-    id: 'due_diligence_checklist',
-    name: 'Due Diligence',
-    description: 'Structured assessment checklist',
-    icon: <CheckSquare className="w-3.5 h-3.5" />,
-  },
-  {
-    id: 'template_fill',
-    name: 'From Template',
-    description: 'Complete a doc from project materials',
-    icon: <FileUp className="w-3.5 h-3.5" />,
-    beta: true,
   },
   {
     id: 'stakeholder_assessment',
@@ -97,9 +78,7 @@ export const MODULE_CATEGORIES: ModuleCategory[] = [
   { id: 'definition', name: 'Project Definition', moduleIds: ['stakeholder_assessment'] },
   { id: 'feasibility', name: 'Feasibility & Option Analysis', moduleIds: ['lcoe_model', 'solar_estimate'] },
   { id: 'impact', name: 'Impact Assessment', moduleIds: ['carbon_model'] },
-  { id: 'financing', name: 'Financing & Incentives', moduleIds: ['investment_memo'] },
-  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['due_diligence_checklist', 'esmp', 'mel_plan'] },
-  { id: 'deliverables', name: 'Deliverables & Execution', moduleIds: ['template_fill'] },
+  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['esmp', 'mel_plan'] },
 ];
 
 interface ModulePickerProps {

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
+from app.core.execution_context import build_context
 from app.core.auth import get_current_user, AuthUser, MockUser
 from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_initiative_with_role
@@ -133,20 +134,10 @@ async def list_sessions(
     )
 
     if initiative_id:
-        # Accept both UUID strings and slugs (slug → UUID resolution).
-        init_uuid: uuid.UUID | None = None
         try:
             init_uuid = uuid.UUID(initiative_id)
         except ValueError:
-            # Not a UUID — try slug lookup
-            slug_result = await db.execute(
-                select(Initiative.id).where(Initiative.slug == initiative_id)
-            )
-            raw = slug_result.scalar_one_or_none()
-            if raw is None:
-                # Unknown slug: return empty list (not an error — project may be new)
-                return {"sessions": []}
-            init_uuid = raw
+            raise HTTPException(status_code=400, detail="Invalid initiative_id")
         query = query.where(CoreChatSession.initiative_id == init_uuid)
 
     result = await db.execute(query)
@@ -265,12 +256,16 @@ async def chat_stream(
 
     async def generate():
         try:
-            # Resolve initiative_id for session scoping
+            # Resolve initiative_id for session scoping.
             resolved_initiative_id: uuid.UUID | None = None
             if data.initiative_id:
                 try:
-                    resolved_initiative_id = uuid.UUID(data.initiative_id)
-                except ValueError:
+                    resolved_initiative, _ = await get_initiative_with_role(
+                        db, data.initiative_id, user
+                    )
+                    resolved_initiative_id = resolved_initiative.id
+                except HTTPException:
+                    # Keep session unscoped; access is enforced below where needed.
                     pass
 
             # Persist session + user message upfront
@@ -307,7 +302,8 @@ async def chat_stream(
             )
             prior_msgs = prior_msgs_result.scalars().all()
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
-            service = ChatService(db)
+            ctx = await build_context(db, user, resolved_initiative_id)
+            service = ChatService(db, ctx=ctx)
 
             verified_initiative: Initiative | None = None
 
@@ -317,14 +313,13 @@ async def chat_stream(
                 compare_contexts = []
                 for cid in data.compare_initiative_ids:
                     try:
-                        init_uuid = uuid.UUID(cid)
-                        initiative, _role = await get_initiative_with_role(db, init_uuid, user)
+                        initiative, _role = await get_initiative_with_role(db, cid, user)
                         compare_contexts.append({
-                            "initiative_id": cid,
+                            "initiative_id": str(initiative.id),
                             "project_context": _build_project_context(initiative),
                             "title": initiative.title or "Untitled Project",
                         })
-                    except (ValueError, HTTPException, Exception) as e:
+                    except (HTTPException, Exception) as e:
                         logger.warning(f"Failed to load compare initiative {cid}: {e}")
                         compare_contexts = None
                         break
@@ -353,172 +348,68 @@ async def chat_stream(
                 project_context: str | None = None
                 if data.initiative_id:
                     try:
-                        init_uuid = uuid.UUID(data.initiative_id)
-                        verified_initiative, _role = await get_initiative_with_role(db, init_uuid, user)
+                        verified_initiative, _role = await get_initiative_with_role(
+                            db, data.initiative_id, user
+                        )
                         project_context = _build_project_context(verified_initiative)
-                    except (ValueError, HTTPException):
+                    except HTTPException:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
                         return
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
-                # Assessment module detection: emit assessment_workspace widget
-                if _tool_hint in ("stakeholder_assessment", "landscape_mapping", "esmp", "mel_plan") and data.initiative_id:
+                if _tool_hint and data.initiative_id:
+                    from app.modules import get_module_registry as _get_registry
+                    from app.services.chat import ChatResponse
+                    from app.services.module_workflow_service import (
+                        ensure_workflow_state,
+                        uses_layered_build,
+                        uses_workspace_flow,
+                    )
+
+                    _registry = _get_registry()
+                    _workflow_module = _registry.get_module(_tool_hint)
+                else:
+                    _workflow_module = None
+
+                if _workflow_module and data.initiative_id and uses_workspace_flow(_workflow_module):
                     if not verified_initiative:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for this module.'})}\n\n"
                         return
-                    from app.modules import get_module_registry as _get_registry
-                    from app.modules.assessment_base import (
-                        BaseAssessmentModule,
-                        make_initial_workflow_state,
-                    )
-                    from app.services.chat import ChatResponse
 
-                    async def _run_assessment_workspace():
+                    async def _open_workflow_workspace():
                         if on_thinking:
-                            await on_thinking("Setting up assessment workspace...")
-                        _registry = _get_registry()
-                        _module = _registry.get_module(_tool_hint)
-
-                        # Get or create instance for this session
+                            await on_thinking(f"Opening {_workflow_module.definition.name} workspace...")
                         inst = await module_service.get_or_create_instance(
                             db, verified_initiative.id, _tool_hint, user.uid, session_id=session.id,
                         )
+                        await ensure_workflow_state(db, inst, _workflow_module)
+                        await db.commit()
 
-                        # Initialise workflow_state if blank
-                        if inst.workflow_state is None and isinstance(_module, BaseAssessmentModule):
-                            init_state = make_initial_workflow_state(
-                                _tool_hint, _module.assessment_definition
+                        if uses_layered_build(_workflow_module):
+                            intro = (
+                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                "Review the setup, work through the build stage, and finalize the output when you're ready."
                             )
-                            # Auto-generate setup defaults
-                            context = {
-                                "project_title": verified_initiative.title or "",
-                                "project_description": verified_initiative.project_description or verified_initiative.goal or "",
-                                "geography": verified_initiative.geography or "",
-                            }
-                            try:
-                                defaults = await _module.generate_setup_defaults(db, verified_initiative.id, context)
-                                init_state["setup"]["fields"] = defaults
-                            except Exception:
-                                pass
-                            inst.workflow_state = init_state
-                            await db.commit()
+                            tiers_used = ["workspace_setup"]
+                        else:
+                            intro = (
+                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                "Review the setup context, refine the build-stage inputs, and continue in the editor."
+                            )
+                            tiers_used = ["workspace_build"]
 
                         return ChatResponse(
-                            content=f"Here's your **{_module.definition.name}** workspace. Review the setup and work through each layer to build your assessment.",
-                            sources=[], tiers_used=["assessment"], latency_ms=0,
-                            widget_type="assessment_workspace",
+                            content=intro,
+                            sources=[], tiers_used=tiers_used, latency_ms=0,
+                            widget_type="module_workspace",
                             widget_data={
                                 "instance_id": str(inst.id),
                                 "module_id": _tool_hint,
                             },
                         )
 
-                    generation_task = asyncio.create_task(_run_assessment_workspace())
-                elif _tool_hint in ("investment_memo", "due_diligence_checklist") and data.initiative_id:
-                    if not verified_initiative:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for document generation.'})}\n\n"
-                        return
-                    from app.api.alignment_helpers import (
-                        get_or_generate_alignment,
-                        build_alignment_widget_data,
-                        get_alignment_intro_message,
-                    )
-                    from app.modules import get_module_registry as _get_registry
-                    from app.services.chat import ChatResponse
-                    from sqlalchemy.orm.attributes import flag_modified
-
-                    _registry = _get_registry()
-                    _align_tool = _registry.get_module(_tool_hint)
-                    _align_initiative = verified_initiative
-
-                    async def _run_alignment():
-                        if on_thinking:
-                            await on_thinking("Preparing outline...")
-                        existing = list(_align_initiative.selected_tools or [])
-                        if existing != [_tool_hint]:
-                            _align_initiative.selected_tools = [_tool_hint]
-                            flag_modified(_align_initiative, "selected_tools")
-                            await db.commit()
-                            await db.refresh(_align_initiative)
-
-                        # Create / find module instance for this session
-                        await module_service.get_or_create_instance(
-                            db, _align_initiative.id, _tool_hint, user.uid, session_id=session.id,
-                        )
-
-                        alignment_data = await get_or_generate_alignment(
-                            db, _align_initiative, _tool_hint, user_id=user.uid, session_id=session.id,
-                        )
-                        if not alignment_data:
-                            return ChatResponse(
-                                content=f"I wasn't able to generate an outline for {_align_tool.definition.name}. Please try again.",
-                                sources=[], tiers_used=[], latency_ms=0,
-                            )
-
-                        pending = await module_service.get_pending_alignment_tools(
-                            db, _align_initiative.id, _align_initiative.selected_tools or [],
-                        )
-                        wd = build_alignment_widget_data(
-                            tool_id=_tool_hint,
-                            alignment_data=alignment_data,
-                            pending_tool_ids=[t for t in pending if t != _tool_hint],
-                        )
-                        wd["session_id"] = str(session.id)
-                        intro = get_alignment_intro_message(_align_tool.definition.name)
-                        return ChatResponse(
-                            content=intro,
-                            sources=[], tiers_used=["alignment"], latency_ms=0,
-                            widget_type="alignment", widget_data=wd,
-                        )
-
-                    generation_task = asyncio.create_task(_run_alignment())
-                elif _tool_hint.startswith("template_fill:") and data.initiative_id:
-                    if not verified_initiative:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for template analysis.'})}\n\n"
-                        return
-                    template_id_str = _tool_hint.split(":", 1)[1]
-                    from app.modules.template_module import TemplateFillTool
-                    from app.services.chat import ChatResponse
-
-                    tmpl_tool = TemplateFillTool()
-                    init_uuid = verified_initiative.id
-
-                    async def _run_template():
-                        wt, wd = await tmpl_tool.execute_from_template(
-                            db=db,
-                            initiative_id=init_uuid,
-                            template_id=uuid.UUID(template_id_str),
-                            on_progress=on_thinking,
-                        )
-                        summary = wd.get("summary", {})
-                        supported = summary.get("supported", 0)
-                        total = summary.get("total", 0)
-                        missing = summary.get("missing", 0)
-                        form_summary = wd.get("form_summary", "")
-                        text = (
-                            f"I've analyzed your template **{wd.get('filename', 'document')}** "
-                            f"and identified **{total}** requirements.\n\n"
-                        )
-                        if form_summary:
-                            text += f"{form_summary}\n\n"
-                        text += (
-                            f"- **{supported}** are already supported by your project materials\n"
-                            f"- **{missing}** are missing and need your input\n\n"
-                            "Review the requirements panel on the right. You can confirm "
-                            "values, provide missing information directly, or click any "
-                            "requirement to investigate it."
-                        )
-                        return ChatResponse(
-                            content=text,
-                            sources=[],
-                            tiers_used=["template_analysis"],
-                            latency_ms=0,
-                            widget_type=wt,
-                            widget_data=wd,
-                        )
-
-                    generation_task = asyncio.create_task(_run_template())
+                    generation_task = asyncio.create_task(_open_workflow_workspace())
                 else:
                     generation_task = asyncio.create_task(
                         service.generate_response(
@@ -570,42 +461,6 @@ async def chat_stream(
                 widget_data=result.widget_data,
             )
             db.add(assistant_msg)
-
-            # Sync generated deliverables when a project is in context and the
-            # result widget represents a completed, exportable tool output.
-            if verified_initiative and result.widget_type and result.widget_data:
-                _WIDGET_TO_TOOL: dict[str, str] = {
-                    "lcoe_output": "lcoe_model",
-                    "lcoe_inputs": "lcoe_model",
-                    "carbon_output": "carbon_model",
-                    "carbon_inputs": "carbon_model",
-                    "solar_output": "solar_estimate",
-                    "solar_inputs": "solar_estimate",
-                }
-                _tool_id = _WIDGET_TO_TOOL.get(result.widget_type or "")
-                if _tool_id:
-                    from app.modules.registry import get_module_registry
-                    _tool = get_module_registry().get_module(_tool_id)
-                    _content = result.widget_data or {}
-                    if _tool and _tool.is_exportable(_content):
-                        _res = _content.get("result") or {}
-                        if _tool_id == "lcoe_model":
-                            _lcoe = _res.get("lcoe", 0)
-                            _cur = _res.get("currency", "USD")
-                            _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
-                        elif _tool_id == "carbon_model":
-                            _er = _res.get("net_er_tco2e", 0)
-                            _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
-                        elif _tool_id == "solar_estimate":
-                            _kwh = _res.get("annual_kwh", 0)
-                            _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
-                        else:
-                            _title = _tool.definition.name
-                        await module_service.save_deliverable(
-                            db, verified_initiative.id, _tool_id,
-                            _title, _tool.definition.output_type, _content,
-                            user_id=user.uid, session_id=session.id,
-                        )
 
             await db.commit()
 
@@ -711,45 +566,6 @@ async def update_message_widget(
 
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(msg, "widget_data")
-
-    # Keep module instance in sync when a model widget is recalculated.
-    chat_session = await db.get(CoreChatSession, msg.session_id)
-    if chat_session and chat_session.initiative_id:
-        try:
-            _WIDGET_TO_TOOL: dict[str, str] = {
-                "lcoe_output": "lcoe_model",
-                "lcoe_inputs": "lcoe_model",
-                "carbon_output": "carbon_model",
-                "carbon_inputs": "carbon_model",
-                "solar_output": "solar_estimate",
-                "solar_inputs": "solar_estimate",
-            }
-            _tool_id = _WIDGET_TO_TOOL.get(msg.widget_type or "")
-            if _tool_id:
-                from app.modules.registry import get_module_registry
-                _tool = get_module_registry().get_module(_tool_id)
-                _content = data.widget_data or {}
-                if _tool and _tool.is_exportable(_content):
-                    _res = _content.get("result") or {}
-                    if _tool_id == "lcoe_model":
-                        _lcoe = _res.get("lcoe", 0)
-                        _cur = _res.get("currency", "USD")
-                        _title = f"LCOE Model ({_cur} {_lcoe:.4f}/kWh)"
-                    elif _tool_id == "carbon_model":
-                        _er = _res.get("net_er_tco2e", 0)
-                        _title = f"Carbon ER Model ({_er:,.2f} tCO\u2082e/yr)"
-                    elif _tool_id == "solar_estimate":
-                        _kwh = _res.get("annual_kwh", 0)
-                        _title = f"Solar Estimate ({_kwh:,.0f} kWh/yr)"
-                    else:
-                        _title = _tool.definition.name
-                    await module_service.save_deliverable(
-                        db, chat_session.initiative_id, _tool_id,
-                        _title, _tool.definition.output_type, _content,
-                        user_id=user.uid, session_id=chat_session.id,
-                    )
-        except Exception:
-            pass
 
     await db.commit()
 
@@ -872,253 +688,3 @@ async def save_session_from_messages(
     return {"session_id": str(session.id), "title": session.title}
 
 
-# ---------------------------------------------------------------------------
-# Alignment endpoints (for memo / checklist generation via the chat flow)
-# ---------------------------------------------------------------------------
-
-class AlignmentConfirmRequest(BaseModel):
-    tool_id: str
-    sections: list[dict] | None = None
-    parameters: list[dict] | None = None
-
-
-class AlignmentFeedbackRequest(BaseModel):
-    tool_id: str
-    feedback: str = Field(..., min_length=1, max_length=5000)
-
-
-class AlignmentMessageOut(BaseModel):
-    id: str
-    role: str
-    content: str
-    widget_type: str | None = None
-    widget_data: dict | None = None
-    created_at: str | None = None
-
-
-class AlignmentConfirmResponse(BaseModel):
-    alignment: dict
-    message: str
-    new_messages: list[AlignmentMessageOut] = []
-
-
-@router.post("/chat/sessions/{session_id}/alignment/confirm")
-async def confirm_chat_alignment(
-    session_id: str,
-    data: AlignmentConfirmRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
-):
-    """Confirm alignment and generate the deliverable, saving messages to the chat session."""
-    session = await db.get(CoreChatSession, uuid.UUID(session_id))
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    from app.core.permissions import require_editor
-    initiative = await require_editor(db, session.initiative_id, user)
-
-    alignment_data = await module_service.get_alignment(db, initiative.id, data.tool_id)
-    if not alignment_data:
-        raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
-
-    if data.sections:
-        alignment_data["sections"] = data.sections
-    if data.parameters:
-        alignment_data["parameters"] = data.parameters
-
-    alignment_data["confirmed"] = True
-    alignment_data["feedback"] = None
-    await module_service.save_alignment(
-        db, initiative.id, data.tool_id, alignment_data,
-        user_id=user.uid, session_id=session.id,
-    )
-    await db.commit()
-    await db.refresh(initiative)
-
-    from app.modules import get_module_registry
-    from app.modules.base import ModuleAlignment
-
-    registry = get_module_registry()
-    tool = registry.get_module(data.tool_id)
-    tool_name = tool.definition.name if tool else data.tool_id
-
-    new_messages: list[AlignmentMessageOut] = []
-
-    confirm_text = f"Perfect! The {tool_name} outline is confirmed. Generating your deliverable now..."
-    confirm_msg = CoreChatMessage(
-        session_id=session.id, role="assistant", content=confirm_text,
-    )
-    db.add(confirm_msg)
-    await db.flush()
-    new_messages.append(AlignmentMessageOut(
-        id=str(confirm_msg.id), role="assistant", content=confirm_text,
-        created_at=confirm_msg.created_at.isoformat() if confirm_msg.created_at else None,
-    ))
-
-    inputs = initiative.tool_inputs or {}
-    if initiative.title:
-        inputs.setdefault("project_title", initiative.title)
-    if initiative.geography:
-        inputs.setdefault("geography", initiative.geography)
-    if initiative.target_population:
-        inputs.setdefault("target_beneficiaries", initiative.target_population)
-    if initiative.goal:
-        inputs.setdefault("project_goal", initiative.goal)
-    if initiative.budget_range:
-        inputs.setdefault("budget_range", initiative.budget_range)
-    if initiative.timeline:
-        inputs.setdefault("timeline", initiative.timeline)
-
-    WIDGET_TYPES = {"memo": "memo_viewer", "checklist": "checklist_viewer"}
-    WIDGET_LABELS = {"memo_viewer": "Investment Memo", "checklist_viewer": "Due Diligence Checklist"}
-
-    if tool and tool.requires_alignment:
-        try:
-            alignment_obj = ModuleAlignment.from_dict(alignment_data)
-            output = await tool.execute(
-                db=db,
-                initiative_id=initiative.id,
-                inputs=inputs,
-                include_corpus=True,
-                alignment=alignment_obj,
-            )
-            await module_service.save_deliverable(
-                db, initiative.id, data.tool_id,
-                output.title, output.output_type, output.content,
-                user_id=user.uid, session_id=session.id,
-            )
-            w_type = WIDGET_TYPES.get(output.output_type, "document_viewer")
-            label = WIDGET_LABELS.get(w_type, tool_name)
-            deliverable_msg = CoreChatMessage(
-                session_id=session.id,
-                role="assistant",
-                content=f"Here's your **{label}** — review it in the editor and export when ready.",
-                widget_type=w_type,
-                widget_data={"content": output.content},
-            )
-            db.add(deliverable_msg)
-            await db.flush()
-            new_messages.append(AlignmentMessageOut(
-                id=str(deliverable_msg.id), role="assistant",
-                content=deliverable_msg.content,
-                widget_type=w_type,
-                widget_data={"content": output.content},
-                created_at=deliverable_msg.created_at.isoformat() if deliverable_msg.created_at else None,
-            ))
-        except Exception as e:
-            logger.error(f"Failed to generate {data.tool_id}: {e}", exc_info=True)
-            err_msg = CoreChatMessage(
-                session_id=session.id, role="assistant",
-                content=f"I wasn't able to generate the {tool_name} right now. Please try again.",
-            )
-            db.add(err_msg)
-            await db.flush()
-            new_messages.append(AlignmentMessageOut(
-                id=str(err_msg.id), role="assistant", content=err_msg.content,
-                created_at=err_msg.created_at.isoformat() if err_msg.created_at else None,
-            ))
-
-    await db.commit()
-    return AlignmentConfirmResponse(
-        alignment=alignment_data,
-        message=confirm_text,
-        new_messages=new_messages,
-    )
-
-
-@router.post("/chat/sessions/{session_id}/alignment/feedback")
-async def provide_chat_alignment_feedback(
-    session_id: str,
-    data: AlignmentFeedbackRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
-):
-    """Provide feedback to update an alignment within a chat session."""
-    session = await db.get(CoreChatSession, uuid.UUID(session_id))
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    from app.core.permissions import require_editor
-    initiative = await require_editor(db, session.initiative_id, user)
-
-    alignment_data = await module_service.get_alignment(db, initiative.id, data.tool_id)
-    if not alignment_data:
-        raise HTTPException(status_code=400, detail=f"No alignment found for tool {data.tool_id}")
-
-    from app.modules import get_module_registry
-    from app.modules.base import ModuleAlignment
-    from app.api.alignment_helpers import build_alignment_widget_data
-
-    registry = get_module_registry()
-    tool = registry.get_module(data.tool_id)
-    if not tool:
-        raise HTTPException(status_code=400, detail=f"Tool {data.tool_id} not found")
-
-    current_alignment = ModuleAlignment.from_dict(alignment_data)
-    try:
-        updated_alignment = await tool.update_alignment_from_feedback(
-            current_alignment=current_alignment,
-            feedback=data.feedback,
-            db=db,
-            initiative_id=initiative.id,
-        )
-        updated_data = updated_alignment.to_dict()
-    except Exception as e:
-        logger.error(f"Failed to update alignment from feedback: {e}")
-        alignment_data["feedback"] = data.feedback
-        updated_data = alignment_data
-
-    await module_service.save_alignment(
-        db, initiative.id, data.tool_id, updated_data,
-        user_id=user.uid, session_id=session.id,
-    )
-    await db.commit()
-    await db.refresh(initiative)
-
-    user_msg = CoreChatMessage(
-        session_id=session.id, role="user", content=data.feedback,
-    )
-    db.add(user_msg)
-
-    tool_name = tool.definition.name
-    pending = await module_service.get_pending_alignment_tools(
-        db, initiative.id, initiative.selected_tools or [],
-    )
-    pending_others = [tid for tid in pending if tid != data.tool_id]
-
-    wd = build_alignment_widget_data(
-        tool_id=data.tool_id,
-        alignment_data=updated_data,
-        pending_tool_ids=pending_others,
-    )
-    wd["session_id"] = str(session.id)
-
-    assistant_msg = CoreChatMessage(
-        session_id=session.id,
-        role="assistant",
-        content=f"I've updated the {tool_name} outline based on your feedback. Please review the changes.",
-        widget_type="alignment",
-        widget_data=wd,
-    )
-    db.add(assistant_msg)
-    await db.flush()
-    await db.commit()
-
-    new_messages = [
-        AlignmentMessageOut(
-            id=str(user_msg.id), role="user", content=data.feedback,
-            created_at=user_msg.created_at.isoformat() if user_msg.created_at else None,
-        ),
-        AlignmentMessageOut(
-            id=str(assistant_msg.id), role="assistant",
-            content=assistant_msg.content,
-            widget_type="alignment", widget_data=wd,
-            created_at=assistant_msg.created_at.isoformat() if assistant_msg.created_at else None,
-        ),
-    ]
-
-    return AlignmentConfirmResponse(
-        alignment=updated_data,
-        message=f"Updated {tool_name} outline based on your feedback.",
-        new_messages=new_messages,
-    )

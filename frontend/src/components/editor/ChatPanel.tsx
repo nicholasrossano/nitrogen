@@ -15,15 +15,10 @@ import { Loader2 } from 'lucide-react';
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
-import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
 import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { PlanCategoriesWidget } from '@/components/widgets/PlanCategoriesWidget';
-import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
-import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
-import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
-import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
 import { EDITOR_WIDGET_TYPES } from './EditorSidePanel';
@@ -42,16 +37,11 @@ interface ChatPanelProps {
 const CHAT_WIDGET_TYPES = [
   'confirmation',
   'evidence_input',
-  'generate_options',
   'tool_checklist',
   'deliverables_overview',
-  'alignment',
   'project_plan',
   'plan_categories',
-  'lcoe_inputs',
-  'lcoe_output',
-  'carbon_inputs',
-  'carbon_output',
+  'proposed_value',
   'gs_proposed_field',
   'template_proposed_value',
 ];
@@ -264,11 +254,6 @@ export function ChatPanel({
               )
             ) : (
               safeMessages.map((message, index) => {
-                const hasOutputWidget =
-                  (message.widget_type === 'lcoe_inputs' &&
-                    safeMessages.slice(index + 1).some(m => m.widget_type === 'lcoe_output')) ||
-                  (message.widget_type === 'carbon_inputs' &&
-                    safeMessages.slice(index + 1).some(m => m.widget_type === 'carbon_output'));
                 return (
                   <ErrorBoundary key={message.id || `msg-${index}`}>
                     <ChatMessageItem
@@ -276,7 +261,7 @@ export function ChatPanel({
                       initiativeId={initiativeId}
                       isLatest={index === safeMessages.length - 1}
                       animate={!isInitialLoadRef.current && index >= lastSeenCountRef.current}
-                      hasOutputWidget={hasOutputWidget}
+                      hasOutputWidget={false}
                       onSendMessage={onSendMessage}
                     />
                   </ErrorBoundary>
@@ -708,12 +693,6 @@ function ChatWidget({
           <EvidenceInputWidget initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
-    case 'generate_options':
-      return (
-        <ErrorBoundary>
-          <GenerateOptionsWidget data={data} initiativeId={initiativeId} isActive={isActive} />
-        </ErrorBoundary>
-      );
     case 'tool_checklist':
       return (
         <ErrorBoundary>
@@ -736,30 +715,6 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <PlanCategoriesWidget data={data} initiativeId={initiativeId} isActive={isActive} />
-        </ErrorBoundary>
-      );
-    case 'lcoe_inputs':
-      return (
-        <ErrorBoundary>
-          <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} onSendMessage={onSendMessage} />
-        </ErrorBoundary>
-      );
-    case 'lcoe_output':
-      return (
-        <ErrorBoundary>
-          <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />
-        </ErrorBoundary>
-      );
-    case 'carbon_inputs':
-      return (
-        <ErrorBoundary>
-          <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} onSendMessage={onSendMessage} />
-        </ErrorBoundary>
-      );
-    case 'carbon_output':
-      return (
-        <ErrorBoundary>
-          <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       );
     case 'gs_proposed_field':

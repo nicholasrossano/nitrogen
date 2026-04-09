@@ -73,6 +73,37 @@ class AuthUser:
         self.email = email
 
 
+async def authenticate_bearer_token(token: str) -> AuthUser:
+    """Validate a Firebase bearer token and return the authenticated user."""
+    if not settings.firebase_project_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service not configured",
+        )
+
+    if not _init_firebase():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        )
+
+    try:
+        from firebase_admin import auth
+
+        decoded_token = auth.verify_id_token(token)
+        return AuthUser(
+            uid=decoded_token["uid"],
+            email=decoded_token.get("email"),
+        )
+    except Exception as e:
+        logger.warning(f"Token verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> AuthUser:
@@ -86,35 +117,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not settings.firebase_project_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service not configured",
-        )
-
-    if not _init_firebase():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service unavailable",
-        )
-    
-    try:
-        from firebase_admin import auth
-        
-        # Verify the Firebase ID token
-        decoded_token = auth.verify_id_token(credentials.credentials)
-        
-        return AuthUser(
-            uid=decoded_token['uid'],
-            email=decoded_token.get('email')
-        )
-    except Exception as e:
-        logger.warning(f"Token verification failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    return await authenticate_bearer_token(credentials.credentials)
 
 
 async def get_optional_user(
