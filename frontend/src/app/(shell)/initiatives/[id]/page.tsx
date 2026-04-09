@@ -300,6 +300,9 @@ function InitiativePageContent() {
     const hasPlan = !!projectPlan;
     if (hasPlan && !prevPlanRef.current) {
       setRightPanel('project_plan');
+    } else if (!hasPlan && prevPlanRef.current) {
+      // If a plan disappears (or stale state is cleared), fall back to onboarding chat.
+      setRightPanel('closed');
     }
     prevPlanRef.current = hasPlan;
   }, [projectPlan]);
