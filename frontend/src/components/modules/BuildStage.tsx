@@ -189,7 +189,7 @@ export function BuildStage({
         ].map((i) => i.id))
         .catch(() => {});
     },
-    [build.layers, instanceId, outlineDef, detailsDef]
+    [build.stages, instanceId, outlineDef, detailsDef]
   );
 
   const outlineItems = getStageById(build, outlineDef?.id ?? '')?.items ?? [];
