@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Literal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -29,6 +29,7 @@ class ResourceDefinition:
     mime_type: str
     initiative_scoped: bool
     read_handler: ReadHandler
+    visibility: Literal["internal", "exposed"] = "internal"
 
 
 class ResourceRegistry:
