@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: process.env.NITROGEN_NEXT_DIST_DIR || '.next',
+  // Vercel expects artifacts in `.next` (routes-manifest.json, etc.).
+  // Keep `.next-build` only for local builds to avoid clobbering `next dev`.
+  distDir:
+    process.env.VERCEL === '1'
+      ? '.next'
+      : process.env.NITROGEN_NEXT_DIST_DIR || '.next',
   output: 'standalone',
   transpilePackages: ['undici'],
   experimental: {
