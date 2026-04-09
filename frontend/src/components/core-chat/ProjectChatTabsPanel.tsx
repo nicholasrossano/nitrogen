@@ -25,7 +25,6 @@ interface ProjectChatTabsPanelProps {
   onPendingSessionHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   onCitationClick?: (citation: SourceCitation) => void;
-  onAlignmentConfirmedRef?: React.MutableRefObject<((msgs: { id: string; role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; created_at?: string | null }[]) => void) | null>;
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
 }
 
@@ -46,7 +45,6 @@ export function ProjectChatTabsPanel({
   onPendingSessionHandled,
   onEditorWidgetsChange,
   onCitationClick,
-  onAlignmentConfirmedRef,
   onSendRef,
 }: ProjectChatTabsPanelProps) {
   const initialTabRef = useRef<ProjectChatTab | null>(null);
@@ -306,7 +304,6 @@ export function ProjectChatTabsPanel({
                 onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
                 onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
                 onCitationClick={isActive ? onCitationClick : undefined}
-                onAlignmentConfirmedRef={isActive ? onAlignmentConfirmedRef : undefined}
                 onSendRef={isActive ? onSendRef : undefined}
               />
             </div>

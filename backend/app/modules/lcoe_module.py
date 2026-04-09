@@ -30,7 +30,6 @@ from app.modules.base import (
     ModuleManifest,
     ProgressCallback,
     RefinementModel,
-    ReviewStrategy,
     ModuleDefinition,
     ModuleInput,
     ModuleOutput,
@@ -235,10 +234,6 @@ class LCOETool(BaseModule):
         ]
 
     @property
-    def review_strategy(self) -> ReviewStrategy:
-        return ReviewStrategy.INPUT_REVIEW
-
-    @property
     def execution_model(self) -> ExecutionModel:
         return ExecutionModel.SYNC_COMPUTATION
 
@@ -335,7 +330,6 @@ class LCOETool(BaseModule):
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment=None,
     ) -> ModuleOutput:
         """Full LCOE execution: extract → fill defaults → calculate → return structured output."""
 

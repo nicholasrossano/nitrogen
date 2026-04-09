@@ -16,15 +16,6 @@ import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 
-interface AlignmentNewMessage {
-  id: string;
-  role: string;
-  content: string;
-  widget_type?: string | null;
-  widget_data?: Record<string, any> | null;
-  created_at?: string | null;
-}
-
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
   showLanding?: boolean;
@@ -44,8 +35,6 @@ interface ProjectStandaloneChatViewProps {
   onSessionMetaChange?: (meta: { sessionId: string | null; title: string | null }) => void;
   /** Called when this view enters or leaves its landing state */
   onLandingStateChange?: (isOnLanding: boolean) => void;
-  /** Callback for EditorSidePanel to thread through to AlignmentWidget */
-  onAlignmentConfirmedRef?: React.MutableRefObject<((msgs: AlignmentNewMessage[]) => void) | null>;
   /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
 }
@@ -82,7 +71,6 @@ export function ProjectStandaloneChatView({
   onCitationClick,
   onSessionMetaChange,
   onLandingStateChange,
-  onAlignmentConfirmedRef,
   onSendRef,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
@@ -101,27 +89,6 @@ export function ProjectStandaloneChatView({
   const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
 
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
-
-  const handleAlignmentConfirmed = useCallback(
-    (newMessages: AlignmentNewMessage[]) => {
-      const chatMessages: ChatMessage[] = newMessages.map((m) => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        widget_type: m.widget_type ?? null,
-        widget_data: m.widget_data ?? null,
-        created_at: m.created_at ?? new Date().toISOString(),
-      }));
-      setLocalMessages((prev) => [...prev, ...chatMessages]);
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (onAlignmentConfirmedRef) {
-      onAlignmentConfirmedRef.current = handleAlignmentConfirmed;
-    }
-  }, [onAlignmentConfirmedRef, handleAlignmentConfirmed]);
 
   useEffect(() => {
     if (initialTitle && !sessionTitle) {
@@ -238,20 +205,7 @@ export function ProjectStandaloneChatView({
       )
       .map((m) => ({ type: m.widget_type!, data: m.widget_data!, messageId: m.id }));
 
-    // Suppress alignment widgets whose output has already been generated
-    const OUTPUT_TYPE_TO_WIDGET: Record<string, string> = {
-      memo: 'memo_viewer',
-      checklist: 'checklist_viewer',
-    };
-    const presentWidgetTypes = new Set(raw.map((w) => w.type));
-    const widgets = raw.filter((w) => {
-      if (w.type !== 'alignment') return true;
-      const outputType = w.data?.tool?.output_type as string | undefined;
-      if (!outputType) return true;
-      const widgetType = OUTPUT_TYPE_TO_WIDGET[outputType];
-      return !widgetType || !presentWidgetTypes.has(widgetType);
-    });
-    onEditorWidgetsChange(widgets);
+    onEditorWidgetsChange(raw);
   }, [localMessages, onEditorWidgetsChange]);
 
   const displayMessages = useMemo(
