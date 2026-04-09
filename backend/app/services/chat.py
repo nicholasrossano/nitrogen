@@ -109,88 +109,6 @@ SEARCH_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "run_lcoe_model",
-            "description": (
-                "Build an LCOE (Levelized Cost of Energy) model to estimate cost per kWh. "
-                "ALWAYS use this when the user asks for: LCOE, levelized cost, cost of energy, "
-                "cost per kWh, project economics, financial feasibility of an energy project, "
-                "or when they mention capex/opex/discount rate/WACC/capacity factor in a project costing context. "
-                "Also use when the user says 'build me an LCOE', 'model the economics', or "
-                "'is this project viable/feasible' for an energy project. "
-                "Extract any numbers mentioned in the conversation as inputs."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "technology_type": {
-                        "type": "string",
-                        "description": "Energy technology: solar_pv, wind, battery, mini_grid, clean_cooking, or other. Infer from conversation.",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "One sentence explaining why the LCOE tool is appropriate here.",
-                    },
-                },
-                "required": ["reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "run_carbon_model",
-            "description": (
-                "Build a Carbon Emissions model to estimate emission reductions (tCO₂e). "
-                "ALWAYS use this when the user asks about: carbon credits, emission reductions, "
-                "tCO₂e, baseline vs project emissions, cookstove methodology, fNRB, leakage, "
-                "Gold Standard ER calculations, fuel consumption savings from clean cooking, "
-                "or 'how many credits will this project generate'. "
-                "Extract any numbers mentioned in the conversation as inputs."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "method_pack": {
-                        "type": "string",
-                        "description": "Methodology pack: cookstoves or other. Infer from conversation.",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "One sentence explaining why the carbon tool is appropriate here.",
-                    },
-                },
-                "required": ["reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "run_solar_estimate",
-            "description": (
-                "Generate a solar PV production estimate (annual and monthly kWh) using PVWatts. "
-                "ALWAYS use this when the user asks for: solar production estimate, PV energy yield, "
-                "annual or monthly kWh for a solar installation, solar feasibility, solar output, "
-                "or mentions system capacity/tilt/azimuth/location in a solar energy context. "
-                "Also use when the user says 'estimate solar production', 'how much will this system produce', "
-                "'solar production estimate for this site', or similar. "
-                "Extract any location, capacity, orientation, and system details from the conversation."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reason": {
-                        "type": "string",
-                        "description": "One sentence explaining why the solar estimate tool is appropriate here.",
-                    },
-                },
-                "required": ["reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "propose_input_value",
             "description": (
                 "Propose a specific value for a model input field (LCOE, Carbon, or Solar). "
@@ -285,9 +203,6 @@ Your only job is to decide which tools (if any) to call before generating a resp
 You have these data sources available — they are all equally valid and complement each other:
 - search_scholarly_literature: peer-reviewed papers, empirical studies, impact evaluations
 - search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
-- run_lcoe_model: builds a Levelized Cost of Energy model when the user wants energy project economics
-- run_carbon_model: builds a carbon emissions model when the user wants emission reduction estimates
-- run_solar_estimate: generates a solar PV production estimate (annual + monthly kWh) using PVWatts when the user wants solar energy yield
 - propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE, Carbon, or Solar model input field
 - propose_template_value: proposes a value for a template/form requirement field when the user message contains [TEMPLATE_CONTEXT]
 
@@ -297,13 +212,9 @@ The user may be working inside a project workspace. Project documents are ALREAD
 
 For general research questions that go BEYOND the project's own documents (e.g. industry benchmarks, regulatory standards, methodology comparisons, best practices), call BOTH search_scholarly_literature AND search_web_sources.
 
-Call run_lcoe_model when the user wants a numerical energy cost model (LCOE, cost per kWh, project economics, capex/opex/WACC analysis). This can be combined with search tools.
+Calculator modules (LCOE, Carbon, Solar) now live in the editor workspace panel. When the user asks to model project economics or emissions, encourage them to open the relevant module from the workspace — do NOT attempt to run the model inline.
 
-Call run_carbon_model when the user wants a numerical emissions model (carbon credits, tCO₂e, emission reductions, cookstove methodology, fNRB). This can be combined with search tools.
-
-Call run_solar_estimate when the user wants a solar PV production estimate (annual/monthly kWh, energy yield, solar feasibility). This can be combined with search tools.
-
-Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia", "change tilt to 20°"). Combine with search tools (scholarly + web) to ground the proposal in evidence.
+Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia", "change tilt to 20°"). Combine with search tools (scholarly + web) to ground the proposal in evidence. This supports the editor module's investigate → propose → confirm flow.
 
 Call propose_template_value when the user message contains a [TEMPLATE_CONTEXT] block — this means they are investigating a template/form requirement. ALWAYS combine with search_scholarly_literature AND search_web_sources to ground the answer in evidence. Extract the requirement label, field type, and category from the context block.
 
@@ -484,11 +395,7 @@ class ChatService:
             return get_capability_registry().to_openai_tools("orchestration")
         return get_capability_registry().to_openai_tools("standalone")
 
-    _HINT_TO_PLANNER_TOOL: dict[str, str] = {
-        "lcoe_model": "run_lcoe_model",
-        "carbon_model": "run_carbon_model",
-        "solar_estimate": "run_solar_estimate",
-    }
+    _HINT_TO_PLANNER_TOOL: dict[str, str] = {}
 
     async def generate_response(
         self,
@@ -637,61 +544,16 @@ class ChatService:
                     all_facts.extend(facts)
                     tiers_used.append(label)
 
-        # Run model tools (LCOE / carbon / solar) sequentially — they produce widgets
+        # Modules (LCOE / carbon / solar) live in the editor workspace — not chat.
+        # If the planner calls a model tool, acknowledge it but do not execute inline.
         for fn_name, args in parsed_calls:
-            if fn_name in ("run_lcoe_model", "run_carbon_model"):
-                from app.modules.lcoe_module import LCOETool
-                from app.modules.carbon_module import CarbonTool
-
-                is_lcoe = fn_name == "run_lcoe_model"
-                tool = LCOETool() if is_lcoe else CarbonTool()
-                label = "lcoe" if is_lcoe else "carbon"
-
-                await _think(f"Building {'LCOE' if is_lcoe else 'carbon emissions'} model...")
-                tiers_used.append(label)
-
-                conversation_text = "\n".join(
-                    f"{m['role']}: {m['content']}"
-                    for m in (history[-20:] if len(history) > 20 else history)
-                )
-                conversation_text += f"\nuser: {user_message}"
-
-                try:
-                    widget_type, widget_data = await tool.execute_from_conversation(
-                        conversation_text=conversation_text,
-                        planner_args=args,
-                        on_progress=_think,
-                    )
-                except Exception as e:
-                    logger.error(f"{label.upper()} tool failed: {e}", exc_info=True)
-                    await _think(f"{label.upper()} model encountered an error — falling back to text response")
-
-            elif fn_name == "run_solar_estimate":
-                from app.modules.pvwatts_module import PVWattsTool
-
-                await _think("Generating solar production estimate...")
-                tiers_used.append("solar")
-
-                conversation_parts: list[str] = []
-                if project_context:
-                    conversation_parts.append(f"PROJECT CONTEXT:\n{project_context}")
-                conversation_parts.append("\n".join(
-                    f"{m['role']}: {m['content']}"
-                    for m in (history[-20:] if len(history) > 20 else history)
-                ))
-                conversation_parts.append(f"user: {user_message}")
-                conversation_text = "\n\n".join(conversation_parts)
-
-                try:
-                    solar_tool = PVWattsTool()
-                    widget_type, widget_data = await solar_tool.execute_from_conversation(
-                        conversation_text=conversation_text,
-                        planner_args=args,
-                        on_progress=_think,
-                    )
-                except Exception as e:
-                    logger.error(f"Solar estimate tool failed: {e}", exc_info=True)
-                    await _think("Solar estimate encountered an error — falling back to text response")
+            if fn_name in ("run_lcoe_model", "run_carbon_model", "run_solar_estimate"):
+                label_map = {
+                    "run_lcoe_model": "LCOE",
+                    "run_carbon_model": "Carbon",
+                    "run_solar_estimate": "Solar",
+                }
+                await _think(f"{label_map.get(fn_name, 'Model')} calculation queued — use the editor workspace to interact with the model.")
 
             elif fn_name == "propose_input_value":
                 await _think(f"Proposing value for {args.get('field_name', 'field')}...")

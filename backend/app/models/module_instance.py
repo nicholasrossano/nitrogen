@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 from typing import TYPE_CHECKING
 from sqlalchemy import String, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -9,6 +10,22 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.initiative import Initiative
+
+
+class ModuleInstanceStatus(str, Enum):
+    """Canonical lifecycle status for a module instance.
+
+    Transitions:
+        started -> generating (setup confirmed on a layered module, or LLM run begins)
+        started -> ready      (widget module becomes computable after first recalculate)
+        generating -> ready   (LLM generation complete, user can review)
+        ready -> completed    (user exports or finalizes the deliverable)
+        Any -> started        (setup re-confirmed, resetting build/output)
+    """
+    STARTED = "started"
+    GENERATING = "generating"
+    READY = "ready"
+    COMPLETED = "completed"
 
 
 class ModuleInstance(Base):
