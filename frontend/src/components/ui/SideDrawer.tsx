@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Search, PanelsTopLeft, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Search, PanelsTopLeft, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -105,6 +105,7 @@ export function SideDrawer() {
     const labels = GLOBAL_ITEMS.map((item) => item.label);
     projectItems.forEach((item) => labels.push(item.label));
     labels.push('Files');
+    labels.push('Help');
     labels.push('Settings');
     labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
@@ -565,6 +566,19 @@ export function SideDrawer() {
       </div>
 
       <UsagePill />
+
+      <a
+        href="https://nitrogenai.mintlify.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="nav-row w-full"
+        title="Help"
+      >
+        <HelpCircle className="w-4 h-4 flex-shrink-0" />
+        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+          Help
+        </span>
+      </a>
 
       <button
         onClick={() => setSettingsOpen(true)}
