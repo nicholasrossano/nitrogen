@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
+from app.mcp.exposure_policy import adapter_visibility
 from app.services.pvwatts_engine import PVWattsEngine, PVWattsInput
 
 
@@ -21,25 +22,56 @@ class PVWattsAdapter(BaseAdapter):
             provider="pvwatts",
             adapter_type="api",
             input_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "PVWattsInput",
+                "description": "Inputs for the PVWatts production estimate adapter.",
                 "type": "object",
                 "properties": {
-                    "known_values": {"type": "object"},
-                    "serialized_inputs": {"type": "object"},
-                    "resolve_address": {"type": "boolean"},
+                    "known_values": {
+                        "type": "object",
+                        "description": "Known PVWatts input values keyed by engine field name.",
+                    },
+                    "serialized_inputs": {
+                        "type": "object",
+                        "description": "Previously serialized PVWatts inputs to restore before execution.",
+                    },
+                    "resolve_address": {
+                        "type": "boolean",
+                        "description": "Whether to geocode a provided address before calling PVWatts.",
+                    },
                 },
             },
             output_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "PVWattsOutput",
+                "description": "PVWatts estimate output and normalized engine inputs.",
                 "type": "object",
                 "properties": {
-                    "inputs": {"type": "object"},
-                    "missing_essentials": {"type": "array", "items": {"type": "string"}},
-                    "computable": {"type": "boolean"},
-                    "result": {"type": "object"},
-                    "geocode": {"type": "object"},
+                    "inputs": {
+                        "type": "object",
+                        "description": "Normalized calculator inputs after defaults are applied.",
+                    },
+                    "missing_essentials": {
+                        "type": "array",
+                        "description": "Required fields still missing for a computable run.",
+                        "items": {"type": "string"},
+                    },
+                    "computable": {
+                        "type": "boolean",
+                        "description": "Whether the provided inputs are sufficient for calculation.",
+                    },
+                    "result": {
+                        "type": "object",
+                        "description": "PVWatts API result when the estimate is computable.",
+                    },
+                    "geocode": {
+                        "type": "object",
+                        "description": "Resolved geocoding payload when address lookup is requested.",
+                    },
                 },
             },
             initiative_scope_required=False,
-            visibility="internal",
+            visibility=adapter_visibility("pvwatts", "internal"),
             capabilities=["async"],
         )
 

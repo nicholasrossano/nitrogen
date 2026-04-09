@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
+from app.mcp.exposure_policy import adapter_visibility
 from app.services.openalex import OpenAlexService
 
 
@@ -21,21 +22,37 @@ class OpenAlexAdapter(BaseAdapter):
             provider="openalex",
             adapter_type="api",
             input_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "OpenAlexInput",
+                "description": "Inputs for scholarly literature search via OpenAlex.",
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "per_page": {"type": "integer"},
+                    "query": {
+                        "type": "string",
+                        "description": "Search query to run against OpenAlex.",
+                    },
+                    "per_page": {
+                        "type": "integer",
+                        "description": "Maximum number of works to return.",
+                    },
                 },
                 "required": ["query"],
             },
             output_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "OpenAlexOutput",
+                "description": "OpenAlex work-search results.",
                 "type": "object",
                 "properties": {
-                    "works": {"type": "array", "items": {"type": "object"}},
+                    "works": {
+                        "type": "array",
+                        "description": "Matching scholarly works returned by OpenAlex.",
+                        "items": {"type": "object"},
+                    },
                 },
             },
             initiative_scope_required=False,
-            visibility="exposed",
+            visibility=adapter_visibility("openalex", "exposed"),
             capabilities=["async"],
         )
 

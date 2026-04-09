@@ -17,7 +17,8 @@ import traceback  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import initiatives, onboarding, evidence, generate, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
+from app.api import initiatives, onboarding, evidence, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
+from app.mcp import get_mcp_http_app  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -155,7 +156,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(initiatives.router, prefix="/api/v1", tags=["initiatives"])
 app.include_router(onboarding.router, prefix="/api/v1", tags=["onboarding"])
 app.include_router(evidence.router, prefix="/api/v1", tags=["evidence"])
-app.include_router(generate.router, prefix="/api/v1", tags=["generate"])
 app.include_router(exports.router, prefix="/api/v1", tags=["exports"])
 app.include_router(corpus.router, prefix="/api/v1", tags=["corpus"])
 app.include_router(module_catalog.router, prefix="/api/v1", tags=["modules"])
@@ -171,6 +171,7 @@ app.include_router(pvwatts.router, prefix="/api/v1", tags=["pvwatts"])
 app.include_router(google_drive.router, prefix="/api/v1", tags=["google-drive"])
 app.include_router(billing.router, prefix="/api/v1", tags=["billing"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["api-keys"])
+app.mount("/mcp", get_mcp_http_app())
 
 
 @app.get("/")

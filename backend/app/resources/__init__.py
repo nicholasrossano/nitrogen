@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthUser
 from app.core.execution_context import ExecutionContext
 from app.core.permissions import get_initiative_with_role
+from app.mcp.exposure_policy import resource_visibility
 from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.initiative import Initiative
@@ -239,6 +240,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_initiative,
+            visibility=resource_visibility("initiative"),
         )
     )
     registry.register(
@@ -250,6 +252,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_evidence_doc,
+            visibility=resource_visibility("evidence_doc"),
         )
     )
     registry.register(
@@ -261,6 +264,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_evidence_chunk,
+            visibility=resource_visibility("evidence_chunk"),
         )
     )
     registry.register(
@@ -272,6 +276,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=False,
             read_handler=_read_corpus_doc,
+            visibility=resource_visibility("corpus_doc"),
         )
     )
     registry.register(
@@ -283,6 +288,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_project_material,
+            visibility=resource_visibility("project_material"),
         )
     )
     registry.register(
@@ -294,6 +300,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_memo_version,
+            visibility=resource_visibility("memo_version"),
         )
     )
     registry.register(
@@ -305,6 +312,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_module_instance,
+            visibility=resource_visibility("module_instance"),
         )
     )
     registry.register(
@@ -316,6 +324,7 @@ def register_all(registry: ResourceRegistry) -> None:
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_artifact,
+            visibility=resource_visibility("artifact"),
         )
     )
 

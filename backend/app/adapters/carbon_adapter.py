@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
+from app.mcp.exposure_policy import adapter_visibility
 from app.services.carbon_engine import CarbonEngine
 
 
@@ -21,25 +22,54 @@ class CarbonAdapter(BaseAdapter):
             provider="internal",
             adapter_type="python",
             input_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "CarbonInput",
+                "description": "Inputs for the carbon reduction calculator.",
                 "type": "object",
                 "properties": {
-                    "method_pack": {"type": "string"},
-                    "known_values": {"type": "object"},
+                    "method_pack": {
+                        "type": "string",
+                        "description": "Optional method-pack preset to seed default assumptions.",
+                    },
+                    "known_values": {
+                        "type": "object",
+                        "description": "Known calculator inputs keyed by carbon field name.",
+                    },
                 },
                 "required": ["known_values"],
             },
             output_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "CarbonOutput",
+                "description": "Computed carbon result bundle returned by the internal engine.",
                 "type": "object",
                 "properties": {
-                    "inputs": {"type": "object"},
-                    "missing_essentials": {"type": "array", "items": {"type": "string"}},
-                    "computable": {"type": "boolean"},
-                    "result": {"type": "object"},
-                    "sensitivity": {"type": "array", "items": {"type": "object"}},
+                    "inputs": {
+                        "type": "object",
+                        "description": "Normalized calculator inputs after defaults are applied.",
+                    },
+                    "missing_essentials": {
+                        "type": "array",
+                        "description": "Required fields still missing for a computable run.",
+                        "items": {"type": "string"},
+                    },
+                    "computable": {
+                        "type": "boolean",
+                        "description": "Whether the provided inputs are sufficient for calculation.",
+                    },
+                    "result": {
+                        "type": "object",
+                        "description": "Primary carbon calculation output when computable.",
+                    },
+                    "sensitivity": {
+                        "type": "array",
+                        "description": "Sensitivity analysis points derived from the current inputs.",
+                        "items": {"type": "object"},
+                    },
                 },
             },
             initiative_scope_required=False,
-            visibility="internal",
+            visibility=adapter_visibility("carbon", "internal"),
             capabilities=["sync"],
         )
 

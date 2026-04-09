@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
+from app.mcp.exposure_policy import adapter_visibility
 from app.services.rag import RAGService
 
 
@@ -22,24 +23,50 @@ class RAGAdapter(BaseAdapter):
             provider="internal",
             adapter_type="python",
             input_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "RAGInput",
+                "description": "Inputs for Nitrogen's scoped RAG retrieval adapter.",
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "initiative_id": {"type": "string"},
-                    "sources": {"type": "array", "items": {"type": "string"}},
-                    "evidence_top_k": {"type": "integer"},
-                    "corpus_top_k": {"type": "integer"},
+                    "query": {
+                        "type": "string",
+                        "description": "Similarity-search query to run over evidence and corpus content.",
+                    },
+                    "initiative_id": {
+                        "type": "string",
+                        "description": "Initiative UUID used to scope evidence access and permissions.",
+                    },
+                    "sources": {
+                        "type": "array",
+                        "description": "Source collections to search, typically evidence and/or corpus.",
+                        "items": {"type": "string"},
+                    },
+                    "evidence_top_k": {
+                        "type": "integer",
+                        "description": "Maximum number of initiative evidence chunks to return.",
+                    },
+                    "corpus_top_k": {
+                        "type": "integer",
+                        "description": "Maximum number of corpus chunks to return.",
+                    },
                 },
-                "required": ["query"],
+                "required": ["query", "initiative_id"],
             },
             output_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "RAGOutput",
+                "description": "Chunk-level vector retrieval results.",
                 "type": "object",
                 "properties": {
-                    "chunks": {"type": "array", "items": {"type": "object"}},
+                    "chunks": {
+                        "type": "array",
+                        "description": "Retrieved chunks with provenance and similarity metadata.",
+                        "items": {"type": "object"},
+                    },
                 },
             },
             initiative_scope_required=True,
-            visibility="internal",
+            visibility=adapter_visibility("rag", "internal"),
             capabilities=["async"],
         )
 

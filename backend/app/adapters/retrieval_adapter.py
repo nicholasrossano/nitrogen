@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
+from app.mcp.exposure_policy import adapter_visibility
 from app.services.tiered_retrieval import TieredRetrievalService
 
 
@@ -22,27 +23,62 @@ class RetrievalAdapter(BaseAdapter):
             provider="internal",
             adapter_type="python",
             input_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "RetrievalInput",
+                "description": "Inputs for Nitrogen's tiered retrieval workflow.",
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "initiative_id": {"type": "string"},
-                    "include_openalex": {"type": "boolean"},
-                    "include_web_search": {"type": "boolean"},
-                    "include_llm_fallback": {"type": "boolean"},
-                    "require_citation": {"type": "boolean"},
+                    "query": {
+                        "type": "string",
+                        "description": "Research question or retrieval query to execute.",
+                    },
+                    "initiative_id": {
+                        "type": "string",
+                        "description": "Initiative UUID used to scope project evidence and permissions.",
+                    },
+                    "include_openalex": {
+                        "type": "boolean",
+                        "description": "Whether to include the OpenAlex scholarly retrieval tier.",
+                    },
+                    "include_web_search": {
+                        "type": "boolean",
+                        "description": "Whether to include the web-search retrieval tier.",
+                    },
+                    "include_llm_fallback": {
+                        "type": "boolean",
+                        "description": "Whether to allow the LLM fallback tier when citations are scarce.",
+                    },
+                    "require_citation": {
+                        "type": "boolean",
+                        "description": "Whether to require citation-backed facts in the final result.",
+                    },
                 },
-                "required": ["query"],
+                "required": ["query", "initiative_id"],
             },
             output_schema={
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "title": "RetrievalOutput",
+                "description": "Tiered retrieval result with the facts and tiers used.",
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "tiers_used": {"type": "array", "items": {"type": "string"}},
-                    "facts": {"type": "array", "items": {"type": "object"}},
+                    "query": {
+                        "type": "string",
+                        "description": "The normalized retrieval query that was executed.",
+                    },
+                    "tiers_used": {
+                        "type": "array",
+                        "description": "Retrieval tiers that contributed to the response.",
+                        "items": {"type": "string"},
+                    },
+                    "facts": {
+                        "type": "array",
+                        "description": "Retrieved fact payloads returned by the retrieval service.",
+                        "items": {"type": "object"},
+                    },
                 },
             },
-            initiative_scope_required=False,
-            visibility="internal",
+            initiative_scope_required=True,
+            visibility=adapter_visibility("retrieval", "internal"),
             capabilities=["async"],
         )
 
