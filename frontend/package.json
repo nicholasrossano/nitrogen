@@ -12,8 +12,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:clean": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev -p 3000",
-    "build": "next build",
-    "start": "next start",
+    "build": "rm -rf .next-build && NITROGEN_NEXT_DIST_DIR=.next-build next build",
+    "start": "NITROGEN_NEXT_DIST_DIR=.next-build next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",

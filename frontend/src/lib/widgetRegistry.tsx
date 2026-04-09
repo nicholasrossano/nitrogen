@@ -1,0 +1,59 @@
+/**
+ * Module widget registry for the editor/workspace panel.
+ *
+ * Maps widget_type strings to their React components. All module widgets
+ * that appear in the editor workspace are registered here. Chat interaction
+ * widgets (proposed_value, template_proposed_value) are NOT registered here —
+ * they live in ChatMessage.tsx.
+ *
+ * To add a new module widget:
+ *   1. Create your widget component in /components/widgets/
+ *   2. Add an entry to WIDGET_REGISTRY below
+ */
+
+import type { ComponentType } from 'react';
+
+export interface WorkspaceWidgetProps {
+  data: Record<string, any>;
+  initiativeId: string;
+  instanceId?: string;
+  onWorkflowUpdated?: () => void;
+  workspaceView?: 'build' | 'output';
+  isActive?: boolean;
+}
+
+type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
+
+// Lazy imports keep the initial bundle small
+const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }>> = {
+  lcoe_inputs: () =>
+    import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
+  lcoe_output: () =>
+    import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
+  carbon_inputs: () =>
+    import('@/components/widgets/CarbonModelWidget').then((m) => ({ default: m.CarbonModelWidget as unknown as WidgetComponent })),
+  carbon_output: () =>
+    import('@/components/widgets/CarbonModelWidget').then((m) => ({ default: m.CarbonModelWidget as unknown as WidgetComponent })),
+  solar_inputs: () =>
+    import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
+  solar_output: () =>
+    import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
+  document_viewer: () =>
+    import('@/components/widgets/DocumentViewerWidget').then((m) => ({ default: m.DocumentViewerWidget as unknown as WidgetComponent })),
+};
+
+/**
+ * Return the known widget type IDs (for validation and tests).
+ */
+export function getRegisteredWidgetTypes(): string[] {
+  return Object.keys(WIDGET_REGISTRY);
+}
+
+/**
+ * Check whether a widget type is registered for workspace rendering.
+ */
+export function isRegisteredWidget(widgetType: string): boolean {
+  return widgetType in WIDGET_REGISTRY;
+}
+
+export { WIDGET_REGISTRY };

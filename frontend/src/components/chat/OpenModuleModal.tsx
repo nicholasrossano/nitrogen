@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { X, Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
+import { Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { api, type ModuleInstance } from '@/lib/api';
-import { ModalShell } from '@/components/ui/ModalShell';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((m) => [m.id, m]));
 
@@ -25,10 +24,9 @@ function formatEmail(email: string | null, fallback: string): string {
   return fallback.length > 16 ? `${fallback.slice(0, 8)}…` : fallback;
 }
 
-interface OpenModuleModalProps {
+interface OpenModuleBrowserProps {
   initiativeId: string;
   onSelect: (instance: ModuleInstance) => void;
-  onClose: () => void;
 }
 
 type EnrichedInstance = ModuleInstance & { index: number | null; displayName: string };
@@ -52,7 +50,7 @@ function enrich(instances: ModuleInstance[]): EnrichedInstance[] {
   });
 }
 
-export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleModalProps) {
+export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserProps) {
   const [instances, setInstances] = useState<ModuleInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [isTrashView, setIsTrashView] = useState(false);
@@ -101,22 +99,8 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
   const enriched = enrich(instances);
 
   return (
-    <ModalShell onClose={onClose} maxWidth="max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-stroke-subtle">
-        <h2 className="text-sm font-semibold text-text-primary">
-          {isTrashView ? 'Trash' : 'Open Module'}
-        </h2>
-        <button
-          onClick={onClose}
-          className="p-1.5 shrink-0 rounded-md text-text-tertiary enabled:hover:text-text-primary enabled:hover:bg-surface-hover transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="px-6 py-5 max-h-[calc(90vh-4rem)] overflow-y-auto">
+    <div className="w-full">
+      <div className="w-full pb-8">
         {/* Same btn-secondary styling as the main project grid Trash control; button on the right */}
         <div className="mb-6 flex items-center justify-between gap-4">
           <p className="text-sm text-text-tertiary flex-1 min-w-0">
@@ -161,43 +145,6 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
 
               const cardInner = (
                 <>
-                  {/* Hover trash icon (normal view) */}
-                  {!isTrashView && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleArchive(e, inst.id)}
-                      title="Move to trash"
-                      className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-
-                  {/* Trash view: restore + permanent delete — must NOT wrap in disabled <button> or clicks never fire */}
-                  {isTrashView && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => handleRestore(e, inst.id)}
-                        title="Restore"
-                        className="project-action-btn project-action-btn-success absolute top-2 right-9 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity z-10"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmDeleteId(inst.id);
-                        }}
-                        title="Permanently delete"
-                        className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  )}
-
                   <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash [&>svg]:w-5 [&>svg]:h-5 text-accent">
                     {mod?.icon}
                   </div>
@@ -221,13 +168,44 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
               );
 
               return (
-                <div key={inst.id} className="relative">
+                <div key={inst.id} className="group relative">
                   {isTrashView ? (
-                    <div className={cardClass}>{cardInner}</div>
-                  ) : (
-                    <button type="button" onClick={() => onSelect(inst)} className={cardClass}>
+                    <div className={cardClass}>
                       {cardInner}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleRestore(e, inst.id)}
+                        title="Restore"
+                        className="project-action-btn project-action-btn-success absolute top-2 right-9 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-green transition-opacity z-10"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(inst.id);
+                        }}
+                        title="Permanently delete"
+                        className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => onSelect(inst)} className={cardClass}>
+                        {cardInner}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleArchive(e, inst.id)}
+                        title="Move to trash"
+                        className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
                   )}
 
                   {/* Permanent delete confirmation overlay */}
@@ -260,6 +238,6 @@ export function OpenModuleModal({ initiativeId, onSelect, onClose }: OpenModuleM
           </div>
         )}
       </div>
-    </ModalShell>
+    </div>
   );
 }

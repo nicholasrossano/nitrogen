@@ -1,13 +1,11 @@
 export { ConfirmationWidget } from './ConfirmationWidget';
 export { DocumentRequestWidget } from './DocumentRequestWidget';
 export { EvidenceInputWidget } from './EvidenceInputWidget';
-export { GenerateOptionsWidget } from './GenerateOptionsWidget';
 export { MemoViewerWidget } from './MemoViewerWidget';
 export { ModuleChecklistWidget } from './ModuleChecklistWidget';
 export { DeliverablesOverviewWidget } from './DeliverablesOverviewWidget';
 export { ChecklistViewerWidget } from './ChecklistViewerWidget';
 export { DeliverablesListWidget } from './DeliverablesListWidget';
-export { AlignmentWidget } from './AlignmentWidget';
 export { LCOEInputsWidget } from './LCOEInputsWidget';
 export { LCOEOutputWidget } from './LCOEOutputWidget';
 export { CarbonInputsWidget } from './CarbonInputsWidget';

@@ -16,6 +16,10 @@
   - Add minimal tests only when changing core logic, and keep them simple.
   - Otherwise provide a concrete manual verification checklist.
 - Always include: "How to verify" steps.
+- For adapter/resource/capability registries, prefer scalable contract tests: baseline `issubset` + shape checks, not exact full-set equality.
+- When adding/removing a baseline adapter/resource contract, update the corresponding registry contract tests in the same change.
+- For phased architecture migrations, add tests in-phase: contract tests immediately, targeted parity/regression tests at each wiring step (do not wait until the final phase).
+- For new test suites added during migration phases, include them in the default backend CI pytest path (or document why they are intentionally excluded).
 
 **Disabled button hover states:**
 - Whenever a button has both `hover:X` effects and `disabled:opacity-*`, replace `hover:X` with `enabled:hover:X` so hover animations are suppressed when disabled while the `disabled:cursor-not-allowed` cursor still shows. For `btn-primary/secondary/danger` classes in `globals.css`, add `:disabled:hover::before { opacity: 0 }` CSS overrides to suppress the pseudo-element fill animation.
@@ -24,6 +28,8 @@
 - After every substantive edit, call `ReadLints` on the edited file(s) before finalizing.
 - Fix any linter errors introduced by the change before responding.
 - For JSX in particular: watch for ternary branches with multiple sibling elements — they must be wrapped in a fragment (`<>...</>`).
+- After substantial frontend/App Router shell changes, if Next dev shows missing `vendor-chunks/*` or `Cannot find module './*.js'` under `.next/server`, treat it as cache corruption first: clear `frontend/.next` and restart with `npm run dev:clean` before debugging code.
+- Never run `next build` into the same output dir as an active `next dev` server; keep build output isolated (for this repo, `npm run build` must use `.next-build`) so verification does not corrupt dev chunks.
 
 **Import integrity after deletions (non-trivial changes):**
 - After deleting any backend Python file, immediately `grep` the entire backend for imports of the deleted module before finalizing. Key aggregator files to check: `models/__init__.py`, `alembic/env.py`, `app/main.py`, and any API/service file that might lazy-import it.
@@ -33,6 +39,11 @@
 **Scope discipline:**
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
+
+**Architecture migration posture:**
+- For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
+- If a temporary shim is unavoidable, mark it clearly with owner + removal trigger in the same PR; do not leave indefinite legacy paths.
+- For noteworthy architecture changes, do not keep dual legacy + new infra paths; complete a migration audit in-phase (all callers moved, legacy path removed, CI/tests green).
 
 **Learning & iteration:**
 - When I receive feedback or correction from you, interpret whether it reflects a reusable pattern or preference.
@@ -73,6 +84,31 @@ Follow `docs/style-guide.md` as the source of truth.
 **Page layout chrome (non-negotiable):**
 - Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
 - The `<header className="shrink-0 h-14">` must always be present — even if empty — on every page state/branch. What changes is only the content inside it, never its presence. Never omit the header on any conditional render branch (e.g. a selection screen vs. an active workspace screen on the same route).
+
+## Documentation Maintenance
+
+Nitrogen docs live in `docs/` and are automatically rendered on the public docs site (Mintlify) on every push to `main`. Keep them current by following these rules — the goal is docs that update alongside code, not after.
+
+**When to update docs (update in the same PR, not after):**
+- Changing how `adapter_bindings`, `ModuleManifest`, `AdapterDefinition`, or `ExecutionContext` work → update `docs/architecture.md` and the relevant authoring guide
+- Changing the module authoring pattern (base classes, registration, manifest fields) → update `docs/modules/authoring-guide.md`
+- Changing the adapter contract or adding a new adapter type → update `docs/adapters/authoring-guide.md`
+- Changing the MCP exposure model, transport, or auth → update `docs/mcp/integration-guide.md`
+- Changing setup steps, env vars, or dev commands → update `docs/setup.md`
+
+**When NOT to update docs:**
+- Adding a new concrete module (e.g. a new `DemandAssessmentModule`) — the live `GET /api/v1/capabilities` endpoint reflects this automatically; no doc edit needed unless the authoring *pattern* changed
+- Adding a new adapter instance — same as above; the capabilities endpoint is the live catalog
+- Routine bug fixes, UI tweaks, or refactors that don't change contracts
+
+**API reference (auto-generated — keep code annotations current):**
+- Every new FastAPI route function must have a docstring describing what it does
+- Every new Pydantic model field must have a `Field(description="...")` annotation
+- These become the Mintlify API reference automatically on deploy — no separate doc writing required
+
+**Capabilities endpoint (always live — no maintenance needed):**
+- `GET /api/v1/capabilities` is generated from the registries at request time
+- Never write a static list of modules, adapters, or resources in docs — always link to this endpoint instead
 
 ## Pull Requests
 When creating a PR with `gh pr create`, always fill in the `.github/PULL_REQUEST_TEMPLATE.md` fields — never leave placeholder comment text in the final body. The template has two sections:

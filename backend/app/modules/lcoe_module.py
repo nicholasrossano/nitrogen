@@ -20,24 +20,22 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
     ExecutionModel,
+    ModuleManifest,
     ProgressCallback,
     RefinementModel,
-    ReviewStrategy,
     ModuleDefinition,
     ModuleInput,
     ModuleOutput,
 )
 from app.models.initiative import Initiative
 from app.models.onboarding import ChatMessage
-from app.services.lcoe_engine import (
-    LCOEEngine,
-    LCOEInput,
-)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -101,6 +99,44 @@ class LCOETool(BaseModule):
     """LCOE modeling tool for chat-based energy project economics."""
 
     @property
+    def workspace_setup_fields(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "geography",
+                "label": "Geography",
+                "description": "Project geography or market context.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Kenya",
+            },
+            {
+                "name": "technology_type",
+                "label": "Technology Type",
+                "description": "Confirm the primary technology for the model.",
+                "field_type": "select",
+                "required": True,
+                "options": [
+                    "solar_pv",
+                    "wind",
+                    "battery",
+                    "mini_grid",
+                    "clean_cooking",
+                    "hydro",
+                    "other",
+                ],
+                "placeholder": None,
+            },
+            {
+                "name": "project_title",
+                "label": "Project Title",
+                "description": "Working title for this module run.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "Project title",
+            },
+        ]
+
+    @property
     def definition(self) -> ModuleDefinition:
         return ModuleDefinition(
             id="lcoe_model",
@@ -116,6 +152,23 @@ class LCOETool(BaseModule):
                 "solar", "wind", "battery", "mini-grid", "clean cooking",
             ],
             export_format="xlsx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            goal="Estimate project levelized cost of energy and sensitivity ranges.",
+            primary_ui_object="lcoe_output",
+            workspace_build_widget="lcoe_inputs",
+            workspace_output_widget="lcoe_output",
+            export_artifact_types=["xlsx"],
+            adapter_bindings={"core_engine": "lcoe"},
+            input_dependencies=["solar_estimate"],
+            produced_outputs=["lcoe_kwh", "lcoe_sensitivity", "lcoe_inputs"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="none",
         )
 
     def is_exportable(self, content: dict) -> bool:
@@ -179,10 +232,6 @@ class LCOETool(BaseModule):
                 default=25,
             ),
         ]
-
-    @property
-    def review_strategy(self) -> ReviewStrategy:
-        return ReviewStrategy.INPUT_REVIEW
 
     @property
     def execution_model(self) -> ExecutionModel:
@@ -281,7 +330,6 @@ class LCOETool(BaseModule):
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment=None,
     ) -> ModuleOutput:
         """Full LCOE execution: extract → fill defaults → calculate → return structured output."""
 
@@ -290,33 +338,21 @@ class LCOETool(BaseModule):
 
         tech_type = merged.pop("technology_type", None) or merged.pop("tech_type", None)
         merged.pop("location", None)
-
-        engine_inputs = LCOEEngine.build_default_inputs(
-            tech_type=tech_type,
-            known_values=merged,
+        adapter = get_adapter_registry().get("lcoe")
+        if adapter is None:
+            raise RuntimeError("lcoe adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id=getattr(self, "user_id", None) or "system",
+            user_email=None,
+            initiative_id=initiative_id,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id=f"lcoe:{initiative_id}",
         )
-
-        missing = LCOEEngine.get_missing_essentials(engine_inputs)
-        computable = LCOEEngine.is_computable(engine_inputs)
-
-        result_data: dict[str, Any] = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-            "technology_type": tech_type,
-        }
-
-        if computable:
-            try:
-                lcoe_result = LCOEEngine.calculate(engine_inputs)
-                result_data["result"] = lcoe_result.to_dict()
-
-                sensitivity = LCOEEngine.run_sensitivity(engine_inputs)
-                result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-                result_data["is_unruly"] = LCOEEngine.is_unruly(engine_inputs)
-            except (ValueError, ZeroDivisionError) as e:
-                result_data["error"] = str(e)
-                result_data["computable"] = False
+        result = await adapter.execute(ctx, db, {"tech_type": tech_type, "known_values": merged})
+        result_data: dict[str, Any] = dict(result.output)
+        result_data["technology_type"] = tech_type
 
         return ModuleOutput(
             module_id="lcoe_model",
@@ -346,40 +382,34 @@ class LCOETool(BaseModule):
         if not tech_type and extracted.get("technology_type"):
             tech_type = extracted.pop("technology_type", None)
         extracted.pop("location", None)
-
-        engine_inputs = LCOEEngine.build_default_inputs(
-            tech_type=tech_type,
-            known_values=extracted,
+        adapter = get_adapter_registry().get("lcoe")
+        if adapter is None:
+            raise RuntimeError("lcoe adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id=getattr(self, "user_id", None) or "system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="lcoe:conversation",
         )
-
-        missing = LCOEEngine.get_missing_essentials(engine_inputs)
-        computable = LCOEEngine.is_computable(engine_inputs)
-
-        widget_data: dict = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-            "technology_type": tech_type,
-        }
-
-        if computable:
-            await _progress("Calculating LCOE...")
-            result = LCOEEngine.calculate(engine_inputs)
-            widget_data["result"] = result.to_dict()
-
-            await _progress("Running sensitivity analysis...")
-            sensitivity = LCOEEngine.run_sensitivity(engine_inputs)
-            widget_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-            widget_data["is_unruly"] = LCOEEngine.is_unruly(engine_inputs)
-
+        await _progress("Calculating LCOE...")
+        result = await adapter.execute(ctx, None, {"tech_type": tech_type, "known_values": extracted})
+        widget_data: dict[str, Any] = dict(result.output)
+        widget_data["technology_type"] = tech_type
+        if widget_data.get("computable"):
             widget_type = "lcoe_output"
+            lcoe_result = (widget_data.get("result") or {})
             await _progress(
-                f"LCOE: {result.currency} {result.lcoe:.4f}/kWh "
-                f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
+                f"LCOE: {lcoe_result.get('currency', '')} {lcoe_result.get('lcoe', 0):.4f}/kWh "
+                f"({lcoe_result.get('assumption_count', 0)} assumptions, {lcoe_result.get('quality_label', 'unknown')} confidence)"
             )
         else:
             widget_type = "lcoe_inputs"
-            await _progress(f"Need {len(missing)} more inputs to compute — showing input table")
+            await _progress(
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to compute — showing input table"
+            )
 
         return widget_type, widget_data
 
@@ -392,29 +422,41 @@ class LCOETool(BaseModule):
         This is the fast path used when the user edits a single value
         in the inputs table widget — no LLM call, pure math.
         """
-        engine_inputs = {
-            k: LCOEInput.from_dict(v) for k, v in inputs_dict.items()
-        }
+        known_values: dict[str, Any] = {}
+        for key, value in inputs_dict.items():
+            if isinstance(value, dict):
+                known_values[key] = value.get("value")
+            else:
+                known_values[key] = value
+        tech_type = known_values.pop("technology_type", None)
 
-        computable = LCOEEngine.is_computable(engine_inputs)
-        missing = LCOEEngine.get_missing_essentials(engine_inputs)
-
-        result_data: dict[str, Any] = {
-            "inputs": inputs_dict,
-            "missing_essentials": missing,
-            "computable": computable,
-        }
-
-        if computable:
-            try:
-                lcoe_result = LCOEEngine.calculate(engine_inputs)
-                result_data["result"] = lcoe_result.to_dict()
-
-                sensitivity = LCOEEngine.run_sensitivity(engine_inputs)
-                result_data["sensitivity"] = [s.to_dict() for s in sensitivity]
-                result_data["is_unruly"] = LCOEEngine.is_unruly(engine_inputs)
-            except (ValueError, ZeroDivisionError) as e:
-                result_data["error"] = str(e)
-                result_data["computable"] = False
-
+        adapter = get_adapter_registry().get("lcoe")
+        if adapter is None:
+            raise RuntimeError("lcoe adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id=getattr(self, "user_id", None) or "system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="lcoe:recalculate",
+        )
+        result = await adapter.execute(ctx, None, {"tech_type": tech_type, "known_values": known_values})
+        result_data = dict(result.output)
+        result_data["technology_type"] = tech_type
         return result_data
+
+    async def build_workspace_widget_data(
+        self,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.services.lcoe_engine import LCOEEngine
+
+        tech_type = known_values.get("technology_type")
+        inputs = LCOEEngine.build_default_inputs(
+            tech_type=tech_type,
+            known_values=known_values,
+        )
+        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
+        return await self.recalculate(serialized_inputs)

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ModuleAlignment, AlignmentSection, AlignmentParameter, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -22,7 +22,6 @@ interface InitiativeState {
   loading: boolean;
   sending: boolean;
   generating: boolean;
-  alignmentLoading: boolean;
   projectPlanLoading: boolean;
   error: string | null;
   streamingMessageId: string | null;
@@ -60,8 +59,6 @@ interface InitiativeState {
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
   generateAllDeliverables: (id: string) => Promise<void>;
   updateTitle: (id: string, title: string) => Promise<void>;
-  confirmAlignment: (id: string, toolId: string, sections?: AlignmentSection[], parameters?: AlignmentParameter[]) => Promise<void>;
-  provideFeedback: (id: string, toolId: string, feedback: string) => Promise<void>;
   _refreshPlanInBackground: (id: string) => Promise<void>;
   loadProjectPlan: (id: string) => Promise<void>;
   generateProjectPlan: (id: string) => Promise<void>;
@@ -87,7 +84,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   loading: false,
   sending: false,
   generating: false,
-  alignmentLoading: false,
   projectPlanLoading: false,
   error: null,
   streamingMessageId: null,
@@ -105,7 +101,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({
         initiative,
         loading: false,
-        ...(initiative.project_plan ? { projectPlan: initiative.project_plan } : {}),
+        // Always sync projectPlan so stale plan state from another project cannot persist.
+        projectPlan: initiative.project_plan ?? null,
       });
     } catch (error) {
       set({ 
@@ -681,62 +678,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Confirm alignment for a tool (may also trigger generation if this is the last alignment)
-  confirmAlignment: async (id: string, toolId: string, sections?: AlignmentSection[], parameters?: AlignmentParameter[]) => {
-    set({ alignmentLoading: true, generating: true, error: null });
-    try {
-      await api.confirmAlignment(id, toolId, sections, parameters);
-      
-      // Reload everything — may include newly generated memo_viewer / checklist_viewer messages
-      const [initiative, { messages, stage_status }] = await Promise.all([
-        api.getInitiative(id),
-        api.getChatHistory(id),
-      ]);
-      
-      set({
-        initiative,
-        messages,
-        stageStatus: stage_status,
-        alignmentLoading: false,
-        generating: false,
-      });
-
-      get()._refreshPlanInBackground(id);
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to confirm alignment',
-        alignmentLoading: false,
-        generating: false,
-      });
-    }
-  },
-
-  // Provide feedback on alignment
-  provideFeedback: async (id: string, toolId: string, feedback: string) => {
-    set({ alignmentLoading: true, error: null });
-    try {
-      await api.provideFeedback(id, toolId, feedback);
-      
-      // Reload chat to get updated alignment widget
-      const [initiative, { messages, stage_status }] = await Promise.all([
-        api.getInitiative(id),
-        api.getChatHistory(id),
-      ]);
-      
-      set({
-        initiative,
-        messages,
-        stageStatus: stage_status,
-        alignmentLoading: false,
-      });
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to provide feedback',
-        alignmentLoading: false,
-      });
-    }
-  },
-
   // Silently refresh the project plan in the background (if one already exists)
   _refreshPlanInBackground: async (id: string) => {
     const { projectPlan } = get();
@@ -902,7 +843,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       loading: false,
       sending: false,
       generating: false,
-      alignmentLoading: false,
       projectPlanLoading: false,
       error: null,
       streamingMessageId: null,

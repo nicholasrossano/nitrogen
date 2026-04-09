@@ -22,9 +22,14 @@ import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGenerating
 async function persistWidgetToDb(
   initiativeId: string,
   messageId: string,
+  instanceId: string | undefined,
   widgetData: Record<string, any>,
 ): Promise<boolean> {
   try {
+    if (instanceId) {
+      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      return true;
+    }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
     useInitiativeStore.getState().updateMessageWidgetData(messageId, widgetData);
     useChatStore.getState().updateMessageWidgetData(messageId, widgetData);
@@ -39,6 +44,9 @@ interface CarbonModelWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   messageId?: string;
+  instanceId?: string;
+  onWorkflowUpdated?: () => void;
+  workspaceView?: 'build' | 'output';
   isActive?: boolean;
 }
 
@@ -82,6 +90,9 @@ export function CarbonModelWidget({
   data: initialData,
   initiativeId,
   messageId,
+  instanceId,
+  onWorkflowUpdated,
+  workspaceView = 'output',
   isActive = true,
 }: CarbonModelWidgetProps) {
   const [data, setDataRaw] = useState(initialData);
@@ -106,6 +117,7 @@ export function CarbonModelWidget({
   useEffect(() => { setMounted(true); }, []);
 
   const result = data?.result;
+  const forceInputsView = workspaceView === 'build';
   const inputs = useMemo(() => data?.inputs || {}, [data]);
   const missingEssentials: string[] = data?.missing_essentials || [];
   const sensitivity: any[] = data?.sensitivity || [];
@@ -123,14 +135,17 @@ export function CarbonModelWidget({
         try {
           const newData = await api.updateCarbonInput(inputs, fieldName, value, 'confirmed');
           setData(newData);
-          if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+          if ((messageId && initiativeId) || instanceId) {
+            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+            if (persisted && instanceId) onWorkflowUpdated?.();
+          }
         } catch { /* keep old */ }
         finally { setIsRecalculating(false); }
       })();
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId]);
+  }, [inputs, setData, messageId, initiativeId, instanceId]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -170,7 +185,10 @@ export function CarbonModelWidget({
     try {
       const newData = await api.updateCarbonInput(inputs, editingField, parsed);
       setData(newData);
-      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+      if ((messageId && initiativeId) || instanceId) {
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        if (persisted && instanceId) onWorkflowUpdated?.();
+      }
     } catch {
       // keep old values
     } finally {
@@ -178,7 +196,7 @@ export function CarbonModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -217,7 +235,10 @@ export function CarbonModelWidget({
     try {
       const newData = await api.updateCarbonInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
-      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+      if ((messageId && initiativeId) || instanceId) {
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        if (persisted && instanceId) onWorkflowUpdated?.();
+      }
     } catch {
       setData((prev: any) => ({
         ...prev,
@@ -229,7 +250,7 @@ export function CarbonModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId]);
 
   const switchMethodPack = useCallback(async (newPack: string) => {
     if (newPack === currentMethodPack) return;
@@ -237,13 +258,16 @@ export function CarbonModelWidget({
     try {
       const newData = await api.switchCarbonMethodPack(newPack, inputs);
       setData(newData);
-      if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+      if ((messageId && initiativeId) || instanceId) {
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        if (persisted && instanceId) onWorkflowUpdated?.();
+      }
     } catch {
       // keep old data
     } finally {
       setIsSwitchingPack(false);
     }
-  }, [currentMethodPack, inputs, setData, messageId, initiativeId]);
+  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
@@ -327,7 +351,10 @@ export function CarbonModelWidget({
                               try {
                                 const newData = await api.updateCarbonInput(inputs, inp.field_name, newVal, 'confirmed');
                                 setData(newData);
-                                if (messageId && initiativeId) await persistWidgetToDb(initiativeId, messageId, newData);
+                                if ((messageId && initiativeId) || instanceId) {
+                                  const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+                                  if (persisted && instanceId) onWorkflowUpdated?.();
+                                }
                               } catch { /* keep old */ }
                               finally { setIsRecalculating(false); }
                             }}
@@ -426,7 +453,7 @@ export function CarbonModelWidget({
 
   const isLoadingInputs = isActive && Object.keys(inputs).length === 0;
 
-  if (!result) {
+  if (!result || forceInputsView) {
     return (
       <>
         <div className="card-elevated overflow-hidden !rounded-none">

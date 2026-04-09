@@ -58,32 +58,6 @@ async def _get_role_for_initiative(
     return None
 
 
-async def _get_accessible_initiatives_by_slug(
-    db: AsyncSession,
-    slug: str,
-    user: AuthUser,
-) -> list[tuple[Initiative, str]]:
-    """Return initiatives matching a legacy slug that this user can access."""
-    owned_result = await db.execute(
-        select(Initiative).where(
-            Initiative.slug == slug,
-            Initiative.user_id == user.uid,
-        )
-    )
-    owned_matches = [(initiative, "owner") for initiative in owned_result.scalars().all()]
-
-    shared_result = await db.execute(
-        select(Initiative, ProjectShare.role)
-        .join(ProjectShare, ProjectShare.initiative_id == Initiative.id)
-        .where(
-            Initiative.slug == slug,
-            ProjectShare.user_id == user.uid,
-        )
-    )
-    shared_matches = list(shared_result.all())
-    return owned_matches + shared_matches
-
-
 async def get_initiative_with_role(
     db: AsyncSession,
     initiative_id: uuid.UUID | str,
@@ -91,42 +65,23 @@ async def get_initiative_with_role(
 ) -> tuple[Initiative, str]:
     """Return (initiative, role) where role is 'owner', 'editor', or 'viewer'.
 
-    Accepts either a UUID string or a slug. Raises 404 if the user has no access.
+    Accepts only canonical UUID initiative identifiers.
+    Raises 404 if the user has no access.
     """
-    initiative: Initiative | None = None
-
-    # Try UUID lookup first, fall back to slug lookup
     try:
         uid = uuid.UUID(str(initiative_id))
-        result = await db.execute(select(Initiative).where(Initiative.id == uid))
-        initiative = result.scalar_one_or_none()
     except (ValueError, AttributeError):
-        pass
-
-    if initiative is not None:
-        role = await _get_role_for_initiative(db, initiative, user)
-        if role:
-            return initiative, role
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
-    matches = await _get_accessible_initiatives_by_slug(db, str(initiative_id), user)
-    if not matches:
+    result = await db.execute(select(Initiative).where(Initiative.id == uid))
+    initiative = result.scalar_one_or_none()
+    if initiative is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
-    if len(matches) == 1:
-        return matches[0]
-
-    owned_matches = [match for match in matches if match[1] == "owner"]
-    if len(owned_matches) == 1:
-        return owned_matches[0]
-
-    raise HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=(
-            "This legacy project URL matches multiple accessible projects. "
-            "Open the project from the projects list to use its canonical URL."
-        ),
-    )
+    role = await _get_role_for_initiative(db, initiative, user)
+    if role:
+        return initiative, role
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found")
 
 
 async def require_owner(

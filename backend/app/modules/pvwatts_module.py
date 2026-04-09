@@ -19,19 +19,20 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters import get_adapter_registry
 from app.config import get_settings
+from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
     ExecutionModel,
+    ModuleManifest,
     ProgressCallback,
     RefinementModel,
-    ReviewStrategy,
     ModuleDefinition,
     ModuleInput,
     ModuleOutput,
 )
-from app.services.pvwatts_engine import PVWattsEngine, PVWattsInput
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -99,6 +100,35 @@ class PVWattsTool(BaseModule):
     """Solar production estimate tool using NREL PVWatts V8."""
 
     @property
+    def workspace_setup_fields(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "geography",
+                "label": "Geography",
+                "description": "Project geography or address context.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Nairobi, Kenya",
+            },
+            {
+                "name": "address",
+                "label": "Site Address",
+                "description": "Address or place name for the solar site.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Kisumu, Kenya",
+            },
+            {
+                "name": "project_title",
+                "label": "Project Title",
+                "description": "Working title for this module run.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "Project title",
+            },
+        ]
+
+    @property
     def definition(self) -> ModuleDefinition:
         return ModuleDefinition(
             id="solar_estimate",
@@ -114,6 +144,23 @@ class PVWattsTool(BaseModule):
                 "tilt", "azimuth", "irradiance", "solar radiation",
             ],
             export_format="xlsx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            goal="Estimate annual and monthly solar generation from site and system assumptions.",
+            primary_ui_object="solar_output",
+            workspace_build_widget="solar_inputs",
+            workspace_output_widget="solar_output",
+            export_artifact_types=["xlsx"],
+            adapter_bindings={"core_engine": "pvwatts"},
+            input_dependencies=[],
+            produced_outputs=["solar_annual_kwh", "solar_monthly_kwh", "solar_inputs"],
+            downstream_dependencies=["lcoe_model"],
+            assumptions_behavior="tracks",
+            evidence_behavior="none",
         )
 
     def is_exportable(self, content: dict) -> bool:
@@ -148,10 +195,6 @@ class PVWattsTool(BaseModule):
                 placeholder="e.g. 36.817",
             ),
         ]
-
-    @property
-    def review_strategy(self) -> ReviewStrategy:
-        return ReviewStrategy.INPUT_REVIEW
 
     @property
     def execution_model(self) -> ExecutionModel:
@@ -251,50 +294,51 @@ class PVWattsTool(BaseModule):
         # When an address is present, ALWAYS geocode it — LLM-generated lat/lon
         # are often hallucinated and won't match the address string.
         address = extracted.get("address")
-        if address:
-            try:
-                await _progress(f"Geocoding: \"{address}\"...")
-                geo = await PVWattsEngine.geocode_address(address)
-                extracted["lat"] = geo["lat"]
-                extracted["lon"] = geo["lon"]
-                extracted["address"] = geo["display_name"]
-                await _progress(f"Location: {geo['lat']:.4f}, {geo['lon']:.4f}")
-            except Exception as e:
-                logger.error(f"Geocoding failed: {e}")
-                await _progress(f"Could not geocode \"{address}\" — please provide coordinates")
+        if address and ("lat" not in extracted or "lon" not in extracted):
+            await _progress(f"Geocoding: \"{address}\"...")
 
         extracted.pop("notes", None)
 
-        engine_inputs = PVWattsEngine.build_default_inputs(known_values=extracted)
-        missing = PVWattsEngine.get_missing_essentials(engine_inputs)
-        computable = PVWattsEngine.is_computable(engine_inputs)
-
-        widget_data: dict = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-        }
-
-        if computable:
-            await _progress("Calling PVWatts API for production estimate...")
-            try:
-                result = await PVWattsEngine.call_pvwatts(engine_inputs)
-                widget_data["result"] = result.to_dict()
-                widget_type = "solar_output"
-                await _progress(
-                    f"Year 1 AC Energy: {result.ac_annual:,.0f} kWh | "
-                    f"Capacity Factor: {result.capacity_factor:.1f}% "
-                    f"({result.assumption_count} assumptions, {result.quality_label} confidence)"
-                )
-            except Exception as e:
-                logger.error(f"PVWatts API call failed: {e}", exc_info=True)
-                widget_data["error"] = str(e)
-                widget_data["computable"] = False
-                widget_type = "solar_inputs"
-                await _progress("PVWatts API error — showing inputs for review")
+        adapter = get_adapter_registry().get("pvwatts")
+        if adapter is None:
+            raise RuntimeError("pvwatts adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="pvwatts:conversation",
+        )
+        await _progress("Calling PVWatts API for production estimate...")
+        result = await adapter.execute(
+            ctx,
+            None,
+            {
+                "known_values": extracted,
+                "resolve_address": True,
+            },
+        )
+        widget_data: dict[str, Any] = dict(result.output)
+        geocode = widget_data.get("geocode")
+        if isinstance(geocode, dict) and "lat" in geocode and "lon" in geocode:
+            await _progress(f"Location: {geocode['lat']:.4f}, {geocode['lon']:.4f}")
+        elif address and ("lat" not in extracted or "lon" not in extracted):
+            await _progress(f"Could not geocode \"{address}\" — please provide coordinates")
+        if widget_data.get("computable") and widget_data.get("result"):
+            widget_type = "solar_output"
+            solar_result = widget_data.get("result", {})
+            await _progress(
+                f"Year 1 AC Energy: {solar_result.get('ac_annual', 0):,.0f} kWh | "
+                f"Capacity Factor: {solar_result.get('capacity_factor', 0):.1f}% "
+                f"({solar_result.get('assumption_count', 0)} assumptions, {solar_result.get('quality_label', 'unknown')} confidence)"
+            )
         else:
             widget_type = "solar_inputs"
-            await _progress(f"Need {len(missing)} more inputs to run estimate — showing input table")
+            await _progress(
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to run estimate — showing input table"
+            )
 
         return widget_type, widget_data
 
@@ -305,31 +349,26 @@ class PVWattsTool(BaseModule):
         """Recalculate from serialized inputs. Fast path for widget edits — no LLM.
         Always refreshes location-derived defaults (tilt, azimuth) from the current
         lat unless those fields have been user-confirmed."""
-        engine_inputs = {
-            k: PVWattsInput.from_dict(v) for k, v in inputs_dict.items()
-        }
-
-        # Re-derive orientation defaults from current lat for any non-confirmed values
-        engine_inputs = PVWattsEngine.refresh_location_defaults(engine_inputs)
-
-        computable = PVWattsEngine.is_computable(engine_inputs)
-        missing = PVWattsEngine.get_missing_essentials(engine_inputs)
-
-        result_data: dict[str, Any] = {
-            "inputs": {k: v.to_dict() for k, v in engine_inputs.items()},
-            "missing_essentials": missing,
-            "computable": computable,
-        }
-
-        if computable:
-            try:
-                result = await PVWattsEngine.call_pvwatts(engine_inputs)
-                result_data["result"] = result.to_dict()
-            except Exception as e:
-                result_data["error"] = str(e)
-                result_data["computable"] = False
-
-        return result_data
+        adapter = get_adapter_registry().get("pvwatts")
+        if adapter is None:
+            raise RuntimeError("pvwatts adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="pvwatts:recalculate",
+        )
+        result = await adapter.execute(
+            ctx,
+            None,
+            {
+                "serialized_inputs": inputs_dict,
+            },
+        )
+        return dict(result.output)
 
     async def execute(self, db, initiative_id, inputs, **kwargs) -> ModuleOutput:
         """Full execution for initiative-scoped tool runs (not used in core chat)."""
@@ -340,3 +379,13 @@ class PVWattsTool(BaseModule):
             title="Solar Production Estimate",
             content=result_data,
         )
+
+    async def build_workspace_widget_data(
+        self,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.services.pvwatts_engine import PVWattsEngine
+
+        inputs = PVWattsEngine.build_default_inputs(known_values=known_values)
+        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
+        return await self.recalculate(serialized_inputs)

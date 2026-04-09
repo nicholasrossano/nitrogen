@@ -157,11 +157,13 @@ export function OutputStage({
   const [error, setError] = useState<string | null>(null);
   const autoGenTriggered = useRef(false);
 
-  // Gate on any items existing in the final layer (category-confirm flow doesn't
+  // Gate on any items existing in the final stage (category-confirm flow doesn't
   // set individual item.confirmed, so we just check items.length > 0)
   const lastLayerDef = layerDefs[layerDefs.length - 1];
-  const lastLayer = lastLayerDef ? build.layers[lastLayerDef.id] : null;
-  const itemsInLast = (lastLayer?.items ?? []).length;
+  const lastStage = lastLayerDef
+    ? build.stages?.find((s) => s.id === lastLayerDef.id)
+    : null;
+  const itemsInLast = (lastStage?.items ?? []).length;
   const canGenerate = itemsInLast > 0 && output.status !== 'generating';
   const isGenerating = generating || output.status === 'generating';
 
@@ -205,8 +207,8 @@ export function OutputStage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canGenerate]);
 
-  const totalItems = Object.values(build.layers).reduce(
-    (acc, l) => acc + l.items.length,
+  const totalItems = (build.stages ?? []).reduce(
+    (acc, s) => acc + (s.items?.length ?? 0),
     0
   );
 

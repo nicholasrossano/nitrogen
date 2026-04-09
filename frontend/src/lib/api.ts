@@ -44,7 +44,6 @@ export interface Initiative {
   project_type: string | null;
   selected_tools: string[] | null;
   tool_inputs: Record<string, any> | null;
-  module_alignments: Record<string, ModuleAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
   module_instances: ModuleInstance[] | null;
@@ -58,13 +57,15 @@ export interface Initiative {
 export interface ModuleInstance {
   id: string;
   module_id: string;
-  status: 'started' | 'alignment_proposed' | 'alignment_confirmed' | 'generating' | 'complete' | 'error';
+  status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'error';
   title: string | null;
   started_by: string;
   started_by_email: string | null;
   started_at: string;
   updated_at: string;
   session_id: string | null;
+  deliverable?: Record<string, any> | null;
+  workflow_state?: Record<string, any> | null;
 }
 
 export interface ProjectShare {
@@ -119,25 +120,40 @@ export interface BuildItem {
   removable: boolean;
 }
 
+export interface BuildStage {
+  id: string;
+  name: string;
+  stage_type: 'widget' | 'simple_list' | 'structured_list' | 'detail_node';
+  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'complete' | 'error';
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
+  items?: BuildItem[] | null;
+  view_config?: Record<string, any>;
+}
+
+/** @deprecated Use BuildStage instead */
 export interface BuildLayer {
   status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'error';
   items: BuildItem[];
 }
 
 export interface WorkflowSetup {
-  fields: Record<string, string>;
+  mode?: 'form' | 'auto';
+  fields: Record<string, any>;
   confirmed: boolean;
   confirmed_at: string | null;
 }
 
 export interface WorkflowBuild {
-  current_layer: string | null;
-  layers: Record<string, BuildLayer>;
+  stages: BuildStage[];
+  current_stage_id: string | null;
 }
 
 export interface WorkflowOutput {
   status: 'pending' | 'generating' | 'complete' | 'error';
   content: Record<string, any> | null;
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
 }
 
 export interface WorkflowState {
@@ -167,9 +183,11 @@ export interface BuildLayerDef {
   removable: boolean;
 }
 
-export interface AssessmentModuleDefinition extends ModuleDefinition {
-  setup_fields: SetupFieldDef[];
-  build_layers: BuildLayerDef[];
+export interface WorkflowModuleDefinition extends ModuleDefinition {
+  workspace_build_widget?: string | null;
+  workspace_output_widget?: string | null;
+  setup_fields?: SetupFieldDef[];
+  build_layers?: BuildLayerDef[];
 }
 
 export interface ModuleWorkflowState {
@@ -177,7 +195,7 @@ export interface ModuleWorkflowState {
   module_id: string;
   status: string;
   workflow_state: WorkflowState;
-  module_definition: AssessmentModuleDefinition;
+  module_definition: WorkflowModuleDefinition;
 }
 
 export interface SourceCitation {
@@ -342,42 +360,6 @@ export interface DriveSyncResult {
   checked: number;
   updated: number;
   errors: { file_id: string; error: string }[];
-}
-
-// Alignment types
-export interface AlignmentSection {
-  id: string;
-  title: string;
-  description: string;
-  key_points: string[];
-  include: boolean;
-  order: number;
-}
-
-export interface AlignmentParameter {
-  name: string;
-  label: string;
-  description: string;
-  param_type: 'text' | 'number' | 'select' | 'boolean';
-  value: any;
-  options?: string[] | null;
-  unit?: string | null;
-}
-
-export interface ModuleAlignment {
-  module_id: string;
-  title: string;
-  description: string;
-  sections: AlignmentSection[];
-  parameters: AlignmentParameter[];
-  assumptions: string[];
-  confirmed: boolean;
-  feedback?: string | null;
-}
-
-export interface AlignmentResponse {
-  alignment: ModuleAlignment;
-  message: string;
 }
 
 // Plan category proposal types (approval stage)
@@ -1028,7 +1010,7 @@ export const api = {
       { method: 'POST' }
     ),
 
-  confirmWorkflowSetup: (instanceId: string, fields: Record<string, string>) =>
+  confirmWorkflowSetup: (instanceId: string, fields: Record<string, any>) =>
     fetchApi<{ ok: boolean; current_stage: string }>(
       `/api/v1/module-workflow/${instanceId}/setup/confirm`,
       {
@@ -1088,6 +1070,15 @@ export const api = {
       { method: 'POST' }
     ),
 
+  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>) =>
+    fetchApi<{ instance_id: string; status: string; workflow_state: WorkflowState }>(
+      `/api/v1/module-workflow/${instanceId}/widget-state`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ widget_data: widgetData }),
+      }
+    ),
+
   exportModuleOutputDocx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
@@ -1103,42 +1094,6 @@ export const api = {
     const blob = await res.blob();
     return { blob, filename };
   },
-
-  // Alignment
-  getAlignment: (initiativeId: string, toolId: string) =>
-    fetchApi<{ alignment: ModuleAlignment; tool_id: string }>(
-      `/api/v1/initiatives/${initiativeId}/alignment/${toolId}`
-    ),
-
-  confirmAlignment: (
-    initiativeId: string,
-    toolId: string,
-    sections?: AlignmentSection[],
-    parameters?: AlignmentParameter[]
-  ) =>
-    fetchApi<AlignmentResponse>(
-      `/api/v1/initiatives/${initiativeId}/alignment/confirm`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          sections,
-          parameters,
-        }),
-      }
-    ),
-
-  provideFeedback: (initiativeId: string, toolId: string, feedback: string) =>
-    fetchApi<AlignmentResponse>(
-      `/api/v1/initiatives/${initiativeId}/alignment/feedback`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          feedback,
-        }),
-      }
-    ),
 
   // Project Plan
   getProjectPlan: (initiativeId: string) =>
@@ -1273,58 +1228,6 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ title, messages, initiative_id: initiativeId }),
-      }
-    ),
-
-  confirmChatAlignment: (
-    sessionId: string,
-    toolId: string,
-    sections?: AlignmentSection[],
-    parameters?: AlignmentParameter[]
-  ) =>
-    fetchApi<{
-      alignment: ModuleAlignment;
-      message: string;
-      new_messages: {
-        id: string;
-        role: string;
-        content: string;
-        widget_type?: string | null;
-        widget_data?: Record<string, any> | null;
-        created_at?: string | null;
-      }[];
-    }>(
-      `/api/v1/chat/sessions/${sessionId}/alignment/confirm`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          ...(sections && { sections }),
-          ...(parameters && { parameters }),
-        }),
-      }
-    ),
-
-  provideChatAlignmentFeedback: (sessionId: string, toolId: string, feedback: string) =>
-    fetchApi<{
-      alignment: ModuleAlignment;
-      message: string;
-      new_messages: {
-        id: string;
-        role: string;
-        content: string;
-        widget_type?: string | null;
-        widget_data?: Record<string, any> | null;
-        created_at?: string | null;
-      }[];
-    }>(
-      `/api/v1/chat/sessions/${sessionId}/alignment/feedback`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          feedback,
-        }),
       }
     ),
 
@@ -1619,71 +1522,6 @@ export const api = {
     });
     if (!response.ok) throw new Error(`Export failed: ${response.status}`);
     return response.blob();
-  },
-
-  // --- Template Fill ---
-
-  getRecentTemplates: (initiativeId: string, limit = 5) =>
-    fetchApi<{ template_id: string; filename: string; file_type: string; created_at: string }[]>(
-      `/api/v1/template/recent?initiative_id=${encodeURIComponent(initiativeId)}&limit=${limit}`,
-    ),
-
-  uploadTemplate: async (initiativeId: string, file: File): Promise<{ template_id: string; filename: string; file_type: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('initiative_id', initiativeId);
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/template/upload`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(error.detail || 'Upload failed');
-    }
-    return response.json();
-  },
-
-  updateTemplateRequirement: (requirementId: string, value?: string | null, reqStatus?: string | null) =>
-    fetchApi<{ requirement_id: string; value: string | null; status: string | null; updated: boolean }>(
-      `/api/v1/template/requirements/${requirementId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ value: value ?? null, status: reqStatus ?? null }),
-      },
-    ),
-
-  generateFromTemplate: (initiativeId: string, templateId: string, requirements?: any[]) =>
-    fetchApi<{ template_id: string; output_path: string; file_type: string; filename: string; requirements: any[] }>(
-      '/api/v1/template/generate',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          initiative_id: initiativeId,
-          template_id: templateId,
-          requirements: requirements ?? null,
-        }),
-      },
-    ),
-
-  exportTemplate: async (templateId: string, filename: string) => {
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/template/${templateId}/export`, { headers });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
   },
 
   async exportGSCoverLetter(workspaceId: string): Promise<Blob> {
