@@ -58,7 +58,7 @@ async def generate_memo(
     
     initiative.stage = "complete"
     await module_service.save_deliverable(
-        db, initiative.id, "investment_memo",
+        db, initiative.id, "memo_document",
         memo_content.title, "memo", memo_content.model_dump(mode="json"),
         user_id=user.uid,
     )
@@ -203,13 +203,8 @@ async def generate_all_deliverables(
     initiative.stage = InitiativeStage.COMPLETE.value
     await db.commit()
     
-    # Create individual chat messages per deliverable so each opens in EditorSidePanel
-    WIDGET_LABELS = {
-        "memo_viewer": "Investment Memo",
-        "checklist_viewer": "Due Diligence Checklist",
-    }
     for widget in deliverable_widgets:
-        label = WIDGET_LABELS.get(widget["widget_type"], widget["tool_name"])
+        label = widget["tool_name"]
         deliverable_message = ChatMessage(
             initiative_id=initiative.id,
             role="assistant",

@@ -16,7 +16,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import ModuleDefinition
+from app.modules.base import ModuleDefinition, ModuleManifest
 from app.modules.assessment_base import (
     AssessmentModuleDef,
     BaseAssessmentModule,
@@ -44,6 +44,24 @@ class LandscapeMappingModule(BaseAssessmentModule):
             output_type="assessment_document",
             category="assessment",
             keywords=["landscape", "ecosystem", "mapping", "market", "actors", "initiatives", "context"],
+            export_format="docx",
+        )
+
+    @property
+    def manifest(self) -> ModuleManifest:
+        return ModuleManifest(
+            **self.definition.__dict__,
+            goal="Generate a landscape map of ecosystem themes, entities, and strategic implications.",
+            primary_ui_object="assessment_viewer",
+            workspace_build_widget="assessment_build",
+            workspace_output_widget="assessment_output",
+            export_artifact_types=["docx"],
+            adapter_bindings={"research_source": "retrieval"},
+            input_dependencies=[],
+            produced_outputs=["landscape_themes", "landscape_recommendations"],
+            downstream_dependencies=[],
+            assumptions_behavior="tracks",
+            evidence_behavior="rag_grounded",
         )
 
     @property

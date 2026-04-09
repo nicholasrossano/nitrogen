@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
+from app.core.execution_context import build_context
 from app.core.permissions import require_editor, require_viewer
 from app.models.onboarding import ChatMessage
 from app.models.initiative import Initiative
@@ -28,9 +29,8 @@ from app.schemas.chat import (
     MessageFeedbackRequest,
     MessageWidgetUpdateRequest,
 )
-from app.services.orchestration import OrchestrationService
+from app.services.chat import ChatService, ChatMode
 from app.services.chat_agent import ChatAgentService
-from app.services.chat import ChatService
 from app.services.project_plan import ProjectPlanService
 from app.services import module_service
 from app.modules import get_module_registry
@@ -99,8 +99,12 @@ async def send_chat_message_stream(
             )
             messages = list(history_result.scalars().all())
 
-            # Use orchestration service
-            orchestration = OrchestrationService(db, user_id=user.uid)
+            ctx = await build_context(db, user, initiative.id)
+            chat_service = ChatService(
+                db,
+                mode=ChatMode.PROJECT,
+                ctx=ctx,
+            )
 
             # Detect first user message (only the one we just saved exists)
             user_message_count = sum(1 for m in messages if m.role == "user")
@@ -112,20 +116,20 @@ async def send_chat_message_stream(
                     # For the first message, kick off extraction concurrently so the
                     # scripted response can stream immediately without waiting ~3s for LLM.
                     extraction_task = asyncio.create_task(
-                        orchestration.extract_inputs_from_message(
+                        chat_service.extract_inputs_from_message(
                             message=data.content,
                             initiative=initiative,
                         )
                     )
                 else:
-                    extracted = await orchestration.extract_inputs_from_message(
+                    extracted = await chat_service.extract_inputs_from_message(
                         message=data.content,
                         initiative=initiative,
                     )
-                    await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+                    await update_initiative_from_inputs(db, initiative, extracted)
 
             tool_hint = data.tool_hint or None
-            action_result = await orchestration.get_next_action(
+            action_result = await chat_service.get_next_action(
                 messages=messages,
                 initiative=initiative,
                 tool_hint=tool_hint,
@@ -154,18 +158,16 @@ async def send_chat_message_stream(
                 event_json = await thinking_queue.get()
                 yield f"data: {event_json}\n\n"
 
-            # Build model inputs context from the latest LCOE/Carbon widget in history
-            from app.services.orchestration import OrchestrationService as _OrchestratorRef
-            _model_inputs_ctx = _OrchestratorRef._format_model_inputs_from_messages(messages)
+            _model_inputs_ctx = ChatService._format_model_inputs_from_messages(messages)
 
-            # Execute the action with on_thinking callback for research pipeline
             generation_task = asyncio.create_task(
-                execute_action(
-                    db, initiative, action_result, orchestration,
-                    chat_history=messages, tool_hint=tool_hint,
+                chat_service.execute_project_action(
+                    initiative=initiative,
+                    action_result=action_result,
+                    chat_history=messages,
+                    tool_hint=tool_hint,
                     model_inputs_context=_model_inputs_ctx,
                     on_thinking=on_thinking,
-                    user_id=user.uid,
                 )
             )
 
@@ -241,7 +243,7 @@ async def send_chat_message_stream(
             if extraction_task is not None:
                 try:
                     extracted = await asyncio.wait_for(extraction_task, timeout=20.0)
-                    await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+                    await update_initiative_from_inputs(db, initiative, extracted)
                 except asyncio.TimeoutError:
                     logger.warning("First-message input extraction timed out")
                 except Exception as exc:
@@ -265,7 +267,7 @@ async def send_chat_message_stream(
 
 
 def _build_project_context(initiative: Initiative) -> str:
-    """Build a project context string to inject into the research assistant."""
+    """DEPRECATED — use ChatService._build_project_context instead."""
     parts = []
     if initiative.title:
         parts.append(f"- Title: {initiative.title}")
@@ -286,19 +288,14 @@ async def execute_action(
     db: AsyncSession,
     initiative: Initiative,
     action_result,
-    orchestration: OrchestrationService,
+    orchestration,
     chat_history: list | None = None,
     tool_hint: str | None = None,
     model_inputs_context: str | None = None,
     on_thinking: Optional[Callable] = None,
     user_id: str | None = None,
 ) -> tuple[str | None, dict | None, str, list]:
-    """
-    Execute an orchestration action and return widget/response.
-
-    Returns:
-        (widget_type, widget_data, assistant_response, sources)
-    """
+    """DEPRECATED — use ChatService.execute_project_action instead."""
     action = action_result.action
     params = action_result.parameters
     sources = action_result.sources_used
@@ -333,7 +330,7 @@ async def execute_action(
                     break
 
         try:
-            research_service = ChatService(db, user_id=user_id)
+            research_service = ChatService(db, ctx=orchestration._chat.ctx)
             research_result = await research_service.generate_response(
                 user_message=user_message,
                 history=history_dicts,
@@ -546,7 +543,7 @@ async def execute_action(
                     break
 
         try:
-            research_service = ChatService(db, user_id=user_id)
+            research_service = ChatService(db, ctx=orchestration._chat.ctx)
             research_result = await research_service.generate_response(
                 user_message=user_message,
                 history=history_dicts,
@@ -637,7 +634,6 @@ async def update_initiative_from_inputs(
     db: AsyncSession,
     initiative: Initiative,
     extracted: dict,
-    orchestration: OrchestrationService,
 ) -> None:
     """Update initiative with extracted inputs from conversation."""
     if not extracted:
@@ -716,20 +712,23 @@ async def send_chat_message(
     # - Conversation history
     # ============================================================
     
-    orchestration = OrchestrationService(db, user_id=user.uid)
+    ctx = await build_context(db, user, initiative.id)
+    chat_service = ChatService(
+        db,
+        mode=ChatMode.PROJECT,
+        ctx=ctx,
+    )
     
-    # Extract inputs from the user's message first (skip synthetic UI messages)
     if data.content not in _SKIP_EXTRACTION_MESSAGES:
-        extracted = await orchestration.extract_inputs_from_message(
+        extracted = await chat_service.extract_inputs_from_message(
             message=data.content,
             initiative=initiative,
         )
-        await update_initiative_from_inputs(db, initiative, extracted, orchestration)
+        await update_initiative_from_inputs(db, initiative, extracted)
 
     tool_hint = data.tool_hint or None
 
-    # Get the next action from the orchestration LLM
-    action_result = await orchestration.get_next_action(
+    action_result = await chat_service.get_next_action(
         messages=messages,
         initiative=initiative,
         tool_hint=tool_hint,
@@ -737,14 +736,14 @@ async def send_chat_message(
     
     logger.info(f"Orchestration chose action: {action_result.action}")
 
-    from app.services.orchestration import OrchestrationService as _OrchestratorRef2
-    _model_inputs_ctx2 = _OrchestratorRef2._format_model_inputs_from_messages(messages)
+    _model_inputs_ctx2 = ChatService._format_model_inputs_from_messages(messages)
 
-    # Execute the action
-    widget_type, widget_data, assistant_response, sources = await execute_action(
-        db, initiative, action_result, orchestration, chat_history=messages, tool_hint=tool_hint,
+    widget_type, widget_data, assistant_response, sources = await chat_service.execute_project_action(
+        initiative=initiative,
+        action_result=action_result,
+        chat_history=messages,
+        tool_hint=tool_hint,
         model_inputs_context=_model_inputs_ctx2,
-        user_id=user.uid,
     )
     
     # Convert sources to citation format

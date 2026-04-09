@@ -1,24 +1,50 @@
 """API endpoints for module catalog."""
 
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.alignment_helpers import (
-    build_alignment_widget_data,
-    build_deliverables_overview_data,
-    get_alignment_intro_message,
-    get_deliverables_overview_message,
-    get_or_generate_alignment,
-)
 from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
-from app.services import module_service
 from app.modules import get_module_registry
+from app.services.sdg_classifier import classify_sdg
+
+
+def build_deliverables_overview_data(initiative) -> dict:
+    """Build widget data for the deliverables overview widget."""
+    registry = get_module_registry()
+    tools_info = []
+    for tool_id in (initiative.selected_tools or []):
+        tool = registry.get_module(tool_id)
+        if tool:
+            tools_info.append({
+                "id": tool.definition.id,
+                "name": tool.definition.name,
+                "description": tool.definition.description,
+                "icon": tool.definition.icon,
+                "output_type": tool.definition.output_type,
+            })
+    tool_inputs = dict(initiative.tool_inputs or {})
+    if initiative.project_description:
+        sdg_info = classify_sdg(
+            project_description=initiative.project_description,
+            project_type=initiative.project_type,
+        )
+        if sdg_info:
+            tool_inputs["sdg"] = sdg_info
+    return {
+        "project_summary": initiative.to_summary_dict(),
+        "selected_tools": tools_info,
+        "tool_inputs": tool_inputs,
+        "alignments": initiative.get_tool_alignments_dict(),
+    }
+
+
+def get_deliverables_overview_message(tool_names: list[str]) -> str:
+    return f"I have everything I need to prepare your **{', '.join(tool_names)}**. Here's an overview:"
 
 _LOWERCASE_WORDS = frozenset(
     ["a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
@@ -195,55 +221,20 @@ async def select_tools(
     tool_names = [registry.get_module(tid).definition.name for tid in valid_tools]
     
     if not missing:
-        # All inputs available - check for pending alignments first
         initiative.stage = InitiativeStage.REVIEW.value
         await db.commit()
         await db.refresh(initiative)
-        
-        # Check for tools that need alignment
-        pending_alignment_tools = await module_service.get_pending_alignment_tools(
-            db, initiative.id, initiative.selected_tools or [],
+
+        widget_data = build_deliverables_overview_data(initiative)
+        message = ChatMessage(
+            initiative_id=initiative.id,
+            role="assistant",
+            content=get_deliverables_overview_message(tool_names),
+            widget_type="deliverables_overview",
+            widget_data=widget_data,
         )
-        
-        if pending_alignment_tools:
-            # Show alignment widget for the first tool needing alignment
-            tool_id = pending_alignment_tools[0]
-            tool = registry.get_module(tool_id)
-            
-            if tool and tool.requires_alignment:
-                alignment_data = await get_or_generate_alignment(db, initiative, tool_id)
-                
-                if alignment_data:
-                    widget_data = build_alignment_widget_data(
-                        tool_id=tool_id,
-                        alignment_data=alignment_data,
-                        pending_tool_ids=pending_alignment_tools[1:],
-                    )
-                    message = ChatMessage(
-                        initiative_id=initiative.id,
-                        role="assistant",
-                        content=get_alignment_intro_message(tool.definition.name),
-                        widget_type="alignment",
-                        widget_data=widget_data,
-                    )
-                    db.add(message)
-                    await db.commit()
-                else:
-                    # Alignment generation failed, fall through to deliverables overview
-                    pending_alignment_tools = []
-        
-        # If no pending alignments (or alignment generation failed), show deliverables overview
-        if not pending_alignment_tools:
-            widget_data = build_deliverables_overview_data(initiative)
-            message = ChatMessage(
-                initiative_id=initiative.id,
-                role="assistant",
-                content=get_deliverables_overview_message(tool_names),
-                widget_type="deliverables_overview",
-                widget_data=widget_data,
-            )
-            db.add(message)
-            await db.commit()
+        db.add(message)
+        await db.commit()
     else:
         # Need to gather more inputs - ask first question
         # Get the first missing input to ask about

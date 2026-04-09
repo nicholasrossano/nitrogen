@@ -1,9 +1,13 @@
 """Tool registry for managing and recommending tools."""
 
+import logging
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.modules.base import BaseModule, ModuleDefinition
+
+logger = logging.getLogger(__name__)
 
 
 class ModuleRegistry:
@@ -19,11 +23,8 @@ class ModuleRegistry:
             return
             
         # Import modules here to avoid circular imports
-        from app.modules.investment_memo import InvestmentMemoTool
-        from app.modules.due_diligence_checklist import DueDiligenceChecklistTool
         from app.modules.lcoe_module import LCOETool
         from app.modules.carbon_module import CarbonTool
-        from app.modules.template_module import TemplateFillTool
         from app.modules.pvwatts_module import PVWattsTool
         from app.modules.stakeholder_assessment import StakeholderAssessmentModule
         from app.modules.landscape_mapping import LandscapeMappingModule
@@ -31,11 +32,8 @@ class ModuleRegistry:
         from app.modules.mel_plan import MELPlanModule
 
         tools = [
-            InvestmentMemoTool(),
-            DueDiligenceChecklistTool(),
             LCOETool(),
             CarbonTool(),
-            TemplateFillTool(),
             PVWattsTool(),
             StakeholderAssessmentModule(),
             LandscapeMappingModule(),
@@ -45,8 +43,71 @@ class ModuleRegistry:
         
         for tool in tools:
             self._modules[tool.definition.id] = tool
-        
+        invalid_modules = self._collect_manifest_errors()
+        if invalid_modules:
+            if self._should_fail_fast_on_manifest_errors():
+                details = "\n".join(
+                    f"- {module_id}: {'; '.join(errors)}"
+                    for module_id, errors in sorted(invalid_modules.items())
+                )
+                raise ValueError(f"Module manifest validation failed:\n{details}")
+
+            for module_id, errors in sorted(invalid_modules.items()):
+                logger.error(
+                    "Disabling invalid module '%s' due to manifest wiring issues: %s",
+                    module_id,
+                    "; ".join(errors),
+                )
+                self._modules.pop(module_id, None)
+
+            logger.warning(
+                "Loaded %d modules after disabling %d invalid module(s).",
+                len(self._modules),
+                len(invalid_modules),
+            )
         self._loaded = True
+
+    def _collect_manifest_errors(self) -> dict[str, list[str]]:
+        """Return module_id -> list of manifest validation errors."""
+        from app.adapters import get_adapter_registry
+
+        adapter_ids = {
+            adapter.definition.adapter_id
+            for adapter in get_adapter_registry().list_all()
+        }
+        module_ids = set(self._modules.keys())
+        errors_by_module: dict[str, list[str]] = {}
+
+        for module in self._modules.values():
+            manifest = module.manifest
+            for _role, adapter_id in manifest.adapter_bindings.items():
+                if adapter_id not in adapter_ids:
+                    errors_by_module.setdefault(module.definition.id, []).append(
+                        f"unknown adapter '{adapter_id}'"
+                    )
+            for dependency in manifest.input_dependencies:
+                if dependency not in module_ids:
+                    errors_by_module.setdefault(module.definition.id, []).append(
+                        f"unknown input dependency '{dependency}'"
+                    )
+            if manifest.export_artifact_types and module.definition.export_format is None:
+                errors_by_module.setdefault(module.definition.id, []).append(
+                    "declares export_artifact_types but has no definition.export_format"
+                )
+        return errors_by_module
+
+    def _should_fail_fast_on_manifest_errors(self) -> bool:
+        """Strict in dev/test; graceful degradation in production."""
+        from app.config import get_settings
+
+        override = os.getenv("NITROGEN_STRICT_MODULE_MANIFESTS")
+        if override is not None:
+            return override.strip().lower() in {"1", "true", "yes", "on"}
+
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return True
+
+        return bool(get_settings().debug)
     
     def get_module(self, module_id: str) -> "BaseModule | None":
         """Get a tool by ID."""
@@ -78,44 +139,6 @@ class ModuleRegistry:
         
         # Keyword matching for boosting scores
         keyword_scores = {
-            # Energy/power related
-            "solar": ["investment_memo", "due_diligence_checklist"],
-            "pv": ["investment_memo", "due_diligence_checklist"],
-            "mini-grid": ["investment_memo", "due_diligence_checklist"],
-            "minigrid": ["investment_memo", "due_diligence_checklist"],
-            "micro-grid": ["investment_memo", "due_diligence_checklist"],
-            "microgrid": ["investment_memo", "due_diligence_checklist"],
-            "battery": ["investment_memo", "due_diligence_checklist"],
-            "storage": ["investment_memo", "due_diligence_checklist"],
-            "renewable": ["investment_memo", "due_diligence_checklist"],
-            "wind": ["investment_memo", "due_diligence_checklist"],
-            "hydro": ["investment_memo", "due_diligence_checklist"],
-            
-            # Clean cooking
-            "cookstove": ["investment_memo", "due_diligence_checklist"],
-            "cooking": ["investment_memo", "due_diligence_checklist"],
-            "lpg": ["investment_memo", "due_diligence_checklist"],
-            "biogas": ["investment_memo", "due_diligence_checklist"],
-            "ethanol": ["investment_memo", "due_diligence_checklist"],
-            "fuel": ["investment_memo", "due_diligence_checklist"],
-            
-            # General development
-            "investment": ["investment_memo"],
-            "funding": ["investment_memo"],
-            "grant": ["investment_memo"],
-            "project": ["investment_memo", "due_diligence_checklist"],
-            "initiative": ["investment_memo", "due_diligence_checklist"],
-            "pilot": ["investment_memo", "due_diligence_checklist"],
-            "scale": ["investment_memo", "due_diligence_checklist"],
-            
-            # Due diligence specific
-            "risk": ["due_diligence_checklist"],
-            "assess": ["due_diligence_checklist"],
-            "evaluate": ["due_diligence_checklist"],
-            "review": ["due_diligence_checklist"],
-            "audit": ["due_diligence_checklist"],
-            "compliance": ["due_diligence_checklist"],
-
             # ESMP
             "esmp": ["esmp"],
             "environmental": ["esmp"],
@@ -182,9 +205,6 @@ class ModuleRegistry:
                 for tool_id in tool_ids:
                     if tool_id in module_scores:
                         module_scores[tool_id] += 1.0
-        
-        # Investment memo gets a slight default boost (most common need)
-        module_scores["investment_memo"] = module_scores.get("investment_memo", 0) + 0.3
         
         # Build recommendations for ALL tools
         recommendations = []

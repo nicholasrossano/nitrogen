@@ -2,11 +2,15 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Loader2, Check } from 'lucide-react';
-import type { WorkflowBuild, BuildLayerDef, BuildItem } from '@/lib/api';
+import type { WorkflowBuild, BuildLayerDef, BuildStage as BuildStageData, BuildItem } from '@/lib/api';
 import { api } from '@/lib/api';
 import { SimpleListView } from './views/SimpleListView';
 import { StructuredListView } from './views/StructuredListView';
 import { FloatingCard } from './FloatingCard';
+
+function getStageById(build: WorkflowBuild, stageId: string): BuildStageData | undefined {
+  return build.stages?.find((s) => s.id === stageId);
+}
 
 function StageButton({
   onClick,
@@ -65,7 +69,7 @@ export function BuildStage({
     const s = new Set<string>();
     layerDefs.forEach((layer, idx) => {
       if (idx === 0) s.add(layer.id);
-      else if ((build.layers[layer.id]?.items?.length ?? 0) > 0) s.add(layer.id);
+      else if ((getStageById(build, layer.id)?.items?.length ?? 0) > 0) s.add(layer.id);
     });
     return s;
   });
@@ -73,11 +77,11 @@ export function BuildStage({
   const [activeLayerId, setActiveLayerId] = useState<string>(() => {
     // Start on the last layer that has items, or the first layer
     for (let i = layerDefs.length - 1; i >= 0; i--) {
-      if ((build.layers[layerDefs[i].id]?.items?.length ?? 0) > 0) {
+      if ((getStageById(build, layerDefs[i].id)?.items?.length ?? 0) > 0) {
         return layerDefs[i].id;
       }
     }
-    return build.current_layer ?? layerDefs[0]?.id ?? '';
+    return build.current_stage_id ?? layerDefs[0]?.id ?? '';
   });
 
   const [generatingLayer, setGeneratingLayer] = useState<string | null>(null);
@@ -88,7 +92,7 @@ export function BuildStage({
   // Any outline category that has ≥1 item in the Details layer is considered confirmed.
   const [confirmedCategories, setConfirmedCategories] = useState<Set<string>>(() => {
     const confirmed = new Set<string>();
-    const detailItems = build.layers[layerDefs[1]?.id ?? '']?.items ?? [];
+    const detailItems = getStageById(build, layerDefs[1]?.id ?? '')?.items ?? [];
     if (detailItems.length > 0) {
       detailItems.forEach((item) => {
         const parent = item.content.parent as string;
@@ -125,15 +129,15 @@ export function BuildStage({
     if (readOnly) return;
     unlockedLayers.forEach((layerId) => {
       if (autoGenTriggered.current.has(layerId)) return;
-      const layer = build.layers[layerId];
-      const isEmpty = !layer?.items?.length;
-      const isPending = !layer?.status || layer.status === 'pending';
+      const stage = getStageById(build, layerId);
+      const isEmpty = !stage?.items?.length;
+      const isPending = !stage?.status || stage.status === 'pending';
       if (isEmpty && isPending) {
         autoGenTriggered.current.add(layerId);
         runGenerate(layerId);
       }
     });
-  }, [readOnly, unlockedLayers, build.layers, runGenerate]);
+  }, [readOnly, unlockedLayers, build.stages, runGenerate]);
 
   const unlockDetails = () => {
     if (!detailsDef) return;
@@ -157,8 +161,8 @@ export function BuildStage({
   const handleCategoryReorder = useCallback(
     (categoryName: string, newCategoryItemIds: string[]) => {
       if (!detailsDef) return;
-      const allItems = build.layers[detailsDef.id]?.items ?? [];
-      const catOrder = (build.layers[outlineDef?.id ?? '']?.items ?? []).map(
+      const allItems = getStageById(build, detailsDef.id)?.items ?? [];
+      const catOrder = (getStageById(build, outlineDef?.id ?? '')?.items ?? []).map(
         (i) => i.content.title as string
       );
 
@@ -185,14 +189,14 @@ export function BuildStage({
         ].map((i) => i.id))
         .catch(() => {});
     },
-    [build.layers, instanceId, outlineDef, detailsDef]
+    [build.stages, instanceId, outlineDef, detailsDef]
   );
 
-  const outlineItems = build.layers[outlineDef?.id ?? '']?.items ?? [];
-  const detailsItems = build.layers[detailsDef?.id ?? '']?.items ?? [];
+  const outlineItems = getStageById(build, outlineDef?.id ?? '')?.items ?? [];
+  const detailsItems = getStageById(build, detailsDef?.id ?? '')?.items ?? [];
 
   const isGenerating = (id: string) =>
-    generatingLayer === id || build.layers[id]?.status === 'generating';
+    generatingLayer === id || getStageById(build, id)?.status === 'generating';
 
   const detailsUnlocked = detailsDef ? unlockedLayers.has(detailsDef.id) : false;
 

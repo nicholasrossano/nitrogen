@@ -64,6 +64,18 @@ class AssessmentModuleDef:
     output_type: str = "assessment_document"
 
     def to_dict(self) -> dict:
+        layer_dicts = [
+            {
+                "id": layer.id,
+                "name": layer.name,
+                "view_type": layer.view_type,
+                "stage_type": layer.view_type,  # mirrors view_type for frontend
+                "description": layer.description,
+                "item_schema": layer.item_schema,
+                "removable": layer.removable,
+            }
+            for layer in self.build_layers
+        ]
         return {
             "setup_fields": [
                 {
@@ -77,17 +89,7 @@ class AssessmentModuleDef:
                 }
                 for f in self.setup_fields
             ],
-            "build_layers": [
-                {
-                    "id": layer.id,
-                    "name": layer.name,
-                    "view_type": layer.view_type,
-                    "description": layer.description,
-                    "item_schema": layer.item_schema,
-                    "removable": layer.removable,
-                }
-                for layer in self.build_layers
-            ],
+            "build_layers": layer_dicts,
             "output_type": self.output_type,
         }
 
@@ -96,14 +98,28 @@ class AssessmentModuleDef:
 # workflow_state helpers
 # ---------------------------------------------------------------------------
 
-def _make_empty_layer_state(layer_def: BuildLayerDef) -> dict:
+def build_stage_from_layer(layer_def: BuildLayerDef) -> dict:
+    """Convert a BuildLayerDef into a canonical build stage entry."""
     return {
+        "id": layer_def.id,
+        "name": layer_def.name,
+        "stage_type": layer_def.view_type,  # "simple_list" | "structured_list" | "detail_node"
         "status": "pending",
+        "widget_type": None,
+        "widget_data": None,
         "items": [],
+        "view_config": {
+            "removable": layer_def.removable,
+            "item_schema": layer_def.item_schema,
+            "description": layer_def.description,
+        },
     }
 
 
 def make_initial_workflow_state(module_type: str, assessment_def: AssessmentModuleDef) -> dict:
+    """Build the canonical workflow_state skeleton for an assessment module."""
+    stages = [build_stage_from_layer(layer) for layer in assessment_def.build_layers]
+    first_stage_id = stages[0]["id"] if stages else None
     return {
         "module_type": module_type,
         "current_stage": "setup",
@@ -113,16 +129,29 @@ def make_initial_workflow_state(module_type: str, assessment_def: AssessmentModu
             "confirmed_at": None,
         },
         "build": {
-            "current_layer": assessment_def.build_layers[0].id if assessment_def.build_layers else None,
-            "layers": {
-                layer.id: _make_empty_layer_state(layer)
-                for layer in assessment_def.build_layers
-            },
+            "stages": stages,
+            "current_stage_id": first_stage_id,
         },
         "output": {
             "status": "pending",
             "content": None,
         },
+    }
+
+
+def get_build_stage(build: dict, stage_id: str) -> dict | None:
+    """Return the stage entry matching stage_id from build.stages, or None."""
+    for s in build.get("stages", []):
+        if s["id"] == stage_id:
+            return s
+    return None
+
+
+def layers_as_dict(build: dict) -> dict[str, dict]:
+    """Return a {stage_id: {items, status}} dict for use in generate_layer prior_layers arg."""
+    return {
+        s["id"]: {"items": s.get("items") or [], "status": s.get("status", "pending")}
+        for s in build.get("stages", [])
     }
 
 
@@ -198,7 +227,6 @@ class BaseAssessmentModule(BaseModule):
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment: Any = None,
     ) -> ModuleOutput:
         """Not used for assessment modules — workflow is driven via dedicated API endpoints."""
         raise NotImplementedError("Assessment modules use the workflow API, not execute()")
@@ -281,24 +309,42 @@ class BaseAssessmentModule(BaseModule):
         Returns (context_str_for_prompt, numbered_citations_list).
         Citations are deduplicated by source title.
         """
-        from app.services.tiered_retrieval import TieredRetrievalService
+        from app.adapters import get_adapter_registry
+        from app.core.execution_context import ExecutionContext
 
-        retrieval = TieredRetrievalService(db)
+        retrieval_adapter = get_adapter_registry().get("retrieval")
+        if retrieval_adapter is None:
+            raise RuntimeError("retrieval adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=initiative_id,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id=f"assessment-retrieval:{initiative_id}",
+        )
         all_facts: list = []
         seen_titles: set[str] = set()
 
         for query in queries:
             try:
-                result = await retrieval.retrieve(
-                    query=query,
-                    initiative_id=initiative_id,
-                    include_openalex=True,
-                    include_web_search=True,
-                    include_llm_fallback=False,
+                adapter_result = await retrieval_adapter.execute(
+                    ctx,
+                    db,
+                    {
+                        "query": query,
+                        "initiative_id": str(initiative_id),
+                        "include_openalex": True,
+                        "include_web_search": True,
+                        "include_llm_fallback": False,
+                        "require_citation": False,
+                    },
                 )
-                for fact in result.facts:
-                    if fact.source_title not in seen_titles:
-                        seen_titles.add(fact.source_title)
+                for fact in adapter_result.output.get("facts", []):
+                    source_title = fact.get("source_title", "")
+                    if source_title and source_title not in seen_titles:
+                        seen_titles.add(source_title)
                         all_facts.append(fact)
             except Exception as exc:
                 logger.warning(f"Retrieval failed for query '{query[:60]}': {exc}")
@@ -310,16 +356,16 @@ class BaseAssessmentModule(BaseModule):
         for i, fact in enumerate(all_facts, start=1):
             citations.append({
                 "number": i,
-                "source_type": fact.source_type.value,
-                "source_title": fact.source_title,
-                "source_url": fact.source_url or "",
-                "publisher": fact.publisher or "",
-                "excerpt": fact.content[:300],
+                "source_type": fact.get("source_type", ""),
+                "source_title": fact.get("source_title", ""),
+                "source_url": fact.get("source_url", "") or "",
+                "publisher": fact.get("publisher", "") or "",
+                "excerpt": (fact.get("content", "") or "")[:300],
             })
             context_lines.append(
-                f"[{i}] {fact.source_title}"
-                + (f" ({fact.publisher})" if fact.publisher else "")
-                + f": {fact.content[:400]}"
+                f"[{i}] {fact.get('source_title', '')}"
+                + (f" ({fact.get('publisher', '')})" if fact.get("publisher") else "")
+                + f": {(fact.get('content', '') or '')[:400]}"
             )
 
         context_str = "\n".join(context_lines) if context_lines else ""
