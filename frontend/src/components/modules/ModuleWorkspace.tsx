@@ -7,12 +7,9 @@ import { api } from '@/lib/api';
 import { SetupStage } from './SetupStage';
 import { BuildStage } from './BuildStage';
 import { OutputStage } from './OutputStage';
-import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { LCOEModelWidget } from '@/components/widgets/LCOEModelWidget';
 import { CarbonModelWidget } from '@/components/widgets/CarbonModelWidget';
 import { SolarEstimateWidget } from '@/components/widgets/SolarEstimateWidget';
-import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
-import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 
 type Stage = 'setup' | 'build' | 'output';
@@ -169,20 +166,6 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
               isActive
             />
           );
-        case 'alignment':
-          return (
-            <AlignmentWidget
-              data={data}
-              initiativeId={initiativeId ?? ''}
-              instanceId={instanceId}
-              onWorkflowUpdated={fetchState}
-              isActive
-            />
-          );
-        case 'memo_viewer':
-          return <MemoViewerWidget data={data} initiativeId={initiativeId ?? ''} isActive />;
-        case 'checklist_viewer':
-          return <ChecklistViewerWidget data={data} initiativeId={initiativeId ?? ''} isActive />;
         case 'document_viewer':
           return <DocumentViewerWidget data={data} initiativeId={initiativeId ?? ''} isActive />;
         default:
@@ -232,13 +215,22 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           const stages: Stage[] = ['setup', 'build', 'output'];
           const setupConfirmed = ws.setup.confirmed;
           const outputComplete = ws.output?.status === 'complete';
-          const buildReadyForOutput = ['complete', 'confirmed'].includes(ws.build?.status ?? '');
+          // For widget modules, the single stage has status "complete" when computable.
+          // For assessment modules, check if last stage has items (handled by OutputStage).
+          const mainStage = ws.build?.stages?.[0];
+          const buildReadyForOutput =
+            mainStage?.status === 'complete' ||
+            ws.build?.stages?.some((s) => s.status === 'confirmed') ||
+            false;
           const outputUnlocked =
             buildCompleted ||
             buildReadyForOutput ||
             outputComplete ||
             Boolean(ws.output?.widget_data) ||
             Boolean(ws.output?.content);
+
+          // Widget stage data for non-layered builds
+          const widgetStage = !hasLayeredBuild ? mainStage : null;
 
           return (
             <div className="max-w-2xl mx-auto w-full px-4 py-5 flex flex-col gap-4">
@@ -280,7 +272,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
                     onAddToChat={onAddToChat ? handleAddToChat : undefined}
                   />
                 ) : (
-                  renderWidget(ws.build.widget_type, ws.build.widget_data, 'build')
+                  renderWidget(widgetStage?.widget_type, widgetStage?.widget_data, 'build')
                 ))}
 
               {activeStage === 'output' &&

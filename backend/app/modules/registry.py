@@ -23,8 +23,6 @@ class ModuleRegistry:
             return
             
         # Import modules here to avoid circular imports
-        from app.modules.investment_memo import InvestmentMemoTool
-        from app.modules.due_diligence_checklist import DueDiligenceChecklistTool
         from app.modules.lcoe_module import LCOETool
         from app.modules.carbon_module import CarbonTool
         from app.modules.pvwatts_module import PVWattsTool
@@ -34,8 +32,6 @@ class ModuleRegistry:
         from app.modules.mel_plan import MELPlanModule
 
         tools = [
-            InvestmentMemoTool(),
-            DueDiligenceChecklistTool(),
             LCOETool(),
             CarbonTool(),
             PVWattsTool(),
@@ -143,44 +139,6 @@ class ModuleRegistry:
         
         # Keyword matching for boosting scores
         keyword_scores = {
-            # Energy/power related
-            "solar": ["investment_memo", "due_diligence_checklist"],
-            "pv": ["investment_memo", "due_diligence_checklist"],
-            "mini-grid": ["investment_memo", "due_diligence_checklist"],
-            "minigrid": ["investment_memo", "due_diligence_checklist"],
-            "micro-grid": ["investment_memo", "due_diligence_checklist"],
-            "microgrid": ["investment_memo", "due_diligence_checklist"],
-            "battery": ["investment_memo", "due_diligence_checklist"],
-            "storage": ["investment_memo", "due_diligence_checklist"],
-            "renewable": ["investment_memo", "due_diligence_checklist"],
-            "wind": ["investment_memo", "due_diligence_checklist"],
-            "hydro": ["investment_memo", "due_diligence_checklist"],
-            
-            # Clean cooking
-            "cookstove": ["investment_memo", "due_diligence_checklist"],
-            "cooking": ["investment_memo", "due_diligence_checklist"],
-            "lpg": ["investment_memo", "due_diligence_checklist"],
-            "biogas": ["investment_memo", "due_diligence_checklist"],
-            "ethanol": ["investment_memo", "due_diligence_checklist"],
-            "fuel": ["investment_memo", "due_diligence_checklist"],
-            
-            # General development
-            "investment": ["investment_memo"],
-            "funding": ["investment_memo"],
-            "grant": ["investment_memo"],
-            "project": ["investment_memo", "due_diligence_checklist"],
-            "initiative": ["investment_memo", "due_diligence_checklist"],
-            "pilot": ["investment_memo", "due_diligence_checklist"],
-            "scale": ["investment_memo", "due_diligence_checklist"],
-            
-            # Due diligence specific
-            "risk": ["due_diligence_checklist"],
-            "assess": ["due_diligence_checklist"],
-            "evaluate": ["due_diligence_checklist"],
-            "review": ["due_diligence_checklist"],
-            "audit": ["due_diligence_checklist"],
-            "compliance": ["due_diligence_checklist"],
-
             # ESMP
             "esmp": ["esmp"],
             "environmental": ["esmp"],
@@ -247,9 +205,6 @@ class ModuleRegistry:
                 for tool_id in tool_ids:
                     if tool_id in module_scores:
                         module_scores[tool_id] += 1.0
-        
-        # Investment memo gets a slight default boost (most common need)
-        module_scores["investment_memo"] = module_scores.get("investment_memo", 0) + 0.3
         
         # Build recommendations for ALL tools
         recommendations = []

@@ -34,20 +34,16 @@ export interface AlignmentNewMessage {
 interface AlignmentWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
-  instanceId?: string;
   isActive?: boolean;
   onConfirmed?: (newMessages: AlignmentNewMessage[]) => void;
-  onWorkflowUpdated?: () => void;
 }
 
 
 export function AlignmentWidget({
   data,
   initiativeId,
-  instanceId,
   isActive = true,
   onConfirmed,
-  onWorkflowUpdated,
 }: AlignmentWidgetProps) {
   const { confirmAlignment, alignmentLoading, generating, error: storeError } = useInitiativeStore();
   
@@ -99,15 +95,6 @@ export function AlignmentWidget({
         );
         setChatLoading(false);
         onConfirmed?.(result.new_messages);
-      } else if (instanceId) {
-        setChatLoading(true);
-        await api.confirmWorkflowAlignment(
-          instanceId,
-          modifiedSections,
-          undefined,
-        );
-        setChatLoading(false);
-        onWorkflowUpdated?.();
       } else {
         await confirmAlignment(
           initiativeId,
@@ -121,7 +108,7 @@ export function AlignmentWidget({
       setHasConfirmed(false);
       setChatLoading(false);
     }
-  }, [alignment, localSections, data, isChatFlow, sessionId, onConfirmed, onWorkflowUpdated, confirmAlignment, initiativeId, instanceId]);
+  }, [alignment, localSections, data, isChatFlow, sessionId, onConfirmed, confirmAlignment, initiativeId]);
 
   if (!alignment || !tool) {
     return (

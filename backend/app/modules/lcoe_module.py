@@ -100,6 +100,44 @@ class LCOETool(BaseModule):
     """LCOE modeling tool for chat-based energy project economics."""
 
     @property
+    def workspace_setup_fields(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "geography",
+                "label": "Geography",
+                "description": "Project geography or market context.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "e.g. Kenya",
+            },
+            {
+                "name": "technology_type",
+                "label": "Technology Type",
+                "description": "Confirm the primary technology for the model.",
+                "field_type": "select",
+                "required": True,
+                "options": [
+                    "solar_pv",
+                    "wind",
+                    "battery",
+                    "mini_grid",
+                    "clean_cooking",
+                    "hydro",
+                    "other",
+                ],
+                "placeholder": None,
+            },
+            {
+                "name": "project_title",
+                "label": "Project Title",
+                "description": "Working title for this module run.",
+                "field_type": "text",
+                "required": False,
+                "placeholder": "Project title",
+            },
+        ]
+
+    @property
     def definition(self) -> ModuleDefinition:
         return ModuleDefinition(
             id="lcoe_model",
@@ -414,3 +452,17 @@ class LCOETool(BaseModule):
         result_data = dict(result.output)
         result_data["technology_type"] = tech_type
         return result_data
+
+    async def build_workspace_widget_data(
+        self,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.services.lcoe_engine import LCOEEngine
+
+        tech_type = known_values.get("technology_type")
+        inputs = LCOEEngine.build_default_inputs(
+            tech_type=tech_type,
+            known_values=known_values,
+        )
+        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
+        return await self.recalculate(serialized_inputs)

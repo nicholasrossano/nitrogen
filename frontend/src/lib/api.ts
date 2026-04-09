@@ -121,6 +121,18 @@ export interface BuildItem {
   removable: boolean;
 }
 
+export interface BuildStage {
+  id: string;
+  name: string;
+  stage_type: 'widget' | 'simple_list' | 'structured_list' | 'detail_node';
+  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'complete' | 'error';
+  widget_type?: string | null;
+  widget_data?: Record<string, any> | null;
+  items?: BuildItem[] | null;
+  view_config?: Record<string, any>;
+}
+
+/** @deprecated Use BuildStage instead */
 export interface BuildLayer {
   status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'error';
   items: BuildItem[];
@@ -134,11 +146,8 @@ export interface WorkflowSetup {
 }
 
 export interface WorkflowBuild {
-  status?: string;
-  current_layer: string | null;
-  layers: Record<string, BuildLayer>;
-  widget_type?: string | null;
-  widget_data?: Record<string, any> | null;
+  stages: BuildStage[];
+  current_stage_id: string | null;
 }
 
 export interface WorkflowOutput {
@@ -1104,22 +1113,6 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ widget_data: widgetData }),
-      }
-    ),
-
-  confirmWorkflowAlignment: (
-    instanceId: string,
-    sections?: AlignmentSection[],
-    parameters?: AlignmentParameter[],
-  ) =>
-    fetchApi<{ instance_id: string; status: string; workflow_state: WorkflowState; output: Record<string, any> }>(
-      `/api/v1/module-workflow/${instanceId}/alignment/confirm`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          ...(sections ? { sections } : {}),
-          ...(parameters ? { parameters } : {}),
-        }),
       }
     ),
 
