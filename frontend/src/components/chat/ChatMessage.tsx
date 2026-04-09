@@ -12,7 +12,6 @@ import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidge
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidget';
 import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWidget';
-import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
@@ -418,8 +417,6 @@ function MessageWidget({
       return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'deliverables_list':
       return <DeliverablesListWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
-    case 'alignment':
-      return <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'project_plan':
       return <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'proposed_value':

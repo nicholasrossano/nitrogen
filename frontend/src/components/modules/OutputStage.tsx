@@ -207,8 +207,8 @@ export function OutputStage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canGenerate]);
 
-  const totalItems = Object.values(build.layers).reduce(
-    (acc, l) => acc + l.items.length,
+  const totalItems = (build.stages ?? []).reduce(
+    (acc, s) => acc + (s.items?.length ?? 0),
     0
   );
 

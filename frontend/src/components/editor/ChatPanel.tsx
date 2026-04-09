@@ -39,7 +39,6 @@ const CHAT_WIDGET_TYPES = [
   'evidence_input',
   'tool_checklist',
   'deliverables_overview',
-  'alignment',
   'project_plan',
   'plan_categories',
   'proposed_value',

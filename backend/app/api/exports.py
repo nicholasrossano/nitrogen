@@ -3,7 +3,6 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
-from pydantic import BaseModel
 from typing import Any
 import re
 

@@ -24,7 +24,6 @@ interface ProjectWorkspaceEditorPanelProps {
   onWorkspaceLaunchModeHandled: () => void;
   preferArtifactsTab?: boolean;
   onArtifactsTabPreferredHandled?: () => void;
-  onAlignmentConfirmed?: (newMessages: { id: string; role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; created_at?: string | null }[]) => void;
   onSendToChat?: (content: string, toolHint?: string) => void;
   onOpenChatSession?: (session: { sessionId: string; title?: string | null }) => void;
 }
@@ -38,7 +37,6 @@ export function ProjectWorkspaceEditorPanel({
   onWorkspaceLaunchModeHandled,
   preferArtifactsTab = false,
   onArtifactsTabPreferredHandled,
-  onAlignmentConfirmed,
   onSendToChat,
   onOpenChatSession,
 }: ProjectWorkspaceEditorPanelProps) {
@@ -222,7 +220,6 @@ export function ProjectWorkspaceEditorPanel({
           <EditorSidePanel
             widgets={chatWidgets}
             initiativeId={initiativeId}
-            onAlignmentConfirmed={onAlignmentConfirmed}
           />
         )}
 

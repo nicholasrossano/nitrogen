@@ -29,7 +29,6 @@ from app.modules.base import (
     ModuleManifest,
     ProgressCallback,
     RefinementModel,
-    ReviewStrategy,
     ModuleDefinition,
     ModuleInput,
     ModuleOutput,
@@ -196,10 +195,6 @@ class PVWattsTool(BaseModule):
                 placeholder="e.g. 36.817",
             ),
         ]
-
-    @property
-    def review_strategy(self) -> ReviewStrategy:
-        return ReviewStrategy.INPUT_REVIEW
 
     @property
     def execution_model(self) -> ExecutionModel:
