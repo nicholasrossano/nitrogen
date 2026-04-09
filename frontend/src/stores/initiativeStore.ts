@@ -101,7 +101,8 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({
         initiative,
         loading: false,
-        ...(initiative.project_plan ? { projectPlan: initiative.project_plan } : {}),
+        // Always sync projectPlan so stale plan state from another project cannot persist.
+        projectPlan: initiative.project_plan ?? null,
       });
     } catch (error) {
       set({ 
