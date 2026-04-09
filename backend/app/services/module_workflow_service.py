@@ -1,4 +1,15 @@
-"""Helpers for the unified module workflow lifecycle."""
+"""Helpers for the unified module workflow lifecycle.
+
+All modules — whether widget-backed calculators or layered assessments — share
+the same `setup -> build -> output` lifecycle.  The build stage is represented
+as a single ``build.stages[]`` array:
+
+  Widget module:   one stage with stage_type="widget"
+  Assessment:      N stages with stage_type="simple_list" | "structured_list"
+
+The workflow service is generic over stage type.  It never branches on module
+family or inspects ``module_id`` strings.
+"""
 
 from __future__ import annotations
 
@@ -10,72 +21,60 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance
-from app.modules.assessment_base import BaseAssessmentModule, make_initial_workflow_state
+from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
+from app.modules.assessment_base import (
+    BaseAssessmentModule,
+    get_build_stage,
+    layers_as_dict,
+    make_initial_workflow_state,
+)
 from app.modules.base import BaseModule
 from app.services import module_service
 
-LCOE_TECHNOLOGY_OPTIONS = [
-    "solar_pv",
-    "wind",
-    "battery",
-    "mini_grid",
-    "clean_cooking",
-    "hydro",
-    "other",
-]
 
-CARBON_METHOD_PACK_OPTIONS = [
-    "cookstoves",
-    "fuel_switch",
-    "safe_water",
-    "grid_renewable",
-    "solar_home",
-    "biodigester",
-    "efficient_lighting",
-]
-
-DUE_DILIGENCE_STAGE_OPTIONS = [
-    "Concept/Idea",
-    "Feasibility",
-    "Pilot",
-    "Implementation",
-    "Scale-up",
-]
-
-DUE_DILIGENCE_PROJECT_TYPE_OPTIONS = [
-    "energy_access",
-    "clean_cooking",
-    "water_sanitation",
-    "agriculture",
-    "health",
-    "general",
-]
-
+# ---------------------------------------------------------------------------
+# Module capability checks (read from declared contract, not class hierarchy)
+# ---------------------------------------------------------------------------
 
 def uses_workspace_flow(module: BaseModule) -> bool:
     """Whether the module can open inside the unified workspace flow."""
     return (
         isinstance(module, BaseAssessmentModule)
-        or module.requires_alignment
         or callable(getattr(module, "recalculate", None))
     )
 
 
 def uses_layered_build(module: BaseModule) -> bool:
-    """Whether the build stage uses the layered item editor."""
+    """Whether the build stage uses the layered item editor (assessment modules)."""
     return isinstance(module, BaseAssessmentModule)
 
 
-def uses_alignment_build(module: BaseModule) -> bool:
-    """Whether the build stage is an alignment editor."""
-    return module.requires_alignment
-
-
 def uses_recalculating_build(module: BaseModule) -> bool:
-    """Whether the build stage is a widget-backed input editor."""
+    """Whether the build stage is a widget-backed input editor (calculator modules)."""
     return callable(getattr(module, "recalculate", None))
 
+
+# ---------------------------------------------------------------------------
+# Stage helpers
+# ---------------------------------------------------------------------------
+
+def _make_widget_stage(module: BaseModule) -> dict:
+    """Return a single widget-type build stage for a calculator module."""
+    return {
+        "id": "main",
+        "name": module.definition.name,
+        "stage_type": "widget",
+        "status": "pending",
+        "widget_type": module.manifest.workspace_build_widget,
+        "widget_data": None,
+        "items": None,
+        "view_config": {},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Persistence helpers
+# ---------------------------------------------------------------------------
 
 def save_workflow_state(inst: ModuleInstance, state: dict[str, Any]) -> None:
     """Persist workflow state on the instance."""
@@ -91,6 +90,10 @@ def build_deliverable_title(module: BaseModule, content: dict[str, Any] | None) 
             return title.strip()
     return module.definition.name
 
+
+# ---------------------------------------------------------------------------
+# Initiative context helpers
+# ---------------------------------------------------------------------------
 
 async def get_initiative_context(db: AsyncSession, initiative_id) -> dict[str, str]:
     """Build a normalized initiative context dict for workflow generation."""
@@ -125,161 +128,7 @@ def get_workspace_setup_fields(module: BaseModule) -> list[dict[str, Any]]:
     """Return setup field definitions for workspace modules."""
     if isinstance(module, BaseAssessmentModule):
         return module.assessment_definition.to_dict()["setup_fields"]
-
-    module_id = module.definition.id
-    if module_id == "lcoe_model":
-        return [
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Project geography or market context.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kenya",
-            },
-            {
-                "name": "technology_type",
-                "label": "Technology Type",
-                "description": "Confirm the primary technology for the model.",
-                "field_type": "select",
-                "required": True,
-                "options": LCOE_TECHNOLOGY_OPTIONS,
-                "placeholder": None,
-            },
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Working title for this module run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            },
-        ]
-
-    if module_id == "carbon_model":
-        return [
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Project geography or operating market.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kenya",
-            },
-            {
-                "name": "method_pack",
-                "label": "Project Type",
-                "description": "Select the carbon methodology family that best matches the project.",
-                "field_type": "select",
-                "required": True,
-                "options": CARBON_METHOD_PACK_OPTIONS,
-                "placeholder": None,
-            },
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Working title for this module run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            },
-        ]
-
-    if module_id == "solar_estimate":
-        return [
-            {
-                "name": "address",
-                "label": "Geography",
-                "description": "Project site, city, region, or country for the solar estimate.",
-                "field_type": "text",
-                "required": True,
-                "placeholder": "e.g. Nairobi, Kenya",
-            },
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Working title for this module run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            },
-        ]
-
-    if module_id == "investment_memo":
-        return [
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Name of the project or initiative.",
-                "field_type": "text",
-                "required": True,
-                "placeholder": "Project title",
-            },
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Primary geography for the memo.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kenya",
-            },
-            {
-                "name": "project_goal",
-                "label": "Project Goal",
-                "description": "Short summary of what the project is trying to achieve.",
-                "field_type": "textarea",
-                "required": False,
-                "placeholder": "Summarize the project goal",
-            },
-            {
-                "name": "target_beneficiaries",
-                "label": "Target Beneficiaries",
-                "description": "Who the project is intended to serve.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Target communities or user segment",
-            },
-        ]
-
-    if module_id == "due_diligence_checklist":
-        return [
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Name of the project or initiative.",
-                "field_type": "text",
-                "required": True,
-                "placeholder": "Project title",
-            },
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Primary geography for due diligence.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kenya",
-            },
-            {
-                "name": "project_type",
-                "label": "Project Type",
-                "description": "High-level sector classification for the checklist.",
-                "field_type": "select",
-                "required": False,
-                "options": DUE_DILIGENCE_PROJECT_TYPE_OPTIONS,
-                "placeholder": None,
-            },
-            {
-                "name": "project_stage",
-                "label": "Project Stage",
-                "description": "Current maturity of the project.",
-                "field_type": "select",
-                "required": False,
-                "options": DUE_DILIGENCE_STAGE_OPTIONS,
-                "placeholder": None,
-            },
-        ]
-
-    return []
+    return copy.deepcopy(module.workspace_setup_fields)
 
 
 def _build_setup_fields_from_context(
@@ -337,79 +186,32 @@ def _merge_setup_fields(
     return merged
 
 
+# ---------------------------------------------------------------------------
+# Stage-level state builders
+# ---------------------------------------------------------------------------
+
 async def _build_calculator_widget_data(
     db: AsyncSession,
     inst: ModuleInstance,
     module: BaseModule,
     setup_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Return initial widget data for a calculator module's main stage."""
     if inst.deliverable and isinstance(inst.deliverable.get("content"), dict):
         return copy.deepcopy(inst.deliverable["content"])
 
-    existing = (inst.workflow_state or {}).get("build", {}).get("widget_data")
-    if isinstance(existing, dict):
-        return copy.deepcopy(existing)
+    # Check if existing workflow state has data in the main widget stage
+    existing_build = (inst.workflow_state or {}).get("build", {})
+    for stage in existing_build.get("stages", []):
+        if stage.get("stage_type") == "widget" and isinstance(stage.get("widget_data"), dict):
+            return copy.deepcopy(stage["widget_data"])
 
     initiative = await db.get(Initiative, inst.initiative_id)
     known_values = _merge_setup_fields(
         _build_known_values_from_initiative(initiative),
         setup_fields,
     )
-
-    if inst.module_id == "lcoe_model":
-        from app.services.lcoe_engine import LCOEEngine
-
-        tech_type = known_values.get("technology_type")
-        inputs = LCOEEngine.build_default_inputs(tech_type=tech_type, known_values=known_values)
-        serialized_inputs = {k: v.to_dict() for k, v in inputs.items()}
-        return await module.recalculate(serialized_inputs)
-
-    if inst.module_id == "carbon_model":
-        from app.services.carbon_engine import CarbonEngine
-
-        method_pack = known_values.get("method_pack")
-        inputs = CarbonEngine.build_default_inputs(method_pack=method_pack, known_values=known_values)
-        serialized_inputs = {k: v.to_dict() for k, v in inputs.items()}
-        return await module.recalculate(serialized_inputs)
-
-    if inst.module_id == "solar_estimate":
-        from app.services.pvwatts_engine import PVWattsEngine
-
-        inputs = PVWattsEngine.build_default_inputs(known_values=known_values)
-        serialized_inputs = {k: v.to_dict() for k, v in inputs.items()}
-        return await module.recalculate(serialized_inputs)
-
-    raise ValueError(f"Unsupported calculator workflow module '{inst.module_id}'")
-
-
-async def _ensure_alignment_data(
-    db: AsyncSession,
-    inst: ModuleInstance,
-    module: BaseModule,
-    setup_fields: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    if inst.alignment:
-        return copy.deepcopy(inst.alignment)
-
-    initiative = await db.get(Initiative, inst.initiative_id)
-    if initiative is None:
-        return {}
-
-    alignment_obj = await module.generate_alignment(
-        db=db,
-        initiative_id=initiative.id,
-        inputs=_merge_setup_fields(dict(initiative.tool_inputs or {}), setup_fields),
-    )
-    alignment_data = alignment_obj.to_dict()
-    await module_service.save_alignment(
-        db,
-        initiative.id,
-        inst.module_id,
-        alignment_data,
-        user_id=inst.started_by,
-        instance_id=inst.id,
-    )
-    return copy.deepcopy(alignment_data)
+    return await module.build_workspace_widget_data(known_values)
 
 
 async def _build_setup_state(
@@ -428,18 +230,16 @@ async def _build_setup_state(
             "confirmed_at": None,
         }
 
-    if uses_layered_build(module):
-        setup["mode"] = "form"
-        if not setup.get("fields"):
+    setup["mode"] = "form"
+    if not setup.get("fields"):
+        if uses_layered_build(module):
             context = await get_initiative_context(db, inst.initiative_id)
             try:
                 defaults = await module.generate_setup_defaults(db, inst.initiative_id, context)
                 setup["fields"] = defaults
             except Exception:
                 setup["fields"] = {}
-    else:
-        setup["mode"] = "form"
-        if not setup.get("fields"):
+        else:
             initiative = await db.get(Initiative, inst.initiative_id)
             setup["fields"] = _build_setup_fields_from_context(module, initiative)
 
@@ -453,55 +253,78 @@ async def _build_build_state(
     existing_state: dict[str, Any] | None,
     setup_state: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build the canonical build state using unified stages[]."""
+
     if uses_layered_build(module):
+        # --- Assessment module: N ordered list stages ---
         if existing_state and isinstance(existing_state.get("build"), dict):
-            build = copy.deepcopy(existing_state["build"])
+            existing_build = existing_state["build"]
+            # Migrate legacy layers{} format to stages[] if needed
+            if "layers" in existing_build and "stages" not in existing_build:
+                existing_build = _migrate_legacy_build(existing_build, module)
+            build = copy.deepcopy(existing_build)
         else:
             build = make_initial_workflow_state(
                 module.definition.id,
                 module.assessment_definition,
             )["build"]
-        build.setdefault("status", "pending")
-        build["widget_type"] = None
-        build["widget_data"] = None
+        build.setdefault("current_stage_id", build.get("stages", [{}])[0].get("id") if build.get("stages") else None)
         return build
 
+    # --- Widget module: single widget stage ---
     if not setup_state.get("confirmed"):
         return {
-            "status": "pending",
-            "current_layer": None,
-            "layers": {},
-            "widget_type": module.manifest.workspace_build_widget,
-            "widget_data": None,
-        }
-
-    if uses_alignment_build(module):
-        alignment_data = await _ensure_alignment_data(db, inst, module, setup_state.get("fields"))
-        from app.api.alignment_helpers import build_alignment_widget_data
-
-        return {
-            "status": "confirmed" if alignment_data.get("confirmed") else "in_progress",
-            "current_layer": None,
-            "layers": {},
-            "widget_type": module.manifest.workspace_build_widget,
-            "widget_data": build_alignment_widget_data(
-                tool_id=inst.module_id,
-                alignment_data=alignment_data,
-                pending_tool_ids=[],
-            ),
+            "stages": [_make_widget_stage(module)],
+            "current_stage_id": "main",
         }
 
     if uses_recalculating_build(module):
         widget_data = await _build_calculator_widget_data(db, inst, module, setup_state.get("fields"))
+        stage = _make_widget_stage(module)
+        stage["widget_data"] = widget_data
+        stage["status"] = "complete" if widget_data.get("computable") else "in_progress"
         return {
-            "status": "complete" if widget_data.get("computable") else "in_progress",
-            "current_layer": None,
-            "layers": {},
-            "widget_type": module.manifest.workspace_build_widget,
-            "widget_data": widget_data,
+            "stages": [stage],
+            "current_stage_id": "main",
         }
 
     raise ValueError(f"Module '{module.definition.id}' is not configured for workspace build flow")
+
+
+def _migrate_legacy_build(existing_build: dict, module: BaseModule) -> dict:
+    """Migrate a legacy layers{} build state to stages[] format.
+
+    Pre-migration format (assessment):
+      { "current_layer": "outline", "layers": { "outline": {status, items}, ... } }
+
+    Post-migration format:
+      { "stages": [...], "current_stage_id": "outline" }
+    """
+    layers_dict = existing_build.get("layers", {})
+    current_layer = existing_build.get("current_layer")
+
+    stages = []
+    for layer_def in module.assessment_definition.build_layers:
+        old_layer = layers_dict.get(layer_def.id, {})
+        stages.append({
+            "id": layer_def.id,
+            "name": layer_def.name,
+            "stage_type": layer_def.view_type,
+            "status": old_layer.get("status", "pending"),
+            "widget_type": None,
+            "widget_data": None,
+            "items": old_layer.get("items", []),
+            "view_config": {
+                "removable": layer_def.removable,
+                "item_schema": layer_def.item_schema,
+                "description": layer_def.description,
+            },
+        })
+
+    return {
+        "stages": stages,
+        "current_stage_id": current_layer or (stages[0]["id"] if stages else None),
+    }
 
 
 async def _build_output_state(
@@ -523,23 +346,11 @@ async def _build_output_state(
         output["widget_data"] = None
         return output
 
-    if uses_alignment_build(module):
-        output_widget_data = None
-        output_status = "pending"
-        output_content = None
-        if inst.deliverable and isinstance(inst.deliverable.get("content"), dict):
-            output_content = copy.deepcopy(inst.deliverable["content"])
-            output_widget_data = {"content": output_content}
-            output_status = "complete"
-        return {
-            "status": output_status,
-            "content": output_content,
-            "widget_type": module.manifest.workspace_output_widget,
-            "widget_data": output_widget_data,
-        }
-
     if uses_recalculating_build(module):
-        widget_data = copy.deepcopy(build_state.get("widget_data"))
+        # Pull widget data from the main stage
+        stages = build_state.get("stages", [])
+        main_stage = next((s for s in stages if s.get("id") == "main"), None)
+        widget_data = copy.deepcopy(main_stage.get("widget_data")) if main_stage else None
         is_complete = bool(widget_data and widget_data.get("computable"))
         return {
             "status": "complete" if is_complete else "pending",
@@ -556,12 +367,18 @@ def _infer_current_stage(setup: dict[str, Any], build: dict[str, Any], output: d
         return "setup"
     if output.get("status") in {"generating", "complete", "error"}:
         return "output"
-    if build.get("status") in {"generating", "in_progress", "confirmed", "complete"}:
-        return "build"
+    # Check if any build stage is actively in progress
+    for stage in build.get("stages", []):
+        if stage.get("status") in {"generating", "in_progress", "confirmed", "complete"}:
+            return "build"
     if setup.get("confirmed"):
         return "build"
     return "setup"
 
+
+# ---------------------------------------------------------------------------
+# Top-level state builders
+# ---------------------------------------------------------------------------
 
 async def build_workflow_state(
     db: AsyncSession,
@@ -598,25 +415,40 @@ async def ensure_workflow_state(
     return state
 
 
-async def persist_calculator_widget_state(
+# ---------------------------------------------------------------------------
+# Widget state persistence (calculator modules)
+# ---------------------------------------------------------------------------
+
+async def persist_widget_stage_state(
     db: AsyncSession,
     inst: ModuleInstance,
     module: BaseModule,
     widget_data: dict[str, Any],
+    stage_id: str = "main",
 ) -> dict[str, Any]:
-    """Persist calculator widget state back onto the module instance."""
+    """Persist widget-stage state back onto the module instance.
+
+    Updates the named stage in build.stages[] and syncs output state.
+    """
     if not uses_recalculating_build(module):
-        raise ValueError(f"Module '{module.definition.id}' does not support recalculating widget persistence")
+        raise ValueError(f"Module '{module.definition.id}' does not support widget stage persistence")
 
     state = await ensure_workflow_state(db, inst, module)
-    state["build"]["widget_data"] = copy.deepcopy(widget_data)
-    state["build"]["status"] = "complete" if widget_data.get("computable") else "in_progress"
+
+    # Update the target stage in stages[]
+    target_stage = get_build_stage(state["build"], stage_id)
+    if target_stage is None:
+        raise ValueError(f"Stage '{stage_id}' not found in module '{module.definition.id}'")
+
+    target_stage["widget_data"] = copy.deepcopy(widget_data)
+    target_stage["status"] = "complete" if widget_data.get("computable") else "in_progress"
 
     if widget_data.get("computable"):
         state["current_stage"] = "output"
         state["output"]["status"] = "complete"
         state["output"]["content"] = copy.deepcopy(widget_data)
         state["output"]["widget_data"] = copy.deepcopy(widget_data)
+        inst.status = ModuleInstanceStatus.READY
         await module_service.save_deliverable(
             db,
             inst.initiative_id,
@@ -631,7 +463,7 @@ async def persist_calculator_widget_state(
         state["output"]["status"] = "pending"
         state["output"]["content"] = None
         state["output"]["widget_data"] = None
-        inst.status = "started"
+        inst.status = ModuleInstanceStatus.STARTED
         inst.deliverable = None
         inst.updated_at = datetime.now(timezone.utc)
         flag_modified(inst, "deliverable")
@@ -639,3 +471,6 @@ async def persist_calculator_widget_state(
     save_workflow_state(inst, state)
     return state
 
+
+# Keep old name as alias for backward compat during API transition
+persist_calculator_widget_state = persist_widget_stage_state

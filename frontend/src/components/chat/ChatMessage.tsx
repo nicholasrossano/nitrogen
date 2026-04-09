@@ -7,7 +7,6 @@ import rehypeKatex from 'rehype-katex';
 import { ChatMessage as ChatMessageType, SourceCitation } from '@/lib/api';
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
-import { GenerateOptionsWidget } from '@/components/widgets/GenerateOptionsWidget';
 import { MemoViewerWidget } from '@/components/widgets/MemoViewerWidget';
 import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
@@ -16,10 +15,6 @@ import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWid
 import { AlignmentWidget } from '@/components/widgets/AlignmentWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
-import { LCOEInputsWidget } from '@/components/widgets/LCOEInputsWidget';
-import { LCOEOutputWidget } from '@/components/widgets/LCOEOutputWidget';
-import { CarbonInputsWidget } from '@/components/widgets/CarbonInputsWidget';
-import { CarbonOutputWidget } from '@/components/widgets/CarbonOutputWidget';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
@@ -413,8 +408,6 @@ function MessageWidget({
       return <EvidenceInputWidget initiativeId={initiativeId} isActive={isActive} />;
     case 'document_request':
       return <DocumentRequestWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
-    case 'generate_options':
-      return <GenerateOptionsWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'memo_viewer':
       return <MemoViewerWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'tool_checklist':
@@ -429,14 +422,6 @@ function MessageWidget({
       return <AlignmentWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'project_plan':
       return <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
-    case 'lcoe_inputs':
-      return <LCOEInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} messageId={messageId} />;
-    case 'lcoe_output':
-      return <LCOEOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
-    case 'carbon_inputs':
-      return <CarbonInputsWidget data={data} initiativeId={initiativeId} isActive={isActive} hasOutputWidget={hasOutputWidget} messageId={messageId} />;
-    case 'carbon_output':
-      return <CarbonOutputWidget data={data} initiativeId={initiativeId} isActive={isActive} messageId={messageId} />;
     case 'proposed_value':
       return <ProposedValueWidget data={data as any} messageId={messageId} />;
     default:
