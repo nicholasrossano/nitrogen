@@ -44,7 +44,6 @@ export interface Initiative {
   project_type: string | null;
   selected_tools: string[] | null;
   tool_inputs: Record<string, any> | null;
-  module_alignments: Record<string, ModuleAlignment> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
   module_instances: ModuleInstance[] | null;
@@ -58,7 +57,7 @@ export interface Initiative {
 export interface ModuleInstance {
   id: string;
   module_id: string;
-  status: 'draft' | 'started' | 'alignment_proposed' | 'alignment_confirmed' | 'generating' | 'complete' | 'error';
+  status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'error';
   title: string | null;
   started_by: string;
   started_by_email: string | null;
@@ -361,42 +360,6 @@ export interface DriveSyncResult {
   checked: number;
   updated: number;
   errors: { file_id: string; error: string }[];
-}
-
-// Alignment types
-export interface AlignmentSection {
-  id: string;
-  title: string;
-  description: string;
-  key_points: string[];
-  include: boolean;
-  order: number;
-}
-
-export interface AlignmentParameter {
-  name: string;
-  label: string;
-  description: string;
-  param_type: 'text' | 'number' | 'select' | 'boolean';
-  value: any;
-  options?: string[] | null;
-  unit?: string | null;
-}
-
-export interface ModuleAlignment {
-  module_id: string;
-  title: string;
-  description: string;
-  sections: AlignmentSection[];
-  parameters: AlignmentParameter[];
-  assumptions: string[];
-  confirmed: boolean;
-  feedback?: string | null;
-}
-
-export interface AlignmentResponse {
-  alignment: ModuleAlignment;
-  message: string;
 }
 
 // Plan category proposal types (approval stage)
@@ -1132,42 +1095,6 @@ export const api = {
     return { blob, filename };
   },
 
-  // Alignment
-  getAlignment: (initiativeId: string, toolId: string) =>
-    fetchApi<{ alignment: ModuleAlignment; tool_id: string }>(
-      `/api/v1/initiatives/${initiativeId}/alignment/${toolId}`
-    ),
-
-  confirmAlignment: (
-    initiativeId: string,
-    toolId: string,
-    sections?: AlignmentSection[],
-    parameters?: AlignmentParameter[]
-  ) =>
-    fetchApi<AlignmentResponse>(
-      `/api/v1/initiatives/${initiativeId}/alignment/confirm`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          sections,
-          parameters,
-        }),
-      }
-    ),
-
-  provideFeedback: (initiativeId: string, toolId: string, feedback: string) =>
-    fetchApi<AlignmentResponse>(
-      `/api/v1/initiatives/${initiativeId}/alignment/feedback`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          feedback,
-        }),
-      }
-    ),
-
   // Project Plan
   getProjectPlan: (initiativeId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
@@ -1301,58 +1228,6 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ title, messages, initiative_id: initiativeId }),
-      }
-    ),
-
-  confirmChatAlignment: (
-    sessionId: string,
-    toolId: string,
-    sections?: AlignmentSection[],
-    parameters?: AlignmentParameter[]
-  ) =>
-    fetchApi<{
-      alignment: ModuleAlignment;
-      message: string;
-      new_messages: {
-        id: string;
-        role: string;
-        content: string;
-        widget_type?: string | null;
-        widget_data?: Record<string, any> | null;
-        created_at?: string | null;
-      }[];
-    }>(
-      `/api/v1/chat/sessions/${sessionId}/alignment/confirm`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          ...(sections && { sections }),
-          ...(parameters && { parameters }),
-        }),
-      }
-    ),
-
-  provideChatAlignmentFeedback: (sessionId: string, toolId: string, feedback: string) =>
-    fetchApi<{
-      alignment: ModuleAlignment;
-      message: string;
-      new_messages: {
-        id: string;
-        role: string;
-        content: string;
-        widget_type?: string | null;
-        widget_data?: Record<string, any> | null;
-        created_at?: string | null;
-      }[];
-    }>(
-      `/api/v1/chat/sessions/${sessionId}/alignment/feedback`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tool_id: toolId,
-          feedback,
-        }),
       }
     ),
 
