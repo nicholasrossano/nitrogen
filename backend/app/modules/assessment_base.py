@@ -227,7 +227,6 @@ class BaseAssessmentModule(BaseModule):
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment: Any = None,
     ) -> ModuleOutput:
         """Not used for assessment modules — workflow is driven via dedicated API endpoints."""
         raise NotImplementedError("Assessment modules use the workflow API, not execute()")

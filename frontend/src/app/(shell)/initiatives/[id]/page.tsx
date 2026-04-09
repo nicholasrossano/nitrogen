@@ -73,7 +73,6 @@ function InitiativePageContent() {
   const [rightPanel, setRightPanel] = useState<RightPanelMode>('closed');
   const [showInspector, setShowInspector] = useState(false);
   const [hasInspectorItem, setHasInspectorItem] = useState(false);
-  const alignmentCallbackRef = useRef<((msgs: { id: string; role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; created_at?: string | null }[]) => void) | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
   const [pendingEditorDocument, setPendingEditorDocument] = useState<ResearchPanelCitation | null>(null);
@@ -540,7 +539,6 @@ function InitiativePageContent() {
                             resetToLandingSignal={researchLandingResetSignal}
                             onEditorWidgetsChange={activeView === 'research' ? handleChatEditorWidgetsChange : undefined}
                             onCitationClick={activeView === 'research' ? handleCitationClick : undefined}
-                            onAlignmentConfirmedRef={activeView === 'research' ? alignmentCallbackRef : undefined}
                           />
                         </div>
                         <div className={activeView === 'workspace' ? 'h-full' : 'hidden'}>
@@ -551,7 +549,6 @@ function InitiativePageContent() {
                             onPendingSessionHandled={() => setPendingChatSessionToOpen(null)}
                             onEditorWidgetsChange={activeView === 'workspace' ? handleChatEditorWidgetsChange : undefined}
                             onCitationClick={activeView === 'workspace' ? handleCitationClick : undefined}
-                            onAlignmentConfirmedRef={activeView === 'workspace' ? alignmentCallbackRef : undefined}
                             onSendRef={chatSendRef}
                           />
                         </div>
@@ -588,7 +585,6 @@ function InitiativePageContent() {
                       onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
                       preferArtifactsTab={preferArtifactsTab}
                       onArtifactsTabPreferredHandled={() => setPreferArtifactsTab(false)}
-                      onAlignmentConfirmed={(msgs) => alignmentCallbackRef.current?.(msgs)}
                       onSendToChat={(content, toolHint) => {
                         setSurfacePanelState('workspace', { chatOpen: true });
                         chatSendRef.current?.(content, toolHint);

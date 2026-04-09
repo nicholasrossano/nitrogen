@@ -138,7 +138,6 @@ class ExampleWidgetModule(BaseModule):
         initiative_id: UUID,
         inputs: dict[str, Any],
         include_corpus: bool = True,
-        alignment=None,
     ) -> ModuleOutput:
         content = await self.recalculate(
             {
