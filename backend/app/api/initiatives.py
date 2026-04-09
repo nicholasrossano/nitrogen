@@ -169,7 +169,7 @@ async def get_initiative(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Get an initiative by ID or slug (owner, editor, or viewer)"""
+    """Get an initiative by canonical UUID (owner, editor, or viewer)."""
     await ensure_user_exists(db, user)
     initiative, role = await get_initiative_with_role(db, initiative_id, user)
 
