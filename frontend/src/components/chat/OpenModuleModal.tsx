@@ -102,12 +102,7 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
     <div className="w-full">
       <div className="w-full pb-8">
         {/* Same btn-secondary styling as the main project grid Trash control; button on the right */}
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <p className="text-sm text-text-tertiary flex-1 min-w-0">
-            {isTrashView
-              ? 'Deleted modules. Restore to bring them back, or permanently delete.'
-              : 'Pick up where you or a collaborator left off in any module started in this project.'}
-          </p>
+        <div className="mb-6 flex items-center justify-end gap-4">
           <button
             type="button"
             onClick={handleTrashToggle}
