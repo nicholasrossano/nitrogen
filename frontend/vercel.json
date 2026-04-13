@@ -20,5 +20,15 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/docs",
+      "destination": "https://nitrogenai.mintlify.app/docs"
+    },
+    {
+      "source": "/docs/:match*",
+      "destination": "https://nitrogenai.mintlify.app/docs/:match*"
+    }
   ]
 }
