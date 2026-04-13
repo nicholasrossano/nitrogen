@@ -28,7 +28,7 @@ export function ModuleLandingPage({ onSelectModule, showIntro = true }: ModuleLa
   return (
     <div className="flex flex-col items-center h-full px-6 md:px-8 py-8 overflow-y-auto">
       <div className="w-full max-w-3xl">
-        {showIntro ? (
+        {showIntro && (
           <>
             <h1 className="text-lg font-semibold text-text-primary mb-1">New Module</h1>
             <p className="text-sm text-text-tertiary mb-8">
@@ -36,11 +36,6 @@ export function ModuleLandingPage({ onSelectModule, showIntro = true }: ModuleLa
               and impact estimates to planning and delivery documents.
             </p>
           </>
-        ) : (
-          <p className="text-sm text-text-tertiary mb-8">
-            Choose a module to generate a structured output tailored to your project context, from feasibility models
-            and impact estimates to planning and delivery documents.
-          </p>
         )}
 
         <div className="flex flex-col gap-8">
