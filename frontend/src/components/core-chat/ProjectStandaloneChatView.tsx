@@ -26,7 +26,6 @@ interface ProjectStandaloneChatViewProps {
   initialSessionId?: string | null;
   initialTitle?: string | null;
   onMessageSent?: () => void;
-  onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   /** Called when user clicks an internal citation */
@@ -66,7 +65,6 @@ export function ProjectStandaloneChatView({
   initialSessionId = null,
   initialTitle = null,
   onMessageSent,
-  onBack,
   onEditorWidgetsChange,
   onCitationClick,
   onSessionMetaChange,
@@ -514,8 +512,6 @@ export function ProjectStandaloneChatView({
       messageFeedback={messageFeedback}
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
-      onBack={onBack}
-      title={sessionTitle}
       initiativeId={initiativeId}
       onCitationClick={onCitationClick}
       extraInputActions={hideTiles ? (

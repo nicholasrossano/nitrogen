@@ -229,7 +229,6 @@ export function ProjectWorkspaceEditorPanel({
             instanceId={activeTab.instanceId}
             moduleId={activeTab.moduleId}
             initiativeId={initiativeId}
-            onBack={() => closeTab(activeTab.id)}
             onAddToChat={(text) => onSendToChat?.(text, activeTab.moduleId)}
           />
         )}
