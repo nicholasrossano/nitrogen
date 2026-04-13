@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import type { ModuleWorkflowState, BuildItem } from '@/lib/api';
 import { api } from '@/lib/api';
 import { SetupStage } from './SetupStage';
@@ -68,10 +68,9 @@ interface ModuleWorkspaceProps {
   moduleId: string;
   initiativeId?: string;
   onAddToChat?: (text: string) => void;
-  onBack?: () => void;
 }
 
-export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToChat, onBack }: ModuleWorkspaceProps) {
+export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToChat }: ModuleWorkspaceProps) {
   const [state, setState] = useState<ModuleWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,8 +111,6 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
     },
     [onAddToChat]
   );
-
-  const moduleName = state?.module_definition.name ?? null;
 
   const renderWidget = useCallback(
     (
@@ -181,23 +178,6 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — back arrow + centered module name */}
-      <div className="relative flex items-center px-4 py-3 border-b border-divider flex-shrink-0">
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="p-1 rounded hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
-            title="Close module"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-        )}
-        <h3 className="absolute inset-x-0 text-center text-sm font-medium text-text-primary truncate px-10 pointer-events-none">
-          {moduleName ?? '…'}
-        </h3>
-      </div>
-
-      {/* Body */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12">

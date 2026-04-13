@@ -6,7 +6,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
   ArrowUp,
-  ArrowLeft,
   BookOpen,
   GraduationCap,
   Globe,
@@ -41,9 +40,6 @@ export interface ConversationViewProps {
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
   onSetFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   retryingMessageId: string | null;
-  onBack?: () => void;
-  /** LLM-generated title for the current conversation */
-  title?: string | null;
   /** Required for rendering initiative-specific widgets (alignment, etc.) */
   initiativeId?: string;
   /** Called when user clicks an internal citation (corpus/evidence) */
@@ -92,8 +88,6 @@ export function ConversationView({
   messageFeedback,
   onSetFeedback,
   retryingMessageId,
-  onBack,
-  title,
   initiativeId,
   onCitationClick,
   extraInputActions,
@@ -209,21 +203,6 @@ export function ConversationView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Conversation header — back button + LLM-generated title */}
-      {onBack && (
-        <div className="relative flex items-center px-4 py-3 border-b border-divider flex-shrink-0">
-          <button
-            onClick={onBack}
-            className="p-1 rounded hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
-            title="Back to chat home"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <h3 className="absolute inset-x-0 text-center text-sm font-medium text-text-primary truncate px-10 pointer-events-none">
-            {title || 'New chat'}
-          </h3>
-        </div>
-      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
         <div className="max-w-[52rem] mx-auto">
