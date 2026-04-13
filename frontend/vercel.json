@@ -23,12 +23,24 @@
   ],
   "rewrites": [
     {
+      "source": "/_mintlify/:path*",
+      "destination": "https://nitrogenai.mintlify.app/_mintlify/:path*"
+    },
+    {
+      "source": "/api/request",
+      "destination": "https://nitrogenai.mintlify.app/_mintlify/api/request"
+    },
+    {
       "source": "/docs",
-      "destination": "https://nitrogenai.mintlify.app/docs"
+      "destination": "https://nitrogenai.mintlify.app/"
     },
     {
       "source": "/docs/:match*",
-      "destination": "https://nitrogenai.mintlify.app/docs/:match*"
+      "destination": "https://nitrogenai.mintlify.app/:match*"
+    },
+    {
+      "source": "/mintlify-assets/:path+",
+      "destination": "https://nitrogenai.mintlify.app/mintlify-assets/:path+"
     }
   ]
 }
