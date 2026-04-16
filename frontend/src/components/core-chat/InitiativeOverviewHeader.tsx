@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { Files, Layers3, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
 import { api, type Initiative } from '@/lib/api';
 
+const collaboratorsCountCache = new Map<string, number>();
+
 interface InitiativeOverviewHeaderProps {
   initiative: Initiative;
   filesUploaded: number;
@@ -57,20 +59,36 @@ export function InitiativeOverviewHeader({
   const projectType = formatProjectType(initiative.project_type);
   const hasFiles = filesUploaded > 0;
   const hasOverview = Boolean(initiative.overview_description?.trim());
-  const [collaboratorsCount, setCollaboratorsCount] = useState<number | null>(null);
+  const [collaboratorsCount, setCollaboratorsCount] = useState<number | null>(
+    () => collaboratorsCountCache.get(initiative.id) ?? null,
+  );
 
   useEffect(() => {
+    const cachedCount = collaboratorsCountCache.get(initiative.id);
+    if (cachedCount !== undefined) {
+      setCollaboratorsCount(cachedCount);
+    } else {
+      setCollaboratorsCount(null);
+    }
+
+    const hadCachedCount = cachedCount !== undefined;
+
     let cancelled = false;
 
     api.getShares(initiative.id)
       .then((shares) => {
         if (!cancelled) {
-          setCollaboratorsCount(1 + shares.length);
+          const nextCount = 1 + shares.length;
+          collaboratorsCountCache.set(initiative.id, nextCount);
+          setCollaboratorsCount(nextCount);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setCollaboratorsCount(1);
+          if (!hadCachedCount) {
+            collaboratorsCountCache.set(initiative.id, 1);
+            setCollaboratorsCount(1);
+          }
         }
       });
 
