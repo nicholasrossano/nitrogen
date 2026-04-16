@@ -79,6 +79,8 @@ function ConfirmationBar({
   isPopulating,
   isConfirming,
   hasDownstreamData,
+  isEditingConfirmedStage,
+  onStartEditConfirmedStage,
 }: {
   stageDef: StageDef;
   stageState: StageState;
@@ -87,9 +89,32 @@ function ConfirmationBar({
   isPopulating: boolean;
   isConfirming: boolean;
   hasDownstreamData: boolean;
+  isEditingConfirmedStage: boolean;
+  onStartEditConfirmedStage: () => void;
 }) {
   const status = stageState.status;
   const hasData = !!(stageState.data?.items?.length || stageState.data?.widget_data || stageState.data?.records);
+  const ConfirmCtaButton = ({
+    onClick,
+    disabled,
+    loading,
+  }: {
+    onClick: () => void;
+    disabled?: boolean;
+    loading?: boolean;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+    >
+      {loading ? (
+        <><Loader2 className="w-3 h-3 animate-spin" /> Confirming...</>
+      ) : (
+        <>Confirm</>
+      )}
+    </button>
+  );
 
   if (status === 'confirmed') {
     const confirmedAt = stageState.confirmed_at
@@ -99,15 +124,23 @@ function ConfirmationBar({
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider bg-emerald-50/60">
         <div className="flex items-center gap-2 text-xs text-emerald-700">
           <CheckCircle2 className="w-4 h-4" />
-          <span>Confirmed{confirmedAt ? ` · ${confirmedAt}` : ''}</span>
+          <span>
+            {isEditingConfirmedStage
+              ? 'Editing confirmed stage'
+              : `Confirmed${confirmedAt ? ` · ${confirmedAt}` : ''}`}
+          </span>
         </div>
-        <button
-          onClick={onConfirm}
-          className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-        >
-          Edit & Re-confirm
-          {hasDownstreamData && <span className="text-amber-600 ml-1">(resets next stages)</span>}
-        </button>
+        {isEditingConfirmedStage ? (
+          <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} />
+        ) : (
+          <button
+            onClick={onStartEditConfirmedStage}
+            className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            Edit & Re-confirm
+            {hasDownstreamData && <span className="text-amber-600 ml-1">(resets next stages)</span>}
+          </button>
+        )}
       </div>
     );
   }
@@ -116,17 +149,7 @@ function ConfirmationBar({
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
         <p className="text-xs text-text-tertiary">Populate this stage to get started</p>
-        <button
-          onClick={onPopulate}
-          disabled={isPopulating}
-          className="btn-primary !py-1.5 !px-3 text-xs shrink-0"
-        >
-          {isPopulating ? (
-            <><Loader2 className="w-3 h-3 animate-spin" /> Generating...</>
-          ) : (
-            <>Confirm</>
-          )}
-        </button>
+        <ConfirmCtaButton onClick={onPopulate} loading={isPopulating} />
       </div>
     );
   }
@@ -135,17 +158,7 @@ function ConfirmationBar({
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
         <p className="text-xs text-text-tertiary">Review and confirm when ready</p>
-        <button
-          onClick={onConfirm}
-          disabled={isConfirming || !hasData}
-          className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5"
-        >
-          {isConfirming ? (
-            <><Loader2 className="w-3 h-3 animate-spin" /> Confirming...</>
-          ) : (
-            <>Confirm {stageDef.title}</>
-          )}
-        </button>
+        <ConfirmCtaButton onClick={onConfirm} disabled={!hasData} loading={isConfirming} />
       </div>
     );
   }
@@ -166,9 +179,7 @@ function ConfirmationBar({
           <AlertCircle className="w-3.5 h-3.5" />
           <span>Generation failed</span>
         </div>
-        <button onClick={onPopulate} disabled={isPopulating} className="btn-secondary !py-1.5 !px-3 text-xs">
-          {isPopulating ? 'Retrying...' : 'Retry'}
-        </button>
+        <ConfirmCtaButton onClick={onPopulate} loading={isPopulating} />
       </div>
     );
   }
@@ -192,6 +203,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   const [activeStageId, setActiveStageId] = useState<string | null>(null);
   const [isPopulating, setIsPopulating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [editingConfirmedStageIds, setEditingConfirmedStageIds] = useState<Record<string, boolean>>({});
 
   // Refresh callback for child components (onChanged / onWorkflowUpdated).
   const fetchState = useCallback(async () => {
@@ -325,6 +337,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
       if (ws.current_stage_id && ws.current_stage_id !== stageId) {
         setActiveStageId(ws.current_stage_id);
       }
+      setEditingConfirmedStageIds((prev) => ({ ...prev, [stageId]: false }));
     } catch (e: any) {
       setError(e.message ?? 'Failed to confirm stage');
     } finally {
@@ -373,6 +386,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   }
 
   const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
+  const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
 
   // Downstream stages after the current one that have data
   const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
@@ -391,6 +405,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
     const { component, widget, fields, id: stageId } = currentStageDef;
     const stageData = currentStageState.data;
     const isConfirmed = currentStageState.status === 'confirmed';
+    const readOnly = isConfirmed && !isEditingConfirmedStage;
 
     if (component === 'computed_results') {
       return renderComputedWidget(widget, stageData?.widget_data);
@@ -403,7 +418,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           stageId={stageId}
           fields={fields}
           items={stageData?.items ?? []}
-          readOnly={isConfirmed}
+          readOnly={readOnly}
           onChanged={fetchState}
         />
       );
@@ -416,7 +431,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           stageId={stageId}
           fields={fields}
           items={stageData?.items ?? []}
-          readOnly={isConfirmed}
+          readOnly={readOnly}
           onChanged={fetchState}
         />
       );
@@ -436,7 +451,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           stageDef={currentStageDef}
           stageData={currentStageState.data}
           categoryItems={categoryItems}
-          readOnly={isConfirmed}
+          readOnly={readOnly}
           onChanged={fetchState}
           onAddToChat={onAddToChat}
         />
@@ -495,6 +510,13 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
               isPopulating={isPopulating}
               isConfirming={isConfirming}
               hasDownstreamData={hasDownstreamData}
+              isEditingConfirmedStage={isEditingConfirmedStage}
+              onStartEditConfirmedStage={() =>
+                setEditingConfirmedStageIds((prev) => ({
+                  ...prev,
+                  [currentStageDef.id]: true,
+                }))
+              }
             />
           </div>
         </div>

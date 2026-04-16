@@ -1,5 +1,20 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, GripVertical, Trash2 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { getIconByName } from '@/lib/icons';
 
@@ -18,6 +33,12 @@ interface PlanStructureColumnProps {
   onToggleComplete?: (itemId: string) => void;
   phases?: PlanWorkspacePhase[];
   onAddItem?: (groupId: string, title: string, phaseId?: string) => Promise<void>;
+  showItemKindBadge?: boolean;
+  showItemCompleteToggle?: boolean;
+  showItemBranchDelete?: boolean;
+  showItemRightActions?: boolean;
+  enableItemSorting?: boolean;
+  onReorderItems?: (itemIds: string[]) => Promise<void>;
 }
 
 const DEFAULT_VISIBLE = 10;
@@ -49,6 +70,12 @@ export function PlanStructureColumn({
   onToggleComplete,
   phases,
   onAddItem,
+  showItemKindBadge = true,
+  showItemCompleteToggle = true,
+  showItemBranchDelete = true,
+  showItemRightActions = false,
+  enableItemSorting = false,
+  onReorderItems,
 }: PlanStructureColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const [internalExpanded, setInternalExpanded] = useState(false);
@@ -69,6 +96,115 @@ export function PlanStructureColumn({
   const visibleItems = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
   const hiddenCount = items.length - DEFAULT_VISIBLE;
   const Icon = getIconByName(group.icon);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const renderPlanItem = (item: PlanWorkspaceItem, idx: number) => {
+    const itemIsComplete = completedIds?.has(item.id) ?? false;
+    return (
+    <PlanItemNode
+      key={item.id}
+      item={item}
+      isLast={idx === visibleItems.length - 1 && (showAll || hiddenCount <= 0) && !isAdding}
+      onOpen={onOpenItem ? (nextItem) => onOpenItem(nextItem, group) : undefined}
+      onDelete={onDeleteItem ? () => onDeleteItem(item.id) : undefined}
+      isComplete={itemIsComplete}
+      onToggleComplete={onToggleComplete}
+      showKindBadge={showItemKindBadge}
+      showCompleteToggle={showItemCompleteToggle}
+      showBranchDelete={showItemBranchDelete}
+      rightActions={showItemRightActions && !itemIsComplete ? (
+        <div className="flex items-center gap-1">
+          {enableItemSorting && (
+            <button
+              type="button"
+              className="text-text-tertiary hover:text-text-secondary cursor-grab active:cursor-grabbing p-0.5"
+              aria-label="Reorder item"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onDeleteItem && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDeleteItem(item.id);
+              }}
+              className="text-text-tertiary hover:text-red-400 transition-colors p-0.5"
+              aria-label="Delete item"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      ) : undefined}
+    />
+    );
+  };
+
+  function SortablePlanItem({ item, idx }: { item: PlanWorkspaceItem; idx: number }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+    const itemIsComplete = completedIds?.has(item.id) ?? false;
+    return (
+      <div
+        ref={setNodeRef}
+        style={{ transform: CSS.Transform.toString(transform), transition }}
+        className={isDragging ? 'opacity-60' : undefined}
+      >
+        <PlanItemNode
+          item={item}
+          isLast={idx === visibleItems.length - 1 && (showAll || hiddenCount <= 0) && !isAdding}
+          onOpen={onOpenItem ? (nextItem) => onOpenItem(nextItem, group) : undefined}
+          onDelete={onDeleteItem ? () => onDeleteItem(item.id) : undefined}
+          isComplete={itemIsComplete}
+          onToggleComplete={onToggleComplete}
+          showKindBadge={showItemKindBadge}
+          showCompleteToggle={showItemCompleteToggle}
+          showBranchDelete={showItemBranchDelete}
+          rightActions={showItemRightActions && !itemIsComplete ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                {...attributes}
+                {...listeners}
+                onClick={(e) => e.preventDefault()}
+                className="text-text-tertiary hover:text-text-secondary cursor-grab active:cursor-grabbing p-0.5"
+                aria-label="Reorder item"
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </button>
+              {onDeleteItem && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDeleteItem(item.id);
+                  }}
+                  className="text-text-tertiary hover:text-red-400 transition-colors p-0.5"
+                  aria-label="Delete item"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : undefined}
+        />
+      </div>
+    );
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (!enableItemSorting || !onReorderItems) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = visibleItems.findIndex((item) => item.id === active.id);
+    const newIdx = visibleItems.findIndex((item) => item.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(visibleItems, oldIdx, newIdx);
+    await onReorderItems(reordered.map((item) => item.id));
+  };
 
   const handleStartAdding = () => {
     setIsAdding(true);
@@ -128,17 +264,17 @@ export function PlanStructureColumn({
 
       {itemsExpanded && (
         <div className="flex-1 overflow-y-auto min-h-0">
-          {visibleItems.map((item, idx) => (
-            <PlanItemNode
-              key={item.id}
-              item={item}
-              isLast={idx === visibleItems.length - 1 && (showAll || hiddenCount <= 0) && !isAdding}
-              onOpen={onOpenItem ? (nextItem) => onOpenItem(nextItem, group) : undefined}
-              onDelete={onDeleteItem ? () => onDeleteItem(item.id) : undefined}
-              isComplete={completedIds?.has(item.id) ?? false}
-              onToggleComplete={onToggleComplete}
-            />
-          ))}
+          {enableItemSorting && onReorderItems ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={visibleItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                {visibleItems.map((item, idx) => (
+                  <SortablePlanItem key={item.id} item={item} idx={idx} />
+                ))}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            visibleItems.map((item, idx) => renderPlanItem(item, idx))
+          )}
 
           {!showAll && hiddenCount > 0 && (
             <div className="flex items-stretch">
