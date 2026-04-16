@@ -7,7 +7,7 @@ import { api, type Initiative } from '@/lib/api';
 interface InitiativeOverviewHeaderProps {
   initiative: Initiative;
   filesUploaded: number;
-  modulesCreated: number;
+  modulesCreated: number | null;
   isGenerating: boolean;
   errorMessage: string | null;
   canRefresh: boolean;
@@ -28,7 +28,7 @@ function FootprintBox({
   Icon,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   Icon: typeof Files;
 }) {
   return (
@@ -37,7 +37,9 @@ function FootprintBox({
         <Icon className="w-3.5 h-3.5" />
         {label}
       </div>
-      <div className="mt-2 text-2xl font-semibold text-text-primary tabular-nums">{value}</div>
+      <div className="mt-2 text-2xl font-semibold text-text-primary tabular-nums">
+        {value === null ? '—' : value}
+      </div>
     </div>
   );
 }
@@ -76,8 +78,6 @@ export function InitiativeOverviewHeader({
       cancelled = true;
     };
   }, [initiative.id]);
-
-  const resolvedCollaboratorsCount = collaboratorsCount ?? 1;
 
   return (
     <div className="w-full">
@@ -155,7 +155,7 @@ export function InitiativeOverviewHeader({
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <FootprintBox label="Collaborators" value={resolvedCollaboratorsCount} Icon={Users} />
+        <FootprintBox label="Collaborators" value={collaboratorsCount} Icon={Users} />
         <FootprintBox label="Modules Created" value={modulesCreated} Icon={Layers3} />
         <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
       </div>

@@ -12,8 +12,6 @@ const DocumentViewerWidget = dynamic(() => import('@/components/widgets/Document
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
 const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
 
-export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
-
 export const EDITOR_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
   'carbon_inputs', 'carbon_output',

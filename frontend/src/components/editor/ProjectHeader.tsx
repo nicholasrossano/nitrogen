@@ -16,7 +16,7 @@ import {
 import { api, Initiative } from '@/lib/api';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 
-type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'editor' | 'workspace';
+type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'workspace';
 
 interface PanelToggle {
   active: boolean;
@@ -105,7 +105,6 @@ export function ProjectHeader({
     switch (icon) {
       case 'chat':
         return <MessageSquare className="w-4 h-4" />;
-      case 'editor':
       case 'workspace':
         return <PanelsTopLeft className="w-4 h-4" />;
       case 'panel-right':
