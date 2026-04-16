@@ -73,18 +73,18 @@ class BasePlanHandler(ABC):
         """Return widget_data for the shared structure-confirm widget."""
 
         return {
-            "plan_type": self.definition.id,
+            "planType": self.definition.id,
             "title": f"Proposed {self.definition.name} Structure",
             "subtitle": (
                 f"Proposing the following {len(structure)} sections. Review and confirm to "
                 "generate the full breakdown, or propose changes in the chat."
             ),
-            "pending_title": f"Building your {self.definition.name.lower()}...",
-            "pending_subtitle_template": "Generating detailed breakdown for {count} sections",
-            "success_message": f"{self.definition.name} generated.",
-            "footer_hint": "Remove sections above · Request changes via the chat",
-            "confirm_label": "Confirm & Generate Plan",
-            "min_selected": 2,
+            "pendingTitle": f"Building your {self.definition.name.lower()}...",
+            "pendingSubtitleTemplate": "Generating detailed breakdown for {count} sections",
+            "successMessage": f"{self.definition.name} generated.",
+            "footerHint": "Remove sections above · Request changes via the chat",
+            "confirmLabel": "Confirm & Generate Plan",
+            "minSelected": 2,
             "options": structure,
             "action": {"type": f"confirm_{self.definition.id}_structure"},
         }
@@ -99,16 +99,16 @@ class BasePlanHandler(ABC):
             for group in groups
         )
         return {
-            "plan_type": self.definition.id,
+            "planType": self.definition.id,
             "title": self.definition.name,
-            "total_items": total_items,
-            "required_count": required_count,
+            "totalItems": total_items,
+            "requiredCount": required_count,
             "groups": [
                 {
                     "id": group["id"],
                     "name": group["name"],
-                    "item_count": len(group.get("items", [])),
-                    "required_count": len(
+                    "itemCount": len(group.get("items", [])),
+                    "requiredCount": len(
                         [item for item in group.get("items", []) if item.get("classification") == "required"]
                     ),
                     "icon": group.get("icon"),
@@ -121,9 +121,8 @@ class BasePlanHandler(ABC):
         """Return widget_data for the shared plan summary widget."""
 
         return {
-            "plan_type": self.definition.id,
+            "planType": self.definition.id,
             "title": self.definition.name,
-            "footer_text": "You can edit this as needed in the diagram directly.",
-            "plan": plan,
-            "summary": self.summarize_plan(plan),
+            "footerText": "You can edit this as needed in the diagram directly.",
+            **self.summarize_plan(plan),
         }

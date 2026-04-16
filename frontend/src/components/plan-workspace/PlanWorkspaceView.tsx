@@ -58,6 +58,7 @@ interface PlanWorkspaceViewProps {
   onToggleComplete: (itemId: string) => void;
   onAddItem?: (groupId: string, title: string, phaseId?: string) => Promise<void>;
   onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
+  onViewModeChange?: (modeId: string) => void;
   emptyState?: Partial<EmptyStateConfig>;
   colors?: string[];
 }
@@ -85,6 +86,7 @@ export function PlanWorkspaceView({
   onToggleComplete,
   onAddItem,
   onOpenDocument,
+  onViewModeChange,
   emptyState,
   colors = DEFAULT_COLORS,
 }: PlanWorkspaceViewProps) {
@@ -132,7 +134,7 @@ export function PlanWorkspaceView({
     [groups, selectedFilterId],
   );
 
-  const hasPhases = phases.length > 0 && groups.some((group) => group.items.some((item) => item.phaseId));
+  const hasPhases = phases.length > 0;
   const visibleDisplayModes = useMemo(
     () => displayModes.filter((mode) => mode.id !== 'phase' || hasPhases),
     [displayModes, hasPhases],
@@ -385,6 +387,7 @@ export function PlanWorkspaceView({
                         key={mode.id}
                         onClick={() => {
                           setViewMode(mode.id);
+                          onViewModeChange?.(mode.id);
                           if (mode.id === 'group') setSelectedFilterId(null);
                         }}
                         className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150 ${
@@ -441,7 +444,7 @@ export function PlanWorkspaceView({
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 pt-2">
-                <div className="max-w-3xl mx-auto space-y-6">
+                <div className="w-full max-w-none space-y-6">
                   {phaseGroups.map((phaseGroup, idx) => (
                     <PhaseSection
                       key={phaseGroup.phase.id}

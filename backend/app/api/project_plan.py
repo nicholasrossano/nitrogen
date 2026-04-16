@@ -22,6 +22,21 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _ensure_plan_metadata(
+    db: AsyncSession,
+    user_id: str | None,
+    plan: dict | None,
+) -> dict | None:
+    """Backfill plan metadata for legacy payloads without mutating storage eagerly."""
+
+    if not plan:
+        return plan
+    if plan.get("plan_type") and plan.get("schema_version"):
+        return plan
+    handler = get_plan_registry().default_handler(db, user_id)
+    return handler.attach_metadata(plan)
+
+
 class StatusUpdate(BaseModel):
     status: str  # not_started | in_progress | complete
 
@@ -51,7 +66,7 @@ async def get_project_plan(
 ):
     """Return the cached project plan, or null if none exists."""
     initiative = await require_viewer(db, initiative_id, user)
-    return {"project_plan": initiative.project_plan}
+    return {"project_plan": _ensure_plan_metadata(db, user.uid, initiative.project_plan)}
 
 
 @router.post("/initiatives/{initiative_id}/project-plan")
@@ -186,6 +201,7 @@ async def update_plan_item_status(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     found = False
     for pillar in initiative.project_plan.get("pillars", []):
@@ -258,6 +274,7 @@ async def delete_plan_item(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     found = False
     for pillar in initiative.project_plan.get("pillars", []):
@@ -290,6 +307,7 @@ async def delete_plan_element(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     deep_dives = initiative.project_plan.get("deep_dives", {})
     dive = deep_dives.get(item_id)
@@ -321,6 +339,7 @@ async def add_plan_item(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     title = body.title.strip()
     if not title:
@@ -375,7 +394,7 @@ async def deep_dive_plan_item(
     service = DeepDiveService(db, user_id=user.uid)
 
     # Check for cached LLM result
-    plan = initiative.project_plan or {}
+    plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan) or {}
     cached = plan.get("deep_dives", {}).get(item_id)
 
     if cached:

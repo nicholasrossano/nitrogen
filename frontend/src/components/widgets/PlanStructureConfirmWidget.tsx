@@ -9,7 +9,10 @@ import type { ProposedCategory } from '@/lib/api';
 import { getIconByName } from '@/lib/icons';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
-import { runPlanStructureConfirmAction } from './planWidgetRegistry';
+import {
+  getPlanStructureConfirmRuntime,
+  runPlanStructureConfirmAction,
+} from './planWidgetRegistry';
 
 interface PlanStructureConfirmWidgetProps {
   data: PlanWorkspaceStructureConfirmData;
@@ -22,12 +25,14 @@ export function PlanStructureConfirmWidget({
   initiativeId,
   isActive = true,
 }: PlanStructureConfirmWidgetProps) {
-  const { confirmPlanCategories, projectPlanLoading, projectPlan } = useInitiativeStore();
+  const store = useInitiativeStore();
+  const { confirmPlanCategories } = store;
   const [localOptions, setLocalOptions] = useState(data.options);
   const [confirmedLocal, setConfirmedLocal] = useState(false);
 
-  const confirmed = confirmedLocal || !!projectPlan;
-  const isLoading = projectPlanLoading && confirmed;
+  const runtime = getPlanStructureConfirmRuntime(data.action.type, store);
+  const confirmed = confirmedLocal || runtime.completed;
+  const isLoading = runtime.loading && confirmed;
   const canInteract = isActive && !confirmed;
   const canRemove = localOptions.length > data.minSelected;
 
