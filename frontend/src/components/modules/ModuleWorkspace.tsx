@@ -400,6 +400,8 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
 
   const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
   const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
+  const isEditableInputTableStage =
+    currentStageDef.component === 'table' && currentStageDef.widget === 'editable_table';
 
   // Current stage index (used for deriving prior stages in workspace stages)
   const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
@@ -426,6 +428,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           fields={fields}
           items={stageData?.items ?? []}
           readOnly={readOnly}
+          flush
           onChanged={fetchState}
         />
       );
@@ -575,7 +578,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
                 </p>
               </div>
 
-              <div className="p-4">
+              <div className={isEditableInputTableStage ? '' : 'p-4'}>
                 {renderStageContent()}
               </div>
 
