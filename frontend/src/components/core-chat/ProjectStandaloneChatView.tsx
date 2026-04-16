@@ -15,6 +15,7 @@ import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+const activeModulesCountCache = new Map<string, number>();
 
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
@@ -92,7 +93,9 @@ export function ProjectStandaloneChatView({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
-  const [activeModulesCount, setActiveModulesCount] = useState<number | null>(null);
+  const [activeModulesCount, setActiveModulesCount] = useState<number | null>(
+    () => activeModulesCountCache.get(initiativeId) ?? null,
+  );
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewGenerating, setOverviewGenerating] = useState(false);
   const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
@@ -441,16 +444,28 @@ export function ProjectStandaloneChatView({
   useEffect(() => {
     if (!hideTiles || !isOnLanding) return;
 
+    const cachedCount = activeModulesCountCache.get(initiativeId);
+    if (cachedCount !== undefined) {
+      setActiveModulesCount(cachedCount);
+    } else {
+      setActiveModulesCount(null);
+    }
+
+    const hadCachedCount = cachedCount !== undefined;
+
     let cancelled = false;
     api.listModuleInstances(initiativeId)
       .then((instances) => {
         if (!cancelled) {
+          activeModulesCountCache.set(initiativeId, instances.length);
           setActiveModulesCount(instances.length);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setActiveModulesCount(null);
+          if (!hadCachedCount) {
+            setActiveModulesCount(null);
+          }
         }
       });
 
@@ -475,7 +490,7 @@ export function ProjectStandaloneChatView({
   useEffect(() => {
     setOverviewError(null);
     setOverviewGenerating(false);
-    setActiveModulesCount(null);
+    setActiveModulesCount(activeModulesCountCache.get(initiativeId) ?? null);
     autoOverviewAttemptRef.current = null;
   }, [initiativeId]);
 
