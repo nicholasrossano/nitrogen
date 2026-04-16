@@ -199,16 +199,17 @@ export function ProjectChatTabsPanel({
   }, [loadSessions, researchMode]);
 
   const handleTabMetaChange = useCallback((tabId: string, meta: { sessionId: string | null; title: string | null }) => {
-    if (meta.sessionId) {
+    const sessionId = meta.sessionId;
+    if (sessionId) {
       const title = meta.title?.trim() || 'Untitled';
       setSessions((prev) => {
-        const existing = prev.find((session) => session.id === meta.sessionId);
+        const existing = prev.find((session) => session.id === sessionId);
         if (existing) {
           return prev.map((session) =>
-            session.id === meta.sessionId ? { ...session, title } : session,
+            session.id === sessionId ? { ...session, title } : session,
           );
         }
-        return [{ id: meta.sessionId, title, createdAt: Date.now(), messages: [] }, ...prev].slice(0, 50);
+        return [{ id: sessionId, title, createdAt: Date.now(), messages: [] }, ...prev].slice(0, 50);
       });
     }
 
