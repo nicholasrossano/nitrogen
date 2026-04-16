@@ -1,13 +1,11 @@
 """
 Carbon Emissions Calculator Tool — callable within chat.
 
-Orchestration flow:
-1. Tool is invoked (by orchestration action or directly).
-2. LLM extracts candidate inputs from chat history + uploaded docs.
-3. Engine fills gaps with method-pack defaults.
-4. Inputs table widget is shown; user confirms / edits.
-5. Engine calculates ERs; outputs widget is shown.
-6. User can iterate (edit input → recompute) or request sensitivity / export.
+Stage workflow:
+  1. Inputs  (table / editable_table)   — pre-populated from engine defaults; user confirms.
+  2. Results (computed_results / carbon_results) — auto-computed after Inputs confirmed; user confirms.
+
+Chat path uses execute_from_conversation() (not part of the stage contract).
 """
 
 from __future__ import annotations
@@ -26,6 +24,9 @@ from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
+    FieldDef,
+    PopulationStep,
+    StageDef,
     ExecutionModel,
     ModuleManifest,
     ProgressCallback,
@@ -49,100 +50,45 @@ INPUT_EXTRACTION_SCHEMA = {
                 "cookstoves", "fuel_switch", "safe_water",
                 "grid_renewable", "solar_home", "biodigester", "efficient_lighting",
             ],
-            "description": (
-                "Project type determining calculation methodology. "
-                "'cookstoves': improved biomass cookstoves (biomass-to-biomass). "
-                "'fuel_switch': biomass to LPG/biogas/ethanol. "
-                "'safe_water': water purification replacing fuel-based boiling. "
-                "'grid_renewable': grid-connected solar/wind/hydro/geothermal. "
-                "'solar_home': off-grid solar home systems displacing kerosene/diesel. "
-                "'biodigester': animal manure biodigesters (methane avoidance + fuel). "
-                "'efficient_lighting': replacing incandescent/CFL with LED. "
-                "Default to 'cookstoves' if unclear but involves cooking or stoves."
-            ),
+            "description": "Project type determining calculation methodology.",
         },
-        # --- Shared ---
-        "usage_rate": {"type": "number", "description": "Usage rate (0-1). 1.0 = 100%."},
-        "adoption_rate": {"type": "number", "description": "Adoption rate (0-1). 1.0 = full in year 1."},
-        "baseline_fuel_type": {"type": "string", "description": "Baseline fuel: wood, charcoal, kerosene, dung."},
-        "fnrb": {"type": "number", "description": "Fraction of non-renewable biomass (0-1)."},
-        "crediting_period_years": {"type": "integer", "description": "Crediting period in years."},
-        # --- Cookstoves & fuel switch ---
-        "devices_households": {"type": "number", "description": "Number of devices/households (cookstoves & fuel switch)."},
-        "baseline_fuel_consumption_kg_yr": {"type": "number", "description": "Baseline fuel in kg/yr per device/household."},
-        "project_fuel_type": {"type": "string", "description": "Project fuel: improved_biomass, lpg, biogas, ethanol."},
-        "project_fuel_consumption_kg_yr": {"type": "number", "description": "Project fuel in kg/yr per device/household."},
-        "baseline_efficiency": {"type": "number", "description": "Baseline stove thermal efficiency (decimal)."},
-        "project_efficiency": {"type": "number", "description": "Project stove thermal efficiency (decimal)."},
-        "fuel_savings_pct": {"type": "number", "description": "Fuel savings % as decimal (cookstoves only)."},
-        "emission_factor_kgco2_per_kg": {"type": "number", "description": "Direct EF kgCO2/kg (cookstoves only). ~1.747 for wood."},
-        # --- Safe water ---
-        "people_served": {"type": "number", "description": "Number of people served (safe water projects)."},
-        "water_per_person_day": {"type": "number", "description": "Litres of drinking water per person per day. Default 4, cap 5.5."},
-        "proportion_already_safe": {"type": "number", "description": "Proportion already with safe water before project (0-1)."},
-        "proportion_still_boiling": {"type": "number", "description": "Proportion still boiling after project (0-1)."},
-        # --- Grid renewable energy ---
-        "installed_capacity_kw": {"type": "number", "description": "Installed capacity in kW (grid renewable)."},
-        "capacity_factor": {"type": "number", "description": "Capacity factor 0-1 (grid renewable). ~0.18 solar, ~0.30 wind."},
-        "grid_emission_factor": {"type": "number", "description": "Grid EF in tCO₂/MWh (grid renewable, efficient lighting)."},
-        # --- Solar home systems ---
-        "num_systems": {"type": "number", "description": "Number of solar home systems deployed."},
-        "system_capacity_wp": {"type": "number", "description": "SHS panel watt-peak capacity (Wp)."},
-        "peak_sun_hours": {"type": "number", "description": "Average peak sun hours per day."},
-        "baseline_fuel_consumption_l_yr": {"type": "number", "description": "Baseline kerosene/diesel per HH per year (litres)."},
-        # --- Biodigesters ---
-        "num_digesters": {"type": "number", "description": "Number of biodigesters installed."},
-        "livestock_type": {"type": "string", "description": "Livestock type: dairy_cattle, other_cattle, swine, poultry, buffalo, sheep, goats."},
-        "num_animals": {"type": "number", "description": "Number of animals per digester."},
-        # --- Efficient lighting ---
-        "num_lamps": {"type": "number", "description": "Number of project lamps distributed."},
-        "baseline_wattage": {"type": "number", "description": "Baseline lamp wattage (W). Typical incandescent ~60W."},
-        "project_wattage": {"type": "number", "description": "Project lamp wattage (W). Typical LED ~9W."},
-        "operating_hours_per_day": {"type": "number", "description": "Daily lamp operating hours. Default 3.5, max 5.0."},
+        "usage_rate": {"type": "number"},
+        "adoption_rate": {"type": "number"},
+        "baseline_fuel_type": {"type": "string"},
+        "fnrb": {"type": "number"},
+        "crediting_period_years": {"type": "integer"},
+        "devices_households": {"type": "number"},
+        "baseline_fuel_consumption_kg_yr": {"type": "number"},
+        "project_fuel_type": {"type": "string"},
+        "project_fuel_consumption_kg_yr": {"type": "number"},
+        "baseline_efficiency": {"type": "number"},
+        "project_efficiency": {"type": "number"},
+        "fuel_savings_pct": {"type": "number"},
+        "emission_factor_kgco2_per_kg": {"type": "number"},
+        "people_served": {"type": "number"},
+        "water_per_person_day": {"type": "number"},
+        "proportion_already_safe": {"type": "number"},
+        "proportion_still_boiling": {"type": "number"},
+        "installed_capacity_kw": {"type": "number"},
+        "capacity_factor": {"type": "number"},
+        "grid_emission_factor": {"type": "number"},
+        "num_systems": {"type": "number"},
+        "system_capacity_wp": {"type": "number"},
+        "peak_sun_hours": {"type": "number"},
+        "baseline_fuel_consumption_l_yr": {"type": "number"},
+        "num_digesters": {"type": "number"},
+        "livestock_type": {"type": "string"},
+        "num_animals": {"type": "number"},
+        "num_lamps": {"type": "number"},
+        "baseline_wattage": {"type": "number"},
+        "project_wattage": {"type": "number"},
+        "operating_hours_per_day": {"type": "number"},
     },
 }
 
 
 class CarbonTool(BaseModule):
-    """Carbon emissions calculator for chat-based ER estimation."""
-
-    @property
-    def workspace_setup_fields(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Project geography or operating market.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kenya",
-            },
-            {
-                "name": "method_pack",
-                "label": "Project Type",
-                "description": "Select the carbon methodology family that best matches the project.",
-                "field_type": "select",
-                "required": True,
-                "options": [
-                    "cookstoves",
-                    "fuel_switch",
-                    "safe_water",
-                    "grid_renewable",
-                    "solar_home",
-                    "biodigester",
-                    "efficient_lighting",
-                ],
-                "placeholder": None,
-            },
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Working title for this module run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            },
-        ]
+    """Carbon emissions calculator."""
 
     @property
     def definition(self) -> ModuleDefinition:
@@ -173,9 +119,7 @@ class CarbonTool(BaseModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="Estimate project emission reductions and uncertainty sensitivity.",
-            primary_ui_object="carbon_output",
-            workspace_build_widget="carbon_inputs",
-            workspace_output_widget="carbon_output",
+            primary_ui_object="carbon_results",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "carbon"},
             input_dependencies=[],
@@ -185,12 +129,133 @@ class CarbonTool(BaseModule):
             evidence_behavior="none",
         )
 
+    @property
+    def stage_defs(self) -> list[StageDef]:
+        return [
+            StageDef(
+                id="inputs",
+                title="Inputs",
+                component="table",
+                widget="editable_table",
+                fields=[
+                    FieldDef("variable", "text", required=True, label="Variable"),
+                    FieldDef("value", "number", label="Value"),
+                    FieldDef("unit", "text", label="Unit"),
+                ],
+                population=[
+                    PopulationStep("start_from_predefined_rows"),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("infer_missing_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="results",
+                title="Results",
+                component="computed_results",
+                widget="carbon_results",
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "inputs"}),
+                    PopulationStep("compute_with_module_logic"),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+        ]
+
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def get_predefined_rows(self, stage_id: str, context: dict) -> list[dict]:
+        if stage_id != "inputs":
+            return []
+        from app.services.carbon_engine import CarbonEngine
+
+        method_pack = context.get("tool_inputs", {}).get("method_pack") or context.get("project_type")
+        known_values: dict[str, Any] = {}
+        if method_pack:
+            known_values["method_pack"] = method_pack
+
+        inputs = CarbonEngine.build_default_inputs(method_pack=method_pack, known_values=known_values)
+        rows = []
+        for key, inp_obj in inputs.items():
+            d = inp_obj.to_dict() if hasattr(inp_obj, "to_dict") else {}
+            rows.append({
+                "variable": d.get("label", key),
+                "value": d.get("value"),
+                "unit": d.get("unit", ""),
+                "category": d.get("category", "general"),
+                "status": d.get("status", "assumed"),
+                "rationale": d.get("rationale", ""),
+            })
+        return rows
+
+    async def compute_stage(
+        self,
+        stage_id: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        if stage_id != "results":
+            raise ValueError(f"compute_stage called for unexpected stage '{stage_id}'")
+
+        inputs_data = (confirmed_stages.get("inputs") or {}).get("data") or {}
+        items = inputs_data.get("items", [])
+
+        known_values: dict[str, Any] = {}
+        method_pack = None
+        for item in items:
+            content = item.get("content", {})
+            var = content.get("variable", "")
+            val = content.get("value")
+            if val is None:
+                continue
+            key = var.lower().replace(" ", "_")
+            if "method_pack" in key or "project_type" in key:
+                method_pack = val
+            else:
+                known_values[key] = val
+
+        return await self.recalculate_from_values(method_pack=method_pack, known_values=known_values)
+
+    async def recalculate_from_values(
+        self,
+        method_pack: str | None,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        adapter = get_adapter_registry().get("carbon")
+        if adapter is None:
+            raise RuntimeError("carbon adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="carbon:compute_stage",
+        )
+        result = await adapter.execute(ctx, None, {"method_pack": method_pack, "known_values": known_values})
+        result_data = dict(result.output)
+        result_data["method_pack"] = method_pack
+        return result_data
+
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        results_data = (confirmed_stages.get("results") or {}).get("data") or {}
+        widget_data = results_data.get("widget_data", {})
+        from app.services.carbon_engine import CarbonEngine
+        return CarbonEngine.export_xlsx(widget_data)
+
     def is_exportable(self, content: dict) -> bool:
         return bool(
             isinstance(content, dict)
             and content.get("computable", False)
             and content.get("inputs")
         )
+
+    # ------------------------------------------------------------------ #
+    # Chat-path methods                                                    #
+    # ------------------------------------------------------------------ #
 
     @property
     def required_inputs(self) -> list[ModuleInput]:
@@ -205,7 +270,7 @@ class CarbonTool(BaseModule):
             ModuleInput(
                 name="baseline_fuel_consumption_kg_yr",
                 label="Baseline Fuel Consumption (kg/yr per device)",
-                description="How much fuel does each household consume per year under the baseline scenario?",
+                description="How much fuel does each household consume per year under the baseline?",
                 input_type="number",
                 placeholder="e.g. 2000",
             ),
@@ -217,26 +282,18 @@ class CarbonTool(BaseModule):
             ModuleInput(
                 name="project_fuel_consumption_kg_yr",
                 label="Project Fuel Consumption (kg/yr per device)",
-                description="How much fuel per household per year under the project scenario? If not provided, will be derived from efficiency ratio.",
+                description="How much fuel per household per year under the project scenario?",
                 input_type="number",
                 required=False,
                 placeholder="e.g. 700",
             ),
             ModuleInput(
                 name="fnrb",
-                label="fNRB (fraction of non-renewable biomass)",
-                description="Fraction of non-renewable biomass. Default varies by methodology.",
+                label="fNRB",
+                description="Fraction of non-renewable biomass.",
                 input_type="number",
                 required=False,
                 default=0.70,
-            ),
-            ModuleInput(
-                name="crediting_period_years",
-                label="Crediting Period (years)",
-                description="How many years is the crediting period?",
-                input_type="number",
-                required=False,
-                default=10,
             ),
         ]
 
@@ -255,7 +312,6 @@ class CarbonTool(BaseModule):
         user_id: str | None = None,
         db: AsyncSession | None = None,
     ) -> dict[str, Any]:
-        """Extract carbon inputs from raw conversation text via LLM."""
         client, is_byok = await get_openai_client(user_id, db)
         try:
             resp = await client.chat.completions.create(
@@ -264,21 +320,9 @@ class CarbonTool(BaseModule):
                     {
                         "role": "system",
                         "content": (
-                            "You are a carbon project analyst specialising in emission reduction "
-                            "methodologies. Extract any carbon-ER-relevant numeric inputs from "
-                            "the conversation below. "
-                            "Only include values that are explicitly stated or clearly implied. "
-                            "Convert units where needed (e.g. tonnes → kg). "
-                            "For rates (usage_rate, adoption_rate, fnrb, efficiencies), return as decimals (0-1). "
-                            "Set method_pack based on the project type:\n"
-                            "- 'cookstoves': improved biomass cookstoves replacing traditional stoves\n"
-                            "- 'fuel_switch': switching from biomass to LPG, biogas, or ethanol\n"
-                            "- 'safe_water': water purification/filtration replacing fuel-based boiling\n"
-                            "- 'grid_renewable': grid-connected solar, wind, hydro, or geothermal power\n"
-                            "- 'solar_home': off-grid solar home systems displacing kerosene/diesel\n"
-                            "- 'biodigester': animal manure biodigesters (methane avoidance + cooking fuel)\n"
-                            "- 'efficient_lighting': LED/CFL replacing incandescent lamps\n"
-                            "Default to 'cookstoves' if unclear but the project involves cooking or stoves."
+                            "You are a carbon project analyst. Extract any carbon-ER-relevant "
+                            "numeric inputs from the conversation below. "
+                            "Only include values that are explicitly stated or clearly implied."
                         ),
                     },
                     {"role": "user", "content": conversation_text},
@@ -303,80 +347,15 @@ class CarbonTool(BaseModule):
             logger.error(f"Carbon input extraction failed: {e}")
             return {}
 
-    async def extract_inputs_from_context(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        user_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Extract carbon inputs from DB-stored chat history and project context."""
-        result = await db.execute(
-            select(Initiative).where(Initiative.id == initiative_id)
-        )
-        initiative = result.scalar_one_or_none()
-        if not initiative:
-            return {}
-
-        msgs_result = await db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.initiative_id == initiative_id)
-            .order_by(ChatMessage.created_at)
-        )
-        messages = list(msgs_result.scalars().all())
-
-        conversation_text = "\n".join(
-            f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}"
-            for m in messages[-20:]
-        )
-
-        project_context = (
-            f"Project type: {initiative.project_type or 'Unknown'}\n"
-            f"Description: {initiative.project_description or 'N/A'}\n"
-            f"Geography: {initiative.geography or 'Not specified'}"
-        )
-
-        return await self.extract_inputs_from_text(
-            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}",
-            user_id=user_id,
-            db=db,
-        )
-
-    async def execute(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        inputs: dict[str, Any],
-        include_corpus: bool = True,
-    ) -> ModuleOutput:
-        """Full carbon execution: extract → fill defaults → calculate → return structured output."""
-
-        extracted = await self.extract_inputs_from_context(db, initiative_id)
-        merged = {**extracted, **{k: v for k, v in inputs.items() if v is not None}}
-
-        method_pack = merged.pop("method_pack", None) or merged.pop("methodology_variant", None)
-
-        adapter = get_adapter_registry().get("carbon")
-        if adapter is None:
-            raise RuntimeError("carbon adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id=getattr(self, "user_id", None) or "system",
-            user_email=None,
-            initiative_id=initiative_id,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id=f"carbon:{initiative_id}",
-        )
-        result = await adapter.execute(ctx, db, {"method_pack": method_pack, "known_values": merged})
-        result_data: dict[str, Any] = dict(result.output)
-        result_data["method_pack"] = method_pack
-
-        return ModuleOutput(
-            module_id="carbon_model",
-            output_type="carbon",
-            title="Carbon Emissions Analysis",
-            content=result_data,
-        )
+    async def recalculate(self, inputs_dict: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        known_values: dict[str, Any] = {}
+        for key, value in inputs_dict.items():
+            if isinstance(value, dict):
+                known_values[key] = value.get("value")
+            else:
+                known_values[key] = value
+        method_pack = known_values.pop("method_pack", None)
+        return await self.recalculate_from_values(method_pack=method_pack, known_values=known_values)
 
     async def execute_from_conversation(
         self,
@@ -384,8 +363,6 @@ class CarbonTool(BaseModule):
         planner_args: dict | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> tuple[str, dict]:
-        """Run carbon model from conversation text — unified path for both chat contexts."""
-
         async def _progress(msg: str) -> None:
             if on_progress:
                 await on_progress(msg)
@@ -399,80 +376,20 @@ class CarbonTool(BaseModule):
         if not method_pack and extracted.get("method_pack"):
             method_pack = extracted.pop("method_pack", None)
 
-        adapter = get_adapter_registry().get("carbon")
-        if adapter is None:
-            raise RuntimeError("carbon adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id=getattr(self, "user_id", None) or "system",
-            user_email=None,
-            initiative_id=None,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id="carbon:conversation",
-        )
         await _progress("Calculating emission reductions...")
-        result = await adapter.execute(ctx, None, {"method_pack": method_pack, "known_values": extracted})
-        widget_data: dict[str, Any] = dict(result.output)
-        widget_data["method_pack"] = method_pack
+        widget_data = await self.recalculate_from_values(method_pack=method_pack, known_values=extracted)
+
         if widget_data.get("computable"):
             widget_type = "carbon_output"
             carbon_result = widget_data.get("result") or {}
             await _progress(
                 f"Net ERs: {carbon_result.get('net_er_tco2e', 0):,.2f} tCO₂e/yr "
-                f"({carbon_result.get('assumption_count', 0)} assumptions, {carbon_result.get('quality_label', 'unknown')} confidence)"
+                f"({carbon_result.get('assumption_count', 0)} assumptions)"
             )
         else:
             widget_type = "carbon_inputs"
             await _progress(
-                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to compute — showing input table"
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs — showing input table"
             )
 
         return widget_type, widget_data
-
-    async def recalculate(
-        self,
-        inputs_dict: dict[str, dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Recalculate from serialized CarbonInput dicts.
-
-        Fast path for user edits — no LLM call, pure math.
-        """
-        known_values: dict[str, Any] = {}
-        for key, value in inputs_dict.items():
-            if isinstance(value, dict):
-                known_values[key] = value.get("value")
-            else:
-                known_values[key] = value
-        method_pack = known_values.pop("method_pack", None)
-
-        adapter = get_adapter_registry().get("carbon")
-        if adapter is None:
-            raise RuntimeError("carbon adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id=getattr(self, "user_id", None) or "system",
-            user_email=None,
-            initiative_id=None,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id="carbon:recalculate",
-        )
-        result = await adapter.execute(ctx, None, {"method_pack": method_pack, "known_values": known_values})
-        result_data = dict(result.output)
-        result_data["method_pack"] = method_pack
-        return result_data
-
-    async def build_workspace_widget_data(
-        self,
-        known_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        from app.services.carbon_engine import CarbonEngine
-
-        method_pack = known_values.get("method_pack")
-        inputs = CarbonEngine.build_default_inputs(
-            method_pack=method_pack,
-            known_values=known_values,
-        )
-        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
-        return await self.recalculate(serialized_inputs)
