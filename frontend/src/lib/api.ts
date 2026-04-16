@@ -42,11 +42,14 @@ export interface Initiative {
   // Tool-based fields
   project_description: string | null;
   project_type: string | null;
+  overview_description: string | null;
+  overview_generated_at: string | null;
   selected_tools: string[] | null;
   tool_inputs: Record<string, any> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
   module_instances: ModuleInstance[] | null;
+  module_instances_count?: number;
   /** Non-archived module instances with status complete + deliverable (grid tile). */
   generated_modules_count?: number;
   // Sharing fields
@@ -196,6 +199,65 @@ export interface ModuleWorkflowState {
   status: string;
   workflow_state: WorkflowState;
   module_definition: WorkflowModuleDefinition;
+}
+
+// ── Unified Staged Workflow Types (new architecture) ──────────────────────
+
+export interface FieldDef {
+  name: string;
+  field_type: 'text' | 'number' | 'long_text' | 'select';
+  required: boolean;
+  label: string | null;
+  options: string[] | null;
+  placeholder: string | null;
+}
+
+export interface PopulationStep {
+  type: string;
+  config: Record<string, any>;
+}
+
+export interface StageDef {
+  id: string;
+  title: string;
+  component: 'table' | 'list' | 'record' | 'computed_results';
+  widget: string;
+  fields: FieldDef[];
+  population: PopulationStep[];
+}
+
+export interface StageState {
+  status: 'pending' | 'populating' | 'draft' | 'confirmed' | 'error';
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  data: {
+    /** For table and list stages */
+    items?: BuildItem[];
+    /** For record stages */
+    source_stage_id?: string;
+    records?: Record<string, Record<string, any>>;
+    /** For computed_results stages */
+    widget_data?: Record<string, any>;
+  } | null;
+}
+
+export interface StagedWorkflowState {
+  module_type: string;
+  current_stage_id: string | null;
+  stages: Record<string, StageState>;
+}
+
+export interface StagedModuleDefinition extends ModuleDefinition {
+  export_format: string | null;
+  stage_defs: StageDef[];
+}
+
+export interface StagedModuleWorkflowState {
+  instance_id: string;
+  module_id: string;
+  status: string;
+  workflow_state: StagedWorkflowState;
+  module_definition: StagedModuleDefinition;
 }
 
 export interface SourceCitation {
@@ -540,6 +602,11 @@ export const api = {
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    }),
+
+  generateInitiativeOverview: (id: string) =>
+    fetchApi<Initiative>(`/api/v1/initiatives/${id}/overview`, {
+      method: 'POST',
     }),
 
   deleteInitiative: async (id: string) => {
@@ -1091,6 +1158,75 @@ export const api = {
     const disposition = res.headers.get('content-disposition') || '';
     const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
     const filename = match ? match[1].replace(/['"]/g, '') : 'assessment.docx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  // ── Staged workflow endpoints ──────────────────────────────────────
+
+  getStagedModuleWorkflowState: (instanceId: string) =>
+    fetchApi<StagedModuleWorkflowState>(`/api/v1/module-workflow/${instanceId}/state`),
+
+  populateStage: (instanceId: string, stageId: string) =>
+    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/populate`,
+      { method: 'POST' }
+    ),
+
+  confirmStage: (instanceId: string, stageId: string) =>
+    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/confirm`,
+      { method: 'POST' }
+    ),
+
+  addStageItem: (instanceId: string, stageId: string, content: Record<string, any>) =>
+    fetchApi<{ item: BuildItem }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items`,
+      { method: 'POST', body: JSON.stringify({ content }) }
+    ),
+
+  editStageItem: (instanceId: string, stageId: string, itemId: string, content: Record<string, any>) =>
+    fetchApi<{ item: BuildItem }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
+      { method: 'PATCH', body: JSON.stringify({ content }) }
+    ),
+
+  deleteStageItem: (instanceId: string, stageId: string, itemId: string) =>
+    fetchApi<{ ok: boolean; remaining_count: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
+      { method: 'DELETE' }
+    ),
+
+  reorderStageItems: (instanceId: string, stageId: string, itemIds: string[]) =>
+    fetchApi<{ ok: boolean }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/reorder`,
+      { method: 'POST', body: JSON.stringify({ item_ids: itemIds }) }
+    ),
+
+  enrichRecord: (instanceId: string, stageId: string, itemId: string) =>
+    fetchApi<{ item_id: string; record: Record<string, any> }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}/enrich`,
+      { method: 'POST' }
+    ),
+
+  updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>) =>
+    fetchApi<{ item_id: string; record: Record<string, any> }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
+      { method: 'PATCH', body: JSON.stringify({ fields }) }
+    ),
+
+  exportStagedModule: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/export`,
+      { headers }
+    );
+    if (!res.ok) throw new Error('Export failed');
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'export.docx';
     const blob = await res.blob();
     return { blob, filename };
   },

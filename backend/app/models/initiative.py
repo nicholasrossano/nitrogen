@@ -55,6 +55,8 @@ class Initiative(Base):
     tool_alignments: Mapped[dict | None] = mapped_column(JSONB)  # Tool alignments (outline, params) keyed by tool_id
     deliverables: Mapped[dict | None] = mapped_column(JSONB)  # Generated output references
     project_plan: Mapped[dict | None] = mapped_column(JSONB)  # 3-pillar needs map
+    overview_description: Mapped[str | None] = mapped_column(Text)
+    overview_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     
     # Stage tracking
     stage: Mapped[str] = mapped_column(

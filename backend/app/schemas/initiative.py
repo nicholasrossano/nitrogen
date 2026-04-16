@@ -57,6 +57,8 @@ class InitiativeResponse(BaseModel):
     # Module-based fields
     project_description: Optional[str] = None
     project_type: Optional[str] = None
+    overview_description: Optional[str] = None
+    overview_generated_at: Optional[datetime] = None
     selected_tools: Optional[list[str]] = None
     tool_inputs: Optional[dict] = None
     module_alignments: Optional[dict] = None
@@ -64,6 +66,7 @@ class InitiativeResponse(BaseModel):
     project_plan: Optional[dict] = None
     # Module instances
     module_instances: Optional[list] = None
+    module_instances_count: int = 0
     # Non-archived instances with a completed generated deliverable (for grid tiles)
     generated_modules_count: int = 0
     # Sharing fields (null = owned by current user)
