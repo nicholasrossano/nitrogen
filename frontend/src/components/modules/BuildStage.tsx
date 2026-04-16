@@ -137,7 +137,7 @@ export function BuildStage({
         runGenerate(layerId);
       }
     });
-  }, [readOnly, unlockedLayers, build.stages, runGenerate]);
+  }, [readOnly, unlockedLayers, build, runGenerate]);
 
   const unlockDetails = () => {
     if (!detailsDef) return;
@@ -189,7 +189,7 @@ export function BuildStage({
         ].map((i) => i.id))
         .catch(() => {});
     },
-    [build.stages, instanceId, outlineDef, detailsDef]
+    [build, instanceId, outlineDef, detailsDef]
   );
 
   const outlineItems = getStageById(build, outlineDef?.id ?? '')?.items ?? [];
