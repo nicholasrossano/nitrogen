@@ -202,18 +202,18 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
         hasInitialized.current = true;
         setActiveStageId(data.workflow_state.current_stage_id);
 
-        // Auto-populate the first stage when the module is brand-new (all stages pending)
-        // This matches the old behavior where opening a module would kick off AI generation.
+        // Auto-populate the first stage when the module is brand-new (all stages pending).
+        // Covers both calculator modules (start_from_predefined_rows) and assessment
+        // modules (seed_from_template + adapt_with_ai_from_project_materials).
         const defs = data.module_definition.stage_defs ?? [];
         const stages = data.workflow_state.stages ?? {};
         const allPending = defs.length > 0 && defs.every((d) => stages[d.id]?.status === 'pending');
         const firstDef = defs[0];
         if (allPending && firstDef) {
-          const hasAiSteps = firstDef.population?.some((p) =>
-            ['propose_with_ai', 'adapt_with_ai_from_project_materials'].includes(p.type)
+          const hasPopulationSteps = firstDef.population?.some((p) =>
+            p.type !== 'await_user_confirmation'
           );
-          if (hasAiSteps) {
-            // Trigger population without awaiting — state will update via the returned workflow_state
+          if (hasPopulationSteps) {
             setIsPopulating(true);
             api.populateStage(instanceId, firstDef.id)
               .then((result) => {
