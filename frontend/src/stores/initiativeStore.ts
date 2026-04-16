@@ -58,6 +58,7 @@ interface InitiativeState {
   exportMemo: (id: string) => Promise<void>;
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
   generateAllDeliverables: (id: string) => Promise<void>;
+  generateInitiativeOverview: (id: string) => Promise<Initiative>;
   updateTitle: (id: string, title: string) => Promise<void>;
   _refreshPlanInBackground: (id: string) => Promise<void>;
   loadProjectPlan: (id: string) => Promise<void>;
@@ -666,6 +667,15 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         generating: false,
       });
     }
+  },
+
+  generateInitiativeOverview: async (id: string) => {
+    const initiative = await api.generateInitiativeOverview(id);
+    set((state) => ({
+      initiative,
+      projectPlan: initiative.project_plan ?? state.projectPlan,
+    }));
+    return initiative;
   },
 
   // Update initiative title

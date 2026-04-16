@@ -1,0 +1,163 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Files, Layers3, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
+import { api, type Initiative } from '@/lib/api';
+
+interface InitiativeOverviewHeaderProps {
+  initiative: Initiative;
+  filesUploaded: number;
+  modulesCreated: number;
+  isGenerating: boolean;
+  errorMessage: string | null;
+  canRefresh: boolean;
+  onRefresh: () => void;
+}
+
+function formatProjectType(value: string | null): string | null {
+  if (!value) return null;
+  return value
+    .split('_')
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(' ');
+}
+
+function FootprintBox({
+  label,
+  value,
+  Icon,
+}: {
+  label: string;
+  value: number;
+  Icon: typeof Files;
+}) {
+  return (
+    <div className="rounded-xl border border-black/[0.05] bg-white px-4 py-3">
+      <div className="flex items-center gap-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
+        <Icon className="w-3.5 h-3.5" />
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-semibold text-text-primary tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+export function InitiativeOverviewHeader({
+  initiative,
+  filesUploaded,
+  modulesCreated,
+  isGenerating,
+  errorMessage,
+  canRefresh,
+  onRefresh,
+}: InitiativeOverviewHeaderProps) {
+  const title = initiative.title || 'Untitled initiative';
+  const projectType = formatProjectType(initiative.project_type);
+  const hasFiles = filesUploaded > 0;
+  const hasOverview = Boolean(initiative.overview_description?.trim());
+  const [collaboratorsCount, setCollaboratorsCount] = useState(1);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCollaboratorsCount(1);
+
+    api.getShares(initiative.id)
+      .then((shares) => {
+        if (!cancelled) {
+          setCollaboratorsCount(1 + shares.length);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCollaboratorsCount(1);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initiative.id]);
+
+  return (
+    <div className="w-full">
+      <div className="min-w-0 pt-10">
+        <h2 className="text-xl font-semibold text-text-primary">{title}</h2>
+      </div>
+
+      {(initiative.geography || projectType) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {initiative.geography && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-accent/20 bg-accent/10 text-xs font-medium text-accent leading-none">
+              <MapPinned className="w-3 h-3" />
+              {initiative.geography}
+            </span>
+          )}
+          {projectType && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-xs font-medium text-amber-700 leading-none">
+              <Tag className="w-3 h-3" />
+              {projectType}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4 min-h-[150px] rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-4">
+        <div className="mb-4">
+          <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Initiative Summary</p>
+        </div>
+
+        {!hasFiles ? (
+          <div className="h-full flex flex-col items-start justify-center">
+            <p className="text-sm font-medium text-text-primary">No overview yet</p>
+            <p className="mt-1 text-sm text-text-tertiary">Upload files to generate a project summary.</p>
+          </div>
+        ) : isGenerating && !hasOverview ? (
+          <div className="h-full flex flex-col items-start justify-center">
+            <div className="inline-flex items-center gap-2 text-sm font-medium text-text-primary">
+              <Loader2 className="w-4 h-4 animate-spin text-accent" />
+              Generating overview...
+            </div>
+            <p className="mt-2 text-sm text-text-tertiary">Reviewing uploaded files and initiative context.</p>
+          </div>
+        ) : hasOverview ? (
+          <p className="text-sm leading-7 text-text-secondary whitespace-pre-wrap">{initiative.overview_description}</p>
+        ) : (
+          <div className="h-full flex flex-col items-start justify-center">
+            <p className="text-sm font-medium text-text-primary">No overview yet</p>
+            <p className="mt-1 text-sm text-text-tertiary">Upload files to generate a project summary.</p>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="min-h-[20px] text-xs text-text-tertiary">
+            {errorMessage ? <span className="text-red-500">{errorMessage}</span> : null}
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={!canRefresh || isGenerating}
+            className="btn-secondary !px-3 !py-1.5 text-xs"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <FootprintBox label="Collaborators" value={collaboratorsCount} Icon={Users} />
+        <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
+        <FootprintBox label="Modules Created" value={modulesCreated} Icon={Layers3} />
+      </div>
+    </div>
+  );
+}
