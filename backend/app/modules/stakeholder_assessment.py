@@ -61,7 +61,7 @@ class StakeholderAssessmentModule(BaseModule):
         return [
             StageDef(
                 id="categories",
-                title="Stakeholder Categories",
+                title="Categories",
                 component="list",
                 widget="categorized_list",
                 fields=[
