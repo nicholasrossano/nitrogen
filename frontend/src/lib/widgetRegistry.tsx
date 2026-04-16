@@ -1,8 +1,8 @@
 /**
- * Module widget registry for the editor/workspace panel.
+ * Module widget registry for the workspace panel.
  *
  * Maps widget_type strings to their React components. All module widgets
- * that appear in the editor workspace are registered here. Chat interaction
+ * that appear in the workspace are registered here. Chat interaction
  * widgets (proposed_value, template_proposed_value) are NOT registered here —
  * they live in ChatMessage.tsx.
  *
