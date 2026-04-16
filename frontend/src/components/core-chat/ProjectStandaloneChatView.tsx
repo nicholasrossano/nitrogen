@@ -500,11 +500,7 @@ export function ProjectStandaloneChatView({
 
   if (isOnLanding) {
     const filesUploaded = projectMaterials.length;
-    const modulesCreated =
-      activeModulesCount ??
-      initiative?.module_instances_count ??
-      initiative?.module_instances?.length ??
-      0;
+    const modulesCreated = activeModulesCount;
     const canRefreshOverview = Boolean(
       initiative &&
       initiative.shared_role !== 'viewer' &&
