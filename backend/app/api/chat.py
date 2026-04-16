@@ -363,7 +363,7 @@ async def chat_stream(
                     from app.services.chat import ChatResponse
                     from app.services.module_workflow_service import (
                         ensure_workflow_state,
-                        uses_layered_build,
+                        is_assessment_module,
                         uses_workspace_flow,
                     )
 
@@ -386,16 +386,16 @@ async def chat_stream(
                         await ensure_workflow_state(db, inst, _workflow_module)
                         await db.commit()
 
-                        if uses_layered_build(_workflow_module):
+                        if is_assessment_module(_workflow_module):
                             intro = (
                                 f"Here's your **{_workflow_module.definition.name}** workspace. "
-                                "Review the setup, work through the build stage, and finalize the output when you're ready."
+                                "Work through each stage and confirm when you're ready to advance."
                             )
                             tiers_used = ["workspace_setup"]
                         else:
                             intro = (
                                 f"Here's your **{_workflow_module.definition.name}** workspace. "
-                                "Review the setup context, refine the build-stage inputs, and continue in the editor."
+                                "Review the inputs, confirm them, and the results will auto-compute."
                             )
                             tiers_used = ["workspace_build"]
 

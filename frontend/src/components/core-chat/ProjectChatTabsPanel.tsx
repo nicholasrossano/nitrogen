@@ -5,16 +5,14 @@ import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import { ProjectStandaloneChatView } from './ProjectStandaloneChatView';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { SourceCitation } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { ChatSession } from '@/stores/chatStore';
 
 interface ProjectChatTab {
   id: string;
   title: string;
   sessionId: string | null;
   isLanding: boolean;
-}
-
-interface ClosedChatTab extends ProjectChatTab {
-  closedAt: number;
 }
 
 interface ProjectChatTabsPanelProps {
@@ -37,6 +35,18 @@ function makeTab(title = 'New Chat', isLanding = false): ProjectChatTab {
   };
 }
 
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return 'yesterday';
+  return `${days}d ago`;
+}
+
 export function ProjectChatTabsPanel({
   initiativeId,
   researchMode = false,
@@ -53,7 +63,7 @@ export function ProjectChatTabsPanel({
   }
   const [tabs, setTabs] = useState<ProjectChatTab[]>(() => [initialTabRef.current!]);
   const [activeTabId, setActiveTabId] = useState<string>(() => initialTabRef.current!.id);
-  const [closedTabs, setClosedTabs] = useState<ClosedChatTab[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +73,26 @@ export function ProjectChatTabsPanel({
   );
   const showTabBar = !researchMode || tabs.some((tab) => !tab.isLanding);
 
+  const loadSessions = useCallback(async () => {
+    try {
+      const { sessions: raw } = await api.getChatSessions(initiativeId);
+      setSessions(
+        raw.map((session) => ({
+          id: session.id,
+          title: session.title || 'Untitled',
+          createdAt: session.created_at ? new Date(session.created_at).getTime() : Date.now(),
+          messages: [],
+        })),
+      );
+    } catch (err) {
+      console.warn('Failed to load chat sessions:', err);
+    }
+  }, [initiativeId]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
   const handleCreateTab = useCallback(() => {
     const tab = makeTab('New Chat', researchMode);
     setTabs((prev) => [...prev, tab]);
@@ -71,14 +101,6 @@ export function ProjectChatTabsPanel({
 
   const handleCloseTab = useCallback((tabId: string) => {
     setTabs((prev) => {
-      const closingTab = prev.find((tab) => tab.id === tabId);
-      if (closingTab?.sessionId) {
-        setClosedTabs((existing) => [
-          { ...closingTab, closedAt: Date.now() },
-          ...existing.filter((tab) => tab.sessionId !== closingTab.sessionId),
-        ].slice(0, 20));
-      }
-
       if (prev.length === 1) {
         const replacement = makeTab('New Chat', researchMode);
         setActiveTabId(replacement.id);
@@ -137,20 +159,59 @@ export function ProjectChatTabsPanel({
     setShowHistory(false);
   }, [researchMode, resetToLandingSignal]);
 
-  const handleReopenTab = (tabId: string) => {
-    const tab = closedTabs.find((entry) => entry.id === tabId);
-    if (!tab) return;
-    setTabs((prev) => [...prev, { id: tab.id, title: tab.title, sessionId: tab.sessionId, isLanding: false }]);
-    setActiveTabId(tab.id);
-    setClosedTabs((prev) => prev.filter((entry) => entry.id !== tabId));
-    setShowHistory(false);
-  };
+  const handleOpenSession = useCallback((session: ChatSession) => {
+    const existingTab = tabs.find((tab) => tab.sessionId === session.id);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+      setShowHistory(false);
+      return;
+    }
 
-  const handleDeleteClosedTab = (tabId: string) => {
-    setClosedTabs((prev) => prev.filter((entry) => entry.id !== tabId));
-  };
+    const newTab: ProjectChatTab = {
+      id: makeTab().id,
+      title: session.title,
+      sessionId: session.id,
+      isLanding: false,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    setShowHistory(false);
+  }, [tabs]);
+
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    setSessions((prev) => prev.filter((session) => session.id !== sessionId));
+    setTabs((prev) => {
+      const nextTabs = prev.filter((tab) => tab.sessionId !== sessionId);
+      if (nextTabs.length === 0) {
+        const replacement = makeTab('New Chat', researchMode);
+        setActiveTabId(replacement.id);
+        return [replacement];
+      }
+      setActiveTabId((current) =>
+        nextTabs.some((tab) => tab.id === current) ? current : nextTabs[0].id,
+      );
+      return nextTabs;
+    });
+    api.deleteChatSession(sessionId).catch((err) => {
+      console.error('Failed to delete session:', err);
+      loadSessions();
+    });
+  }, [loadSessions, researchMode]);
 
   const handleTabMetaChange = useCallback((tabId: string, meta: { sessionId: string | null; title: string | null }) => {
+    if (meta.sessionId) {
+      const title = meta.title?.trim() || 'Untitled';
+      setSessions((prev) => {
+        const existing = prev.find((session) => session.id === meta.sessionId);
+        if (existing) {
+          return prev.map((session) =>
+            session.id === meta.sessionId ? { ...session, title } : session,
+          );
+        }
+        return [{ id: meta.sessionId, title, createdAt: Date.now(), messages: [] }, ...prev].slice(0, 50);
+      });
+    }
+
     setTabs((prev) => {
       let changed = false;
       const nextTabs = prev.map((tab) => {
@@ -243,28 +304,31 @@ export function ProjectChatTabsPanel({
                     </h3>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
-                    {closedTabs.length === 0 ? (
+                    {sessions.length === 0 ? (
                       <div className="px-3 py-6 text-xs text-text-tertiary text-center">
                         No chat history
                       </div>
                     ) : (
-                      closedTabs.map((tab) => (
+                      sessions.map((session) => (
                         <div
-                          key={tab.id}
+                          key={session.id}
                           className="group flex items-center gap-2 px-3 py-2.5 hover:bg-surface-subtle cursor-pointer border-b border-divider last:border-b-0 transition-colors"
-                          onClick={() => handleReopenTab(tab.id)}
+                          onClick={() => handleOpenSession(session)}
                         >
                           <MessageSquare className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-text-primary truncate">{tab.title}</p>
+                            <p className="text-xs text-text-primary truncate">{session.title}</p>
+                            <p className="text-[10px] text-text-tertiary mt-0.5">
+                              {relativeTime(session.createdAt)}
+                            </p>
                           </div>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteClosedTab(tab.id);
+                              handleDeleteSession(session.id);
                             }}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 text-text-tertiary hover:text-red-500 flex-shrink-0"
-                            title="Remove from history"
+                            title="Delete conversation"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -300,6 +364,9 @@ export function ProjectChatTabsPanel({
                 useLandingWhenEmpty={researchMode}
                 initialSessionId={tab.sessionId}
                 initialTitle={tab.title}
+                sessions={sessions}
+                onDeleteSession={handleDeleteSession}
+                onSessionListDirty={loadSessions}
                 onSessionMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
                 onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
                 onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}

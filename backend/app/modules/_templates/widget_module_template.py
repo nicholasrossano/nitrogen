@@ -1,7 +1,9 @@
 """
-Template for a widget-backed Nitrogen module.
+Template for a widget-backed (calculator) Nitrogen module using the staged workflow.
 
-Lifecycle: setup -> build (single widget stage) -> output
+Calculator modules have two stages:
+  1. Inputs  (table / editable_table)   — user confirms pre-populated input rows
+  2. Results (computed_results / <widget>)  — auto-computed after Inputs confirmed
 
 Copy this file, rename the class, and fill in the TODOs.
 Register the module in backend/app/modules/registry.py.
@@ -12,12 +14,12 @@ register it in frontend/src/lib/widgetRegistry.tsx.
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.base import (
     BaseModule,
+    FieldDef,
+    PopulationStep,
+    StageDef,
     ExecutionModel,
     ModuleDefinition,
     ModuleInput,
@@ -46,9 +48,7 @@ class ExampleWidgetModule(BaseModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="State the user outcome this module produces.",
-            primary_ui_object="example_output",
-            workspace_build_widget="example_inputs",
-            workspace_output_widget="example_output",
+            primary_ui_object="example_results",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "example_adapter"},
             input_dependencies=[],
@@ -57,6 +57,90 @@ class ExampleWidgetModule(BaseModule):
             assumptions_behavior="tracks",
             evidence_behavior="none",
         )
+
+    @property
+    def stage_defs(self) -> list[StageDef]:
+        return [
+            StageDef(
+                id="inputs",
+                title="Inputs",
+                component="table",
+                widget="editable_table",
+                fields=[
+                    FieldDef("variable", "text", required=True, label="Variable"),
+                    FieldDef("value", "number", label="Value"),
+                    FieldDef("unit", "text", label="Unit"),
+                    FieldDef("source", "text", label="Source"),
+                    FieldDef("rationale", "long_text", label="Rationale"),
+                ],
+                population=[
+                    PopulationStep("start_from_predefined_rows"),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("infer_missing_with_ai"),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="results",
+                title="Results",
+                component="computed_results",
+                widget="example_results",   # register this widget in widgetRegistry.tsx
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "inputs"}),
+                    PopulationStep("compute_with_module_logic"),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+        ]
+
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def get_predefined_rows(self, stage_id: str, context: dict) -> list[dict]:
+        """Return default input rows from the engine."""
+        if stage_id != "inputs":
+            return []
+        # TODO: call your engine's build_default_inputs() method here
+        return [
+            {"variable": "Example Input", "value": 42, "unit": "", "source": "Engine default", "rationale": ""},
+        ]
+
+    async def compute_stage(
+        self,
+        stage_id: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Compute results from confirmed inputs stage."""
+        if stage_id != "results":
+            raise ValueError(f"compute_stage called for unexpected stage '{stage_id}'")
+
+        inputs_data = (confirmed_stages.get("inputs") or {}).get("data") or {}
+        items = inputs_data.get("items", [])
+
+        # TODO: reconstruct engine inputs from items and run computation
+        known_values = {
+            item["content"]["variable"]: item["content"].get("value")
+            for item in items
+            if item.get("content", {}).get("variable")
+        }
+
+        # TODO: call your adapter and return widget_data
+        return {
+            "computable": True,
+            "inputs": known_values,
+            "result": {"value": sum(v for v in known_values.values() if isinstance(v, (int, float)))},
+        }
+
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        """Generate XLSX from confirmed inputs and results."""
+        # TODO: implement real export
+        raise NotImplementedError("Implement generate_export() for this module")
+
+    # ------------------------------------------------------------------ #
+    # Chat-path methods (optional)                                         #
+    # ------------------------------------------------------------------ #
 
     @property
     def required_inputs(self) -> list[ModuleInput]:
@@ -78,76 +162,11 @@ class ExampleWidgetModule(BaseModule):
     def refinement_model(self) -> RefinementModel:
         return RefinementModel.EDIT_AND_RECOMPUTE
 
-    @property
-    def workspace_setup_fields(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Optional working title for the run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            }
-        ]
-
-    async def build_workspace_widget_data(
+    async def execute_from_conversation(
         self,
-        known_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Convert project/setup context into initial widget_data for the build stage."""
-        return {
-            "inputs": {
-                "example_input": {
-                    "field_name": "example_input",
-                    "label": "Example Input",
-                    "value": known_values.get("example_input"),
-                    "unit": "",
-                    "source": "chat",
-                    "status": "inferred",
-                }
-            },
-            "computable": known_values.get("example_input") is not None,
-            "result": None,
-        }
-
-    async def recalculate(
-        self,
-        inputs_dict: dict[str, dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Fast edit loop called on every widget change; returns updated widget_data."""
-        value = (inputs_dict.get("example_input") or {}).get("value")
-        return {
-            "inputs": inputs_dict,
-            "computable": value is not None,
-            "result": {"value": value},
-        }
-
-    async def export(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        widget_data: dict[str, Any],
-    ) -> bytes:
-        """Produce the export artifact (xlsx, pdf, etc.) from confirmed widget_data."""
-        raise NotImplementedError("Implement export() for this module.")
-
-    async def execute(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        inputs: dict[str, Any],
-        include_corpus: bool = True,
-    ) -> ModuleOutput:
-        content = await self.recalculate(
-            {
-                key: {"field_name": key, "value": value}
-                for key, value in inputs.items()
-            }
-        )
-        return ModuleOutput(
-            module_id=self.definition.id,
-            output_type=self.definition.output_type,
-            title=self.definition.name,
-            content=content,
-        )
+        conversation_text: str,
+        planner_args: dict | None = None,
+        on_progress=None,
+    ) -> tuple[str, dict]:
+        """Execute from chat context. Override if the module supports chat."""
+        raise NotImplementedError("This module does not support conversation-based execution")
