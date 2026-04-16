@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, ChevronRight, Download, Sparkles,
+  Loader2, AlertCircle, CheckCircle2, Download,
 } from 'lucide-react';
 import type {
   StagedModuleWorkflowState, StageDef, StageState, StagedWorkflowState,
@@ -119,12 +119,12 @@ function ConfirmationBar({
         <button
           onClick={onPopulate}
           disabled={isPopulating}
-          className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5"
+          className="btn-primary !py-1.5 !px-3 text-xs shrink-0"
         >
           {isPopulating ? (
             <><Loader2 className="w-3 h-3 animate-spin" /> Generating...</>
           ) : (
-            <><Sparkles className="w-3 h-3" /> Generate</>
+            <>Confirm</>
           )}
         </button>
       </div>
