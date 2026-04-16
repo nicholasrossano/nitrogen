@@ -1758,6 +1758,7 @@ class ChatService:
                         self.db, initiative.id, "lcoe_model",
                         f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)", "lcoe", content,
                         user_id=self.user_id or initiative.user_id,
+                        chat_id=self.ctx.chat_id,
                     )
                 else:
                     missing = content.get("missing_essentials", [])
@@ -1810,6 +1811,7 @@ class ChatService:
                         self.db, initiative.id, "carbon_model",
                         f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)", "carbon", content,
                         user_id=self.user_id or initiative.user_id,
+                        chat_id=self.ctx.chat_id,
                     )
                 else:
                     missing = content.get("missing_essentials", [])
@@ -1895,6 +1897,7 @@ class ChatService:
                     self.db, initiative.id, _tool_id,
                     title, _tool.definition.output_type, widget_data,
                     user_id=self.user_id or initiative.user_id,
+                    chat_id=self.ctx.chat_id,
                 )
 
         return widget_type, widget_data, assistant_response, sources

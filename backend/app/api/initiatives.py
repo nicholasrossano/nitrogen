@@ -506,7 +506,7 @@ async def create_module_instance(
     initiative = await require_editor(db, initiative_id, user)
     inst = await module_service.get_or_create_instance(
         db, initiative.id, body.module_id, user.uid
-        # no session_id → always creates a fresh instance
+        # no chat_id → always creates a fresh instance
     )
     await db.commit()
     await db.refresh(inst)

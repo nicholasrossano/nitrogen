@@ -28,7 +28,7 @@ def _bump_initiative_ts(connection, initiative_id: uuid.UUID | None) -> None:
 def _register_child_listeners() -> None:
     from app.models.module_instance import ModuleInstance
     from app.models.onboarding import ChatMessage
-    from app.models.chat import CoreChatSession, CoreChatMessage
+    from app.models.chat import CoreChat, CoreChatMessage
     from app.models.evidence import EvidenceDoc, EvidenceChunk
     from app.models.project_material import ProjectMaterial
     from app.models.memo import MemoVersion
@@ -77,9 +77,9 @@ def _register_child_listeners() -> None:
     def bump_from_core_message(mapper, connection, target: CoreChatMessage) -> None:
         row = connection.execute(
             select(
-                CoreChatSession.initiative_id,
-                CoreChatSession.compare_initiative_ids,
-            ).where(CoreChatSession.id == target.session_id)
+                CoreChat.initiative_id,
+                CoreChat.compare_initiative_ids,
+            ).where(CoreChat.id == target.chat_id)
         ).first()
         if not row:
             return
