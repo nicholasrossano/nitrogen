@@ -54,7 +54,8 @@ function InitiativePageContent() {
   const viewParam = searchParams.get('view');
   const viewFromUrl: ProjectView =
     viewParam === 'research' || viewParam === 'explore' ? 'research' :
-    viewParam === 'workspace' ? 'workspace' :
+    viewParam === 'framework' || viewParam === 'plan' ? 'plan' :
+    viewParam === 'workspace' || viewParam === 'modules' ? 'workspace' :
     viewParam === 'files' ? 'files' : 'research';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
@@ -111,6 +112,12 @@ function InitiativePageContent() {
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
   }, [viewFromUrl]);
+
+  useEffect(() => {
+    if (viewParam === 'plan') {
+      router.replace(`/initiatives/${initiativeId}?view=framework`);
+    }
+  }, [viewParam, router, initiativeId]);
 
   useEffect(() => {
     if (activeView !== 'workspace' || hasEnteredWorkspaceRef.current) return;
@@ -201,7 +208,6 @@ function InitiativePageContent() {
 
   const hasProjectPlan = !!projectPlan;
   const showProjectPlan = rightPanel === 'project_plan';
-  const rightPanelOpen = rightPanel !== 'closed';
 
   const handlePlanReady = useCallback(() => setPlanViewReady(true), []);
 
@@ -226,7 +232,7 @@ function InitiativePageContent() {
     }
     if (item === 'workspace') {
       setActiveView('workspace');
-      router.replace(`/initiatives/${initiativeId}?view=workspace`);
+      router.replace(`/initiatives/${initiativeId}?view=modules`);
       return true;
     }
     if (item === 'files') {
@@ -239,7 +245,7 @@ function InitiativePageContent() {
       setShowPlanOverlay(true);
       loadProjectPlan(initiativeId).finally(handlePlanReady);
       setActiveView('plan');
-      router.replace(`/initiatives/${initiativeId}?view=plan`);
+      router.replace(`/initiatives/${initiativeId}?view=framework`);
       return true;
     }
     return false;
@@ -248,7 +254,7 @@ function InitiativePageContent() {
   useEffect(() => {
     if (isViewer && (activeView === 'research' || activeView === 'workspace')) {
       setActiveView('plan');
-      router.replace(`/initiatives/${initiativeId}?view=plan`);
+      router.replace(`/initiatives/${initiativeId}?view=framework`);
     }
   }, [isViewer, activeView, initiativeId, router]);
 
@@ -652,7 +658,6 @@ function InitiativePageContent() {
                 showOverlay={showPlanOverlay}
                 showSprout={showSprout}
                 uploadError={uploadError}
-                panelOpen={rightPanelOpen}
                 readOnly={!!isViewer}
                 hasPlan={hasProjectPlan}
                 mainContent={showProjectPlan ? (
@@ -661,6 +666,10 @@ function InitiativePageContent() {
                     showInspector={showInspector}
                     onInspectorChange={handleInspectorChange}
                     onOpenFullDoc={handleOpenFullDocFromPlan}
+                    onViewModeChange={() => {
+                      setShowInspector(false);
+                      setPlanDocViewer(null);
+                    }}
                   />
                 ) : null}
                 onboardingContent={
@@ -674,7 +683,7 @@ function InitiativePageContent() {
                     hasProjectPlan={hasProjectPlan}
                   />
                 }
-                emptyContent={<p className="text-sm text-text-tertiary">No project plan yet</p>}
+                emptyContent={<p className="text-sm text-text-tertiary">No framework yet</p>}
                 documentViewer={planDocViewer ? (
                   <div
                     className="flex-shrink-0 border-l border-divider flex flex-col bg-surface overflow-hidden relative"
