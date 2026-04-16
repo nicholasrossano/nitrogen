@@ -552,13 +552,13 @@ export function SideDrawer() {
         </div>
       </div>
 
-      {/* Spacer + collapsed-only divider below the files icon.
+      {/* Spacer + divider below the files icon.
           h-6 creates the visual gap; top-1/2 -translate-y-1/2 centers the line
-          inside that gap. The expanded panel is absolute so it's unaffected by
-          this height. */}
+          inside that gap. Percentage insets make the divider scale proportionally
+          as the drawer expands. */}
       {showMaterials && (
         <div className="relative h-6">
-          <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-px bg-black/[0.16] opacity-100 group-hover:opacity-0 group-data-[open]:opacity-0 transition-opacity duration-150" />
+          <div className="absolute left-[10%] right-[10%] top-1/2 -translate-y-1/2 h-px bg-black/[0.16]" />
         </div>
       )}
 
