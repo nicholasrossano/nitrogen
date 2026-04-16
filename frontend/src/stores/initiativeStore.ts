@@ -71,6 +71,8 @@ interface InitiativeState {
   reset: () => void;
 }
 
+let latestLoadInitiativeRequest = 0;
+
 export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   // Initial state
   initiative: null,
@@ -96,9 +98,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
 
   // Load initiative details (also populates projectPlan from the response)
   loadInitiative: async (id: string) => {
+    const requestId = ++latestLoadInitiativeRequest;
     set({ loading: true, error: null });
     try {
       const initiative = await api.getInitiative(id);
+      if (requestId !== latestLoadInitiativeRequest) return;
       set({
         initiative,
         loading: false,
@@ -106,6 +110,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         projectPlan: initiative.project_plan ?? null,
       });
     } catch (error) {
+      if (requestId !== latestLoadInitiativeRequest) return;
       set({ 
         error: error instanceof Error ? error.message : 'Failed to load initiative',
         loading: false 
