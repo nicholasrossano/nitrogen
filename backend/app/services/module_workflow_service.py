@@ -364,9 +364,7 @@ async def _execute_population_step(
         # Terminal signal — caller breaks out of loop
         return accumulated_data
 
-    if step_type in ("start_from_predefined_rows", "seed_from_template"):
-        # seed_from_template and start_from_predefined_rows both pull hardcoded
-        # template rows from the module — they do NOT call the LLM.
+    if step_type == "start_from_predefined_rows":
         rows = await module.get_predefined_rows(stage_def.id, context)
         items = [
             make_build_item(content=row, derivation="template")
@@ -375,7 +373,21 @@ async def _execute_population_step(
         existing = accumulated_data.get("items", [])
         return {"items": existing + items}
 
+    if step_type == "seed_from_template":
+        raw_items = await module.generate_items_for_stage(
+            stage_def.id, step_type, context, confirmed_stages
+        )
+        items = [
+            make_build_item(content=raw, derivation="template")
+            for raw in raw_items
+        ]
+        existing = accumulated_data.get("items", [])
+        return {"items": existing + items}
+
     if step_type in ("propose_with_ai", "adapt_with_ai_from_project_materials"):
+        existing = accumulated_data.get("items", [])
+        if step_type == "adapt_with_ai_from_project_materials" and existing:
+            return accumulated_data
         raw_items = await module.generate_items_for_stage(
             stage_def.id, step_type, context, confirmed_stages
         )
@@ -383,7 +395,6 @@ async def _execute_population_step(
             make_build_item(content=raw, derivation="inferred")
             for raw in raw_items
         ]
-        existing = accumulated_data.get("items", [])
         return {"items": existing + items}
 
     if step_type == "extract_from_project_materials":
