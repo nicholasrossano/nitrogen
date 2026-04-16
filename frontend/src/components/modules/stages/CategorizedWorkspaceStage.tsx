@@ -6,6 +6,7 @@ import type { BuildItem, FieldDef, StageDef, StageState } from '@/lib/api';
 import { api } from '@/lib/api';
 import { PlanStructureColumn } from '@/components/plan-workspace/PlanStructureColumn';
 import type { PlanWorkspaceGroup, PlanWorkspaceItem } from '@/components/plan-workspace/types';
+import { inferCategoryIconName } from './categoryIcons';
 
 // Gradient-ordered palette matching ProjectPlanView
 const CATEGORY_COLORS = [
@@ -224,7 +225,7 @@ export function CategorizedWorkspaceStage({
             group: {
               id: cat.id,
               name: catLabel,
-              icon: 'Compass',
+              icon: String(cat.content.icon ?? inferCategoryIconName(catLabel)),
               items: planItems,
             },
             buildItems: groupBuildItems,

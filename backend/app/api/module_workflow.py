@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid as _uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -551,4 +552,139 @@ async def export_module_output(
         content=export_bytes,
         media_type=media_type,
         headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.{fmt}")},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Write-up export (LLM-generated, cached)
+# ---------------------------------------------------------------------------
+
+@router.get("/module-workflow/{instance_id}/export/writeup")
+async def export_writeup(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Export the write-up DOCX for an assessment module.
+
+    The write-up is generated once by LLM and cached in workflow_state.
+    Subsequent calls return the cached version instantly unless backing
+    stages have been re-confirmed (which invalidates the cache).
+    """
+    from app.core.filename_utils import safe_content_disposition
+    from app.services.docx_exporter import DocxExporterService
+
+    inst, module = await _get_workflow_instance(db, instance_id, user)
+
+    if not hasattr(module, "generate_writeup_content"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Module '{module.definition.id}' does not support write-up export",
+        )
+
+    state = await ensure_workflow_state(db, inst, module)
+    cached_exports = state.get("cached_exports") or {}
+    cached_writeup = cached_exports.get("writeup") or {}
+
+    confirmed_stages: dict[str, Any] = {
+        sid: s for sid, s in state["stages"].items()
+        if s.get("status") == "confirmed"
+    }
+    if not confirmed_stages:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one stage must be confirmed before generating a write-up",
+        )
+
+    # Use cache if valid (not explicitly invalidated)
+    content = cached_writeup.get("content") if not cached_writeup.get("invalidated") else None
+
+    if not content:
+        context = await get_initiative_context(db, inst.initiative_id)
+        try:
+            content = await module.generate_writeup_content(confirmed_stages, context)
+        except Exception as e:
+            logger.error("Write-up generation failed for instance %s: %s", instance_id, e, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Write-up generation failed: {e}")
+
+        # Cache the generated content
+        state.setdefault("cached_exports", {})["writeup"] = {
+            "content": content,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "invalidated": False,
+        }
+        save_workflow_state(inst, state)
+        await db.commit()
+    else:
+        logger.info("Returning cached write-up for instance %s", instance_id)
+        context = await get_initiative_context(db, inst.initiative_id)
+
+    docx_bytes = DocxExporterService().generate_assessment_docx(
+        content=content,
+        initiative_title=context.get("project_title", ""),
+    )
+
+    initiative = await db.get(Initiative, inst.initiative_id)
+    initiative_title = initiative.title if initiative else "Export"
+    safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}_WriteUp").replace(" ", "_")[:60]
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Decision log export (deterministic, no LLM, always fast)
+# ---------------------------------------------------------------------------
+
+@router.get("/module-workflow/{instance_id}/export/decision-log")
+async def export_decision_log(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Export a decision log DOCX for any staged module.
+
+    The decision log lists every confirmed item with its source (model or user),
+    provenance (citations or training data acknowledgment), and confirmation
+    metadata (confirmed_by, confirmed_at). No LLM calls — always fast.
+    """
+    from app.core.filename_utils import safe_content_disposition
+    from app.services.decision_log_service import build_decision_log_docx
+
+    inst, module = await _get_workflow_instance(db, instance_id, user)
+    state = await ensure_workflow_state(db, inst, module)
+    context = await get_initiative_context(db, inst.initiative_id)
+
+    confirmed_stages = {
+        sid: s for sid, s in state["stages"].items()
+        if s.get("status") == "confirmed"
+    }
+    if not confirmed_stages:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one stage must be confirmed before exporting a decision log",
+        )
+
+    try:
+        docx_bytes = build_decision_log_docx(
+            workflow_state=state,
+            stage_defs=module.stage_defs,
+            project_context=context,
+            current_user_email=getattr(user, "email", None),
+        )
+    except Exception as e:
+        logger.error("Decision log export failed for instance %s: %s", instance_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Decision log export failed: {e}")
+
+    initiative = await db.get(Initiative, inst.initiative_id)
+    initiative_title = initiative.title if initiative else "Export"
+    safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}_DecisionLog").replace(" ", "_")[:60]
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
     )

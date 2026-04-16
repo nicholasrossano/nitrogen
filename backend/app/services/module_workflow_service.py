@@ -263,6 +263,32 @@ def _invalidate_downstream(
 
 
 # ---------------------------------------------------------------------------
+# State hydration helper
+# ---------------------------------------------------------------------------
+
+def _hydrate_state(inst: ModuleInstance, module: BaseModule) -> dict[str, Any]:
+    """Return a deepcopy of workflow_state with any missing stage keys added.
+
+    This ensures that stages added to a module after an instance was created
+    (e.g. a new 'map' stage) are present in the returned state without
+    requiring a full legacy migration.
+    """
+    existing = copy.deepcopy(inst.workflow_state) if inst.workflow_state else None
+    if existing is None:
+        return _build_initial_workflow_state(module)
+    if _is_legacy_state(existing):
+        return _migrate_legacy_state(existing, module)
+    # Add any stages defined in the module that aren't in the stored state
+    stages = existing.setdefault("stages", {})
+    for stage_def in module.stage_defs:
+        if stage_def.id not in stages:
+            stages[stage_def.id] = _initial_stage_state()
+    if not existing.get("current_stage_id"):
+        existing["current_stage_id"] = _infer_current_stage_id(module, stages)
+    return existing
+
+
+# ---------------------------------------------------------------------------
 # Population step executor
 # ---------------------------------------------------------------------------
 
@@ -276,9 +302,7 @@ async def populate_stage(
 
     Returns the updated workflow state.
     """
-    state = inst.workflow_state or _build_initial_workflow_state(module)
-    if _is_legacy_state(state):
-        state = _migrate_legacy_state(state, module)
+    state = _hydrate_state(inst, module)
 
     if stage_id not in state["stages"]:
         raise ValueError(f"Stage '{stage_id}' not found in module '{module.definition.id}'")
@@ -466,9 +490,7 @@ async def confirm_stage(
     confirmed_by: str,
 ) -> dict[str, Any]:
     """Confirm a stage, record audit info, and invalidate downstream stages."""
-    state = inst.workflow_state or _build_initial_workflow_state(module)
-    if _is_legacy_state(state):
-        state = _migrate_legacy_state(state, module)
+    state = _hydrate_state(inst, module)
 
     if stage_id not in state["stages"]:
         raise ValueError(f"Stage '{stage_id}' not found")
@@ -479,6 +501,16 @@ async def confirm_stage(
     stage_state["confirmed_by"] = confirmed_by
 
     _invalidate_downstream(state, module, stage_id)
+
+    # Invalidate cached write-up whenever a non-computed stage is confirmed,
+    # since the underlying data has changed.
+    stage_def_being_confirmed = next(
+        (s for s in module.stage_defs if s.id == stage_id), None
+    )
+    if stage_def_being_confirmed and stage_def_being_confirmed.component != "computed_results":
+        if state.get("cached_exports"):
+            state["cached_exports"] = {}
+
     state["current_stage_id"] = _infer_current_stage_id(module, state["stages"])
 
     # Trigger auto-population of the next computed_results stage, if any

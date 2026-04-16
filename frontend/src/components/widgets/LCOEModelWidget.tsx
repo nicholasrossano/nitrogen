@@ -13,6 +13,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -51,6 +52,13 @@ interface LCOEModelWidgetProps {
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
+  outputFooterAction?: {
+    label: string;
+    onClick: () => void;
+    loading?: boolean;
+    disabled?: boolean;
+  };
+  outputFooterState?: WorkspaceWidgetFooterState;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -86,6 +94,8 @@ export function LCOEModelWidget({
   onWorkflowUpdated,
   workspaceView = 'output',
   isActive = true,
+  outputFooterAction,
+  outputFooterState,
 }: LCOEModelWidgetProps) {
   const [data, setDataRaw] = useState(initialData);
   const setData = useCallback((newData: any) => {
@@ -258,7 +268,9 @@ export function LCOEModelWidget({
   /*  Shared sub-renders                                                 */
   /* ------------------------------------------------------------------ */
 
-  const renderInputsTable = () => (
+  // readOnly=true: shown in the results tab (no editing, no confirm checkboxes).
+  // readOnly=false: shown in the standalone inputs view (full interactivity).
+  const renderInputsTable = (readOnly = false) => (
     <div className="divide-y divide-divider">
       {groupedInputs.map((group) => (
         <div key={group.category}>
@@ -270,24 +282,24 @@ export function LCOEModelWidget({
           <div className="divide-y divide-stroke-subtle">
             {group.inputs.map((inp: any) => {
               const isMissing = inp.status === 'missing';
-              const isEditing = editingField === inp.field_name;
+              const isEditing = !readOnly && editingField === inp.field_name;
               const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
 
               return (
                 <div
                   key={inp.field_name}
-                  onMouseMove={(e) => {
+                  onMouseMove={readOnly ? undefined : (e) => {
                     const isInteractive = !!(e.target as HTMLElement).closest('button, input, a');
                     setOverInteractive(isInteractive);
                     setMousePos({ x: e.clientX, y: e.clientY });
                     setHoveredRowInp(inp);
                   }}
-                  onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
-                  onClick={(e) => {
+                  onMouseLeave={readOnly ? undefined : () => { setHoveredRowInp(null); setOverInteractive(false); }}
+                  onClick={readOnly ? undefined : (e) => {
                     if ((e.target as HTMLElement).closest('button, input, a')) return;
                     investigate(inp.label, inp.status, inp.field_name);
                   }}
-                  style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
+                  style={readOnly ? undefined : { cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
                   className={`px-5 py-2.5 flex items-center gap-3 ${
                     isMissing ? 'bg-red-50/40' : 'bg-white'
                   }`}
@@ -301,7 +313,7 @@ export function LCOEModelWidget({
                         <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
                       )}
                     </div>
-                    {inp.rationale && inp.status === 'assumed' && (
+                    {!readOnly && inp.rationale && inp.status === 'assumed' && (
                       <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
                         {inp.rationale}
                       </p>
@@ -319,6 +331,16 @@ export function LCOEModelWidget({
                         autoFocus
                         className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
                       />
+                    ) : readOnly ? (
+                      <span className="text-xs font-mono tabular-nums text-text-primary">
+                        {isMissing ? (
+                          <span className="text-red-500 italic">—</span>
+                        ) : (
+                          typeof inp.value === 'number'
+                            ? inp.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                            : inp.value
+                        )}
+                      </span>
                     ) : (
                       <button
                         onClick={() => isActive && startEdit(inp.field_name, inp.value)}
@@ -353,18 +375,20 @@ export function LCOEModelWidget({
                     </span>
                   </div>
 
-                  <div className="w-5 flex justify-center">
-                    {isActive && (
-                      <input
-                        type="checkbox"
-                        checked={inp.status === 'confirmed'}
-                        disabled={isMissing || confirmingFields.has(inp.field_name)}
-                        onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                        title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
-                        className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                      />
-                    )}
-                  </div>
+                  {!readOnly && (
+                    <div className="w-5 flex justify-center">
+                      {isActive && (
+                        <input
+                          type="checkbox"
+                          checked={inp.status === 'confirmed'}
+                          disabled={isMissing || confirmingFields.has(inp.field_name)}
+                          onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
+                          title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                          className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -464,9 +488,9 @@ export function LCOEModelWidget({
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
-    { id: 'inputs' as const, label: 'Inputs' },
     ...(sensitivity.length > 0 ? [{ id: 'sensitivity' as const, label: 'Sensitivity' }] : []),
     { id: 'cashflow' as const, label: 'Cash Flow' },
+    { id: 'inputs' as const, label: 'Inputs' },
   ];
 
   return (
@@ -580,7 +604,16 @@ export function LCOEModelWidget({
         </div>
       )}
 
-      {activeTab === 'inputs' && renderInputsTable()}
+      {activeTab === 'inputs' && (
+        <>
+          {renderInputsTable(true)}
+          <div className="px-5 py-2.5 bg-surface-subtle border-t border-divider">
+            <p className="text-[10px] text-text-tertiary">
+              To edit values, go back to the <span className="font-medium">Inputs</span> stage.
+            </p>
+          </div>
+        </>
+      )}
 
       {activeTab === 'sensitivity' && sensitivity.length > 0 && (
         <div className="bg-white">
@@ -709,19 +742,40 @@ export function LCOEModelWidget({
         </div>
       )}
 
-      <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
-        <p className="text-[10px] text-text-tertiary">
-          {activeTab === 'inputs' ? 'Edit any input to recalculate instantly' : 'Switch to Inputs to edit values'}
-        </p>
-        <button
-          onClick={handleExport}
-          disabled={isExporting}
-          className="btn-primary !text-xs !px-4 !py-1.5"
-        >
-          <Download className="w-3 h-3" />
-          {isExporting ? 'Exporting…' : 'Export to Excel'}
-        </button>
-      </div>
+      {outputFooterState?.mode === 'confirmed' ? (
+        <div className="px-5 py-3 bg-emerald-50/60 border-t border-divider">
+          <div className="flex items-center gap-2 text-xs text-emerald-700">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>
+              Confirmed{outputFooterState.confirmedAt ? ` · ${outputFooterState.confirmedAt}` : ''}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
+          <p className="text-[10px] text-text-tertiary">
+            Edit values in the Inputs stage to recalculate
+          </p>
+          {outputFooterAction ? (
+            <button
+              onClick={outputFooterAction.onClick}
+              disabled={outputFooterAction.disabled || outputFooterAction.loading}
+              className="btn-primary !text-xs !px-4 !py-1.5"
+            >
+              {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
+            </button>
+          ) : !instanceId && (
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="btn-primary !text-xs !px-4 !py-1.5"
+            >
+              <Download className="w-3 h-3" />
+              {isExporting ? 'Exporting…' : 'Export to Excel'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
 
     {activeTab === 'inputs' && renderInvestigateTooltip()}
