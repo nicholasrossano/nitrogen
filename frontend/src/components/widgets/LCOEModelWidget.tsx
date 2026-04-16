@@ -135,7 +135,7 @@ export function LCOEModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId, instanceId]);
+  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -186,7 +186,7 @@ export function LCOEModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -240,7 +240,7 @@ export function LCOEModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */

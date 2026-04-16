@@ -145,7 +145,7 @@ export function CarbonModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId, instanceId]);
+  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -196,7 +196,7 @@ export function CarbonModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -250,7 +250,7 @@ export function CarbonModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   const switchMethodPack = useCallback(async (newPack: string) => {
     if (newPack === currentMethodPack) return;
@@ -267,7 +267,7 @@ export function CarbonModelWidget({
     } finally {
       setIsSwitchingPack(false);
     }
-  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId]);
+  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
