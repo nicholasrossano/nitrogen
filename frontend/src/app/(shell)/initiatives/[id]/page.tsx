@@ -54,7 +54,7 @@ function InitiativePageContent() {
   const viewFromUrl: ProjectView =
     viewParam === 'research' || viewParam === 'explore' ? 'research' :
     viewParam === 'workspace' ? 'workspace' :
-    viewParam === 'files' ? 'files' : 'plan';
+    viewParam === 'files' ? 'files' : 'research';
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
   const [surfacePanels, setSurfacePanels] = useState({

@@ -87,7 +87,7 @@ export function SideDrawer() {
     if (view === 'research' || view === 'explore') return 'research';
     if (view === 'workspace') return 'workspace';
     if (view === 'files') return 'files';
-    return 'plan';
+    return 'research';
   }, [initiativeId, searchParams]);
 
   const hasProject = !!initiativeId;
