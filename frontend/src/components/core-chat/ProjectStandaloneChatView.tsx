@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ChatMessage, ResearchStep, SourceCitation } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
+import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
@@ -36,6 +36,12 @@ interface ProjectStandaloneChatViewProps {
   onLandingStateChange?: (isOnLanding: boolean) => void;
   /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
+  /** Shared session history (project + user scoped) */
+  sessions?: ChatSession[];
+  /** Delete a session from shared history */
+  onDeleteSession?: (sessionId: string) => void;
+  /** Ask parent to refresh shared session history */
+  onSessionListDirty?: () => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -70,6 +76,9 @@ export function ProjectStandaloneChatView({
   onSessionMetaChange,
   onLandingStateChange,
   onSendRef,
+  sessions = [],
+  onDeleteSession,
+  onSessionListDirty,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -82,33 +91,22 @@ export function ProjectStandaloneChatView({
   const [messageFeedback, setFeedbackMap] = useState<
     Record<string, 'like' | 'dislike' | null>
   >({});
-  const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
   const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [overviewGenerating, setOverviewGenerating] = useState(false);
   const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
+  const autoOverviewAttemptRef = useRef<string | null>(null);
 
+  const initiative = useInitiativeStore((s) => s.initiative);
+  const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+  const generateInitiativeOverview = useInitiativeStore((s) => s.generateInitiativeOverview);
 
   useEffect(() => {
     if (initialTitle && !sessionTitle) {
       setSessionTitle(initialTitle);
     }
   }, [initialTitle, sessionTitle]);
-
-  // Load session list from DB on mount — scoped to this project
-  useEffect(() => {
-    api.getChatSessions(initiativeId)
-      .then(({ sessions }) => {
-        setDbSessions(
-          sessions.map((s) => ({
-            id: s.id,
-            title: s.title || 'Untitled',
-            createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
-            messages: [],
-          })),
-        );
-      })
-      .catch((err) => console.warn('Failed to load chat sessions:', err));
-  }, [initiativeId]);
 
   useEffect(() => {
     if (!initialSessionId) return;
@@ -159,19 +157,8 @@ export function ProjectStandaloneChatView({
   const prevShowLanding = useRef(showLanding);
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
-      // Refresh sessions list so the just-finished conversation appears in history
-      api.getChatSessions(initiativeId)
-        .then(({ sessions }) => {
-          setDbSessions(
-            sessions.map((s) => ({
-              id: s.id,
-              title: s.title || 'Untitled',
-              createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
-              messages: [],
-            })),
-          );
-        })
-        .catch(() => {});
+      // Refresh shared sessions so the finished conversation appears in history.
+      onSessionListDirty?.();
       setLocalMessages([]);
       setSessionTitle(null);
       setCurrentSessionId(null);
@@ -179,7 +166,7 @@ export function ProjectStandaloneChatView({
       setCompareProject(null);
     }
     prevShowLanding.current = showLanding;
-  }, [showLanding, localMessages, initiativeId]);
+  }, [showLanding, localMessages, onSessionListDirty]);
 
   // Persist the AI-generated title to the DB session once both are available
   const titlePersistedRef = useRef(false);
@@ -210,8 +197,6 @@ export function ProjectStandaloneChatView({
     () => localMessages.map(toCoreMessage),
     [localMessages],
   );
-
-  const sessions = dbSessions;
 
   const sendViaStream = useCallback(
     async (content: string, currentMessages: ChatMessage[], toolHint?: string) => {
@@ -244,6 +229,7 @@ export function ProjectStandaloneChatView({
 
           if (payload.session_id) {
             setCurrentSessionId(payload.session_id);
+            onSessionListDirty?.();
           }
 
           setLocalMessages((prev) =>
@@ -296,7 +282,7 @@ export function ProjectStandaloneChatView({
         compareIds,
       );
     },
-    [initiativeId, currentSessionId, compareProject],
+    [initiativeId, currentSessionId, compareProject, onSessionListDirty],
   );
 
   const handleUploadFile = useCallback(
@@ -437,16 +423,6 @@ export function ProjectStandaloneChatView({
     [onMessageSent],
   );
 
-  const handleDeleteSession = useCallback(
-    (id: string) => {
-      setDbSessions((prev) => prev.filter((s) => s.id !== id));
-      api.deleteChatSession(id).catch((err) => {
-        console.error('Failed to delete session:', err);
-      });
-    },
-    [],
-  );
-
   // Expose handleSend to parent via ref so ModuleLandingPage can trigger a send
   useEffect(() => {
     if (onSendRef) onSendRef.current = handleSend;
@@ -461,7 +437,53 @@ export function ProjectStandaloneChatView({
     onLandingStateChange?.(isOnLanding);
   }, [isOnLanding, onLandingStateChange]);
 
+  const handleGenerateOverview = useCallback(async () => {
+    if (!initiative) return;
+    setOverviewError(null);
+    setOverviewGenerating(true);
+    try {
+      await generateInitiativeOverview(initiativeId);
+    } catch (err) {
+      setOverviewError(err instanceof Error ? err.message : 'Failed to refresh overview.');
+    } finally {
+      setOverviewGenerating(false);
+    }
+  }, [generateInitiativeOverview, initiative, initiativeId]);
+
+  useEffect(() => {
+    setOverviewError(null);
+    setOverviewGenerating(false);
+    autoOverviewAttemptRef.current = null;
+  }, [initiativeId]);
+
+  useEffect(() => {
+    if (!hideTiles || !initiative || initiative.shared_role === 'viewer') return;
+    if (projectMaterials.length === 0) return;
+    if (initiative.overview_description?.trim()) return;
+    if (overviewGenerating) return;
+
+    const attemptKey = `${initiativeId}:${projectMaterials.length}`;
+    if (autoOverviewAttemptRef.current === attemptKey) return;
+    autoOverviewAttemptRef.current = attemptKey;
+    void handleGenerateOverview();
+  }, [
+    handleGenerateOverview,
+    hideTiles,
+    initiative,
+    initiativeId,
+    overviewGenerating,
+    projectMaterials.length,
+  ]);
+
   if (isOnLanding) {
+    const filesUploaded = projectMaterials.length;
+    const modulesCreated = initiative?.module_instances_count ?? initiative?.module_instances?.length ?? 0;
+    const canRefreshOverview = Boolean(
+      initiative &&
+      initiative.shared_role !== 'viewer' &&
+      filesUploaded > 0
+    );
+
     return (
       <>
         <LandingInput
@@ -469,18 +491,21 @@ export function ProjectStandaloneChatView({
           onUploadFile={handleUploadFile}
           sessions={sessions}
           onLoadSession={handleLoadSession}
-          onDeleteSession={handleDeleteSession}
+          onDeleteSession={onDeleteSession}
           hideTiles={hideTiles}
+          layoutMode={hideTiles ? 'overview' : 'default'}
           headerContent={hideTiles ? (
-            <div className="text-center mb-8">
-              <div className="flex items-center justify-center gap-2.5 mb-3">
-                <Search className="w-7 h-7 text-accent" strokeWidth={1.75} />
-                <h1 className="text-[32px] font-semibold text-text-primary tracking-tight font-display">Research</h1>
-              </div>
-              <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-                Research and analyze project materials, compare against another project, or ask about past academic work and case studies.
-              </p>
-            </div>
+            initiative ? (
+              <InitiativeOverviewHeader
+                initiative={initiative}
+                filesUploaded={filesUploaded}
+                modulesCreated={modulesCreated}
+                isGenerating={overviewGenerating}
+                errorMessage={overviewError}
+                canRefresh={canRefreshOverview}
+                onRefresh={handleGenerateOverview}
+              />
+            ) : null
           ) : undefined}
           extraInputActions={hideTiles ? (
             <CompareProjectPicker

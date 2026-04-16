@@ -1,6 +1,7 @@
 import logging
 import re
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -32,6 +33,7 @@ from app.schemas.initiative import (
 )
 from app.schemas.module_instance import ModuleInstanceResponse
 from app.services import module_service
+from app.services.initiative_overview import generate_initiative_overview
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,11 @@ def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
     )
 
 
+def _count_active_module_instances(instances: list[ModuleInstance]) -> int:
+    """Module instances started for this initiative, excluding trash."""
+    return sum(1 for inst in instances if not inst.archived)
+
+
 def _initiative_to_response(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
     """Convert an Initiative ORM object to a response dict with sharing fields.
 
@@ -101,6 +108,7 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
 
     data["deliverables"] = deliverables or None
     data["module_alignments"] = alignments or None
+    data["module_instances_count"] = _count_active_module_instances(instances)
     data["generated_modules_count"] = _count_generated_module_instances(instances)
     data["module_instances"] = [
         ModuleInstanceResponse.model_validate(i).model_dump()
@@ -121,6 +129,7 @@ def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = N
         if inst.deliverable and inst.status == "complete":
             seen_tools.add(inst.module_id)
     data["deliverables"] = {t: True for t in seen_tools} if seen_tools else None
+    data["module_instances_count"] = _count_active_module_instances(instances)
     data["generated_modules_count"] = _count_generated_module_instances(instances)
     data["tool_alignments"] = None
     data["tool_inputs"] = None
@@ -294,6 +303,40 @@ async def update_initiative(
     if data.icon is not None:
         initiative.icon = data.icon
 
+    await db.commit()
+    await db.refresh(initiative)
+
+    owner_user = await db.get(User, initiative.user_id)
+    owner_email = owner_user.email if owner_user else None
+    return _initiative_to_response(
+        initiative,
+        shared_role=role if role != "owner" else None,
+        owner_email=owner_email,
+    )
+
+
+@router.post("/initiatives/{initiative_id}/overview", response_model=InitiativeResponse)
+async def generate_overview(
+    initiative_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Generate or refresh the stored initiative overview description."""
+    await ensure_user_exists(db, user)
+    initiative, role = await get_initiative_with_role(db, initiative_id, user)
+    if role == "viewer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewers cannot refresh this overview",
+        )
+
+    try:
+        initiative.overview_description = await generate_initiative_overview(db, initiative, user.uid)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    initiative.overview_generated_at = datetime.now(timezone.utc)
+    initiative.touch()
     await db.commit()
     await db.refresh(initiative)
 
