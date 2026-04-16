@@ -25,6 +25,9 @@ const PLAN_COLORS = [
 ];
 
 function mapPlanItem(item: ProjectPlanItem, pillar: ProjectPlanPillar): PlanWorkspaceItem {
+  const fallbackPhaseId =
+    item.phase ?? (item.phase_order !== undefined ? `phase_${item.phase_order}` : undefined);
+
   return {
     id: item.id,
     title: item.title,
@@ -34,7 +37,7 @@ function mapPlanItem(item: ProjectPlanItem, pillar: ProjectPlanPillar): PlanWork
     rationale: item.rationale,
     groupId: pillar.id,
     groupName: pillar.name,
-    phaseId: item.phase,
+    phaseId: fallbackPhaseId,
     phaseOrder: item.phase_order,
     userAdded: item.user_added,
     supports: item.supports,
@@ -54,11 +57,58 @@ export function mapProjectPlanToWorkspaceGroups(plan: ProjectPlan | null): PlanW
 }
 
 export function mapProjectPlanToWorkspacePhases(plan: ProjectPlan | null): PlanWorkspacePhase[] {
-  return (plan?.phases ?? []).map((phase) => ({
-    id: phase.id,
-    name: phase.name,
-    description: phase.description,
-  }));
+  const explicitPhases = plan?.phases ?? [];
+  if (explicitPhases.length > 0) {
+    return explicitPhases.map((phase) => ({
+      id: phase.id,
+      name: phase.name,
+      description: phase.description,
+    }));
+  }
+
+  if (!plan) return [];
+
+  const inferredPhases = new Map<string, { id: string; name: string; order: number }>();
+  const inferredFromOrder = new Set<number>();
+  plan.pillars.forEach((pillar) => {
+    pillar.items.forEach((item) => {
+      const order = item.phase_order ?? Number.MAX_SAFE_INTEGER;
+      if (!item.phase) {
+        if (item.phase_order !== undefined) {
+          inferredFromOrder.add(item.phase_order);
+        }
+        return;
+      }
+      const existing = inferredPhases.get(item.phase);
+      if (!existing || order < existing.order) {
+        inferredPhases.set(item.phase, {
+          id: item.phase,
+          name: item.phase
+            .replace(/[_-]+/g, ' ')
+            .replace(/\b\w/g, (char) => char.toUpperCase()),
+          order,
+        });
+      }
+    });
+  });
+
+  const inferredFromIds = Array.from(inferredPhases.values())
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+    .map(({ id, name }) => ({ id, name }));
+  if (inferredFromIds.length > 0) {
+    return inferredFromIds;
+  }
+
+  if (inferredFromOrder.size > 0) {
+    return Array.from(inferredFromOrder)
+      .sort((a, b) => a - b)
+      .map((order) => ({
+        id: `phase_${order}`,
+        name: `Phase ${order}`,
+      }));
+  }
+
+  return [];
 }
 
 export function mapProjectPlanToProgress(plan: ProjectPlan | null): PlanWorkspaceProgress | null {
@@ -120,7 +170,7 @@ export function buildProjectPlanSummaryData(plan: ProjectPlan): PlanWorkspaceSum
 
   return {
     planType: plan.plan_type ?? 'project_plan',
-    title: 'Project Plan',
+    title: 'Framework',
     footerText: 'You can edit this as needed in the diagram directly.',
     totalItems,
     requiredCount,

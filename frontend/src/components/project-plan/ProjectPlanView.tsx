@@ -51,6 +51,7 @@ interface ProjectPlanViewProps {
   showInspector?: boolean;
   onInspectorChange?: (open: boolean, hasItem: boolean) => void;
   onOpenFullDoc?: (citation: ResearchPanelCitation) => void;
+  onViewModeChange?: (modeId: string) => void;
 }
 
 interface DeepDiveState {
@@ -66,6 +67,7 @@ export function ProjectPlanView({
   showInspector,
   onInspectorChange,
   onOpenFullDoc,
+  onViewModeChange,
 }: ProjectPlanViewProps) {
   const {
     projectPlan,
@@ -76,6 +78,7 @@ export function ProjectPlanView({
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
   const [activeSurvey, setActiveSurvey] = useState<ActiveSurvey | null>(null);
+  const [localInspectorOpen, setLocalInspectorOpen] = useState(false);
 
   useEffect(() => {
     if (projectPlan?.deep_dives) {
@@ -150,7 +153,8 @@ export function ProjectPlanView({
       .find(({ item }) => item.id === workspaceItem.id);
     if (!match) return;
     runDeepDive(match.item, match.pillar);
-    onInspectorChange?.(true, true);
+    if (onInspectorChange) onInspectorChange(true, true);
+    else setLocalInspectorOpen(true);
   }, [onInspectorChange, projectPlan, runDeepDive]);
 
   const handleRetry = useCallback(() => {
@@ -162,7 +166,8 @@ export function ProjectPlanView({
 
     adapter.deleteItem(itemId);
     if (deepDive?.item.id === itemId) {
-      onInspectorChange?.(false, true);
+      if (onInspectorChange) onInspectorChange(false, true);
+      else setLocalInspectorOpen(false);
     }
 
     setActiveSurvey({
@@ -215,22 +220,26 @@ export function ProjectPlanView({
         progress={progress}
         filterConfig={filterConfig}
         inspectorState={inspectorState}
-        showInspector={showInspector}
-        onInspectorChange={onInspectorChange}
+        showInspector={showInspector ?? localInspectorOpen}
+        onInspectorChange={(open, hasItem) => {
+          if (onInspectorChange) onInspectorChange(open, hasItem);
+          else if (!open) setLocalInspectorOpen(false);
+        }}
         onOpenItem={handleOpenItem}
         onRetryInspector={handleRetry}
         onDeleteItem={handleDeleteItem}
         onToggleComplete={toggleComplete}
         onAddItem={(groupId, title, phaseId) => adapter.addItem(groupId, title, phaseId)}
+        onViewModeChange={onViewModeChange}
         onOpenDocument={(source) => onOpenFullDoc?.({
           evidence_doc_id: source.evidenceDocId,
           chunk_id: source.chunkId ?? null,
           source_title: source.title,
         })}
         emptyState={{
-          loadingTitle: 'Building your project plan...',
+          loadingTitle: 'Building your framework...',
           loadingSubtitle: 'This usually takes 15–30 seconds',
-          emptyTitle: 'No project plan yet',
+          emptyTitle: 'No framework yet',
           emptySubtitle: 'Describe your project in the chat and confirm the proposed categories to generate your plan.',
         }}
         colors={PLAN_COLORS}

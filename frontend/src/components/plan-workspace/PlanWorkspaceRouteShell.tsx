@@ -8,7 +8,6 @@ interface PlanWorkspaceRouteShellProps {
   showOverlay: boolean;
   showSprout: boolean;
   uploadError?: string | null;
-  panelOpen: boolean;
   readOnly: boolean;
   hasPlan: boolean;
   mainContent: ReactNode;
@@ -22,7 +21,6 @@ export function PlanWorkspaceRouteShell({
   showOverlay,
   showSprout,
   uploadError,
-  panelOpen,
   readOnly,
   hasPlan,
   mainContent,
@@ -56,7 +54,7 @@ export function PlanWorkspaceRouteShell({
         </div>
       )}
 
-      {panelOpen ? (
+      {hasPlan ? (
         <>
           <div className="flex-1 overflow-hidden min-w-0">{mainContent}</div>
           {documentViewer}
