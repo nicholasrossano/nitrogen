@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { EditorSidePanel } from './EditorSidePanel';
 import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
 import { api, type ModuleInstance } from '@/lib/api';
@@ -86,9 +87,7 @@ export function ProjectWorkspaceEditorPanel({
           <div className="flex-1 flex items-stretch overflow-x-auto min-w-0" style={{ scrollbarWidth: 'none' }}>
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId && !showWorkspaceHub;
-            const style = isActive
-              ? { flexShrink: 0, width: 148 }
-              : { flex: '1 1 0', minWidth: 88 };
+            const style = { flexShrink: 0, width: 148 };
 
             return (
               <button
@@ -108,7 +107,9 @@ export function ProjectWorkspaceEditorPanel({
                 <span className="flex-shrink-0 text-text-tertiary">
                   <FileText className="w-3.5 h-3.5" />
                 </span>
-                <span className="flex-1 truncate text-left">{tab.title}</span>
+                <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={1000}>
+                  <span className="block truncate text-left">{tab.title}</span>
+                </Tooltip>
                 <span
                   onClick={(event) => {
                     event.stopPropagation();

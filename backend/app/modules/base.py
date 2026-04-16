@@ -113,8 +113,8 @@ class PopulationStep:
     from prior steps and may extend or refine it.
 
     Supported types:
-        start_from_predefined_rows      — module.get_predefined_rows(stage_id)
-        seed_from_template              — module.get_template_items(stage_id, context)
+        start_from_predefined_rows      — module.get_predefined_rows(stage_id, context)
+        seed_from_template              — module.generate_items_for_stage(stage_id, step_type, …)
         extract_from_project_materials  — RAG retrieval via retrieval adapter
         infer_missing_with_ai           — LLM fills gaps in existing rows/items
         adapt_with_ai_from_project_materials — LLM + RAG adapts template items
