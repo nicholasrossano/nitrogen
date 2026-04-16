@@ -109,7 +109,7 @@ export function WorkspaceHub({
                   writeStoredHubMode(initiativeId, 'new');
                 }
               }}
-              className={`${mode === 'new' ? 'btn-secondary' : 'btn-primary'} !h-[36px] !text-xs !leading-none !px-4 !py-0`}
+              className="btn-primary !h-[36px] !text-xs !leading-none !px-4 !py-0"
             >
               {mode === 'new' ? (
                 <>
