@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Trash2, Plus, GripVertical, Check, X } from 'lucide-react';
 import {
   DndContext,
@@ -19,6 +19,46 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { BuildItem, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
+import { getIconByName } from '@/lib/icons';
+
+const CATEGORY_COLORS = [
+  '#005e72', '#4a6680', '#8d5e6a', '#7a5030',
+  '#a06548', '#7a6520', '#7a7a3a', '#6b7d6a',
+];
+
+const ICON_BY_KEYWORD: Array<{ icon: string; keywords: string[] }> = [
+  { icon: 'TrendingUp', keywords: ['market', 'demand', 'growth', 'viability', 'economic'] },
+  { icon: 'Zap', keywords: ['technology', 'tech', 'innovation', 'energy', 'electrification'] },
+  { icon: 'Scale', keywords: ['policy', 'regulatory', 'compliance', 'legal', 'governance'] },
+  { icon: 'Users', keywords: ['stakeholder', 'community', 'consumer', 'user', 'household'] },
+  { icon: 'Leaf', keywords: ['environment', 'climate', 'emission', 'carbon', 'ecology'] },
+  { icon: 'CircleDollarSign', keywords: ['financial', 'finance', 'funding', 'investment', 'cost'] },
+  { icon: 'Truck', keywords: ['supply', 'logistics', 'distribution', 'infrastructure', 'value chain'] },
+  { icon: 'Wrench', keywords: ['operations', 'implementation', 'maintenance', 'capacity'] },
+];
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function inferCategoryIconName(label: string): string {
+  const normalized = label.trim().toLowerCase();
+  for (const mapping of ICON_BY_KEYWORD) {
+    if (mapping.keywords.some((keyword) => normalized.includes(keyword))) {
+      return mapping.icon;
+    }
+  }
+  return 'Compass';
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('item not found') || message.includes('http 404');
+}
 
 interface Props {
   instanceId: string;
@@ -33,12 +73,14 @@ interface Props {
 
 function SortableRow({
   item,
+  index,
   fields,
   onDelete,
   onEdit,
   readOnly,
 }: {
   item: BuildItem;
+  index: number;
   fields: FieldDef[];
   onDelete: (id: string) => void;
   onEdit: (id: string, content: Record<string, any>) => void;
@@ -57,6 +99,9 @@ function SortableRow({
   const primaryLabel = primaryField ? String(item.content[primaryField.name] ?? '') : 'Item';
   const secondaryField = fields[1];
   const secondaryLabel = secondaryField ? String(item.content[secondaryField.name] ?? '') : null;
+  const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+  const inferredIcon = inferCategoryIconName(primaryLabel);
+  const Icon = getIconByName(String(item.content.icon ?? inferredIcon));
 
   const handleCommit = () => {
     setEditing(false);
@@ -66,66 +111,104 @@ function SortableRow({
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={`flex items-center gap-2 px-2 py-2.5 rounded-md transition-colors ${
-        isDragging ? 'opacity-50 bg-surface-subtle' : 'hover:bg-surface-subtle/60'
+      className={`border rounded-md px-4 py-3 transition-colors duration-150 ${
+        isDragging ? 'opacity-60 bg-surface-subtle' : 'bg-surface'
       }`}
+      onMouseEnter={(e) => {
+        if (!editing && !isDragging) {
+          e.currentTarget.style.backgroundColor = hexToRgba(color, 0.06);
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isDragging) {
+          e.currentTarget.style.backgroundColor = '';
+        }
+      }}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          e.currentTarget.style.backgroundColor = '';
+        }
+      }}
+      onFocus={(e) => {
+        if (!editing && !isDragging) {
+          e.currentTarget.style.backgroundColor = hexToRgba(color, 0.06);
+        }
+      }}
+      // Match the real pillar header border treatment.
+      style={{ ...style, borderColor: color }}
     >
-      {!readOnly && (
+      <div className={`flex gap-2.5 w-full ${editing || secondaryLabel ? 'items-start' : 'items-center'}`}>
         <div
-          {...attributes}
-          {...listeners}
-          className="text-text-tertiary cursor-grab active:cursor-grabbing"
+          className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: hexToRgba(color, 0.1), color }}
         >
-          <GripVertical className="w-3.5 h-3.5" />
+          <Icon className="w-5 h-5" />
         </div>
-      )}
 
-      {editing ? (
-        <div className="flex-1 flex flex-col gap-1.5">
-          {fields.map((f) => (
-            <input
-              key={f.name}
-              autoFocus={f === fields[0]}
-              type={f.field_type === 'number' ? 'number' : 'text'}
-              value={draft[f.name]}
-              onChange={(e) => setDraft((d) => ({ ...d, [f.name]: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCommit();
-                if (e.key === 'Escape') { setDraft(Object.fromEntries(fields.map((fi) => [fi.name, String(item.content[fi.name] ?? '')]))); setEditing(false); }
-              }}
-              placeholder={f.placeholder ?? f.label ?? f.name}
-              className="w-full text-xs bg-surface border border-accent/40 rounded px-2 py-1 outline-none text-text-primary"
-            />
-          ))}
-          <div className="flex gap-1">
-            <button onClick={handleCommit} className="p-0.5 text-emerald-600 hover:text-emerald-700 transition-colors">
-              <Check className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => { setDraft(Object.fromEntries(fields.map((f) => [f.name, String(item.content[f.name] ?? '')]))); setEditing(false); }} className="p-0.5 text-text-tertiary hover:text-text-secondary transition-colors">
-              <X className="w-3.5 h-3.5" />
-            </button>
+        {editing ? (
+          <div className="flex-1 flex flex-col gap-1.5">
+            {fields.map((f) => (
+              <input
+                key={f.name}
+                autoFocus={f === fields[0]}
+                type={f.field_type === 'number' ? 'number' : 'text'}
+                value={draft[f.name]}
+                onChange={(e) => setDraft((d) => ({ ...d, [f.name]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCommit();
+                  if (e.key === 'Escape') { setDraft(Object.fromEntries(fields.map((fi) => [fi.name, String(item.content[fi.name] ?? '')]))); setEditing(false); }
+                }}
+                placeholder={f.placeholder ?? f.label ?? f.name}
+                className="w-full text-xs bg-surface border border-accent/40 rounded px-2 py-1 outline-none text-text-primary"
+              />
+            ))}
+            <div className="flex gap-1">
+              <button onClick={handleCommit} className="p-0.5 text-emerald-600 hover:text-emerald-700 transition-colors">
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => { setDraft(Object.fromEntries(fields.map((f) => [f.name, String(item.content[f.name] ?? '')]))); setEditing(false); }} className="p-0.5 text-text-tertiary hover:text-text-secondary transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <button
-          className="flex-1 text-left"
-          onClick={() => !readOnly && setEditing(true)}
-          disabled={readOnly}
-        >
-          <p className="text-sm text-text-primary font-medium leading-snug">{primaryLabel || <span className="text-text-tertiary italic">Untitled</span>}</p>
-          {secondaryLabel && <p className="text-xs text-text-secondary mt-0.5 leading-relaxed line-clamp-2">{secondaryLabel}</p>}
-        </button>
-      )}
+        ) : (
+          <button
+            className="flex-1 text-left min-h-8 flex flex-col justify-center"
+            onClick={() => !readOnly && setEditing(true)}
+            disabled={readOnly}
+          >
+            <p className="text-sm font-semibold text-text-primary leading-tight">
+              {primaryLabel || <span className="text-text-tertiary italic">Untitled</span>}
+            </p>
+            {secondaryLabel && (
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed line-clamp-2">
+                {secondaryLabel}
+              </p>
+            )}
+          </button>
+        )}
 
-      {!readOnly && !editing && (
-        <button
-          onClick={() => onDelete(item.id)}
-          className="text-text-tertiary hover:text-red-400 transition-colors shrink-0 p-0.5"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
+        <div className="flex items-center gap-1">
+          {!readOnly && (
+            <button
+              {...attributes}
+              {...listeners}
+              className="text-text-tertiary hover:text-text-secondary cursor-grab active:cursor-grabbing p-0.5"
+              aria-label="Reorder"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {!readOnly && !editing && (
+            <button
+              onClick={() => onDelete(item.id)}
+              className="text-text-tertiary hover:text-red-400 transition-colors shrink-0 p-0.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -141,41 +224,63 @@ function AddItemRow({
   onSubmit: (content: Record<string, string>) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(fields.map((f) => [f.name, '']))
-  );
+  const primaryField = fields[0];
+  const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const hasValue = !!value.trim();
+  const inferredIcon = inferCategoryIconName(value || primaryField?.label || primaryField?.name || 'Category');
+  const Icon = getIconByName(inferredIcon);
 
   const handleSubmit = async () => {
-    if (!values[fields[0]?.name]?.trim()) return;
+    if (!primaryField?.name || !value.trim()) return;
     setSaving(true);
-    try { await onSubmit(values); } finally { setSaving(false); }
+    try {
+      await onSubmit({ [primaryField.name]: value });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="px-2 py-2.5 rounded-md bg-accent/5 flex flex-col gap-1.5">
-      {fields.map((f) => (
+    <div
+      className="border border-divider rounded-md px-4 py-3 bg-surface-subtle/40"
+    >
+      <div className="flex items-center gap-3 w-full min-h-8">
+        <div
+          className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+          style={{
+            backgroundColor: hasValue ? hexToRgba('#6b7280', 0.12) : hexToRgba('#9ca3af', 0.18),
+            color: hasValue ? '#6b7280' : '#9ca3af',
+          }}
+        >
+          {hasValue ? (
+            <Icon className="w-5 h-5" />
+          ) : (
+            <span className="w-3.5 h-3.5 rounded-[3px] border-2 border-current/80" />
+          )}
+        </div>
+
         <input
-          key={f.name}
-          autoFocus={f === fields[0]}
-          type={f.field_type === 'number' ? 'number' : 'text'}
-          value={values[f.name]}
-          onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+          autoFocus
+          type={primaryField?.field_type === 'number' ? 'number' : 'text'}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit();
             if (e.key === 'Escape') onCancel();
           }}
-          placeholder={f.placeholder ?? f.label ?? f.name}
-          className="w-full text-xs bg-surface border border-accent/40 rounded px-2 py-1 outline-none text-text-primary"
+          placeholder={primaryField?.placeholder ?? primaryField?.label ?? primaryField?.name ?? 'Category'}
+          className="flex-1 bg-transparent outline-none text-sm font-semibold text-text-primary placeholder:text-text-tertiary"
         />
-      ))}
-      <div className="flex gap-1">
+
+        <div className="flex items-center gap-2 pl-1 shrink-0">
         <button onClick={handleSubmit} disabled={saving} className="p-0.5 text-emerald-600 enabled:hover:text-emerald-700 disabled:opacity-40 transition-colors">
           <Check className="w-3.5 h-3.5" />
         </button>
         <button onClick={onCancel} className="p-0.5 text-text-tertiary hover:text-text-secondary transition-colors">
           <X className="w-3.5 h-3.5" />
         </button>
+        </div>
       </div>
     </div>
   );
@@ -186,9 +291,17 @@ function AddItemRow({
 export function CategorizedListStage({ instanceId, stageId, fields, items, readOnly, onChanged }: Props) {
   const [adding, setAdding] = useState(false);
   const [localItems, setLocalItems] = useState(items);
+  const [optimisticAddedItemId, setOptimisticAddedItemId] = useState<string | null>(null);
 
-  // Sync when parent re-fetches
-  if (localItems !== items && !adding) setLocalItems(items);
+  // Sync when parent re-fetches (avoid mutating state during render).
+  useEffect(() => {
+    if (adding) return;
+    if (optimisticAddedItemId && !items.some((item) => item.id === optimisticAddedItemId)) return;
+    setLocalItems(items);
+    if (optimisticAddedItemId && items.some((item) => item.id === optimisticAddedItemId)) {
+      setOptimisticAddedItemId(null);
+    }
+  }, [items, adding, optimisticAddedItemId]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -208,10 +321,22 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
 
   const handleDelete = useCallback(
     async (itemId: string) => {
-      await api.deleteStageItem(instanceId, stageId, itemId);
-      onChanged();
+      const previousItems = localItems;
+      setLocalItems((prev) => prev.filter((item) => item.id !== itemId));
+      try {
+        await api.deleteStageItem(instanceId, stageId, itemId);
+        onChanged();
+      } catch (error) {
+        // If the backend already deleted it (race/double-click), keep UI state.
+        if (isNotFoundError(error)) {
+          onChanged();
+          return;
+        }
+        setLocalItems(previousItems);
+        throw error;
+      }
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, localItems]
   );
 
   const handleEdit = useCallback(
@@ -224,7 +349,9 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
 
   const handleAdd = useCallback(
     async (content: Record<string, string>) => {
-      await api.addStageItem(instanceId, stageId, content);
+      const { item } = await api.addStageItem(instanceId, stageId, content);
+      setLocalItems((prev) => [...prev, item]);
+      setOptimisticAddedItemId(item.id);
       setAdding(false);
       onChanged();
     },
@@ -232,7 +359,7 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
   );
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2.5">
       {localItems.length === 0 && !adding && (
         <div className="py-8 text-center text-sm text-text-tertiary">
           No items yet.{!readOnly && ' Click + to add one.'}
@@ -240,11 +367,12 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
       )}
 
       {readOnly ? (
-        <div className="flex flex-col gap-0.5">
-          {localItems.map((item) => (
+        <div className="flex flex-col gap-2.5">
+          {localItems.map((item, idx) => (
             <SortableRow
               key={item.id}
               item={item}
+              index={idx}
               fields={fields}
               onDelete={handleDelete}
               onEdit={handleEdit}
@@ -255,11 +383,12 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={localItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-0.5">
-              {localItems.map((item) => (
+            <div className="flex flex-col gap-2.5">
+              {localItems.map((item, idx) => (
                 <SortableRow
                   key={item.id}
                   item={item}
+                  index={idx}
                   fields={fields}
                   onDelete={handleDelete}
                   onEdit={handleEdit}
@@ -279,13 +408,15 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
       )}
 
       {!readOnly && !adding && (
-        <button
-          onClick={() => setAdding(true)}
-          className="mt-1 flex items-center gap-1 text-xs text-text-tertiary hover:text-text-secondary transition-colors py-1 px-2"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add item
-        </button>
+        <div className="flex justify-center py-1">
+          <button
+            onClick={() => setAdding(true)}
+            className="w-4 h-4 rounded-full bg-green-500 enabled:hover:bg-green-600 disabled:opacity-40 flex items-center justify-center transition-colors duration-150 shadow-sm"
+            aria-label="Add item"
+          >
+            <Plus className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
+          </button>
+        </div>
       )}
     </div>
   );
