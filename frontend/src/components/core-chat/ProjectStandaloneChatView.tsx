@@ -92,6 +92,7 @@ export function ProjectStandaloneChatView({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
+  const [activeModulesCount, setActiveModulesCount] = useState<number | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewGenerating, setOverviewGenerating] = useState(false);
   const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
@@ -437,6 +438,27 @@ export function ProjectStandaloneChatView({
     onLandingStateChange?.(isOnLanding);
   }, [isOnLanding, onLandingStateChange]);
 
+  useEffect(() => {
+    if (!hideTiles || !isOnLanding) return;
+
+    let cancelled = false;
+    api.listModuleInstances(initiativeId)
+      .then((instances) => {
+        if (!cancelled) {
+          setActiveModulesCount(instances.length);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActiveModulesCount(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hideTiles, initiativeId, isOnLanding]);
+
   const handleGenerateOverview = useCallback(async () => {
     if (!initiative) return;
     setOverviewError(null);
@@ -453,6 +475,7 @@ export function ProjectStandaloneChatView({
   useEffect(() => {
     setOverviewError(null);
     setOverviewGenerating(false);
+    setActiveModulesCount(null);
     autoOverviewAttemptRef.current = null;
   }, [initiativeId]);
 
@@ -477,7 +500,11 @@ export function ProjectStandaloneChatView({
 
   if (isOnLanding) {
     const filesUploaded = projectMaterials.length;
-    const modulesCreated = initiative?.module_instances_count ?? initiative?.module_instances?.length ?? 0;
+    const modulesCreated =
+      activeModulesCount ??
+      initiative?.module_instances_count ??
+      initiative?.module_instances?.length ??
+      0;
     const canRefreshOverview = Boolean(
       initiative &&
       initiative.shared_role !== 'viewer' &&
