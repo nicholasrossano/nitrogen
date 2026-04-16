@@ -1,8 +1,8 @@
 """Landscape Mapping Module.
 
 Stage workflow:
-  1. Landscape Themes  (list / categorized_list)
-  2. Entities          (list / categorized_workspace)
+  1. Categories  (list / categorized_list)
+  2. Entities    (list / categorized_workspace)
 
 Export: DOCX generated on demand from confirmed stage data.
 """
@@ -41,12 +41,12 @@ class LandscapeMappingModule(BaseModule):
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
             **self.definition.__dict__,
-            goal="Generate a landscape map of ecosystem themes, entities, and strategic implications.",
+            goal="Generate a landscape map of ecosystem categories, entities, and strategic implications.",
             primary_ui_object="categorized_workspace",
             export_artifact_types=["docx"],
             adapter_bindings={"research_source": "retrieval"},
             input_dependencies=[],
-            produced_outputs=["landscape_themes", "landscape_recommendations"],
+            produced_outputs=["landscape_categories", "landscape_recommendations"],
             downstream_dependencies=[],
             assumptions_behavior="tracks",
             evidence_behavior="rag_grounded",
@@ -57,11 +57,11 @@ class LandscapeMappingModule(BaseModule):
         return [
             StageDef(
                 id="themes",
-                title="Landscape Themes",
+                title="Categories",
                 component="list",
                 widget="categorized_list",
                 fields=[
-                    FieldDef("label", "text", required=True, label="Theme"),
+                    FieldDef("label", "text", required=True, label="Category"),
                     FieldDef("description", "long_text", label="Description"),
                 ],
                 population=[
@@ -77,7 +77,7 @@ class LandscapeMappingModule(BaseModule):
                 widget="categorized_workspace",
                 fields=[
                     FieldDef("name", "text", required=True, label="Name"),
-                    FieldDef("category", "text", required=True, label="Theme"),
+                    FieldDef("category", "text", required=True, label="Category"),
                     FieldDef("description", "long_text", label="Description"),
                 ],
                 population=[
@@ -141,13 +141,13 @@ class LandscapeMappingModule(BaseModule):
         result = await llm_json(
             system=(
                 "You are a senior landscape analyst producing a professional report. "
-                "Using the confirmed themes, entities, and retrieved sources, write a full "
+                "Using the confirmed categories, entities, and retrieved sources, write a full "
                 "landscape mapping report:\n"
                 "  • Executive Summary (3–5 sentences)\n"
-                "  • One section per theme with 2–3 analytical paragraphs. Cite as [1], [2], etc.\n"
+                "  • One section per category with 2–3 analytical paragraphs. Cite as [1], [2], etc.\n"
                 "  • Strategic Implications and Recommendations\n\n"
                 "Return JSON with keys: title, executive_summary, "
-                "sections (list of {theme, body}), strategic_implications, recommendations"
+                "sections (list of {category, body}), strategic_implications, recommendations"
             ),
             user_msg=(
                 f"Project: Region={region}, Type={sector}\n\n"
@@ -174,8 +174,8 @@ class LandscapeMappingModule(BaseModule):
     async def _generate_themes(self, context: dict) -> list[dict]:
         data = await llm_json(
             system=(
-                "You are a landscape analysis expert. Generate 5–8 high-level themes or dimensions "
-                "for a landscape mapping assessment. Return JSON with key 'themes', a list of objects "
+                "You are a landscape analysis expert. Generate 5–8 high-level categories or dimensions "
+                "for a landscape mapping assessment. Return JSON with key 'categories', a list of objects "
                 "with 'label' (no descriptions needed)."
             ),
             user_msg=(
@@ -186,7 +186,7 @@ class LandscapeMappingModule(BaseModule):
         )
         return [
             {"label": t.get("label", t.get("title", "")), "description": t.get("description", "")}
-            for t in data.get("themes", [])
+            for t in data.get("categories", [])
         ]
 
     async def _generate_entities(self, context: dict, theme_items: list[dict]) -> list[dict]:
@@ -194,15 +194,15 @@ class LandscapeMappingModule(BaseModule):
         themes_list = "\n".join(f"- {t}" for t in themes)
         data = await llm_json(
             system=(
-                "You are a landscape researcher. For each theme listed, identify 3–5 specific "
+                "You are a landscape researcher. For each category listed, identify 3–5 specific "
                 "organisations, programmes, policies, technologies, or trends. Each item must have "
-                "'name' and 'category' (exactly matching one theme label). "
+                "'name' and 'category' (exactly matching one category label). "
                 "Return JSON with key 'entities', a flat list."
             ),
             user_msg=(
                 f"Region: {context.get('geography', '')}\n"
                 f"Project type / sector: {context.get('project_type', '')}\n"
-                f"Themes:\n{themes_list}"
+                f"Categories:\n{themes_list}"
             ),
         )
         return [

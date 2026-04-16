@@ -5,7 +5,7 @@ workspace. The workflow state stored in module_instances.workflow_state is:
 
 {
     "module_type": "stakeholder_assessment",
-    "current_stage_id": "stakeholders",
+    "current_stage_id": "categories",
     "stages": {
         "categories": {
             "status": "confirmed",    # pending | populating | draft | confirmed | error
