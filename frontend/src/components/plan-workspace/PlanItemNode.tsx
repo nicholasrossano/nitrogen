@@ -1,4 +1,5 @@
 import { Minus, Check, FileCheck2, Calculator } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { Tooltip } from '@/components/ui/Tooltip';
 
@@ -13,6 +14,10 @@ interface PlanItemNodeProps {
   onToggleComplete?: (id: string) => void;
   hideBranchGutter?: boolean;
   fullWidth?: boolean;
+  showKindBadge?: boolean;
+  showCompleteToggle?: boolean;
+  showBranchDelete?: boolean;
+  rightActions?: ReactNode;
 }
 
 type ItemKind = 'deliverable' | 'assessment';
@@ -43,6 +48,10 @@ export function PlanItemNode({
   onToggleComplete,
   hideBranchGutter = false,
   fullWidth = false,
+  showKindBadge = true,
+  showCompleteToggle = true,
+  showBranchDelete = true,
+  rightActions,
 }: PlanItemNodeProps) {
   const itemKind: ItemKind = item.kind;
   const kindStyle = ITEM_KIND_STYLES[itemKind];
@@ -56,8 +65,8 @@ export function PlanItemNode({
           <div className="absolute top-1/2 left-1/2 right-0 h-px bg-stroke-subtle" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
             <div className="relative w-2 h-2">
-              <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete ? 'group-hover/item:opacity-0' : ''} bg-stroke-muted`} />
-              {onDelete && (
+              <div className={`w-2 h-2 rounded-full transition-opacity duration-200 ${onDelete && showBranchDelete ? 'group-hover/item:opacity-0' : ''} bg-stroke-muted`} />
+              {onDelete && showBranchDelete && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -92,13 +101,15 @@ export function PlanItemNode({
           } : undefined}
           aria-label={isClickable ? `Open details: ${item.title}` : undefined}
         >
-          <Tooltip content={kindStyle.tooltip}>
-            <span className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-opacity ${
-              isComplete ? 'opacity-40' : ''
-            } ${kindStyle.badge}`}>
-              <kindStyle.Icon className="w-3 h-3" />
-            </span>
-          </Tooltip>
+          {showKindBadge && (
+            <Tooltip content={kindStyle.tooltip}>
+              <span className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-opacity ${
+                isComplete ? 'opacity-40' : ''
+              } ${kindStyle.badge}`}>
+                <kindStyle.Icon className="w-3 h-3" />
+              </span>
+            </Tooltip>
+          )}
 
           <span className={`flex-1 text-sm font-medium leading-snug transition-colors ${
             isComplete ? 'text-text-tertiary' : 'text-text-primary'
@@ -106,25 +117,28 @@ export function PlanItemNode({
             {item.title}
           </span>
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggleComplete?.(item.id);
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            aria-label={isComplete ? 'Mark incomplete' : 'Mark complete'}
-            className="p-2 -m-2 flex items-center justify-center flex-shrink-0 group/check"
-          >
-            <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-150 pointer-events-none ${
-              isComplete
-                ? 'bg-green-500 border-green-500'
-                : 'border-stroke-muted group-hover/check:border-green-400 bg-transparent'
-            }`}>
-              {isComplete && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-            </span>
-          </button>
+          {showCompleteToggle && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleComplete?.(item.id);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={isComplete ? 'Mark incomplete' : 'Mark complete'}
+              className="p-2 -m-2 flex items-center justify-center flex-shrink-0 group/check"
+            >
+              <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-150 pointer-events-none ${
+                isComplete
+                  ? 'bg-green-500 border-green-500'
+                  : 'border-stroke-muted group-hover/check:border-green-400 bg-transparent'
+              }`}>
+                {isComplete && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+              </span>
+            </button>
+          )}
+          {rightActions}
         </div>
       </div>
     </div>

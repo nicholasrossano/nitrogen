@@ -505,7 +505,8 @@ def _get_auto_populate_stage(
     next_state = state["stages"].get(next_def.id, {})
 
     # Auto-populate if: next stage is pending AND has a read_confirmed_prior_stage
-    # pointing to the just-confirmed stage (making it ready to compute)
+    # pointing to the just-confirmed stage. This covers calculator outputs as
+    # well as assessment follow-on stages (e.g. categories -> entities).
     if next_state.get("status") != "pending":
         return None
 
@@ -514,8 +515,12 @@ def _get_auto_populate_stage(
             step.type == "read_confirmed_prior_stage"
             and step.config.get("stage_id") == confirmed_stage_id
         ):
-            # Only auto-populate computed_results (calculators)
-            if next_def.component == "computed_results":
+            # If the next stage has any executable population step, auto-run it.
+            has_executable_steps = any(
+                s.type != "await_user_confirmation"
+                for s in next_def.population
+            )
+            if has_executable_steps:
                 return next_def
             break
 

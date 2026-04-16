@@ -11,6 +11,7 @@ Export: DOCX generated on demand from confirmed stage data.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 from uuid import UUID
 
@@ -229,13 +230,20 @@ class StakeholderAssessmentModule(BaseModule):
         ]
 
     async def _generate_stakeholders(self, context: dict, category_items: list[dict]) -> list[dict]:
-        categories = [i["content"].get("label", i["content"].get("title", "")) for i in category_items]
+        categories = [
+            i["content"].get("label", i["content"].get("title", "")).strip()
+            for i in category_items
+            if i["content"].get("label", i["content"].get("title", "")).strip()
+        ]
+        if not categories:
+            return []
         categories_list = "\n".join(f"- {c}" for c in categories)
         data = await llm_json(
             system=(
                 "You are an expert stakeholder analyst. For each stakeholder category listed, "
                 "identify 3–5 specific stakeholders. Each item must have 'name', 'category' "
                 "(exactly matching one category label), and 'why_they_matter'. "
+                "Do not skip categories. Ensure every category has at least 3 stakeholders. "
                 "Return JSON with key 'stakeholders', a flat list."
             ),
             user_msg=(
@@ -245,14 +253,89 @@ class StakeholderAssessmentModule(BaseModule):
                 f"Stakeholder categories:\n{categories_list}"
             ),
         )
-        return [
-            {
-                "name": s.get("name", ""),
-                "category": s.get("category", ""),
-                "why_they_matter": s.get("why_they_matter", ""),
-            }
-            for s in data.get("stakeholders", [])
-        ]
+        stakeholders_by_category = self._bucket_stakeholders(data.get("stakeholders", []), categories)
+
+        min_per_category = 3
+        underfilled = [c for c in categories if len(stakeholders_by_category.get(c, [])) < min_per_category]
+        if underfilled:
+            shortfalls = "\n".join(
+                f"- {c}: need at least {min_per_category - len(stakeholders_by_category.get(c, []))} more"
+                for c in underfilled
+            )
+            existing = "\n".join(
+                f"- {c}: {', '.join(s['name'] for s in stakeholders_by_category.get(c, [])) or '(none)'}"
+                for c in categories
+            )
+            refill = await llm_json(
+                system=(
+                    "You are an expert stakeholder analyst. Fill only missing stakeholders for underfilled categories. "
+                    "Return JSON with key 'stakeholders' as a flat list of objects with "
+                    "'name', 'category', and 'why_they_matter'. Category values must exactly match one listed category."
+                ),
+                user_msg=(
+                    f"Project: {context.get('project_title', 'Unknown')}\n"
+                    f"Geography: {context.get('geography', '')}\n"
+                    f"Project type: {context.get('project_type', '')}\n"
+                    f"All categories:\n{categories_list}\n\n"
+                    f"Existing stakeholders by category:\n{existing}\n\n"
+                    f"Underfilled categories:\n{shortfalls}"
+                ),
+            )
+            refill_bucket = self._bucket_stakeholders(refill.get("stakeholders", []), categories)
+            for category in categories:
+                existing_names = {s["name"].strip().lower() for s in stakeholders_by_category.get(category, [])}
+                for stakeholder in refill_bucket.get(category, []):
+                    key = stakeholder["name"].strip().lower()
+                    if key not in existing_names:
+                        stakeholders_by_category.setdefault(category, []).append(stakeholder)
+                        existing_names.add(key)
+
+        output: list[dict] = []
+        for category in categories:
+            output.extend(stakeholders_by_category.get(category, [])[:6])
+        return output
+
+    @staticmethod
+    def _normalize_category(raw_category: str, categories: list[str]) -> str:
+        raw = (raw_category or "").strip()
+        if not raw:
+            return ""
+        if raw in categories:
+            return raw
+
+        lowered_map = {c.lower(): c for c in categories}
+        if raw.lower() in lowered_map:
+            return lowered_map[raw.lower()]
+
+        raw_norm = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", raw.lower())).strip()
+        for category in categories:
+            cat_norm = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", category.lower())).strip()
+            if raw_norm and cat_norm and (raw_norm in cat_norm or cat_norm in raw_norm):
+                return category
+        return ""
+
+    def _bucket_stakeholders(self, raw_stakeholders: list[dict], categories: list[str]) -> dict[str, list[dict]]:
+        buckets: dict[str, list[dict]] = {c: [] for c in categories}
+        seen: set[tuple[str, str]] = set()
+
+        for stakeholder in raw_stakeholders or []:
+            name = (stakeholder.get("name") or "").strip()
+            category = self._normalize_category(stakeholder.get("category", ""), categories)
+            if not name or not category:
+                continue
+            dedupe_key = (category, name.lower())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            buckets[category].append(
+                {
+                    "name": name,
+                    "category": category,
+                    "why_they_matter": (stakeholder.get("why_they_matter") or "").strip(),
+                }
+            )
+
+        return buckets
 
     async def _enrich_stakeholder_detail(
         self,

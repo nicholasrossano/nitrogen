@@ -10,6 +10,7 @@ Export: DOCX generated on demand from confirmed stage data.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from app.modules.base import BaseModule, FieldDef, PopulationStep, StageDef, ModuleDefinition, ModuleManifest
@@ -190,13 +191,16 @@ class LandscapeMappingModule(BaseModule):
         ]
 
     async def _generate_entities(self, context: dict, theme_items: list[dict]) -> list[dict]:
-        themes = [i["content"].get("label", "") for i in theme_items]
+        themes = [i["content"].get("label", "").strip() for i in theme_items if i["content"].get("label", "").strip()]
+        if not themes:
+            return []
         themes_list = "\n".join(f"- {t}" for t in themes)
         data = await llm_json(
             system=(
                 "You are a landscape researcher. For each category listed, identify 3–5 specific "
                 "organisations, programmes, policies, technologies, or trends. Each item must have "
                 "'name' and 'category' (exactly matching one category label). "
+                "Do not skip categories. Ensure every category has at least 3 items. "
                 "Return JSON with key 'entities', a flat list."
             ),
             user_msg=(
@@ -205,7 +209,89 @@ class LandscapeMappingModule(BaseModule):
                 f"Categories:\n{themes_list}"
             ),
         )
-        return [
-            {"name": e.get("name", ""), "category": e.get("category", e.get("parent", "")), "description": ""}
-            for e in data.get("entities", [])
-        ]
+
+        entities_by_theme = self._bucket_entities(data.get("entities", []), themes)
+
+        min_per_theme = 3
+        underfilled = [t for t in themes if len(entities_by_theme.get(t, [])) < min_per_theme]
+        if underfilled:
+            shortfalls = "\n".join(
+                f"- {t}: need at least {min_per_theme - len(entities_by_theme.get(t, []))} more"
+                for t in underfilled
+            )
+            existing = "\n".join(
+                f"- {t}: {', '.join(e['name'] for e in entities_by_theme.get(t, [])) or '(none)'}"
+                for t in themes
+            )
+            refill = await llm_json(
+                system=(
+                    "You are a landscape researcher. Fill only missing entities for underfilled categories. "
+                    "Return JSON with key 'entities' as a flat list of objects with 'name' and 'category'. "
+                    "Category values must exactly match one listed category."
+                ),
+                user_msg=(
+                    f"Region: {context.get('geography', '')}\n"
+                    f"Project type / sector: {context.get('project_type', '')}\n"
+                    f"All categories:\n{themes_list}\n\n"
+                    f"Existing entities by category:\n{existing}\n\n"
+                    f"Underfilled categories:\n{shortfalls}"
+                ),
+            )
+            refill_bucket = self._bucket_entities(refill.get("entities", []), themes)
+            for theme in themes:
+                existing_names = {e["name"].strip().lower() for e in entities_by_theme.get(theme, [])}
+                for entity in refill_bucket.get(theme, []):
+                    key = entity["name"].strip().lower()
+                    if key not in existing_names:
+                        entities_by_theme.setdefault(theme, []).append(entity)
+                        existing_names.add(key)
+
+        output: list[dict] = []
+        for theme in themes:
+            output.extend(entities_by_theme.get(theme, [])[:6])
+        return output
+
+    @staticmethod
+    def _normalize_category(raw_category: str, categories: list[str]) -> str:
+        raw = (raw_category or "").strip()
+        if not raw:
+            return ""
+        if raw in categories:
+            return raw
+
+        lowered_map = {c.lower(): c for c in categories}
+        if raw.lower() in lowered_map:
+            return lowered_map[raw.lower()]
+
+        raw_norm = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", raw.lower())).strip()
+        for category in categories:
+            cat_norm = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", category.lower())).strip()
+            if raw_norm and cat_norm and (raw_norm in cat_norm or cat_norm in raw_norm):
+                return category
+        return ""
+
+    def _bucket_entities(self, raw_entities: list[dict], categories: list[str]) -> dict[str, list[dict]]:
+        buckets: dict[str, list[dict]] = {c: [] for c in categories}
+        seen: set[tuple[str, str]] = set()
+
+        for entity in raw_entities or []:
+            name = (entity.get("name") or "").strip()
+            category = self._normalize_category(
+                entity.get("category", entity.get("parent", "")),
+                categories,
+            )
+            if not name or not category:
+                continue
+            dedupe_key = (category, name.lower())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            buckets[category].append(
+                {
+                    "name": name,
+                    "category": category,
+                    "description": (entity.get("description") or "").strip(),
+                }
+            )
+
+        return buckets

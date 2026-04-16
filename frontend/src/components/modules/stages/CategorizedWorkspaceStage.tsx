@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useCallback, useLayoutEffect, useEffect, useRef } from 'react';
-import { Loader2, X, Sparkles, ChevronRight, Trash2, Plus } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Loader2, X, Sparkles } from 'lucide-react';
 import type { BuildItem, FieldDef, StageDef, StageState } from '@/lib/api';
 import { api } from '@/lib/api';
+import { PlanStructureColumn } from '@/components/plan-workspace/PlanStructureColumn';
+import type { PlanWorkspaceGroup, PlanWorkspaceItem } from '@/components/plan-workspace/types';
 
 // Gradient-ordered palette matching ProjectPlanView
 const CATEGORY_COLORS = [
@@ -160,111 +162,6 @@ function RecordPanel({ item, record, fields, readOnly, onClose, onEnrich, onSave
   );
 }
 
-// ── Category column (pillar-style) ────────────────────────────────────────
-
-interface CategoryColumnProps {
-  label: string;
-  color: string;
-  items: BuildItem[];
-  selectedItemId: string | null;
-  onSelectItem: (item: BuildItem) => void;
-  onDeleteItem: (itemId: string) => void;
-  onAddItem?: (content: Record<string, any>) => Promise<void>;
-  readOnly: boolean;
-}
-
-function CategoryColumn({
-  label, color, items, selectedItemId, onSelectItem, onDeleteItem, onAddItem, readOnly,
-}: CategoryColumnProps) {
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (adding) setTimeout(() => inputRef.current?.focus(), 0);
-  }, [adding]);
-
-  const handleCommit = async () => {
-    const name = newName.trim();
-    if (!name || !onAddItem || saving) return;
-    setSaving(true);
-    try {
-      await onAddItem({ name });
-      setNewName('');
-      setAdding(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-divider bg-surface flex flex-col min-w-0">
-      {/* Column header */}
-      <div className="px-3 pt-3 pb-2 border-b border-divider" style={{ borderTopColor: color, borderTopWidth: 3, borderTopStyle: 'solid' }}>
-        <h4 className="text-xs font-semibold text-text-primary leading-tight">{label}</h4>
-        <p className="text-[11px] text-text-tertiary mt-0.5">{items.length} item{items.length !== 1 ? 's' : ''}</p>
-      </div>
-
-      {/* Items */}
-      <div className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
-        {items.map((item) => {
-          const name = String(item.content.name ?? item.content.title ?? item.content.label ?? 'Item');
-          const isSelected = item.id === selectedItemId;
-          return (
-            <div
-              key={item.id}
-              className={`flex items-center gap-1.5 px-2 py-2 rounded-lg cursor-pointer group transition-colors ${
-                isSelected ? 'bg-accent/10 text-accent' : 'hover:bg-surface-subtle text-text-primary'
-              }`}
-              onClick={() => onSelectItem(item)}
-            >
-              <span className="flex-1 text-xs font-medium leading-snug">{name}</span>
-              <ChevronRight className={`w-3 h-3 shrink-0 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
-              {!readOnly && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }}
-                  className="p-0.5 text-text-tertiary hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Add item */}
-        {!readOnly && adding && (
-          <div className="px-2 py-1.5 rounded-lg bg-accent/5">
-            <input
-              ref={inputRef}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCommit();
-                if (e.key === 'Escape') { setAdding(false); setNewName(''); }
-              }}
-              onBlur={() => { if (!newName.trim()) { setAdding(false); } }}
-              placeholder="Name…"
-              className="w-full text-xs bg-transparent outline-none text-text-primary placeholder:text-text-tertiary"
-            />
-          </div>
-        )}
-      </div>
-
-      {!readOnly && !adding && (
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1 px-3 py-2 text-[11px] text-text-tertiary hover:text-text-secondary transition-colors border-t border-divider"
-        >
-          <Plus className="w-3 h-3" />
-          Add
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ── Main CategorizedWorkspaceStage ────────────────────────────────────────
 
 interface Props {
@@ -290,49 +187,90 @@ export function CategorizedWorkspaceStage({
 }: Props) {
   const [selectedItem, setSelectedItem] = useState<BuildItem | null>(null);
   const [panelWidth] = useState(360);
-  const outerRef = useRef<HTMLDivElement>(null);
-  const [numCols, setNumCols] = useState(3);
-
-  const computeCols = (w: number, panelOpen: boolean) =>
-    panelOpen ? (w >= 900 ? 3 : w >= 600 ? 2 : 1) : (w >= 700 ? 3 : w >= 450 ? 2 : 1);
-
-  useEffect(() => {
-    const el = outerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(([entry]) => {
-      setNumCols(computeCols(entry.contentRect.width, !!selectedItem));
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [selectedItem]);
+  const [expandedByGroup, setExpandedByGroup] = useState<Record<string, boolean>>({});
 
   const isRecord = stageDef.component === 'record';
   const items: BuildItem[] = stageData?.items ?? [];
   const records: Record<string, Record<string, any>> = stageData?.records ?? {};
   const fields: FieldDef[] = stageDef.fields ?? [];
+  const categoryLabelById = useMemo(() => {
+    return Object.fromEntries(
+      categoryItems.map((cat) => [
+        cat.id,
+        String(cat.content.label ?? cat.content.name ?? cat.content.title ?? 'Uncategorized'),
+      ])
+    );
+  }, [categoryItems]);
 
-  // Group items by their category field (matching category items by label)
-  const categoryField = fields.find((f) => f.name === 'category');
-  const groupedItems: Array<{ category: Pick<BuildItem, 'id' | 'content'>; items: BuildItem[] }> = categoryItems.length
-    ? categoryItems.map((cat) => {
-        const catLabel = String(cat.content.label ?? cat.content.name ?? cat.content.title ?? '');
-        return {
-          category: cat,
-          items: items.filter((item) => {
+  const groupRows: Array<{ group: PlanWorkspaceGroup; buildItems: BuildItem[] }> = useMemo(() => {
+    const grouped = categoryItems.length
+      ? categoryItems.map((cat) => {
+          const catLabel = String(cat.content.label ?? cat.content.name ?? cat.content.title ?? 'Uncategorized');
+          const groupBuildItems = items.filter((item) => {
             const itemCat = String(item.content.category ?? item.content.category_label ?? '');
             return itemCat === catLabel;
-          }),
-        };
-      })
-    : [{ category: { id: '__all__', content: { label: 'All' } }, items }];
+          });
+          const planItems: PlanWorkspaceItem[] = groupBuildItems.map((item) => ({
+            id: item.id,
+            title: String(item.content.name ?? item.content.title ?? item.content.label ?? 'Item'),
+            kind: 'assessment',
+            classification: 'required',
+            status: 'not_started',
+            groupId: cat.id,
+            groupName: catLabel,
+            userAdded: item.provenance?.derivation === 'provided',
+          }));
+          return {
+            group: {
+              id: cat.id,
+              name: catLabel,
+              icon: 'Compass',
+              items: planItems,
+            },
+            buildItems: groupBuildItems,
+          };
+        })
+      : [
+          {
+            group: {
+              id: '__all__',
+              name: 'All',
+              icon: 'Compass',
+              items: items.map((item) => ({
+                id: item.id,
+                title: String(item.content.name ?? item.content.title ?? item.content.label ?? 'Item'),
+                kind: 'assessment',
+                classification: 'required',
+                status: 'not_started',
+                groupId: '__all__',
+                groupName: 'All',
+                userAdded: item.provenance?.derivation === 'provided',
+              })),
+            },
+            buildItems: items,
+          },
+        ];
+    return grouped;
+  }, [categoryItems, items]);
+
+  useEffect(() => {
+    setExpandedByGroup((prev) => {
+      const next = { ...prev };
+      for (const row of groupRows) {
+        if (!(row.group.id in next)) next[row.group.id] = true;
+      }
+      return next;
+    });
+  }, [groupRows]);
 
   // Add item
   const handleAdd = useCallback(
-    async (categoryLabel: string, content: Record<string, any>) => {
-      await api.addStageItem(instanceId, stageId, { ...content, category: categoryLabel });
+    async (groupId: string, title: string) => {
+      const categoryLabel = categoryLabelById[groupId] ?? 'Uncategorized';
+      await api.addStageItem(instanceId, stageId, { name: title, category: categoryLabel });
       onChanged();
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, categoryLabelById]
   );
 
   const handleDelete = useCallback(
@@ -342,6 +280,23 @@ export function CategorizedWorkspaceStage({
       onChanged();
     },
     [instanceId, stageId, onChanged, selectedItem]
+  );
+
+  const handleReorderWithinGroup = useCallback(
+    async (groupItemIds: string[]) => {
+      if (!groupItemIds.length) return;
+      const target = new Set(groupItemIds);
+      let idx = 0;
+      const reorderedAll = items.map((item) => {
+        if (!target.has(item.id)) return item.id;
+        const nextId = groupItemIds[idx];
+        idx += 1;
+        return nextId;
+      });
+      await api.reorderStageItems(instanceId, stageId, reorderedAll);
+      onChanged();
+    },
+    [instanceId, stageId, items, onChanged]
   );
 
   const handleEnrich = useCallback(
@@ -363,32 +318,35 @@ export function CategorizedWorkspaceStage({
   const panelOpen = !!selectedItem && isRecord;
 
   return (
-    <div ref={outerRef} className="flex min-h-0 gap-0 overflow-hidden" style={{ minHeight: 400 }}>
-      {/* Grid */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1">
-        <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: `repeat(${numCols}, minmax(0, 1fr))` }}
-        >
-          {groupedItems.map((group, idx) => {
-            const catLabel = String(group.category.content.label ?? group.category.content.name ?? group.category.content.title ?? 'Uncategorized');
-            const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-            return (
-              <CategoryColumn
-                key={group.category.id}
-                label={catLabel}
-                color={color}
-                items={group.items}
-                selectedItemId={selectedItem?.id ?? null}
-                onSelectItem={(item) => {
-                  if (isRecord) setSelectedItem((prev) => prev?.id === item.id ? null : item);
-                }}
-                onDeleteItem={handleDelete}
-                onAddItem={!readOnly ? (content) => handleAdd(catLabel, content) : undefined}
-                readOnly={readOnly}
-              />
-            );
-          })}
+    <div className="flex min-h-0 gap-0 overflow-hidden" style={{ minHeight: 400 }}>
+      <div className="flex-1 overflow-y-auto p-1">
+        <div className="space-y-4">
+          {groupRows.map((row, idx) => (
+            <PlanStructureColumn
+              key={row.group.id}
+              group={row.group}
+              color={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]}
+              expanded={expandedByGroup[row.group.id] ?? true}
+              onToggleExpanded={() =>
+                setExpandedByGroup((prev) => ({
+                  ...prev,
+                  [row.group.id]: !(prev[row.group.id] ?? true),
+                }))
+              }
+              onDeleteItem={!readOnly ? handleDelete : undefined}
+              onOpenItem={isRecord ? (planItem) => {
+                const selected = row.buildItems.find((item) => item.id === planItem.id) ?? null;
+                setSelectedItem((prev) => (prev?.id === selected?.id ? null : selected));
+              } : undefined}
+              onAddItem={!readOnly ? (groupId, title) => handleAdd(groupId, title) : undefined}
+              showItemKindBadge={false}
+              showItemCompleteToggle={false}
+              showItemBranchDelete={false}
+              showItemRightActions={!readOnly}
+              enableItemSorting={!readOnly}
+              onReorderItems={!readOnly ? handleReorderWithinGroup : undefined}
+            />
+          ))}
         </div>
       </div>
 
