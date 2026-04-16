@@ -156,8 +156,8 @@ export function InitiativeOverviewHeader({
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <FootprintBox label="Collaborators" value={resolvedCollaboratorsCount} Icon={Users} />
-        <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
         <FootprintBox label="Modules Created" value={modulesCreated} Icon={Layers3} />
+        <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
       </div>
     </div>
   );
