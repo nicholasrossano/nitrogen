@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, Sprout, TreeDeciduous } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -16,6 +16,7 @@ import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPane
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { api, type SourceCitation } from '@/lib/api';
 import { openGooglePicker } from '@/lib/googlePicker';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
@@ -75,8 +76,6 @@ function InitiativePageContent() {
   const [pageReady, setPageReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [chromeReady, setChromeReady] = useState(false);
-  const [showSprout, setShowSprout] = useState(true);
-
   const [planViewReady, setPlanViewReady] = useState(true);
   const [showPlanOverlay, setShowPlanOverlay] = useState(false);
 
@@ -84,7 +83,7 @@ function InitiativePageContent() {
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
-  const [pendingChatSessionToOpen, setPendingChatSessionToOpen] = useState<{ sessionId: string; title?: string | null } | null>(null);
+  const [pendingChatToOpen, setPendingChatToOpen] = useState<{ chatId: string; title?: string | null } | null>(null);
   const [preferArtifactsTab, setPreferArtifactsTab] = useState(false);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>([]);
@@ -268,7 +267,7 @@ function InitiativePageContent() {
     setResearchCitation(null);
     setChatEditorWidgets([]);
     setWorkspaceLaunchMode('idle');
-    setPendingChatSessionToOpen(null);
+    setPendingChatToOpen(null);
     setPreferArtifactsTab(false);
     setPageReady(false);
     setChromeReady(false);
@@ -296,12 +295,6 @@ function InitiativePageContent() {
     const timer = window.setTimeout(() => setShowOverlay(false), 350);
     return () => window.clearTimeout(timer);
   }, [pageReady]);
-
-  useEffect(() => {
-    if (!showOverlay && !showPlanOverlay) return;
-    const interval = window.setInterval(() => setShowSprout((prev) => !prev), 750);
-    return () => window.clearInterval(interval);
-  }, [showOverlay, showPlanOverlay]);
 
   useEffect(() => {
     if (!planViewReady || !showPlanOverlay) return;
@@ -359,6 +352,22 @@ function InitiativePageContent() {
     setWorkspaceTabs((prev) => (prev.some((existingTab) => existingTab.id === tab.id) ? prev : [...prev, tab]));
     setActiveWorkspaceTabId(tab.id);
   }, []);
+
+  const handleOpenWorkspaceModule = useCallback(
+    (module: { instanceId: string; moduleId: string; title?: string | null }) => {
+      setWorkspaceLaunchMode('idle');
+      setActiveView('modules');
+      router.replace(`/initiatives/${initiativeId}?view=modules`);
+      openWorkspaceTab({
+        id: `module-${module.instanceId}`,
+        kind: 'module',
+        title: module.title || module.moduleId.replace(/_/g, ' '),
+        instanceId: module.instanceId,
+        moduleId: module.moduleId,
+      });
+    },
+    [initiativeId, openWorkspaceTab, router],
+  );
 
   const openWorkspaceDocument = useCallback((citation: ResearchPanelCitation) => {
     openWorkspaceTab({
@@ -477,15 +486,7 @@ function InitiativePageContent() {
     <div
       className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${planViewReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
     >
-      <div className="relative w-10 h-10">
-        <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-          <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
-        </div>
-        <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-          <TreeDeciduous className="w-6 h-6 text-accent" strokeWidth={1.5} />
-        </div>
-      </div>
-      <span className="text-xs text-text-secondary font-medium tracking-wide">Loading framework...</span>
+      <PageLoader label="" />
     </div>
   ) : null;
 
@@ -544,10 +545,10 @@ function InitiativePageContent() {
             setChatPanelOpen('modules', true);
             chatSendRef.current?.(content, toolHint);
           }}
-          onOpenChatSession={(session) => {
+          onOpenChatSession={(chat) => {
             setChatPanelOpen('modules', true);
             setPreferArtifactsTab(true);
-            setPendingChatSessionToOpen(session);
+            setPendingChatToOpen(chat);
           }}
         />
       );
@@ -563,6 +564,7 @@ function InitiativePageContent() {
               resetToLandingSignal={researchLandingResetSignal}
               onEditorWidgetsChange={handleChatEditorWidgetsChange}
               onCitationClick={handleCitationClick}
+              onOpenWorkspaceModule={handleOpenWorkspaceModule}
             />
           </div>
           {renderResearchPanel}
@@ -616,10 +618,11 @@ function InitiativePageContent() {
         <ProjectChatTabsPanel
           initiativeId={initiativeId}
           researchMode={false}
-          pendingSessionToOpen={pendingChatSessionToOpen}
-          onPendingSessionHandled={() => setPendingChatSessionToOpen(null)}
+          pendingChatToOpen={pendingChatToOpen}
+          onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onCitationClick={handleCitationClick}
+          onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
         />
       </div>
@@ -674,24 +677,13 @@ function InitiativePageContent() {
             <div
               className={`absolute inset-0 z-50 flex flex-col items-center justify-center gap-1.5 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${pageReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
-              <div className="relative w-10 h-10">
-                <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                  <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
-                </div>
-                <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                  <TreeDeciduous className="w-6 h-6 text-accent" strokeWidth={1.5} />
-                </div>
-              </div>
-              <span className="text-xs text-text-secondary font-medium tracking-wide">Loading project...</span>
+              <PageLoader label="" />
             </div>
           )}
 
           {loading && !initiative ? (
             <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-accent" />
-                <span className="text-sm text-text-secondary">Loading project...</span>
-              </div>
+              <PageLoader label="" />
             </div>
           ) : !initiative ? (
             error ? (
