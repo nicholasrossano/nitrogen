@@ -1,11 +1,8 @@
-"""API endpoints for the multi-stage module workflow (Setup / Build / Output).
+"""API endpoints for the unified staged module workflow.
 
-These endpoints drive the ModuleWorkspace frontend component. Each endpoint
-operates on a ModuleInstance identified by its UUID.
-
-The build stage is represented as ``workflow_state.build.stages[]`` — an ordered
-array where each entry has ``id``, ``name``, ``stage_type``, ``status``, and
-type-specific fields (``widget_data`` for widget stages, ``items`` for list stages).
+Every module is an ordered sequence of confirmable stages. These endpoints
+drive the ModuleWorkspace frontend component. Each endpoint operates on a
+ModuleInstance identified by its UUID.
 
 Mounted at: /api/v1/module-workflow
 """
@@ -15,7 +12,6 @@ from __future__ import annotations
 import logging
 import re
 import uuid as _uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,19 +27,22 @@ from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 from app.modules.base import BaseModule
 from app.modules.registry import get_module_registry
-from app.modules.assessment_base import BaseAssessmentModule, get_build_stage, layers_as_dict, make_build_item
+from app.modules.utils import make_build_item
 from app.services import module_service
 from app.services.module_workflow_service import (
     build_deliverable_title,
+    build_workflow_state,
+    confirm_stage,
+    enrich_record_item,
     ensure_workflow_state,
-    get_workspace_setup_fields,
     get_initiative_context,
-    persist_widget_stage_state,
+    populate_stage,
     save_workflow_state,
-    uses_layered_build,
-    uses_recalculating_build,
     uses_workspace_flow,
-    _make_widget_stage,
+    _build_initial_workflow_state,
+    _infer_current_stage_id,
+    _is_legacy_state,
+    _migrate_legacy_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,6 @@ async def _get_workflow_instance(
     instance_id: _uuid.UUID,
     user: AuthUser,
 ) -> tuple[ModuleInstance, BaseModule]:
-    """Fetch the instance and its unified-workflow module class."""
     inst = await db.get(ModuleInstance, instance_id)
     if inst is None:
         raise HTTPException(status_code=404, detail="Module instance not found")
@@ -76,27 +74,11 @@ async def _get_workflow_instance(
     return inst, module
 
 
-async def _get_assessment_instance(
-    db: AsyncSession,
-    instance_id: _uuid.UUID,
-    user: AuthUser,
-) -> tuple[ModuleInstance, BaseAssessmentModule]:
-    """Fetch an assessment workflow instance."""
-    inst, module = await _get_workflow_instance(db, instance_id, user)
-    if not isinstance(module, BaseAssessmentModule):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Module '{inst.module_id}' does not use layered build stages",
-        )
-    return inst, module
-
-
 async def _get_editable_workflow_instance(
     db: AsyncSession,
     instance_id: _uuid.UUID,
     user: AuthUser,
 ) -> tuple[ModuleInstance, BaseModule]:
-    """Like _get_workflow_instance but requires editor rights."""
     inst = await db.get(ModuleInstance, instance_id)
     if inst is None:
         raise HTTPException(status_code=404, detail="Module instance not found")
@@ -113,42 +95,44 @@ async def _get_editable_workflow_instance(
     return inst, module
 
 
-async def _get_editable_instance(
-    db: AsyncSession,
-    instance_id: _uuid.UUID,
-    user: AuthUser,
-) -> tuple[ModuleInstance, BaseAssessmentModule]:
-    """Like _get_assessment_instance but requires editor rights."""
-    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
-    if not isinstance(module, BaseAssessmentModule):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Module '{inst.module_id}' does not use layered build stages",
-        )
-    return inst, module
-
-
 def _module_definition_payload(module: BaseModule) -> dict[str, Any]:
-    payload = {
+    """Build the module definition payload returned with workflow state."""
+    return {
         "id": module.definition.id,
         "name": module.definition.name,
         "icon": module.definition.icon,
         "output_type": module.definition.output_type,
-        "workspace_build_widget": module.manifest.workspace_build_widget,
-        "workspace_output_widget": module.manifest.workspace_output_widget,
-        "setup_fields": get_workspace_setup_fields(module),
+        "export_format": module.definition.export_format,
+        "stage_defs": [s.to_dict() for s in module.stage_defs],
     }
-    if isinstance(module, BaseAssessmentModule):
-        payload.update(module.assessment_definition.to_dict())
-    return payload
 
 
-def _get_stage_or_404(build: dict, stage_id: str, instance_id: Any) -> dict:
-    """Return the stage dict or raise HTTP 404."""
-    stage = get_build_stage(build, stage_id)
-    if stage is None:
-        raise HTTPException(status_code=404, detail=f"Stage '{stage_id}' not found on instance {instance_id}")
-    return stage
+def _get_stage_state_or_404(
+    state: dict[str, Any],
+    stage_id: str,
+    instance_id: Any,
+) -> dict[str, Any]:
+    stage_state = state["stages"].get(stage_id)
+    if stage_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Stage '{stage_id}' not found on instance {instance_id}",
+        )
+    return stage_state
+
+
+def _get_stage_def_or_404(
+    module: BaseModule,
+    stage_id: str,
+    instance_id: Any,
+) -> Any:
+    stage_def = next((s for s in module.stage_defs if s.id == stage_id), None)
+    if stage_def is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Stage '{stage_id}' not defined in module for instance {instance_id}",
+        )
+    return stage_def
 
 
 # ---------------------------------------------------------------------------
@@ -176,130 +160,92 @@ async def get_workflow_state(
 
 
 # ---------------------------------------------------------------------------
-# Setup endpoints
+# Stage population
 # ---------------------------------------------------------------------------
 
-@router.post("/module-workflow/{instance_id}/setup/generate")
-async def generate_setup_defaults(
-    instance_id: _uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """AI-generate default setup field values from project context (assessment modules only)."""
-    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
-    if not isinstance(module, BaseAssessmentModule):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Module '{inst.module_id}' does not support generated setup defaults",
-        )
-    context = await get_initiative_context(db, inst.initiative_id)
-    defaults = await module.generate_setup_defaults(db, inst.initiative_id, context)
-
-    state = await ensure_workflow_state(db, inst, module)
-    state["setup"]["fields"] = defaults
-    save_workflow_state(inst, state)
-    await db.commit()
-
-    return {"fields": defaults}
-
-
-class ConfirmSetupRequest(BaseModel):
-    fields: dict[str, Any]
-
-
-@router.post("/module-workflow/{instance_id}/setup/confirm")
-async def confirm_setup(
-    instance_id: _uuid.UUID,
-    data: ConfirmSetupRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Confirm the setup fields and advance to the Build stage."""
-    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
-
-    state = await ensure_workflow_state(db, inst, module)
-    previous_fields = dict(state["setup"].get("fields") or {})
-    state["setup"]["fields"] = data.fields
-    state["setup"]["confirmed"] = True
-    state["setup"]["confirmed_at"] = datetime.now(timezone.utc).isoformat()
-    state["current_stage"] = "build"
-
-    # If setup fields changed for a widget module, reset build and output
-    if not uses_layered_build(module) and previous_fields != data.fields:
-        state["build"] = {
-            "stages": [_make_widget_stage(module)],
-            "current_stage_id": "main",
-        }
-        state["output"] = {
-            "status": "pending",
-            "content": None,
-            "widget_type": module.manifest.workspace_output_widget,
-            "widget_data": None,
-        }
-        inst.deliverable = None
-        flag_modified(inst, "deliverable")
-
-    save_workflow_state(inst, state)
-    inst.status = ModuleInstanceStatus.GENERATING if uses_layered_build(module) else ModuleInstanceStatus.STARTED
-    await db.commit()
-
-    return {"ok": True, "current_stage": "build"}
-
-
-# ---------------------------------------------------------------------------
-# Build endpoints (assessment / layered modules)
-# ---------------------------------------------------------------------------
-
-@router.post("/module-workflow/{instance_id}/build/{stage_id}/generate")
-async def generate_build_stage(
+@router.post("/module-workflow/{instance_id}/stages/{stage_id}/populate")
+async def populate_stage_endpoint(
     instance_id: _uuid.UUID,
     stage_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Generate items for a build stage using the LLM (assessment modules only)."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
+    """Run the population pipeline for a stage.
 
-    state = await ensure_workflow_state(db, inst, module)
+    Executes the stage's declared population steps in order.
+    Sets stage status to 'draft' when complete (awaiting user confirmation).
+    """
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _get_stage_def_or_404(module, stage_id, instance_id)
 
-    if not state["setup"].get("confirmed"):
-        raise HTTPException(status_code=400, detail="Setup must be confirmed before generating build stages")
-
-    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
-
-    context = await get_initiative_context(db, inst.initiative_id)
-    setup_fields = state["setup"]["fields"]
-    prior_layers = layers_as_dict(state["build"])
-
-    # Mark as generating
-    stage["status"] = "generating"
-    state["build"]["current_stage_id"] = stage_id
-    save_workflow_state(inst, state)
+    state = await populate_stage(db, inst, module, stage_id)
     await db.commit()
 
-    try:
-        items = await module.generate_layer(
-            db, inst.initiative_id, stage_id, setup_fields, prior_layers, context
-        )
-        stage["items"] = items
-        stage["status"] = "in_progress"
-        save_workflow_state(inst, state)
-        await db.commit()
-    except Exception as e:
-        logger.error(f"Stage generation failed for {instance_id}/{stage_id}: {e}", exc_info=True)
-        stage["status"] = "error"
-        save_workflow_state(inst, state)
-        await db.commit()
-        raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
+    return {
+        "stage_id": stage_id,
+        "stage_state": state["stages"][stage_id],
+        "workflow_state": state,
+    }
 
-    return {"items": items, "stage_status": "in_progress"}
 
+# ---------------------------------------------------------------------------
+# Stage confirmation
+# ---------------------------------------------------------------------------
+
+@router.post("/module-workflow/{instance_id}/stages/{stage_id}/confirm")
+async def confirm_stage_endpoint(
+    instance_id: _uuid.UUID,
+    stage_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Confirm a stage with a full audit trail.
+
+    Records confirmed_by (user uid) and confirmed_at timestamp.
+    Resets any downstream stages that depend on this one.
+    If the next stage is a computed_results stage that reads from this stage,
+    auto-triggers its population pipeline.
+    """
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+
+    state = await ensure_workflow_state(db, inst, module)
+    _get_stage_state_or_404(state, stage_id, instance_id)
+
+    state, auto_populate_def = await confirm_stage(
+        db, inst, module, stage_id, confirmed_by=user.uid
+    )
+    save_workflow_state(inst, state)
+
+    inst.status = ModuleInstanceStatus.GENERATING
+    await db.commit()
+
+    # Auto-populate next computed stage if applicable (e.g. LCOE results after inputs confirmed)
+    if auto_populate_def is not None:
+        try:
+            state = await populate_stage(db, inst, module, auto_populate_def.id)
+            await db.commit()
+        except Exception as e:
+            logger.error(
+                "Auto-population of stage '%s' failed after confirming '%s': %s",
+                auto_populate_def.id, stage_id, e, exc_info=True,
+            )
+
+    return {
+        "stage_id": stage_id,
+        "stage_state": state["stages"][stage_id],
+        "workflow_state": state,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Stage data editing (items / rows)
+# ---------------------------------------------------------------------------
 
 class EditItemRequest(BaseModel):
     content: dict[str, Any]
 
 
-@router.patch("/module-workflow/{instance_id}/build/{stage_id}/items/{item_id}")
+@router.patch("/module-workflow/{instance_id}/stages/{stage_id}/items/{item_id}")
 async def edit_item(
     instance_id: _uuid.UUID,
     stage_id: str,
@@ -308,92 +254,36 @@ async def edit_item(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Edit an item's content directly."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
+    """Edit an item's content in a list or table stage."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
-    items = stage.get("items") or []
+    stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+
+    stage_data = stage_state.get("data") or {}
+    items = stage_data.get("items", [])
     item_idx = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
     if item_idx is None:
         raise HTTPException(status_code=404, detail="Item not found")
 
     items[item_idx]["content"] = data.content
     items[item_idx]["origin"] = "user edited"
+    if "provenance" not in items[item_idx]:
+        items[item_idx]["provenance"] = {}
     items[item_idx]["provenance"]["derivation"] = "user_edited"
-    stage["items"] = items
+    stage_data["items"] = items
+    stage_state["data"] = stage_data
     save_workflow_state(inst, state)
     await db.commit()
 
     return {"item": items[item_idx]}
 
 
-@router.post("/module-workflow/{instance_id}/build/{stage_id}/items/{item_id}/confirm")
-async def confirm_item(
-    instance_id: _uuid.UUID,
-    stage_id: str,
-    item_id: str,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Toggle an item's confirmed state."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
-
-    state = await ensure_workflow_state(db, inst, module)
-    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
-    items = stage.get("items") or []
-    item_idx = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
-    if item_idx is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-
-    now_confirmed = not items[item_idx].get("confirmed", False)
-    items[item_idx]["confirmed"] = now_confirmed
-    items[item_idx]["confirmed_at"] = datetime.now(timezone.utc).isoformat() if now_confirmed else None
-
-    # If all items confirmed, mark stage as confirmed
-    if all(it.get("confirmed") for it in items):
-        stage["status"] = "confirmed"
-    else:
-        stage["status"] = "in_progress"
-
-    stage["items"] = items
-    save_workflow_state(inst, state)
-    await db.commit()
-
-    return {"item": items[item_idx], "stage_status": stage["status"]}
-
-
-@router.delete("/module-workflow/{instance_id}/build/{stage_id}/items/{item_id}")
-async def delete_item(
-    instance_id: _uuid.UUID,
-    stage_id: str,
-    item_id: str,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Remove an item from a build stage."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
-
-    state = await ensure_workflow_state(db, inst, module)
-    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
-    items = stage.get("items") or []
-    original_len = len(items)
-    items = [it for it in items if it["id"] != item_id]
-    if len(items) == original_len:
-        raise HTTPException(status_code=404, detail="Item not found")
-
-    stage["items"] = items
-    save_workflow_state(inst, state)
-    await db.commit()
-
-    return {"ok": True, "remaining_count": len(items)}
-
-
 class AddItemRequest(BaseModel):
     content: dict[str, Any]
 
 
-@router.post("/module-workflow/{instance_id}/build/{stage_id}/items")
+@router.post("/module-workflow/{instance_id}/stages/{stage_id}/items")
 async def add_item(
     instance_id: _uuid.UUID,
     stage_id: str,
@@ -401,28 +291,59 @@ async def add_item(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Add a new manually-authored item to a build stage."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
+    """Add a new manually-authored item to a list or table stage."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
+    stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
 
+    stage_data = stage_state.get("data") or {"items": []}
     new_item = make_build_item(content=data.content, derivation="provided")
-    if stage.get("items") is None:
-        stage["items"] = []
-    stage["items"].append(new_item)
-    stage["status"] = "in_progress"
+    stage_data.setdefault("items", []).append(new_item)
+    stage_state["data"] = stage_data
+    if stage_state.get("status") == "pending":
+        stage_state["status"] = "draft"
+
     save_workflow_state(inst, state)
     await db.commit()
 
     return {"item": new_item}
 
 
+@router.delete("/module-workflow/{instance_id}/stages/{stage_id}/items/{item_id}")
+async def delete_item(
+    instance_id: _uuid.UUID,
+    stage_id: str,
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Remove an item from a list or table stage."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+
+    state = await ensure_workflow_state(db, inst, module)
+    stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+
+    stage_data = stage_state.get("data") or {}
+    items = stage_data.get("items", [])
+    original_len = len(items)
+    items = [it for it in items if it["id"] != item_id]
+    if len(items) == original_len:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    stage_data["items"] = items
+    stage_state["data"] = stage_data
+    save_workflow_state(inst, state)
+    await db.commit()
+
+    return {"ok": True, "remaining_count": len(items)}
+
+
 class ReorderItemsRequest(BaseModel):
     item_ids: list[str]
 
 
-@router.post("/module-workflow/{instance_id}/build/{stage_id}/reorder")
+@router.post("/module-workflow/{instance_id}/stages/{stage_id}/reorder")
 async def reorder_items(
     instance_id: _uuid.UUID,
     stage_id: str,
@@ -430,19 +351,21 @@ async def reorder_items(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Reorder items in a build stage."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
+    """Reorder items in a list or table stage."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
 
     state = await ensure_workflow_state(db, inst, module)
-    stage = _get_stage_or_404(state["build"], stage_id, instance_id)
-    items = stage.get("items") or []
+    stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
 
+    stage_data = stage_state.get("data") or {}
+    items = stage_data.get("items", [])
     id_to_item = {it["id"]: it for it in items}
     reordered = [id_to_item[iid] for iid in data.item_ids if iid in id_to_item]
     mentioned = set(data.item_ids)
     reordered.extend(it for it in items if it["id"] not in mentioned)
 
-    stage["items"] = reordered
+    stage_data["items"] = reordered
+    stage_state["data"] = stage_data
     save_workflow_state(inst, state)
     await db.commit()
 
@@ -450,138 +373,182 @@ async def reorder_items(
 
 
 # ---------------------------------------------------------------------------
-# Widget-backed workflow endpoints (calculator modules)
+# Record enrichment (detail panel / record stages)
 # ---------------------------------------------------------------------------
 
-class PersistWidgetStateRequest(BaseModel):
+@router.post("/module-workflow/{instance_id}/stages/{stage_id}/records/{item_id}/enrich")
+async def enrich_record_endpoint(
+    instance_id: _uuid.UUID,
+    stage_id: str,
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """AI-enrich a single record in a record-component stage.
+
+    The item_id refers to the source item from the prior list stage.
+    Calls module.enrich_record() and persists the enriched field values.
+    """
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+
+    enriched = await enrich_record_item(db, inst, module, stage_id, item_id)
+    await db.commit()
+
+    return {"item_id": item_id, "record": enriched}
+
+
+class UpdateRecordRequest(BaseModel):
+    fields: dict[str, Any]
+
+
+@router.patch("/module-workflow/{instance_id}/stages/{stage_id}/records/{item_id}")
+async def update_record(
+    instance_id: _uuid.UUID,
+    stage_id: str,
+    item_id: str,
+    data: UpdateRecordRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Update field values for a single record in a record-component stage."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+
+    state = await ensure_workflow_state(db, inst, module)
+    stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+
+    stage_data = stage_state.get("data") or {}
+    records = stage_data.get("records", {})
+    existing = records.get(item_id, {})
+    existing.update(data.fields)
+    records[item_id] = existing
+    stage_data["records"] = records
+    stage_state["data"] = stage_data
+    save_workflow_state(inst, state)
+    await db.commit()
+
+    return {"item_id": item_id, "record": records[item_id]}
+
+
+# ---------------------------------------------------------------------------
+# Widget-state persistence (compatibility shim for chat-path widgets)
+# ---------------------------------------------------------------------------
+# The chat-path versions of LCOEModelWidget / CarbonModelWidget /
+# SolarEstimateWidget call persistModuleWorkflowWidget() when the user edits
+# a value inline. That function POSTs the full widget_data blob here.
+# We write it to the first computed_results stage's data.
+
+class WidgetStateRequest(BaseModel):
     widget_data: dict[str, Any]
-    stage_id: str = "main"
 
 
 @router.post("/module-workflow/{instance_id}/widget-state")
 async def persist_widget_state(
     instance_id: _uuid.UUID,
-    data: PersistWidgetStateRequest,
+    data: WidgetStateRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Persist widget-backed workflow state for calculator modules."""
-    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
-    if not uses_recalculating_build(module):
-        raise HTTPException(status_code=400, detail="This workflow does not support widget persistence")
+    """Persist widget_data into the first computed_results stage of the instance.
 
-    state = await persist_widget_stage_state(db, inst, module, data.widget_data, stage_id=data.stage_id)
+    Compatibility shim for chat-path calculator widgets that call
+    api.persistModuleWorkflowWidget() after an inline edit.
+    """
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    state = await ensure_workflow_state(db, inst, module)
+
+    # Find the first computed_results stage
+    target_stage_def = next(
+        (s for s in module.stage_defs if s.component == "computed_results"),
+        None,
+    )
+    if target_stage_def is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This module has no computed_results stage to write widget data to",
+        )
+
+    stage_state = state["stages"].setdefault(target_stage_def.id, {
+        "status": "pending",
+        "confirmed_at": None,
+        "confirmed_by": None,
+        "data": None,
+    })
+    stage_data = stage_state.get("data") or {}
+    stage_data["widget_data"] = data.widget_data
+    stage_state["data"] = stage_data
+    if stage_state.get("status") == "pending":
+        stage_state["status"] = "draft"
+
+    save_workflow_state(inst, state)
     await db.commit()
+
     return {
-        "instance_id": str(inst.id),
+        "instance_id": str(instance_id),
         "status": inst.status,
         "workflow_state": state,
     }
 
 
 # ---------------------------------------------------------------------------
-# Output endpoint
+# Export endpoint (generates artifact on demand from confirmed stage data)
 # ---------------------------------------------------------------------------
 
-@router.post("/module-workflow/{instance_id}/output/generate")
-async def generate_output(
-    instance_id: _uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
-):
-    """Generate the final assessment output from all build items."""
-    inst, module = await _get_editable_instance(db, instance_id, user)
-
-    state = await ensure_workflow_state(db, inst, module)
-
-    # Require at least one item in the last stage
-    stages = state["build"].get("stages", [])
-    last_stage = stages[-1] if stages else None
-    if last_stage and not last_stage.get("items"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Stage '{last_stage['id']}' must have items before generating output",
-        )
-
-    # Build confirmed_build as {stage_id: {items}} for backward compat with generate_output hook
-    confirmed_build = {
-        s["id"]: {"items": s.get("items") or []}
-        for s in stages
-    }
-
-    state["output"]["status"] = "generating"
-    save_workflow_state(inst, state)
-    await db.commit()
-
-    try:
-        output_content = await module.generate_output(
-            db, inst.initiative_id,
-            state["setup"]["fields"],
-            confirmed_build,
-        )
-        state["output"]["content"] = output_content
-        state["output"]["status"] = "complete"
-        state["current_stage"] = "output"
-        save_workflow_state(inst, state)
-        inst.status = ModuleInstanceStatus.COMPLETED
-        await module_service.save_deliverable(
-            db,
-            inst.initiative_id,
-            inst.module_id,
-            build_deliverable_title(module, output_content),
-            module.definition.output_type,
-            output_content,
-            user_id=user.uid,
-            instance_id=inst.id,
-        )
-        await db.commit()
-    except Exception as e:
-        logger.error(f"Output generation failed for {instance_id}: {e}", exc_info=True)
-        state["output"]["status"] = "error"
-        save_workflow_state(inst, state)
-        await db.commit()
-        raise HTTPException(status_code=500, detail=f"Output generation failed: {e}")
-
-    return {"output": output_content, "status": "complete"}
-
-
-# ---------------------------------------------------------------------------
-# Export endpoint
-# ---------------------------------------------------------------------------
-
-@router.get("/module-workflow/{instance_id}/output/export")
+@router.get("/module-workflow/{instance_id}/export")
 async def export_module_output(
     instance_id: _uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Download the module output as a DOCX file."""
-    from app.services.docx_exporter import DocxExporterService
+    """Generate and download the module export artifact from confirmed stage data.
+
+    For assessment modules: generates DOCX via module.generate_export().
+    For calculator modules: generates XLSX via module.generate_export().
+
+    The document is synthesized on demand — nothing is stored.
+    """
     from app.core.filename_utils import safe_content_disposition
 
-    inst, module = await _get_assessment_instance(db, instance_id, user)
-    state = await ensure_workflow_state(db, inst, module)
+    inst, module = await _get_workflow_instance(db, instance_id, user)
 
-    output = state.get("output", {})
-    if output.get("status") != "complete" or not output.get("content"):
-        raise HTTPException(status_code=400, detail="Output not yet generated")
+    if module.definition.export_format is None:
+        raise HTTPException(status_code=400, detail="This module does not support export")
+
+    state = await ensure_workflow_state(db, inst, module)
+    context = await get_initiative_context(db, inst.initiative_id)
+
+    # Build confirmed_stages snapshot
+    confirmed_stages: dict[str, Any] = {
+        sid: s for sid, s in state["stages"].items()
+        if s.get("status") == "confirmed"
+    }
+
+    if not confirmed_stages:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one stage must be confirmed before exporting",
+        )
+
+    try:
+        export_bytes = await module.generate_export(confirmed_stages, context)
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Module '{module.definition.id}' does not implement generate_export()",
+        )
+
+    fmt = module.definition.export_format
+    media_types = {
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    media_type = media_types.get(fmt, "application/octet-stream")
 
     initiative = await db.get(Initiative, inst.initiative_id)
-    initiative_title = initiative.title if initiative else "Assessment"
+    initiative_title = initiative.title if initiative else "Export"
+    safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}").replace(" ", "_")[:60]
 
-    content = dict(output["content"])
-    if not content.get("title"):
-        content["title"] = f"{module.definition.name} — {initiative_title}"
-
-    exporter = DocxExporterService()
-    docx_bytes = exporter.generate_assessment_docx(
-        content=content,
-        initiative_title=initiative_title,
-    )
-
-    safe_title = re.sub(r"[^\w\s\-.]", "_", content["title"]).replace(" ", "_")[:60]
     return Response(
-        content=docx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
+        content=export_bytes,
+        media_type=media_type,
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.{fmt}")},
     )

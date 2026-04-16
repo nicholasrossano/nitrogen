@@ -1,37 +1,31 @@
 """Stakeholder Assessment Module.
 
-Two-layer Build workflow:
-  outline  (simple_list)    → stakeholder categories / groupings
-  details  (structured_list) → named stakeholders per category
+Stage workflow:
+  1. Stakeholder Categories  (list / categorized_list)
+  2. Stakeholders            (list / categorized_workspace)
+  3. Stakeholder Details     (record / categorized_workspace)
 
-After Details are confirmed the user clicks "Generate Output" which drafts
-a full stakeholder assessment with engagement strategies and inline citations.
+Export: DOCX generated on demand from confirmed stage data.
 """
 
 from __future__ import annotations
 
-import json
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import ModuleDefinition, ModuleManifest
-from app.modules.assessment_base import (
-    AssessmentModuleDef,
-    BaseAssessmentModule,
-    BuildLayerDef,
-    SetupFieldDef,
-    make_build_item,
-    llm_json,
-)
+from app.modules.base import BaseModule, FieldDef, PopulationStep, StageDef, ModuleDefinition, ModuleManifest
+from app.modules.retrieval import retrieve_evidence
+from app.modules.utils import llm_json
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class StakeholderAssessmentModule(BaseAssessmentModule):
+class StakeholderAssessmentModule(BaseModule):
     """Stakeholder Assessment — map and profile key stakeholders for a project."""
 
     @property
@@ -52,9 +46,7 @@ class StakeholderAssessmentModule(BaseAssessmentModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="Produce a stakeholder assessment with engagement strategy and cited evidence.",
-            primary_ui_object="assessment_viewer",
-            workspace_build_widget="assessment_build",
-            workspace_output_widget="assessment_output",
+            primary_ui_object="categorized_workspace",
             export_artifact_types=["docx"],
             adapter_bindings={"research_source": "retrieval"},
             input_dependencies=[],
@@ -65,185 +57,117 @@ class StakeholderAssessmentModule(BaseAssessmentModule):
         )
 
     @property
-    def assessment_definition(self) -> AssessmentModuleDef:
-        return AssessmentModuleDef(
-            setup_fields=[
-                SetupFieldDef(
-                    name="geography",
-                    label="Geography / Location",
-                    description="Where is the project located?",
-                    field_type="text",
-                    placeholder="e.g. Northern Ghana",
-                ),
-                SetupFieldDef(
-                    name="sector",
-                    label="Sector",
-                    description="What sector does the project operate in?",
-                    field_type="select",
-                    options=[
-                        "Energy Access",
-                        "Clean Cooking",
-                        "Water & Sanitation",
-                        "Agriculture",
-                        "Health",
-                        "Education",
-                        "Financial Inclusion",
-                        "Other",
-                    ],
-                ),
-            ],
-            build_layers=[
-                BuildLayerDef(
-                    id="outline",
-                    name="Outline",
-                    view_type="simple_list",
-                    description="High-level stakeholder categories or groupings",
-                    item_schema={"title": "Stakeholder category name"},
-                ),
-                BuildLayerDef(
-                    id="details",
-                    name="Details",
-                    view_type="structured_list",
-                    description="Named stakeholders per category",
-                    item_schema={
-                        "name": "Stakeholder name",
-                        "parent": "Which Outline category this belongs to",
-                    },
-                ),
-            ],
-            output_type="assessment_document",
-        )
-
-    async def generate_setup_defaults(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        context: dict,
-    ) -> dict:
-        return await llm_json(
-            system=(
-                "You are helping set up a Stakeholder Assessment for a development project. "
-                "Based on the project context provided, suggest sensible default values for the setup fields. "
-                "Return a JSON object with keys: geography, sector. "
-                "Use the project information to infer the best defaults. "
-                "For geography, use this location specificity order: "
-                "1) If a project country is present in the provided project materials, default to that country as the base. "
-                "2) If subnational detail is also available (state/province/county/district/city/site), include it with the country "
-                "for higher granularity (for example: 'Northern Region, Ghana'). "
-                "3) If no country is available, fall back to the narrowest credible broader region. "
-                "Do not return a broad region when a country is available. "
-                "If a field cannot be inferred, return an empty string."
-            ),
-            user_msg=f"Project context:\n{json.dumps(context, indent=2)}",
-        )
-
-    async def generate_layer(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        layer_id: str,
-        setup_fields: dict,
-        prior_layers: dict,
-        context: dict,
-    ) -> list[dict]:
-        if layer_id == "outline":
-            return await self._generate_outline(setup_fields, context)
-        elif layer_id == "details":
-            outline_items = prior_layers.get("outline", {}).get("items", [])
-            return await self._generate_details(setup_fields, outline_items, context)
-        else:
-            logger.warning(f"Unknown layer_id: {layer_id}")
-            return []
-
-    async def _generate_outline(self, setup: dict, context: dict) -> list[dict]:
-        data = await llm_json(
-            system=(
-                "You are an expert stakeholder analyst. Generate 5–8 stakeholder categories "
-                "for the given project. Each category is a distinct group of stakeholders. "
-                "Return JSON with key 'categories', a list of objects with 'title' only (no description)."
-            ),
-            user_msg=(
-                f"Project: {context.get('project_title', 'Unknown')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"Sector: {setup.get('sector', '')}\n"
-                f"Assessment scope: {setup.get('assessment_scope', '')}\n"
-                f"Project description: {context.get('project_description', '')}"
-            ),
-        )
+    def stage_defs(self) -> list[StageDef]:
         return [
-            make_build_item(
-                content={"title": c.get("title", "")},
-                derivation="inferred",
-                rationale="Generated from project context",
-            )
-            for c in data.get("categories", [])
+            StageDef(
+                id="categories",
+                title="Stakeholder Categories",
+                component="list",
+                widget="categorized_list",
+                fields=[
+                    FieldDef("label", "text", required=True, label="Category"),
+                    FieldDef("description", "long_text", label="Description"),
+                ],
+                population=[
+                    PopulationStep("seed_from_template"),
+                    PopulationStep("adapt_with_ai_from_project_materials", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="stakeholders",
+                title="Stakeholders",
+                component="list",
+                widget="categorized_workspace",
+                fields=[
+                    FieldDef("name", "text", required=True, label="Name"),
+                    FieldDef("category", "text", required=True, label="Category"),
+                    FieldDef("why_they_matter", "long_text", label="Why they matter"),
+                ],
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "categories"}),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("propose_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="details",
+                title="Stakeholder Details",
+                component="record",
+                widget="categorized_workspace",
+                fields=[
+                    FieldDef("role_in_project", "long_text", label="Role in project"),
+                    FieldDef("influence_level", "select", label="Influence",
+                             options=["Low", "Medium", "High"]),
+                    FieldDef("impact_level", "select", label="Impact",
+                             options=["Low", "Medium", "High"]),
+                    FieldDef("engagement_priority", "select", label="Priority",
+                             options=["Monitor", "Inform", "Consult", "Collaborate"]),
+                    FieldDef("notes", "long_text", label="Notes"),
+                ],
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "stakeholders"}),
+                    PopulationStep("enrich_selected_item_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
         ]
 
-    async def _generate_details(
-        self, setup: dict, outline_items: list[dict], context: dict
-    ) -> list[dict]:
-        categories = [item["content"].get("title", "") for item in outline_items]
-        categories_list = "\n".join(f"- {c}" for c in categories)
-        data = await llm_json(
-            system=(
-                "You are an expert stakeholder analyst. For each stakeholder category listed, identify 3–5 "
-                "specific stakeholders that belong to that category. "
-                "Each item must have 'name' (the stakeholder name) and 'parent' (exactly matching one category title). "
-                "Return JSON with key 'stakeholders', a flat list. Do not add roles, types, or relevance scores."
-            ),
-            user_msg=(
-                f"Project: {context.get('project_title', 'Unknown')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"Sector: {setup.get('sector', '')}\n"
-                f"Stakeholder categories:\n{categories_list}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={
-                    "name": s.get("name", ""),
-                    "parent": s.get("parent", ""),
-                },
-                derivation="inferred",
-                rationale="Inferred from project context and stakeholder categories",
-            )
-            for s in data.get("stakeholders", [])
-        ]
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
 
-    async def generate_output(
+    async def generate_items_for_stage(
         self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        setup_fields: dict,
-        confirmed_build: dict,
-    ) -> dict:
-        outline_items = confirmed_build.get("outline", {}).get("items", [])
-        details_items = confirmed_build.get("details", {}).get("items", [])
+        stage_id: str,
+        step_type: str,
+        context: dict,
+        prior_data: dict[str, Any],
+    ) -> list[dict]:
+        if stage_id == "categories":
+            return await self._generate_categories(context)
+        elif stage_id == "stakeholders":
+            prior_cats = (prior_data.get("categories") or {}).get("data", {}).get("items", [])
+            return await self._generate_stakeholders(context, prior_cats)
+        return []
 
-        categories = [i["content"].get("title", "") for i in outline_items]
+    async def enrich_record(
+        self,
+        stage_id: str,
+        item_content: dict,
+        existing_record: dict,
+        context: dict,
+    ) -> dict:
+        if stage_id != "details":
+            raise ValueError(f"enrich_record called for unexpected stage '{stage_id}'")
+        return await self._enrich_stakeholder_detail(item_content, existing_record, context)
+
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        category_items = (confirmed_stages.get("categories") or {}).get("data", {}).get("items", [])
+        stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
+        records = (confirmed_stages.get("details") or {}).get("data", {}).get("records", {})
+
+        categories = [i["content"].get("label", "") for i in category_items]
         by_category: dict[str, list[str]] = {c: [] for c in categories}
-        for item in details_items:
-            parent = item["content"].get("parent", "")
+        for item in stakeholder_items:
+            cat = item["content"].get("category", "")
             name = item["content"].get("name", "")
-            if parent in by_category:
-                by_category[parent].append(name)
-            else:
-                by_category.setdefault("Other", []).append(name)
+            by_category.setdefault(cat, []).append(name)
 
         outline_text = "\n".join(
             f"### {cat}\n" + "\n".join(f"  - {s}" for s in by_category.get(cat, []))
             for cat in categories
         )
 
-        # Retrieve real evidence — query per category + a general engagement query
-        geography = setup_fields.get("geography", "")
-        sector = setup_fields.get("sector", "")
+        geography = context.get("geography", "")
+        project_type = context.get("project_type", "")
         queries = [
-            f"{cat} stakeholder {geography} {sector}".strip()
+            f"{cat} stakeholder {geography} {project_type}".strip()
             for cat in categories[:5]
-        ] + ([f"stakeholder engagement {sector} {geography}"] if sector or geography else [])
+        ] + ([f"stakeholder engagement {project_type} {geography}"] if project_type or geography else [])
 
-        context_str, citations = await self._retrieve_evidence(queries, db, initiative_id)
+        context_str, citations = await retrieve_evidence(queries, None, None)
 
         evidence_block = (
             f"\n\nRetrieved sources — cite these as [1], [2] … in your text:\n{context_str}"
@@ -252,25 +176,19 @@ class StakeholderAssessmentModule(BaseAssessmentModule):
 
         result = await llm_json(
             system=(
-                "You are a senior stakeholder engagement specialist producing a professional assessment "
-                "for a development project team. Using the confirmed stakeholder categories, named "
-                "stakeholders, and retrieved sources, write a full stakeholder assessment. The report must:\n"
-                "  • Include an Executive Summary (3–5 sentences)\n"
-                "  • Have a section per stakeholder category with 2–3 analytical paragraphs covering "
-                "    each named stakeholder's likely interests, influence, stance, and engagement "
-                "    considerations. Where retrieved sources support a point, cite them as [1], [2], etc.\n"
-                "  • Include an Engagement Strategy section with priority actions\n"
-                "  • End with Risk Considerations (key risks if stakeholders are not engaged)\n"
-                "  • Use professional language appropriate for a funding proposal or project brief\n\n"
-                "Return JSON with keys:\n"
-                "  title (string),\n"
-                "  executive_summary (string),\n"
-                "  sections (list of {category, body} objects — one per outline category),\n"
-                "  engagement_strategy (string),\n"
-                "  risk_considerations (string)"
+                "You are a senior stakeholder engagement specialist producing a professional assessment. "
+                "Using the confirmed stakeholder categories and named stakeholders, write a full "
+                "stakeholder assessment. Include:\n"
+                "  • Executive Summary (3–5 sentences)\n"
+                "  • One section per category with analytical paragraphs covering interests, influence, "
+                "    stance, and engagement considerations. Cite sources as [1], [2], etc.\n"
+                "  • Engagement Strategy section with priority actions\n"
+                "  • Risk Considerations\n\n"
+                "Return JSON with keys: title, executive_summary, sections (list of {category, body}), "
+                "engagement_strategy, risk_considerations"
             ),
             user_msg=(
-                f"Project: Geography={geography}, Sector={sector}\n\n"
+                f"Project: Geography={geography}, Type={project_type}\n\n"
                 f"Stakeholder outline:\n{outline_text}"
                 f"{evidence_block}"
             ),
@@ -279,4 +197,88 @@ class StakeholderAssessmentModule(BaseAssessmentModule):
         result = result or {"title": "Stakeholder Assessment"}
         if citations:
             result["citations"] = citations
-        return result
+
+        from app.services.docx_exporter import DocxExporterService
+        exporter = DocxExporterService()
+        return exporter.generate_assessment_docx(
+            content=result,
+            initiative_title=context.get("project_title", ""),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Private generation helpers                                           #
+    # ------------------------------------------------------------------ #
+
+    async def _generate_categories(self, context: dict) -> list[dict]:
+        data = await llm_json(
+            system=(
+                "You are an expert stakeholder analyst. Generate 5–8 stakeholder categories "
+                "for the given project. Each category is a distinct group of stakeholders. "
+                "Return JSON with key 'categories', a list of objects with 'label' and optional 'description'."
+            ),
+            user_msg=(
+                f"Project: {context.get('project_title', 'Unknown')}\n"
+                f"Geography: {context.get('geography', '')}\n"
+                f"Project type: {context.get('project_type', '')}\n"
+                f"Description: {context.get('project_description', '')}"
+            ),
+        )
+        return [
+            {"label": c.get("label", c.get("title", "")), "description": c.get("description", "")}
+            for c in data.get("categories", [])
+        ]
+
+    async def _generate_stakeholders(self, context: dict, category_items: list[dict]) -> list[dict]:
+        categories = [i["content"].get("label", i["content"].get("title", "")) for i in category_items]
+        categories_list = "\n".join(f"- {c}" for c in categories)
+        data = await llm_json(
+            system=(
+                "You are an expert stakeholder analyst. For each stakeholder category listed, "
+                "identify 3–5 specific stakeholders. Each item must have 'name', 'category' "
+                "(exactly matching one category label), and 'why_they_matter'. "
+                "Return JSON with key 'stakeholders', a flat list."
+            ),
+            user_msg=(
+                f"Project: {context.get('project_title', 'Unknown')}\n"
+                f"Geography: {context.get('geography', '')}\n"
+                f"Project type: {context.get('project_type', '')}\n"
+                f"Stakeholder categories:\n{categories_list}"
+            ),
+        )
+        return [
+            {
+                "name": s.get("name", ""),
+                "category": s.get("category", ""),
+                "why_they_matter": s.get("why_they_matter", ""),
+            }
+            for s in data.get("stakeholders", [])
+        ]
+
+    async def _enrich_stakeholder_detail(
+        self,
+        item_content: dict,
+        existing_record: dict,
+        context: dict,
+    ) -> dict:
+        data = await llm_json(
+            system=(
+                "You are an expert stakeholder analyst. Enrich the stakeholder detail record. "
+                "Return JSON with keys: role_in_project, influence_level (Low/Medium/High), "
+                "impact_level (Low/Medium/High), engagement_priority (Monitor/Inform/Consult/Collaborate), "
+                "notes."
+            ),
+            user_msg=(
+                f"Stakeholder: {item_content.get('name', '')}\n"
+                f"Category: {item_content.get('category', '')}\n"
+                f"Why they matter: {item_content.get('why_they_matter', '')}\n"
+                f"Project: {context.get('project_title', '')}, "
+                f"Geography: {context.get('geography', '')}"
+            ),
+        )
+        return {
+            "role_in_project": data.get("role_in_project", existing_record.get("role_in_project", "")),
+            "influence_level": data.get("influence_level", existing_record.get("influence_level", "")),
+            "impact_level": data.get("impact_level", existing_record.get("impact_level", "")),
+            "engagement_priority": data.get("engagement_priority", existing_record.get("engagement_priority", "")),
+            "notes": data.get("notes", existing_record.get("notes", "")),
+        }

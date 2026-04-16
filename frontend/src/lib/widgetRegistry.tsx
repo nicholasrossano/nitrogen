@@ -26,6 +26,7 @@ type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
 
 // Lazy imports keep the initial bundle small
 const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }>> = {
+  // Legacy widget keys (preserved for existing module_instances during migration)
   lcoe_inputs: () =>
     import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
   lcoe_output: () =>
@@ -40,6 +41,14 @@ const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }
     import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
   document_viewer: () =>
     import('@/components/widgets/DocumentViewerWidget').then((m) => ({ default: m.DocumentViewerWidget as unknown as WidgetComponent })),
+
+  // Staged workflow result widget keys
+  lcoe_results: () =>
+    import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
+  carbon_results: () =>
+    import('@/components/widgets/CarbonModelWidget').then((m) => ({ default: m.CarbonModelWidget as unknown as WidgetComponent })),
+  solar_yield_results: () =>
+    import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
 };
 
 /**

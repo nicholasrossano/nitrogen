@@ -31,6 +31,9 @@ const DocumentViewerWidget = dynamic(() => import('@/components/widgets/Document
 const MIN_RESEARCH_PANEL_PERCENT = 20;
 const MAX_RESEARCH_PANEL_PERCENT = 25;
 const DEFAULT_RESEARCH_PANEL_PERCENT = 25;
+const MIN_CHAT_PANEL_PERCENT = 20;
+const MAX_CHAT_PANEL_PERCENT = 60;
+const DEFAULT_CHAT_PANEL_PERCENT = 30;
 const MIN_PLAN_DOC_VIEWER_PERCENT = 25;
 const MAX_PLAN_DOC_VIEWER_PERCENT = 55;
 const DEFAULT_PLAN_DOC_VIEWER_PERCENT = 38;
@@ -60,6 +63,8 @@ function InitiativePageContent() {
   });
   const [researchPanelWidthPercent, setResearchPanelWidthPercent] = useState(DEFAULT_RESEARCH_PANEL_PERCENT);
   const [isResizingResearch, setIsResizingResearch] = useState(false);
+  const [chatPanelWidthPercent, setChatPanelWidthPercent] = useState(DEFAULT_CHAT_PANEL_PERCENT);
+  const [isResizingChat, setIsResizingChat] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [pageReady, setPageReady] = useState(false);
@@ -385,6 +390,19 @@ function InitiativePageContent() {
     setIsResizingPlanDoc(false);
   }, []);
 
+  const handleChatMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingChat || !workspaceContainerRef.current) return;
+    const rect = workspaceContainerRef.current.getBoundingClientRect();
+    const newChatPercent = ((rect.right - e.clientX) / rect.width) * 100;
+    setChatPanelWidthPercent(
+      Math.min(MAX_CHAT_PANEL_PERCENT, Math.max(MIN_CHAT_PANEL_PERCENT, newChatPercent))
+    );
+  }, [isResizingChat]);
+
+  const handleChatMouseUp = useCallback(() => {
+    setIsResizingChat(false);
+  }, []);
+
   useEffect(() => {
     if (isResizingPlanDoc) {
       document.addEventListener('mousemove', handlePlanDocMouseMove);
@@ -399,6 +417,21 @@ function InitiativePageContent() {
       document.body.style.userSelect = '';
     };
   }, [isResizingPlanDoc, handlePlanDocMouseMove, handlePlanDocMouseUp]);
+
+  useEffect(() => {
+    if (isResizingChat) {
+      document.addEventListener('mousemove', handleChatMouseMove);
+      document.addEventListener('mouseup', handleChatMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleChatMouseMove);
+      document.removeEventListener('mouseup', handleChatMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingChat, handleChatMouseMove, handleChatMouseUp]);
 
   useEffect(() => {
     if (isResizingResearch) {
@@ -437,16 +470,6 @@ function InitiativePageContent() {
           initiative={initiative}
           onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
           readOnly={isViewer}
-          primaryAction={isViewer ? undefined : {
-            label: 'New Module',
-            onClick: () => {
-              setActiveView('workspace');
-              setSurfacePanelState('workspace', { editorOpen: true });
-              setWorkspaceLaunchMode('new');
-              router.replace(`/initiatives/${initiativeId}?view=workspace`);
-            },
-            title: 'Open workspace and start a new module',
-          }}
           {...(activeView === 'plan' ? {
             rightToggle: rightPanel === 'project_plan' ? {
               active: planDocViewer !== null,
@@ -463,15 +486,6 @@ function InitiativePageContent() {
             } : undefined,
           } : (activeView === 'research' || activeView === 'workspace') && !isViewer ? {
             leftToggle: {
-              active: chatPanelOpen,
-              disabled: !editorPanelOpen,
-              onClick: () => setSurfacePanelState(activeView, {
-                chatOpen: editorPanelOpen ? !chatPanelOpen : true,
-              }),
-              title: chatPanelOpen ? 'Hide chat' : 'Show chat',
-              icon: 'chat',
-            },
-            rightToggle: {
               active: editorPanelOpen,
               disabled: !chatPanelOpen,
               onClick: () => setSurfacePanelState(activeView, {
@@ -479,6 +493,15 @@ function InitiativePageContent() {
               }),
               title: editorPanelOpen ? 'Hide editor' : 'Show editor',
               icon: 'workspace',
+            },
+            rightToggle: {
+              active: chatPanelOpen,
+              disabled: !editorPanelOpen,
+              onClick: () => setSurfacePanelState(activeView, {
+                chatOpen: editorPanelOpen ? !chatPanelOpen : true,
+              }),
+              title: chatPanelOpen ? 'Hide chat' : 'Show chat',
+              icon: 'chat',
             },
           } : {})}
         />
@@ -529,9 +552,46 @@ function InitiativePageContent() {
                 ref={workspaceContainerRef}
                 className={`h-full min-w-0 flex overflow-hidden relative ${(activeView !== 'research' && activeView !== 'workspace') ? 'hidden' : ''}`}
               >
+                {editorPanelOpen && (
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <ProjectWorkspaceEditorPanel
+                      initiativeId={initiativeId}
+                      chatWidgets={chatEditorWidgets}
+                      pendingDocument={pendingEditorDocument}
+                      onPendingDocumentHandled={() => setPendingEditorDocument(null)}
+                      workspaceLaunchMode={workspaceLaunchMode}
+                      onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
+                      preferArtifactsTab={preferArtifactsTab}
+                      onArtifactsTabPreferredHandled={() => setPreferArtifactsTab(false)}
+                      onSendToChat={(content, toolHint) => {
+                        setSurfacePanelState('workspace', { chatOpen: true });
+                        chatSendRef.current?.(content, toolHint);
+                      }}
+                      onOpenChatSession={(session) => {
+                        setSurfacePanelState('workspace', { chatOpen: true, editorOpen: true });
+                        setPreferArtifactsTab(true);
+                        setPendingChatSessionToOpen(session);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {editorPanelOpen && chatPanelOpen && (
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setIsResizingChat(true);
+                    }}
+                    className={`w-2 flex-shrink-0 cursor-col-resize relative group ${isResizingChat ? 'bg-accent/10' : ''}`}
+                  >
+                    <div className={`absolute left-1/2 top-0 h-full -translate-x-1/2 w-px transition-colors ${isResizingChat ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`} />
+                  </div>
+                )}
+
                 {chatPanelOpen && (
                   <div
-                    className={`flex-shrink-0 overflow-hidden ${editorPanelOpen ? 'w-[46%] border-r border-divider' : 'flex-1'}`}
+                    className={`flex-shrink-0 overflow-hidden ${editorPanelOpen ? '' : 'flex-1'}`}
+                    style={editorPanelOpen ? { width: `${chatPanelWidthPercent}%` } : undefined}
                   >
                     <div className="h-full flex overflow-hidden">
                       <div className="flex-1 min-w-0">
@@ -574,30 +634,6 @@ function InitiativePageContent() {
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {editorPanelOpen && (
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <ProjectWorkspaceEditorPanel
-                      initiativeId={initiativeId}
-                      chatWidgets={chatEditorWidgets}
-                      pendingDocument={pendingEditorDocument}
-                      onPendingDocumentHandled={() => setPendingEditorDocument(null)}
-                      workspaceLaunchMode={workspaceLaunchMode}
-                      onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
-                      preferArtifactsTab={preferArtifactsTab}
-                      onArtifactsTabPreferredHandled={() => setPreferArtifactsTab(false)}
-                      onSendToChat={(content, toolHint) => {
-                        setSurfacePanelState('workspace', { chatOpen: true });
-                        chatSendRef.current?.(content, toolHint);
-                      }}
-                      onOpenChatSession={(session) => {
-                        setSurfacePanelState('workspace', { chatOpen: true, editorOpen: true });
-                        setPreferArtifactsTab(true);
-                        setPendingChatSessionToOpen(session);
-                      }}
-                    />
                   </div>
                 )}
               </main>

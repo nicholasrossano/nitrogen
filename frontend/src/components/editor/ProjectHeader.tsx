@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   Users,
   MessageSquare,
-  Plus,
 } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
@@ -27,13 +26,6 @@ interface PanelToggle {
   icon?: HeaderIcon;
 }
 
-interface HeaderPrimaryAction {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-}
-
 interface ProjectHeaderProps {
   initiative: Initiative;
   onTitleUpdate?: (title: string) => void;
@@ -41,8 +33,6 @@ interface ProjectHeaderProps {
   leftToggle?: PanelToggle;
   /** PanelRight button — shown on the right side when provided */
   rightToggle?: PanelToggle;
-  /** Header CTA styled like the New Project button */
-  primaryAction?: HeaderPrimaryAction;
   /** SquarePen "new chat" button */
   onNewChat?: () => void;
   /** Override the tooltip for the onNewChat button (default: "New chat") */
@@ -58,7 +48,6 @@ export function ProjectHeader({
   onTitleUpdate,
   leftToggle,
   rightToggle,
-  primaryAction,
   onNewChat,
   newChatTitle = 'New chat',
   onBack,
@@ -135,18 +124,6 @@ export function ProjectHeader({
     <header className="flex-shrink-0">
       <div className="px-4 h-14 flex items-center relative">
         <div className="flex items-center gap-2">
-          {primaryAction && !readOnly && (
-            <button
-              onClick={primaryAction.onClick}
-              disabled={primaryAction.disabled}
-              title={primaryAction.title}
-              className="btn-primary shrink-0 !h-7 !text-xs !leading-none !px-3 !py-0"
-            >
-              <Plus className="w-3 h-3" />
-              {primaryAction.label}
-            </button>
-          )}
-
           {onBack && (
             <button
               onClick={onBack}

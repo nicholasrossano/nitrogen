@@ -115,6 +115,18 @@ When creating a PR with `gh pr create`, always fill in the `.github/PULL_REQUEST
 - **Summary**: 1–3 sentences on what the PR does and why. Include `Closes #N` only if there is a known issue number, otherwise omit that line.
 - **Changes**: bullet points listing the key changes (one per logical change area).
 
+## GitHub Issues
+When creating or renaming issues, prefer plain-language titles that are easy to scan quickly; avoid overly technical phrasing unless the user asks for it.
+
+**Issue body format (default):**
+- Use this exact structure: `## Scope` (what will be done) and `## Why` (why it matters).
+- Keep both sections concise (1 short paragraph each) and avoid filler text.
+
+**Issue labels:**
+- Use only active repo labels unless the user explicitly asks to add a new one.
+- Current type labels are `type/bug`, `type/feature`, and `type/docs` (do not reintroduce removed type labels).
+- Apply 1 `type/*` label and 1–2 `area/*` labels; use `contrib/*` only when explicitly contributor-facing.
+
 ## Environment Files
 
 There is **one `.env` file** at the repo root. `backend/.env` and `frontend/.env.local` are **symlinks** to it.
