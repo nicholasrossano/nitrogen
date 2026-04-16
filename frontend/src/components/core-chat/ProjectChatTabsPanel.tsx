@@ -70,11 +70,16 @@ export function ProjectChatTabsPanel({
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
-  const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
+  const resolvedActiveTabId = useMemo(
+    () => (tabs.some((tab) => tab.id === activeTabId) ? activeTabId : tabs[0]?.id ?? null),
     [tabs, activeTabId],
   );
   const showTabBar = !researchMode || tabs.some((tab) => !tab.isLanding);
+
+  useEffect(() => {
+    if (!resolvedActiveTabId || resolvedActiveTabId === activeTabId) return;
+    setActiveTabId(resolvedActiveTabId);
+  }, [resolvedActiveTabId, activeTabId]);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -103,24 +108,24 @@ export function ProjectChatTabsPanel({
   }, []);
 
   const handleCloseTab = useCallback((tabId: string) => {
-    setTabs((prev) => {
-      if (prev.length === 1) {
-        const replacement = makeTab('New Chat', researchMode);
-        setActiveTabId(replacement.id);
-        return [replacement];
-      }
+    if (tabs.length === 1) {
+      const replacement = makeTab('New Chat', researchMode);
+      setTabs([replacement]);
+      setActiveTabId(replacement.id);
+      return;
+    }
 
-      const idx = prev.findIndex((tab) => tab.id === tabId);
-      const nextTabs = prev.filter((tab) => tab.id !== tabId);
-      if (tabId === activeTabId) {
-        const fallback = nextTabs[Math.max(0, idx - 1)] ?? nextTabs[0];
-        if (fallback) {
-          setActiveTabId(fallback.id);
-        }
+    const idx = tabs.findIndex((tab) => tab.id === tabId);
+    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
+    setTabs(nextTabs);
+
+    if (tabId === activeTabId) {
+      const fallback = nextTabs[Math.max(0, idx - 1)] ?? nextTabs[0];
+      if (fallback) {
+        setActiveTabId(fallback.id);
       }
-      return nextTabs;
-    });
-  }, [activeTabId, researchMode]);
+    }
+  }, [tabs, activeTabId, researchMode]);
 
   useEffect(() => {
     if (!showHistory) return;
@@ -183,23 +188,22 @@ export function ProjectChatTabsPanel({
 
   const handleDeleteSession = useCallback((chatId: string) => {
     setSessions((prev) => prev.filter((session) => session.id !== chatId));
-    setTabs((prev) => {
-      const nextTabs = prev.filter((tab) => tab.chatId !== chatId);
-      if (nextTabs.length === 0) {
-        const replacement = makeTab('New Chat', researchMode);
-        setActiveTabId(replacement.id);
-        return [replacement];
-      }
+    const nextTabs = tabs.filter((tab) => tab.chatId !== chatId);
+    if (nextTabs.length === 0) {
+      const replacement = makeTab('New Chat', researchMode);
+      setTabs([replacement]);
+      setActiveTabId(replacement.id);
+    } else {
+      setTabs(nextTabs);
       setActiveTabId((current) =>
         nextTabs.some((tab) => tab.id === current) ? current : nextTabs[0].id,
       );
-      return nextTabs;
-    });
+    }
     api.deleteChat(chatId).catch((err) => {
       console.error('Failed to delete session:', err);
       loadSessions();
     });
-  }, [loadSessions, researchMode]);
+  }, [tabs, loadSessions, researchMode]);
 
   const handleTabMetaChange = useCallback((tabId: string, meta: { chatId: string | null; title: string | null }) => {
     const chatId = meta.chatId;
@@ -254,7 +258,7 @@ export function ProjectChatTabsPanel({
         <div className="flex-shrink-0 flex items-stretch border-b border-divider bg-surface-subtle/50 h-[36px]">
           <div className="flex-1 flex items-stretch overflow-x-auto min-w-0" style={{ scrollbarWidth: 'none' }}>
             {tabs.map((tab) => {
-              const isActive = tab.id === activeTabId;
+              const isActive = tab.id === resolvedActiveTabId;
               const style = { flexShrink: 0, width: 148 };
 
               return (
@@ -359,7 +363,7 @@ export function ProjectChatTabsPanel({
 
       <div className="relative flex-1 min-h-0">
         {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
+          const isActive = tab.id === resolvedActiveTabId;
           return (
             <div
               key={tab.id}
