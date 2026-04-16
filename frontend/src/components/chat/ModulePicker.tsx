@@ -232,22 +232,37 @@ export function ModulePicker({
 export function ModuleChip({
   module,
   onRemove,
+  onClick,
 }: {
   module: ModuleOption;
-  onRemove: () => void;
+  onRemove?: () => void;
+  onClick?: () => void;
 }) {
+  const Container = onClick ? 'button' : 'span';
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
+    <Container
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={[
+        'inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none',
+        onClick ? 'transition-colors enabled:hover:bg-accent/15 cursor-pointer' : '',
+      ].join(' ')}
+    >
       {module.icon}
       {module.name}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="hover:opacity-60 transition-opacity"
-        aria-label={`Remove ${module.name}`}
-      >
-        <X className="w-2.5 h-2.5" />
-      </button>
-    </span>
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+          className="hover:opacity-60 transition-opacity"
+          aria-label={`Remove ${module.name}`}
+        >
+          <X className="w-2.5 h-2.5" />
+        </button>
+      ) : null}
+    </Container>
   );
 }

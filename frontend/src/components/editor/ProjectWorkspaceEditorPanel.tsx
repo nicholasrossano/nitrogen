@@ -28,7 +28,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onWorkspaceLaunchModeHandled: () => void;
   showModuleActions?: boolean;
   onSendToChat?: (content: string, toolHint?: string) => void;
-  onOpenChatSession?: (session: { sessionId: string; title?: string | null }) => void;
+  onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -107,7 +107,7 @@ export function ProjectWorkspaceEditorPanel({
                 <span className="flex-shrink-0 text-text-tertiary">
                   <FileText className="w-3.5 h-3.5" />
                 </span>
-                <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={1000}>
+                <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={2000}>
                   <span className="block truncate text-left">{tab.title}</span>
                 </Tooltip>
                 <span

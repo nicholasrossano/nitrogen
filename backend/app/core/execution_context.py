@@ -19,7 +19,7 @@ class ExecutionContext:
     ai_access_granted: bool
     is_byok: bool
     request_id: str
-    session_id: UUID | None = None
+    chat_id: UUID | None = None
 
 
 async def build_context(

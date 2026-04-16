@@ -3,7 +3,7 @@ from app.models.onboarding import ChatMessage
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
-from app.models.chat import CoreChatSession, CoreChatMessage
+from app.models.chat import CoreChat, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
 from app.models.project_material import ProjectMaterial
 from app.models.user import User
@@ -21,7 +21,7 @@ __all__ = [
     "Citation",
     "CorpusDocument",
     "CorpusChunk",
-    "CoreChatSession",
+    "CoreChat",
     "CoreChatMessage",
     "ProvenanceTrace",
     "ProjectMaterial",

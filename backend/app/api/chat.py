@@ -21,7 +21,7 @@ from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
 from app.services.chat import ChatService
 from app.services import module_service
-from app.models.chat import CoreChatSession, CoreChatMessage
+from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
 from app.core.rate_limit import limiter
 
@@ -56,7 +56,7 @@ class ChatHistoryMessage(BaseModel):
 class ChatStreamRequest(BaseModel):
     content: str = Field(..., max_length=50000)
     history: list[ChatHistoryMessage] = Field(default=[], max_length=100)
-    session_id: Optional[str] = None
+    chat_id: Optional[str] = None
     tool_hint: Optional[str] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
     initiative_id: Optional[str] = None
@@ -71,45 +71,45 @@ class FeedbackRequest(BaseModel):
     feedback: Optional[str] = None  # "like" | "dislike" | null to clear
 
 
-async def _get_or_create_session(
+async def _get_or_create_chat(
     db: AsyncSession,
     user_id: str,
-    session_id: Optional[str],
+    chat_id: Optional[str],
     initiative_id: Optional[uuid.UUID] = None,
-) -> CoreChatSession:
-    """Return an existing session or create a new one."""
-    if session_id:
+) -> CoreChat:
+    """Return an existing chat or create a new one."""
+    if chat_id:
         try:
-            sid = uuid.UUID(session_id)
+            cid = uuid.UUID(chat_id)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid session_id format")
+            raise HTTPException(status_code=400, detail="Invalid chat_id format")
         result = await db.execute(
-            select(CoreChatSession).where(
-                CoreChatSession.id == sid,
-                CoreChatSession.user_id == user_id,
+            select(CoreChat).where(
+                CoreChat.id == cid,
+                CoreChat.user_id == user_id,
             )
         )
-        session = result.scalar_one_or_none()
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if initiative_id and not session.initiative_id:
-            session.initiative_id = initiative_id
+        chat = result.scalar_one_or_none()
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        if initiative_id and not chat.initiative_id:
+            chat.initiative_id = initiative_id
             await db.flush()
-        return session
+        return chat
 
-    session = CoreChatSession(user_id=user_id, initiative_id=initiative_id)
-    db.add(session)
+    chat = CoreChat(user_id=user_id, initiative_id=initiative_id)
+    db.add(chat)
     await db.flush()
-    return session
+    return chat
 
 
-@router.get("/chat/sessions")
-async def list_sessions(
+@router.get("/chats")
+async def list_chats(
     initiative_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Return core chat sessions for the current user, most recent first.
+    """Return core chats for the current user, most recent first.
 
     When initiative_id is provided, only sessions scoped to that project are
     returned.  When omitted, all sessions (including unscoped ones) are returned.
@@ -118,18 +118,18 @@ async def list_sessions(
 
     query = (
         select(
-            CoreChatSession.id,
-            CoreChatSession.title,
-            CoreChatSession.created_at,
-            CoreChatSession.updated_at,
-            CoreChatSession.compare_initiative_ids,
-            CoreChatSession.initiative_id,
+            CoreChat.id,
+            CoreChat.title,
+            CoreChat.created_at,
+            CoreChat.updated_at,
+            CoreChat.compare_initiative_ids,
+            CoreChat.initiative_id,
             func.count(CoreChatMessage.id).label("message_count"),
         )
-        .outerjoin(CoreChatMessage, CoreChatMessage.session_id == CoreChatSession.id)
-        .where(CoreChatSession.user_id == user.uid)
-        .group_by(CoreChatSession.id)
-        .order_by(CoreChatSession.updated_at.desc())
+        .outerjoin(CoreChatMessage, CoreChatMessage.chat_id == CoreChat.id)
+        .where(CoreChat.user_id == user.uid)
+        .group_by(CoreChat.id)
+        .order_by(CoreChat.updated_at.desc())
         .limit(50)
     )
 
@@ -138,13 +138,13 @@ async def list_sessions(
             init_uuid = uuid.UUID(initiative_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid initiative_id")
-        query = query.where(CoreChatSession.initiative_id == init_uuid)
+        query = query.where(CoreChat.initiative_id == init_uuid)
 
     result = await db.execute(query)
     rows = result.all()
 
     return {
-        "sessions": [
+        "chats": [
             {
                 "id": str(r.id),
                 "title": r.title,
@@ -160,38 +160,38 @@ async def list_sessions(
     }
 
 
-@router.get("/chat/sessions/{session_id}/messages")
-async def get_session_messages(
-    session_id: str,
+@router.get("/chats/{chat_id}/messages")
+async def get_chat_messages(
+    chat_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Return all messages for a core chat session."""
+    """Return all messages for a core chat."""
     try:
-        sid = uuid.UUID(session_id)
+        cid = uuid.UUID(chat_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
 
-    session_result = await db.execute(
-        select(CoreChatSession).where(
-            CoreChatSession.id == sid,
-            CoreChatSession.user_id == user.uid,
+    chat_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
         )
     )
-    session = session_result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat = chat_result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
 
     messages_result = await db.execute(
         select(CoreChatMessage)
-        .where(CoreChatMessage.session_id == sid)
+        .where(CoreChatMessage.chat_id == cid)
         .order_by(CoreChatMessage.created_at)
     )
     messages = messages_result.scalars().all()
 
     return {
-        "session_id": str(session.id),
-        "title": session.title,
+        "chat_id": str(chat.id),
+        "title": chat.title,
         "messages": [
             {
                 "id": str(m.id),
@@ -210,31 +210,76 @@ async def get_session_messages(
     }
 
 
-@router.delete("/chat/sessions/{session_id}")
-async def delete_session(
-    session_id: str,
+@router.get("/chats/{chat_id}/modules")
+async def get_chat_modules(
+    chat_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Delete a core chat session and all its messages (CASCADE)."""
-    try:
-        sid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+    """Return module instances associated with a core chat."""
+    from app.models.module_instance import ModuleInstance
 
-    result = await db.execute(
-        select(CoreChatSession).where(
-            CoreChatSession.id == sid,
-            CoreChatSession.user_id == user.uid,
+    try:
+        cid = uuid.UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    chat_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
         )
     )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat = chat_result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
 
-    await db.delete(session)
+    modules_result = await db.execute(
+        select(ModuleInstance)
+        .where(ModuleInstance.chat_id == cid)
+        .order_by(ModuleInstance.started_at.asc())
+    )
+    modules = modules_result.scalars().all()
+
+    return {
+        "modules": [
+            {
+                "instance_id": str(module.id),
+                "module_id": module.module_id,
+                "title": module.title,
+                "status": module.status,
+                "started_at": module.started_at.isoformat() if module.started_at else None,
+            }
+            for module in modules
+        ]
+    }
+
+
+@router.delete("/chats/{chat_id}")
+async def delete_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete a core chat and all its messages (CASCADE)."""
+    try:
+        cid = uuid.UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
+        )
+    )
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    await db.delete(chat)
     await db.commit()
-    return {"deleted": True, "session_id": session_id}
+    return {"deleted": True, "chat_id": chat_id}
 
 
 @router.post("/chat/stream")
@@ -256,7 +301,7 @@ async def chat_stream(
 
     async def generate():
         try:
-            # Resolve initiative_id for session scoping.
+            # Resolve initiative_id for chat scoping.
             resolved_initiative_id: uuid.UUID | None = None
             if data.initiative_id:
                 try:
@@ -268,13 +313,13 @@ async def chat_stream(
                     # Keep session unscoped; access is enforced below where needed.
                     pass
 
-            # Persist session + user message upfront
-            session = await _get_or_create_session(
-                db, user.uid, data.session_id, initiative_id=resolved_initiative_id,
+            # Persist chat + user message upfront
+            chat = await _get_or_create_chat(
+                db, user.uid, data.chat_id, initiative_id=resolved_initiative_id,
             )
 
             user_msg = CoreChatMessage(
-                session_id=session.id,
+                chat_id=chat.id,
                 role="user",
                 content=data.content,
             )
@@ -296,13 +341,14 @@ async def chat_stream(
             # Reconstruct history server-side from stored messages
             prior_msgs_result = await db.execute(
                 select(CoreChatMessage)
-                .where(CoreChatMessage.session_id == session.id)
+                .where(CoreChatMessage.chat_id == chat.id)
                 .where(CoreChatMessage.id != user_msg.id)
                 .order_by(CoreChatMessage.created_at)
             )
             prior_msgs = prior_msgs_result.scalars().all()
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
             ctx = await build_context(db, user, resolved_initiative_id)
+            ctx.chat_id = chat.id
             service = ChatService(db, ctx=ctx)
 
             verified_initiative: Initiative | None = None
@@ -325,9 +371,9 @@ async def chat_stream(
                         break
 
                 if compare_contexts:
-                    # Persist compare_initiative_ids on the session
-                    if not session.compare_initiative_ids:
-                        session.compare_initiative_ids = data.compare_initiative_ids
+                    # Persist compare_initiative_ids on the chat
+                    if not chat.compare_initiative_ids:
+                        chat.compare_initiative_ids = data.compare_initiative_ids
                         await db.flush()
 
                     generation_task = asyncio.create_task(
@@ -381,7 +427,7 @@ async def chat_stream(
                         if on_thinking:
                             await on_thinking(f"Opening {_workflow_module.definition.name} workspace...")
                         inst = await module_service.get_or_create_instance(
-                            db, verified_initiative.id, _tool_hint, user.uid, session_id=session.id,
+                            db, verified_initiative.id, _tool_hint, user.uid, chat_id=chat.id,
                         )
                         await ensure_workflow_state(db, inst, _workflow_module)
                         await db.commit()
@@ -447,7 +493,7 @@ async def chat_stream(
             # Persist assistant message
             sources_list = [s.to_dict() for s in result.sources]
             assistant_msg = CoreChatMessage(
-                session_id=session.id,
+                chat_id=chat.id,
                 role="assistant",
                 content=result.content,
                 sources=sources_list,
@@ -475,7 +521,7 @@ async def chat_stream(
                 "widget_data": result.widget_data,
                 "thinking_lines": thinking_lines,
                 # IDs for the frontend to track for feedback / retry
-                "session_id": str(session.id),
+                "chat_id": str(chat.id),
                 "user_message_id": str(user_msg.id),
                 "assistant_message_id": str(assistant_msg.id),
             }
@@ -515,10 +561,10 @@ async def set_message_feedback(
 
     result = await db.execute(
         select(CoreChatMessage)
-        .join(CoreChatSession)
+        .join(CoreChat)
         .where(
             CoreChatMessage.id == mid,
-            CoreChatSession.user_id == user.uid,
+            CoreChat.user_id == user.uid,
         )
     )
     msg = result.scalar_one_or_none()
@@ -552,10 +598,10 @@ async def update_message_widget(
 
     result = await db.execute(
         select(CoreChatMessage)
-        .join(CoreChatSession)
+        .join(CoreChat)
         .where(
             CoreChatMessage.id == mid,
-            CoreChatSession.user_id == user.uid,
+            CoreChat.user_id == user.uid,
         )
     )
     msg = result.scalar_one_or_none()
@@ -572,32 +618,32 @@ async def update_message_widget(
     return {"message_id": str(msg.id), "updated": True}
 
 
-@router.patch("/chat/sessions/{session_id}/title")
-async def update_session_title(
-    session_id: str,
+@router.patch("/chats/{chat_id}/title")
+async def update_chat_title(
+    chat_id: str,
     data: dict,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Update the AI-generated title on a session."""
+    """Update the AI-generated title on a chat."""
     try:
-        sid = uuid.UUID(session_id)
+        cid = uuid.UUID(chat_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
 
     result = await db.execute(
-        select(CoreChatSession).where(
-            CoreChatSession.id == sid,
-            CoreChatSession.user_id == user.uid,
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
         )
     )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
 
-    session.title = data.get("title", "")
+    chat.title = data.get("title", "")
     await db.commit()
-    return {"session_id": str(session.id), "title": session.title}
+    return {"chat_id": str(chat.id), "title": chat.title}
 
 
 @router.post("/chat/title")
@@ -633,7 +679,7 @@ async def generate_chat_title(
         return {"title": data.message[:40]}
 
 
-class SaveSessionMessage(BaseModel):
+class SaveChatMessage(BaseModel):
     role: str
     content: str
     widget_type: Optional[str] = None
@@ -642,19 +688,19 @@ class SaveSessionMessage(BaseModel):
     completion_meta: Optional[dict] = None
 
 
-class SaveSessionRequest(BaseModel):
+class SaveChatRequest(BaseModel):
     title: Optional[str] = None
     initiative_id: Optional[str] = None
-    messages: list[SaveSessionMessage]
+    messages: list[SaveChatMessage]
 
 
-@router.post("/chat/sessions/save")
-async def save_session_from_messages(
-    data: SaveSessionRequest,
+@router.post("/chats/save")
+async def save_chat_from_messages(
+    data: SaveChatRequest,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Create a chat session from a list of messages (e.g. document flow)."""
+    """Create a chat from a list of messages (e.g. document flow)."""
     if not data.messages:
         raise HTTPException(status_code=400, detail="No messages provided")
 
@@ -668,13 +714,13 @@ async def save_session_from_messages(
         except HTTPException:
             raise
 
-    session = CoreChatSession(user_id=user.uid, title=data.title, initiative_id=init_uuid)
-    db.add(session)
+    chat = CoreChat(user_id=user.uid, title=data.title, initiative_id=init_uuid)
+    db.add(chat)
     await db.flush()
 
     for msg in data.messages:
         db_msg = CoreChatMessage(
-            session_id=session.id,
+            chat_id=chat.id,
             role=msg.role,
             content=msg.content,
             widget_type=msg.widget_type,
@@ -685,6 +731,6 @@ async def save_session_from_messages(
         db.add(db_msg)
 
     await db.commit()
-    return {"session_id": str(session.id), "title": session.title}
+    return {"chat_id": str(chat.id), "title": chat.title}
 
 

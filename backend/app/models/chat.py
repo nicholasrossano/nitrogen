@@ -7,9 +7,9 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
 
 
-class CoreChatSession(Base):
+class CoreChat(Base):
     """A standalone (non-initiative) chat conversation."""
-    __tablename__ = "core_chat_sessions"
+    __tablename__ = "core_chats"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -29,17 +29,17 @@ class CoreChatSession(Base):
     compare_initiative_ids: Mapped[list | None] = mapped_column(JSONB)
 
     messages: Mapped[list["CoreChatMessage"]] = relationship(
-        back_populates="session", cascade="all, delete-orphan", order_by="CoreChatMessage.created_at"
+        back_populates="chat", cascade="all, delete-orphan", order_by="CoreChatMessage.created_at"
     )
 
 
 class CoreChatMessage(Base):
-    """A single message in a core chat session."""
+    """A single message in a core chat conversation."""
     __tablename__ = "core_chat_messages"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("core_chat_sessions.id", ondelete="CASCADE"), index=True
+    chat_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("core_chats.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # user | assistant
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -58,4 +58,4 @@ class CoreChatMessage(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
-    session: Mapped["CoreChatSession"] = relationship(back_populates="messages")
+    chat: Mapped["CoreChat"] = relationship(back_populates="messages")
