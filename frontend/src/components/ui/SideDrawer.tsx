@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Home, PanelsTopLeft, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Home, Layers3, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -30,8 +30,8 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'research', label: 'Overview', Icon: Home },
-  { key: 'plan', label: 'Project Plan', Icon: Map },
-  { key: 'workspace', label: 'Workspace', Icon: PanelsTopLeft },
+  { key: 'plan', label: 'Framework', Icon: Map },
+  { key: 'workspace', label: 'Modules', Icon: Layers3 },
 ];
 
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
@@ -85,7 +85,8 @@ export function SideDrawer() {
     if (!initiativeId) return 'home';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
-    if (view === 'workspace') return 'workspace';
+    if (view === 'plan' || view === 'framework') return 'plan';
+    if (view === 'workspace' || view === 'modules') return 'workspace';
     if (view === 'files') return 'files';
     return 'research';
   }, [initiativeId, searchParams]);

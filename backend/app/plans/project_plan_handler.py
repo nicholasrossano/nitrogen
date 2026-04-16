@@ -22,7 +22,7 @@ class ProjectPlanHandler(BasePlanHandler):
     def definition(self) -> PlanDefinition:
         return PlanDefinition(
             id="project_plan",
-            name="Project Plan",
+            name="Framework",
             description="Structured plan for project approvals, financing, and design workstreams.",
             primary_ui_object="plan_workspace",
             structure_widget_type="plan_structure_confirm",
@@ -54,18 +54,18 @@ class ProjectPlanHandler(BasePlanHandler):
 
     def build_structure_widget_data(self, structure: list[dict]) -> dict:
         return {
-            "plan_type": self.definition.id,
+            "planType": self.definition.id,
             "title": "Proposed Plan Structure",
             "subtitle": (
                 f"Proposing the following {len(structure)} categories. Review and confirm to "
                 "generate the full breakdown, or propose changes in the chat."
             ),
-            "pending_title": "Building your project plan...",
-            "pending_subtitle_template": "Generating detailed breakdown for {count} categories",
-            "success_message": "Plan generated. View it in the Project Plan tab.",
-            "footer_hint": "Remove categories above · Request changes via the chat",
-            "confirm_label": "Confirm & Generate Plan",
-            "min_selected": 2,
+            "pendingTitle": "Building your framework...",
+            "pendingSubtitleTemplate": "Generating detailed breakdown for {count} categories",
+            "successMessage": "Framework generated. View it in the Framework tab.",
+            "footerHint": "Remove categories above · Request changes via the chat",
+            "confirmLabel": "Confirm & Generate Plan",
+            "minSelected": 2,
             "options": structure,
             "action": {"type": "confirm_project_plan_categories"},
         }
