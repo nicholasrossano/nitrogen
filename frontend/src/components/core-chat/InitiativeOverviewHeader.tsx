@@ -55,11 +55,10 @@ export function InitiativeOverviewHeader({
   const projectType = formatProjectType(initiative.project_type);
   const hasFiles = filesUploaded > 0;
   const hasOverview = Boolean(initiative.overview_description?.trim());
-  const [collaboratorsCount, setCollaboratorsCount] = useState(1);
+  const [collaboratorsCount, setCollaboratorsCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setCollaboratorsCount(1);
 
     api.getShares(initiative.id)
       .then((shares) => {
@@ -77,6 +76,8 @@ export function InitiativeOverviewHeader({
       cancelled = true;
     };
   }, [initiative.id]);
+
+  const resolvedCollaboratorsCount = collaboratorsCount ?? 1;
 
   return (
     <div className="w-full">
@@ -154,7 +155,7 @@ export function InitiativeOverviewHeader({
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <FootprintBox label="Collaborators" value={collaboratorsCount} Icon={Users} />
+        <FootprintBox label="Collaborators" value={resolvedCollaboratorsCount} Icon={Users} />
         <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
         <FootprintBox label="Modules Created" value={modulesCreated} Icon={Layers3} />
       </div>
