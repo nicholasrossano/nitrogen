@@ -66,9 +66,17 @@ export interface ModuleInstance {
   started_by_email: string | null;
   started_at: string;
   updated_at: string;
-  session_id: string | null;
+  chat_id: string | null;
   deliverable?: Record<string, any> | null;
   workflow_state?: Record<string, any> | null;
+}
+
+export interface ChatModuleSummary {
+  instance_id: string;
+  module_id: string;
+  title: string | null;
+  status: string;
+  started_at: string | null;
 }
 
 export interface ProjectShare {
@@ -1308,9 +1316,9 @@ export const api = {
     ),
 
   // Chat sessions — optionally scoped to a single project
-  getChatSessions: (initiativeId?: string) =>
+  getChats: (initiativeId?: string) =>
     fetchApi<{
-      sessions: {
+      chats: {
         id: string;
         title: string | null;
         created_at: string | null;
@@ -1321,20 +1329,23 @@ export const api = {
       }[];
     }>(
       initiativeId
-        ? `/api/v1/chat/sessions?initiative_id=${encodeURIComponent(initiativeId)}`
-        : '/api/v1/chat/sessions',
+        ? `/api/v1/chats?initiative_id=${encodeURIComponent(initiativeId)}`
+        : '/api/v1/chats',
     ),
 
-  getChatSessionMessages: (sessionId: string) =>
+  getChatMessages: (chatId: string) =>
     fetchApi<{
-      session_id: string;
+      chat_id: string;
       title: string | null;
       messages: ChatMessage[];
-    }>(`/api/v1/chat/sessions/${sessionId}/messages`),
+    }>(`/api/v1/chats/${chatId}/messages`),
 
-  deleteChatSession: (sessionId: string) =>
-    fetchApi<{ deleted: boolean; session_id: string }>(
-      `/api/v1/chat/sessions/${sessionId}`,
+  getChatModules: (chatId: string) =>
+    fetchApi<{ modules: ChatModuleSummary[] }>(`/api/v1/chats/${chatId}/modules`),
+
+  deleteChat: (chatId: string) =>
+    fetchApi<{ deleted: boolean; chat_id: string }>(
+      `/api/v1/chats/${chatId}`,
       { method: 'DELETE' },
     ),
 
@@ -1347,22 +1358,22 @@ export const api = {
       }
     ),
 
-  updateChatSessionTitle: (sessionId: string, title: string) =>
-    fetchApi<{ session_id: string; title: string }>(
-      `/api/v1/chat/sessions/${sessionId}/title`,
+  updateChatTitle: (chatId: string, title: string) =>
+    fetchApi<{ chat_id: string; title: string }>(
+      `/api/v1/chats/${chatId}/title`,
       {
         method: 'PATCH',
         body: JSON.stringify({ title }),
       }
     ),
 
-  saveSessionFromMessages: (
+  saveChatFromMessages: (
     messages: { role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; sources?: any[] | null; completion_meta?: Record<string, any> | null }[],
     title?: string,
     initiativeId?: string,
   ) =>
-    fetchApi<{ session_id: string; title: string | null }>(
-      '/api/v1/chat/sessions/save',
+    fetchApi<{ chat_id: string; title: string | null }>(
+      '/api/v1/chats/save',
       {
         method: 'POST',
         body: JSON.stringify({ title, messages, initiative_id: initiativeId }),
@@ -1383,12 +1394,12 @@ export const api = {
       widget_type?: string | null;
       widget_data?: Record<string, any> | null;
       thinking_lines?: string[];
-      session_id: string;
+      chat_id: string;
       user_message_id: string;
       assistant_message_id: string;
     }) => void,
     onError: (message: string) => void,
-    session_id?: string | null,
+    chat_id?: string | null,
     toolHint?: string | null,
     modelInputsContext?: string | null,
     initiativeId?: string | null,
@@ -1411,7 +1422,7 @@ export const api = {
       body: JSON.stringify({
         content,
         history,
-        session_id: session_id ?? null,
+        chat_id: chat_id ?? null,
         tool_hint: toolHint ?? null,
         model_inputs_context: modelInputsContext ?? null,
         initiative_id: initiativeId ?? null,

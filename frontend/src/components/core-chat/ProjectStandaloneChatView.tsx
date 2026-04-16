@@ -10,11 +10,21 @@ import { LandingInput } from './LandingInput';
 import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
+import { ALL_MODULES, ModuleChip } from '@/components/chat/ModulePicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
-import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
+import type { CoreChatMessage, ChatSummary } from '@/stores/chatStore';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+const CHAT_MODULE_WIDGET_TYPES = new Set([
+  'module_workspace',
+  'lcoe_inputs',
+  'lcoe_output',
+  'carbon_inputs',
+  'carbon_output',
+  'solar_inputs',
+  'solar_output',
+]);
 const activeModulesCountCache = new Map<string, number>();
 
 interface ProjectStandaloneChatViewProps {
@@ -24,25 +34,27 @@ interface ProjectStandaloneChatViewProps {
   hideTiles?: boolean;
   /** When false, empty state stays in conversation mode instead of showing the landing UI */
   useLandingWhenEmpty?: boolean;
-  initialSessionId?: string | null;
+  initialChatId?: string | null;
   initialTitle?: string | null;
   onMessageSent?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   /** Called when user clicks an internal citation */
   onCitationClick?: (citation: SourceCitation) => void;
-  /** Called when the active thread/session metadata changes */
-  onSessionMetaChange?: (meta: { sessionId: string | null; title: string | null }) => void;
+  /** Called when the active chat metadata changes */
+  onChatMetaChange?: (meta: { chatId: string | null; title: string | null }) => void;
   /** Called when this view enters or leaves its landing state */
   onLandingStateChange?: (isOnLanding: boolean) => void;
+  /** Open a module workspace from a chat-associated module chip */
+  onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
   /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Shared session history (project + user scoped) */
-  sessions?: ChatSession[];
-  /** Delete a session from shared history */
-  onDeleteSession?: (sessionId: string) => void;
-  /** Ask parent to refresh shared session history */
-  onSessionListDirty?: () => void;
+  sessions?: ChatSummary[];
+  /** Delete a chat from shared history */
+  onDeleteChat?: (chatId: string) => void;
+  /** Ask parent to refresh shared chat history */
+  onChatListDirty?: () => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -69,22 +81,24 @@ export function ProjectStandaloneChatView({
   showLanding = false,
   hideTiles = false,
   useLandingWhenEmpty = true,
-  initialSessionId = null,
+  initialChatId = null,
   initialTitle = null,
   onMessageSent,
   onEditorWidgetsChange,
   onCitationClick,
-  onSessionMetaChange,
+  onChatMetaChange,
   onLandingStateChange,
+  onOpenWorkspaceModule,
   onSendRef,
   sessions = [],
-  onDeleteSession,
-  onSessionListDirty,
+  onDeleteChat,
+  onChatListDirty,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [chatModules, setChatModules] = useState<{ instance_id: string; module_id: string; title: string | null; status: string; started_at: string | null }[]>([]);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +112,7 @@ export function ProjectStandaloneChatView({
   );
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewGenerating, setOverviewGenerating] = useState(false);
-  const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
+  const lastReportedMetaRef = useRef<{ chatId: string | null; title: string | null } | null>(null);
   const autoOverviewAttemptRef = useRef<string | null>(null);
 
   const initiative = useInitiativeStore((s) => s.initiative);
@@ -113,16 +127,16 @@ export function ProjectStandaloneChatView({
   }, [initialTitle, sessionTitle]);
 
   useEffect(() => {
-    if (!initialSessionId) return;
-    if (currentSessionId === initialSessionId || localMessages.length > 0) return;
+    if (!initialChatId) return;
+    if (currentChatId === initialChatId || localMessages.length > 0) return;
 
     let cancelled = false;
-    api.getChatSessionMessages(initialSessionId)
+    api.getChatMessages(initialChatId)
       .then(({ messages, title }) => {
         if (cancelled) return;
         setLocalMessages(messages);
         setSessionTitle(title || initialTitle || 'Untitled');
-        setCurrentSessionId(initialSessionId);
+        setCurrentChatId(initialChatId);
         setFeedbackMap(
           Object.fromEntries(
             messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
@@ -138,49 +152,76 @@ export function ProjectStandaloneChatView({
     return () => {
       cancelled = true;
     };
-  }, [initialSessionId, initialTitle, currentSessionId, localMessages.length]);
+  }, [initialChatId, initialTitle, currentChatId, localMessages.length]);
 
   useEffect(() => {
     const nextMeta = {
-      sessionId: currentSessionId,
+      chatId: currentChatId,
       title: sessionTitle,
     };
     const prevMeta = lastReportedMetaRef.current;
     if (
-      prevMeta?.sessionId === nextMeta.sessionId &&
+      prevMeta?.chatId === nextMeta.chatId &&
       prevMeta?.title === nextMeta.title
     ) {
       return;
     }
     lastReportedMetaRef.current = nextMeta;
-    onSessionMetaChange?.(nextMeta);
-  }, [currentSessionId, sessionTitle, onSessionMetaChange]);
+    onChatMetaChange?.(nextMeta);
+  }, [currentChatId, sessionTitle, onChatMetaChange]);
 
   // When showLanding transitions to true, clear current conversation
   // (it's already persisted to DB by the streaming endpoint)
   const prevShowLanding = useRef(showLanding);
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
-      // Refresh shared sessions so the finished conversation appears in history.
-      onSessionListDirty?.();
+      // Refresh shared chats so the finished conversation appears in history.
+      onChatListDirty?.();
       setLocalMessages([]);
       setSessionTitle(null);
-      setCurrentSessionId(null);
+      setCurrentChatId(null);
+      setChatModules([]);
       setFeedbackMap({});
       setCompareProject(null);
     }
     prevShowLanding.current = showLanding;
-  }, [showLanding, localMessages, onSessionListDirty]);
+  }, [showLanding, localMessages, onChatListDirty]);
 
-  // Persist the AI-generated title to the DB session once both are available
+  // Persist the AI-generated title to the DB chat once both are available
   const titlePersistedRef = useRef(false);
   useEffect(() => {
-    if (sessionTitle && currentSessionId && !titlePersistedRef.current) {
+    if (sessionTitle && currentChatId && !titlePersistedRef.current) {
       titlePersistedRef.current = true;
-      api.updateChatSessionTitle(currentSessionId, sessionTitle).catch(() => {});
+      api.updateChatTitle(currentChatId, sessionTitle).catch(() => {});
     }
-    if (!currentSessionId) titlePersistedRef.current = false;
-  }, [sessionTitle, currentSessionId]);
+    if (!currentChatId) titlePersistedRef.current = false;
+  }, [sessionTitle, currentChatId]);
+
+  const refreshChatModules = useCallback(async (chatId: string) => {
+    try {
+      const { modules } = await api.getChatModules(chatId);
+      setChatModules(modules);
+    } catch (err) {
+      console.warn('Failed to load chat modules:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentChatId) {
+      setChatModules([]);
+      return;
+    }
+    void refreshChatModules(currentChatId);
+  }, [currentChatId, refreshChatModules]);
+
+  useEffect(() => {
+    if (!currentChatId) return;
+    const latestAssistant = [...localMessages].reverse().find((message) => message.role === 'assistant');
+    if (!latestAssistant?.widget_type || !CHAT_MODULE_WIDGET_TYPES.has(latestAssistant.widget_type)) {
+      return;
+    }
+    void refreshChatModules(currentChatId);
+  }, [currentChatId, localMessages, refreshChatModules]);
 
   // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
@@ -231,9 +272,9 @@ export function ProjectStandaloneChatView({
           setStreamingContent('');
           setThinkingLines([]);
 
-          if (payload.session_id) {
-            setCurrentSessionId(payload.session_id);
-            onSessionListDirty?.();
+          if (payload.chat_id) {
+            setCurrentChatId(payload.chat_id);
+            onChatListDirty?.();
           }
 
           setLocalMessages((prev) =>
@@ -268,7 +309,7 @@ export function ProjectStandaloneChatView({
           setError(message);
           setSending(false);
         },
-        currentSessionId,
+        currentChatId,
         toolHint ?? null,
         null,
         initiativeId,
@@ -286,7 +327,7 @@ export function ProjectStandaloneChatView({
         compareIds,
       );
     },
-    [initiativeId, currentSessionId, compareProject, onSessionListDirty],
+    [initiativeId, currentChatId, compareProject, onChatListDirty],
   );
 
   const handleUploadFile = useCallback(
@@ -408,12 +449,12 @@ export function ProjectStandaloneChatView({
   );
 
   const handleLoadSession = useCallback(
-    async (session: ChatSession) => {
+    async (session: ChatSummary) => {
       try {
-        const { messages, title } = await api.getChatSessionMessages(session.id);
+        const { messages, title } = await api.getChatMessages(session.id);
         setLocalMessages(messages);
         setSessionTitle(title || session.title);
-        setCurrentSessionId(session.id);
+        setCurrentChatId(session.id);
         setFeedbackMap(
           Object.fromEntries(
             messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
@@ -436,6 +477,48 @@ export function ProjectStandaloneChatView({
   }, [onSendRef, handleSend]);
 
   const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
+
+  const moduleChips = useMemo(() => {
+    if (chatModules.length === 0) return null;
+
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {chatModules.map((module) => {
+          const moduleOption = ALL_MODULES.find((candidate) => candidate.id === module.module_id);
+          if (!moduleOption) return null;
+
+          return (
+            <ModuleChip
+              key={module.instance_id}
+              module={moduleOption}
+              onClick={
+                onOpenWorkspaceModule
+                  ? () =>
+                      onOpenWorkspaceModule({
+                        instanceId: module.instance_id,
+                        moduleId: module.module_id,
+                        title: module.title ?? moduleOption.name,
+                      })
+                  : undefined
+              }
+            />
+          );
+        })}
+      </div>
+    );
+  }, [chatModules, onOpenWorkspaceModule]);
+
+  const inputChips = useMemo(() => {
+    if (!compareProject && !moduleChips) return undefined;
+    return (
+      <>
+        {compareProject ? (
+          <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
+        ) : null}
+        {moduleChips}
+      </>
+    );
+  }, [compareProject, moduleChips]);
 
   useEffect(() => {
     onLandingStateChange?.(isOnLanding);
@@ -529,7 +612,7 @@ export function ProjectStandaloneChatView({
           onUploadFile={handleUploadFile}
           sessions={sessions}
           onLoadSession={handleLoadSession}
-          onDeleteSession={onDeleteSession}
+          onDeleteSession={onDeleteChat}
           hideTiles={hideTiles}
           layoutMode={hideTiles ? 'overview' : 'default'}
           headerContent={hideTiles ? (
@@ -552,9 +635,7 @@ export function ProjectStandaloneChatView({
               onSelect={setCompareProject}
             />
           ) : undefined}
-          inputChips={compareProject ? (
-            <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
-          ) : undefined}
+          inputChips={inputChips}
         />
       </>
     );
@@ -584,9 +665,7 @@ export function ProjectStandaloneChatView({
           onSelect={setCompareProject}
         />
       ) : undefined}
-      inputChips={compareProject ? (
-        <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
-      ) : undefined}
+      inputChips={inputChips}
     />
   );
 }

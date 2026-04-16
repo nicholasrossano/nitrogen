@@ -38,7 +38,7 @@ class ModuleInstance(Base):
 
     __table_args__ = (
         Index("ix_mi_initiative_module", "initiative_id", "module_id"),
-        Index("ix_mi_initiative_session", "initiative_id", "session_id"),
+        Index("ix_mi_initiative_chat", "initiative_id", "chat_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -53,9 +53,9 @@ class ModuleInstance(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="started")
     title: Mapped[str | None] = mapped_column(String(255))
     started_by: Mapped[str] = mapped_column(String(255), nullable=False)
-    session_id: Mapped[uuid.UUID | None] = mapped_column(
+    chat_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("core_chat_sessions.id", ondelete="SET NULL"),
+        ForeignKey("core_chats.id", ondelete="SET NULL"),
         nullable=True,
     )
     archived: Mapped[bool] = mapped_column(default=False, nullable=False)

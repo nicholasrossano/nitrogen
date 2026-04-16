@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import { ProjectStandaloneChatView } from './ProjectStandaloneChatView';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { SourceCitation } from '@/lib/api';
 import { api } from '@/lib/api';
@@ -11,7 +12,7 @@ import type { ChatSession } from '@/stores/chatStore';
 interface ProjectChatTab {
   id: string;
   title: string;
-  sessionId: string | null;
+  chatId: string | null;
   isLanding: boolean;
 }
 
@@ -19,10 +20,11 @@ interface ProjectChatTabsPanelProps {
   initiativeId: string;
   researchMode?: boolean;
   resetToLandingSignal?: number;
-  pendingSessionToOpen?: { sessionId: string; title?: string | null } | null;
+  pendingChatToOpen?: { chatId: string; title?: string | null } | null;
   onPendingSessionHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   onCitationClick?: (citation: SourceCitation) => void;
+  onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
 }
 
@@ -30,7 +32,7 @@ function makeTab(title = 'New Chat', isLanding = false): ProjectChatTab {
   return {
     id: `chat-tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     title,
-    sessionId: null,
+    chatId: null,
     isLanding,
   };
 }
@@ -51,10 +53,11 @@ export function ProjectChatTabsPanel({
   initiativeId,
   researchMode = false,
   resetToLandingSignal = 0,
-  pendingSessionToOpen = null,
+  pendingChatToOpen = null,
   onPendingSessionHandled,
   onEditorWidgetsChange,
   onCitationClick,
+  onOpenWorkspaceModule,
   onSendRef,
 }: ProjectChatTabsPanelProps) {
   const initialTabRef = useRef<ProjectChatTab | null>(null);
@@ -75,7 +78,7 @@ export function ProjectChatTabsPanel({
 
   const loadSessions = useCallback(async () => {
     try {
-      const { sessions: raw } = await api.getChatSessions(initiativeId);
+      const { chats: raw } = await api.getChats(initiativeId);
       setSessions(
         raw.map((session) => ({
           id: session.id,
@@ -94,10 +97,10 @@ export function ProjectChatTabsPanel({
   }, [loadSessions]);
 
   const handleCreateTab = useCallback(() => {
-    const tab = makeTab('New Chat', researchMode);
+    const tab = makeTab('New Chat', false);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
-  }, [researchMode]);
+  }, []);
 
   const handleCloseTab = useCallback((tabId: string) => {
     setTabs((prev) => {
@@ -131,9 +134,9 @@ export function ProjectChatTabsPanel({
   }, [showHistory]);
 
   useEffect(() => {
-    if (!pendingSessionToOpen?.sessionId) return;
+    if (!pendingChatToOpen?.chatId) return;
 
-    const existingTab = tabs.find((tab) => tab.sessionId === pendingSessionToOpen.sessionId);
+    const existingTab = tabs.find((tab) => tab.chatId === pendingChatToOpen.chatId);
     if (existingTab) {
       setActiveTabId(existingTab.id);
       onPendingSessionHandled?.();
@@ -142,14 +145,14 @@ export function ProjectChatTabsPanel({
 
     const newTab: ProjectChatTab = {
       id: makeTab().id,
-      title: pendingSessionToOpen.title?.trim() || 'Untitled',
-      sessionId: pendingSessionToOpen.sessionId,
+      title: pendingChatToOpen.title?.trim() || 'Untitled',
+      chatId: pendingChatToOpen.chatId,
       isLanding: false,
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
     onPendingSessionHandled?.();
-  }, [pendingSessionToOpen, tabs, onPendingSessionHandled]);
+  }, [pendingChatToOpen, tabs, onPendingSessionHandled]);
 
   useEffect(() => {
     if (!researchMode || resetToLandingSignal === 0) return;
@@ -160,7 +163,7 @@ export function ProjectChatTabsPanel({
   }, [researchMode, resetToLandingSignal]);
 
   const handleOpenSession = useCallback((session: ChatSession) => {
-    const existingTab = tabs.find((tab) => tab.sessionId === session.id);
+    const existingTab = tabs.find((tab) => tab.chatId === session.id);
     if (existingTab) {
       setActiveTabId(existingTab.id);
       setShowHistory(false);
@@ -170,7 +173,7 @@ export function ProjectChatTabsPanel({
     const newTab: ProjectChatTab = {
       id: makeTab().id,
       title: session.title,
-      sessionId: session.id,
+      chatId: session.id,
       isLanding: false,
     };
     setTabs((prev) => [...prev, newTab]);
@@ -178,10 +181,10 @@ export function ProjectChatTabsPanel({
     setShowHistory(false);
   }, [tabs]);
 
-  const handleDeleteSession = useCallback((sessionId: string) => {
-    setSessions((prev) => prev.filter((session) => session.id !== sessionId));
+  const handleDeleteSession = useCallback((chatId: string) => {
+    setSessions((prev) => prev.filter((session) => session.id !== chatId));
     setTabs((prev) => {
-      const nextTabs = prev.filter((tab) => tab.sessionId !== sessionId);
+      const nextTabs = prev.filter((tab) => tab.chatId !== chatId);
       if (nextTabs.length === 0) {
         const replacement = makeTab('New Chat', researchMode);
         setActiveTabId(replacement.id);
@@ -192,24 +195,24 @@ export function ProjectChatTabsPanel({
       );
       return nextTabs;
     });
-    api.deleteChatSession(sessionId).catch((err) => {
+    api.deleteChat(chatId).catch((err) => {
       console.error('Failed to delete session:', err);
       loadSessions();
     });
   }, [loadSessions, researchMode]);
 
-  const handleTabMetaChange = useCallback((tabId: string, meta: { sessionId: string | null; title: string | null }) => {
-    const sessionId = meta.sessionId;
-    if (sessionId) {
+  const handleTabMetaChange = useCallback((tabId: string, meta: { chatId: string | null; title: string | null }) => {
+    const chatId = meta.chatId;
+    if (chatId) {
       const title = meta.title?.trim() || 'Untitled';
       setSessions((prev) => {
-        const existing = prev.find((session) => session.id === sessionId);
+        const existing = prev.find((session) => session.id === chatId);
         if (existing) {
           return prev.map((session) =>
-            session.id === sessionId ? { ...session, title } : session,
+            session.id === chatId ? { ...session, title } : session,
           );
         }
-        return [{ id: sessionId, title, createdAt: Date.now(), messages: [] }, ...prev].slice(0, 50);
+        return [{ id: chatId, title, createdAt: Date.now(), messages: [] }, ...prev].slice(0, 50);
       });
     }
 
@@ -218,13 +221,13 @@ export function ProjectChatTabsPanel({
       const nextTabs = prev.map((tab) => {
         if (tab.id !== tabId) return tab;
         const nextTitle = meta.title?.trim() || tab.title;
-        if (tab.sessionId === meta.sessionId && tab.title === nextTitle) {
+        if (tab.chatId === meta.chatId && tab.title === nextTitle) {
           return tab;
         }
         changed = true;
         return {
           ...tab,
-          sessionId: meta.sessionId,
+          chatId: meta.chatId,
           title: nextTitle,
           isLanding: false,
         };
@@ -252,9 +255,7 @@ export function ProjectChatTabsPanel({
           <div className="flex-1 flex items-stretch overflow-x-auto min-w-0" style={{ scrollbarWidth: 'none' }}>
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
-              const style = isActive
-                ? { flexShrink: 0, width: 136 }
-                : { flex: '1 1 0', minWidth: 72 };
+              const style = { flexShrink: 0, width: 148 };
 
               return (
                 <button
@@ -268,7 +269,12 @@ export function ProjectChatTabsPanel({
                       : 'text-text-tertiary hover:text-text-secondary hover:bg-white/60',
                   ].join(' ')}
                 >
-                  <span className="flex-1 truncate text-left">{tab.title}</span>
+                  <span className="flex-shrink-0 text-text-tertiary">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </span>
+                  <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={2000}>
+                    <span className="block truncate text-left">{tab.title}</span>
+                  </Tooltip>
                   <span
                     onClick={(event) => {
                       event.stopPropagation();
@@ -362,16 +368,17 @@ export function ProjectChatTabsPanel({
               <ProjectStandaloneChatView
                 initiativeId={initiativeId}
                 hideTiles={researchMode}
-                useLandingWhenEmpty={researchMode}
-                initialSessionId={tab.sessionId}
+                useLandingWhenEmpty={tab.isLanding}
+                initialChatId={tab.chatId}
                 initialTitle={tab.title}
                 sessions={sessions}
-                onDeleteSession={handleDeleteSession}
-                onSessionListDirty={loadSessions}
-                onSessionMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
+                onDeleteChat={handleDeleteSession}
+                onChatListDirty={loadSessions}
+                onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
                 onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
                 onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
                 onCitationClick={isActive ? onCitationClick : undefined}
+                onOpenWorkspaceModule={isActive ? onOpenWorkspaceModule : undefined}
                 onSendRef={isActive ? onSendRef : undefined}
               />
             </div>
