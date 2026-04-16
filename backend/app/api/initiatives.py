@@ -79,6 +79,11 @@ def _count_active_module_instances(instances: list[ModuleInstance]) -> int:
     return sum(1 for inst in instances if not inst.archived)
 
 
+def _active_module_instances(instances: list[ModuleInstance]) -> list[ModuleInstance]:
+    """Return only non-archived module instances."""
+    return [inst for inst in instances if not inst.archived]
+
+
 def _initiative_to_response(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
     """Convert an Initiative ORM object to a response dict with sharing fields.
 
@@ -87,7 +92,8 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
     """
     data = InitiativeResponse.model_validate(initiative).model_dump()
 
-    instances = initiative.module_instances or []
+    all_instances = initiative.module_instances or []
+    instances = _active_module_instances(all_instances)
 
     deliverables: dict = {}
     alignments: dict = {}
@@ -123,7 +129,7 @@ def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = N
     """Lightweight version for list endpoints — skips heavy fields."""
     data = InitiativeResponse.model_validate(initiative).model_dump()
     # Derive a simple deliverable count without iterating module instances
-    instances = initiative.module_instances or []
+    instances = _active_module_instances(initiative.module_instances or [])
     seen_tools: set[str] = set()
     for inst in instances:
         if inst.deliverable and inst.status == "complete":

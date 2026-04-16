@@ -13,6 +13,7 @@ import type { EditorWidget, RightPanelMode } from '@/components/editor';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { api } from '@/lib/api';
 import type { SourceCitation } from '@/lib/api';
+import { PlanWorkspaceRouteShell } from '@/components/plan-workspace';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
@@ -178,12 +179,6 @@ function InitiativePageContent() {
   const getDriveAccessToken = useGoogleDriveStore((s) => s.getAccessToken);
   const driveConnected = useGoogleDriveStore((s) => s.connected);
   const connectDrive = useGoogleDriveStore((s) => s.connect);
-
-  useEffect(() => {
-    if (!initiative?.id || initiativeId === initiative.id) return;
-    const query = searchParams.toString();
-    router.replace(query ? `/initiatives/${initiative.id}?${query}` : `/initiatives/${initiative.id}`);
-  }, [initiative?.id, initiativeId, router, searchParams]);
 
   const handleFilesViewDriveImport = useCallback(async () => {
     if (!driveConnected) {
@@ -651,44 +646,36 @@ function InitiativePageContent() {
               />
             </main>
           ) : activeView === 'plan' ? (
-            <main ref={planContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
-              {showPlanOverlay && (
-                <div
-                  className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${planViewReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-                >
-                  <div className="relative w-10 h-10">
-                    <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                      <Sprout className="w-6 h-6 text-accent" strokeWidth={1.5} />
-                    </div>
-                    <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${!showSprout ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                      <TreeDeciduous className="w-6 h-6 text-accent" strokeWidth={1.5} />
-                    </div>
-                  </div>
-                  <span className="text-xs text-text-secondary font-medium tracking-wide">Loading plan…</span>
-                </div>
-              )}
-
-              {uploadError && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="bg-indicator-orange/10 border border-indicator-orange/30 rounded px-4 py-3 shadow-lg max-w-md">
-                    <p className="text-sm text-indicator-orange font-medium">{uploadError}</p>
-                  </div>
-                </div>
-              )}
-
-              {rightPanelOpen ? (
-                <>
-                <div className="flex-1 overflow-hidden min-w-0">
-                  {showProjectPlan && (
-                    <ProjectPlanView
-                      initiativeId={initiativeId}
-                      showInspector={showInspector}
-                      onInspectorChange={handleInspectorChange}
-                      onOpenFullDoc={handleOpenFullDocFromPlan}
-                    />
-                  )}
-                </div>
-                {planDocViewer && (
+            <div ref={planContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
+              <PlanWorkspaceRouteShell
+                ready={planViewReady}
+                showOverlay={showPlanOverlay}
+                showSprout={showSprout}
+                uploadError={uploadError}
+                panelOpen={rightPanelOpen}
+                readOnly={!!isViewer}
+                hasPlan={hasProjectPlan}
+                mainContent={showProjectPlan ? (
+                  <ProjectPlanView
+                    initiativeId={initiativeId}
+                    showInspector={showInspector}
+                    onInspectorChange={handleInspectorChange}
+                    onOpenFullDoc={handleOpenFullDocFromPlan}
+                  />
+                ) : null}
+                onboardingContent={
+                  <ChatPanel
+                    messages={messages}
+                    sending={sending}
+                    generating={generating}
+                    initiativeId={initiativeId}
+                    onSendMessage={handleSendMessage}
+                    fullWidth={true}
+                    hasProjectPlan={hasProjectPlan}
+                  />
+                }
+                emptyContent={<p className="text-sm text-text-tertiary">No project plan yet</p>}
+                documentViewer={planDocViewer ? (
                   <div
                     className="flex-shrink-0 border-l border-divider flex flex-col bg-surface overflow-hidden relative"
                     style={{ width: `${planDocViewerWidthPercent}%` }}
@@ -709,26 +696,9 @@ function InitiativePageContent() {
                       />
                     </div>
                   </div>
-                )}
-                </>
-                ) : !isViewer ? (
-                <div className="flex-1 overflow-hidden h-full">
-                  <ChatPanel
-                    messages={messages}
-                    sending={sending}
-                    generating={generating}
-                    initiativeId={initiativeId}
-                    onSendMessage={handleSendMessage}
-                    fullWidth={true}
-                    hasProjectPlan={hasProjectPlan}
-                  />
-                </div>
-              ) : (
-                <div className="flex-1 overflow-hidden h-full flex items-center justify-center">
-                  <p className="text-sm text-text-tertiary">No project plan yet</p>
-                </div>
-              )}
-            </main>
+                ) : undefined}
+              />
+            </div>
             ) : null}
             </>
           )}

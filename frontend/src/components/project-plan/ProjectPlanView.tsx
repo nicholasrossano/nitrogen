@@ -10,12 +10,12 @@ import { api, DeepDiveResult, ProjectPlanItem, ProjectPlanPillar } from '@/lib/a
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
 import {
-  buildProjectPlanSummaryData,
   mapDeepDiveToInspectorResult,
   mapProjectPlanToProgress,
   mapProjectPlanToWorkspaceGroups,
   mapProjectPlanToWorkspacePhases,
 } from './projectPlanMapper';
+import { useProjectPlanAdapter } from './useProjectPlanAdapter';
 
 const PLAN_COLORS = [
   '#005e72',
@@ -70,10 +70,8 @@ export function ProjectPlanView({
   const {
     projectPlan,
     projectPlanLoading,
-    deletePlanItem,
-    updatePlanItemStatus,
-    addPlanItem,
   } = useInitiativeStore();
+  const adapter = useProjectPlanAdapter(initiativeId);
 
   const [deepDive, setDeepDive] = useState<DeepDiveState | null>(null);
   const [localCache, setLocalCache] = useState<Record<string, DeepDiveResult>>({});
@@ -88,10 +86,6 @@ export function ProjectPlanView({
   const groups = useMemo(() => mapProjectPlanToWorkspaceGroups(projectPlan), [projectPlan]);
   const phases = useMemo(() => mapProjectPlanToWorkspacePhases(projectPlan), [projectPlan]);
   const progress = useMemo(() => mapProjectPlanToProgress(projectPlan), [projectPlan]);
-  const summary = useMemo(
-    () => (projectPlan ? buildProjectPlanSummaryData(projectPlan) : null),
-    [projectPlan],
-  );
 
   const filterConfig = useMemo(
     () => ({
@@ -115,8 +109,8 @@ export function ProjectPlanView({
   const toggleComplete = useCallback((id: string) => {
     const item = projectPlan?.pillars.flatMap((pillar) => pillar.items).find((candidate) => candidate.id === id);
     if (!item) return;
-    updatePlanItemStatus(initiativeId, id, item.status === 'complete' ? 'not_started' : 'complete');
-  }, [initiativeId, projectPlan, updatePlanItemStatus]);
+    adapter.setItemStatus(id, item.status === 'complete' ? 'not_started' : 'complete');
+  }, [adapter, projectPlan]);
 
   const runDeepDive = useCallback(async (item: ProjectPlanItem, pillar: ProjectPlanPillar) => {
     if (item.user_added || item.id.startsWith('temp-')) {
@@ -166,7 +160,7 @@ export function ProjectPlanView({
   const handleDeleteItem = useCallback((itemId: string) => {
     const item = projectPlan?.pillars.flatMap((pillar) => pillar.items).find((candidate) => candidate.id === itemId);
 
-    deletePlanItem(initiativeId, itemId);
+    adapter.deleteItem(itemId);
     if (deepDive?.item.id === itemId) {
       onInspectorChange?.(false, true);
     }
@@ -180,7 +174,7 @@ export function ProjectPlanView({
         initiativeId,
       },
     });
-  }, [deepDive, deletePlanItem, initiativeId, onInspectorChange, projectPlan]);
+  }, [adapter, deepDive, initiativeId, onInspectorChange, projectPlan]);
 
   const inspectorState = useMemo<PlanWorkspaceInspectorState | null>(() => {
     if (!deepDive) return null;
@@ -227,7 +221,7 @@ export function ProjectPlanView({
         onRetryInspector={handleRetry}
         onDeleteItem={handleDeleteItem}
         onToggleComplete={toggleComplete}
-        onAddItem={(groupId, title, phaseId) => addPlanItem(initiativeId, groupId, title, 'deliverable', phaseId)}
+        onAddItem={(groupId, title, phaseId) => adapter.addItem(groupId, title, phaseId)}
         onOpenDocument={(source) => onOpenFullDoc?.({
           evidence_doc_id: source.evidenceDocId,
           chunk_id: source.chunkId ?? null,

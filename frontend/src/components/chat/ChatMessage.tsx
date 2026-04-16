@@ -14,6 +14,8 @@ import { ChecklistViewerWidget } from '@/components/widgets/ChecklistViewerWidge
 import { DeliverablesListWidget } from '@/components/widgets/DeliverablesListWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
+import { PlanSummaryWidget } from '@/components/widgets/PlanSummaryWidget';
+import { PlanStructureConfirmWidget } from '@/components/widgets/PlanStructureConfirmWidget';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { BookOpen, Globe, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserMessageToolbar, AssistantMessageToolbar } from './MessageToolbar';
@@ -419,6 +421,10 @@ function MessageWidget({
       return <DeliverablesListWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
     case 'project_plan':
       return <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />;
+    case 'plan_summary':
+      return <PlanSummaryWidget data={data as any} />;
+    case 'plan_structure_confirm':
+      return <PlanStructureConfirmWidget data={data as any} initiativeId={initiativeId} isActive={isActive} />;
     case 'proposed_value':
       return <ProposedValueWidget data={data as any} messageId={messageId} />;
     default:

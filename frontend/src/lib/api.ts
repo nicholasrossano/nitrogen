@@ -463,6 +463,8 @@ export interface ProjectPlanPhase {
 
 export interface ProjectPlan {
   generated_at: string;
+  plan_type?: string;
+  schema_version?: number;
   pillars: ProjectPlanPillar[];
   phases?: ProjectPlanPhase[];
   deep_dives?: Record<string, DeepDiveResult>;

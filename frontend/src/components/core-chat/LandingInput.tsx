@@ -249,6 +249,9 @@ export function LandingInput({
         <div className="w-full max-w-3xl flex-1 min-h-0 flex flex-col pt-6">
           {headerContent}
           <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end">
+            <p className="mb-3 w-full px-4 text-xs font-medium uppercase tracking-wider text-text-tertiary">
+              Explore Project
+            </p>
             {renderComposer(
               `w-full pb-2`
             )}

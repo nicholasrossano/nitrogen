@@ -1690,28 +1690,28 @@ class ChatService:
             widget_data = {"fields_needed": params.get("fields_needed", [])}
 
         elif action == "generate_project_plan":
-            from app.services.project_plan import ProjectPlanService
+            from app.plans.registry import get_plan_registry
 
-            plan_service = ProjectPlanService(self.db, user_id=self.user_id)
+            plan_handler = get_plan_registry().default_handler(self.db, self.user_id)
             try:
-                categories = await plan_service.propose_categories(
+                structure = await plan_handler.propose_structure(
                     initiative=initiative, chat_history=chat_history,
                 )
-                widget_type = "plan_categories"
-                widget_data = {"categories": categories}
+                widget_type = plan_handler.definition.structure_widget_type
+                widget_data = plan_handler.build_structure_widget_data(structure)
             except Exception as e:
                 logger.error(f"Category proposal failed: {e}", exc_info=True)
                 assistant_response = "I wasn't able to analyze the project right now. Could you provide a bit more detail so I can try again?"
 
         elif action == "update_project_plan":
-            from app.services.project_plan import ProjectPlanService
+            from app.plans.registry import get_plan_registry
             from sqlalchemy.orm.attributes import flag_modified
 
-            plan_service = ProjectPlanService(self.db, user_id=self.user_id)
+            plan_handler = get_plan_registry().default_handler(self.db, self.user_id)
             existing_plan = initiative.project_plan
             user_request = params.get("user_request", "")
             try:
-                plan_data = await plan_service.generate(
+                plan_data = await plan_handler.generate_plan(
                     initiative=initiative,
                     existing_plan=existing_plan,
                     user_request=user_request,
@@ -1720,20 +1720,8 @@ class ChatService:
                 flag_modified(initiative, "project_plan")
                 await self.db.commit()
                 await self.db.refresh(initiative)
-                total_items = sum(
-                    len(p.get("items", [])) for p in plan_data.get("pillars", [])
-                )
-                widget_type = "project_plan"
-                widget_data = {
-                    "plan": plan_data,
-                    "summary": {
-                        "total_items": total_items,
-                        "pillars": [
-                            {"id": p["id"], "name": p["name"], "item_count": len(p.get("items", []))}
-                            for p in plan_data.get("pillars", [])
-                        ],
-                    },
-                }
+                widget_type = plan_handler.definition.summary_widget_type
+                widget_data = plan_handler.build_summary_widget_data(plan_data)
             except Exception as e:
                 logger.error(f"Project plan update failed: {e}", exc_info=True)
                 assistant_response = "I wasn't able to update the project plan right now. Please try again."

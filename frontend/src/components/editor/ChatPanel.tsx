@@ -19,6 +19,8 @@ import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidge
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { PlanCategoriesWidget } from '@/components/widgets/PlanCategoriesWidget';
+import { PlanSummaryWidget } from '@/components/widgets/PlanSummaryWidget';
+import { PlanStructureConfirmWidget } from '@/components/widgets/PlanStructureConfirmWidget';
 import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
 import { EDITOR_WIDGET_TYPES } from './EditorSidePanel';
@@ -41,6 +43,8 @@ const CHAT_WIDGET_TYPES = [
   'deliverables_overview',
   'project_plan',
   'plan_categories',
+  'plan_summary',
+  'plan_structure_confirm',
   'proposed_value',
   'gs_proposed_field',
   'template_proposed_value',
@@ -706,15 +710,21 @@ function ChatWidget({
         </ErrorBoundary>
       );
     case 'project_plan':
+    case 'plan_summary':
       return (
         <ErrorBoundary>
-          <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          {type === 'project_plan'
+            ? <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+            : <PlanSummaryWidget data={data as any} />}
         </ErrorBoundary>
       );
     case 'plan_categories':
+    case 'plan_structure_confirm':
       return (
         <ErrorBoundary>
-          <PlanCategoriesWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          {type === 'plan_categories'
+            ? <PlanCategoriesWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+            : <PlanStructureConfirmWidget data={data as any} initiativeId={initiativeId} isActive={isActive} />}
         </ErrorBoundary>
       );
     case 'gs_proposed_field':

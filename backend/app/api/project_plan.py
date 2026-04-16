@@ -15,8 +15,8 @@ from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
 from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
+from app.plans.registry import get_plan_registry
 from app.services.deep_dive import DeepDiveService
-from app.services.project_plan import ProjectPlanService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -69,11 +69,11 @@ async def generate_project_plan(
             detail="Project needs a description before a plan can be generated.",
         )
 
-    service = ProjectPlanService(db, user_id=user.uid)
+    handler = get_plan_registry().default_handler(db, user.uid)
     existing_plan = initiative.project_plan
 
     try:
-        plan = await service.generate(
+        plan = await handler.generate_plan(
             initiative=initiative,
             existing_plan=existing_plan,
         )
@@ -117,9 +117,9 @@ async def propose_plan_categories(
     recent_messages = list(reversed(result.scalars().all()))
     chat_history = [{"role": m.role, "content": m.content} for m in recent_messages]
 
-    service = ProjectPlanService(db, user_id=user.uid)
+    handler = get_plan_registry().default_handler(db, user.uid)
     try:
-        categories = await service.propose_categories(initiative=initiative, chat_history=chat_history)
+        categories = await handler.propose_structure(initiative=initiative, chat_history=chat_history)
     except Exception:
         logger.exception("Category proposal failed for %s", initiative_id)
         raise HTTPException(
@@ -140,14 +140,14 @@ async def confirm_plan_categories(
     """Accept confirmed categories and generate the full project plan."""
     initiative = await require_editor(db, initiative_id, user)
 
-    service = ProjectPlanService(db, user_id=user.uid)
+    handler = get_plan_registry().default_handler(db, user.uid)
     existing_plan = initiative.project_plan
 
     try:
-        plan = await service.generate(
+        plan = await handler.generate_plan(
             initiative=initiative,
             existing_plan=existing_plan,
-            approved_categories=body.categories,
+            approved_structure=body.categories,
         )
     except Exception:
         logger.exception("Plan generation (with categories) failed for %s", initiative_id)
