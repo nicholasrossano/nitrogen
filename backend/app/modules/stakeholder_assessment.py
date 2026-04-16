@@ -4,8 +4,11 @@ Stage workflow:
   1. Stakeholder Categories  (list / categorized_list)
   2. Stakeholders            (list / categorized_workspace)
   3. Stakeholder Details     (record / categorized_workspace)
+  4. Map                     (computed_results / assessment_map)
 
-Export: DOCX generated on demand from confirmed stage data.
+Exports:
+  - Write-up DOCX: LLM-generated, cached in workflow_state after first generation.
+  - Decision Log DOCX: deterministic extraction, no LLM, always fast.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.base import BaseModule, FieldDef, PopulationStep, StageDef, ModuleDefinition, ModuleManifest
 from app.modules.retrieval import retrieve_evidence
-from app.modules.utils import llm_json
+from app.modules.utils import llm_json, infer_category_icon
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -113,6 +116,17 @@ class StakeholderAssessmentModule(BaseModule):
                     PopulationStep("await_user_confirmation"),
                 ],
             ),
+            StageDef(
+                id="map",
+                title="Map",
+                component="computed_results",
+                widget="assessment_map",
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "details"}),
+                    PopulationStep("compute_with_module_logic"),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
         ]
 
     # ------------------------------------------------------------------ #
@@ -144,7 +158,68 @@ class StakeholderAssessmentModule(BaseModule):
             raise ValueError(f"enrich_record called for unexpected stage '{stage_id}'")
         return await self._enrich_stakeholder_detail(item_content, existing_record, context)
 
-    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+    async def compute_stage(
+        self,
+        stage_id: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Build the assessment_map widget_data from confirmed categories + stakeholders."""
+        if stage_id != "map":
+            raise ValueError(f"compute_stage called for unexpected stage '{stage_id}'")
+
+        category_items = (confirmed_stages.get("categories") or {}).get("data", {}).get("items", [])
+        stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
+        records = (confirmed_stages.get("details") or {}).get("data", {}).get("records", {})
+
+        pillar_colors = [
+            "#005e72", "#6b3fa0", "#1a7340", "#c05621",
+            "#1d4ed8", "#92400e", "#065f46", "#7e22ce",
+        ]
+        groups = []
+        for idx, cat_item in enumerate(category_items):
+            content = cat_item.get("content", {})
+            label = content.get("label", "")
+            if not label:
+                continue
+            icon = content.get("icon", "Compass")
+            color = pillar_colors[idx % len(pillar_colors)]
+
+            stakeholders = [
+                s for s in stakeholder_items
+                if s.get("content", {}).get("category", "") == label
+            ]
+            items = []
+            for sh in stakeholders:
+                sc = sh.get("content", {})
+                record = records.get(sh.get("id", ""), {})
+                items.append({
+                    "id": sh.get("id", ""),
+                    "name": sc.get("name", ""),
+                    "description": sc.get("why_they_matter", ""),
+                    "category": label,
+                    "influence_level": record.get("influence_level", ""),
+                    "impact_level": record.get("impact_level", ""),
+                    "engagement_priority": record.get("engagement_priority", ""),
+                    "role_in_project": record.get("role_in_project", ""),
+                    "provenance": sh.get("provenance", {}),
+                })
+            groups.append({
+                "id": cat_item.get("id", ""),
+                "label": label,
+                "icon": icon,
+                "color": color,
+                "items": items,
+            })
+
+        return {"groups": groups, "module_id": "stakeholder_assessment"}
+
+    async def generate_writeup_content(
+        self,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Generate the write-up as a JSON dict (cacheable). Called by the export endpoint."""
         category_items = (confirmed_stages.get("categories") or {}).get("data", {}).get("items", [])
         stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
         records = (confirmed_stages.get("details") or {}).get("data", {}).get("records", {})
@@ -169,7 +244,6 @@ class StakeholderAssessmentModule(BaseModule):
         ] + ([f"stakeholder engagement {project_type} {geography}"] if project_type or geography else [])
 
         context_str, citations = await retrieve_evidence(queries, None, None)
-
         evidence_block = (
             f"\n\nRetrieved sources — cite these as [1], [2] … in your text:\n{context_str}"
             if context_str else ""
@@ -178,14 +252,15 @@ class StakeholderAssessmentModule(BaseModule):
         result = await llm_json(
             system=(
                 "You are a senior stakeholder engagement specialist producing a professional assessment. "
-                "Using the confirmed stakeholder categories and named stakeholders, write a full "
-                "stakeholder assessment. Include:\n"
+                "Write a woven, prosaic stakeholder assessment — NOT a list of sections for each category. "
+                "Weave stakeholder insights into coherent analytical narrative:\n"
                 "  • Executive Summary (3–5 sentences)\n"
-                "  • One section per category with analytical paragraphs covering interests, influence, "
-                "    stance, and engagement considerations. Cite sources as [1], [2], etc.\n"
-                "  • Engagement Strategy section with priority actions\n"
+                "  • 3–4 thematic sections that cut across stakeholder groups (e.g. 'Power and Influence', "
+                "    'Community and Civil Society', 'Regulatory Landscape'). "
+                "    Cite sources as [1], [2], etc.\n"
+                "  • Engagement Strategy with priority actions\n"
                 "  • Risk Considerations\n\n"
-                "Return JSON with keys: title, executive_summary, sections (list of {category, body}), "
+                "Return JSON with keys: title, executive_summary, sections (list of {heading, body}), "
                 "engagement_strategy, risk_considerations"
             ),
             user_msg=(
@@ -198,11 +273,13 @@ class StakeholderAssessmentModule(BaseModule):
         result = result or {"title": "Stakeholder Assessment"}
         if citations:
             result["citations"] = citations
+        return result
 
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        content = await self.generate_writeup_content(confirmed_stages, context)
         from app.services.docx_exporter import DocxExporterService
-        exporter = DocxExporterService()
-        return exporter.generate_assessment_docx(
-            content=result,
+        return DocxExporterService().generate_assessment_docx(
+            content=content,
             initiative_title=context.get("project_title", ""),
         )
 
@@ -225,7 +302,11 @@ class StakeholderAssessmentModule(BaseModule):
             ),
         )
         return [
-            {"label": c.get("label", c.get("title", "")), "description": c.get("description", "")}
+            {
+                "label": c.get("label", c.get("title", "")),
+                "description": c.get("description", ""),
+                "icon": infer_category_icon(c.get("label", c.get("title", ""))),
+            }
             for c in data.get("categories", [])
         ]
 

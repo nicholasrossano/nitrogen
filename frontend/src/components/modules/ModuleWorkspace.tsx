@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, Download,
+  Loader2, AlertCircle, CheckCircle2, Download, Pencil,
 } from 'lucide-react';
 import type {
   StagedModuleWorkflowState, StageDef, StageState, StagedWorkflowState,
@@ -13,7 +13,12 @@ import { api } from '@/lib/api';
 import { EditableTableStage } from './stages/EditableTableStage';
 import { CategorizedListStage } from './stages/CategorizedListStage';
 import { CategorizedWorkspaceStage } from './stages/CategorizedWorkspaceStage';
-import { WIDGET_REGISTRY, type WorkspaceWidgetProps } from '@/lib/widgetRegistry';
+import {
+  WIDGET_REGISTRY,
+  type WorkspaceWidgetProps,
+  type WorkspaceWidgetFooterAction,
+  type WorkspaceWidgetFooterState,
+} from '@/lib/widgetRegistry';
 
 // ── Stage Stepper ─────────────────────────────────────────────────────────
 
@@ -78,7 +83,6 @@ function ConfirmationBar({
   onConfirm,
   isPopulating,
   isConfirming,
-  hasDownstreamData,
   isEditingConfirmedStage,
   onStartEditConfirmedStage,
 }: {
@@ -88,7 +92,6 @@ function ConfirmationBar({
   onConfirm: () => void;
   isPopulating: boolean;
   isConfirming: boolean;
-  hasDownstreamData: boolean;
   isEditingConfirmedStage: boolean;
   onStartEditConfirmedStage: () => void;
 }) {
@@ -117,6 +120,7 @@ function ConfirmationBar({
   );
 
   if (status === 'confirmed') {
+    const isComputedResultsStage = stageDef.component === 'computed_results';
     const confirmedAt = stageState.confirmed_at
       ? new Date(stageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
       : null;
@@ -132,13 +136,15 @@ function ConfirmationBar({
         </div>
         {isEditingConfirmedStage ? (
           <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} />
+        ) : isComputedResultsStage ? (
+          <span className="text-xs text-emerald-700/80">Go back to earlier stages to edit values</span>
         ) : (
           <button
             onClick={onStartEditConfirmedStage}
-            className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+            className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
           >
-            Edit & Re-confirm
-            {hasDownstreamData && <span className="text-amber-600 ml-1">(resets next stages)</span>}
+            <Pencil className="w-3 h-3" />
+            Edit
           </button>
         )}
       </div>
@@ -270,7 +276,12 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   // Lazy widget rendering for computed_results stages
   const widgetCache = useRef<Record<string, ComponentType<WorkspaceWidgetProps>>>({});
   const renderComputedWidget = useCallback(
-    (widgetType: string, widgetData: Record<string, any> | null | undefined) => {
+    (
+      widgetType: string,
+      widgetData: Record<string, any> | null | undefined,
+      outputFooterAction?: WorkspaceWidgetFooterAction,
+      outputFooterState?: WorkspaceWidgetFooterState
+    ) => {
       if (!widgetData) {
         return (
           <div className="card p-8 text-center text-sm text-text-secondary">
@@ -302,6 +313,8 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
             onWorkflowUpdated={fetchState}
             workspaceView="output"
             isActive
+            outputFooterAction={outputFooterAction}
+            outputFooterState={outputFooterState}
           />
         </Suspense>
       );
@@ -388,14 +401,8 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
   const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
 
-  // Downstream stages after the current one that have data
+  // Current stage index (used for deriving prior stages in workspace stages)
   const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
-  const hasDownstreamData = stageDefs
-    .slice(currentIdx + 1)
-    .some((s) => {
-      const ss = stages[s.id];
-      return ss?.status !== 'pending' && ss?.data != null;
-    });
 
   // All stages confirmed → show export button for modules that support it
   const allConfirmed = stageDefs.length > 0 && stageDefs.every((s) => stages[s.id]?.status === 'confirmed');
@@ -462,6 +469,49 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
     return renderComputedWidget(widget, stageData?.widget_data ?? stageData as any);
   };
 
+  const isComputedStage = currentStageDef.component === 'computed_results';
+  const isCalculationComputedWidget = isComputedStage && [
+    'lcoe_results',
+    'carbon_results',
+    'solar_yield_results',
+    'lcoe_output',
+    'carbon_output',
+    'solar_output',
+  ].includes(currentStageDef.widget);
+  const hasComputedWidgetData = !!currentStageState.data?.widget_data;
+  const shouldShowMergedConfirmAction =
+    isCalculationComputedWidget
+    && (currentStageState.status === 'draft'
+      || (currentStageState.status === 'pending'
+        && hasComputedWidgetData)
+      || (currentStageState.status === 'confirmed' && isEditingConfirmedStage));
+  const shouldShowMergedConfirmedState =
+    isCalculationComputedWidget
+    && currentStageState.status === 'confirmed'
+    && !isEditingConfirmedStage;
+  const computedFooterAction: WorkspaceWidgetFooterAction | undefined = shouldShowMergedConfirmAction
+    ? {
+        label: 'Confirm',
+        onClick: () => handleConfirm(currentStageDef.id),
+        loading: isConfirming,
+      }
+    : undefined;
+  const computedFooterState: WorkspaceWidgetFooterState | undefined =
+    shouldShowMergedConfirmAction
+      ? { mode: 'confirm' }
+      : shouldShowMergedConfirmedState
+      ? {
+          mode: 'confirmed',
+          confirmedAt: currentStageState.confirmed_at
+            ? new Date(currentStageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+            : null,
+        }
+      : undefined;
+  const shouldShowSeparateConfirmationBar = !(
+    isCalculationComputedWidget
+    && (shouldShowMergedConfirmAction || shouldShowMergedConfirmedState)
+  );
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -486,39 +536,63 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           </div>
 
           {/* Active stage content */}
-          <div className="card overflow-hidden">
-            <div className="p-4 border-b border-divider">
-              <h3 className="text-sm font-semibold text-text-primary">{currentStageDef.title}</h3>
-              <p className="text-xs text-text-tertiary mt-0.5">
-                {currentStageState.status === 'pending' && 'Not started'}
-                {currentStageState.status === 'populating' && 'Generating…'}
-                {currentStageState.status === 'draft' && 'Ready for your review'}
-                {currentStageState.status === 'confirmed' && 'Confirmed'}
-                {currentStageState.status === 'error' && 'Generation failed'}
-              </p>
+          {isComputedStage ? (
+            // Computed-results stages: no card wrapper, widget renders directly
+            // into the same container so width + stepper position are identical
+            // to editable stages.
+            <div className="flex flex-col gap-0">
+              {renderComputedWidget(
+                currentStageDef.widget,
+                currentStageState.data?.widget_data,
+                computedFooterAction,
+                computedFooterState
+              )}
+              {shouldShowSeparateConfirmationBar && (
+                <ConfirmationBar
+                  stageDef={currentStageDef}
+                  stageState={currentStageState}
+                  onPopulate={() => handlePopulate(currentStageDef.id)}
+                  onConfirm={() => handleConfirm(currentStageDef.id)}
+                  isPopulating={isPopulating}
+                  isConfirming={isConfirming}
+                  isEditingConfirmedStage={isEditingConfirmedStage}
+                  onStartEditConfirmedStage={() =>
+                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }))
+                  }
+                />
+              )}
             </div>
+          ) : (
+            <div className="card overflow-hidden">
+              <div className="p-4 border-b border-divider">
+                <h3 className="text-sm font-semibold text-text-primary">{currentStageDef.title}</h3>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {currentStageState.status === 'pending' && 'Not started'}
+                  {currentStageState.status === 'populating' && 'Generating…'}
+                  {currentStageState.status === 'draft' && 'Ready for your review'}
+                  {currentStageState.status === 'confirmed' && 'Confirmed'}
+                  {currentStageState.status === 'error' && 'Generation failed'}
+                </p>
+              </div>
 
-            <div className="p-4">
-              {renderStageContent()}
+              <div className="p-4">
+                {renderStageContent()}
+              </div>
+
+              <ConfirmationBar
+                stageDef={currentStageDef}
+                stageState={currentStageState}
+                onPopulate={() => handlePopulate(currentStageDef.id)}
+                onConfirm={() => handleConfirm(currentStageDef.id)}
+                isPopulating={isPopulating}
+                isConfirming={isConfirming}
+                isEditingConfirmedStage={isEditingConfirmedStage}
+                onStartEditConfirmedStage={() =>
+                  setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }))
+                }
+              />
             </div>
-
-            <ConfirmationBar
-              stageDef={currentStageDef}
-              stageState={currentStageState}
-              onPopulate={() => handlePopulate(currentStageDef.id)}
-              onConfirm={() => handleConfirm(currentStageDef.id)}
-              isPopulating={isPopulating}
-              isConfirming={isConfirming}
-              hasDownstreamData={hasDownstreamData}
-              isEditingConfirmedStage={isEditingConfirmedStage}
-              onStartEditConfirmedStage={() =>
-                setEditingConfirmedStageIds((prev) => ({
-                  ...prev,
-                  [currentStageDef.id]: true,
-                }))
-              }
-            />
-          </div>
+          )}
         </div>
       </div>
     </div>

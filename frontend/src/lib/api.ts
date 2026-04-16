@@ -1241,6 +1241,44 @@ export const api = {
     return { blob, filename };
   },
 
+  exportAssessmentWriteup: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/export/writeup`,
+      { headers }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).detail ?? 'Write-up export failed');
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'writeup.docx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  exportAssessmentDecisionLog: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/export/decision-log`,
+      { headers }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).detail ?? 'Decision log export failed');
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.docx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
   // Project Plan
   getProjectPlan: (initiativeId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
