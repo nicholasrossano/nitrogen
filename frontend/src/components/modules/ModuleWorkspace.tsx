@@ -192,48 +192,68 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   const [activeStageId, setActiveStageId] = useState<string | null>(null);
   const [isPopulating, setIsPopulating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  const hasInitialized = useRef(false);
 
+  // Refresh callback for child components (onChanged / onWorkflowUpdated).
   const fetchState = useCallback(async () => {
     try {
       const data = await api.getStagedModuleWorkflowState(instanceId);
       setState(data);
-      if (!hasInitialized.current) {
-        hasInitialized.current = true;
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load module state');
+    }
+  }, [instanceId]);
+
+  // One-time init: fetch state, auto-populate if the module is brand-new.
+  // Uses a cancelled flag so React Strict Mode double-invoke doesn't cause
+  // a stale GET response to overwrite the populated state.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initialize() {
+      try {
+        const data = await api.getStagedModuleWorkflowState(instanceId);
+        if (cancelled) return;
+        setState(data);
         setActiveStageId(data.workflow_state.current_stage_id);
+        setLoading(false);
 
         // Auto-populate the first stage when the module is brand-new (all stages pending).
-        // Covers both calculator modules (start_from_predefined_rows) and assessment
+        // Covers calculator modules (start_from_predefined_rows) and assessment
         // modules (seed_from_template + adapt_with_ai_from_project_materials).
         const defs = data.module_definition.stage_defs ?? [];
         const stages = data.workflow_state.stages ?? {};
         const allPending = defs.length > 0 && defs.every((d) => stages[d.id]?.status === 'pending');
         const firstDef = defs[0];
+
         if (allPending && firstDef) {
           const hasPopulationSteps = firstDef.population?.some((p) =>
             p.type !== 'await_user_confirmation'
           );
           if (hasPopulationSteps) {
             setIsPopulating(true);
-            api.populateStage(instanceId, firstDef.id)
-              .then((result) => {
-                setState((prev) => prev ? { ...prev, workflow_state: result.workflow_state } : prev);
-              })
-              .catch(() => {
-                // Silently ignore — user can click Retry in the ConfirmationBar
-              })
-              .finally(() => setIsPopulating(false));
+            try {
+              const result = await api.populateStage(instanceId, firstDef.id);
+              if (cancelled) return;
+              setState((prev) => prev ? { ...prev, workflow_state: result.workflow_state } : prev);
+            } catch {
+              // Silently ignore — user can click Retry in the ConfirmationBar
+              if (!cancelled) await fetchState();
+            } finally {
+              if (!cancelled) setIsPopulating(false);
+            }
           }
         }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e.message ?? 'Failed to load module state');
+          setLoading(false);
+        }
       }
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to load module state');
-    } finally {
-      setLoading(false);
     }
-  }, [instanceId]);
 
-  useEffect(() => { fetchState(); }, [fetchState]);
+    initialize();
+    return () => { cancelled = true; };
+  }, [instanceId, fetchState]);
 
   // Lazy widget rendering for computed_results stages
   const widgetCache = useRef<Record<string, ComponentType<WorkspaceWidgetProps>>>({});
