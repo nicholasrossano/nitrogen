@@ -85,6 +85,12 @@ Follow `docs/style-guide.md` as the source of truth.
 - Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
 - The `<header className="shrink-0 h-14">` must always be present — even if empty — on every page state/branch. What changes is only the content inside it, never its presence. Never omit the header on any conditional render branch (e.g. a selection screen vs. an active workspace screen on the same route).
 
+**Pillar/node UI reuse (non-negotiable):**
+- For category/entity tree UIs, reuse shared pillar/node components (`PlanStructureColumn`, `PlanItemNode`) with prop-based variants; do not build lookalike duplicates.
+- Keep diagram mode clean (no right-side edit chrome); only show drag/delete controls in explicit editor mode.
+- Draft add rows should be neutral grey (not confirmed color), collect only the primary label by default, and be launched from a centered green add-dot affordance.
+- Preserve node rhythm/alignment: draft rows use the same vertical spacing as active nodes, and title text stays vertically centered when no subtitle is present.
+
 ## Documentation Maintenance
 
 Nitrogen docs live in `docs/` and are automatically rendered on the public docs site (Mintlify) on every push to `main`. Keep them current by following these rules — the goal is docs that update alongside code, not after.

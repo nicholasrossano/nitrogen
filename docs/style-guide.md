@@ -156,6 +156,30 @@ Card or node labels (primary title + metadata subtitle) must never reflow to mul
 
 ---
 
+## D2) Pillar / Node Reuse Pattern
+
+When building category/entity tree UIs (assessment workspaces, plan structures, similar node stacks), reuse the shared pillar/node primitives instead of rebuilding visual clones.
+
+### Shared primitives
+- Pillar headers and node rows should come from shared components (`PlanStructureColumn`, `PlanItemNode`) or extracted sub-primitives.
+- Variant behavior must be prop-driven (editor mode vs diagram mode), not copy-pasted component forks.
+
+### Mode rules
+- **Diagram mode**: no right-side editing chrome (drag handles / delete buttons).
+- **Editor mode**: right-side drag and delete controls are allowed and should be explicit.
+- Keep branch-line geometry and node card proportions identical across modes.
+
+### Draft add-node pattern
+- Add flow starts from a centered green add-dot button under the stack (same affordance as other node add patterns).
+- The in-progress add row should render as a **neutral draft node** (`border-divider` / subtle grey fill), not as a confirmed colored node.
+- Draft composer captures only the primary label/title by default unless the surface explicitly requires additional fields.
+
+### Rhythm & alignment
+- Maintain the same vertical gap cadence between active nodes and draft rows (no compressed draft spacing).
+- If subtitle metadata is absent, primary node labels remain vertically centered within the row.
+
+---
+
 ### Multi-Column Layouts with Independent Column Heights
 
 When displaying a set of cards or nodes across multiple columns, prefer **independent flex columns** over CSS Grid.
