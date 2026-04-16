@@ -6,6 +6,7 @@ import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 function HomePageContent() {
   const router = useRouter();
@@ -143,7 +144,7 @@ function HomePageContent() {
           </div>
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-6 h-6 text-accent animate-spin" />
+              <PageLoader label="" />
             </div>
           ) : error ? (
             <div className="text-center py-20">
