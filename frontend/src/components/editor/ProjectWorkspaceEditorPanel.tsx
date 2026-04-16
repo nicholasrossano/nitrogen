@@ -47,6 +47,9 @@ export function ProjectWorkspaceEditorPanel({
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const effectiveWorkspaceLaunchMode =
     localWorkspaceLaunchMode !== 'idle' ? localWorkspaceLaunchMode : workspaceLaunchMode;
+  const showWorkspaceHub = effectiveWorkspaceLaunchMode !== 'idle' || !activeTabId;
+  const openModeActive = showWorkspaceHub && effectiveWorkspaceLaunchMode === 'open';
+  const newModeActive = showWorkspaceHub && effectiveWorkspaceLaunchMode === 'new';
 
   const activeTab = useMemo(() => {
     if (!activeTabId) return null;
@@ -55,6 +58,7 @@ export function ProjectWorkspaceEditorPanel({
 
   const openModuleTab = async (moduleId: string, moduleName?: string) => {
     const instance = await api.createModuleInstance(initiativeId, moduleId);
+    setLocalWorkspaceLaunchMode('idle');
     onOpenTab({
       id: `module-${instance.id}`,
       kind: 'module',
@@ -65,6 +69,7 @@ export function ProjectWorkspaceEditorPanel({
   };
 
   const openExistingModule = async (instance: ModuleInstance) => {
+    setLocalWorkspaceLaunchMode('idle');
     onOpenTab({
       id: `module-${instance.id}`,
       kind: 'module',
@@ -80,7 +85,7 @@ export function ProjectWorkspaceEditorPanel({
         <div className="flex-shrink-0 flex items-stretch border-b border-divider bg-surface-subtle/50 h-[36px]">
           <div className="flex-1 flex items-stretch overflow-x-auto min-w-0" style={{ scrollbarWidth: 'none' }}>
           {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
+            const isActive = tab.id === activeTabId && !showWorkspaceHub;
             const style = isActive
               ? { flexShrink: 0, width: 148 }
               : { flex: '1 1 0', minWidth: 88 };
@@ -88,7 +93,10 @@ export function ProjectWorkspaceEditorPanel({
             return (
               <button
                 key={tab.id}
-                onClick={() => onActiveTabChange(tab.id)}
+                onClick={() => {
+                  setLocalWorkspaceLaunchMode('idle');
+                  onActiveTabChange(tab.id);
+                }}
                 style={style}
                 className={[
                   'group relative flex items-center gap-1 px-2.5 text-xs whitespace-nowrap transition-colors border-r border-divider last:border-r-0',
@@ -121,7 +129,13 @@ export function ProjectWorkspaceEditorPanel({
                   setLocalWorkspaceLaunchMode('open');
                   onActiveTabChange(null);
                 }}
-                className="flex items-center justify-center w-7 h-7 rounded text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
+                aria-pressed={openModeActive}
+                className={[
+                  'flex items-center justify-center w-7 h-7 rounded transition-colors',
+                  openModeActive
+                    ? 'bg-white text-text-primary shadow-subtle'
+                    : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
+                ].join(' ')}
                 title="Open module"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
@@ -131,7 +145,13 @@ export function ProjectWorkspaceEditorPanel({
                   setLocalWorkspaceLaunchMode('new');
                   onActiveTabChange(null);
                 }}
-                className="flex items-center justify-center w-7 h-7 rounded text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle transition-colors"
+                aria-pressed={newModeActive}
+                className={[
+                  'flex items-center justify-center w-7 h-7 rounded transition-colors',
+                  newModeActive
+                    ? 'bg-white text-text-primary shadow-subtle'
+                    : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
+                ].join(' ')}
                 title="New module"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -142,13 +162,12 @@ export function ProjectWorkspaceEditorPanel({
       )}
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        {!activeTab && (
+        {showWorkspaceHub && (
           <WorkspaceHub
             key={initiativeId}
             initiativeId={initiativeId}
             launchMode={effectiveWorkspaceLaunchMode}
             onLaunchModeHandled={() => {
-              setLocalWorkspaceLaunchMode('idle');
               onWorkspaceLaunchModeHandled();
             }}
             onSelectModule={openModuleTab}
