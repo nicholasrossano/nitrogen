@@ -31,7 +31,7 @@ from app.schemas.chat import (
 )
 from app.services.chat import ChatService, ChatMode
 from app.services.chat_agent import ChatAgentService
-from app.services.project_plan import ProjectPlanService
+from app.plans.registry import get_plan_registry
 from app.services import module_service
 from app.modules import get_module_registry
 
@@ -361,11 +361,11 @@ async def execute_action(
         }
 
     elif action == "generate_project_plan":
-        plan_service = ProjectPlanService(db, user_id=user_id)
+        plan_handler = get_plan_registry().default_handler(db, user_id)
         try:
-            categories = await plan_service.propose_categories(initiative=initiative, chat_history=chat_history)
-            widget_type = "plan_categories"
-            widget_data = {"categories": categories}
+            structure = await plan_handler.propose_structure(initiative=initiative, chat_history=chat_history)
+            widget_type = plan_handler.definition.structure_widget_type
+            widget_data = plan_handler.build_structure_widget_data(structure)
         except Exception as e:
             logger.error(f"Category proposal failed: {e}", exc_info=True)
             assistant_response = "I wasn't able to analyze the project right now. Could you provide a bit more detail so I can try again?"
@@ -373,11 +373,11 @@ async def execute_action(
             widget_data = None
 
     elif action == "update_project_plan":
-        plan_service = ProjectPlanService(db, user_id=user_id)
+        plan_handler = get_plan_registry().default_handler(db, user_id)
         existing_plan = initiative.project_plan
         user_request = params.get("user_request", "")
         try:
-            plan_data = await plan_service.generate(
+            plan_data = await plan_handler.generate_plan(
                 initiative=initiative,
                 existing_plan=existing_plan,
                 user_request=user_request,
@@ -387,25 +387,8 @@ async def execute_action(
             flag_modified(initiative, "project_plan")
             await db.commit()
             await db.refresh(initiative)
-
-            total_items = sum(
-                len(p.get("items", [])) for p in plan_data.get("pillars", [])
-            )
-            widget_type = "project_plan"
-            widget_data = {
-                "plan": plan_data,
-                "summary": {
-                    "total_items": total_items,
-                    "pillars": [
-                        {
-                            "id": p["id"],
-                            "name": p["name"],
-                            "item_count": len(p.get("items", [])),
-                        }
-                        for p in plan_data.get("pillars", [])
-                    ],
-                },
-            }
+            widget_type = plan_handler.definition.summary_widget_type
+            widget_data = plan_handler.build_summary_widget_data(plan_data)
         except Exception as e:
             logger.error(f"Project plan update failed: {e}", exc_info=True)
             assistant_response = "I wasn't able to update the project plan right now. Please try again."

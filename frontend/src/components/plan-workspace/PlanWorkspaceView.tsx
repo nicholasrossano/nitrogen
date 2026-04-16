@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, Loader2, MessageSquare } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, Loader2, MessageSquare, Plus } from 'lucide-react';
 
 import { Tooltip } from '@/components/ui/Tooltip';
 
@@ -674,7 +674,7 @@ function PhaseSection({
                 className="w-4 h-4 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors duration-150 shadow-sm"
                 aria-label="Add item to phase"
               >
-                <LayoutGrid className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
+                <Plus className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
               </button>
             </div>
           )}
