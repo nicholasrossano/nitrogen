@@ -63,3 +63,22 @@ def make_build_item(content: dict, derivation: str = "inferred", sources: list[d
         "confirmed_at": None,
         "removable": True,
     }
+
+
+def infer_category_icon(label: str) -> str:
+    """Infer a deterministic icon name from a category label."""
+    normalized = (label or "").strip().lower()
+    icon_by_keyword = [
+        ("TrendingUp", ["market", "demand", "growth", "viability", "economic"]),
+        ("Zap", ["technology", "tech", "innovation", "energy", "electrification"]),
+        ("Scale", ["policy", "regulatory", "compliance", "legal", "governance"]),
+        ("Users", ["stakeholder", "community", "consumer", "user", "household"]),
+        ("Leaf", ["environment", "climate", "emission", "carbon", "ecology"]),
+        ("CircleDollarSign", ["financial", "finance", "funding", "investment", "cost"]),
+        ("Truck", ["supply", "logistics", "distribution", "infrastructure", "value chain"]),
+        ("Wrench", ["operations", "implementation", "maintenance", "capacity"]),
+    ]
+    for icon, keywords in icon_by_keyword:
+        if any(keyword in normalized for keyword in keywords):
+            return icon
+    return "Compass"

@@ -20,21 +20,11 @@ import { CSS } from '@dnd-kit/utilities';
 import type { BuildItem, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
 import { getIconByName } from '@/lib/icons';
+import { inferCategoryIconName } from './categoryIcons';
 
 const CATEGORY_COLORS = [
   '#005e72', '#4a6680', '#8d5e6a', '#7a5030',
   '#a06548', '#7a6520', '#7a7a3a', '#6b7d6a',
-];
-
-const ICON_BY_KEYWORD: Array<{ icon: string; keywords: string[] }> = [
-  { icon: 'TrendingUp', keywords: ['market', 'demand', 'growth', 'viability', 'economic'] },
-  { icon: 'Zap', keywords: ['technology', 'tech', 'innovation', 'energy', 'electrification'] },
-  { icon: 'Scale', keywords: ['policy', 'regulatory', 'compliance', 'legal', 'governance'] },
-  { icon: 'Users', keywords: ['stakeholder', 'community', 'consumer', 'user', 'household'] },
-  { icon: 'Leaf', keywords: ['environment', 'climate', 'emission', 'carbon', 'ecology'] },
-  { icon: 'CircleDollarSign', keywords: ['financial', 'finance', 'funding', 'investment', 'cost'] },
-  { icon: 'Truck', keywords: ['supply', 'logistics', 'distribution', 'infrastructure', 'value chain'] },
-  { icon: 'Wrench', keywords: ['operations', 'implementation', 'maintenance', 'capacity'] },
 ];
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -42,16 +32,6 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function inferCategoryIconName(label: string): string {
-  const normalized = label.trim().toLowerCase();
-  for (const mapping of ICON_BY_KEYWORD) {
-    if (mapping.keywords.some((keyword) => normalized.includes(keyword))) {
-      return mapping.icon;
-    }
-  }
-  return 'Compass';
 }
 
 function isNotFoundError(error: unknown): boolean {
@@ -341,21 +321,25 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
 
   const handleEdit = useCallback(
     async (itemId: string, content: Record<string, any>) => {
-      await api.editStageItem(instanceId, stageId, itemId, content);
+      const label = String(content[fields[0]?.name ?? 'label'] ?? '');
+      const icon = inferCategoryIconName(label);
+      await api.editStageItem(instanceId, stageId, itemId, { ...content, icon });
       onChanged();
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, fields]
   );
 
   const handleAdd = useCallback(
     async (content: Record<string, string>) => {
-      const { item } = await api.addStageItem(instanceId, stageId, content);
+      const primaryFieldName = fields[0]?.name ?? 'label';
+      const icon = inferCategoryIconName(String(content[primaryFieldName] ?? ''));
+      const { item } = await api.addStageItem(instanceId, stageId, { ...content, icon });
       setLocalItems((prev) => [...prev, item]);
       setOptimisticAddedItemId(item.id);
       setAdding(false);
       onChanged();
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, fields]
   );
 
   return (

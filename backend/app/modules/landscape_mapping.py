@@ -3,8 +3,11 @@
 Stage workflow:
   1. Categories  (list / categorized_list)
   2. Entities    (list / categorized_workspace)
+  3. Map         (computed_results / assessment_map)
 
-Export: DOCX generated on demand from confirmed stage data.
+Exports:
+  - Write-up DOCX: LLM-generated, cached in workflow_state after first generation.
+  - Decision Log DOCX: deterministic extraction, no LLM, always fast.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from typing import Any
 
 from app.modules.base import BaseModule, FieldDef, PopulationStep, StageDef, ModuleDefinition, ModuleManifest
 from app.modules.retrieval import retrieve_evidence
-from app.modules.utils import llm_json
+from app.modules.utils import llm_json, infer_category_icon
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -88,6 +91,17 @@ class LandscapeMappingModule(BaseModule):
                     PopulationStep("await_user_confirmation"),
                 ],
             ),
+            StageDef(
+                id="map",
+                title="Map",
+                component="computed_results",
+                widget="assessment_map",
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "entities"}),
+                    PopulationStep("compute_with_module_logic"),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
         ]
 
     # ------------------------------------------------------------------ #
@@ -108,7 +122,62 @@ class LandscapeMappingModule(BaseModule):
             return await self._generate_entities(context, prior_themes)
         return []
 
-    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+    async def compute_stage(
+        self,
+        stage_id: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Build the assessment_map widget_data from confirmed themes + entities."""
+        if stage_id != "map":
+            raise ValueError(f"compute_stage called for unexpected stage '{stage_id}'")
+
+        theme_items = (confirmed_stages.get("themes") or {}).get("data", {}).get("items", [])
+        entity_items = (confirmed_stages.get("entities") or {}).get("data", {}).get("items", [])
+
+        pillar_colors = [
+            "#005e72", "#6b3fa0", "#1a7340", "#c05621",
+            "#1d4ed8", "#92400e", "#065f46", "#7e22ce",
+        ]
+        groups = []
+        for idx, theme_item in enumerate(theme_items):
+            content = theme_item.get("content", {})
+            label = content.get("label", "")
+            if not label:
+                continue
+            icon = content.get("icon", "Compass")
+            color = pillar_colors[idx % len(pillar_colors)]
+
+            theme_entities = [
+                e for e in entity_items
+                if e.get("content", {}).get("category", "") == label
+            ]
+            items = [
+                {
+                    "id": e.get("id", ""),
+                    "name": e.get("content", {}).get("name", ""),
+                    "description": e.get("content", {}).get("description", ""),
+                    "category": label,
+                    "provenance": e.get("provenance", {}),
+                }
+                for e in theme_entities
+            ]
+            groups.append({
+                "id": theme_item.get("id", ""),
+                "label": label,
+                "icon": icon,
+                "color": color,
+                "items": items,
+            })
+
+        return {"groups": groups, "module_id": "landscape_mapping"}
+
+    async def generate_writeup_content(
+        self,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Generate the write-up as a JSON dict (cacheable). Called by the export endpoint."""
         theme_items = (confirmed_stages.get("themes") or {}).get("data", {}).get("items", [])
         entity_items = (confirmed_stages.get("entities") or {}).get("data", {}).get("items", [])
 
@@ -129,10 +198,7 @@ class LandscapeMappingModule(BaseModule):
 
         region = context.get("geography", "")
         sector = context.get("project_type", "")
-        queries = [
-            f"{theme} {region} {sector}".strip()
-            for theme in themes[:6]
-        ]
+        queries = [f"{theme} {region} {sector}".strip() for theme in themes[:6]]
         context_str, citations = await retrieve_evidence(queries, None, None)
         evidence_block = (
             f"\n\nRetrieved sources — cite as [1], [2] … inline:\n{context_str}"
@@ -142,17 +208,18 @@ class LandscapeMappingModule(BaseModule):
         result = await llm_json(
             system=(
                 "You are a senior landscape analyst producing a professional report. "
-                "Using the confirmed categories, entities, and retrieved sources, write a full "
-                "landscape mapping report:\n"
+                "Write a woven, prosaic landscape mapping document — NOT a list of sections for each entity. "
+                "Weave findings across categories into coherent analytical prose:\n"
                 "  • Executive Summary (3–5 sentences)\n"
-                "  • One section per category with 2–3 analytical paragraphs. Cite as [1], [2], etc.\n"
+                "  • 3–5 thematic sections combining insights across categories (not one-per-category). "
+                "    Cite sources as [1], [2], etc.\n"
                 "  • Strategic Implications and Recommendations\n\n"
                 "Return JSON with keys: title, executive_summary, "
-                "sections (list of {category, body}), strategic_implications, recommendations"
+                "sections (list of {heading, body}), strategic_implications, recommendations"
             ),
             user_msg=(
                 f"Project: Region={region}, Type={sector}\n\n"
-                f"Outline with entities:\n{outline_text}"
+                f"Confirmed landscape:\n{outline_text}"
                 f"{evidence_block}"
             ),
             model="gpt-4.1",
@@ -160,11 +227,13 @@ class LandscapeMappingModule(BaseModule):
         result = result or {"title": "Landscape Mapping"}
         if citations:
             result["citations"] = citations
+        return result
 
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        content = await self.generate_writeup_content(confirmed_stages, context)
         from app.services.docx_exporter import DocxExporterService
-        exporter = DocxExporterService()
-        return exporter.generate_assessment_docx(
-            content=result,
+        return DocxExporterService().generate_assessment_docx(
+            content=content,
             initiative_title=context.get("project_title", ""),
         )
 
@@ -186,7 +255,11 @@ class LandscapeMappingModule(BaseModule):
             ),
         )
         return [
-            {"label": t.get("label", t.get("title", "")), "description": t.get("description", "")}
+            {
+                "label": t.get("label", t.get("title", "")),
+                "description": t.get("description", ""),
+                "icon": infer_category_icon(t.get("label", t.get("title", ""))),
+            }
             for t in data.get("categories", [])
         ]
 

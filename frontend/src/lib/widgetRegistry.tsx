@@ -13,6 +13,18 @@
 
 import type { ComponentType } from 'react';
 
+export interface WorkspaceWidgetFooterAction {
+  label: string;
+  onClick: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}
+
+export interface WorkspaceWidgetFooterState {
+  mode: 'confirm' | 'confirmed';
+  confirmedAt?: string | null;
+}
+
 export interface WorkspaceWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
@@ -20,6 +32,8 @@ export interface WorkspaceWidgetProps {
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
+  outputFooterAction?: WorkspaceWidgetFooterAction;
+  outputFooterState?: WorkspaceWidgetFooterState;
 }
 
 type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
@@ -49,6 +63,10 @@ const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }
     import('@/components/widgets/CarbonModelWidget').then((m) => ({ default: m.CarbonModelWidget as unknown as WidgetComponent })),
   solar_yield_results: () =>
     import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
+
+  // Assessment module map view (landscape mapping, stakeholder assessment)
+  assessment_map: () =>
+    import('@/components/widgets/AssessmentMapWidget').then((m) => ({ default: m.AssessmentMapWidget as unknown as WidgetComponent })),
 };
 
 /**
