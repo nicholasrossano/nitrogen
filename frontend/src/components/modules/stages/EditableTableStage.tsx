@@ -11,6 +11,7 @@ interface Props {
   fields: FieldDef[];
   items: BuildItem[];
   readOnly?: boolean;
+  flush?: boolean;
   onChanged: () => void;
 }
 
@@ -234,7 +235,15 @@ function AddRowForm({
 
 // ── Main component ────────────────────────────────────────────────────────
 
-export function EditableTableStage({ instanceId, stageId, fields, items, readOnly, onChanged }: Props) {
+export function EditableTableStage({
+  instanceId,
+  stageId,
+  fields,
+  items,
+  readOnly,
+  flush = false,
+  onChanged,
+}: Props) {
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -313,7 +322,7 @@ export function EditableTableStage({ instanceId, stageId, fields, items, readOnl
   }
 
   return (
-    <div className="rounded-lg border border-divider overflow-hidden">
+    <div className={flush ? 'overflow-hidden' : 'rounded-lg border border-divider overflow-hidden'}>
       {groupedItems.map((group) => (
         <div key={group.cat}>
           {group.label && (
