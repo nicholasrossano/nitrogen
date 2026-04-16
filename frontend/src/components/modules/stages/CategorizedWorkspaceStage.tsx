@@ -313,7 +313,7 @@ export function CategorizedWorkspaceStage({
 
   // Group items by their category field (matching category items by label)
   const categoryField = fields.find((f) => f.name === 'category');
-  const groupedItems: Array<{ category: BuildItem; items: BuildItem[] }> = categoryItems.length
+  const groupedItems: Array<{ category: Pick<BuildItem, 'id' | 'content'>; items: BuildItem[] }> = categoryItems.length
     ? categoryItems.map((cat) => {
         const catLabel = String(cat.content.label ?? cat.content.name ?? cat.content.title ?? '');
         return {
@@ -324,7 +324,7 @@ export function CategorizedWorkspaceStage({
           }),
         };
       })
-    : [{ category: { id: '__all__', content: { label: 'All' } } as BuildItem, items }];
+    : [{ category: { id: '__all__', content: { label: 'All' } }, items }];
 
   // Add item
   const handleAdd = useCallback(
