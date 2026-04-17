@@ -256,14 +256,10 @@ export function LandingInput({
       <div className="flex flex-col items-center h-full px-4">
         <div className="w-full max-w-3xl flex-1 min-h-0 flex flex-col pt-6">
           {headerContent}
-          <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end">
-            <p className="mb-3 w-full px-4 text-xs font-medium uppercase tracking-wider text-text-tertiary">
-              Explore Project
-            </p>
+          <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end pb-4">
             {renderComposer(
-              `w-full pb-2`
+              'w-full pb-4'
             )}
-            {sessions.length > 0 && renderHistory('w-full max-w-2xl self-center mt-2', true)}
           </div>
         </div>
       </div>
