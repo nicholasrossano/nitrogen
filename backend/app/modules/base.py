@@ -152,6 +152,7 @@ class StageDef:
     widget: str
     fields: list[FieldDef] = field(default_factory=list)
     population: list[PopulationStep] = field(default_factory=list)
+    allow_add_rows: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -161,7 +162,19 @@ class StageDef:
             "widget": self.widget,
             "fields": [f.to_dict() for f in self.fields],
             "population": [p.to_dict() for p in self.population],
+            "allow_add_rows": self.allow_add_rows,
         }
+
+
+@dataclass(kw_only=True)
+class DecisionLogAttribution:
+    """Schema-backed decision-log attribution preferences for a module."""
+
+    include_adapter_bindings: bool = True
+    include_provenance_sources: bool = True
+    include_model_name: bool = True
+    adapter_labels: dict[str, str] = field(default_factory=dict)
+    widget_detail_labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True)
@@ -169,6 +182,7 @@ class ModuleManifest(ModuleDefinition):
     """Full module contract metadata used for registry and exposure layers."""
     goal: str
     primary_ui_object: str
+    investigate_hint: str | None = None
     export_artifact_types: list[str]
     adapter_bindings: dict[str, str]
     input_dependencies: list[str]
@@ -176,6 +190,7 @@ class ModuleManifest(ModuleDefinition):
     downstream_dependencies: list[str]
     assumptions_behavior: Literal["tracks", "none"]
     evidence_behavior: Literal["rag_grounded", "user_uploaded", "both", "none"]
+    decision_log_attribution: DecisionLogAttribution = field(default_factory=DecisionLogAttribution)
 
 
 class BaseModule(ABC):

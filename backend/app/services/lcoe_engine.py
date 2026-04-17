@@ -38,6 +38,8 @@ class LCOEInput:
     notes: str = ""
     rationale: str = ""
     category: str = "general"
+    field_type: str = "number"  # "number" | "text" | "select"
+    options: list[str] | None = None
     provenance: dict | None = None
     validation_status: str = "unconfirmed"
 
@@ -52,8 +54,11 @@ class LCOEInput:
             "notes": self.notes,
             "rationale": self.rationale,
             "category": self.category,
+            "field_type": self.field_type,
             "validation_status": self.validation_status,
         }
+        if self.options is not None:
+            d["options"] = self.options
         if self.provenance is not None:
             d["provenance"] = self.provenance
         return d
@@ -187,6 +192,8 @@ TECH_DEFAULTS: dict[str, dict[str, Any]] = {
         "construction_years": 1,
     },
 }
+
+TECH_TYPE_OPTIONS = [k for k in TECH_DEFAULTS.keys() if k != "default"]
 
 
 def _get_defaults(tech_type: str | None) -> dict[str, Any]:
@@ -422,23 +429,23 @@ class LCOEEngine:
         known = known_values or {}
 
         fields = [
-            ("technology_type", "Technology Type", tech_type or "Unknown", "", "project"),
-            ("net_capacity_kw", "Net Capacity", None, "kW", "energy"),
-            ("capacity_factor", "Capacity Factor", defaults["capacity_factor"], "", "energy"),
-            ("degradation_rate", "Annual Degradation", defaults["degradation_rate"], "%/yr", "energy"),
-            ("total_capex", "Total CAPEX", None, "USD", "costs"),
-            ("annual_opex", "Annual O&M", None, "USD/yr", "costs"),
-            ("annual_fuel_cost", "Annual Fuel Cost", 0.0, "USD/yr", "costs"),
-            ("annual_replacement_cost", "Replacement Cost", 0.0, "USD/yr", "costs"),
-            ("discount_rate", "Discount Rate (WACC)", defaults["discount_rate"], "", "finance"),
-            ("project_life_years", "Project Lifetime", defaults["project_life_years"], "years", "finance"),
-            ("construction_years", "Construction Period", defaults["construction_years"], "years", "timing"),
-            ("currency", "Currency", "USD", "", "general"),
+            ("technology_type", "Technology Type", tech_type or "default", "", "project", "select", TECH_TYPE_OPTIONS),
+            ("net_capacity_kw", "Net Capacity", None, "kW", "energy", "number", None),
+            ("capacity_factor", "Capacity Factor", defaults["capacity_factor"], "", "energy", "number", None),
+            ("degradation_rate", "Annual Degradation", defaults["degradation_rate"], "%/yr", "energy", "number", None),
+            ("total_capex", "Total CAPEX", None, "USD", "costs", "number", None),
+            ("annual_opex", "Annual O&M", None, "USD/yr", "costs", "number", None),
+            ("annual_fuel_cost", "Annual Fuel Cost", 0.0, "USD/yr", "costs", "number", None),
+            ("annual_replacement_cost", "Replacement Cost", 0.0, "USD/yr", "costs", "number", None),
+            ("discount_rate", "Discount Rate (WACC)", defaults["discount_rate"], "", "finance", "number", None),
+            ("project_life_years", "Project Lifetime", defaults["project_life_years"], "years", "finance", "number", None),
+            ("construction_years", "Construction Period", defaults["construction_years"], "years", "timing", "number", None),
+            ("currency", "Currency", "USD", "", "general", "text", None),
         ]
 
         result: dict[str, LCOEInput] = {}
 
-        for field_name, label, default_val, unit, category in fields:
+        for field_name, label, default_val, unit, category, field_type, options in fields:
             if field_name in known and known[field_name] is not None:
                 prov = ItemProvenance(
                     derivation=Derivation.PROVIDED,
@@ -452,6 +459,8 @@ class LCOEEngine:
                     source="chat",
                     status="inferred",
                     category=category,
+                    field_type=field_type,
+                    options=options,
                     provenance=prov,
                     validation_status=ValidationStatus.UNCONFIRMED,
                 )
@@ -472,6 +481,8 @@ class LCOEEngine:
                     status="assumed",
                     rationale=rationale,
                     category=category,
+                    field_type=field_type,
+                    options=options,
                     provenance=prov,
                     validation_status=ValidationStatus.UNCONFIRMED,
                 )
@@ -484,6 +495,8 @@ class LCOEEngine:
                     source="assumption",
                     status="missing",
                     category=category,
+                    field_type=field_type,
+                    options=options,
                     provenance=None,
                     validation_status=ValidationStatus.MISSING,
                 )
