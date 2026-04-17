@@ -158,8 +158,8 @@ function InitiativePageContent() {
   const frameworkWorkspaceOpen =
     activeView === 'framework' && (!hasProjectPlan || panelVisibility.framework.workspace);
   const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && panelVisibility.framework.chat;
-  const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen;
-  const chatOpen = modulesChatOpen || frameworkChatOpen || activeView === 'overview';
+  const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen || activeView === 'overview';
+  const chatOpen = modulesChatOpen || frameworkChatOpen;
   const sideChatOpen = modulesChatOpen || frameworkChatOpen;
   const showPrimaryPanel = activeView === 'overview' || activeView === 'files' || workspaceOpen;
   const workspaceToggleEnabled = !isViewer && (activeView === 'framework' || activeView === 'modules');
