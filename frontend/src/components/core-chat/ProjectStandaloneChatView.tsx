@@ -2,15 +2,15 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
-import type { ChatMessage, ResearchStep, SourceCitation } from '@/lib/api';
+import type { ChatMessage, FieldContext, ResearchStep, SourceCitation } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
+import { AssociatedModulesTray, type AssociatedChatModule } from './AssociatedModulesTray';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
-import { ALL_MODULES, ModuleChip } from '@/components/chat/ModulePicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSummary } from '@/stores/chatStore';
@@ -26,6 +26,12 @@ const CHAT_MODULE_WIDGET_TYPES = new Set([
   'solar_output',
 ]);
 const activeModulesCountCache = new Map<string, number>();
+
+const MODEL_TYPE_TO_MODULE_ID: Record<string, string> = {
+  lcoe: 'lcoe_model',
+  carbon: 'carbon_model',
+  solar: 'solar_estimate',
+};
 
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
@@ -78,6 +84,13 @@ function toCoreMessage(m: ChatMessage): CoreChatMessage {
   };
 }
 
+function resolveFieldContextModuleId(fieldContext?: FieldContext | null): string | null {
+  if (!fieldContext) return null;
+  if (fieldContext.module_id) return fieldContext.module_id;
+  if (!fieldContext.model_type) return null;
+  return MODEL_TYPE_TO_MODULE_ID[fieldContext.model_type] ?? null;
+}
+
 export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
@@ -101,7 +114,7 @@ export function ProjectStandaloneChatView({
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatModules, setChatModules] = useState<{ instance_id: string; module_id: string; title: string | null; status: string; started_at: string | null }[]>([]);
+  const [chatModules, setChatModules] = useState<AssociatedChatModule[]>([]);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -227,20 +240,6 @@ export function ProjectStandaloneChatView({
   }, [currentChatId, refreshChatModules]);
 
   useEffect(() => {
-    if (!currentChatId || !activeModuleContext?.instanceId) return;
-    const associationKey = `${currentChatId}:${activeModuleContext.instanceId}`;
-    if (associatedModuleKeysRef.current.has(associationKey)) return;
-    associatedModuleKeysRef.current.add(associationKey);
-
-    api.associateChatModule(currentChatId, activeModuleContext.instanceId)
-      .then(() => refreshChatModules(currentChatId))
-      .catch((err: unknown) => {
-        associatedModuleKeysRef.current.delete(associationKey);
-        console.warn('Failed to associate active module with chat:', err);
-      });
-  }, [activeModuleContext, currentChatId, refreshChatModules]);
-
-  useEffect(() => {
     if (!currentChatId) return;
     const latestAssistant = [...localMessages].reverse().find((message) => message.role === 'assistant');
     if (!latestAssistant?.widget_type || !CHAT_MODULE_WIDGET_TYPES.has(latestAssistant.widget_type)) {
@@ -270,7 +269,13 @@ export function ProjectStandaloneChatView({
   );
 
   const sendViaStream = useCallback(
-    async (content: string, currentMessages: ChatMessage[], toolHint?: string) => {
+    async (
+      content: string,
+      currentMessages: ChatMessage[],
+      toolHint?: string,
+      fieldContext?: FieldContext | null,
+      associatedModule?: { instanceId: string; moduleId: string; title?: string | null } | null,
+    ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
@@ -298,9 +303,23 @@ export function ProjectStandaloneChatView({
           setStreamingContent('');
           setThinkingLines([]);
 
+          const resolvedChatId = payload.chat_id || currentChatId;
           if (payload.chat_id) {
             setCurrentChatId(payload.chat_id);
             onChatListDirty?.();
+          }
+
+          if (resolvedChatId && associatedModule) {
+            const associationKey = `${resolvedChatId}:${associatedModule.instanceId}`;
+            if (!associatedModuleKeysRef.current.has(associationKey)) {
+              associatedModuleKeysRef.current.add(associationKey);
+              void api.associateChatModule(resolvedChatId, associatedModule.instanceId)
+                .then(() => refreshChatModules(resolvedChatId))
+                .catch((err: unknown) => {
+                  associatedModuleKeysRef.current.delete(associationKey);
+                  console.warn('Failed to associate interacted module with chat:', err);
+                });
+            }
           }
 
           setLocalMessages((prev) =>
@@ -337,6 +356,7 @@ export function ProjectStandaloneChatView({
         },
         currentChatId,
         toolHint ?? null,
+        fieldContext ?? null,
         null,
         initiativeId,
         (step) => {
@@ -353,7 +373,7 @@ export function ProjectStandaloneChatView({
         compareIds,
       );
     },
-    [initiativeId, currentChatId, compareProject, onChatListDirty],
+    [initiativeId, currentChatId, compareProject, onChatListDirty, refreshChatModules],
   );
 
   const handleUploadFile = useCallback(
@@ -366,7 +386,7 @@ export function ProjectStandaloneChatView({
   );
 
   const handleSend = useCallback(
-    async (content: string, toolHint?: string) => {
+    async (content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -393,8 +413,18 @@ export function ProjectStandaloneChatView({
       setLocalMessages(updatedMessages);
       setSending(true);
 
+      const matchedFieldContextModuleId = resolveFieldContextModuleId(fieldContext);
+      const associatedModule =
+        activeModuleContext &&
+        (
+          (matchedFieldContextModuleId && matchedFieldContextModuleId === activeModuleContext.moduleId) ||
+          (toolHint && toolHint === activeModuleContext.moduleId)
+        )
+          ? activeModuleContext
+          : null;
+
       try {
-        await sendViaStream(content, updatedMessages, toolHint);
+        await sendViaStream(content, updatedMessages, toolHint, fieldContext, associatedModule);
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
@@ -402,7 +432,7 @@ export function ProjectStandaloneChatView({
         setSending(false);
       }
     },
-    [localMessages, onMessageSent, sendViaStream],
+    [activeModuleContext, localMessages, onMessageSent, sendViaStream],
   );
 
   const handleEditMessage = useCallback(
@@ -491,60 +521,30 @@ export function ProjectStandaloneChatView({
 
   const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
 
-  const moduleChips = useMemo(() => {
-    const mergedModules = [...chatModules];
-    if (
-      activeModuleContext?.instanceId &&
-      !mergedModules.some((module) => module.instance_id === activeModuleContext.instanceId)
-    ) {
-      mergedModules.push({
-        instance_id: activeModuleContext.instanceId,
-        module_id: activeModuleContext.moduleId,
-        title: activeModuleContext.title ?? null,
-        status: 'started',
-        started_at: null,
-      });
-    }
-    if (mergedModules.length === 0) return null;
+  const associatedModules = useMemo(() => {
+    return chatModules
+      .filter((module, index, collection) =>
+        collection.findIndex((candidate) => candidate.instance_id === module.instance_id) === index,
+      );
+  }, [chatModules]);
+
+  const associatedModulesTray = useMemo(() => {
+    if (associatedModules.length === 0) return null;
 
     return (
-      <div className="flex flex-wrap gap-1.5">
-        {mergedModules.map((module) => {
-          const moduleOption = ALL_MODULES.find((candidate) => candidate.id === module.module_id);
-          if (!moduleOption) return null;
-
-          return (
-            <ModuleChip
-              key={module.instance_id}
-              module={moduleOption}
-              onClick={
-                onOpenWorkspaceModule
-                  ? () =>
-                      onOpenWorkspaceModule({
-                        instanceId: module.instance_id,
-                        moduleId: module.module_id,
-                        title: module.title ?? moduleOption.name,
-                      })
-                  : undefined
-              }
-            />
-          );
-        })}
-      </div>
+      <AssociatedModulesTray
+        modules={associatedModules}
+        onOpenWorkspaceModule={onOpenWorkspaceModule}
+      />
     );
-  }, [activeModuleContext, chatModules, onOpenWorkspaceModule]);
+  }, [associatedModules, onOpenWorkspaceModule]);
 
-  const inputChips = useMemo(() => {
-    if (!compareProject && !moduleChips) return undefined;
-    return (
-      <>
-        {compareProject ? (
-          <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
-        ) : null}
-        {moduleChips}
-      </>
-    );
-  }, [compareProject, moduleChips]);
+  const inputChips = useMemo(
+    () => (compareProject
+      ? <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
+      : undefined),
+    [compareProject],
+  );
 
   useEffect(() => {
     onLandingStateChange?.(isOnLanding);
@@ -661,6 +661,7 @@ export function ProjectStandaloneChatView({
               onSelect={setCompareProject}
             />
           ) : undefined}
+          topComposerContent={associatedModulesTray}
           inputChips={inputChips}
         />
       </>
@@ -691,6 +692,7 @@ export function ProjectStandaloneChatView({
           onSelect={setCompareProject}
         />
       ) : undefined}
+      topComposerContent={associatedModulesTray}
       inputChips={inputChips}
     />
   );
