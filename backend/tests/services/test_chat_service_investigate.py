@@ -53,6 +53,10 @@ def test_requires_distinct_proposal_detects_alternative_requests():
         "Can you validate the current value for annual degradation?",
         {"status": "confirmed"},
     )
+    assert ChatService._requires_distinct_proposal(
+        "Can you investigate the value for discount rate (WACC)?",
+        {"status": "assumed"},
+    )
 
 
 def test_proposal_matches_current_uses_numeric_comparison():
@@ -64,6 +68,27 @@ def test_proposal_matches_current_uses_numeric_comparison():
         {"field_name": "tilt", "proposed_value": 25},
         {"field_name": "tilt", "current_value": 20.0},
     )
+
+
+def test_resolve_current_value_reads_from_model_inputs_context_when_missing():
+    context = (
+        "### Active Investigation\n"
+        "- Discount Rate (WACC) (field_name=discount_rate): —  [assumed]\n\n"
+        "### LCOE Model Inputs\n"
+        "- Discount Rate (WACC) (field_name=discount_rate): 0.08  [assumed]\n"
+    )
+
+    resolved = ChatService._resolve_current_value(
+        {"field_name": "discount_rate", "current_value": None},
+        context,
+    )
+
+    assert resolved == 0.08
+
+
+def test_normalize_proposal_unit_strips_unitless_placeholder():
+    assert ChatService._normalize_proposal_unit("unitless") == ""
+    assert ChatService._normalize_proposal_unit(" USD/yr ") == "USD/yr"
 
 
 def test_lcoe_construction_period_uses_years_unit():

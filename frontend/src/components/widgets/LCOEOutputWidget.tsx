@@ -13,6 +13,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
 
 interface LCOEOutputWidgetProps {
   data: Record<string, any>;
@@ -136,20 +137,22 @@ export function LCOEOutputWidget({
       status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
       `Can you help me investigate and estimate a value for ${label}?`;
     const input = fieldName ? inputs[fieldName] : undefined;
+    const fieldContext = fieldName ? {
+      field_name: fieldName,
+      label,
+      current_value: typeof input?.value === 'number' ? input.value : null,
+      unit: input?.unit || null,
+      model_type: 'lcoe' as const,
+      status: status || null,
+    } : null;
 
     window.dispatchEvent(new CustomEvent('nitrogen:draft', {
       detail: {
         text,
         label,
         fieldName,
-        fieldContext: fieldName ? {
-          field_name: fieldName,
-          label,
-          current_value: typeof input?.value === 'number' ? input.value : null,
-          unit: input?.unit || null,
-          model_type: 'lcoe',
-          status: status || null,
-        } : null,
+        fieldContext,
+        modelInputsContext: buildModelInputsContext('LCOE Model', inputs, fieldContext),
       },
     }));
   }, [inputs]);

@@ -25,6 +25,7 @@ import {
   Cell,
 } from 'recharts';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
@@ -312,20 +313,22 @@ export function SolarEstimateWidget({
       status === 'confirmed' ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
     const input = inputs[fieldName];
+    const fieldContext = {
+      field_name: fieldName,
+      label,
+      current_value: typeof input?.value === 'number' ? input.value : null,
+      unit: input?.unit || null,
+      model_type: 'solar' as const,
+      status: status || null,
+    };
 
     window.dispatchEvent(new CustomEvent('nitrogen:draft', {
       detail: {
         text,
         label,
         fieldName,
-        fieldContext: {
-          field_name: fieldName,
-          label,
-          current_value: typeof input?.value === 'number' ? input.value : null,
-          unit: input?.unit || null,
-          model_type: 'solar',
-          status: status || null,
-        },
+        fieldContext,
+        modelInputsContext: buildModelInputsContext('Solar Model', inputs, fieldContext),
       },
     }));
   }, [inputs]);

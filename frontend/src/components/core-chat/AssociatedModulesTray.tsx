@@ -14,7 +14,13 @@ export type AssociatedChatModule = {
 
 interface AssociatedModulesTrayProps {
   modules: AssociatedChatModule[];
-  onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
+  onOpenWorkspaceModule?: (module: {
+    instanceId: string;
+    moduleId: string;
+    title?: string | null;
+    chatId?: string | null;
+    chatTitle?: string | null;
+  }) => void;
 }
 
 export function AssociatedModulesTray({

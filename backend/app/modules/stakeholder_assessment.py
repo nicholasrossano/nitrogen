@@ -3,8 +3,7 @@
 Stage workflow:
   1. Stakeholder Categories  (list / categorized_list)
   2. Stakeholders            (list / categorized_workspace)
-  3. Stakeholder Details     (record / categorized_workspace)
-  4. Map                     (computed_results / assessment_map)
+  3. Map                     (computed_results / assessment_map)
 
 Exports:
   - Write-up DOCX: LLM-generated, cached in workflow_state after first generation.
@@ -96,33 +95,12 @@ class StakeholderAssessmentModule(BaseModule):
                 ],
             ),
             StageDef(
-                id="details",
-                title="Stakeholder Details",
-                component="record",
-                widget="categorized_workspace",
-                fields=[
-                    FieldDef("role_in_project", "long_text", label="Role in project"),
-                    FieldDef("influence_level", "select", label="Influence",
-                             options=["Low", "Medium", "High"]),
-                    FieldDef("impact_level", "select", label="Impact",
-                             options=["Low", "Medium", "High"]),
-                    FieldDef("engagement_priority", "select", label="Priority",
-                             options=["Monitor", "Inform", "Consult", "Collaborate"]),
-                    FieldDef("notes", "long_text", label="Notes"),
-                ],
-                population=[
-                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "stakeholders"}),
-                    PopulationStep("enrich_selected_item_with_ai", {"require_citation": True}),
-                    PopulationStep("await_user_confirmation"),
-                ],
-            ),
-            StageDef(
                 id="map",
                 title="Map",
                 component="computed_results",
                 widget="assessment_map",
                 population=[
-                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "details"}),
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "stakeholders"}),
                     PopulationStep("compute_with_module_logic"),
                     PopulationStep("await_user_confirmation"),
                 ],
@@ -147,17 +125,6 @@ class StakeholderAssessmentModule(BaseModule):
             return await self._generate_stakeholders(context, prior_cats)
         return []
 
-    async def enrich_record(
-        self,
-        stage_id: str,
-        item_content: dict,
-        existing_record: dict,
-        context: dict,
-    ) -> dict:
-        if stage_id != "details":
-            raise ValueError(f"enrich_record called for unexpected stage '{stage_id}'")
-        return await self._enrich_stakeholder_detail(item_content, existing_record, context)
-
     async def compute_stage(
         self,
         stage_id: str,
@@ -170,7 +137,7 @@ class StakeholderAssessmentModule(BaseModule):
 
         category_items = (confirmed_stages.get("categories") or {}).get("data", {}).get("items", [])
         stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
-        records = (confirmed_stages.get("details") or {}).get("data", {}).get("records", {})
+        records = self._extract_stakeholder_details(confirmed_stages)
 
         pillar_colors = [
             "#005e72", "#6b3fa0", "#1a7340", "#c05621",
@@ -193,6 +160,28 @@ class StakeholderAssessmentModule(BaseModule):
             for sh in stakeholders:
                 sc = sh.get("content", {})
                 record = records.get(sh.get("id", ""), {})
+                base_provenance = sh.get("provenance", {}) or {}
+                evidence_sources = record.get("sources", []) if isinstance(record.get("sources"), list) else []
+                if evidence_sources:
+                    merged_sources = evidence_sources
+                    if isinstance(base_provenance.get("sources"), list):
+                        seen_source_keys: set[str] = set()
+                        merged_sources = []
+                        for source in [*evidence_sources, *base_provenance.get("sources", [])]:
+                            if not isinstance(source, dict):
+                                continue
+                            key = (source.get("url") or source.get("title") or "").strip().lower()
+                            if not key or key in seen_source_keys:
+                                continue
+                            seen_source_keys.add(key)
+                            merged_sources.append(source)
+                    provenance = {
+                        **base_provenance,
+                        "derivation": "retrieval_grounded",
+                        "sources": merged_sources,
+                    }
+                else:
+                    provenance = base_provenance
                 items.append({
                     "id": sh.get("id", ""),
                     "name": sc.get("name", ""),
@@ -202,7 +191,8 @@ class StakeholderAssessmentModule(BaseModule):
                     "impact_level": record.get("impact_level", ""),
                     "engagement_priority": record.get("engagement_priority", ""),
                     "role_in_project": record.get("role_in_project", ""),
-                    "provenance": sh.get("provenance", {}),
+                    "notes": record.get("notes", ""),
+                    "provenance": provenance,
                 })
             groups.append({
                 "id": cat_item.get("id", ""),
@@ -222,14 +212,27 @@ class StakeholderAssessmentModule(BaseModule):
         """Generate the write-up as a JSON dict (cacheable). Called by the export endpoint."""
         category_items = (confirmed_stages.get("categories") or {}).get("data", {}).get("items", [])
         stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
-        records = (confirmed_stages.get("details") or {}).get("data", {}).get("records", {})
+        records = self._extract_stakeholder_details(confirmed_stages)
 
         categories = [i["content"].get("label", "") for i in category_items]
         by_category: dict[str, list[str]] = {c: [] for c in categories}
         for item in stakeholder_items:
             cat = item["content"].get("category", "")
             name = item["content"].get("name", "")
-            by_category.setdefault(cat, []).append(name)
+            item_id = item.get("id", "")
+            detail = records.get(item_id, {})
+            detail_fragments = [
+                f"influence={detail.get('influence_level', '').strip()}",
+                f"impact={detail.get('impact_level', '').strip()}",
+                f"priority={detail.get('engagement_priority', '').strip()}",
+            ]
+            if detail.get("role_in_project"):
+                detail_fragments.append(f"role={detail.get('role_in_project', '').strip()}")
+            if detail.get("notes"):
+                detail_fragments.append(f"notes={detail.get('notes', '').strip()}")
+            compact_details = ", ".join(frag for frag in detail_fragments if not frag.endswith("="))
+            line = f"{name} ({compact_details})" if compact_details else name
+            by_category.setdefault(cat, []).append(line)
 
         outline_text = "\n".join(
             f"### {cat}\n" + "\n".join(f"  - {s}" for s in by_category.get(cat, []))
@@ -274,6 +277,52 @@ class StakeholderAssessmentModule(BaseModule):
         if citations:
             result["citations"] = citations
         return result
+
+    async def enrich_stakeholder_detail(
+        self,
+        item_content: dict[str, Any],
+        existing_record: dict[str, Any],
+        context: dict[str, Any],
+        db: AsyncSession | None = None,
+        initiative_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        """Run a deep dive for one stakeholder and return normalized detail fields."""
+        return await self._enrich_stakeholder_detail(
+            item_content,
+            existing_record,
+            context,
+            db=db,
+            initiative_id=initiative_id,
+        )
+
+    async def ensure_all_stakeholder_details(
+        self,
+        stakeholder_items: list[dict[str, Any]],
+        existing_records: dict[str, dict[str, Any]],
+        context: dict[str, Any],
+        db: AsyncSession | None = None,
+        initiative_id: UUID | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], bool]:
+        """Ensure every stakeholder has a deep-dive record before write-up export."""
+        records: dict[str, dict[str, Any]] = dict(existing_records or {})
+        changed = False
+        for item in stakeholder_items:
+            item_id = item.get("id", "")
+            if not item_id:
+                continue
+            current = records.get(item_id) or {}
+            if self._is_detail_record_complete(current):
+                continue
+            enriched = await self._enrich_stakeholder_detail(
+                item.get("content", {}),
+                current,
+                context,
+                db=db,
+                initiative_id=initiative_id,
+            )
+            records[item_id] = enriched
+            changed = True
+        return records, changed
 
     async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
         content = await self.generate_writeup_content(confirmed_stages, context)
@@ -423,26 +472,101 @@ class StakeholderAssessmentModule(BaseModule):
         item_content: dict,
         existing_record: dict,
         context: dict,
+        db: AsyncSession | None = None,
+        initiative_id: UUID | None = None,
     ) -> dict:
+        stakeholder_name = item_content.get("name", "")
+        category = item_content.get("category", "")
+        why_they_matter = item_content.get("why_they_matter", "")
+        geography = context.get("geography", "")
+        project_type = context.get("project_type", "")
+
+        evidence_block = ""
+        citations: list[dict[str, Any]] = []
+        if db is not None and initiative_id is not None:
+            queries = [
+                " ".join(
+                    part for part in [
+                        stakeholder_name,
+                        category,
+                        "stakeholder",
+                        geography,
+                        project_type,
+                    ] if part
+                ).strip(),
+                " ".join(
+                    part for part in [
+                        stakeholder_name,
+                        "engagement strategy",
+                        geography,
+                        project_type,
+                    ] if part
+                ).strip(),
+            ]
+            queries = [query for query in queries if query]
+            if queries:
+                try:
+                    context_str, citations = await retrieve_evidence(queries, db, initiative_id, max_facts=8)
+                    if context_str:
+                        evidence_block = (
+                            "\n\nRetrieved evidence (cite [n] references when grounding your assessment):\n"
+                            f"{context_str}"
+                        )
+                except Exception as exc:
+                    logger.warning("Stakeholder evidence retrieval failed for '%s': %s", stakeholder_name, exc)
+
         data = await llm_json(
             system=(
                 "You are an expert stakeholder analyst. Enrich the stakeholder detail record. "
                 "Return JSON with keys: role_in_project, influence_level (Low/Medium/High), "
                 "impact_level (Low/Medium/High), engagement_priority (Monitor/Inform/Consult/Collaborate), "
-                "notes."
+                "notes. Use retrieved evidence when available and avoid unsupported claims."
             ),
             user_msg=(
-                f"Stakeholder: {item_content.get('name', '')}\n"
-                f"Category: {item_content.get('category', '')}\n"
-                f"Why they matter: {item_content.get('why_they_matter', '')}\n"
+                f"Stakeholder: {stakeholder_name}\n"
+                f"Category: {category}\n"
+                f"Why they matter: {why_they_matter}\n"
                 f"Project: {context.get('project_title', '')}, "
                 f"Geography: {context.get('geography', '')}"
+                f"{evidence_block}"
             ),
         )
+        normalized_sources = [
+            {
+                "title": citation.get("source_title", ""),
+                "url": citation.get("source_url", "") or None,
+                "publisher": citation.get("publisher", "") or None,
+            }
+            for citation in citations
+            if citation.get("source_title") or citation.get("source_url")
+        ]
+        if not normalized_sources:
+            existing_sources = existing_record.get("sources", [])
+            if isinstance(existing_sources, list):
+                normalized_sources = existing_sources
+
         return {
             "role_in_project": data.get("role_in_project", existing_record.get("role_in_project", "")),
             "influence_level": data.get("influence_level", existing_record.get("influence_level", "")),
             "impact_level": data.get("impact_level", existing_record.get("impact_level", "")),
             "engagement_priority": data.get("engagement_priority", existing_record.get("engagement_priority", "")),
             "notes": data.get("notes", existing_record.get("notes", "")),
+            "sources": normalized_sources,
         }
+
+    @staticmethod
+    def _extract_stakeholder_details(confirmed_stages: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Read stakeholder detail records from synthetic or legacy stage data."""
+        synthetic = (confirmed_stages.get("stakeholder_details") or {}).get("data", {}).get("records")
+        if isinstance(synthetic, dict):
+            return synthetic
+        legacy = (confirmed_stages.get("details") or {}).get("data", {}).get("records")
+        if isinstance(legacy, dict):
+            return legacy
+        return {}
+
+    @staticmethod
+    def _is_detail_record_complete(record: dict[str, Any]) -> bool:
+        """Return True when required deep-dive fields are already populated."""
+        required = ["role_in_project", "influence_level", "impact_level", "engagement_priority"]
+        return all(bool(str((record or {}).get(field, "")).strip()) for field in required)

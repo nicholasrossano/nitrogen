@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Pencil, Plus, Trash2, Check, X } from 'lucide-react';
-import type { BuildItem, FieldDef } from '@/lib/api';
+import type { BuildItem, FieldContext, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
 
 interface Props {
   instanceId: string;
@@ -380,6 +381,22 @@ export function EditableTableStage({
         }))
         .filter((g) => g.rows.length > 0)
     : [{ cat: '__all__', label: '', rows: effectiveItems }];
+  const modelInputs = useMemo(
+    () =>
+      Object.fromEntries(
+        effectiveItems.map((item) => {
+          const fieldName = typeof item.content.field_name === 'string' ? item.content.field_name : item.id;
+          return [fieldName, {
+            field_name: fieldName,
+            label: String(item.content.label ?? fieldName),
+            value: item.content.value,
+            unit: typeof item.content.unit === 'string' ? item.content.unit : null,
+            status: typeof item.content.status === 'string' ? item.content.status : null,
+          }];
+        }),
+      ),
+    [effectiveItems],
+  );
 
   const handleSave = useCallback(
     async (itemId: string, fieldName: string, value: string) => {
@@ -498,24 +515,27 @@ export function EditableTableStage({
             ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?`
             : `Can you investigate and propose a value for ${label}?`;
 
+      const fieldContext: FieldContext = {
+        field_name: fieldName,
+        label,
+        current_value: typeof currentValue === 'number' ? currentValue : null,
+        unit: unit || null,
+        model_type: proposalModelType,
+        module_id: moduleId,
+        status: status || null,
+      };
+
       window.dispatchEvent(new CustomEvent('nitrogen:draft', {
         detail: {
           text,
           label,
           fieldName,
-          fieldContext: {
-            field_name: fieldName,
-            label,
-            current_value: typeof currentValue === 'number' ? currentValue : null,
-            unit: unit || null,
-            model_type: proposalModelType,
-            module_id: moduleId,
-            status: status || null,
-          },
+          fieldContext,
+          modelInputsContext: buildModelInputsContext('Module', modelInputs, fieldContext),
         },
       }));
     },
-    [moduleId, proposalModelType],
+    [modelInputs, moduleId, proposalModelType],
   );
 
   const handleDelete = useCallback(

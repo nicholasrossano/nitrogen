@@ -19,7 +19,7 @@ from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
-from app.services.chat import ChatService
+from app.services.chat import ChatMode, ChatResponse as ServiceChatResponse, ChatService
 from app.services import module_service
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
@@ -29,6 +29,11 @@ from app.schemas.chat import FieldContext
 router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _log_chat_stream_debug(event: str, **fields) -> None:
+    serialized = " ".join(f"{key}={value!r}" for key, value in fields.items())
+    logger.info("[chat-stream-debug] %s %s", event, serialized)
 
 
 def _build_project_context(initiative: Initiative) -> str:
@@ -47,6 +52,36 @@ def _build_project_context(initiative: Initiative) -> str:
     if initiative.goal:
         parts.append(f"- Goal: {initiative.goal}")
     return "\n".join(parts) if parts else ""
+
+
+async def _execute_project_action(
+    *,
+    service: ChatService,
+    initiative: Initiative,
+    action_result,
+    chat_history: list,
+    tool_hint: str | None,
+    model_inputs_context: str | None,
+    field_context: dict | None,
+    on_thinking,
+) -> ServiceChatResponse:
+    widget_type, widget_data, assistant_response, sources = await service.execute_project_action(
+        initiative=initiative,
+        action_result=action_result,
+        chat_history=chat_history,
+        tool_hint=tool_hint,
+        model_inputs_context=model_inputs_context,
+        field_context=field_context,
+        on_thinking=on_thinking,
+    )
+    return ServiceChatResponse(
+        content=assistant_response,
+        sources=sources or [],
+        tiers_used=list({s.source_type.value for s in sources}) if sources else [],
+        latency_ms=0,
+        widget_type=widget_type,
+        widget_data=widget_data,
+    )
 
 
 class ChatHistoryMessage(BaseModel):
@@ -401,9 +436,20 @@ async def chat_stream(
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
             ctx = await build_context(db, user, resolved_initiative_id)
             ctx.chat_id = chat.id
-            service = ChatService(db, ctx=ctx)
 
             verified_initiative: Initiative | None = None
+            field_context = data.field_context.model_dump() if data.field_context else None
+
+            _log_chat_stream_debug(
+                "request",
+                chat_id=str(chat.id),
+                initiative_id=data.initiative_id,
+                compare=bool(data.compare_initiative_ids),
+                tool_hint=data.tool_hint,
+                field_name=(field_context or {}).get("field_name"),
+                has_field_context=bool(field_context),
+                has_model_inputs_context=bool(data.model_inputs_context),
+            )
 
             # --- Compare mode ---
             compare_contexts: list[dict] | None = None
@@ -423,6 +469,7 @@ async def chat_stream(
                         break
 
                 if compare_contexts:
+                    service = ChatService(db, ctx=ctx)
                     # Persist compare_initiative_ids on the chat
                     if not chat.compare_initiative_ids:
                         chat.compare_initiative_ids = data.compare_initiative_ids
@@ -453,6 +500,12 @@ async def chat_stream(
                     except HTTPException:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
                         return
+
+                service = ChatService(
+                    db,
+                    ctx=ctx,
+                    mode=ChatMode.PROJECT if verified_initiative else ChatMode.STANDALONE,
+                )
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
@@ -509,19 +562,60 @@ async def chat_stream(
 
                     generation_task = asyncio.create_task(_open_workflow_workspace())
                 else:
-                    generation_task = asyncio.create_task(
-                        service.generate_response(
-                            user_message=data.content,
-                            history=history,
-                            on_thinking=on_thinking,
+                    if verified_initiative:
+                        action_result = await service.get_next_action(
+                            messages=prior_msgs,
+                            initiative=verified_initiative,
                             tool_hint=data.tool_hint or None,
-                            field_context=data.field_context.model_dump() if data.field_context else None,
-                            model_inputs_context=data.model_inputs_context or None,
-                            project_context=project_context,
-                            on_research_step=on_research_step,
-                            initiative_id=data.initiative_id if verified_initiative else None,
+                            field_context=field_context,
                         )
-                    )
+                        _log_chat_stream_debug(
+                            "project-action",
+                            chat_id=str(chat.id),
+                            action=action_result.action,
+                            field_name=(field_context or {}).get("field_name"),
+                            has_model_inputs_context=bool(data.model_inputs_context),
+                        )
+
+                        if action_result.action == "generate_project_plan":
+                            await on_thinking("Generating your project plan...")
+                        elif action_result.action == "run_lcoe_tool":
+                            await on_thinking("Building your LCOE model...")
+                        elif action_result.action == "run_carbon_tool":
+                            await on_thinking("Building your carbon emissions model...")
+                        elif action_result.action == "propose_input_value":
+                            await on_thinking("Researching a value for this input...")
+
+                        model_inputs_context = (
+                            data.model_inputs_context
+                            or ChatService._format_model_inputs_from_messages(prior_msgs, field_context)
+                        )
+                        generation_task = asyncio.create_task(
+                            _execute_project_action(
+                                service=service,
+                                initiative=verified_initiative,
+                                action_result=action_result,
+                                chat_history=prior_msgs,
+                                tool_hint=data.tool_hint or None,
+                                model_inputs_context=model_inputs_context,
+                                field_context=field_context,
+                                on_thinking=on_thinking,
+                            )
+                        )
+                    else:
+                        generation_task = asyncio.create_task(
+                            service.generate_response(
+                                user_message=data.content,
+                                history=history,
+                                on_thinking=on_thinking,
+                                tool_hint=data.tool_hint or None,
+                                field_context=field_context,
+                                model_inputs_context=data.model_inputs_context or None,
+                                project_context=project_context,
+                                on_research_step=on_research_step,
+                                initiative_id=data.initiative_id if verified_initiative else None,
+                            )
+                        )
 
             while not generation_task.done():
                 try:
@@ -535,6 +629,14 @@ async def chat_stream(
                 yield f"data: {event_json}\n\n"
 
             result = generation_task.result()
+            _log_chat_stream_debug(
+                "response",
+                chat_id=str(chat.id),
+                initiative_id=data.initiative_id,
+                widget_type=result.widget_type,
+                has_widget_data=bool(result.widget_data),
+                citation_count=len([s for s in result.sources if s.source_type.value != "llm_estimate"]),
+            )
 
             # Stream response token-by-token
             tokens = [t for t in result.content.split(' ') if t]

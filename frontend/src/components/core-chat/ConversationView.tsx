@@ -19,12 +19,11 @@ import { FieldContext, SourceCitation, ResearchStep } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
+import { ABOVE_INPUT_WIDGET_TYPE, ChatWidgetRenderer } from '@/components/chat/ChatWidgetRenderer';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
-import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
-import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
-import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { sanitizeHref } from '@/lib/sanitizeHref';
+import { debugChatFlow } from '@/lib/chatDebug';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -33,7 +32,12 @@ export interface ConversationViewProps {
   researchSteps: ResearchStep[];
   streamingContent: string;
   error: string | null;
-  onSendMessage: (content: string, toolHint?: string, fieldContext?: FieldContext | null) => void;
+  onSendMessage: (
+    content: string,
+    toolHint?: string,
+    fieldContext?: FieldContext | null,
+    modelInputsContext?: string | null,
+  ) => void;
   onUploadFile?: (file: File) => Promise<void>;
   onEditMessage: (messageId: string, newContent: string) => void;
   onRetryMessage: (messageId: string) => void;
@@ -100,6 +104,7 @@ export function ConversationView({
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [draftFieldContext, setDraftFieldContext] = useState<FieldContext | null>(null);
+  const [draftModelInputsContext, setDraftModelInputsContext] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -132,6 +137,7 @@ export function ConversationView({
         text?: string;
         label?: string | null;
         fieldContext?: FieldContext | null;
+        modelInputsContext?: string | null;
       } | null;
       const text = detail?.text;
       const label = detail?.label ?? null;
@@ -139,6 +145,14 @@ export function ConversationView({
         setInput(text);
         setDraftTag(label);
         setDraftFieldContext(detail?.fieldContext ?? null);
+        setDraftModelInputsContext(detail?.modelInputsContext ?? null);
+        debugChatFlow('draft-received', {
+          surface: 'conversation-view',
+          field_name: detail?.fieldContext?.field_name ?? null,
+          model_type: detail?.fieldContext?.model_type ?? null,
+          has_field_context: Boolean(detail?.fieldContext),
+          has_model_inputs_context: Boolean(detail?.modelInputsContext),
+        });
         setTimeout(() => textareaRef.current?.focus(), 0);
       }
     };
@@ -182,10 +196,18 @@ export function ConversationView({
       setUploading(false);
     }
 
-    onSendMessage(input.trim(), undefined, draftFieldContext);
+    debugChatFlow('composer-send', {
+      surface: 'conversation-view',
+      field_name: draftFieldContext?.field_name ?? null,
+      model_type: draftFieldContext?.model_type ?? null,
+      has_field_context: Boolean(draftFieldContext),
+      has_model_inputs_context: Boolean(draftModelInputsContext),
+    });
+    onSendMessage(input.trim(), undefined, draftFieldContext, draftModelInputsContext);
     setInput('');
     setDraftTag(null);
     setDraftFieldContext(null);
+    setDraftModelInputsContext(null);
     setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -210,6 +232,9 @@ export function ConversationView({
   const isThinking = sending && !streamingContent;
   // True once words are coming in
   const isStreaming = sending && !!streamingContent;
+  const latestMessage = messages[messages.length - 1];
+  const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
+  const hideTextInput = showDocumentRequest;
 
   return (
     <div className="flex flex-col h-full">
@@ -294,7 +319,22 @@ export function ConversationView({
         </div>
       </div>
 
+      {showDocumentRequest && latestMessage?.widget_data && initiativeId && (
+        <div className="flex-shrink-0 px-4 pb-4">
+          <div className="max-w-[52rem] mx-auto w-full">
+            <ChatWidgetRenderer
+              type={latestMessage.widget_type!}
+              data={latestMessage.widget_data}
+              initiativeId={initiativeId}
+              messageId={latestMessage.id}
+              isActive={true}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Composer */}
+      {!hideTextInput && (
       <div className="flex-shrink-0 relative">
         <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
         <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
@@ -314,7 +354,12 @@ export function ConversationView({
                     {draftTag}
                     <button
                       type="button"
-                      onClick={() => { setDraftTag(null); setInput(''); }}
+                      onClick={() => {
+                        setDraftTag(null);
+                        setDraftFieldContext(null);
+                        setDraftModelInputsContext(null);
+                        setInput('');
+                      }}
                       className="hover:opacity-60 transition-opacity"
                       aria-label="Remove"
                     >
@@ -398,6 +443,7 @@ export function ConversationView({
         </form>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -830,15 +876,14 @@ function ChatWidget({
   initiativeId?: string;
   isActive?: boolean;
 }) {
-  switch (type) {
-    case 'proposed_value':
-      return <ProposedValueWidget data={data as any} messageId={messageId} />;
-    case 'gs_proposed_field':
-      return <CoverLetterProposedValueWidget data={data as any} messageId={messageId} />;
-    case 'template_proposed_value':
-      return <TemplateProposedValueWidget data={data as any} messageId={messageId} />;
-    default:
-      return null;
-  }
+  return (
+    <ChatWidgetRenderer
+      type={type}
+      data={data}
+      messageId={messageId}
+      initiativeId={initiativeId}
+      isActive={isActive}
+    />
+  );
 }
 
