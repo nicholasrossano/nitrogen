@@ -2,25 +2,30 @@
 
 Use this guide when adding a new Nitrogen module.
 
+Nitrogen modules now author against the shared staged workflow contract:
+
+- declare ordered `stage_defs`
+- let the workflow service persist `workflow_state`
+- rely on shared confirmation, final approval, and decision-log infrastructure instead of bespoke audit logic
+
 ## Choose The Right Base Class
 
 Use `BaseModule` when the module has:
 
-- a small setup form
-- one widget-backed build surface
+- a staged workflow made mostly of calculator-style or computed stages
 - deterministic recompute or a tight generate/edit loop
 
 Use `BaseAssessmentModule` when the module has:
 
-- a setup form plus one or more ordered build layers
+- multiple ordered review stages with AI generation and human confirmation
 - item-level confirmation and revision
-- a final synthesized output assembled from confirmed build items
+- a final synthesized output assembled from confirmed stages
 
-All modules still use the same top-level stages:
+All modules still use the same shared workflow envelope:
 
-1. `setup`
-2. `build`
-3. `output`
+1. ordered `stage_defs`
+2. per-stage confirmation metadata in `workflow_state.stages[*]`
+3. shared `final_approval` before export
 
 ## Required Pieces For Any Module
 
@@ -39,13 +44,11 @@ For `BaseModule` implementations:
 
 1. Define `definition`.
 2. Define `manifest`.
-3. Define `required_inputs` and any `optional_inputs`.
-4. Expose `workspace_setup_fields` for the setup stage.
-5. Implement `build_workspace_widget_data(known_values)` — converts initiative/setup context into the initial `widget_data` dict stored inside the single `build_stages[0]` entry.
-6. Implement `recalculate()` if the widget supports fast user edits (called by the persist-widget-stage endpoint on every change).
-7. Implement `execute()` and `export()` as needed.
+3. Define ordered `stage_defs`.
+4. Implement the stage hooks your workflow uses, such as `get_predefined_rows()`, `generate_items_for_stage()`, `compute_stage()`, or `compute_external()`.
+5. Implement `generate_export()` when the module exports an artifact.
 
-`build_workspace_widget_data()` is the only place a module should write initial widget state. Do not add `module_id` branches in the workflow service for launch modules.
+Do not add `module_id` branches in the workflow service for launch modules. New behavior should come from stage definitions, shared workflow hooks, or shared reporting helpers.
 
 **Chat role**: chat does not render module widgets. The chat assistant can propose values using the `proposed_value` widget; the user confirms in the editor workspace. Do not add `execute_from_conversation()` hooks for new modules.
 
@@ -55,11 +58,10 @@ For `BaseAssessmentModule` implementations:
 
 1. Define `definition`.
 2. Define `manifest`.
-3. Return an `AssessmentModuleDef` from `assessment_definition`.
-4. Define setup fields and ordered build layers.
-5. Implement `generate_setup_defaults()`.
-6. Implement `generate_layer()`.
-7. Implement `generate_output()`.
+3. Define ordered `stage_defs`.
+4. Implement `generate_items_for_stage()` and `enrich_record()` as needed.
+5. Implement `generate_writeup_content()` when the module needs a generated narrative export.
+6. Implement `generate_export()` for the final artifact.
 
 Each build layer should represent one user-reviewable step. Prefer a few meaningful layers over many tiny ones.
 
@@ -80,10 +82,18 @@ Good manifests are specific and operational. They should tell the system:
 - what the module is trying to accomplish
 - which widget the build stage renders
 - which widget the output stage renders
+- any optional `investigate_hint` the shared chat flow can use for concise field-level value proposals
 - which adapters are required
+- how decision-log attribution should label adapters or extra widget metadata
 - what outputs downstream modules can depend on
 
-If the module exports files, `definition.export_format` and `manifest.export_artifact_types` must agree.
+If the module exports files, `definition.export_format` and `manifest.export_artifact_types` must agree. Exportable staged modules automatically inherit the shared final-approval gate and decision-log tracking.
+
+When a module should expose friendly citations in the decision log, configure `manifest.decision_log_attribution` instead of adding reporting heuristics. Common examples:
+
+- `adapter_labels` for human-readable engine or API names
+- `widget_detail_labels` for stable widget metadata keys that should appear in citations
+- leaving `include_model_name=True` so persisted LLM metadata is surfaced automatically
 
 ## Testing Expectations
 
@@ -103,3 +113,10 @@ Copy one of these starting points:
 
 - `backend/app/modules/_templates/widget_module_template.py`
 - `backend/app/modules/_templates/layered_module_template.py`
+
+## Staged Table UX Flags
+
+For staged workflow modules that use `StageDef(component="table", widget="editable_table")`, declare row-creation behavior explicitly:
+
+- set `allow_add_rows=False` for fixed calculator input lists (for example: LCOE, Carbon, Solar)
+- set `allow_add_rows=True` only when the stage is intentionally user-extensible

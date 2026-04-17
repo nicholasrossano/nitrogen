@@ -1,29 +1,42 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Pencil, Plus, Trash2, Check, X } from 'lucide-react';
 import type { BuildItem, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
 
 interface Props {
   instanceId: string;
+  moduleId: string;
   stageId: string;
+  workflowVersion?: number;
   fields: FieldDef[];
   items: BuildItem[];
+  allowAddRows: boolean;
   readOnly?: boolean;
   flush?: boolean;
   onChanged: () => void;
+}
+
+const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
+const LCOE_TECHNOLOGY_OPTIONS = ['solar_pv', 'wind', 'battery', 'mini_grid', 'clean_cooking', 'default'];
+
+function normalizeKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 // ── Inline value editor ──────────────────────────────────────────────────
 
 function ValueEditor({
   value,
-  field,
+  fieldType,
+  options,
   onSave,
 }: {
   value: any;
-  field: FieldDef;
+  fieldType: string;
+  options?: string[] | null;
   onSave: (v: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -51,7 +64,7 @@ function ValueEditor({
     );
   }
 
-  if (field.field_type === 'select' && field.options?.length) {
+  if (fieldType === 'select' && options?.length) {
     return (
       <select
         autoFocus
@@ -61,7 +74,11 @@ function ValueEditor({
         className="text-xs bg-surface border border-accent/40 rounded px-1.5 py-0.5 outline-none text-text-primary font-mono"
       >
         <option value="">—</option>
-        {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o.replace(/_/g, ' ')}
+          </option>
+        ))}
       </select>
     );
   }
@@ -69,7 +86,7 @@ function ValueEditor({
   return (
     <input
       autoFocus
-      type={field.field_type === 'number' ? 'number' : 'text'}
+      type={fieldType === 'number' ? 'number' : 'text'}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -90,20 +107,36 @@ function TableRow({
   onSave,
   onDelete,
   readOnly,
+  investigateEnabled,
+  onInvestigateHoverMove,
+  onInvestigateHoverLeave,
+  onInvestigate,
 }: {
   item: BuildItem;
   fields: FieldDef[];
   onSave: (fieldName: string, value: string) => void;
   onDelete: () => void;
   readOnly?: boolean;
+  investigateEnabled?: boolean;
+  onInvestigateHoverMove?: (e: React.MouseEvent, isInteractive: boolean) => void;
+  onInvestigateHoverLeave?: () => void;
+  onInvestigate?: (e: React.MouseEvent) => void;
 }) {
   const nameField = fields[0];
-  const valueField = fields.find((f) => f.field_type === 'number') ?? fields[1];
+  const valueField = fields.find((f) => f.name === 'value') ?? fields[1] ?? fields[0];
   const unitField = fields.find((f) => f.name === 'unit');
 
   const name = String(item.content[nameField?.name ?? 'variable'] ?? '');
   const unit = unitField ? String(item.content[unitField.name] ?? '') : '';
   const status: string = item.content.status ?? (item.origin === 'inferred' ? 'inferred' : '');
+  const explicitFieldName = String(item.content.field_name ?? '');
+  const normalizedFieldName = explicitFieldName || normalizeKey(name);
+  const rowFieldType = String(item.content.field_type ?? (valueField?.field_type ?? 'text'));
+  const rowOptions = Array.isArray(item.content.options)
+    ? (item.content.options as string[])
+    : normalizedFieldName === 'technology_type'
+      ? LCOE_TECHNOLOGY_OPTIONS
+      : null;
 
   const STATUS_STYLES: Record<string, string> = {
     confirmed: 'bg-green-50 text-green-700',
@@ -113,7 +146,24 @@ function TableRow({
   };
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-subtle/50 transition-colors group border-b border-stroke-subtle last:border-0">
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-subtle/50 transition-colors group border-b border-stroke-subtle last:border-0"
+      style={investigateEnabled ? { cursor: INVESTIGATE_CURSOR } : undefined}
+      onMouseMove={(e) => {
+        if (!investigateEnabled || !onInvestigateHoverMove) return;
+        const isInteractive = !!(e.target as HTMLElement).closest('button, input, select, a');
+        onInvestigateHoverMove(e, isInteractive);
+      }}
+      onMouseLeave={() => {
+        if (!investigateEnabled || !onInvestigateHoverLeave) return;
+        onInvestigateHoverLeave();
+      }}
+      onClick={(e) => {
+        if (!investigateEnabled || !onInvestigate) return;
+        if ((e.target as HTMLElement).closest('button, input, select, a')) return;
+        onInvestigate(e);
+      }}
+    >
       {/* Variable name */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
@@ -137,14 +187,15 @@ function TableRow({
         {readOnly ? (
           <span className="text-xs font-mono tabular-nums text-text-primary">
             {valueField && item.content[valueField.name] !== null && item.content[valueField.name] !== undefined
-              ? String(item.content[valueField.name])
+              ? String(item.content[valueField.name]).replace(/_/g, ' ')
               : <span className="text-text-tertiary italic">—</span>}
           </span>
         ) : (
           valueField && (
             <ValueEditor
               value={item.content[valueField.name]}
-              field={valueField}
+              fieldType={rowFieldType}
+              options={rowOptions}
               onSave={(v) => onSave(valueField.name, v)}
             />
           )
@@ -237,18 +288,79 @@ function AddRowForm({
 
 export function EditableTableStage({
   instanceId,
+  moduleId,
   stageId,
+  workflowVersion,
   fields,
   items,
+  allowAddRows,
   readOnly,
   flush = false,
   onChanged,
 }: Props) {
+  const [optimisticContentByItemId, setOptimisticContentByItemId] = useState<Record<string, Record<string, any>>>({});
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [hoveredInvestigateRow, setHoveredInvestigateRow] = useState<{
+    fieldName: string;
+    label: string;
+    status: string;
+  } | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [overInteractive, setOverInteractive] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const proposalModelType = moduleId === 'lcoe_model'
+    ? 'lcoe'
+    : moduleId === 'carbon_model'
+      ? 'carbon'
+      : moduleId === 'solar_estimate'
+        ? 'solar'
+        : null;
+  const enableInvestigate = !!proposalModelType && stageId === 'inputs' && !readOnly;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const effectiveItems = items.map((item) => {
+    const optimisticContent = optimisticContentByItemId[item.id];
+    if (!optimisticContent) return item;
+    return {
+      ...item,
+      content: {
+        ...item.content,
+        ...optimisticContent,
+      },
+    };
+  });
+
+  useEffect(() => {
+    if (Object.keys(optimisticContentByItemId).length === 0) return;
+    setOptimisticContentByItemId((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const [itemId, optimisticContent] of Object.entries(prev)) {
+        const serverItem = items.find((it) => it.id === itemId);
+        if (!serverItem) {
+          delete next[itemId];
+          changed = true;
+          continue;
+        }
+        const applied = Object.entries(optimisticContent).every(
+          ([field, value]) => serverItem.content?.[field] === value
+        );
+        if (applied) {
+          delete next[itemId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [items, optimisticContentByItemId]);
 
   // Group by category if items have a category field in content
-  const hasCategories = items.some((item) => item.content.category);
+  const hasCategories = effectiveItems.some((item) => item.content.category);
   const categoryOrder = ['project', 'energy', 'costs', 'finance', 'timing', 'general'];
   const CATEGORY_LABELS: Record<string, string> = {
     project: 'Project Definition',
@@ -264,44 +376,168 @@ export function EditableTableStage({
         .map((cat) => ({
           cat,
           label: CATEGORY_LABELS[cat] ?? cat,
-          rows: items.filter((i) => (i.content.category ?? 'general') === cat),
+          rows: effectiveItems.filter((i) => (i.content.category ?? 'general') === cat),
         }))
         .filter((g) => g.rows.length > 0)
-    : [{ cat: '__all__', label: '', rows: items }];
+    : [{ cat: '__all__', label: '', rows: effectiveItems }];
 
   const handleSave = useCallback(
     async (itemId: string, fieldName: string, value: string) => {
-      const item = items.find((i) => i.id === itemId);
+      const item = effectiveItems.find((i) => i.id === itemId);
       if (!item) return;
-      const parsedValue = fields.find((f) => f.name === fieldName)?.field_type === 'number'
+      const rowFieldType = String(
+        item.content?.field_type
+        ?? fields.find((f) => f.name === fieldName)?.field_type
+        ?? 'text'
+      );
+      const parsedValue = rowFieldType === 'number'
         ? (value === '' ? null : Number(value))
         : value;
-      await api.editStageItem(instanceId, stageId, itemId, { ...item.content, [fieldName]: parsedValue });
-      onChanged();
+      const hasUserValue = parsedValue !== null && parsedValue !== undefined && String(parsedValue).trim() !== '';
+      const nextContent = {
+        ...item.content,
+        [fieldName]: parsedValue,
+        ...(hasUserValue ? { status: 'confirmed', source: 'user' } : {}),
+      };
+      setOptimisticContentByItemId((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...(prev[itemId] ?? {}),
+          [fieldName]: parsedValue,
+          ...(hasUserValue ? { status: 'confirmed', source: 'user' } : {}),
+        },
+      }));
+      try {
+        await api.editStageItem(instanceId, stageId, itemId, nextContent, workflowVersion);
+        onChanged();
+      } catch (error) {
+        setOptimisticContentByItemId((prev) => {
+          const next = { ...prev };
+          delete next[itemId];
+          return next;
+        });
+        throw error;
+      }
     },
-    [instanceId, stageId, items, fields, onChanged]
+    [instanceId, stageId, effectiveItems, fields, onChanged, workflowVersion]
+  );
+
+  useEffect(() => {
+    if (!proposalModelType || readOnly) return;
+
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { field_name?: string; value?: unknown; model_type?: string }
+        | undefined;
+      if (!detail?.field_name || detail.model_type !== proposalModelType || detail.value === undefined) {
+        return;
+      }
+
+      const fieldName = detail.field_name;
+      const row = effectiveItems.find((item) => {
+        const content = item.content ?? {};
+        const explicitFieldName = typeof content.field_name === 'string' ? content.field_name : '';
+        const variable = typeof content.variable === 'string' ? content.variable : '';
+        return explicitFieldName === fieldName || normalize(variable) === fieldName;
+      });
+      if (!row) return;
+
+      const incomingValue = detail.value;
+      const currentValue = row.content?.value;
+      const isSameValue = String(currentValue ?? '') === String(incomingValue ?? '');
+      const isAlreadyConfirmed = row.content?.status === 'confirmed';
+      if (isSameValue && isAlreadyConfirmed) return;
+
+      const nextContent = {
+        ...row.content,
+        value: incomingValue,
+        status: 'confirmed',
+        source: 'user',
+      };
+      setOptimisticContentByItemId((prev) => ({
+        ...prev,
+        [row.id]: {
+          ...(prev[row.id] ?? {}),
+          value: incomingValue,
+          status: 'confirmed',
+          source: 'user',
+        },
+      }));
+      try {
+        await api.editStageItem(instanceId, stageId, row.id, nextContent, workflowVersion);
+        onChanged();
+      } catch {
+        setOptimisticContentByItemId((prev) => {
+          const next = { ...prev };
+          delete next[row.id];
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('nitrogen:input-confirmed', handler);
+    return () => window.removeEventListener('nitrogen:input-confirmed', handler);
+  }, [instanceId, stageId, effectiveItems, onChanged, proposalModelType, readOnly, workflowVersion]);
+
+  const investigate = useCallback(
+    (
+      label: string,
+      status: string,
+      fieldName: string,
+      currentValue: unknown,
+      unit: string,
+    ) => {
+    const text =
+      status === 'inferred'
+        ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?`
+        : status === 'assumed'
+          ? `Can you research and propose a better value for ${label} based on available data for this project?`
+          : status === 'confirmed'
+            ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?`
+            : `Can you investigate and propose a value for ${label}?`;
+
+      window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+        detail: {
+          text,
+          label,
+          fieldName,
+          fieldContext: {
+            field_name: fieldName,
+            label,
+            current_value: typeof currentValue === 'number' ? currentValue : null,
+            unit: unit || null,
+            model_type: proposalModelType,
+            module_id: moduleId,
+            status: status || null,
+          },
+        },
+      }));
+    },
+    [moduleId, proposalModelType],
   );
 
   const handleDelete = useCallback(
     async (itemId: string) => {
       setDeleting(itemId);
       try {
-        await api.deleteStageItem(instanceId, stageId, itemId);
+        await api.deleteStageItem(instanceId, stageId, itemId, workflowVersion);
         onChanged();
       } finally {
         setDeleting(null);
       }
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, workflowVersion]
   );
 
   const handleAdd = useCallback(
     async (content: Record<string, any>) => {
-      await api.addStageItem(instanceId, stageId, content);
+      await api.addStageItem(instanceId, stageId, content, workflowVersion);
       setAdding(false);
       onChanged();
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, workflowVersion]
   );
 
   if (fields.length === 0) {
@@ -312,7 +548,7 @@ export function EditableTableStage({
     return (
       <div className="text-center py-8 text-sm text-text-tertiary">
         No rows yet.
-        {!readOnly && (
+        {!readOnly && allowAddRows && (
           <button onClick={() => setAdding(true)} className="ml-2 text-accent hover:underline">
             Add one
           </button>
@@ -334,24 +570,53 @@ export function EditableTableStage({
           )}
           <div>
             {group.rows.map((item) => (
-              <TableRow
-                key={item.id}
-                item={item}
-                fields={fields}
-                onSave={(fieldName, value) => handleSave(item.id, fieldName, value)}
-                onDelete={() => handleDelete(item.id)}
-                readOnly={readOnly || deleting === item.id}
-              />
+              (() => {
+                const rowReadOnly = readOnly || deleting === item.id;
+                const rawFieldName = typeof item.content?.field_name === 'string'
+                  ? item.content.field_name
+                  : '';
+                const variableLabel = String(item.content?.variable ?? '');
+                const fieldName = rawFieldName || variableLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                const status = String(item.content?.status ?? '');
+                const currentValue = item.content?.value;
+                const unit = String(item.content?.unit ?? '');
+
+                return (
+                  <TableRow
+                    key={item.id}
+                    item={item}
+                    fields={fields}
+                    onSave={(fieldName, value) => handleSave(item.id, fieldName, value)}
+                    onDelete={() => handleDelete(item.id)}
+                    readOnly={rowReadOnly}
+                    investigateEnabled={enableInvestigate && !rowReadOnly}
+                    onInvestigateHoverMove={(e, isInteractive) => {
+                      setOverInteractive(isInteractive);
+                      setMousePos({ x: e.clientX, y: e.clientY });
+                      setHoveredInvestigateRow({
+                        fieldName,
+                        label: variableLabel || fieldName,
+                        status,
+                      });
+                    }}
+                    onInvestigateHoverLeave={() => {
+                      setHoveredInvestigateRow(null);
+                      setOverInteractive(false);
+                    }}
+                    onInvestigate={() => investigate(variableLabel || fieldName, status, fieldName, currentValue, unit)}
+                  />
+                );
+              })()
             ))}
           </div>
         </div>
       ))}
 
-      {!readOnly && adding && (
+      {!readOnly && allowAddRows && adding && (
         <AddRowForm fields={fields} onSubmit={handleAdd} onCancel={() => setAdding(false)} />
       )}
 
-      {!readOnly && !adding && (
+      {!readOnly && allowAddRows && !adding && (
         <button
           onClick={() => setAdding(true)}
           className="flex items-center gap-1.5 w-full px-4 py-2 text-xs text-text-tertiary hover:text-text-secondary transition-colors border-t border-divider/50 hover:bg-surface-subtle/50"
@@ -360,6 +625,17 @@ export function EditableTableStage({
           Add row
         </button>
       )}
+
+      {mounted && hoveredInvestigateRow && mousePos && !overInteractive &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-gray-700 text-white text-[11px] font-medium shadow-md whitespace-nowrap"
+            style={{ left: mousePos.x + 16, top: mousePos.y - 32 }}
+          >
+            Investigate
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

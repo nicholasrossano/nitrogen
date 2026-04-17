@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, Download, Pencil,
+  Loader2, AlertCircle, CheckCircle2, Download, Pencil, ChevronDown, FileSpreadsheet,
 } from 'lucide-react';
 import type {
   StagedModuleWorkflowState, StageDef, StageState, StagedWorkflowState,
@@ -19,6 +19,30 @@ import {
   type WorkspaceWidgetFooterAction,
   type WorkspaceWidgetFooterState,
 } from '@/lib/widgetRegistry';
+
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, nested]) => `"${key}":${stableStringify(nested)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some((item) => hasMeaningfulValue(item));
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) => hasMeaningfulValue(item));
+  }
+  return true;
+}
 
 // ── Stage Stepper ─────────────────────────────────────────────────────────
 
@@ -81,19 +105,25 @@ function ConfirmationBar({
   stageState,
   onPopulate,
   onConfirm,
+  onCancelEditConfirmedStage,
   isPopulating,
   isConfirming,
   isEditingConfirmedStage,
+  hasPendingChanges,
   onStartEditConfirmedStage,
+  suppressConfirmAction,
 }: {
   stageDef: StageDef;
   stageState: StageState;
   onPopulate: () => void;
   onConfirm: () => void;
+  onCancelEditConfirmedStage: () => void;
   isPopulating: boolean;
   isConfirming: boolean;
   isEditingConfirmedStage: boolean;
+  hasPendingChanges: boolean;
   onStartEditConfirmedStage: () => void;
+  suppressConfirmAction?: boolean;
 }) {
   const status = stageState.status;
   const hasData = !!(stageState.data?.items?.length || stageState.data?.widget_data || stageState.data?.records);
@@ -124,6 +154,10 @@ function ConfirmationBar({
     const confirmedAt = stageState.confirmed_at
       ? new Date(stageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
       : null;
+    const confirmedBy = stageState.confirmed_by_email || stageState.confirmed_by || null;
+    const confirmedMeta = confirmedAt
+      ? `${confirmedAt}${confirmedBy ? ` by ${confirmedBy}` : ''}`
+      : null;
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider bg-emerald-50/60">
         <div className="flex items-center gap-2 text-xs text-emerald-700">
@@ -131,12 +165,22 @@ function ConfirmationBar({
           <span>
             {isEditingConfirmedStage
               ? 'Editing confirmed stage'
-              : `Confirmed${confirmedAt ? ` · ${confirmedAt}` : ''}`}
+              : `Confirmed${confirmedMeta ? ` • ${confirmedMeta}` : ''}`}
           </span>
         </div>
         {isEditingConfirmedStage ? (
-          <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} />
-        ) : isComputedResultsStage ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onCancelEditConfirmedStage}
+              className="btn-secondary !py-1.5 !px-3 text-xs"
+            >
+              Cancel
+            </button>
+            {!suppressConfirmAction && (
+              <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} disabled={!hasPendingChanges} />
+            )}
+          </div>
+        ) : isComputedResultsStage || suppressConfirmAction ? (
           <span className="text-xs text-emerald-700/80">Go back to earlier stages to edit values</span>
         ) : (
           <button
@@ -161,6 +205,9 @@ function ConfirmationBar({
   }
 
   if (status === 'draft' || (status === 'pending' && hasData)) {
+    if (suppressConfirmAction) {
+      return null;
+    }
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
         <p className="text-xs text-text-tertiary">Review and confirm when ready</p>
@@ -200,16 +247,29 @@ interface ModuleWorkspaceProps {
   moduleId: string;
   initiativeId?: string;
   onAddToChat?: (text: string) => void;
+  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
 }
 
-export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToChat }: ModuleWorkspaceProps) {
+export function ModuleWorkspace({
+  instanceId,
+  moduleId,
+  initiativeId,
+  onAddToChat,
+  onOpenDecisionLog,
+  onExportDecisionLog,
+}: ModuleWorkspaceProps) {
   const [state, setState] = useState<StagedModuleWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeStageId, setActiveStageId] = useState<string | null>(null);
   const [isPopulating, setIsPopulating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isApprovingFinal, setIsApprovingFinal] = useState(false);
+  const [decisionMenuOpen, setDecisionMenuOpen] = useState(false);
   const [editingConfirmedStageIds, setEditingConfirmedStageIds] = useState<Record<string, boolean>>({});
+  const [editBaselineByStageId, setEditBaselineByStageId] = useState<Record<string, string>>({});
+  const decisionMenuRef = useRef<HTMLDivElement>(null);
 
   // Refresh callback for child components (onChanged / onWorkflowUpdated).
   const fetchState = useCallback(async () => {
@@ -250,9 +310,13 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
           if (hasPopulationSteps) {
             setIsPopulating(true);
             try {
-              const result = await api.populateStage(instanceId, firstDef.id);
+              const result = await api.populateStage(instanceId, firstDef.id, data.workflow_version);
               if (cancelled) return;
-              setState((prev) => prev ? { ...prev, workflow_state: result.workflow_state } : prev);
+              setState((prev) => prev ? {
+                ...prev,
+                workflow_state: result.workflow_state,
+                workflow_version: result.workflow_version,
+              } : prev);
             } catch {
               // Silently ignore — user can click Retry in the ConfirmationBar
               if (!cancelled) await fetchState();
@@ -272,6 +336,17 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
     initialize();
     return () => { cancelled = true; };
   }, [instanceId, fetchState]);
+
+  useEffect(() => {
+    if (!decisionMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!decisionMenuRef.current?.contains(event.target as Node)) {
+        setDecisionMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [decisionMenuOpen]);
 
   // Lazy widget rendering for computed_results stages
   const widgetCache = useRef<Record<string, ComponentType<WorkspaceWidgetProps>>>({});
@@ -310,6 +385,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
             data={widgetData}
             initiativeId={initiativeId ?? ''}
             instanceId={instanceId}
+            workflowVersion={state?.workflow_version}
             onWorkflowUpdated={fetchState}
             workspaceView="output"
             isActive
@@ -319,31 +395,34 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
         </Suspense>
       );
     },
-    [fetchState, initiativeId, instanceId]
+    [fetchState, initiativeId, instanceId, state?.workflow_version]
   );
 
   const handlePopulate = useCallback(async (stageId: string) => {
     setIsPopulating(true);
     try {
-      const result = await api.populateStage(instanceId, stageId);
+      const result = await api.populateStage(instanceId, stageId, state?.workflow_version);
       setState((prev) => prev ? {
         ...prev,
         workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
       } : prev);
     } catch (e: any) {
       setError(e.message ?? 'Failed to populate stage');
+      fetchState();
     } finally {
       setIsPopulating(false);
     }
-  }, [instanceId]);
+  }, [instanceId, state?.workflow_version, fetchState]);
 
   const handleConfirm = useCallback(async (stageId: string) => {
     setIsConfirming(true);
     try {
-      const result = await api.confirmStage(instanceId, stageId);
+      const result = await api.confirmStage(instanceId, stageId, state?.workflow_version);
       setState((prev) => prev ? {
         ...prev,
         workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
       } : prev);
       // Auto-advance to next stage
       const ws = result.workflow_state as StagedWorkflowState;
@@ -353,10 +432,28 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
       setEditingConfirmedStageIds((prev) => ({ ...prev, [stageId]: false }));
     } catch (e: any) {
       setError(e.message ?? 'Failed to confirm stage');
+      fetchState();
     } finally {
       setIsConfirming(false);
     }
-  }, [instanceId]);
+  }, [instanceId, state?.workflow_version, fetchState]);
+
+  const handleApproveFinal = useCallback(async () => {
+    setIsApprovingFinal(true);
+    try {
+      const result = await api.approveFinalModuleOutput(instanceId, state?.workflow_version);
+      setState((prev) => prev ? {
+        ...prev,
+        workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
+      } : prev);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to approve final report');
+      fetchState();
+    } finally {
+      setIsApprovingFinal(false);
+    }
+  }, [instanceId, state?.workflow_version, fetchState]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -400,6 +497,12 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
 
   const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
   const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
+  const currentStageDataSignature = stableStringify(currentStageState.data ?? null);
+  const baselineSignature = editBaselineByStageId[currentStageDef.id];
+  const hasPendingConfirmedStageChanges =
+    isEditingConfirmedStage
+    && baselineSignature !== undefined
+    && baselineSignature !== currentStageDataSignature;
   const isEditableInputTableStage =
     currentStageDef.component === 'table' && currentStageDef.widget === 'editable_table';
 
@@ -409,6 +512,63 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   // All stages confirmed → show export button for modules that support it
   const allConfirmed = stageDefs.length > 0 && stageDefs.every((s) => stages[s.id]?.status === 'confirmed');
   const hasExport = !!mod.export_format;
+  const finalApproval = ws.final_approval ?? {
+    status: 'pending',
+    approved_at: null,
+    approved_by: null,
+    approved_by_email: null,
+  };
+  const requiresFinalApproval = !!mod.requires_final_approval;
+  const finalApproved = finalApproval.status === 'approved';
+  const terminalStageDef = stageDefs[stageDefs.length - 1];
+  const terminalStageId = terminalStageDef?.id ?? null;
+  const terminalStageState = terminalStageId ? stages[terminalStageId] : null;
+  const terminalStageReady = !!terminalStageState && (
+    terminalStageState.status === 'confirmed'
+    || (terminalStageState.status === 'draft' && hasMeaningfulValue(terminalStageState.data))
+  );
+  const stagesBeforeTerminalConfirmed = stageDefs.slice(0, -1).every((s) => stages[s.id]?.status === 'confirmed');
+  const canApproveFinal = hasExport
+    && requiresFinalApproval
+    && !finalApproved
+    && stageDefs.length > 0
+    && stagesBeforeTerminalConfirmed
+    && terminalStageReady;
+  const canExportModule = hasExport && (
+    requiresFinalApproval
+      ? finalApproved
+      : allConfirmed
+  );
+  const moduleTitle = mod.name ?? moduleId.replace(/_/g, ' ');
+  const decisionLogContext = {
+    instanceId,
+    moduleId,
+    title: moduleTitle,
+  };
+
+  const handleDecisionLogOpen = async () => {
+    setDecisionMenuOpen(false);
+    onOpenDecisionLog?.(decisionLogContext);
+  };
+
+  const handleDecisionLogExport = async () => {
+    setDecisionMenuOpen(false);
+    try {
+      if (onExportDecisionLog) {
+        await onExportDecisionLog(decisionLogContext);
+        return;
+      }
+      const { blob, filename } = await api.exportModuleDecisionLogXlsx(instanceId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message ?? 'Decision log export failed');
+    }
+  };
 
   const renderStageContent = () => {
     const { component, widget, fields, id: stageId } = currentStageDef;
@@ -424,11 +584,14 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
       return (
         <EditableTableStage
           instanceId={instanceId}
+          moduleId={moduleId}
           stageId={stageId}
+          workflowVersion={state.workflow_version}
           fields={fields}
           items={stageData?.items ?? []}
           readOnly={readOnly}
           flush
+          allowAddRows={currentStageDef.allow_add_rows}
           onChanged={fetchState}
         />
       );
@@ -439,6 +602,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
         <CategorizedListStage
           instanceId={instanceId}
           stageId={stageId}
+          workflowVersion={state.workflow_version}
           fields={fields}
           items={stageData?.items ?? []}
           readOnly={readOnly}
@@ -458,6 +622,7 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
         <CategorizedWorkspaceStage
           instanceId={instanceId}
           stageId={stageId}
+          workflowVersion={state.workflow_version}
           stageDef={currentStageDef}
           stageData={currentStageState.data}
           categoryItems={categoryItems}
@@ -484,10 +649,16 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   const hasComputedWidgetData = !!currentStageState.data?.widget_data;
   const shouldShowMergedConfirmAction =
     isCalculationComputedWidget
+    && !(requiresFinalApproval && currentStageDef.id === terminalStageId)
     && (currentStageState.status === 'draft'
       || (currentStageState.status === 'pending'
         && hasComputedWidgetData)
       || (currentStageState.status === 'confirmed' && isEditingConfirmedStage));
+  const requiresPendingChangesForConfirm =
+    currentStageState.status === 'confirmed' && isEditingConfirmedStage;
+  const canConfirmCurrentStage = requiresPendingChangesForConfirm
+    ? hasPendingConfirmedStageChanges
+    : true;
   const shouldShowMergedConfirmedState =
     isCalculationComputedWidget
     && currentStageState.status === 'confirmed'
@@ -495,8 +666,20 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
   const computedFooterAction: WorkspaceWidgetFooterAction | undefined = shouldShowMergedConfirmAction
     ? {
         label: 'Confirm',
-        onClick: () => handleConfirm(currentStageDef.id),
+        onClick: () => {
+          if (!canConfirmCurrentStage) {
+            setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+            setEditBaselineByStageId((prev) => {
+              const next = { ...prev };
+              delete next[currentStageDef.id];
+              return next;
+            });
+            return;
+          }
+          handleConfirm(currentStageDef.id);
+        },
         loading: isConfirming,
+        disabled: !canConfirmCurrentStage,
       }
     : undefined;
   const computedFooterState: WorkspaceWidgetFooterState | undefined =
@@ -527,15 +710,55 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
               currentStageId={activeStageId}
               onSelect={setActiveStageId}
             />
-            {allConfirmed && hasExport && (
-              <button
-                onClick={handleExport}
-                className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
-              >
-                <Download className="w-3 h-3" />
-                Export
-              </button>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {initiativeId && (
+                <div ref={decisionMenuRef} className="relative">
+                  <button
+                    onClick={() => setDecisionMenuOpen((prev) => !prev)}
+                    className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+                  >
+                    <FileSpreadsheet className="w-3 h-3" />
+                    Decision Log
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                  {decisionMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-20 min-w-[132px] rounded-lg border border-divider bg-white py-1 shadow-lg">
+                      <button
+                        onClick={handleDecisionLogOpen}
+                        className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={handleDecisionLogExport}
+                        className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                      >
+                        Export
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {canApproveFinal && (
+                <button
+                  onClick={handleApproveFinal}
+                  disabled={isApprovingFinal}
+                  className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+                >
+                  {isApprovingFinal ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                  Approve
+                </button>
+              )}
+              {allConfirmed && canExportModule && (
+                <button
+                  onClick={handleExport}
+                  className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+                >
+                  <Download className="w-3 h-3" />
+                  Export
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Active stage content */}
@@ -555,12 +778,39 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
                   stageDef={currentStageDef}
                   stageState={currentStageState}
                   onPopulate={() => handlePopulate(currentStageDef.id)}
-                  onConfirm={() => handleConfirm(currentStageDef.id)}
+                  onConfirm={() => {
+                    if (!canConfirmCurrentStage) {
+                      setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                      setEditBaselineByStageId((prev) => {
+                        const next = { ...prev };
+                        delete next[currentStageDef.id];
+                        return next;
+                      });
+                      return;
+                    }
+                    handleConfirm(currentStageDef.id);
+                  }}
+                  onCancelEditConfirmedStage={() => {
+                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                    setEditBaselineByStageId((prev) => {
+                      const next = { ...prev };
+                      delete next[currentStageDef.id];
+                      return next;
+                    });
+                  }}
                   isPopulating={isPopulating}
                   isConfirming={isConfirming}
                   isEditingConfirmedStage={isEditingConfirmedStage}
+                  hasPendingChanges={hasPendingConfirmedStageChanges}
+                  suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
                   onStartEditConfirmedStage={() =>
-                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }))
+                    {
+                      setEditBaselineByStageId((prev) => ({
+                        ...prev,
+                        [currentStageDef.id]: currentStageDataSignature,
+                      }));
+                      setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+                    }
                   }
                 />
               )}
@@ -586,12 +836,39 @@ export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToCha
                 stageDef={currentStageDef}
                 stageState={currentStageState}
                 onPopulate={() => handlePopulate(currentStageDef.id)}
-                onConfirm={() => handleConfirm(currentStageDef.id)}
+                onConfirm={() => {
+                  if (!canConfirmCurrentStage) {
+                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                    setEditBaselineByStageId((prev) => {
+                      const next = { ...prev };
+                      delete next[currentStageDef.id];
+                      return next;
+                    });
+                    return;
+                  }
+                  handleConfirm(currentStageDef.id);
+                }}
+                onCancelEditConfirmedStage={() => {
+                  setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                  setEditBaselineByStageId((prev) => {
+                    const next = { ...prev };
+                    delete next[currentStageDef.id];
+                    return next;
+                  });
+                }}
                 isPopulating={isPopulating}
                 isConfirming={isConfirming}
                 isEditingConfirmedStage={isEditingConfirmedStage}
+                hasPendingChanges={hasPendingConfirmedStageChanges}
+                suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
                 onStartEditConfirmedStage={() =>
-                  setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }))
+                  {
+                    setEditBaselineByStageId((prev) => ({
+                      ...prev,
+                      [currentStageDef.id]: currentStageDataSignature,
+                    }));
+                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+                  }
                 }
               />
             </div>
