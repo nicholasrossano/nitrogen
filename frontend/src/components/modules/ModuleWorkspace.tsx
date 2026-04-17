@@ -826,7 +826,7 @@ export function ModuleWorkspace({
             </div>
           </div>
 
-          <div className={isAssessmentMapWidget ? 'mt-7 flex min-h-0 flex-1 flex-col' : 'mt-7 max-w-3xl mx-auto w-full flex flex-col'}>
+          <div className={isAssessmentMapWidget ? 'mt-[38px] flex min-h-0 flex-1 flex-col' : 'mt-[38px] max-w-3xl mx-auto w-full flex flex-col'}>
             {/* Active stage content */}
             {isComputedStage ? (
               // Computed-results stages: no card wrapper, widget renders directly
