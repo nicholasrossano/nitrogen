@@ -24,6 +24,7 @@ from app.services import module_service
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
 from app.core.rate_limit import limiter
+from app.schemas.chat import FieldContext
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class ChatStreamRequest(BaseModel):
     history: list[ChatHistoryMessage] = Field(default=[], max_length=100)
     chat_id: Optional[str] = None
     tool_hint: Optional[str] = None
+    field_context: Optional[FieldContext] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
     initiative_id: Optional[str] = None
     compare_initiative_ids: Optional[list[str]] = None
@@ -513,6 +515,7 @@ async def chat_stream(
                             history=history,
                             on_thinking=on_thinking,
                             tool_hint=data.tool_hint or None,
+                            field_context=data.field_context.model_dump() if data.field_context else None,
                             model_inputs_context=data.model_inputs_context or None,
                             project_context=project_context,
                             on_research_step=on_research_step,

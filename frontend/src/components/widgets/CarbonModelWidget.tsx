@@ -225,8 +225,24 @@ export function CarbonModelWidget({
       status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
       status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
-  }, []);
+    const input = fieldName ? inputs[fieldName] : undefined;
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext: fieldName ? {
+          field_name: fieldName,
+          label,
+          current_value: typeof input?.value === 'number' ? input.value : null,
+          unit: input?.unit || null,
+          model_type: 'carbon',
+          status: status || null,
+        } : null,
+      },
+    }));
+  }, [inputs]);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
     const isConfirmed = currentStatus === 'confirmed';
