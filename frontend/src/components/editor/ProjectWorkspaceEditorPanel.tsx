@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
@@ -52,6 +52,12 @@ export function ProjectWorkspaceEditorPanel({
   onExportDecisionLog,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
+  useEffect(() => {
+    if (workspaceLaunchMode === 'idle') return;
+    // Persist parent-triggered launches (e.g. side drawer click) locally so the
+    // hub stays visible even after parent acknowledges the launch event.
+    setLocalWorkspaceLaunchMode(workspaceLaunchMode);
+  }, [workspaceLaunchMode]);
   const effectiveWorkspaceLaunchMode =
     localWorkspaceLaunchMode !== 'idle' ? localWorkspaceLaunchMode : workspaceLaunchMode;
   const showWorkspaceHub = effectiveWorkspaceLaunchMode !== 'idle' || !activeTabId;
