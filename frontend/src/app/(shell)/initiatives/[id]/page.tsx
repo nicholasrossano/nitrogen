@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useShallow } from 'zustand/react/shallow';
 
-import { ChatPanel, ProjectHeader } from '@/components/editor';
+import { ProjectHeader } from '@/components/editor';
 import type { EditorWidget, WorkspacePanelTab } from '@/components/editor';
 import { ProjectWorkspaceEditorPanel } from '@/components/editor/ProjectWorkspaceEditorPanel';
 import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
@@ -64,9 +64,9 @@ function InitiativePageContent() {
   const viewFromUrl = viewFromSearchParam(viewParam);
 
   const [activeView, setActiveView] = useState<InitiativeView>(viewFromUrl);
-  const [chatPanels, setChatPanels] = useState({
-    modules: { open: false },
-    framework: { open: false },
+  const [panelVisibility, setPanelVisibility] = useState({
+    modules: { workspace: true, chat: false },
+    framework: { workspace: true, chat: false },
   });
   const [researchPanelWidthPercent, setResearchPanelWidthPercent] = useState(DEFAULT_RESEARCH_PANEL_PERCENT);
   const [isResizingResearch, setIsResizingResearch] = useState(false);
@@ -91,35 +91,27 @@ function InitiativePageContent() {
 
   const {
     initiative,
-    messages,
     projectPlan,
     projectMaterials,
     driveLinkedFiles,
     loading,
-    sending,
-    generating,
     error,
   } = useInitiativeStore(useShallow((s) => ({
     initiative: s.initiative,
-    messages: s.messages,
     projectPlan: s.projectPlan,
     projectMaterials: s.projectMaterials,
     driveLinkedFiles: s.driveLinkedFiles,
     loading: s.loading,
-    sending: s.sending,
-    generating: s.generating,
     error: s.error,
   })));
 
   const loadInitiative = useInitiativeStore((s) => s.loadInitiative);
-  const loadChatHistory = useInitiativeStore((s) => s.loadChatHistory);
   const loadEvidence = useInitiativeStore((s) => s.loadEvidence);
   const loadMaterials = useInitiativeStore((s) => s.loadMaterials);
   const loadProjectPlan = useInitiativeStore((s) => s.loadProjectPlan);
   const loadDriveLinkedFiles = useInitiativeStore((s) => s.loadDriveLinkedFiles);
   const syncDriveFiles = useInitiativeStore((s) => s.syncDriveFiles);
   const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
-  const sendMessage = useInitiativeStore((s) => s.sendMessage);
   const updateTitle = useInitiativeStore((s) => s.updateTitle);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
   const deleteMaterial = useInitiativeStore((s) => s.deleteMaterial);
@@ -161,64 +153,83 @@ function InitiativePageContent() {
     [visibleWorkspaceTabs, activeWorkspaceTabId],
   );
   const showTabbedWorkspace = activeView === 'modules' || isDocumentTab(activeWorkspaceTab);
-  const modulesChatOpen = activeView === 'modules' && chatPanels.modules.open;
-  const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && chatPanels.framework.open;
+  const modulesWorkspaceOpen = activeView === 'modules' && panelVisibility.modules.workspace;
+  const modulesChatOpen = activeView === 'modules' && panelVisibility.modules.chat;
+  const frameworkWorkspaceOpen =
+    activeView === 'framework' && (!hasProjectPlan || panelVisibility.framework.workspace);
+  const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && panelVisibility.framework.chat;
+  const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen;
+  const chatOpen = modulesChatOpen || frameworkChatOpen || activeView === 'overview';
   const sideChatOpen = modulesChatOpen || frameworkChatOpen;
-  const workspaceToggleEnabled = !isViewer && (
-    activeView === 'overview' ||
-    activeView === 'framework' ||
-    activeView === 'modules'
-  );
+  const workspaceToggleEnabled = !isViewer && (activeView === 'framework' || activeView === 'modules');
   const chatToggleEnabled = activeView === 'modules' || (activeView === 'framework' && hasProjectPlan);
-  const workspaceToggleActive =
-    activeView === 'overview' ||
-    (activeView === 'framework' && !frameworkChatOpen) ||
-    (activeView === 'modules' && !modulesChatOpen);
+  const workspaceToggleActive = workspaceOpen;
+  const chatToggleActive = chatOpen;
+  const workspaceToggleLocked = workspaceToggleActive && !chatToggleActive;
+  const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
+
+  const setPanelOpen = useCallback(
+    (view: 'modules' | 'framework', panel: 'workspace' | 'chat', open: boolean) => {
+      setPanelVisibility((prev) => {
+        const current = prev[view];
+        const next = { ...current, [panel]: open };
+        if (!next.workspace && !next.chat) {
+          next[panel] = true;
+        }
+        return {
+          ...prev,
+          [view]: next,
+        };
+      });
+    },
+    [],
+  );
 
   const workspaceHeaderToggle = {
     active: workspaceToggleActive,
-    disabled: !workspaceToggleEnabled,
+    disabled: !workspaceToggleEnabled || workspaceToggleLocked,
     onClick: () => {
-      if (!workspaceToggleEnabled || workspaceToggleActive) return;
-      if (activeView === 'framework') {
-        setChatPanelOpen('framework', false);
+      if (!workspaceToggleEnabled || workspaceToggleLocked) return;
+      if (activeView === 'modules') {
+        setPanelOpen('modules', 'workspace', !panelVisibility.modules.workspace);
         return;
       }
-      if (activeView === 'modules') {
-        setChatPanelOpen('modules', false);
+      if (activeView === 'framework' && hasProjectPlan) {
+        setPanelOpen('framework', 'workspace', !panelVisibility.framework.workspace);
       }
     },
     title: !workspaceToggleEnabled
       ? 'Workspace unavailable'
-      : workspaceToggleActive
-        ? 'Workspace active'
-        : 'Show workspace',
+      : workspaceToggleLocked
+        ? 'Workspace must stay open'
+        : workspaceToggleActive
+          ? 'Hide workspace'
+          : 'Show workspace',
     icon: 'workspace' as const,
   };
 
   const chatHeaderToggle = {
-    active: activeView === 'modules' ? modulesChatOpen : frameworkChatOpen,
-    disabled: !chatToggleEnabled,
+    active: chatToggleActive,
+    disabled: !chatToggleEnabled || chatToggleLocked,
     onClick: () => {
-      if (!chatToggleEnabled) return;
+      if (!chatToggleEnabled || chatToggleLocked) return;
       if (activeView === 'modules') {
-        setChatPanelOpen('modules', !modulesChatOpen);
+        setPanelOpen('modules', 'chat', !panelVisibility.modules.chat);
         return;
       }
-      setChatPanelOpen('framework', !frameworkChatOpen);
+      if (activeView === 'framework' && hasProjectPlan) {
+        setPanelOpen('framework', 'chat', !panelVisibility.framework.chat);
+      }
     },
     title: !chatToggleEnabled
       ? 'Chat unavailable'
-      : (activeView === 'modules' ? (modulesChatOpen ? 'Hide chat' : 'Show chat') : (frameworkChatOpen ? 'Hide chat' : 'Show chat')),
+      : chatToggleLocked
+        ? 'Chat must stay open'
+        : chatToggleActive
+          ? 'Hide chat'
+          : 'Show chat',
     icon: 'chat' as const,
   };
-
-  const setChatPanelOpen = useCallback((view: 'modules' | 'framework', open: boolean) => {
-    setChatPanels((prev) => ({
-      ...prev,
-      [view]: { open },
-    }));
-  }, []);
 
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
@@ -234,9 +245,9 @@ function InitiativePageContent() {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail ?? {};
       if (detail._workspaceForwarded) return;
-      if (activeView !== 'modules' || chatPanels.modules.open) return;
+      if (activeView !== 'modules' || panelVisibility.modules.chat) return;
 
-      setChatPanelOpen('modules', true);
+      setPanelOpen('modules', 'chat', true);
       window.setTimeout(() => {
         window.dispatchEvent(
           new CustomEvent('nitrogen:draft', {
@@ -248,7 +259,7 @@ function InitiativePageContent() {
 
     window.addEventListener('nitrogen:draft', handler);
     return () => window.removeEventListener('nitrogen:draft', handler);
-  }, [activeView, chatPanels.modules.open, setChatPanelOpen]);
+  }, [activeView, panelVisibility.modules.chat, setPanelOpen]);
 
   const handleFilesViewDriveImport = useCallback(async () => {
     if (!driveConnected) {
@@ -276,10 +287,6 @@ function InitiativePageContent() {
 
   useShellNav(useCallback((item: NavItem): boolean => {
     if (item === 'home') {
-      const hasUserMessage = messages.some((message) => message.role === 'user');
-      if (!hasUserMessage && initiative) {
-        api.permanentlyDeleteInitiative(initiative.id).catch(() => {});
-      }
       router.push('/');
       return true;
     }
@@ -310,7 +317,7 @@ function InitiativePageContent() {
       return true;
     }
     return false;
-  }, [messages, initiative, router, initiativeId, loadProjectPlan, handlePlanReady, activeView]));
+  }, [router, initiativeId, loadProjectPlan, handlePlanReady, activeView]));
 
   useEffect(() => {
     if (isViewer && (activeView === 'overview' || activeView === 'modules')) {
@@ -322,9 +329,9 @@ function InitiativePageContent() {
   useEffect(() => {
     if (!initiativeId) return;
 
-    setChatPanels({
-      modules: { open: false },
-      framework: { open: false },
+    setPanelVisibility({
+      modules: { workspace: true, chat: false },
+      framework: { workspace: true, chat: false },
     });
     setWorkspaceTabs([]);
     setActiveWorkspaceTabId(null);
@@ -343,17 +350,14 @@ function InitiativePageContent() {
     reset();
     const initiativeLoad = loadInitiative(initiativeId);
     initiativeLoad.finally(() => setChromeReady(true));
-    Promise.all([
-      initiativeLoad,
-      loadChatHistory(initiativeId),
-    ]).finally(() => setPageReady(true));
+    initiativeLoad.finally(() => setPageReady(true));
 
     loadEvidence(initiativeId);
     loadMaterials(initiativeId);
     loadDriveLinkedFiles(initiativeId).then(() => {
       syncDriveFiles(initiativeId).catch(() => {});
     });
-  }, [initiativeId, reset, loadInitiative, loadChatHistory, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles]);
+  }, [initiativeId, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles]);
 
   useEffect(() => {
     if (!pageReady) return;
@@ -419,8 +423,22 @@ function InitiativePageContent() {
   }, []);
 
   const handleOpenWorkspaceModule = useCallback(
-    (module: { instanceId: string; moduleId: string; title?: string | null }) => {
+    (module: {
+      instanceId: string;
+      moduleId: string;
+      title?: string | null;
+      chatId?: string | null;
+      chatTitle?: string | null;
+    }) => {
       setWorkspaceLaunchMode('idle');
+      setPanelOpen('modules', 'workspace', true);
+      setPanelOpen('modules', 'chat', true);
+      if (module.chatId) {
+        setPendingChatToOpen({
+          chatId: module.chatId,
+          title: module.chatTitle || module.title || null,
+        });
+      }
       setActiveView('modules');
       router.replace(`/initiatives/${initiativeId}?view=modules`);
       openWorkspaceTab({
@@ -431,7 +449,7 @@ function InitiativePageContent() {
         moduleId: module.moduleId,
       });
     },
-    [initiativeId, openWorkspaceTab, router],
+    [initiativeId, openWorkspaceTab, router, setPanelOpen],
   );
 
   const openWorkspaceDocument = useCallback((citation: ResearchPanelCitation) => {
@@ -567,10 +585,6 @@ function InitiativePageContent() {
     setShowInspector(open);
   }, []);
 
-  const handleSendMessage = useCallback((content: string) => {
-    sendMessage(initiativeId, content);
-  }, [initiativeId, sendMessage]);
-
   const handleTitleUpdate = useCallback((title: string) => {
     updateTitle(initiativeId, title);
   }, [initiativeId, updateTitle]);
@@ -635,11 +649,11 @@ function InitiativePageContent() {
           onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
           showModuleActions={activeView === 'modules'}
           onSendToChat={(content, toolHint) => {
-            setChatPanelOpen('modules', true);
+            setPanelOpen('modules', 'chat', true);
             chatSendRef.current?.(content, toolHint);
           }}
           onOpenChatSession={(chat) => {
-            setChatPanelOpen('modules', true);
+            setPanelOpen('modules', 'chat', true);
             setPreferArtifactsTab(true);
             setPendingChatToOpen(chat);
           }}
@@ -670,14 +684,12 @@ function InitiativePageContent() {
     if (activeView === 'framework') {
       if (!hasProjectPlan && !isViewer) {
         return (
-          <ChatPanel
-            messages={messages}
-            sending={sending}
-            generating={generating}
+          <ProjectChatTabsPanel
             initiativeId={initiativeId}
-            onSendMessage={handleSendMessage}
-            fullWidth={true}
-            hasProjectPlan={hasProjectPlan}
+            researchMode={false}
+            onEditorWidgetsChange={handleChatEditorWidgetsChange}
+            onCitationClick={handleCitationClick}
+            onOpenWorkspaceModule={handleOpenWorkspaceModule}
           />
         );
       }
@@ -725,15 +737,19 @@ function InitiativePageContent() {
       {renderResearchPanel}
     </div>
   ) : frameworkChatOpen ? (
-    <ChatPanel
-      messages={messages}
-      sending={sending}
-      generating={generating}
-      initiativeId={initiativeId}
-      onSendMessage={handleSendMessage}
-      hasProjectPlan={hasProjectPlan}
-      readOnly={Boolean(isViewer)}
-    />
+    <div className="h-full flex overflow-hidden">
+      <div className="flex-1 min-w-0">
+        <ProjectChatTabsPanel
+          initiativeId={initiativeId}
+          researchMode={false}
+          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onCitationClick={handleCitationClick}
+          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onSendRef={chatSendRef}
+        />
+      </div>
+      {renderResearchPanel}
+    </div>
   ) : null;
 
   return (
@@ -780,9 +796,11 @@ function InitiativePageContent() {
             )
           ) : (
             <main ref={workspaceContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
-              <div className="flex-1 min-w-0 overflow-hidden">{primaryWorkspaceContent}</div>
+              {workspaceOpen && (
+                <div className="flex-1 min-w-0 overflow-hidden">{primaryWorkspaceContent}</div>
+              )}
 
-              {sideChatOpen && (
+              {workspaceOpen && sideChatOpen && (
                 <>
                   <div
                     onMouseDown={(event) => {
@@ -798,6 +816,10 @@ function InitiativePageContent() {
                     {sideChatContent}
                   </div>
                 </>
+              )}
+
+              {!workspaceOpen && sideChatOpen && (
+                <div className="flex-1 min-w-0 overflow-hidden">{sideChatContent}</div>
               )}
             </main>
           )}

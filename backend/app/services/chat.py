@@ -38,6 +38,11 @@ from app.services.tiered_retrieval import (
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+
+def _log_proposal_debug(event: str, **fields: Any) -> None:
+    serialized = " ".join(f"{key}={value!r}" for key, value in fields.items())
+    logger.info("[proposal-debug] %s %s", event, serialized)
+
 ThinkingCallback = Callable[[str], Awaitable[None]]
 ResearchStepCallback = Callable[[str, str, str], Awaitable[None]]  # (id, label, status)
 
@@ -420,6 +425,16 @@ class ChatService:
                 start_time=start,
             )
 
+        _log_proposal_debug(
+            "generate-response-start",
+            mode=self.mode.value,
+            field_name=(field_context or {}).get("field_name"),
+            has_field_context=bool(field_context),
+            has_model_inputs_context=bool(model_inputs_context),
+            tool_hint=tool_hint,
+            initiative_id=initiative_id,
+        )
+
         async def _think(text: str) -> None:
             if on_thinking:
                 await on_thinking(text)
@@ -503,6 +518,12 @@ class ChatService:
                 parsed_calls.append((forced_fn, {"reason": "user explicitly selected this tool"}))
 
         is_investigate_request = bool(field_context) or self._is_investigate_request(user_message)
+        _log_proposal_debug(
+            "investigate-detected",
+            field_name=(field_context or {}).get("field_name"),
+            is_investigate_request=is_investigate_request,
+            parsed_calls=[fn_name for fn_name, _ in parsed_calls],
+        )
 
         if is_investigate_request and not any(
             fn_name in {"search_scholarly_literature", "search_web_sources"}
@@ -640,6 +661,13 @@ class ChatService:
         # For propose requests: use the full research context to generate the answer,
         # then extract the concrete proposal from the text afterward.
         is_propose_request = widget_type == "proposed_value" or is_investigate_request
+        _log_proposal_debug(
+            "proposal-branch",
+            field_name=(field_context or {}).get("field_name"),
+            is_propose_request=is_propose_request,
+            has_model_inputs_context=bool(model_inputs_context),
+            planner_candidate=bool(planner_candidate_widget_data),
+        )
 
         if is_propose_request and model_inputs_context:
             synthesized_proposal = await self._synthesize_value_proposal(
@@ -653,6 +681,16 @@ class ChatService:
             if synthesized_proposal:
                 widget_type = "proposed_value"
                 widget_data = synthesized_proposal
+                _log_proposal_debug(
+                    "proposal-synthesized",
+                    field_name=(field_context or {}).get("field_name"),
+                    proposed_value=synthesized_proposal.get("proposed_value"),
+                )
+            else:
+                _log_proposal_debug(
+                    "proposal-synthesized-miss",
+                    field_name=(field_context or {}).get("field_name"),
+                )
 
         if widget_type == "template_proposed_value" and widget_data:
             content = await self._generate_template_investigate_answer(
@@ -693,12 +731,17 @@ class ChatService:
                 model_inputs_context=model_inputs_context,
                 hint_field_name=propose_field_name,
                 hint_model_type=propose_model_type,
-                current_value=(field_context or {}).get("current_value"),
+                current_value=self._resolve_current_value(field_context, model_inputs_context),
                 require_distinct=requires_distinct_proposal,
             )
             if proposal:
                 widget_type = "proposed_value"
                 widget_data = proposal
+                _log_proposal_debug(
+                    "proposal-extracted",
+                    field_name=(field_context or {}).get("field_name"),
+                    proposed_value=proposal.get("proposed_value"),
+                )
                 content = await self._generate_investigate_answer(
                     user_message,
                     history,
@@ -707,6 +750,12 @@ class ChatService:
                     model_inputs_context=model_inputs_context,
                     field_context=field_context,
                     proposal=widget_data,
+                )
+
+            else:
+                _log_proposal_debug(
+                    "proposal-extracted-miss",
+                    field_name=(field_context or {}).get("field_name"),
                 )
 
         await _step("analyze_sources", "Analysis complete", "done")
@@ -735,6 +784,13 @@ class ChatService:
             ).model_dump()
 
         elapsed_ms = int((time.time() - start) * 1000)
+        _log_proposal_debug(
+            "generate-response-complete",
+            field_name=(field_context or {}).get("field_name"),
+            widget_type=widget_type,
+            has_widget_data=bool(widget_data),
+            elapsed_ms=elapsed_ms,
+        )
         return ChatResponse(
             content=content,
             sources=cited_sources,
@@ -1250,7 +1306,8 @@ class ChatService:
         if any(keyword in lower for keyword in distinct_keywords):
             return True
         status = str((field_context or {}).get("status") or "").lower()
-        return status in {"assumed", "inferred"} and "propose" in lower
+        investigate_verbs = ["propose", "investigate", "research", "estimate", "suggest"]
+        return status in {"assumed", "inferred"} and any(verb in lower for verb in investigate_verbs)
 
     @staticmethod
     def _values_match(lhs: Any, rhs: Any) -> bool:
@@ -1273,6 +1330,45 @@ class ChatService:
         if field_name and proposal.get("field_name") and proposal.get("field_name") != field_name:
             return False
         return cls._values_match(proposal.get("proposed_value"), field_context.get("current_value"))
+
+    @staticmethod
+    def _normalize_proposal_unit(unit: Any) -> str:
+        if unit is None:
+            return ""
+        normalized = str(unit).strip()
+        if normalized.lower() in {"unitless", "none", "n/a", "na", "null", "no unit"}:
+            return ""
+        return normalized
+
+    @staticmethod
+    def _resolve_current_value(
+        field_context: dict[str, Any] | None,
+        model_inputs_context: str | None = None,
+    ) -> float | None:
+        current_value = (field_context or {}).get("current_value")
+        if current_value is not None:
+            try:
+                return float(current_value)
+            except (TypeError, ValueError):
+                pass
+
+        field_name = (field_context or {}).get("field_name")
+        if not field_name or not model_inputs_context:
+            return None
+
+        pattern = re.compile(
+            r"- .+? \(field_name=" + re.escape(field_name) + r"\): ([^\[]*)\[",
+        )
+        for match in reversed(list(pattern.finditer(model_inputs_context))):
+            raw_value = match.group(1).strip()
+            numeric_match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", raw_value)
+            if not numeric_match:
+                continue
+            try:
+                return float(numeric_match.group(0))
+            except ValueError:
+                continue
+        return None
 
     @staticmethod
     def _format_active_field_context(field_context: dict[str, Any] | None) -> str:
@@ -1331,8 +1427,8 @@ class ChatService:
         planner_candidate: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Produce one authoritative proposal used by both text and widget."""
-        unit = (field_context or {}).get("unit") or ""
-        current_value = (field_context or {}).get("current_value")
+        unit = self._normalize_proposal_unit((field_context or {}).get("unit"))
+        current_value = self._resolve_current_value(field_context, model_inputs_context)
         distinct_required = self._requires_distinct_proposal(user_message, field_context)
         evidence_block = self._format_fact_blocks(facts)
         planner_block = f"\n\n## Planner Candidate\n{planner_candidate}" if planner_candidate else ""
@@ -1353,10 +1449,11 @@ class ChatService:
             f"{planner_block}\n\n"
             "Return exactly one proposed value for the active field.\n"
             "RULES:\n"
-            f"- Use the same unit as the field's current unit: {unit or 'unitless'}.\n"
+            f"- Use the same unit as the field's current unit: {unit or '(leave unit empty)'}.\n"
             "- If evidence is expressed in different units, convert it before returning the numeric value.\n"
             "- Prefer evidence that matches the project's geography, technology, and financing context.\n"
-            "- If no such evidence exists and you use a proxy from another geography or market, choose the best available proxy but reflect that limitation in the explanation.\n"
+            "- If direct local evidence is weak, still choose the best available proxy and name that proxy explicitly in the explanation.\n"
+            "- Never justify the proposal only by saying evidence is limited or by merely retaining the current assumption.\n"
             "- Prefer values directly supported by evidence or a conservative interpolation from a cited range.\n"
             f"{distinct_instruction}"
             "- The explanation must be 1-2 concise sentences and mention the strongest evidence basis.\n"
@@ -1418,13 +1515,19 @@ class ChatService:
             if result.get("proposed_value") is None or not result.get("field_name"):
                 return planner_candidate
             result = self._enrich_proposal_from_context(result, model_inputs_context)
+            result["unit"] = self._normalize_proposal_unit(result.get("unit"))
             if distinct_required and self._values_match(result.get("proposed_value"), current_value):
                 return None
             return result
         except Exception as e:
             logger.warning(f"Value synthesis failed: {e}")
+            if planner_candidate:
+                planner_candidate = {
+                    **planner_candidate,
+                    "unit": self._normalize_proposal_unit(planner_candidate.get("unit")),
+                }
             if planner_candidate and not (
-                distinct_required and self._proposal_matches_current(planner_candidate, field_context)
+                distinct_required and self._values_match(planner_candidate.get("proposed_value"), current_value)
             ):
                 return planner_candidate
             return None
@@ -1526,6 +1629,7 @@ class ChatService:
                 # Ensure label and unit are populated from the model inputs context
                 if not result.get("label") or not result.get("unit"):
                     result = self._enrich_proposal_from_context(result, model_inputs_context)
+                result["unit"] = self._normalize_proposal_unit(result.get("unit"))
                 return result
             return None
         except Exception as e:
@@ -1580,7 +1684,7 @@ class ChatService:
             investigate_hint_block = f"## Module Investigate Hint\n{investigate_hint}\n\n"
 
         distinct_instruction = ""
-        current_value = (field_context or {}).get("current_value")
+        current_value = self._resolve_current_value(field_context, model_inputs_context)
         if self._requires_distinct_proposal(user_message, field_context) and current_value is not None:
             distinct_instruction = (
                 f"- The current value is {current_value}. Propose a different value, not the same number.\n"
@@ -1606,7 +1710,8 @@ class ChatService:
             "- NEVER use parenthetical source references like '(KPMG, 2025)' or bare publisher mentions. Use only bracketed citation tags such as [Web: Source Title] or [Scholarly: Source Title].\n"
             "- Keep the prose aligned with the final proposal; do not mention a conflicting number anywhere in the answer.\n"
             "- Prefer evidence tailored to the project's geography and technology. If you rely on a proxy from another market, say that explicitly in one short clause.\n"
-            "- If evidence is weak, still give your best estimate and mention uncertainty in a short clause.\n"
+            "- If evidence is weak, still give your best estimate, identify the strongest proxy basis explicitly, and mention uncertainty in a short clause.\n"
+            "- Do not say only that evidence is limited or that you are retaining the current assumption; explain the best proxy you used.\n"
             f"{distinct_instruction}"
             f"{proposal_instruction}"
             + evidence_block
@@ -2258,6 +2363,12 @@ class ChatService:
                 "module_id": params.get("module_id"),
                 "status": params.get("status"),
             }
+            _log_proposal_debug(
+                "execute-project-action",
+                action=action,
+                field_name=active_field_context.get("field_name"),
+                has_model_inputs_context=bool(model_inputs_context),
+            )
 
             try:
                 research_result = await self.generate_response(
@@ -2273,6 +2384,12 @@ class ChatService:
                 if research_result.widget_type == "proposed_value":
                     widget_type = research_result.widget_type
                     widget_data = research_result.widget_data
+                    _log_proposal_debug(
+                        "execute-project-action-widget",
+                        field_name=active_field_context.get("field_name"),
+                        source="generate_response",
+                        proposed_value=(widget_data or {}).get("proposed_value") if widget_data else None,
+                    )
                 else:
                     hint_field = params.get("field_name")
                     hint_model = params.get("model_type", "lcoe")
@@ -2283,7 +2400,7 @@ class ChatService:
                             model_inputs_context=model_inputs_context,
                             hint_field_name=hint_field,
                             hint_model_type=hint_model,
-                            current_value=active_field_context.get("current_value"),
+                            current_value=self._resolve_current_value(active_field_context, model_inputs_context),
                             require_distinct=self._requires_distinct_proposal(
                                 user_message,
                                 active_field_context,
@@ -2292,6 +2409,12 @@ class ChatService:
                         if proposal:
                             widget_type = "proposed_value"
                             widget_data = proposal
+                            _log_proposal_debug(
+                                "execute-project-action-widget",
+                                field_name=active_field_context.get("field_name"),
+                                source="extract_value_proposal",
+                                proposed_value=proposal.get("proposed_value"),
+                            )
             except Exception as e:
                 logger.error(f"propose_input_value action failed: {e}", exc_info=True)
                 assistant_response = params.get("message", "I wasn't able to research this value right now.")

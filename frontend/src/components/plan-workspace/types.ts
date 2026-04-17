@@ -83,16 +83,28 @@ export interface PlanWorkspaceInspectorLinkSource {
 
 export interface PlanWorkspaceInspectorResult {
   summary: string[];
+  summaryTitle?: string;
   requirements: Array<{
     title: string;
     description: string;
   }>;
+  requirementsTitle?: string;
   dependencies: Array<{
     condition: string;
     effect: string;
   }>;
+  dependenciesTitle?: string;
+  detailFields?: Array<{
+    label: string;
+    value: string;
+  }>;
+  detailFieldsTitle?: string;
   documentSources: PlanWorkspaceInspectorDocumentSource[];
+  documentSourcesTitle?: string;
   linkSources: PlanWorkspaceInspectorLinkSource[];
+  linkSourcesTitle?: string;
+  loadingLabel?: string;
+  emptySourcesMessage?: string;
   latencyMs: number;
 }
 

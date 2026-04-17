@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import type { FieldContext } from '@/lib/api';
 import { ArrowUp, X, Paperclip } from 'lucide-react';
+import { debugChatFlow } from '@/lib/chatDebug';
 
 interface ChatInputProps {
   initiativeId?: string;
   disabled?: boolean;
   stage?: string;
   placeholder?: string;
-  onSend?: (content: string, fieldContext?: FieldContext | null) => void;
+  onSend?: (content: string, fieldContext?: FieldContext | null, modelInputsContext?: string | null) => void;
 }
 
 export function ChatInput({ 
@@ -23,6 +24,7 @@ export function ChatInput({
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
   const [draftFieldContext, setDraftFieldContext] = useState<FieldContext | null>(null);
+  const [draftModelInputsContext, setDraftModelInputsContext] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +36,7 @@ export function ChatInput({
         text?: string;
         label?: string | null;
         fieldContext?: FieldContext | null;
+        modelInputsContext?: string | null;
       } | null;
       const text = detail?.text;
       const label = detail?.label ?? null;
@@ -41,6 +44,14 @@ export function ChatInput({
         setInput(text);
         setDraftTag(label);
         setDraftFieldContext(detail?.fieldContext ?? null);
+        setDraftModelInputsContext(detail?.modelInputsContext ?? null);
+        debugChatFlow('draft-received', {
+          surface: 'chat-input',
+          field_name: detail?.fieldContext?.field_name ?? null,
+          model_type: detail?.fieldContext?.model_type ?? null,
+          has_field_context: Boolean(detail?.fieldContext),
+          has_model_inputs_context: Boolean(detail?.modelInputsContext),
+        });
         setTimeout(() => textareaRef.current?.focus(), 0);
       }
     };
@@ -77,11 +88,19 @@ export function ChatInput({
     setInput('');
     setDraftTag(null);
     setDraftFieldContext(null);
+    setDraftModelInputsContext(null);
     setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
     
     if (onSend) {
-      onSend(message, draftFieldContext);
+      debugChatFlow('composer-send', {
+        surface: 'chat-input',
+        field_name: draftFieldContext?.field_name ?? null,
+        model_type: draftFieldContext?.model_type ?? null,
+        has_field_context: Boolean(draftFieldContext),
+        has_model_inputs_context: Boolean(draftModelInputsContext),
+      });
+      onSend(message, draftFieldContext, draftModelInputsContext);
     } else if (initiativeId) {
       await sendMessage(initiativeId, message, undefined, draftFieldContext);
     }

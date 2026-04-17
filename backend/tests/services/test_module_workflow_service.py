@@ -87,13 +87,13 @@ def test_initial_workflow_state_for_calculator_module():
 
 
 def test_initial_workflow_state_for_assessment_module():
-    """Stakeholder assessment starts with three stages, all pending."""
+    """Stakeholder assessment starts with map-first stages, all pending."""
     module = StakeholderAssessmentModule()
     state = _build_initial_workflow_state(module)
 
     assert state["module_type"] == "stakeholder_assessment"
     assert state["current_stage_id"] == "categories"
-    assert {"categories", "stakeholders", "details"}.issubset(set(state["stages"].keys()))
+    assert {"categories", "stakeholders", "map"}.issubset(set(state["stages"].keys()))
     assert all(s["status"] == "pending" for s in state["stages"].values())
 
 
@@ -127,7 +127,7 @@ async def test_build_workflow_state_fresh_instance_assessment():
 
     assert state["module_type"] == "stakeholder_assessment"
     assert state["current_stage_id"] == "categories"
-    assert {"categories", "stakeholders", "details"}.issubset(set(state["stages"].keys()))
+    assert {"categories", "stakeholders", "map"}.issubset(set(state["stages"].keys()))
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ def test_infer_current_stage_id_returns_first_unconfirmed():
     stages = {
         "categories": {"status": "confirmed"},
         "stakeholders": {"status": "draft"},
-        "details": {"status": "pending"},
+        "map": {"status": "pending"},
     }
     result = _infer_current_stage_id(module, stages)
     assert result == "stakeholders"
@@ -224,14 +224,14 @@ def test_get_downstream_stage_ids_for_calculator():
 
 
 def test_get_downstream_stage_ids_for_assessment():
-    """Stakeholder: stakeholders depends on categories; details depends on stakeholders."""
+    """Stakeholder: stakeholders depends on categories; map depends on stakeholders."""
     module = StakeholderAssessmentModule()
 
     from_categories = _get_downstream_stage_ids(module, "categories")
     assert "stakeholders" in from_categories
 
     from_stakeholders = _get_downstream_stage_ids(module, "stakeholders")
-    assert "details" in from_stakeholders
+    assert "map" in from_stakeholders
 
 
 # ---------------------------------------------------------------------------

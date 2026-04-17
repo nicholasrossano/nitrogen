@@ -1,3 +1,5 @@
+import { debugChatFlow } from '@/lib/chatDebug';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Get the current user's ID token for API requests.
@@ -1286,6 +1288,12 @@ export const api = {
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
+  enrichStakeholderFromMap: (instanceId: string, itemId: string, workflowVersion?: number) =>
+    fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stakeholders/${itemId}/enrich`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
   updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>, workflowVersion?: number) =>
     fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
@@ -1553,6 +1561,16 @@ export const api = {
     if (devMode) {
       headers['X-Billing-Test'] = 'true';
     }
+
+    debugChatFlow('api-send-chat-stream', {
+      route: '/api/v1/chat/stream',
+      has_field_context: Boolean(fieldContext),
+      field_name: fieldContext?.field_name ?? null,
+      model_type: fieldContext?.model_type ?? null,
+      has_model_inputs_context: Boolean(modelInputsContext),
+      initiative_id: initiativeId ?? null,
+      compare_mode: Boolean(compareInitiativeIds?.length),
+    });
 
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
       method: 'POST',

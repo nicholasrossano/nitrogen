@@ -103,7 +103,7 @@ export function PlanInspectorPanel({
         {loading && (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <PageLoader label="" />
-            <p className="text-sm text-text-secondary">Researching requirements...</p>
+            <p className="text-sm text-text-secondary">{result?.loadingLabel ?? 'Researching requirements...'}</p>
           </div>
         )}
 
@@ -122,7 +122,7 @@ export function PlanInspectorPanel({
             {result.summary.length > 0 && (
               <section>
                 <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  What this is
+                  {result.summaryTitle ?? 'What this is'}
                 </h3>
                 <p className="text-sm text-text-secondary leading-snug">
                   <InlineBold text={result.summary.join(' ')} />
@@ -130,10 +130,28 @@ export function PlanInspectorPanel({
               </section>
             )}
 
+            {result.detailFields && result.detailFields.length > 0 && (
+              <section>
+                <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
+                  {result.detailFieldsTitle ?? 'Details'}
+                </h3>
+                <div className="space-y-2">
+                  {result.detailFields.map((field, idx) => (
+                    <div key={`${field.label}-${idx}`} className="rounded border border-stroke-subtle bg-surface px-3 py-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+                        {field.label}
+                      </p>
+                      <p className="mt-1 text-sm leading-snug text-text-secondary">{field.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {result.requirements.length > 0 && (
               <section>
                 <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  Requirements
+                  {result.requirementsTitle ?? 'Requirements'}
                 </h3>
                 <div className="space-y-2">
                   {result.requirements.map((requirement, idx) => (
@@ -158,7 +176,7 @@ export function PlanInspectorPanel({
             {result.dependencies.length > 0 && (
               <section>
                 <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  Dependencies
+                  {result.dependenciesTitle ?? 'Dependencies'}
                 </h3>
                 <div className="space-y-2">
                   {result.dependencies.map((dependency, idx) => {
@@ -177,7 +195,7 @@ export function PlanInspectorPanel({
             {result.documentSources.length > 0 && (
               <section>
                 <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  Project documents
+                  {result.documentSourcesTitle ?? 'Project documents'}
                 </h3>
                 <div className="space-y-2">
                   {result.documentSources.map((source, idx) => {
@@ -202,7 +220,7 @@ export function PlanInspectorPanel({
             {result.linkSources.length > 0 && (
               <section>
                 <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  Sources
+                  {result.linkSourcesTitle ?? 'Sources'}
                 </h3>
                 <div className="space-y-1.5">
                   {result.linkSources.map((source, idx) => (
@@ -232,8 +250,8 @@ export function PlanInspectorPanel({
 
             {result.documentSources.length === 0 && result.linkSources.length === 0 && (
               <p className="text-xs text-text-tertiary italic">
-                The provided information was derived from generally available information.
-                Validate requirements against official sources.
+                {result.emptySourcesMessage
+                  ?? 'The provided information was derived from generally available information. Validate requirements against official sources.'}
               </p>
             )}
           </div>
