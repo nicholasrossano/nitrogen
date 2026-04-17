@@ -293,6 +293,7 @@ Most data surfaces and workspace elements use no border radius (0px) for a preci
 | Interactive pill tags (selection, toggle) | 4–6px | `rounded` |
 | Ghost row hovers (history items, nav rows) | 8–12px | `rounded-lg` / `rounded-xl` |
 | Primary / secondary buttons (`btn-primary`, `btn-secondary`) | 20px | `rounded-[20px]` |
+| Module workspace header actions (beside stage stepper: Decision log, Approve, Export) | 6px | `!rounded-md` — intentional override so they sit in the same visual tier as the stage toggle group |
 | Search inputs | 20px | `rounded-[20px]` |
 | Chat composer textarea | 28px | `rounded-[28px]` |
 | Message bubbles (user) | 16px | `rounded-2xl` |
@@ -458,6 +459,28 @@ Use only for irreversible destructive actions: Delete, Remove, Revoke.
 - **Disabled hover**: always add `:disabled:hover::before { opacity: 0 }` suppression — already included in the global classes.
 - Size overrides use Tailwind `!important` modifiers: `!px-4 !py-1.5` to make a smaller button, `!px-6 !py-3` for a larger one.
 - `w-full` makes any button full-width inside its container.
+
+### Module workspace header (aligned with stage toggle)
+Actions in the module workspace top bar that sit **next to the stage stepper** (Decision log, Approve, module Export, and the same pattern elsewhere) must match the **stage segment** typography, not the default global button size:
+
+- Stage segments use `text-xs font-medium` and `gap-1.5` between icon and label (`ModuleWorkspace` stage stepper).
+- `btn-primary` / `btn-secondary` default to `text-sm` and `gap-2` in `globals.css` — always override in this row with **`!text-xs !font-medium !gap-1.5`** so label text reads the same size and weight as the toggle.
+- Keep the compact control tier with **`!py-1.5 !px-3 !rounded-md`** alongside the stepper (see **F) Shape** — module workspace header row in the radius table).
+
+```tsx
+<button
+  type="button"
+  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+>
+  …
+</button>
+<button
+  type="button"
+  className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+>
+  …
+</button>
+```
 
 ---
 
