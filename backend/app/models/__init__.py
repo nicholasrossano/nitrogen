@@ -11,6 +11,7 @@ from app.models.project_share import ProjectShare
 from app.models.google_drive import UserGoogleConnection, DriveLinkedFile
 from app.models.subscription import Subscription, UsageRecord, UserApiKey
 from app.models.module_instance import ModuleInstance
+from app.models.decision_event import DecisionEvent
 
 __all__ = [
     "Initiative",
@@ -33,4 +34,5 @@ __all__ = [
     "UsageRecord",
     "UserApiKey",
     "ModuleInstance",
+    "DecisionEvent",
 ]

@@ -168,6 +168,7 @@ function RecordPanel({ item, record, fields, readOnly, onClose, onEnrich, onSave
 interface Props {
   instanceId: string;
   stageId: string;
+  workflowVersion?: number;
   stageDef: StageDef;
   stageData: StageState['data'];
   /** Items from the prior list stage (used as category groupings) */
@@ -180,6 +181,7 @@ interface Props {
 export function CategorizedWorkspaceStage({
   instanceId,
   stageId,
+  workflowVersion,
   stageDef,
   stageData,
   categoryItems,
@@ -191,8 +193,8 @@ export function CategorizedWorkspaceStage({
   const [expandedByGroup, setExpandedByGroup] = useState<Record<string, boolean>>({});
 
   const isRecord = stageDef.component === 'record';
-  const items: BuildItem[] = stageData?.items ?? [];
-  const records: Record<string, Record<string, any>> = stageData?.records ?? {};
+  const items: BuildItem[] = useMemo(() => stageData?.items ?? [], [stageData?.items]);
+  const records: Record<string, Record<string, any>> = useMemo(() => stageData?.records ?? {}, [stageData?.records]);
   const fields: FieldDef[] = stageDef.fields ?? [];
   const categoryLabelById = useMemo(() => {
     return Object.fromEntries(
@@ -214,9 +216,9 @@ export function CategorizedWorkspaceStage({
           const planItems: PlanWorkspaceItem[] = groupBuildItems.map((item) => ({
             id: item.id,
             title: String(item.content.name ?? item.content.title ?? item.content.label ?? 'Item'),
-            kind: 'assessment',
-            classification: 'required',
-            status: 'not_started',
+            kind: 'assessment' as const,
+            classification: 'required' as const,
+            status: 'not_started' as const,
             groupId: cat.id,
             groupName: catLabel,
             userAdded: item.provenance?.derivation === 'provided',
@@ -240,9 +242,9 @@ export function CategorizedWorkspaceStage({
               items: items.map((item) => ({
                 id: item.id,
                 title: String(item.content.name ?? item.content.title ?? item.content.label ?? 'Item'),
-                kind: 'assessment',
-                classification: 'required',
-                status: 'not_started',
+                kind: 'assessment' as const,
+                classification: 'required' as const,
+                status: 'not_started' as const,
                 groupId: '__all__',
                 groupName: 'All',
                 userAdded: item.provenance?.derivation === 'provided',
@@ -268,19 +270,19 @@ export function CategorizedWorkspaceStage({
   const handleAdd = useCallback(
     async (groupId: string, title: string) => {
       const categoryLabel = categoryLabelById[groupId] ?? 'Uncategorized';
-      await api.addStageItem(instanceId, stageId, { name: title, category: categoryLabel });
+      await api.addStageItem(instanceId, stageId, { name: title, category: categoryLabel }, workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, onChanged, categoryLabelById]
+    [instanceId, stageId, onChanged, categoryLabelById, workflowVersion]
   );
 
   const handleDelete = useCallback(
     async (itemId: string) => {
       if (selectedItem?.id === itemId) setSelectedItem(null);
-      await api.deleteStageItem(instanceId, stageId, itemId);
+      await api.deleteStageItem(instanceId, stageId, itemId, workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, onChanged, selectedItem]
+    [instanceId, stageId, onChanged, selectedItem, workflowVersion]
   );
 
   const handleReorderWithinGroup = useCallback(
@@ -294,26 +296,26 @@ export function CategorizedWorkspaceStage({
         idx += 1;
         return nextId;
       });
-      await api.reorderStageItems(instanceId, stageId, reorderedAll);
+      await api.reorderStageItems(instanceId, stageId, reorderedAll, workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, items, onChanged]
+    [instanceId, stageId, items, onChanged, workflowVersion]
   );
 
   const handleEnrich = useCallback(
     async (itemId: string) => {
-      await api.enrichRecord(instanceId, stageId, itemId);
+      await api.enrichRecord(instanceId, stageId, itemId, workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, workflowVersion]
   );
 
   const handleSaveField = useCallback(
     async (itemId: string, fieldName: string, value: string) => {
-      await api.updateRecord(instanceId, stageId, itemId, { [fieldName]: value });
+      await api.updateRecord(instanceId, stageId, itemId, { [fieldName]: value }, workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, onChanged]
+    [instanceId, stageId, onChanged, workflowVersion]
   );
 
   const panelOpen = !!selectedItem && isRecord;
