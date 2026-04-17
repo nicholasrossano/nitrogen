@@ -161,6 +161,7 @@ function InitiativePageContent() {
   const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen;
   const chatOpen = modulesChatOpen || frameworkChatOpen || activeView === 'overview';
   const sideChatOpen = modulesChatOpen || frameworkChatOpen;
+  const showPrimaryPanel = activeView === 'overview' || activeView === 'files' || workspaceOpen;
   const workspaceToggleEnabled = !isViewer && (activeView === 'framework' || activeView === 'modules');
   const chatToggleEnabled = activeView === 'modules' || (activeView === 'framework' && hasProjectPlan);
   const workspaceToggleActive = workspaceOpen;
@@ -299,6 +300,12 @@ function InitiativePageContent() {
       return true;
     }
     if (item === 'workspace') {
+      setPanelOpen('modules', 'workspace', true);
+      if (activeView === 'modules') {
+        // In modules view, drawer click should always show the module hub.
+        setWorkspaceLaunchMode('open');
+        setActiveWorkspaceTabId(null);
+      }
       setActiveView('modules');
       router.replace(`/initiatives/${initiativeId}?view=modules`);
       return true;
@@ -317,7 +324,7 @@ function InitiativePageContent() {
       return true;
     }
     return false;
-  }, [router, initiativeId, loadProjectPlan, handlePlanReady, activeView]));
+  }, [router, initiativeId, loadProjectPlan, handlePlanReady, activeView, setPanelOpen]));
 
   useEffect(() => {
     if (isViewer && (activeView === 'overview' || activeView === 'modules')) {
@@ -796,11 +803,11 @@ function InitiativePageContent() {
             )
           ) : (
             <main ref={workspaceContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
-              {workspaceOpen && (
+              {showPrimaryPanel && (
                 <div className="flex-1 min-w-0 overflow-hidden">{primaryWorkspaceContent}</div>
               )}
 
-              {workspaceOpen && sideChatOpen && (
+              {showPrimaryPanel && sideChatOpen && (
                 <>
                   <div
                     onMouseDown={(event) => {
@@ -818,7 +825,7 @@ function InitiativePageContent() {
                 </>
               )}
 
-              {!workspaceOpen && sideChatOpen && (
+              {!showPrimaryPanel && sideChatOpen && (
                 <div className="flex-1 min-w-0 overflow-hidden">{sideChatContent}</div>
               )}
             </main>
