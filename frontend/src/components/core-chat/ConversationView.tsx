@@ -46,6 +46,8 @@ export interface ConversationViewProps {
   onCitationClick?: (citation: SourceCitation) => void;
   /** Extra action buttons rendered in the composer toolbar (before paperclip) */
   extraInputActions?: React.ReactNode;
+  /** Attached tray rendered above and visually connected to the composer */
+  topComposerContent?: React.ReactNode;
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
 }
@@ -91,6 +93,7 @@ export function ConversationView({
   initiativeId,
   onCitationClick,
   extraInputActions,
+  topComposerContent,
   inputChips,
 }: ConversationViewProps) {
 
@@ -295,6 +298,11 @@ export function ConversationView({
       <div className="flex-shrink-0 relative">
         <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
         <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
+        {topComposerContent ? (
+          <div className="relative z-10 mx-3 mb-[-1px]">
+            {topComposerContent}
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} className="relative">
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
