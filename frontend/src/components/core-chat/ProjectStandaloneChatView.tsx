@@ -51,6 +51,8 @@ interface ProjectStandaloneChatViewProps {
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Shared session history (project + user scoped) */
   sessions?: ChatSummary[];
+  /** Active module context from the workspace panel */
+  activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
   /** Delete a chat from shared history */
   onDeleteChat?: (chatId: string) => void;
   /** Ask parent to refresh shared chat history */
@@ -91,6 +93,7 @@ export function ProjectStandaloneChatView({
   onOpenWorkspaceModule,
   onSendRef,
   sessions = [],
+  activeModuleContext = null,
   onDeleteChat,
   onChatListDirty,
 }: ProjectStandaloneChatViewProps) {
@@ -114,6 +117,8 @@ export function ProjectStandaloneChatView({
   const [overviewGenerating, setOverviewGenerating] = useState(false);
   const lastReportedMetaRef = useRef<{ chatId: string | null; title: string | null } | null>(null);
   const autoOverviewAttemptRef = useRef<string | null>(null);
+  const associatedModuleKeysRef = useRef<Set<string>>(new Set());
+  const lastLoadedChatIdRef = useRef<string | null>(null);
 
   const initiative = useInitiativeStore((s) => s.initiative);
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
@@ -126,33 +131,39 @@ export function ProjectStandaloneChatView({
     }
   }, [initialTitle, sessionTitle]);
 
-  useEffect(() => {
-    if (!initialChatId) return;
-    if (currentChatId === initialChatId || localMessages.length > 0) return;
-
-    let cancelled = false;
-    api.getChatMessages(initialChatId)
-      .then(({ messages, title }) => {
-        if (cancelled) return;
+  const loadChat = useCallback(
+    async (chatId: string, fallbackTitle?: string | null) => {
+      try {
+        const { messages, title } = await api.getChatMessages(chatId);
         setLocalMessages(messages);
-        setSessionTitle(title || initialTitle || 'Untitled');
-        setCurrentChatId(initialChatId);
+        setSessionTitle(title || fallbackTitle || 'Untitled');
+        setCurrentChatId(chatId);
         setFeedbackMap(
           Object.fromEntries(
             messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
           ) as Record<string, 'like' | 'dislike' | null>,
         );
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          console.error('Failed to load initial session messages:', err);
-        }
-      });
+        setThinkingLines([]);
+        setStreamingContent('');
+        setResearchSteps([]);
+        setError(null);
+        lastLoadedChatIdRef.current = chatId;
+        onMessageSent?.();
+      } catch (err) {
+        console.error('Failed to load chat messages:', err);
+        setError('Failed to load chat history.');
+      }
+    },
+    [onMessageSent],
+  );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [initialChatId, initialTitle, currentChatId, localMessages.length]);
+  useEffect(() => {
+    if (!initialChatId) return;
+    if (lastLoadedChatIdRef.current === initialChatId && currentChatId === initialChatId) {
+      return;
+    }
+    void loadChat(initialChatId, initialTitle);
+  }, [currentChatId, initialChatId, initialTitle, loadChat]);
 
   useEffect(() => {
     const nextMeta = {
@@ -183,6 +194,7 @@ export function ProjectStandaloneChatView({
       setChatModules([]);
       setFeedbackMap({});
       setCompareProject(null);
+      lastLoadedChatIdRef.current = null;
     }
     prevShowLanding.current = showLanding;
   }, [showLanding, localMessages, onChatListDirty]);
@@ -213,6 +225,20 @@ export function ProjectStandaloneChatView({
     }
     void refreshChatModules(currentChatId);
   }, [currentChatId, refreshChatModules]);
+
+  useEffect(() => {
+    if (!currentChatId || !activeModuleContext?.instanceId) return;
+    const associationKey = `${currentChatId}:${activeModuleContext.instanceId}`;
+    if (associatedModuleKeysRef.current.has(associationKey)) return;
+    associatedModuleKeysRef.current.add(associationKey);
+
+    api.associateChatModule(currentChatId, activeModuleContext.instanceId)
+      .then(() => refreshChatModules(currentChatId))
+      .catch((err: unknown) => {
+        associatedModuleKeysRef.current.delete(associationKey);
+        console.warn('Failed to associate active module with chat:', err);
+      });
+  }, [activeModuleContext, currentChatId, refreshChatModules]);
 
   useEffect(() => {
     if (!currentChatId) return;
@@ -450,22 +476,9 @@ export function ProjectStandaloneChatView({
 
   const handleLoadSession = useCallback(
     async (session: ChatSummary) => {
-      try {
-        const { messages, title } = await api.getChatMessages(session.id);
-        setLocalMessages(messages);
-        setSessionTitle(title || session.title);
-        setCurrentChatId(session.id);
-        setFeedbackMap(
-          Object.fromEntries(
-            messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
-          ) as Record<string, 'like' | 'dislike' | null>,
-        );
-        onMessageSent?.();
-      } catch (err) {
-        console.error('Failed to load session messages:', err);
-      }
+      await loadChat(session.id, session.title);
     },
-    [onMessageSent],
+    [loadChat],
   );
 
   // Expose handleSend to parent via ref so ModuleLandingPage can trigger a send
@@ -479,11 +492,24 @@ export function ProjectStandaloneChatView({
   const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
 
   const moduleChips = useMemo(() => {
-    if (chatModules.length === 0) return null;
+    const mergedModules = [...chatModules];
+    if (
+      activeModuleContext?.instanceId &&
+      !mergedModules.some((module) => module.instance_id === activeModuleContext.instanceId)
+    ) {
+      mergedModules.push({
+        instance_id: activeModuleContext.instanceId,
+        module_id: activeModuleContext.moduleId,
+        title: activeModuleContext.title ?? null,
+        status: 'started',
+        started_at: null,
+      });
+    }
+    if (mergedModules.length === 0) return null;
 
     return (
       <div className="flex flex-wrap gap-1.5">
-        {chatModules.map((module) => {
+        {mergedModules.map((module) => {
           const moduleOption = ALL_MODULES.find((candidate) => candidate.id === module.module_id);
           if (!moduleOption) return null;
 
@@ -506,7 +532,7 @@ export function ProjectStandaloneChatView({
         })}
       </div>
     );
-  }, [chatModules, onOpenWorkspaceModule]);
+  }, [activeModuleContext, chatModules, onOpenWorkspaceModule]);
 
   const inputChips = useMemo(() => {
     if (!compareProject && !moduleChips) return undefined;
