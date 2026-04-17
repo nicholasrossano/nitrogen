@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, SourceCitation } from '@/lib/api';
+import { api, FieldContext, SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
 
 
@@ -44,7 +44,7 @@ interface ChatState {
   /** DB chat UUID — persisted across messages in the same conversation */
   currentChatId: string | null;
 
-  sendMessage: (content: string, toolHint?: string) => Promise<void>;
+  sendMessage: (content: string, toolHint?: string, fieldContext?: FieldContext | null) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
@@ -123,7 +123,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   messageFeedback: {},
   ...BLANK_TRANSIENT,
 
-  sendMessage: async (content: string, toolHint?: string) => {
+  sendMessage: async (content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
     const state = get();
     if (state.sending) return;
 
@@ -255,6 +255,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         },
         get().currentChatId,
         toolHint,
+        fieldContext ?? null,
         modelInputsContext,
       );
     } catch (err: any) {

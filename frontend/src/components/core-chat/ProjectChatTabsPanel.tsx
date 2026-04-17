@@ -14,6 +14,8 @@ interface ProjectChatTab {
   title: string;
   chatId: string | null;
   isLanding: boolean;
+  /** True only for auto-created placeholder tabs. */
+  isFallback: boolean;
 }
 
 interface ProjectChatTabsPanelProps {
@@ -29,12 +31,13 @@ interface ProjectChatTabsPanelProps {
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
 }
 
-function makeTab(title = 'New Chat', isLanding = false): ProjectChatTab {
+function makeTab(title = 'New Chat', isLanding = false, isFallback = false): ProjectChatTab {
   return {
     id: `chat-tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     title,
     chatId: null,
     isLanding,
+    isFallback,
   };
 }
 
@@ -64,7 +67,7 @@ export function ProjectChatTabsPanel({
 }: ProjectChatTabsPanelProps) {
   const initialTabRef = useRef<ProjectChatTab | null>(null);
   if (!initialTabRef.current) {
-    initialTabRef.current = makeTab('New Chat', researchMode);
+    initialTabRef.current = makeTab('New Chat', researchMode, true);
   }
   const [tabs, setTabs] = useState<ProjectChatTab[]>(() => [initialTabRef.current!]);
   const [activeTabId, setActiveTabId] = useState<string>(() => initialTabRef.current!.id);
@@ -103,15 +106,31 @@ export function ProjectChatTabsPanel({
     loadSessions();
   }, [loadSessions]);
 
+  const findExistingNewChatTab = useCallback(
+    () =>
+      tabs.find(
+        (tab) =>
+          !tab.chatId &&
+          (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      ),
+    [tabs],
+  );
+
   const handleCreateTab = useCallback(() => {
-    const tab = makeTab('New Chat', false);
+    const existing = findExistingNewChatTab();
+    if (existing) {
+      setActiveTabId(existing.id);
+      return;
+    }
+
+    const tab = makeTab('New Chat', false, false);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
-  }, []);
+  }, [findExistingNewChatTab]);
 
   const handleCloseTab = useCallback((tabId: string) => {
     if (tabs.length === 1) {
-      const replacement = makeTab('New Chat', researchMode);
+      const replacement = makeTab('New Chat', researchMode, true);
       setTabs([replacement]);
       setActiveTabId(replacement.id);
       return;
@@ -150,20 +169,39 @@ export function ProjectChatTabsPanel({
       return;
     }
 
-    const newTab: ProjectChatTab = {
-      id: makeTab().id,
-      title: pendingChatToOpen.title?.trim() || 'Untitled',
-      chatId: pendingChatToOpen.chatId,
-      isLanding: false,
-    };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTab.id);
+    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    if (activeTab && activeTab.isFallback && !activeTab.chatId) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeTab.id
+            ? {
+                ...tab,
+                title: pendingChatToOpen.title?.trim() || 'Untitled',
+                chatId: pendingChatToOpen.chatId,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(activeTab.id);
+    } else {
+      const newTab: ProjectChatTab = {
+        id: makeTab().id,
+        title: pendingChatToOpen.title?.trim() || 'Untitled',
+        chatId: pendingChatToOpen.chatId,
+        isLanding: false,
+        isFallback: false,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    }
     onPendingSessionHandled?.();
-  }, [pendingChatToOpen, tabs, onPendingSessionHandled]);
+  }, [pendingChatToOpen, tabs, resolvedActiveTabId, onPendingSessionHandled]);
 
   useEffect(() => {
     if (!researchMode || resetToLandingSignal === 0) return;
-    const resetTab = makeTab('New Chat', true);
+    const resetTab = makeTab('New Chat', true, true);
     setTabs([resetTab]);
     setActiveTabId(resetTab.id);
     setShowHistory(false);
@@ -177,22 +215,41 @@ export function ProjectChatTabsPanel({
       return;
     }
 
-    const newTab: ProjectChatTab = {
-      id: makeTab().id,
-      title: session.title,
-      chatId: session.id,
-      isLanding: false,
-    };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newTab.id);
+    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    if (activeTab && activeTab.isFallback && !activeTab.chatId) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeTab.id
+            ? {
+                ...tab,
+                title: session.title,
+                chatId: session.id,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(activeTab.id);
+    } else {
+      const newTab: ProjectChatTab = {
+        id: makeTab().id,
+        title: session.title,
+        chatId: session.id,
+        isLanding: false,
+        isFallback: false,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    }
     setShowHistory(false);
-  }, [tabs]);
+  }, [tabs, resolvedActiveTabId]);
 
   const handleDeleteSession = useCallback((chatId: string) => {
     setSessions((prev) => prev.filter((session) => session.id !== chatId));
     const nextTabs = tabs.filter((tab) => tab.chatId !== chatId);
     if (nextTabs.length === 0) {
-      const replacement = makeTab('New Chat', researchMode);
+      const replacement = makeTab('New Chat', researchMode, true);
       setTabs([replacement]);
       setActiveTabId(replacement.id);
     } else {
@@ -236,6 +293,7 @@ export function ProjectChatTabsPanel({
           chatId: meta.chatId,
           title: nextTitle,
           isLanding: false,
+          isFallback: false,
         };
       });
       return changed ? nextTabs : prev;

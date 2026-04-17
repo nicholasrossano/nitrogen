@@ -131,14 +131,30 @@ export function CarbonOutputWidget({
     [commitEdit, cancelEdit]
   );
 
-  const investigate = useCallback((label: string, status: string) => {
+  const investigate = useCallback((label: string, status: string, fieldName?: string) => {
     const text =
       status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
       status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
       status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
       `Can you help me investigate and estimate a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
-  }, []);
+    const input = fieldName ? inputs[fieldName] : undefined;
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext: fieldName ? {
+          field_name: fieldName,
+          label,
+          current_value: typeof input?.value === 'number' ? input.value : null,
+          unit: input?.unit || null,
+          model_type: 'carbon',
+          status: status || null,
+        } : null,
+      },
+    }));
+  }, [inputs]);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
     const isConfirmed = currentStatus === 'confirmed';
@@ -328,7 +344,7 @@ export function CarbonOutputWidget({
                       onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('button, input, a')) return;
-                        investigate(inp.label, inp.status);
+                        investigate(inp.label, inp.status, inp.field_name);
                       }}
                       style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto` : undefined }}
                       className={`px-5 py-2.5 flex items-center gap-3 ${

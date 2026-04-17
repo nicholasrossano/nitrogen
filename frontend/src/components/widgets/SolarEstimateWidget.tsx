@@ -311,8 +311,24 @@ export function SolarEstimateWidget({
       status === 'assumed'   ? `Can you research and propose a better value for ${label} based on available data for this project?` :
       status === 'confirmed' ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
-  }, []);
+    const input = inputs[fieldName];
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext: {
+          field_name: fieldName,
+          label,
+          current_value: typeof input?.value === 'number' ? input.value : null,
+          unit: input?.unit || null,
+          model_type: 'solar',
+          status: status || null,
+        },
+      },
+    }));
+  }, [inputs]);
 
   // Monthly chart data
   const chartData = useMemo(() => {
