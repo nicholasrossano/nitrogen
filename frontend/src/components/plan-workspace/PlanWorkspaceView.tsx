@@ -328,7 +328,7 @@ export function PlanWorkspaceView({
                     setCollapsedPhases(allPhasesCollapsed ? new Set() : new Set(phases.map((phase) => phase.id)));
                   }
                 }}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] hover:bg-black/[0.07] transition-colors whitespace-nowrap"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-text-primary bg-surface ring-1 ring-inset ring-stroke-subtle hover:bg-surface-subtle transition-colors whitespace-nowrap"
               >
                 {(viewMode === 'group' ? allGroupsExpanded : !allPhasesCollapsed) ? 'Collapse all' : 'Expand all'}
                 <ChevronsUpDown className="w-3 h-3" />
@@ -338,10 +338,10 @@ export function PlanWorkspaceView({
                 <div ref={filterDropdownRef} className="relative">
                   <button
                     onClick={() => setFilterDropdownOpen((value) => !value)}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap bg-surface-subtle ring-1 ring-inset hover:bg-black/[0.07] ${
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ring-1 ring-inset hover:bg-surface-subtle ${
                       selectedFilterId
-                        ? 'ring-accent/40 text-accent'
-                        : 'ring-black/[0.08] text-text-secondary'
+                        ? 'bg-surface-subtle text-text-primary ring-stroke-subtle'
+                        : 'bg-surface text-text-primary ring-stroke-subtle'
                     }`}
                   >
                     {selectedFilterId
