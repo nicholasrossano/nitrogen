@@ -230,6 +230,7 @@ export interface StageDef {
   title: string;
   component: 'table' | 'list' | 'record' | 'computed_results';
   widget: string;
+  allow_add_rows: boolean;
   fields: FieldDef[];
   population: PopulationStep[];
 }
@@ -238,6 +239,7 @@ export interface StageState {
   status: 'pending' | 'populating' | 'draft' | 'confirmed' | 'error';
   confirmed_at: string | null;
   confirmed_by: string | null;
+  confirmed_by_email?: string | null;
   data: {
     /** For table and list stages */
     items?: BuildItem[];
@@ -249,14 +251,23 @@ export interface StageState {
   } | null;
 }
 
+export interface FinalApprovalState {
+  status: 'pending' | 'approved';
+  approved_at: string | null;
+  approved_by: string | null;
+  approved_by_email: string | null;
+}
+
 export interface StagedWorkflowState {
   module_type: string;
   current_stage_id: string | null;
   stages: Record<string, StageState>;
+  final_approval: FinalApprovalState;
 }
 
 export interface StagedModuleDefinition extends ModuleDefinition {
   export_format: string | null;
+  requires_final_approval: boolean;
   stage_defs: StageDef[];
 }
 
@@ -264,8 +275,39 @@ export interface StagedModuleWorkflowState {
   instance_id: string;
   module_id: string;
   status: string;
+  workflow_version: number;
   workflow_state: StagedWorkflowState;
   module_definition: StagedModuleDefinition;
+}
+
+export interface DecisionLogHistoryRow {
+  module: string;
+  module_id: string;
+  module_instance_id: string;
+  stage: string;
+  stage_id: string;
+  entity_type: string;
+  entity_id: string;
+  item: string;
+  current_value: string;
+  source_type: string;
+  source_detail: string;
+  status: string;
+  confirmed_by: string;
+  confirmed_at: string;
+  final_approved_by: string;
+  final_approved_at: string;
+}
+
+export interface ModuleDecisionLogReport {
+  metadata: {
+    module_id: string;
+    module_name: string;
+    module_instance_id: string;
+    generated_at: string;
+    history_row_count: number;
+  };
+  history_rows: DecisionLogHistoryRow[];
 }
 
 export interface SourceCitation {
@@ -309,6 +351,16 @@ export interface ChatMessage {
   completion_meta?: { latency_ms?: number; citation_count: number; tiers_used: string[] } | null;
   feedback?: 'like' | 'dislike' | null;
   created_at: string;
+}
+
+export interface FieldContext {
+  field_name: string;
+  label: string;
+  current_value?: number | null;
+  unit?: string | null;
+  model_type?: 'lcoe' | 'carbon' | 'solar' | null;
+  module_id?: string | null;
+  status?: string | null;
 }
 
 export interface StageStatus {
@@ -568,6 +620,11 @@ async function fetchApi<T>(
   return JSON.parse(text) as T;
 }
 
+function workflowVersionHeaders(workflowVersion?: number): Record<string, string> | undefined {
+  if (workflowVersion === undefined || workflowVersion === null) return undefined;
+  return { 'X-Workflow-Version': String(workflowVersion) };
+}
+
 export const api = {
   // Initiatives
   listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false) =>
@@ -670,10 +727,14 @@ export const api = {
       `/api/v1/initiatives/${initiativeId}/chat`
     ),
 
-  sendMessage: (initiativeId: string, content: string, toolHint?: string) =>
+  sendMessage: (initiativeId: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) =>
     fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ content, tool_hint: toolHint ?? null }),
+      body: JSON.stringify({
+        content,
+        tool_hint: toolHint ?? null,
+        field_context: fieldContext ?? null,
+      }),
     }),
 
   sendMessageStream: async (
@@ -682,11 +743,16 @@ export const api = {
     onWord: (word: string) => void,
     onComplete: (message: ChatMessage, stageStatus: any) => void,
     toolHint?: string,
+    fieldContext?: FieldContext | null,
   ) => {
     // Call the regular API since backend doesn't support streaming yet
     const response = await fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ content, tool_hint: toolHint ?? null }),
+      body: JSON.stringify({
+        content,
+        tool_hint: toolHint ?? null,
+        field_context: fieldContext ?? null,
+      }),
     });
 
     // Simulate word-by-word streaming for better UX
@@ -1147,11 +1213,12 @@ export const api = {
       { method: 'POST' }
     ),
 
-  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>) =>
-    fetchApi<{ instance_id: string; status: string; workflow_state: WorkflowState }>(
+  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ instance_id: string; status: string; workflow_state: StagedWorkflowState; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/widget-state`,
       {
         method: 'POST',
+        headers: workflowVersionHeaders(workflowVersion),
         body: JSON.stringify({ widget_data: widgetData }),
       }
     ),
@@ -1177,52 +1244,58 @@ export const api = {
   getStagedModuleWorkflowState: (instanceId: string) =>
     fetchApi<StagedModuleWorkflowState>(`/api/v1/module-workflow/${instanceId}/state`),
 
-  populateStage: (instanceId: string, stageId: string) =>
-    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState }>(
+  populateStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
+    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/populate`,
-      { method: 'POST' }
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
-  confirmStage: (instanceId: string, stageId: string) =>
-    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState }>(
+  confirmStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
+    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/confirm`,
-      { method: 'POST' }
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
-  addStageItem: (instanceId: string, stageId: string, content: Record<string, any>) =>
-    fetchApi<{ item: BuildItem }>(
+  addStageItem: (instanceId: string, stageId: string, content: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ item: BuildItem; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items`,
-      { method: 'POST', body: JSON.stringify({ content }) }
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ content }) }
     ),
 
-  editStageItem: (instanceId: string, stageId: string, itemId: string, content: Record<string, any>) =>
-    fetchApi<{ item: BuildItem }>(
+  editStageItem: (instanceId: string, stageId: string, itemId: string, content: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ item: BuildItem; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
-      { method: 'PATCH', body: JSON.stringify({ content }) }
+      { method: 'PATCH', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ content }) }
     ),
 
-  deleteStageItem: (instanceId: string, stageId: string, itemId: string) =>
-    fetchApi<{ ok: boolean; remaining_count: number }>(
+  deleteStageItem: (instanceId: string, stageId: string, itemId: string, workflowVersion?: number) =>
+    fetchApi<{ ok: boolean; remaining_count: number; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
-      { method: 'DELETE' }
+      { method: 'DELETE', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
-  reorderStageItems: (instanceId: string, stageId: string, itemIds: string[]) =>
-    fetchApi<{ ok: boolean }>(
+  reorderStageItems: (instanceId: string, stageId: string, itemIds: string[], workflowVersion?: number) =>
+    fetchApi<{ ok: boolean; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/reorder`,
-      { method: 'POST', body: JSON.stringify({ item_ids: itemIds }) }
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ item_ids: itemIds }) }
     ),
 
-  enrichRecord: (instanceId: string, stageId: string, itemId: string) =>
-    fetchApi<{ item_id: string; record: Record<string, any> }>(
+  enrichRecord: (instanceId: string, stageId: string, itemId: string, workflowVersion?: number) =>
+    fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}/enrich`,
-      { method: 'POST' }
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
-  updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>) =>
-    fetchApi<{ item_id: string; record: Record<string, any> }>(
+  updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
-      { method: 'PATCH', body: JSON.stringify({ fields }) }
+      { method: 'PATCH', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ fields }) }
+    ),
+
+  approveFinalModuleOutput: (instanceId: string, workflowVersion?: number) =>
+    fetchApi<{ workflow_state: StagedWorkflowState; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/final-approval`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
   exportStagedModule: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
@@ -1265,7 +1338,7 @@ export const api = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/module-workflow/${instanceId}/export/decision-log`,
+      `${API_URL}/api/v1/module-workflow/${instanceId}/decision-log/export.xlsx`,
       { headers }
     );
     if (!res.ok) {
@@ -1274,7 +1347,27 @@ export const api = {
     }
     const disposition = res.headers.get('content-disposition') || '';
     const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.docx';
+    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.xlsx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  getModuleDecisionLog: (instanceId: string) => {
+    return fetchApi<ModuleDecisionLogReport>(`/api/v1/module-workflow/${instanceId}/decision-log`);
+  },
+
+  exportModuleDecisionLogXlsx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/decision-log/export.xlsx`,
+      { headers }
+    );
+    if (!res.ok) throw new Error('Decision log export failed');
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.xlsx';
     const blob = await res.blob();
     return { blob, filename };
   },
@@ -1380,6 +1473,12 @@ export const api = {
 
   getChatModules: (chatId: string) =>
     fetchApi<{ modules: ChatModuleSummary[] }>(`/api/v1/chats/${chatId}/modules`),
+
+  associateChatModule: (chatId: string, instanceId: string) =>
+    fetchApi<{ instance_id: string; chat_id: string; module_id: string }>(
+      `/api/v1/chats/${chatId}/modules/${instanceId}`,
+      { method: 'POST' },
+    ),
 
   deleteChat: (chatId: string) =>
     fetchApi<{ deleted: boolean; chat_id: string }>(
