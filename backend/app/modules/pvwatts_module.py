@@ -23,6 +23,7 @@ from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
+    DecisionLogAttribution,
     FieldDef,
     PopulationStep,
     StageDef,
@@ -85,6 +86,7 @@ class PVWattsTool(BaseModule):
             **self.definition.__dict__,
             goal="Estimate annual and monthly solar generation from site and system assumptions.",
             primary_ui_object="solar_yield_results",
+            investigate_hint="For solar inputs, prefer site-specific geometry and equipment specs first, then fall back to climate-appropriate PV benchmarks and PVWatts-compatible defaults.",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "pvwatts"},
             input_dependencies=[],
@@ -92,6 +94,9 @@ class PVWattsTool(BaseModule):
             downstream_dependencies=["lcoe_model"],
             assumptions_behavior="tracks",
             evidence_behavior="none",
+            decision_log_attribution=DecisionLogAttribution(
+                adapter_labels={"pvwatts": "NREL PVWatts API"},
+            ),
         )
 
     @property
@@ -102,6 +107,7 @@ class PVWattsTool(BaseModule):
                 title="Inputs",
                 component="table",
                 widget="editable_table",
+                allow_add_rows=False,
                 fields=[
                     FieldDef("variable", "text", required=True, label="Variable"),
                     FieldDef("value", "number", label="Value"),
@@ -145,14 +151,20 @@ class PVWattsTool(BaseModule):
         rows = []
         for key, inp_obj in inputs.items():
             d = inp_obj.to_dict() if hasattr(inp_obj, "to_dict") else {}
-            rows.append({
+            row = {
+                "field_name": key,
                 "variable": d.get("label", key),
                 "value": d.get("value"),
                 "unit": d.get("unit", ""),
                 "category": d.get("category", "general"),
                 "status": d.get("status", "assumed"),
                 "rationale": d.get("rationale", ""),
-            })
+            }
+            if d.get("field_type"):
+                row["field_type"] = d.get("field_type")
+            if d.get("options") is not None:
+                row["options"] = d.get("options")
+            rows.append(row)
         return rows
 
     async def compute_external(

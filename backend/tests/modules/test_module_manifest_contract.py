@@ -8,7 +8,13 @@ the new StageDef-based contract. They are intentionally subset-style checks
 from app.adapters import get_adapter_registry
 from app.models.module_instance import ModuleInstanceStatus
 from app.modules import get_module_registry
-from app.modules.base import StageDef, FieldDef, PopulationStep, ModuleManifest
+from app.modules.base import (
+    DecisionLogAttribution,
+    FieldDef,
+    ModuleManifest,
+    PopulationStep,
+    StageDef,
+)
 from app.services.module_workflow_service import uses_workspace_flow
 
 
@@ -25,6 +31,9 @@ def test_registered_modules_expose_manifest_contract() -> None:
         assert manifest.id == module.definition.id
         assert manifest.name == module.definition.name
         assert isinstance(manifest.adapter_bindings, dict)
+        assert isinstance(manifest.decision_log_attribution, DecisionLogAttribution)
+        assert isinstance(manifest.decision_log_attribution.adapter_labels, dict)
+        assert isinstance(manifest.decision_log_attribution.widget_detail_labels, dict)
         assert isinstance(manifest.input_dependencies, list)
         assert isinstance(manifest.produced_outputs, list)
         assert isinstance(manifest.downstream_dependencies, list)
@@ -32,6 +41,7 @@ def test_registered_modules_expose_manifest_contract() -> None:
         assert manifest.evidence_behavior in {"rag_grounded", "user_uploaded", "both", "none"}
         assert manifest.goal
         assert manifest.primary_ui_object
+        assert manifest.investigate_hint is None or isinstance(manifest.investigate_hint, str)
 
 
 def test_manifest_adapter_bindings_resolve_to_registered_adapters() -> None:
@@ -97,6 +107,10 @@ def test_stage_defs_are_well_formed() -> None:
             assert stage.widget, (
                 f"Module '{module.definition.id}' stage '{stage.id}' has no widget"
             )
+            assert isinstance(stage.allow_add_rows, bool), (
+                f"Module '{module.definition.id}' stage '{stage.id}' has non-boolean "
+                f"allow_add_rows='{stage.allow_add_rows}'"
+            )
             for field in stage.fields:
                 assert isinstance(field, FieldDef)
                 assert field.field_type in VALID_FIELD_TYPES, (
@@ -159,3 +173,4 @@ def test_stage_defs_serialise_cleanly() -> None:
             assert d["id"] == stage.id
             assert "fields" in d
             assert "population" in d
+            assert "allow_add_rows" in d

@@ -17,6 +17,7 @@ from typing import Any
 
 from app.modules.base import (
     BaseModule,
+    DecisionLogAttribution,
     FieldDef,
     PopulationStep,
     StageDef,
@@ -56,6 +57,9 @@ class ExampleWidgetModule(BaseModule):
             downstream_dependencies=[],
             assumptions_behavior="tracks",
             evidence_behavior="none",
+            decision_log_attribution=DecisionLogAttribution(
+                adapter_labels={"example_adapter": "Example adapter"},
+            ),
         )
 
     @property
@@ -66,6 +70,7 @@ class ExampleWidgetModule(BaseModule):
                 title="Inputs",
                 component="table",
                 widget="editable_table",
+                allow_add_rows=False,
                 fields=[
                     FieldDef("variable", "text", required=True, label="Variable"),
                     FieldDef("value", "number", label="Value"),
