@@ -742,43 +742,32 @@ export function SolarEstimateWidget({
       </div>
 
       {/* Footer */}
-      {outputFooterState?.mode === 'confirmed' ? (
-        <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 bg-emerald-50/60">
-          <div className="flex items-center gap-2 text-xs text-emerald-700">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>
-              Confirmed{outputFooterState.confirmedAt ? ` · ${outputFooterState.confirmedAt}` : ''}
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 flex items-center justify-between gap-3">
-          <span className="text-[10px] text-text-tertiary truncate">
-            {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
-            Powered by PVWatts V8 (NREL)
-          </span>
-          {outputFooterAction ? (
-            <button
-              type="button"
-              onClick={outputFooterAction.onClick}
-              disabled={outputFooterAction.disabled || outputFooterAction.loading}
-              className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
-            >
-              {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
-            </button>
-          ) : !instanceId && (
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
-            >
-              <Download className="w-3 h-3" />
-              {isExporting ? 'Exporting…' : 'Export to Excel'}
-            </button>
-          )}
-        </div>
-      )}
+      <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 flex items-center justify-between gap-3">
+        <span className="text-[10px] text-text-tertiary truncate">
+          {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
+          Powered by PVWatts V8 (NREL)
+        </span>
+        {outputFooterAction ? (
+          <button
+            type="button"
+            onClick={outputFooterAction.onClick}
+            disabled={outputFooterAction.disabled || outputFooterAction.loading}
+            className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
+          >
+            {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
+          </button>
+        ) : !instanceId && (
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
+          >
+            <Download className="w-3 h-3" />
+            {isExporting ? 'Exporting…' : 'Export to Excel'}
+          </button>
+        )}
+      </div>
 
       {investigateTooltip}
     </div>

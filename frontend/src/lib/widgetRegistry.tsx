@@ -21,8 +21,7 @@ export interface WorkspaceWidgetFooterAction {
 }
 
 export interface WorkspaceWidgetFooterState {
-  mode: 'confirm' | 'confirmed';
-  confirmedAt?: string | null;
+  mode: 'confirm';
 }
 
 export interface WorkspaceWidgetProps {

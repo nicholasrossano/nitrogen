@@ -839,40 +839,29 @@ export function CarbonModelWidget({
         </div>
       )}
 
-      {outputFooterState?.mode === 'confirmed' ? (
-        <div className="px-5 py-3 bg-emerald-50/60 border-t border-divider">
-          <div className="flex items-center gap-2 text-xs text-emerald-700">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>
-              Confirmed{outputFooterState.confirmedAt ? ` · ${outputFooterState.confirmedAt}` : ''}
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
-          <p className="text-[10px] text-text-tertiary">
-            Edit values in the Inputs stage to recalculate
-          </p>
-          {outputFooterAction ? (
-            <button
-              onClick={outputFooterAction.onClick}
-              disabled={outputFooterAction.disabled || outputFooterAction.loading}
-              className="btn-primary !text-xs !px-4 !py-1.5"
-            >
-              {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
-            </button>
-          ) : !instanceId && (
-            <button
-              onClick={handleExport}
-              disabled={isExporting}
-              className="btn-primary !text-xs !px-4 !py-1.5"
-            >
-              <Download className="w-3 h-3" />
-              {isExporting ? 'Exporting…' : 'Export to Excel'}
-            </button>
-          )}
-        </div>
-      )}
+      <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
+        <p className="text-[10px] text-text-tertiary">
+          Edit values in the Inputs stage to recalculate
+        </p>
+        {outputFooterAction ? (
+          <button
+            onClick={outputFooterAction.onClick}
+            disabled={outputFooterAction.disabled || outputFooterAction.loading}
+            className="btn-primary !text-xs !px-4 !py-1.5"
+          >
+            {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
+          </button>
+        ) : !instanceId && (
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="btn-primary !text-xs !px-4 !py-1.5"
+          >
+            <Download className="w-3 h-3" />
+            {isExporting ? 'Exporting…' : 'Export to Excel'}
+          </button>
+        )}
+      </div>
     </div>
 
     {activeTab === 'inputs' && renderInvestigateTooltip()}
