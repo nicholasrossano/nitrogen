@@ -59,6 +59,11 @@ interface PlanWorkspaceViewProps {
   onAddItem?: (groupId: string, title: string, phaseId?: string) => Promise<void>;
   onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
   onViewModeChange?: (modeId: string) => void;
+  showItemKindBadge?: boolean;
+  showItemCompleteToggle?: boolean;
+  showItemBranchDelete?: boolean;
+  showItemRightActions?: boolean;
+  enableItemSorting?: boolean;
   emptyState?: Partial<EmptyStateConfig>;
   colors?: string[];
 }
@@ -87,6 +92,11 @@ export function PlanWorkspaceView({
   onAddItem,
   onOpenDocument,
   onViewModeChange,
+  showItemKindBadge = true,
+  showItemCompleteToggle = true,
+  showItemBranchDelete = true,
+  showItemRightActions = false,
+  enableItemSorting = false,
   emptyState,
   colors = DEFAULT_COLORS,
 }: PlanWorkspaceViewProps) {
@@ -435,6 +445,11 @@ export function PlanWorkspaceView({
                               onToggleComplete={onToggleComplete}
                               phases={hasPhases ? phases : undefined}
                               onAddItem={onAddItem}
+                              showItemKindBadge={showItemKindBadge}
+                              showItemCompleteToggle={showItemCompleteToggle}
+                              showItemBranchDelete={showItemBranchDelete}
+                              showItemRightActions={showItemRightActions}
+                              enableItemSorting={enableItemSorting}
                             />
                           );
                         })}
@@ -468,6 +483,9 @@ export function PlanWorkspaceView({
                       onDeleteItem={onDeleteItem}
                       onToggleComplete={onToggleComplete}
                       onAddItem={onAddItem}
+                      showItemKindBadge={showItemKindBadge}
+                      showItemCompleteToggle={showItemCompleteToggle}
+                      showItemBranchDelete={showItemBranchDelete}
                     />
                   ))}
                 </div>
@@ -510,6 +528,9 @@ interface PhaseSectionProps {
   onDeleteItem: (itemId: string) => void;
   onToggleComplete: (itemId: string) => void;
   onAddItem?: (groupId: string, title: string, phaseId?: string) => Promise<void>;
+  showItemKindBadge: boolean;
+  showItemCompleteToggle: boolean;
+  showItemBranchDelete: boolean;
 }
 
 function PhaseSection({
@@ -526,6 +547,9 @@ function PhaseSection({
   onDeleteItem,
   onToggleComplete,
   onAddItem,
+  showItemKindBadge,
+  showItemCompleteToggle,
+  showItemBranchDelete,
 }: PhaseSectionProps) {
   const completedInPhase = items.filter(({ item }) => completedIds.has(item.id)).length;
   const [isAdding, setIsAdding] = useState(false);
@@ -593,6 +617,9 @@ function PhaseSection({
                   onToggleComplete={onToggleComplete}
                   hideBranchGutter
                   fullWidth
+                  showKindBadge={showItemKindBadge}
+                  showCompleteToggle={showItemCompleteToggle}
+                  showBranchDelete={showItemBranchDelete}
                 />
                 <span
                   className="text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ml-2 self-center justify-self-start"

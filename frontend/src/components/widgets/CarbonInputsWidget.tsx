@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
 
 interface CarbonInput {
   field_name: string;
@@ -90,20 +91,22 @@ export function CarbonInputsWidget({
       status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
     const input = fieldName ? localInputs[fieldName] : undefined;
+    const fieldContext = fieldName ? {
+      field_name: fieldName,
+      label,
+      current_value: typeof input?.value === 'number' ? input.value : null,
+      unit: input?.unit || null,
+      model_type: 'carbon' as const,
+      status: status || null,
+    } : null;
 
     window.dispatchEvent(new CustomEvent('nitrogen:draft', {
       detail: {
         text,
         label,
         fieldName,
-        fieldContext: fieldName ? {
-          field_name: fieldName,
-          label,
-          current_value: typeof input?.value === 'number' ? input.value : null,
-          unit: input?.unit || null,
-          model_type: 'carbon',
-          status: status || null,
-        } : null,
+        fieldContext,
+        modelInputsContext: buildModelInputsContext('Carbon Model', localInputs, fieldContext),
       },
     }));
   }, [localInputs]);

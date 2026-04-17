@@ -27,6 +27,7 @@ from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 from app.modules.base import BaseModule
 from app.modules.registry import get_module_registry
+from app.modules.stakeholder_assessment import StakeholderAssessmentModule
 from app.modules.utils import make_build_item
 from app.services.module_workflow_service import (
     clear_final_approval,
@@ -227,6 +228,48 @@ def _normalized_items(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [it for it in value if isinstance(it, dict)]
+
+
+def _build_confirmed_stages_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    """Build a confirmed-stage snapshot from persisted workflow state."""
+    return {
+        stage_id: stage_state
+        for stage_id, stage_state in (state.get("stages") or {}).items()
+        if stage_state.get("status") == "confirmed"
+    }
+
+
+def _stakeholder_detail_records(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return stakeholder detail records stored outside formal stage defs."""
+    records = state.get("stakeholder_details")
+    if isinstance(records, dict):
+        return records
+    return {}
+
+
+async def _refresh_stakeholder_map_widget(
+    module: StakeholderAssessmentModule,
+    state: dict[str, Any],
+    context: dict[str, Any],
+    records: dict[str, dict[str, Any]],
+) -> None:
+    """Recompute and persist map widget_data with current stakeholder details."""
+    stages = state.get("stages") or {}
+    map_stage = stages.get("map")
+    if not isinstance(map_stage, dict):
+        return
+    if map_stage.get("status") not in ("draft", "confirmed"):
+        return
+
+    confirmed_stages = _build_confirmed_stages_snapshot(state)
+    confirmed_stages["stakeholder_details"] = {"data": {"records": records}}
+    widget_data = await module.compute_stage("map", confirmed_stages, context)
+
+    map_data = map_stage.get("data")
+    if not isinstance(map_data, dict):
+        map_data = {}
+    map_data["widget_data"] = widget_data
+    map_stage["data"] = map_data
 
 
 # ---------------------------------------------------------------------------
@@ -698,6 +741,72 @@ async def enrich_record_endpoint(
     return {"item_id": item_id, "record": enriched, "workflow_version": inst.workflow_version}
 
 
+@router.post("/module-workflow/{instance_id}/stakeholders/{item_id}/enrich")
+async def enrich_stakeholder_from_map(
+    instance_id: _uuid.UUID,
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """AI-enrich a stakeholder from the map inspector (no dedicated details stage)."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    if not isinstance(module, StakeholderAssessmentModule):
+        raise HTTPException(status_code=400, detail="Stakeholder enrichment is only supported for stakeholder assessment")
+    _assert_workflow_version(inst, request)
+    state = await ensure_workflow_state(db, inst, module)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
+
+    stakeholders_stage = _get_stage_state_or_404(state, "stakeholders", instance_id)
+    stakeholder_items = (stakeholders_stage.get("data") or {}).get("items") or []
+    source_item = next((it for it in stakeholder_items if it.get("id") == item_id), None)
+    if source_item is None:
+        raise HTTPException(status_code=404, detail=f"Stakeholder '{item_id}' not found")
+
+    context = await get_initiative_context(db, inst.initiative_id)
+    records = _stakeholder_detail_records(state)
+    existing = records.get(item_id) or {}
+    enriched = await module.enrich_stakeholder_detail(
+        source_item.get("content", {}),
+        existing,
+        context,
+        db=db,
+        initiative_id=inst.initiative_id,
+    )
+    records[item_id] = enriched
+    state["stakeholder_details"] = records
+
+    if state.get("cached_exports"):
+        state["cached_exports"] = {}
+
+    await _refresh_stakeholder_map_widget(module, state, context, records)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="record_enriched",
+        entity_type="record",
+        entity_id=item_id,
+        stage_id="map",
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"fields": enriched, "scope": "stakeholder_map"},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "record_enriched", "stage_id": "map", "entity_id": item_id},
+        )
+    await db.commit()
+    return {"item_id": item_id, "record": enriched, "workflow_version": inst.workflow_version}
+
+
 class UpdateRecordRequest(BaseModel):
     fields: dict[str, Any]
 
@@ -1027,23 +1136,47 @@ async def export_writeup(
     state = await ensure_workflow_state(db, inst, module)
     cached_exports = state.get("cached_exports") or {}
     cached_writeup = cached_exports.get("writeup") or {}
+    context = await get_initiative_context(db, inst.initiative_id)
 
-    confirmed_stages: dict[str, Any] = {
-        sid: s for sid, s in state["stages"].items()
-        if s.get("status") == "confirmed"
-    }
+    confirmed_stages: dict[str, Any] = _build_confirmed_stages_snapshot(state)
     if not confirmed_stages:
         raise HTTPException(
             status_code=400,
             detail="At least one stage must be confirmed before generating a write-up",
         )
 
+    if isinstance(module, StakeholderAssessmentModule):
+        stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
+        existing_records = _stakeholder_detail_records(state)
+        if stakeholder_items:
+            records, changed = await module.ensure_all_stakeholder_details(
+                stakeholder_items=stakeholder_items,
+                existing_records=existing_records,
+                context=context,
+                db=db,
+                initiative_id=inst.initiative_id,
+            )
+            if changed:
+                state["stakeholder_details"] = records
+                await _refresh_stakeholder_map_widget(module, state, context, records)
+                if state.get("cached_exports"):
+                    state["cached_exports"] = {}
+                save_workflow_state(inst, state, increment_version=True)
+                await db.commit()
+                cached_writeup = {}
+                confirmed_stages = _build_confirmed_stages_snapshot(state)
+            elif records:
+                confirmed_stages["stakeholder_details"] = {"data": {"records": records}}
+
     # Use cache if valid (not explicitly invalidated)
     content = cached_writeup.get("content") if not cached_writeup.get("invalidated") else None
 
     if not content:
-        context = await get_initiative_context(db, inst.initiative_id)
         try:
+            if isinstance(module, StakeholderAssessmentModule):
+                records = _stakeholder_detail_records(state)
+                if records:
+                    confirmed_stages["stakeholder_details"] = {"data": {"records": records}}
             content = await module.generate_writeup_content(confirmed_stages, context)
         except Exception as e:
             logger.error("Write-up generation failed for instance %s: %s", instance_id, e, exc_info=True)
@@ -1059,7 +1192,6 @@ async def export_writeup(
         await db.commit()
     else:
         logger.info("Returning cached write-up for instance %s", instance_id)
-        context = await get_initiative_context(db, inst.initiative_id)
 
     docx_bytes = DocxExporterService().generate_assessment_docx(
         content=content,

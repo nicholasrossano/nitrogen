@@ -14,6 +14,7 @@ import type { CompareProject } from './CompareProjectPicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSummary } from '@/stores/chatStore';
+import { debugChatFlow } from '@/lib/chatDebug';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
@@ -52,7 +53,13 @@ interface ProjectStandaloneChatViewProps {
   /** Called when this view enters or leaves its landing state */
   onLandingStateChange?: (isOnLanding: boolean) => void;
   /** Open a module workspace from a chat-associated module chip */
-  onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
+  onOpenWorkspaceModule?: (module: {
+    instanceId: string;
+    moduleId: string;
+    title?: string | null;
+    chatId?: string | null;
+    chatTitle?: string | null;
+  }) => void;
   /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Shared session history (project + user scoped) */
@@ -274,6 +281,7 @@ export function ProjectStandaloneChatView({
       currentMessages: ChatMessage[],
       toolHint?: string,
       fieldContext?: FieldContext | null,
+      modelInputsContext?: string | null,
       associatedModule?: { instanceId: string; moduleId: string; title?: string | null } | null,
     ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
@@ -290,6 +298,17 @@ export function ProjectStandaloneChatView({
       const compareIds = compareProject
         ? [initiativeId, compareProject.id]
         : null;
+
+      debugChatFlow('transport-send', {
+        surface: 'project-standalone-chat',
+        route: '/api/v1/chat/stream',
+        field_name: fieldContext?.field_name ?? null,
+        model_type: fieldContext?.model_type ?? null,
+        has_field_context: Boolean(fieldContext),
+        has_model_inputs_context: Boolean(modelInputsContext),
+        initiative_id: initiativeId,
+        compare_mode: Boolean(compareIds),
+      });
 
       await api.sendChatStream(
         history,
@@ -357,7 +376,7 @@ export function ProjectStandaloneChatView({
         currentChatId,
         toolHint ?? null,
         fieldContext ?? null,
-        null,
+        modelInputsContext ?? null,
         initiativeId,
         (step) => {
           setResearchSteps((prev) => {
@@ -386,7 +405,12 @@ export function ProjectStandaloneChatView({
   );
 
   const handleSend = useCallback(
-    async (content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
+    async (
+      content: string,
+      toolHint?: string,
+      fieldContext?: FieldContext | null,
+      modelInputsContext?: string | null,
+    ) => {
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -424,7 +448,7 @@ export function ProjectStandaloneChatView({
           : null;
 
       try {
-        await sendViaStream(content, updatedMessages, toolHint, fieldContext, associatedModule);
+        await sendViaStream(content, updatedMessages, toolHint, fieldContext, modelInputsContext, associatedModule);
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
@@ -534,10 +558,18 @@ export function ProjectStandaloneChatView({
     return (
       <AssociatedModulesTray
         modules={associatedModules}
-        onOpenWorkspaceModule={onOpenWorkspaceModule}
+        onOpenWorkspaceModule={
+          onOpenWorkspaceModule
+            ? (module) => onOpenWorkspaceModule({
+              ...module,
+              chatId: currentChatId,
+              chatTitle: sessionTitle,
+            })
+            : undefined
+        }
       />
     );
-  }, [associatedModules, onOpenWorkspaceModule]);
+  }, [associatedModules, currentChatId, onOpenWorkspaceModule, sessionTitle]);
 
   const inputChips = useMemo(
     () => (compareProject
