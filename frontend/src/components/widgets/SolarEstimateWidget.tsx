@@ -39,10 +39,11 @@ async function persistWidgetToDb(
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
+  workflowVersion?: number,
 ): Promise<boolean> {
   try {
     if (instanceId) {
-      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      await api.persistModuleWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
@@ -60,6 +61,7 @@ interface SolarEstimateWidgetProps {
   initiativeId: string;
   messageId?: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
@@ -148,6 +150,7 @@ export function SolarEstimateWidget({
   initiativeId,
   messageId,
   instanceId,
+  workflowVersion,
   onWorkflowUpdated,
   workspaceView = 'output',
   isActive = true,
@@ -158,11 +161,11 @@ export function SolarEstimateWidget({
   const setData = useCallback((newData: any) => {
     setDataRaw(newData);
     if (messageId || instanceId) {
-      persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData).then((persisted) => {
+      persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion).then((persisted) => {
         if (persisted && instanceId) onWorkflowUpdated?.();
       });
     }
-  }, [initiativeId, messageId, instanceId, onWorkflowUpdated]);
+  }, [initiativeId, messageId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   useEffect(() => { setDataRaw(initialData); }, [initialData]);
 

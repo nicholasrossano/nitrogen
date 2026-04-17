@@ -58,9 +58,40 @@ logger = logging.getLogger(__name__)
 # Persistence helpers
 # ---------------------------------------------------------------------------
 
-def save_workflow_state(inst: ModuleInstance, state: dict[str, Any]) -> None:
+def save_workflow_state(
+    inst: ModuleInstance,
+    state: dict[str, Any],
+    *,
+    increment_version: bool = False,
+) -> None:
     inst.workflow_state = state
     flag_modified(inst, "workflow_state")
+    if increment_version:
+        inst.workflow_version = (inst.workflow_version or 1) + 1
+
+
+def _initial_final_approval_state() -> dict[str, Any]:
+    return {
+        "status": "pending",
+        "approved_at": None,
+        "approved_by": None,
+        "approved_by_email": None,
+    }
+
+
+def requires_final_approval(module: BaseModule) -> bool:
+    """Whether a workspace module should require explicit final approval."""
+    return module.definition.export_format is not None
+
+
+def clear_final_approval(state: dict[str, Any]) -> bool:
+    """Reset final approval after a meaningful workflow mutation."""
+    existing = state.get("final_approval") or _initial_final_approval_state()
+    if existing.get("status") != "approved":
+        state["final_approval"] = existing
+        return False
+    state["final_approval"] = _initial_final_approval_state()
+    return True
 
 
 def build_deliverable_title(module: BaseModule, content: dict[str, Any] | None) -> str:
@@ -98,6 +129,7 @@ def _initial_stage_state() -> dict[str, Any]:
         "status": "pending",
         "confirmed_at": None,
         "confirmed_by": None,
+        "confirmed_by_email": None,
         "data": None,
     }
 
@@ -114,6 +146,7 @@ def _build_initial_workflow_state(module: BaseModule) -> dict[str, Any]:
         "module_type": module.definition.id,
         "current_stage_id": first_id,
         "stages": stages,
+        "final_approval": _initial_final_approval_state(),
     }
 
 
@@ -283,6 +316,7 @@ def _hydrate_state(inst: ModuleInstance, module: BaseModule) -> dict[str, Any]:
     for stage_def in module.stage_defs:
         if stage_def.id not in stages:
             stages[stage_def.id] = _initial_stage_state()
+    existing.setdefault("final_approval", _initial_final_approval_state())
     if not existing.get("current_stage_id"):
         existing["current_stage_id"] = _infer_current_stage_id(module, stages)
     return existing
@@ -358,7 +392,8 @@ async def populate_stage(
             state["stages"][stage_id]["status"] = "draft"
 
         state["current_stage_id"] = stage_id
-        save_workflow_state(inst, state)
+        clear_final_approval(state)
+        save_workflow_state(inst, state, increment_version=True)
 
     except Exception as e:
         logger.error(
@@ -366,7 +401,7 @@ async def populate_stage(
             stage_id, inst.id, e, exc_info=True,
         )
         state["stages"][stage_id]["status"] = "error"
-        save_workflow_state(inst, state)
+        save_workflow_state(inst, state, increment_version=True)
         raise
 
     return state
@@ -488,6 +523,7 @@ async def confirm_stage(
     module: BaseModule,
     stage_id: str,
     confirmed_by: str,
+    confirmed_by_email: str | None = None,
 ) -> dict[str, Any]:
     """Confirm a stage, record audit info, and invalidate downstream stages."""
     state = _hydrate_state(inst, module)
@@ -499,6 +535,7 @@ async def confirm_stage(
     stage_state["status"] = "confirmed"
     stage_state["confirmed_at"] = datetime.now(timezone.utc).isoformat()
     stage_state["confirmed_by"] = confirmed_by
+    stage_state["confirmed_by_email"] = confirmed_by_email
 
     _invalidate_downstream(state, module, stage_id)
 
@@ -512,11 +549,12 @@ async def confirm_stage(
             state["cached_exports"] = {}
 
     state["current_stage_id"] = _infer_current_stage_id(module, state["stages"])
+    clear_final_approval(state)
 
     # Trigger auto-population of the next computed_results stage, if any
     next_stage_def = _get_auto_populate_stage(module, stage_id, state)
 
-    save_workflow_state(inst, state)
+    save_workflow_state(inst, state, increment_version=True)
     return state, next_stage_def
 
 
@@ -602,7 +640,8 @@ async def enrich_record_item(
     data["records"] = records
     stage_state["data"] = data
 
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
     return enriched
 
 

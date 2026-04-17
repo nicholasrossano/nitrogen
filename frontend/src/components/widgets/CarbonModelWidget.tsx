@@ -25,10 +25,11 @@ async function persistWidgetToDb(
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
+  workflowVersion?: number,
 ): Promise<boolean> {
   try {
     if (instanceId) {
-      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      await api.persistModuleWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
@@ -46,6 +47,7 @@ interface CarbonModelWidgetProps {
   initiativeId: string;
   messageId?: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
@@ -99,6 +101,7 @@ export function CarbonModelWidget({
   initiativeId,
   messageId,
   instanceId,
+  workflowVersion,
   onWorkflowUpdated,
   workspaceView = 'output',
   isActive = true,
@@ -146,7 +149,7 @@ export function CarbonModelWidget({
           const newData = await api.updateCarbonInput(inputs, fieldName, value, 'confirmed');
           setData(newData);
           if ((messageId && initiativeId) || instanceId) {
-            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
             if (persisted && instanceId) onWorkflowUpdated?.();
           }
         } catch { /* keep old */ }
@@ -155,7 +158,7 @@ export function CarbonModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -196,7 +199,7 @@ export function CarbonModelWidget({
       const newData = await api.updateCarbonInput(inputs, editingField, parsed);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -206,7 +209,7 @@ export function CarbonModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -246,7 +249,7 @@ export function CarbonModelWidget({
       const newData = await api.updateCarbonInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -260,7 +263,7 @@ export function CarbonModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   const switchMethodPack = useCallback(async (newPack: string) => {
     if (newPack === currentMethodPack) return;
@@ -269,7 +272,7 @@ export function CarbonModelWidget({
       const newData = await api.switchCarbonMethodPack(newPack, inputs);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -277,7 +280,7 @@ export function CarbonModelWidget({
     } finally {
       setIsSwitchingPack(false);
     }
-  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
@@ -362,7 +365,7 @@ export function CarbonModelWidget({
                                 const newData = await api.updateCarbonInput(inputs, inp.field_name, newVal, 'confirmed');
                                 setData(newData);
                                 if ((messageId && initiativeId) || instanceId) {
-                                  const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+                                  const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
                                   if (persisted && instanceId) onWorkflowUpdated?.();
                                 }
                               } catch { /* keep old */ }

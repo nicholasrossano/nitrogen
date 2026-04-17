@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
-from sqlalchemy import String, DateTime, ForeignKey, Index
+from sqlalchemy import String, DateTime, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
@@ -62,6 +62,7 @@ class ModuleInstance(Base):
     alignment: Mapped[dict | None] = mapped_column(JSONB)
     deliverable: Mapped[dict | None] = mapped_column(JSONB)
     workflow_state: Mapped[dict | None] = mapped_column(JSONB)
+    workflow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

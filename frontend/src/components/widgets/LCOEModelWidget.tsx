@@ -28,10 +28,11 @@ async function persistWidgetToDb(
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
+  workflowVersion?: number,
 ): Promise<boolean> {
   try {
     if (instanceId) {
-      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      await api.persistModuleWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
@@ -49,6 +50,7 @@ interface LCOEModelWidgetProps {
   initiativeId: string;
   messageId?: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
@@ -91,6 +93,7 @@ export function LCOEModelWidget({
   initiativeId,
   messageId,
   instanceId,
+  workflowVersion,
   onWorkflowUpdated,
   workspaceView = 'output',
   isActive = true,
@@ -136,7 +139,7 @@ export function LCOEModelWidget({
           const newData = await api.updateLCOEInput(inputs, fieldName, value, 'confirmed');
           setData(newData);
           if ((messageId && initiativeId) || instanceId) {
-            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
             if (persisted && instanceId) onWorkflowUpdated?.();
           }
         } catch { /* keep old */ }
@@ -145,7 +148,7 @@ export function LCOEModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -186,7 +189,7 @@ export function LCOEModelWidget({
       const newData = await api.updateLCOEInput(inputs, editingField, parsed);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -196,7 +199,7 @@ export function LCOEModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -236,7 +239,7 @@ export function LCOEModelWidget({
       const newData = await api.updateLCOEInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -250,7 +253,7 @@ export function LCOEModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */

@@ -29,6 +29,7 @@ export interface WorkspaceWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
