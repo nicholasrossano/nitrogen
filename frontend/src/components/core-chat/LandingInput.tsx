@@ -24,6 +24,8 @@ interface LandingInputProps {
   extraInputActions?: React.ReactNode;
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
+  /** Attached tray rendered above and visually connected to the composer */
+  topComposerContent?: React.ReactNode;
   /** Alternate landing layout for initiative overview pages */
   layoutMode?: 'default' | 'overview';
 }
@@ -52,6 +54,7 @@ export function LandingInput({
   placeholder = 'Ask anything',
   extraInputActions,
   inputChips,
+  topComposerContent,
   layoutMode = 'default',
 }: LandingInputProps) {
   const devMode = useSettingsStore((s) => s.devMode);
@@ -132,6 +135,11 @@ export function LandingInput({
 
   const renderComposer = (containerClassName?: string) => (
     <div className={containerClassName ?? 'w-full max-w-2xl'}>
+      {topComposerContent ? (
+        <div className="relative z-10 mx-3 mb-[-1px]">
+          {topComposerContent}
+        </div>
+      ) : null}
       <form onSubmit={handleSubmit} className="relative">
         <div
           className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
