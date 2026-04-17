@@ -1,13 +1,31 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from datetime import datetime
 from uuid import UUID
+
+
+class FieldContext(BaseModel):
+    """Explicit context for a field-level investigate request."""
+    field_name: str = Field(..., description="Exact field_name from the module input row.")
+    label: str = Field(..., description="Human-readable label for the field.")
+    current_value: Optional[float] = Field(None, description="Current numeric value shown in the module input row.")
+    unit: Optional[str] = Field(None, description="Display unit for the current value.")
+    model_type: Optional[Literal["lcoe", "carbon", "solar"]] = Field(
+        None,
+        description="Model family used by the proposed_value widget confirm flow.",
+    )
+    module_id: Optional[str] = Field(None, description="Module registry id for module-specific investigate hints.")
+    status: Optional[str] = Field(None, description="Current row status such as assumed, inferred, or confirmed.")
 
 
 class ChatMessageCreate(BaseModel):
     """Schema for sending a chat message"""
     content: str = Field(..., min_length=1, max_length=10000)
     tool_hint: Optional[str] = Field(None, description="Optional tool ID the user explicitly selected (e.g. 'lcoe_model')")
+    field_context: Optional[FieldContext] = Field(
+        None,
+        description="Optional explicit field context for investigate/propose-value chat flows.",
+    )
 
 
 class WidgetData(BaseModel):

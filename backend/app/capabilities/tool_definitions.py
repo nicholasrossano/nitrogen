@@ -223,11 +223,13 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
             "function": {
                 "name": "propose_input_value",
                 "description": (
-                    "Propose a specific numeric or categorical value for a single model input field "
-                    "(LCOE or Carbon model). Use this when the user asks to investigate, estimate, "
+                    "Propose a specific numeric value for a single model input field "
+                    "(LCOE, Carbon, or Solar model). Use this when the user asks to investigate, estimate, "
                     "research, or help determine a value for a specific input field. The proposed value "
                     "will be shown in a confirmation widget that the user can accept to update the model. "
-                    "ALWAYS include a concrete numeric value — never just explain the field without proposing."
+                    "ALWAYS include a concrete numeric value — never just explain the field without proposing. "
+                    "If the user asks for a better, alternative, or different value, the proposal must differ "
+                    "from the current value shown in the model inputs."
                 ),
                 "parameters": {
                     "type": "object",
@@ -246,7 +248,7 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
                         },
                         "model_type": {
                             "type": "string",
-                            "enum": ["lcoe", "carbon"],
+                            "enum": ["lcoe", "carbon", "solar"],
                             "description": "Which model this input belongs to.",
                         },
                         "confidence": {
@@ -522,7 +524,9 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
                     "Propose a specific value for a model input field (LCOE, Carbon, or Solar). "
                     "Use when the user asks to investigate, estimate, or determine a value for a "
                     "specific input (e.g. 'what should net capacity be?', 'investigate Total CAPEX', "
-                    "'estimate capacity factor', 'change tilt to 20°'). The value is shown in a confirmation widget."
+                    "'estimate capacity factor', 'change tilt to 20°'). The value is shown in a confirmation widget. "
+                    "If the user asks for a better, alternative, or different value, the proposal must differ "
+                    "from the current value shown in the model inputs."
                 ),
                 "parameters": {
                     "type": "object",

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult, FieldContext } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -45,7 +45,7 @@ interface InitiativeState {
   loadDriveLinkedFiles: (id: string) => Promise<void>;
   importFromDrive: (id: string, fileIds: string[]) => Promise<DriveLinkedFile[]>;
   syncDriveFiles: (id: string) => Promise<DriveSyncResult>;
-  sendMessage: (id: string, content: string, toolHint?: string) => Promise<void>;
+  sendMessage: (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => Promise<void>;
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
   retryMessage: (id: string, messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
@@ -257,7 +257,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   },
 
   // Send a message with streaming
-  sendMessage: async (id: string, content: string, toolHint?: string) => {
+  sendMessage: async (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
     const { messages } = get();
     
     // Set sending state first
@@ -342,6 +342,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           set({ messages: finalMessages });
         },
         toolHint,
+        fieldContext,
       );
     } catch (error) {
       console.error('sendMessage: error', error);

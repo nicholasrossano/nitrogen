@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import type { FieldContext } from '@/lib/api';
 import { ArrowUp, X, Paperclip } from 'lucide-react';
 
 interface ChatInputProps {
@@ -9,7 +10,7 @@ interface ChatInputProps {
   disabled?: boolean;
   stage?: string;
   placeholder?: string;
-  onSend?: (content: string) => void;
+  onSend?: (content: string, fieldContext?: FieldContext | null) => void;
 }
 
 export function ChatInput({ 
@@ -21,6 +22,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
+  const [draftFieldContext, setDraftFieldContext] = useState<FieldContext | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,12 +30,17 @@ export function ChatInput({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail ?? {};
-      const text = detail.text;
-      const label = detail.label ?? null;
+      const detail = (e as CustomEvent).detail as {
+        text?: string;
+        label?: string | null;
+        fieldContext?: FieldContext | null;
+      } | null;
+      const text = detail?.text;
+      const label = detail?.label ?? null;
       if (text) {
         setInput(text);
         setDraftTag(label);
+        setDraftFieldContext(detail?.fieldContext ?? null);
         setTimeout(() => textareaRef.current?.focus(), 0);
       }
     };
@@ -69,13 +76,14 @@ export function ChatInput({
     const message = input.trim();
     setInput('');
     setDraftTag(null);
+    setDraftFieldContext(null);
     setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
     
     if (onSend) {
-      onSend(message);
+      onSend(message, draftFieldContext);
     } else if (initiativeId) {
-      await sendMessage(initiativeId, message);
+      await sendMessage(initiativeId, message, undefined, draftFieldContext);
     }
   };
 
@@ -115,7 +123,7 @@ export function ChatInput({
               {draftTag}
               <button
                 type="button"
-                onClick={() => { setDraftTag(null); setInput(''); }}
+                onClick={() => { setDraftTag(null); setDraftFieldContext(null); setInput(''); }}
                 className="hover:opacity-60 transition-opacity"
                 aria-label="Remove"
               >
