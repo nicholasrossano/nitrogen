@@ -147,6 +147,54 @@ function InitiativePageContent() {
   const modulesChatOpen = activeView === 'modules' && chatPanels.modules.open;
   const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && chatPanels.framework.open;
   const sideChatOpen = modulesChatOpen || frameworkChatOpen;
+  const workspaceToggleEnabled = !isViewer && (
+    activeView === 'overview' ||
+    activeView === 'framework' ||
+    activeView === 'modules'
+  );
+  const chatToggleEnabled = activeView === 'modules' || (activeView === 'framework' && hasProjectPlan);
+  const workspaceToggleActive =
+    activeView === 'overview' ||
+    (activeView === 'framework' && !frameworkChatOpen) ||
+    (activeView === 'modules' && !modulesChatOpen);
+
+  const workspaceHeaderToggle = {
+    active: workspaceToggleActive,
+    disabled: !workspaceToggleEnabled,
+    onClick: () => {
+      if (!workspaceToggleEnabled || workspaceToggleActive) return;
+      if (activeView === 'framework') {
+        setChatPanelOpen('framework', false);
+        return;
+      }
+      if (activeView === 'modules') {
+        setChatPanelOpen('modules', false);
+      }
+    },
+    title: !workspaceToggleEnabled
+      ? 'Workspace unavailable'
+      : workspaceToggleActive
+        ? 'Workspace active'
+        : 'Show workspace',
+    icon: 'workspace' as const,
+  };
+
+  const chatHeaderToggle = {
+    active: activeView === 'modules' ? modulesChatOpen : frameworkChatOpen,
+    disabled: !chatToggleEnabled,
+    onClick: () => {
+      if (!chatToggleEnabled) return;
+      if (activeView === 'modules') {
+        setChatPanelOpen('modules', !modulesChatOpen);
+        return;
+      }
+      setChatPanelOpen('framework', !frameworkChatOpen);
+    },
+    title: !chatToggleEnabled
+      ? 'Chat unavailable'
+      : (activeView === 'modules' ? (modulesChatOpen ? 'Hide chat' : 'Show chat') : (frameworkChatOpen ? 'Hide chat' : 'Show chat')),
+    icon: 'chat' as const,
+  };
 
   const setChatPanelOpen = useCallback((view: 'modules' | 'framework', open: boolean) => {
     setChatPanels((prev) => ({
@@ -648,25 +696,8 @@ function InitiativePageContent() {
             initiative={initiative}
             onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
             readOnly={Boolean(isViewer)}
-            {...(activeView === 'modules'
-              ? {
-                  rightToggle: {
-                    active: modulesChatOpen,
-                    onClick: () => setChatPanelOpen('modules', !modulesChatOpen),
-                    title: modulesChatOpen ? 'Hide chat' : 'Show chat',
-                    icon: 'chat' as const,
-                  },
-                }
-              : activeView === 'framework' && hasProjectPlan
-                ? {
-                    rightToggle: {
-                      active: frameworkChatOpen,
-                      onClick: () => setChatPanelOpen('framework', !frameworkChatOpen),
-                      title: frameworkChatOpen ? 'Hide chat' : 'Show chat',
-                      icon: 'chat' as const,
-                    },
-                  }
-                : {})}
+            leftToggle={workspaceHeaderToggle}
+            rightToggle={chatHeaderToggle}
           />
         )}
       </div>
