@@ -710,16 +710,18 @@ async def send_chat_message(
         await update_initiative_from_inputs(db, initiative, extracted)
 
     tool_hint = data.tool_hint or None
+    field_context = data.field_context.model_dump() if data.field_context else None
 
     action_result = await chat_service.get_next_action(
         messages=messages,
         initiative=initiative,
         tool_hint=tool_hint,
+        field_context=field_context,
     )
     
     logger.info(f"Orchestration chose action: {action_result.action}")
 
-    _model_inputs_ctx2 = ChatService._format_model_inputs_from_messages(messages)
+    _model_inputs_ctx2 = ChatService._format_model_inputs_from_messages(messages, field_context)
 
     widget_type, widget_data, assistant_response, sources = await chat_service.execute_project_action(
         initiative=initiative,
@@ -727,6 +729,7 @@ async def send_chat_message(
         chat_history=messages,
         tool_hint=tool_hint,
         model_inputs_context=_model_inputs_ctx2,
+        field_context=field_context,
     )
     
     # Convert sources to citation format

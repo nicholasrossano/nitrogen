@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ChatMessage, api } from '@/lib/api';
+import { ChatMessage, FieldContext, api } from '@/lib/api';
 import { ChatInput } from '@/components/chat/ChatInput';
 import ReactMarkdown from 'react-markdown';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -23,6 +23,7 @@ import { PlanSummaryWidget } from '@/components/widgets/PlanSummaryWidget';
 import { PlanStructureConfirmWidget } from '@/components/widgets/PlanStructureConfirmWidget';
 import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
+import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
 import { EDITOR_WIDGET_TYPES } from './EditorSidePanel';
 
 interface ChatPanelProps {
@@ -30,7 +31,7 @@ interface ChatPanelProps {
   sending: boolean;
   generating: boolean;
   initiativeId: string;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, fieldContext?: FieldContext | null) => void;
   fullWidth?: boolean;
   hasProjectPlan?: boolean;
   readOnly?: boolean;
@@ -177,12 +178,12 @@ export function ChatPanel({
   );
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, fieldContext?: FieldContext | null) => {
       if (isOnboardingTab) {
         // Auto-name the onboarding tab after its first user message
         const isFirst = (messages || []).filter((m) => m.role === 'user').length === 0;
         autoNameTab(activeTab.id, content, isFirst);
-        onSendMessage(content);
+        onSendMessage(content, fieldContext);
         return;
       }
 
@@ -204,7 +205,7 @@ export function ChatPanel({
       autoNameTab(tabId, content, isFirst);
 
       try {
-        const response = await api.sendMessage(initiativeId, content);
+        const response = await api.sendMessage(initiativeId, content, undefined, fieldContext);
         addMessage(initiativeId, tabId, response.message);
       } catch {
         removeMessage(initiativeId, tabId, userMsg.id);
@@ -731,6 +732,12 @@ function ChatWidget({
       return (
         <ErrorBoundary>
           <CoverLetterProposedValueWidget data={data as any} />
+        </ErrorBoundary>
+      );
+    case 'proposed_value':
+      return (
+        <ErrorBoundary>
+          <ProposedValueWidget data={data as any} />
         </ErrorBoundary>
       );
     case 'template_proposed_value':
