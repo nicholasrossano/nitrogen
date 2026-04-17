@@ -43,6 +43,7 @@ function isNotFoundError(error: unknown): boolean {
 interface Props {
   instanceId: string;
   stageId: string;
+  workflowVersion?: number;
   fields: FieldDef[];
   items: BuildItem[];
   readOnly?: boolean;
@@ -268,7 +269,7 @@ function AddItemRow({
 
 // ── Main component ────────────────────────────────────────────────────────
 
-export function CategorizedListStage({ instanceId, stageId, fields, items, readOnly, onChanged }: Props) {
+export function CategorizedListStage({ instanceId, stageId, workflowVersion, fields, items, readOnly, onChanged }: Props) {
   const [adding, setAdding] = useState(false);
   const [localItems, setLocalItems] = useState(items);
   const [optimisticAddedItemId, setOptimisticAddedItemId] = useState<string | null>(null);
@@ -293,10 +294,10 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
       const newIdx = localItems.findIndex((i) => i.id === over.id);
       const reordered = arrayMove(localItems, oldIdx, newIdx);
       setLocalItems(reordered);
-      await api.reorderStageItems(instanceId, stageId, reordered.map((i) => i.id));
+      await api.reorderStageItems(instanceId, stageId, reordered.map((i) => i.id), workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, localItems, onChanged]
+    [instanceId, stageId, localItems, onChanged, workflowVersion]
   );
 
   const handleDelete = useCallback(
@@ -304,7 +305,7 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
       const previousItems = localItems;
       setLocalItems((prev) => prev.filter((item) => item.id !== itemId));
       try {
-        await api.deleteStageItem(instanceId, stageId, itemId);
+        await api.deleteStageItem(instanceId, stageId, itemId, workflowVersion);
         onChanged();
       } catch (error) {
         // If the backend already deleted it (race/double-click), keep UI state.
@@ -316,30 +317,30 @@ export function CategorizedListStage({ instanceId, stageId, fields, items, readO
         throw error;
       }
     },
-    [instanceId, stageId, onChanged, localItems]
+    [instanceId, stageId, onChanged, localItems, workflowVersion]
   );
 
   const handleEdit = useCallback(
     async (itemId: string, content: Record<string, any>) => {
       const label = String(content[fields[0]?.name ?? 'label'] ?? '');
       const icon = inferCategoryIconName(label);
-      await api.editStageItem(instanceId, stageId, itemId, { ...content, icon });
+      await api.editStageItem(instanceId, stageId, itemId, { ...content, icon }, workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, onChanged, fields]
+    [instanceId, stageId, onChanged, fields, workflowVersion]
   );
 
   const handleAdd = useCallback(
     async (content: Record<string, string>) => {
       const primaryFieldName = fields[0]?.name ?? 'label';
       const icon = inferCategoryIconName(String(content[primaryFieldName] ?? ''));
-      const { item } = await api.addStageItem(instanceId, stageId, { ...content, icon });
+      const { item } = await api.addStageItem(instanceId, stageId, { ...content, icon }, workflowVersion);
       setLocalItems((prev) => [...prev, item]);
       setOptimisticAddedItemId(item.id);
       setAdding(false);
       onChanged();
     },
-    [instanceId, stageId, onChanged, fields]
+    [instanceId, stageId, onChanged, fields, workflowVersion]
   );
 
   return (

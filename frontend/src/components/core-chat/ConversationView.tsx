@@ -15,7 +15,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import type { CoreChatMessage } from '@/stores/chatStore';
-import { SourceCitation, ResearchStep } from '@/lib/api';
+import { FieldContext, SourceCitation, ResearchStep } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
@@ -33,7 +33,7 @@ export interface ConversationViewProps {
   researchSteps: ResearchStep[];
   streamingContent: string;
   error: string | null;
-  onSendMessage: (content: string, toolHint?: string) => void;
+  onSendMessage: (content: string, toolHint?: string, fieldContext?: FieldContext | null) => void;
   onUploadFile?: (file: File) => Promise<void>;
   onEditMessage: (messageId: string, newContent: string) => void;
   onRetryMessage: (messageId: string) => void;
@@ -96,6 +96,7 @@ export function ConversationView({
 
   const [input, setInput] = useState('');
   const [draftTag, setDraftTag] = useState<string | null>(null);
+  const [draftFieldContext, setDraftFieldContext] = useState<FieldContext | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -124,12 +125,17 @@ export function ConversationView({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail ?? {};
-      const text = detail.text;
-      const label = detail.label ?? null;
+      const detail = (e as CustomEvent).detail as {
+        text?: string;
+        label?: string | null;
+        fieldContext?: FieldContext | null;
+      } | null;
+      const text = detail?.text;
+      const label = detail?.label ?? null;
       if (text) {
         setInput(text);
         setDraftTag(label);
+        setDraftFieldContext(detail?.fieldContext ?? null);
         setTimeout(() => textareaRef.current?.focus(), 0);
       }
     };
@@ -173,9 +179,10 @@ export function ConversationView({
       setUploading(false);
     }
 
-    onSendMessage(input.trim());
+    onSendMessage(input.trim(), undefined, draftFieldContext);
     setInput('');
     setDraftTag(null);
+    setDraftFieldContext(null);
     setAttachedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };

@@ -204,7 +204,15 @@ export function ProjectHeader({
                 onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
                 disabled={leftToggle.disabled}
                 title={leftToggle.title}
-                className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1.5 ${
+                  leftToggle.active
+                    ? leftToggle.disabled
+                      ? 'text-accent/70 cursor-not-allowed'
+                      : 'text-accent'
+                    : leftToggle.disabled
+                      ? 'text-text-tertiary opacity-40 cursor-not-allowed'
+                      : 'text-text-tertiary'
+                }`}
               >
                 {renderPanelIcon(leftToggle.icon, 'left')}
               </button>
@@ -214,7 +222,15 @@ export function ProjectHeader({
                 onClick={rightToggle.disabled ? undefined : rightToggle.onClick}
                 disabled={rightToggle.disabled}
                 title={rightToggle.title}
-                className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1.5 ${
+                  rightToggle.active
+                    ? rightToggle.disabled
+                      ? 'text-accent/70 cursor-not-allowed'
+                      : 'text-accent'
+                    : rightToggle.disabled
+                      ? 'text-text-tertiary opacity-40 cursor-not-allowed'
+                      : 'text-text-tertiary'
+                }`}
               >
                 {renderPanelIcon(rightToggle.icon, 'right')}
               </button>

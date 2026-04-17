@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
+import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { EditorSidePanel } from './EditorSidePanel';
@@ -14,6 +15,7 @@ import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel
 export type WorkspacePanelTab =
   | { id: 'chat-artifacts'; kind: 'artifacts'; title: 'Chat Outputs' }
   | { id: string; kind: 'module'; title: string; instanceId: string; moduleId: string }
+  | { id: string; kind: 'decision-log'; title: string; moduleInstanceId: string; moduleId?: string }
   | { id: string; kind: 'document'; title: string; citation: ResearchPanelCitation };
 
 interface ProjectWorkspaceEditorPanelProps {
@@ -29,6 +31,8 @@ interface ProjectWorkspaceEditorPanelProps {
   showModuleActions?: boolean;
   onSendToChat?: (content: string, toolHint?: string) => void;
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
+  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -44,6 +48,8 @@ export function ProjectWorkspaceEditorPanel({
   showModuleActions = true,
   onSendToChat,
   onOpenChatSession,
+  onOpenDecisionLog,
+  onExportDecisionLog,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const effectiveWorkspaceLaunchMode =
@@ -180,6 +186,8 @@ export function ProjectWorkspaceEditorPanel({
           <EditorSidePanel
             widgets={chatWidgets}
             initiativeId={initiativeId}
+            onOpenDecisionLog={onOpenDecisionLog}
+            onExportDecisionLog={onExportDecisionLog}
           />
         )}
 
@@ -189,6 +197,14 @@ export function ProjectWorkspaceEditorPanel({
             moduleId={activeTab.moduleId}
             initiativeId={initiativeId}
             onAddToChat={(text) => onSendToChat?.(text, activeTab.moduleId)}
+            onOpenDecisionLog={onOpenDecisionLog}
+            onExportDecisionLog={onExportDecisionLog}
+          />
+        )}
+
+        {activeTab?.kind === 'decision-log' && (
+          <DecisionLogWorkspaceTab
+            moduleInstanceId={activeTab.moduleInstanceId}
           />
         )}
 

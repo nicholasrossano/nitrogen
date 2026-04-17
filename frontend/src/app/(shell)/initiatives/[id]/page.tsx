@@ -135,6 +135,23 @@ function InitiativePageContent() {
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
     [workspaceTabs, activeWorkspaceTabId],
   );
+  const activeModuleContext = useMemo(() => {
+    if (activeWorkspaceTab?.kind === 'module') {
+      return {
+        instanceId: activeWorkspaceTab.instanceId,
+        moduleId: activeWorkspaceTab.moduleId,
+        title: activeWorkspaceTab.title,
+      };
+    }
+    if (activeWorkspaceTab?.kind === 'decision-log' && activeWorkspaceTab.moduleId) {
+      return {
+        instanceId: activeWorkspaceTab.moduleInstanceId,
+        moduleId: activeWorkspaceTab.moduleId,
+        title: activeWorkspaceTab.title,
+      };
+    }
+    return null;
+  }, [activeWorkspaceTab]);
   const visibleWorkspaceTabs = useMemo(
     () => (activeView === 'modules' ? workspaceTabs : workspaceTabs.filter((tab) => tab.kind === 'document')),
     [activeView, workspaceTabs],
@@ -426,6 +443,34 @@ function InitiativePageContent() {
     });
   }, [openWorkspaceTab]);
 
+  const openDecisionLogTab = useCallback(
+    (context: { instanceId: string; moduleId: string; title: string }) => {
+      setActiveView('modules');
+      router.replace(`/initiatives/${initiativeId}?view=modules`);
+      openWorkspaceTab({
+        id: `decision-log-${context.instanceId}`,
+        kind: 'decision-log',
+        title: 'Decision Log',
+        moduleInstanceId: context.instanceId,
+        moduleId: context.moduleId,
+      });
+    },
+    [initiativeId, openWorkspaceTab, router],
+  );
+
+  const exportDecisionLog = useCallback(
+    async (context: { instanceId: string; moduleId: string; title: string }) => {
+      const { blob, filename } = await api.exportModuleDecisionLogXlsx(context.instanceId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    [],
+  );
+
   const closeWorkspaceTab = useCallback((tabId: string) => {
     setWorkspaceTabs((prev) => {
       const nextTabs = prev.filter((tab) => tab.id !== tabId);
@@ -598,6 +643,8 @@ function InitiativePageContent() {
             setPreferArtifactsTab(true);
             setPendingChatToOpen(chat);
           }}
+          onOpenDecisionLog={openDecisionLogTab}
+          onExportDecisionLog={exportDecisionLog}
         />
       );
     }
@@ -667,6 +714,7 @@ function InitiativePageContent() {
           initiativeId={initiativeId}
           researchMode={false}
           pendingChatToOpen={pendingChatToOpen}
+          activeModuleContext={activeModuleContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onCitationClick={handleCitationClick}
