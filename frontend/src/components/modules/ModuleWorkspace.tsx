@@ -189,47 +189,24 @@ function ConfirmationBar({
   );
 
   if (status === 'confirmed') {
-    const isComputedResultsStage = stageDef.component === 'computed_results';
-    const confirmedAt = stageState.confirmed_at
-      ? new Date(stageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-      : null;
-    const confirmedBy = stageState.confirmed_by_email || stageState.confirmed_by || null;
-    const confirmedMeta = confirmedAt
-      ? `${confirmedAt}${confirmedBy ? ` by ${confirmedBy}` : ''}`
-      : null;
+    if (!isEditingConfirmedStage) return null;
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider bg-emerald-50/60">
         <div className="flex items-center gap-2 text-xs text-emerald-700">
           <CheckCircle2 className="w-4 h-4" />
-          <span>
-            {isEditingConfirmedStage
-              ? 'Editing confirmed stage'
-              : `Confirmed${confirmedMeta ? ` • ${confirmedMeta}` : ''}`}
-          </span>
+          <span>Editing confirmed stage</span>
         </div>
-        {isEditingConfirmedStage ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onCancelEditConfirmedStage}
-              className="btn-secondary !py-1.5 !px-3 text-xs"
-            >
-              Cancel
-            </button>
-            {!suppressConfirmAction && (
-              <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} disabled={!hasPendingChanges} />
-            )}
-          </div>
-        ) : isComputedResultsStage || suppressConfirmAction ? (
-          <span className="text-xs text-emerald-700/80">Go back to earlier stages to edit values</span>
-        ) : (
+        <div className="flex items-center gap-2">
           <button
-            onClick={onStartEditConfirmedStage}
-            className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+            onClick={onCancelEditConfirmedStage}
+            className="btn-secondary !py-1.5 !px-3 text-xs"
           >
-            <Pencil className="w-3 h-3" />
-            Edit
+            Cancel
           </button>
-        )}
+          {!suppressConfirmAction && (
+            <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} disabled={!hasPendingChanges} />
+          )}
+        </div>
       </div>
     );
   }
@@ -721,10 +698,6 @@ export function ModuleWorkspace({
   const canConfirmCurrentStage = requiresPendingChangesForConfirm
     ? hasPendingConfirmedStageChanges
     : true;
-  const shouldShowMergedConfirmedState =
-    isCalculationComputedWidget
-    && currentStageState.status === 'confirmed'
-    && !isEditingConfirmedStage;
   const computedFooterAction: WorkspaceWidgetFooterAction | undefined = shouldShowMergedConfirmAction
     ? {
         label: 'Confirm',
@@ -744,24 +717,32 @@ export function ModuleWorkspace({
         disabled: !canConfirmCurrentStage,
       }
     : undefined;
+  // Only pass 'confirm' mode to the widget footer; 'confirmed' state is now
+  // handled universally by the floating badge below.
   const computedFooterState: WorkspaceWidgetFooterState | undefined =
-    shouldShowMergedConfirmAction
-      ? { mode: 'confirm' }
-      : shouldShowMergedConfirmedState
-      ? {
-          mode: 'confirmed',
-          confirmedAt: currentStageState.confirmed_at
-            ? new Date(currentStageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-            : null,
-        }
-      : undefined;
+    shouldShowMergedConfirmAction ? { mode: 'confirm' } : undefined;
   const shouldShowSeparateConfirmationBar = !(
-    isCalculationComputedWidget
-    && (shouldShowMergedConfirmAction || shouldShowMergedConfirmedState)
+    isCalculationComputedWidget && shouldShowMergedConfirmAction
   );
 
+  // Floating confirmed badge — universal across all stage/widget types
+  const badgeConfirmedAt = currentStageState.confirmed_at
+    ? new Date(currentStageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
+  const badgeConfirmedBy = currentStageState.confirmed_by_email || currentStageState.confirmed_by || null;
+  const badgeConfirmedMeta = badgeConfirmedAt
+    ? `${badgeConfirmedAt}${badgeConfirmedBy ? ` by ${badgeConfirmedBy}` : ''}`
+    : null;
+  const showConfirmedBadge =
+    currentStageState.status === 'confirmed'
+    && !isEditingConfirmedStage;
+  const showEditInBadge =
+    showConfirmedBadge
+    && !isComputedStage
+    && !(requiresFinalApproval && currentStageDef.id === terminalStageId);
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
       <div className={isAssessmentMapWidget ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
         <div className={isAssessmentMapWidget
           ? 'h-full w-full p-3 flex flex-col'
@@ -942,6 +923,29 @@ export function ModuleWorkspace({
           </div>
         </div>
       </div>
-    </div>
-  );
+
+    {/* Floating confirmed badge — bottom-right of workspace */}
+    {showConfirmedBadge && (
+      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 py-1.5 px-3 rounded-md text-xs text-emerald-700 bg-emerald-50/80 border border-emerald-100 shadow-sm pointer-events-auto">
+        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+        <span>{badgeConfirmedMeta ? `Confirmed • ${badgeConfirmedMeta}` : 'Confirmed'}</span>
+        {showEditInBadge && (
+          <button
+            onClick={() => {
+              setEditBaselineByStageId((prev) => ({
+                ...prev,
+                [currentStageDef.id]: currentStageDataSignature,
+              }));
+              setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+            }}
+            className="ml-1 flex items-center gap-1 text-emerald-700 enabled:hover:text-emerald-900 transition-colors"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </button>
+        )}
+      </div>
+    )}
+  </div>
+);
 }
