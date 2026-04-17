@@ -1,12 +1,8 @@
 # Nitrogen Architecture
 
-Nitrogen now exposes one canonical module workflow:
+Nitrogen now exposes one canonical staged module workflow driven by `StageDef[]`.
 
-1. `setup`
-2. `build`
-3. `output`
-
-Every launch module fits that lifecycle. The difference between module families is not a separate platform or a separate lifecycle. The difference is only how the `build` stage behaves.
+Every workspace module is an ordered set of confirmable stages stored on `module_instances.workflow_state`. The difference between module families is not a separate lifecycle; it is only which stage components and population steps they declare.
 
 ## `workflow_state` Shape
 
@@ -14,26 +10,47 @@ All modules share one canonical `workflow_state` JSON structure:
 
 ```json
 {
-  "setup": { "fields": { ... }, "status": "complete" },
-  "build": {
-    "stages": [
-      {
-        "id": "main",
-        "name": "Build",
-        "stage_type": "widget",          // "widget" | "simple_list" | "structured_list"
-        "status": "in_progress",         // "not_started" | "in_progress" | "complete" | "confirmed"
-        "widget_type": "lcoe_inputs",    // present for stage_type == "widget"
-        "widget_data": { ... }           // present for stage_type == "widget"
-      }
-    ],
-    "current_stage_id": "main"
+  "module_type": "stakeholder_assessment",
+  "current_stage_id": "categories",
+  "stages": {
+    "categories": {
+      "status": "confirmed",
+      "confirmed_at": "2026-04-17T14:00:00+00:00",
+      "confirmed_by": "user-123",
+      "data": { "items": [ ... ] }
+    },
+    "details": {
+      "status": "draft",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "data": { "records": { ... } }
+    }
   },
-  "output": { ... }
+  "final_approval": {
+    "status": "approved",
+    "approved_at": "2026-04-17T15:00:00+00:00",
+    "approved_by": "user-123",
+    "approved_by_email": "owner@example.com"
+  }
 }
 ```
 
-Widget-backed modules have exactly one entry in `build.stages` with `stage_type: "widget"`.  
-Layered assessment modules have one entry per layer, using `stage_type: "simple_list"` or `"structured_list"`.
+Stage data shapes are component-driven:
+
+- `table` / `list`: `data.items`
+- `record`: `data.source_stage_id` + `data.records`
+- `computed_results`: `data.widget_data`
+
+Modules that export artifacts also require a shared `final_approval` step before export is enabled.
+
+## Decision Log
+
+Decision-log reporting is now shared infrastructure, not per-module custom UI:
+
+- live editable truth remains `module_instances.workflow_state`
+- append-only audit history is stored in `decision_events`
+- project-wide current-state and history views are derived from those two sources
+- the primary export is `XLSX` with `Current State` and `History` sheets
 
 ## Module Families
 
@@ -117,6 +134,11 @@ The module owns:
 
 The workflow service should not branch on specific launch calculator `module_id` values.
 
+For staged table stages (`component: "table"` with `widget: "editable_table"`), row extensibility is schema-driven via `StageDef.allow_add_rows`:
+
+- `false` means a fixed variable list (no add-row controls)
+- `true` means users can append rows in the workspace UI
+
 ## Manifest Contract
 
 `ModuleManifest` is the canonical exposure contract for launch modules. It drives registry validation, API exposure, docs, and UI discovery.
@@ -125,10 +147,12 @@ Every module must define:
 
 - `goal`
 - `primary_ui_object`
+- `investigate_hint` (optional, for concise field-level investigate guidance)
 - `workspace_build_widget`
 - `workspace_output_widget`
 - `export_artifact_types`
 - `adapter_bindings`
+- `decision_log_attribution`
 - `input_dependencies`
 - `produced_outputs`
 - `downstream_dependencies`
@@ -140,6 +164,19 @@ Every module must define:
 Modules declare adapter dependencies in `manifest.adapter_bindings`. Adapters are registered separately and validated by the module registry at load time.
 
 This lets module authoring stay focused on product behavior while adapters encapsulate external engines, APIs, or MCP-backed capability.
+
+## Decision-Log Attribution Contract
+
+Decision-log citation behavior should be schema-driven via `manifest.decision_log_attribution`, not hardcoded in reporting services.
+
+The shared builder uses this manifest metadata to decide whether to include:
+
+- adapter binding citations
+- provenance/reference citations already present in stage data
+- LLM model names when modules persist them in widget or provenance metadata
+- selected widget metadata fields (for example a method pack) labeled via manifest config
+
+For third-party or open-source modules, prefer declaring user-facing adapter labels in `decision_log_attribution.adapter_labels` instead of adding service-level `module_id` branches.
 
 ## Launch Scope
 

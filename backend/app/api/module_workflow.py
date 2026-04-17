@@ -15,11 +15,10 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
@@ -29,21 +28,21 @@ from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 from app.modules.base import BaseModule
 from app.modules.registry import get_module_registry
 from app.modules.utils import make_build_item
-from app.services import module_service
 from app.services.module_workflow_service import (
-    build_deliverable_title,
-    build_workflow_state,
+    clear_final_approval,
     confirm_stage,
     enrich_record_item,
     ensure_workflow_state,
     get_initiative_context,
     populate_stage,
+    requires_final_approval,
     save_workflow_state,
     uses_workspace_flow,
-    _build_initial_workflow_state,
-    _infer_current_stage_id,
-    _is_legacy_state,
-    _migrate_legacy_state,
+)
+from app.services.decision_event_service import append_decision_event
+from app.services.decision_log_service import (
+    build_module_decision_history_report,
+    build_module_decision_log_xlsx,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,8 +103,95 @@ def _module_definition_payload(module: BaseModule) -> dict[str, Any]:
         "icon": module.definition.icon,
         "output_type": module.definition.output_type,
         "export_format": module.definition.export_format,
+        "requires_final_approval": requires_final_approval(module),
         "stage_defs": [s.to_dict() for s in module.stage_defs],
     }
+
+
+def _workflow_response(
+    instance_id: _uuid.UUID,
+    inst: ModuleInstance,
+    module: BaseModule,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "instance_id": str(instance_id),
+        "module_id": inst.module_id,
+        "status": inst.status,
+        "workflow_version": inst.workflow_version,
+        "workflow_state": state,
+        "module_definition": _module_definition_payload(module),
+    }
+
+
+def _get_expected_workflow_version(request: Request) -> int | None:
+    raw = request.headers.get("x-workflow-version")
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid X-Workflow-Version header") from exc
+
+
+def _assert_workflow_version(inst: ModuleInstance, request: Request) -> None:
+    expected = _get_expected_workflow_version(request)
+    if expected is None:
+        return
+    current = inst.workflow_version or 1
+    if expected != current:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "This module was updated elsewhere. Refresh and try again.",
+                "current_workflow_version": current,
+            },
+        )
+
+
+def _all_required_stages_confirmed(module: BaseModule, state: dict[str, Any]) -> bool:
+    return bool(module.stage_defs) and all(
+        state["stages"].get(stage_def.id, {}).get("status") == "confirmed"
+        for stage_def in module.stage_defs
+    )
+
+
+def _has_meaningful_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, set)):
+        return any(_has_meaningful_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_meaningful_value(item) for item in value.values())
+    return True
+
+
+def _get_auto_confirmable_final_stage(module: BaseModule, state: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """Return the terminal stage when it is ready to auto-confirm during final approval."""
+    if not module.stage_defs:
+        return None
+
+    final_stage = module.stage_defs[-1]
+    final_stage_state = state["stages"].get(final_stage.id, {})
+    if final_stage_state.get("status") == "confirmed":
+        return None
+
+    if final_stage_state.get("status") != "draft":
+        return None
+
+    if not _has_meaningful_value(final_stage_state.get("data")):
+        return None
+
+    prior_stage_defs = module.stage_defs[:-1]
+    if not all(
+        state["stages"].get(stage_def.id, {}).get("status") == "confirmed"
+        for stage_def in prior_stage_defs
+    ):
+        return None
+
+    return final_stage.id, final_stage_state
 
 
 def _get_stage_state_or_404(
@@ -136,6 +222,13 @@ def _get_stage_def_or_404(
     return stage_def
 
 
+def _normalized_items(value: Any) -> list[dict[str, Any]]:
+    """Return a safe list of item dicts for stage-data operations."""
+    if not isinstance(value, list):
+        return []
+    return [it for it in value if isinstance(it, dict)]
+
+
 # ---------------------------------------------------------------------------
 # GET state
 # ---------------------------------------------------------------------------
@@ -150,14 +243,7 @@ async def get_workflow_state(
     inst, module = await _get_workflow_instance(db, instance_id, user)
     state = await ensure_workflow_state(db, inst, module)
     await db.commit()
-
-    return {
-        "instance_id": str(instance_id),
-        "module_id": inst.module_id,
-        "status": inst.status,
-        "workflow_state": state,
-        "module_definition": _module_definition_payload(module),
-    }
+    return _workflow_response(instance_id, inst, module, state)
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +254,7 @@ async def get_workflow_state(
 async def populate_stage_endpoint(
     instance_id: _uuid.UUID,
     stage_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -177,15 +264,39 @@ async def populate_stage_endpoint(
     Sets stage status to 'draft' when complete (awaiting user confirmation).
     """
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
     _get_stage_def_or_404(module, stage_id, instance_id)
 
+    prior_approved = ((inst.workflow_state or {}).get("final_approval") or {}).get("status") == "approved"
     state = await populate_stage(db, inst, module, stage_id)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="stage_populated",
+        entity_type="stage",
+        entity_id=stage_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"status": state["stages"][stage_id].get("status")},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "stage_repopulated", "stage_id": stage_id},
+        )
     await db.commit()
 
     return {
         "stage_id": stage_id,
         "stage_state": state["stages"][stage_id],
         "workflow_state": state,
+        "workflow_version": inst.workflow_version,
     }
 
 
@@ -197,6 +308,7 @@ async def populate_stage_endpoint(
 async def confirm_stage_endpoint(
     instance_id: _uuid.UUID,
     stage_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -208,14 +320,46 @@ async def confirm_stage_endpoint(
     auto-triggers its population pipeline.
     """
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
 
     state = await ensure_workflow_state(db, inst, module)
     _get_stage_state_or_404(state, stage_id, instance_id)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     state, auto_populate_def = await confirm_stage(
-        db, inst, module, stage_id, confirmed_by=user.uid
+        db,
+        inst,
+        module,
+        stage_id,
+        confirmed_by=user.uid,
+        confirmed_by_email=user.email,
     )
     save_workflow_state(inst, state)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="stage_confirmed",
+        entity_type="stage",
+        entity_id=stage_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={
+            "confirmed_at": state["stages"][stage_id].get("confirmed_at"),
+            "confirmed_by": user.uid,
+            "confirmed_by_email": user.email,
+        },
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "stage_reconfirmed", "stage_id": stage_id},
+        )
 
     inst.status = ModuleInstanceStatus.GENERATING
     await db.commit()
@@ -224,6 +368,17 @@ async def confirm_stage_endpoint(
     if auto_populate_def is not None:
         try:
             state = await populate_stage(db, inst, module, auto_populate_def.id)
+            await append_decision_event(
+                db,
+                inst=inst,
+                event_type="stage_populated",
+                entity_type="stage",
+                entity_id=auto_populate_def.id,
+                stage_id=auto_populate_def.id,
+                actor_user_id=user.uid,
+                actor_email=user.email,
+                payload={"trigger": "auto_after_confirmation", "source_stage_id": stage_id},
+            )
             await db.commit()
         except Exception as e:
             logger.error(
@@ -235,6 +390,7 @@ async def confirm_stage_endpoint(
         "stage_id": stage_id,
         "stage_state": state["stages"][stage_id],
         "workflow_state": state,
+        "workflow_version": inst.workflow_version,
     }
 
 
@@ -252,32 +408,68 @@ async def edit_item(
     stage_id: str,
     item_id: str,
     data: EditItemRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Edit an item's content in a list or table stage."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
 
     state = await ensure_workflow_state(db, inst, module)
     stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     stage_data = stage_state.get("data") or {}
-    items = stage_data.get("items", [])
-    item_idx = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
+    items = _normalized_items(stage_data.get("items"))
+    item_idx = next((i for i, it in enumerate(items) if str(it.get("id")) == item_id), None)
     if item_idx is None:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    items[item_idx]["content"] = data.content
+    previous_content = items[item_idx].get("content", {}) or {}
+    updated_content = dict(data.content)
+    new_value = updated_content.get("value")
+    value_is_present = new_value is not None and str(new_value).strip() != ""
+    value_changed = new_value != previous_content.get("value")
+    if value_changed and value_is_present:
+        # Any explicit user-supplied value should become confirmed to avoid
+        # stale "missing" badges after manual edits or chat-applied updates.
+        updated_content["status"] = "confirmed"
+        updated_content["source"] = "user"
+
+    items[item_idx]["content"] = updated_content
     items[item_idx]["origin"] = "user edited"
     if "provenance" not in items[item_idx]:
         items[item_idx]["provenance"] = {}
     items[item_idx]["provenance"]["derivation"] = "user_edited"
     stage_data["items"] = items
     stage_state["data"] = stage_data
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="item_updated",
+        entity_type="item",
+        entity_id=item_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"content": updated_content},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "item_updated", "stage_id": stage_id, "entity_id": item_id},
+        )
     await db.commit()
 
-    return {"item": items[item_idx]}
+    return {"item": items[item_idx], "workflow_version": inst.workflow_version}
 
 
 class AddItemRequest(BaseModel):
@@ -289,14 +481,17 @@ async def add_item(
     instance_id: _uuid.UUID,
     stage_id: str,
     data: AddItemRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Add a new manually-authored item to a list or table stage."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
 
     state = await ensure_workflow_state(db, inst, module)
     stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     stage_data = stage_state.get("data") or {"items": []}
     new_item = make_build_item(content=data.content, derivation="provided")
@@ -305,10 +500,32 @@ async def add_item(
     if stage_state.get("status") == "pending":
         stage_state["status"] = "draft"
 
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="item_added",
+        entity_type="item",
+        entity_id=new_item["id"],
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"content": new_item["content"]},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "item_added", "stage_id": stage_id, "entity_id": new_item["id"]},
+        )
     await db.commit()
 
-    return {"item": new_item}
+    return {"item": new_item, "workflow_version": inst.workflow_version}
 
 
 @router.delete("/module-workflow/{instance_id}/stages/{stage_id}/items/{item_id}")
@@ -316,28 +533,53 @@ async def delete_item(
     instance_id: _uuid.UUID,
     stage_id: str,
     item_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove an item from a list or table stage."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
 
     state = await ensure_workflow_state(db, inst, module)
     stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     stage_data = stage_state.get("data") or {}
-    items = stage_data.get("items", [])
+    items = _normalized_items(stage_data.get("items"))
     original_len = len(items)
-    items = [it for it in items if it["id"] != item_id]
+    items = [it for it in items if str(it.get("id")) != item_id]
     if len(items) == original_len:
         raise HTTPException(status_code=404, detail="Item not found")
 
     stage_data["items"] = items
     stage_state["data"] = stage_data
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="item_deleted",
+        entity_type="item",
+        entity_id=item_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "item_deleted", "stage_id": stage_id, "entity_id": item_id},
+        )
     await db.commit()
 
-    return {"ok": True, "remaining_count": len(items)}
+    return {"ok": True, "remaining_count": len(items), "workflow_version": inst.workflow_version}
 
 
 class ReorderItemsRequest(BaseModel):
@@ -349,28 +591,61 @@ async def reorder_items(
     instance_id: _uuid.UUID,
     stage_id: str,
     data: ReorderItemsRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Reorder items in a list or table stage."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
 
     state = await ensure_workflow_state(db, inst, module)
     stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     stage_data = stage_state.get("data") or {}
-    items = stage_data.get("items", [])
-    id_to_item = {it["id"]: it for it in items}
+    items = _normalized_items(stage_data.get("items"))
+    id_to_item = {
+        str(it.get("id")): it
+        for it in items
+        if it.get("id") is not None
+    }
     reordered = [id_to_item[iid] for iid in data.item_ids if iid in id_to_item]
     mentioned = set(data.item_ids)
-    reordered.extend(it for it in items if it["id"] not in mentioned)
+    reordered.extend(
+        it
+        for it in items
+        if (it.get("id") is None) or (str(it.get("id")) not in mentioned)
+    )
 
     stage_data["items"] = reordered
     stage_state["data"] = stage_data
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="items_reordered",
+        entity_type="stage",
+        entity_id=stage_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"item_ids": data.item_ids},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "items_reordered", "stage_id": stage_id},
+        )
     await db.commit()
 
-    return {"ok": True}
+    return {"ok": True, "workflow_version": inst.workflow_version}
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +657,7 @@ async def enrich_record_endpoint(
     instance_id: _uuid.UUID,
     stage_id: str,
     item_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -391,11 +667,35 @@ async def enrich_record_endpoint(
     Calls module.enrich_record() and persists the enriched field values.
     """
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
+    prior_approved = ((inst.workflow_state or {}).get("final_approval") or {}).get("status") == "approved"
 
     enriched = await enrich_record_item(db, inst, module, stage_id, item_id)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="record_enriched",
+        entity_type="record",
+        entity_id=item_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"fields": enriched},
+    )
+    state = inst.workflow_state or {}
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "record_enriched", "stage_id": stage_id, "entity_id": item_id},
+        )
     await db.commit()
 
-    return {"item_id": item_id, "record": enriched}
+    return {"item_id": item_id, "record": enriched, "workflow_version": inst.workflow_version}
 
 
 class UpdateRecordRequest(BaseModel):
@@ -408,14 +708,17 @@ async def update_record(
     stage_id: str,
     item_id: str,
     data: UpdateRecordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Update field values for a single record in a record-component stage."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
 
     state = await ensure_workflow_state(db, inst, module)
     stage_state = _get_stage_state_or_404(state, stage_id, instance_id)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     stage_data = stage_state.get("data") or {}
     records = stage_data.get("records", {})
@@ -424,10 +727,32 @@ async def update_record(
     records[item_id] = existing
     stage_data["records"] = records
     stage_state["data"] = stage_data
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="record_updated",
+        entity_type="record",
+        entity_id=item_id,
+        stage_id=stage_id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"fields": data.fields},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "record_updated", "stage_id": stage_id, "entity_id": item_id},
+        )
     await db.commit()
 
-    return {"item_id": item_id, "record": records[item_id]}
+    return {"item_id": item_id, "record": records[item_id], "workflow_version": inst.workflow_version}
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +771,7 @@ class WidgetStateRequest(BaseModel):
 async def persist_widget_state(
     instance_id: _uuid.UUID,
     data: WidgetStateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -455,7 +781,9 @@ async def persist_widget_state(
     api.persistModuleWorkflowWidget() after an inline edit.
     """
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
     state = await ensure_workflow_state(db, inst, module)
+    prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
     # Find the first computed_results stage
     target_stage_def = next(
@@ -480,13 +808,111 @@ async def persist_widget_state(
     if stage_state.get("status") == "pending":
         stage_state["status"] = "draft"
 
-    save_workflow_state(inst, state)
+    clear_final_approval(state)
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="widget_state_updated",
+        entity_type="stage",
+        entity_id=target_stage_def.id,
+        stage_id=target_stage_def.id,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"widget_keys": sorted(data.widget_data.keys())},
+    )
+    if prior_approved and (state.get("final_approval") or {}).get("status") != "approved":
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "widget_state_updated", "stage_id": target_stage_def.id},
+        )
     await db.commit()
 
     return {
         "instance_id": str(instance_id),
         "status": inst.status,
         "workflow_state": state,
+        "workflow_version": inst.workflow_version,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Final approval
+# ---------------------------------------------------------------------------
+
+@router.post("/module-workflow/{instance_id}/final-approval")
+async def approve_final_output(
+    instance_id: _uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Approve the fully confirmed workflow so it becomes exportable."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
+
+    state = await ensure_workflow_state(db, inst, module)
+    auto_confirm_candidate = _get_auto_confirmable_final_stage(module, state)
+    if auto_confirm_candidate is not None:
+        final_stage_id, _ = auto_confirm_candidate
+        state, _ = await confirm_stage(
+            db,
+            inst,
+            module,
+            final_stage_id,
+            user.uid,
+            confirmed_by_email=user.email,
+        )
+        confirmed_stage_state = state["stages"].get(final_stage_id, {})
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="stage_confirmed",
+            stage_id=final_stage_id,
+            entity_type="stage",
+            entity_id=final_stage_id,
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={
+                "status": confirmed_stage_state.get("status"),
+                "confirmed_at": confirmed_stage_state.get("confirmed_at"),
+                "confirmed_by": confirmed_stage_state.get("confirmed_by"),
+                "confirmed_by_email": confirmed_stage_state.get("confirmed_by_email"),
+            },
+        )
+
+    if not _all_required_stages_confirmed(module, state):
+        raise HTTPException(
+            status_code=400,
+            detail="All workflow stages must be confirmed before final approval",
+        )
+
+    state["final_approval"] = {
+        "status": "approved",
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+        "approved_by": user.uid,
+        "approved_by_email": user.email,
+    }
+    save_workflow_state(inst, state, increment_version=True)
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="final_approved",
+        entity_type="module",
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload=state["final_approval"],
+    )
+    await db.commit()
+
+    return {
+        "workflow_state": state,
+        "workflow_version": inst.workflow_version,
     }
 
 
@@ -528,6 +954,11 @@ async def export_module_output(
             status_code=400,
             detail="At least one stage must be confirmed before exporting",
         )
+    if requires_final_approval(module) and (state.get("final_approval") or {}).get("status") != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Final approval is required before exporting this module",
+        )
 
     try:
         export_bytes = await module.generate_export(confirmed_stages, context)
@@ -547,6 +978,17 @@ async def export_module_output(
     initiative = await db.get(Initiative, inst.initiative_id)
     initiative_title = initiative.title if initiative else "Export"
     safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}").replace(" ", "_")[:60]
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="exported",
+        entity_type="export",
+        entity_id=fmt,
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"format": fmt, "scope": "module"},
+    )
+    await db.commit()
 
     return Response(
         content=export_bytes,
@@ -636,55 +1078,67 @@ async def export_writeup(
 
 
 # ---------------------------------------------------------------------------
-# Decision log export (deterministic, no LLM, always fast)
+# Module-scoped decision log (deterministic, no LLM, always fast)
 # ---------------------------------------------------------------------------
 
-@router.get("/module-workflow/{instance_id}/export/decision-log")
-async def export_decision_log(
+@router.get("/module-workflow/{instance_id}/decision-log")
+async def get_module_decision_log(
     instance_id: _uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Export a decision log DOCX for any staged module.
-
-    The decision log lists every confirmed item with its source (model or user),
-    provenance (citations or training data acknowledgment), and confirmation
-    metadata (confirmed_by, confirmed_at). No LLM calls — always fast.
-    """
-    from app.core.filename_utils import safe_content_disposition
-    from app.services.decision_log_service import build_decision_log_docx
-
+    """Return module-scoped, value-level decision history rows."""
     inst, module = await _get_workflow_instance(db, instance_id, user)
     state = await ensure_workflow_state(db, inst, module)
-    context = await get_initiative_context(db, inst.initiative_id)
+    return build_module_decision_history_report(
+        workflow_state=state,
+        stage_defs=module.stage_defs,
+        module_id=inst.module_id,
+        module_name=module.definition.name,
+        module_instance_id=str(inst.id),
+    )
 
-    confirmed_stages = {
-        sid: s for sid, s in state["stages"].items()
-        if s.get("status") == "confirmed"
-    }
-    if not confirmed_stages:
-        raise HTTPException(
-            status_code=400,
-            detail="At least one stage must be confirmed before exporting a decision log",
-        )
 
-    try:
-        docx_bytes = build_decision_log_docx(
-            workflow_state=state,
-            stage_defs=module.stage_defs,
-            project_context=context,
-            current_user_email=getattr(user, "email", None),
-        )
-    except Exception as e:
-        logger.error("Decision log export failed for instance %s: %s", instance_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Decision log export failed: {e}")
+@router.get("/module-workflow/{instance_id}/decision-log/export.xlsx")
+async def export_module_decision_log_xlsx(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Export module-scoped decision history as XLSX."""
+    inst, module = await _get_workflow_instance(db, instance_id, user)
+    state = await ensure_workflow_state(db, inst, module)
+    report = build_module_decision_history_report(
+        workflow_state=state,
+        stage_defs=module.stage_defs,
+        module_id=inst.module_id,
+        module_name=module.definition.name,
+        module_instance_id=str(inst.id),
+    )
+    xlsx_bytes = build_module_decision_log_xlsx(report)
+
+    await append_decision_event(
+        db,
+        inst=inst,
+        event_type="decision_log_exported",
+        entity_type="export",
+        entity_id="xlsx",
+        actor_user_id=user.uid,
+        actor_email=user.email,
+        payload={"format": "xlsx", "scope": "module"},
+    )
+    await db.commit()
 
     initiative = await db.get(Initiative, inst.initiative_id)
     initiative_title = initiative.title if initiative else "Export"
-    safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}_DecisionLog").replace(" ", "_")[:60]
+    safe_title = re.sub(
+        r"[^\w\s\-.]",
+        "_",
+        f"{module.definition.name}_{initiative_title}_DecisionLog",
+    ).replace(" ", "_")[:60]
 
     return Response(
-        content=docx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.xlsx")},
     )
