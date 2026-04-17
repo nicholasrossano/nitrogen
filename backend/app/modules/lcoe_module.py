@@ -26,6 +26,7 @@ from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
+    DecisionLogAttribution,
     FieldDef,
     PopulationStep,
     StageDef,
@@ -92,6 +93,7 @@ class LCOETool(BaseModule):
             **self.definition.__dict__,
             goal="Estimate project levelized cost of energy and sensitivity ranges.",
             primary_ui_object="lcoe_results",
+            investigate_hint="Prefer project-specific engineering or vendor data when available; otherwise anchor assumptions to comparable technology, geography, and operating conditions.",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "lcoe"},
             input_dependencies=["solar_estimate"],
@@ -99,6 +101,9 @@ class LCOETool(BaseModule):
             downstream_dependencies=[],
             assumptions_behavior="tracks",
             evidence_behavior="none",
+            decision_log_attribution=DecisionLogAttribution(
+                adapter_labels={"lcoe": "Nitrogen LCOE engine"},
+            ),
         )
 
     @property
@@ -109,6 +114,7 @@ class LCOETool(BaseModule):
                 title="Inputs",
                 component="table",
                 widget="editable_table",
+                allow_add_rows=False,
                 fields=[
                     FieldDef("variable", "text", required=True, label="Variable"),
                     FieldDef("value", "number", label="Value"),
@@ -153,14 +159,20 @@ class LCOETool(BaseModule):
         rows = []
         for key, inp_obj in inputs.items():
             d = inp_obj.to_dict() if hasattr(inp_obj, "to_dict") else {}
-            rows.append({
+            row = {
+                "field_name": key,
                 "variable": d.get("label", key),
                 "value": d.get("value"),
                 "unit": d.get("unit", ""),
                 "category": d.get("category", "general"),
                 "status": d.get("status", "assumed"),
                 "rationale": d.get("rationale", ""),
-            })
+            }
+            if d.get("field_type"):
+                row["field_type"] = d.get("field_type")
+            if d.get("options") is not None:
+                row["options"] = d.get("options")
+            rows.append(row)
         return rows
 
     async def compute_stage(
