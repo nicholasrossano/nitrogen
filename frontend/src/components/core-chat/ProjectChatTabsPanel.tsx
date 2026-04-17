@@ -21,6 +21,7 @@ interface ProjectChatTabsPanelProps {
   researchMode?: boolean;
   resetToLandingSignal?: number;
   pendingChatToOpen?: { chatId: string; title?: string | null } | null;
+  activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
   onPendingSessionHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   onCitationClick?: (citation: SourceCitation) => void;
@@ -54,6 +55,7 @@ export function ProjectChatTabsPanel({
   researchMode = false,
   resetToLandingSignal = 0,
   pendingChatToOpen = null,
+  activeModuleContext = null,
   onPendingSessionHandled,
   onEditorWidgetsChange,
   onCitationClick,
@@ -376,6 +378,7 @@ export function ProjectChatTabsPanel({
                 initialChatId={tab.chatId}
                 initialTitle={tab.title}
                 sessions={sessions}
+                activeModuleContext={activeModuleContext}
                 onDeleteChat={handleDeleteSession}
                 onChatListDirty={loadSessions}
                 onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}

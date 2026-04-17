@@ -255,6 +255,56 @@ async def get_chat_modules(
     }
 
 
+@router.post("/chats/{chat_id}/modules/{instance_id}")
+async def associate_chat_module(
+    chat_id: str,
+    instance_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Associate an existing module instance with a core chat."""
+    from app.models.module_instance import ModuleInstance
+
+    try:
+        cid = uuid.UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    try:
+        iid = uuid.UUID(instance_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid instance_id")
+
+    chat_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
+        )
+    )
+    chat = chat_result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    instance = await db.get(ModuleInstance, iid)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Module instance not found")
+
+    if chat.initiative_id and instance.initiative_id != chat.initiative_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Module instance belongs to a different initiative",
+        )
+
+    instance.chat_id = chat.id
+    await db.commit()
+
+    return {
+        "instance_id": str(instance.id),
+        "chat_id": str(chat.id),
+        "module_id": instance.module_id,
+    }
+
+
 @router.delete("/chats/{chat_id}")
 async def delete_chat(
     chat_id: str,
