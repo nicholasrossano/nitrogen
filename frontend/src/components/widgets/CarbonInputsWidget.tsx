@@ -72,15 +72,6 @@ export function CarbonInputsWidget({
     }
   }, [messageId, initiativeId]);
 
-  const investigate = useCallback((label: string, status: string, fieldName?: string) => {
-    const text =
-      status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
-      status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
-      status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
-      `Can you investigate and propose a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
-  }, []);
-
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
   );
@@ -91,6 +82,31 @@ export function CarbonInputsWidget({
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [confirmingFields, setConfirmingFields] = useState<Set<string>>(new Set());
   const [preConfirmStatuses, setPreConfirmStatuses] = useState<Record<string, string>>({});
+
+  const investigate = useCallback((label: string, status: string, fieldName?: string) => {
+    const text =
+      status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
+      status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
+      status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
+      `Can you investigate and propose a value for ${label}?`;
+    const input = fieldName ? localInputs[fieldName] : undefined;
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext: fieldName ? {
+          field_name: fieldName,
+          label,
+          current_value: typeof input?.value === 'number' ? input.value : null,
+          unit: input?.unit || null,
+          model_type: 'carbon',
+          status: status || null,
+        } : null,
+      },
+    }));
+  }, [localInputs]);
 
   const groupedInputs = CATEGORY_ORDER.map((cat) => ({
     category: cat,
