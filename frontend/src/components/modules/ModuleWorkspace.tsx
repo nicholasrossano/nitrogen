@@ -44,6 +44,48 @@ function hasMeaningfulValue(value: unknown): boolean {
   return true;
 }
 
+function hasRenderableStageData(stageState?: StageState): boolean {
+  if (!stageState) return false;
+  const data = stageState.data;
+  if (!data) return false;
+  if (Array.isArray(data.items) && data.items.length > 0) return true;
+  if (Array.isArray(data.records) && data.records.length > 0) return true;
+  if (hasMeaningfulValue(data.widget_data)) return true;
+  return hasMeaningfulValue(data);
+}
+
+function resolveLatestAvailableStageId(
+  stageDefs: StageDef[],
+  stages: Record<string, StageState>,
+  workflowCurrentStageId?: string | null
+): string | null {
+  if (stageDefs.length === 0) return null;
+
+  for (let i = stageDefs.length - 1; i >= 0; i -= 1) {
+    const def = stageDefs[i];
+    const stageState = stages[def.id];
+    if (!stageState) continue;
+    const status = stageState.status;
+    const hasStarted = status === 'draft'
+      || status === 'confirmed'
+      || status === 'populating'
+      || status === 'error'
+      || (status === 'pending' && hasRenderableStageData(stageState));
+    if (hasStarted) {
+      return def.id;
+    }
+  }
+
+  const workflowStageExists = workflowCurrentStageId
+    ? stageDefs.some((def) => def.id === workflowCurrentStageId)
+    : false;
+  if (workflowStageExists) {
+    return workflowCurrentStageId ?? null;
+  }
+
+  return stageDefs[0]?.id ?? null;
+}
+
 // ── Stage Stepper ─────────────────────────────────────────────────────────
 
 function StageStepper({
@@ -58,42 +100,39 @@ function StageStepper({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="flex justify-center">
-      <div className="flex items-center gap-1 p-1 bg-surface-subtle rounded-lg">
-        {stageDefs.map((def, idx) => {
-          const stageState = stages[def.id];
-          const status = stageState?.status ?? 'pending';
-          const isActive = def.id === currentStageId;
-          const isConfirmed = status === 'confirmed';
-          const isPending = status === 'pending';
+    <div className="flex items-center gap-1 p-1 bg-surface-subtle rounded-lg">
+      {stageDefs.map((def, idx) => {
+        const stageState = stages[def.id];
+        const status = stageState?.status ?? 'pending';
+        const isActive = def.id === currentStageId;
+        const isConfirmed = status === 'confirmed';
 
-          // Can navigate to a stage if it's confirmed or is the current stage,
-          // or if the prior stage is confirmed
-          const priorConfirmed = idx === 0 || stages[stageDefs[idx - 1]?.id]?.status === 'confirmed';
-          const isAccessible = isConfirmed || isActive || priorConfirmed;
+        // Can navigate to a stage if it's confirmed or is the current stage,
+        // or if the prior stage is confirmed
+        const priorConfirmed = idx === 0 || stages[stageDefs[idx - 1]?.id]?.status === 'confirmed';
+        const isAccessible = isConfirmed || isActive || priorConfirmed;
 
-          return (
-            <button
-              key={def.id}
-              onClick={() => isAccessible && onSelect(def.id)}
-              disabled={!isAccessible}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                isActive
-                  ? 'bg-surface text-text-primary shadow-sm'
-                  : isConfirmed
-                  ? 'text-emerald-600 hover:bg-surface/50'
-                  : isAccessible
-                  ? 'text-text-secondary hover:text-text-primary'
-                  : 'text-text-tertiary cursor-not-allowed opacity-50'
-              }`}
-            >
-              {isConfirmed && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />}
-              {status === 'populating' && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
-              <span>{def.title}</span>
-            </button>
-          );
-        })}
-      </div>
+        return (
+          <button
+            key={def.id}
+            onClick={() => isAccessible && onSelect(def.id)}
+            disabled={!isAccessible}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+              isActive
+                ? 'bg-surface text-text-primary shadow-sm'
+                : isConfirmed
+                ? 'text-emerald-600 hover:bg-surface/50'
+                : isAccessible
+                ? 'text-text-secondary hover:text-text-primary'
+                : 'text-text-tertiary cursor-not-allowed opacity-50'
+            }`}
+          >
+            {isConfirmed && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />}
+            {status === 'populating' && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
+            <span>{def.title}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -288,18 +327,25 @@ export function ModuleWorkspace({
     let cancelled = false;
 
     async function initialize() {
+      setLoading(true);
+      setError(null);
+      setActiveStageId(null);
       try {
         const data = await api.getStagedModuleWorkflowState(instanceId);
         if (cancelled) return;
         setState(data);
-        setActiveStageId(data.workflow_state.current_stage_id);
+        const defs = data.module_definition.stage_defs ?? [];
+        const stages = data.workflow_state.stages ?? {};
+        setActiveStageId(resolveLatestAvailableStageId(
+          defs,
+          stages,
+          data.workflow_state.current_stage_id
+        ));
         setLoading(false);
 
         // Auto-populate the first stage when the module is brand-new (all stages pending).
         // Covers calculator modules (start_from_predefined_rows) and assessment
         // modules (seed_from_template + adapt_with_ai_from_project_materials).
-        const defs = data.module_definition.stage_defs ?? [];
-        const stages = data.workflow_state.stages ?? {};
         const allPending = defs.length > 0 && defs.every((d) => stages[d.id]?.status === 'pending');
         const firstDef = defs[0];
 
@@ -336,6 +382,21 @@ export function ModuleWorkspace({
     initialize();
     return () => { cancelled = true; };
   }, [instanceId, fetchState]);
+
+  useEffect(() => {
+    if (!state) return;
+    const defs = state.module_definition.stage_defs ?? [];
+    const activeStageStillExists = !!activeStageId && defs.some((def) => def.id === activeStageId);
+    if (activeStageStillExists) return;
+    const nextStageId = resolveLatestAvailableStageId(
+      defs,
+      state.workflow_state.stages ?? {},
+      state.workflow_state.current_stage_id
+    );
+    if (nextStageId !== activeStageId) {
+      setActiveStageId(nextStageId);
+    }
+  }, [state, activeStageId]);
 
   useEffect(() => {
     if (!decisionMenuOpen) return;
@@ -638,6 +699,7 @@ export function ModuleWorkspace({
   };
 
   const isComputedStage = currentStageDef.component === 'computed_results';
+  const isAssessmentMapWidget = isComputedStage && currentStageDef.widget === 'assessment_map';
   const isCalculationComputedWidget = isComputedStage && [
     'lcoe_results',
     'carbon_results',
@@ -700,9 +762,12 @@ export function ModuleWorkspace({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto w-full px-4 py-5 flex flex-col gap-4">
-          {/* Stage stepper */}
+      <div className={isAssessmentMapWidget ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
+        <div className={isAssessmentMapWidget
+          ? 'h-full w-full p-3 flex flex-col'
+          : 'w-full p-3 flex flex-col'}
+        >
+          {/* Workspace controls row (full panel width) */}
           <div className="flex items-center justify-between gap-4">
             <StageStepper
               stageDefs={stageDefs}
@@ -715,7 +780,7 @@ export function ModuleWorkspace({
                 <div ref={decisionMenuRef} className="relative">
                   <button
                     onClick={() => setDecisionMenuOpen((prev) => !prev)}
-                    className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+                    className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
                   >
                     <FileSpreadsheet className="w-3 h-3" />
                     Decision Log
@@ -743,7 +808,7 @@ export function ModuleWorkspace({
                 <button
                   onClick={handleApproveFinal}
                   disabled={isApprovingFinal}
-                  className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+                  className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
                 >
                   {isApprovingFinal ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                   Approve
@@ -752,7 +817,7 @@ export function ModuleWorkspace({
               {allConfirmed && canExportModule && (
                 <button
                   onClick={handleExport}
-                  className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
+                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
                 >
                   <Download className="w-3 h-3" />
                   Export
@@ -761,19 +826,78 @@ export function ModuleWorkspace({
             </div>
           </div>
 
-          {/* Active stage content */}
-          {isComputedStage ? (
-            // Computed-results stages: no card wrapper, widget renders directly
-            // into the same container so width + stepper position are identical
-            // to editable stages.
-            <div className="flex flex-col gap-0">
-              {renderComputedWidget(
-                currentStageDef.widget,
-                currentStageState.data?.widget_data,
-                computedFooterAction,
-                computedFooterState
-              )}
-              {shouldShowSeparateConfirmationBar && (
+          <div className={isAssessmentMapWidget ? 'mt-7 flex min-h-0 flex-1 flex-col' : 'mt-7 max-w-3xl mx-auto w-full flex flex-col'}>
+            {/* Active stage content */}
+            {isComputedStage ? (
+              // Computed-results stages: no card wrapper, widget renders directly
+              // into the same container so width + stepper position are identical
+              // to editable stages.
+              <div className={isAssessmentMapWidget ? 'flex min-h-0 flex-1 flex-col gap-0' : 'flex flex-col gap-0'}>
+                {renderComputedWidget(
+                  currentStageDef.widget,
+                  currentStageState.data?.widget_data,
+                  computedFooterAction,
+                  computedFooterState
+                )}
+                {shouldShowSeparateConfirmationBar && (
+                  <ConfirmationBar
+                    stageDef={currentStageDef}
+                    stageState={currentStageState}
+                    onPopulate={() => handlePopulate(currentStageDef.id)}
+                    onConfirm={() => {
+                      if (!canConfirmCurrentStage) {
+                        setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                        setEditBaselineByStageId((prev) => {
+                          const next = { ...prev };
+                          delete next[currentStageDef.id];
+                          return next;
+                        });
+                        return;
+                      }
+                      handleConfirm(currentStageDef.id);
+                    }}
+                    onCancelEditConfirmedStage={() => {
+                      setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                      setEditBaselineByStageId((prev) => {
+                        const next = { ...prev };
+                        delete next[currentStageDef.id];
+                        return next;
+                      });
+                    }}
+                    isPopulating={isPopulating}
+                    isConfirming={isConfirming}
+                    isEditingConfirmedStage={isEditingConfirmedStage}
+                    hasPendingChanges={hasPendingConfirmedStageChanges}
+                    suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
+                    onStartEditConfirmedStage={() =>
+                      {
+                        setEditBaselineByStageId((prev) => ({
+                          ...prev,
+                          [currentStageDef.id]: currentStageDataSignature,
+                        }));
+                        setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+                      }
+                    }
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <div className="p-4 border-b border-divider">
+                  <h3 className="text-sm font-semibold text-text-primary">{currentStageDef.title}</h3>
+                  <p className="text-xs text-text-tertiary mt-0.5">
+                    {currentStageState.status === 'pending' && 'Not started'}
+                    {currentStageState.status === 'populating' && 'Generating…'}
+                    {currentStageState.status === 'draft' && 'Ready for your review'}
+                    {currentStageState.status === 'confirmed' && 'Confirmed'}
+                    {currentStageState.status === 'error' && 'Generation failed'}
+                  </p>
+                </div>
+
+                <div className={isEditableInputTableStage ? '' : 'p-4'}>
+                  {renderStageContent()}
+                </div>
+
                 <ConfirmationBar
                   stageDef={currentStageDef}
                   stageState={currentStageState}
@@ -813,66 +937,9 @@ export function ModuleWorkspace({
                     }
                   }
                 />
-              )}
-            </div>
-          ) : (
-            <div className="card overflow-hidden">
-              <div className="p-4 border-b border-divider">
-                <h3 className="text-sm font-semibold text-text-primary">{currentStageDef.title}</h3>
-                <p className="text-xs text-text-tertiary mt-0.5">
-                  {currentStageState.status === 'pending' && 'Not started'}
-                  {currentStageState.status === 'populating' && 'Generating…'}
-                  {currentStageState.status === 'draft' && 'Ready for your review'}
-                  {currentStageState.status === 'confirmed' && 'Confirmed'}
-                  {currentStageState.status === 'error' && 'Generation failed'}
-                </p>
               </div>
-
-              <div className={isEditableInputTableStage ? '' : 'p-4'}>
-                {renderStageContent()}
-              </div>
-
-              <ConfirmationBar
-                stageDef={currentStageDef}
-                stageState={currentStageState}
-                onPopulate={() => handlePopulate(currentStageDef.id)}
-                onConfirm={() => {
-                  if (!canConfirmCurrentStage) {
-                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
-                    setEditBaselineByStageId((prev) => {
-                      const next = { ...prev };
-                      delete next[currentStageDef.id];
-                      return next;
-                    });
-                    return;
-                  }
-                  handleConfirm(currentStageDef.id);
-                }}
-                onCancelEditConfirmedStage={() => {
-                  setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
-                  setEditBaselineByStageId((prev) => {
-                    const next = { ...prev };
-                    delete next[currentStageDef.id];
-                    return next;
-                  });
-                }}
-                isPopulating={isPopulating}
-                isConfirming={isConfirming}
-                isEditingConfirmedStage={isEditingConfirmedStage}
-                hasPendingChanges={hasPendingConfirmedStageChanges}
-                suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
-                onStartEditConfirmedStage={() =>
-                  {
-                    setEditBaselineByStageId((prev) => ({
-                      ...prev,
-                      [currentStageDef.id]: currentStageDataSignature,
-                    }));
-                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
-                  }
-                }
-              />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
