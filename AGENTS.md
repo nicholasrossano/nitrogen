@@ -27,6 +27,7 @@
 **Post-edit checks (always run):**
 - After every substantive edit, call `ReadLints` on the edited file(s) before finalizing.
 - Fix any linter errors introduced by the change before responding.
+- After adding or changing a backend Alembic migration or ORM column, run `cd backend && python3 -m alembic upgrade head` against the local dev DB before finalizing.
 - For JSX in particular: watch for ternary branches with multiple sibling elements — they must be wrapped in a fragment (`<>...</>`).
 - After substantial frontend/App Router shell changes, if Next dev shows missing `vendor-chunks/*` or `Cannot find module './*.js'` under `.next/server`, treat it as cache corruption first: clear `frontend/.next` and restart with `npm run dev:clean` before debugging code.
 - Never run `next build` into the same output dir as an active `next dev` server; keep build output isolated (for this repo, `npm run build` must use `.next-build`) so verification does not corrupt dev chunks.
@@ -39,6 +40,7 @@
 **Scope discipline:**
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
+- For staged `editable_table` inputs, always set `StageDef.allow_add_rows` explicitly (false for fixed variable lists, true only for intentionally extensible tables).
 
 **Architecture migration posture:**
 - For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
@@ -125,8 +127,23 @@ When creating a PR with `gh pr create`, always fill in the `.github/PULL_REQUEST
 When creating or renaming issues, prefer plain-language titles that are easy to scan quickly; avoid overly technical phrasing unless the user asks for it.
 
 **Issue body format (default):**
-- Use this exact structure: `## Scope` (what will be done) and `## Why` (why it matters).
-- Keep both sections concise (1 short paragraph each) and avoid filler text.
+- Use this exact structure in order: `Title`, `Body`, `## Scope`, `## Done when`.
+- **Title**: short, specific, action-oriented.
+- **Body**: one short paragraph of context.
+- **Scope**: concise bullets for what the issue should do.
+- **Done when**: concise bullets for what completion looks like.
+
+**Epic + child issue format (default):**
+- When a feature spans multiple workstreams, create one epic plus child issues.
+- In the epic, include a `## Child issues` checklist that links each child issue.
+- In each child issue, include a parent reference (for example: `Parent epic: #123`).
+
+**Issue writing guidelines:**
+- Keep issues implementation-oriented, not PRD-like.
+- Keep issues short unless more detail is necessary.
+- Prefer one clear center of gravity per issue.
+- Separate core foundation work from connector-specific work.
+- Write plainly and avoid filler.
 
 **Issue labels:**
 - Use only active repo labels unless the user explicitly asks to add a new one.
