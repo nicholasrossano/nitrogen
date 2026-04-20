@@ -10,6 +10,7 @@ import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_
 interface DocumentRequestWidgetProps {
   initiativeId: string;
   isActive?: boolean;
+  onSendMessage?: (content: string) => void | Promise<void>;
   data?: {
     allow_multiple?: boolean;
   };
@@ -18,6 +19,7 @@ interface DocumentRequestWidgetProps {
 export function DocumentRequestWidget({ 
   initiativeId, 
   isActive = true,
+  onSendMessage,
   data 
 }: DocumentRequestWidgetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,13 +28,21 @@ export function DocumentRequestWidget({
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, sendMessage, projectMaterials } = useInitiativeStore();
+  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials } = useInitiativeStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
     filesToUpload: File[];
     cleanCount: number;
   } | null>(null);
+
+  const sendProgressMessage = useCallback(async (content: string) => {
+    if (onSendMessage) {
+      await onSendMessage(content);
+      return;
+    }
+    await sendLegacyMessage(initiativeId, content);
+  }, [initiativeId, onSendMessage, sendLegacyMessage]);
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
     const initial: UploadItem[] = filesToUpload.map((f) => ({
@@ -65,11 +75,9 @@ export function DocumentRequestWidget({
     }
 
     if (successCount > 0) {
-      setTimeout(() => {
-        sendMessage(initiativeId, "I've uploaded my documents.");
-      }, 500);
+      await sendProgressMessage("I've uploaded my documents.");
     }
-  }, [initiativeId, uploadEvidence, sendMessage]);
+  }, [uploadEvidence, initiativeId, sendProgressMessage]);
 
   const handleUpload = useCallback(async (files: File[]) => {
     const existingNames = projectMaterials.map((m) => m.filename);
@@ -102,8 +110,8 @@ export function DocumentRequestWidget({
   }, [handleUpload]);
 
   const handleNoDocuments = useCallback(() => {
-    sendMessage(initiativeId, "I don't have any documents to upload.");
-  }, [initiativeId, sendMessage]);
+    void sendProgressMessage("I don't have any documents to upload.");
+  }, [sendProgressMessage]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
