@@ -24,6 +24,11 @@ interface NavItemConfig {
   Icon: LucideIcon;
 }
 
+interface NavRenderConfig extends NavItemConfig {
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
 const GLOBAL_ITEMS: NavItemConfig[] = [
   { key: 'home', label: 'All Projects', Icon: LayoutGrid },
 ];
@@ -94,13 +99,26 @@ export function SideDrawer() {
   const hasProject = !!initiativeId;
   const initiative = useInitiativeStore((s) => s.initiative);
   const isViewer = initiative?.shared_role === 'viewer';
+  const isOnboarding = Boolean(hasProject && initiative && !initiative.project_plan && !isViewer);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
   const showMaterials = hasProject && !isViewer;
 
-  const projectItems = isViewer
-    ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
-    : PROJECT_ITEMS;
+  const projectItems: NavRenderConfig[] = (
+    isViewer
+      ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
+      : PROJECT_ITEMS
+  ).map((item) => {
+    const lockedDuringOnboarding = isOnboarding && item.key !== 'research';
+    return {
+      ...item,
+      disabled: lockedDuringOnboarding,
+      disabledReason: lockedDuringOnboarding ? 'Complete onboarding to unlock this area' : undefined,
+    };
+  });
+
+  const filesDisabled = isOnboarding;
+  const filesDisabledReason = filesDisabled ? 'Complete onboarding to unlock this area' : undefined;
 
   const longestLabelLength = useMemo(() => {
     const labels = GLOBAL_ITEMS.map((item) => item.label);
@@ -120,6 +138,27 @@ export function SideDrawer() {
     if (navHandlerRef.current?.(item)) return;
     if (item === 'home') { router.push('/'); return; }
   }, [navHandlerRef, router]);
+
+  const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
+    <button
+      key={key}
+      onClick={() => {
+        if (disabled) return;
+        handleNav(key);
+      }}
+      disabled={disabled}
+      title={disabled ? disabledReason : undefined}
+      aria-disabled={disabled || undefined}
+      className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''} ${disabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
+    >
+      <Icon
+        className="w-4 h-4 flex-shrink-0"
+      />
+      <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+        {label}
+      </span>
+    </button>
+  ), [activeItem, handleNav]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -367,20 +406,7 @@ export function SideDrawer() {
       {/* Spacer matches the h-14 header in the content column */}
       <div className="shrink-0 h-14" />
       <nav className="flex-1 pt-1">
-        {GLOBAL_ITEMS.map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            onClick={() => handleNav(key)}
-            className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
-          >
-            <Icon
-              className="w-4 h-4 flex-shrink-0"
-            />
-            <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-              {label}
-            </span>
-          </button>
-        ))}
+        {GLOBAL_ITEMS.map((item) => renderNavButton(item))}
 
         {/* Project nav — always in the DOM, collapses/expands via CSS grid */}
         <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
@@ -394,20 +420,7 @@ export function SideDrawer() {
                 Current Project
               </span>
             </div>
-            {projectItems.map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                onClick={() => handleNav(key)}
-                className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
-              >
-                <Icon
-                  className="w-4 h-4 flex-shrink-0"
-                />
-                <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-                  {label}
-                </span>
-              </button>
-            ))}
+            {projectItems.map((item) => renderNavButton(item))}
           </div>
         </div>
       </nav>
@@ -540,8 +553,14 @@ export function SideDrawer() {
       <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
         <div className="overflow-hidden">
           <button
-            onClick={() => handleNav('files')}
-            className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''}`}
+            onClick={() => {
+              if (filesDisabled) return;
+              handleNav('files');
+            }}
+            disabled={filesDisabled}
+            title={filesDisabled ? filesDisabledReason : undefined}
+            aria-disabled={filesDisabled || undefined}
+            className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''} ${filesDisabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
           >
             <FolderOpen
               className="w-4 h-4 flex-shrink-0"

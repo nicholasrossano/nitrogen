@@ -11,6 +11,8 @@ import { ProjectHeader } from '@/components/editor';
 import type { EditorWidget, WorkspacePanelTab } from '@/components/editor';
 import { ProjectWorkspaceEditorPanel } from '@/components/editor/ProjectWorkspaceEditorPanel';
 import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
+import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
+import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -88,6 +90,7 @@ function InitiativePageContent() {
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>([]);
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(null);
+  const onboardingSeenRef = useRef(false);
 
   const {
     initiative,
@@ -123,6 +126,7 @@ function InitiativePageContent() {
   const connectDrive = useGoogleDriveStore((s) => s.connect);
 
   const hasProjectPlan = Boolean(projectPlan);
+  const isOnboarding = Boolean(initiative && !isViewer && !hasProjectPlan);
   const activeWorkspaceTab = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
     [workspaceTabs, activeWorkspaceTabId],
@@ -158,14 +162,16 @@ function InitiativePageContent() {
   const frameworkWorkspaceOpen =
     activeView === 'framework' && (!hasProjectPlan || panelVisibility.framework.workspace);
   const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && panelVisibility.framework.chat;
-  const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen || activeView === 'overview';
+  const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen;
   const chatOpen = modulesChatOpen || frameworkChatOpen;
   const sideChatOpen = modulesChatOpen || frameworkChatOpen;
   const showPrimaryPanel = activeView === 'overview' || activeView === 'files' || workspaceOpen;
+  const isChatPrimaryMode = activeView === 'overview' || (activeView === 'framework' && !hasProjectPlan);
   const workspaceToggleEnabled = !isViewer && (activeView === 'framework' || activeView === 'modules');
-  const chatToggleEnabled = activeView === 'modules' || (activeView === 'framework' && hasProjectPlan);
-  const workspaceToggleActive = workspaceOpen;
-  const chatToggleActive = chatOpen;
+  const chatToggleEnabled =
+    activeView === 'modules' || activeView === 'overview' || activeView === 'framework';
+  const workspaceToggleActive = isChatPrimaryMode ? false : workspaceOpen;
+  const chatToggleActive = isChatPrimaryMode ? true : chatOpen;
   const workspaceToggleLocked = workspaceToggleActive && !chatToggleActive;
   const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
 
@@ -334,6 +340,28 @@ function InitiativePageContent() {
   }, [isViewer, activeView, initiativeId, router]);
 
   useEffect(() => {
+    if (!initiative) return;
+    if (isOnboarding && activeView !== 'overview') {
+      setActiveView('overview');
+      router.replace(`/initiatives/${initiativeId}?view=research`);
+    }
+  }, [initiative, isOnboarding, activeView, initiativeId, router]);
+
+  useEffect(() => {
+    if (!initiative) return;
+    if (isOnboarding) {
+      onboardingSeenRef.current = true;
+      return;
+    }
+    if (!hasProjectPlan || !onboardingSeenRef.current || isViewer) return;
+    onboardingSeenRef.current = false;
+    setPlanViewReady(true);
+    setShowPlanOverlay(false);
+    setActiveView('framework');
+    router.replace(`/initiatives/${initiativeId}?view=framework`);
+  }, [initiative, hasProjectPlan, isOnboarding, isViewer, initiativeId, router]);
+
+  useEffect(() => {
     if (!initiativeId) return;
 
     setPanelVisibility({
@@ -353,6 +381,7 @@ function InitiativePageContent() {
     setShowOverlay(true);
     setShowPlanOverlay(false);
     setPlanViewReady(true);
+    onboardingSeenRef.current = false;
 
     reset();
     const initiativeLoad = loadInitiative(initiativeId);
@@ -671,6 +700,26 @@ function InitiativePageContent() {
     }
 
     if (activeView === 'overview') {
+      if (isOnboarding && initiative) {
+        return (
+          <ProjectStandaloneChatView
+            initiativeId={initiativeId}
+            hideTiles={true}
+            useLandingWhenEmpty={true}
+            landingLayoutMode="overview"
+            landingHeaderContent={(
+              <ProjectOnboardingHeader
+                initiative={initiative}
+                filesUploaded={projectMaterials.length}
+              />
+            )}
+            onEditorWidgetsChange={handleChatEditorWidgetsChange}
+            onCitationClick={handleCitationClick}
+            onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          />
+        );
+      }
+
       return (
         <div className="h-full flex overflow-hidden">
           <div className="flex-1 min-w-0">

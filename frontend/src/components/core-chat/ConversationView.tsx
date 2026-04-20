@@ -328,6 +328,7 @@ export function ConversationView({
               initiativeId={initiativeId}
               messageId={latestMessage.id}
               isActive={true}
+              onDocumentRequestMessage={(content) => onSendMessage(content)}
             />
           </div>
         </div>
@@ -846,6 +847,7 @@ function MessageBubble({
         )}
 
         {!isUser && message.widget_type && message.widget_data &&
+          message.widget_type !== ABOVE_INPUT_WIDGET_TYPE &&
           !(EDITOR_WIDGET_TYPES as readonly string[]).includes(message.widget_type) && (
           <div className="mt-3 w-full">
             <ChatWidget
