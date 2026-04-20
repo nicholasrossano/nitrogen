@@ -22,6 +22,7 @@ interface ChatWidgetRendererProps {
   initiativeId?: string;
   messageId?: string;
   isActive?: boolean;
+  onDocumentRequestMessage?: (content: string) => void | Promise<void>;
 }
 
 export function ChatWidgetRenderer({
@@ -30,6 +31,7 @@ export function ChatWidgetRenderer({
   initiativeId,
   messageId,
   isActive = true,
+  onDocumentRequestMessage,
 }: ChatWidgetRendererProps) {
   switch (type) {
     case 'confirmation':
@@ -101,7 +103,12 @@ export function ChatWidgetRenderer({
     case ABOVE_INPUT_WIDGET_TYPE:
       return initiativeId ? (
         <ErrorBoundary>
-          <DocumentRequestWidget initiativeId={initiativeId} isActive={isActive} data={data as any} />
+          <DocumentRequestWidget
+            initiativeId={initiativeId}
+            isActive={isActive}
+            data={data as any}
+            onSendMessage={onDocumentRequestMessage}
+          />
         </ErrorBoundary>
       ) : null;
     default:

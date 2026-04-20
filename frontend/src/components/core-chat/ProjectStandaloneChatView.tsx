@@ -39,6 +39,10 @@ interface ProjectStandaloneChatViewProps {
   showLanding?: boolean;
   /** When true, hides the module tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
+  /** Custom content rendered above the landing composer */
+  landingHeaderContent?: React.ReactNode;
+  /** Landing layout override */
+  landingLayoutMode?: 'default' | 'overview';
   /** When false, empty state stays in conversation mode instead of showing the landing UI */
   useLandingWhenEmpty?: boolean;
   initialChatId?: string | null;
@@ -102,6 +106,8 @@ export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
   hideTiles = false,
+  landingHeaderContent,
+  landingLayoutMode,
   useLandingWhenEmpty = true,
   initialChatId = null,
   initialTitle = null,
@@ -144,6 +150,7 @@ export function ProjectStandaloneChatView({
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
   const generateInitiativeOverview = useInitiativeStore((s) => s.generateInitiativeOverview);
+  const isOverviewLanding = hideTiles && !landingHeaderContent;
 
   useEffect(() => {
     if (initialTitle && !sessionTitle) {
@@ -583,7 +590,7 @@ export function ProjectStandaloneChatView({
   }, [isOnLanding, onLandingStateChange]);
 
   useEffect(() => {
-    if (!hideTiles || !isOnLanding) return;
+    if (!isOverviewLanding || !isOnLanding) return;
 
     const cachedCount = activeModulesCountCache.get(initiativeId);
     if (cachedCount !== undefined) {
@@ -613,7 +620,7 @@ export function ProjectStandaloneChatView({
     return () => {
       cancelled = true;
     };
-  }, [hideTiles, initiativeId, isOnLanding]);
+  }, [initiativeId, isOnLanding, isOverviewLanding]);
 
   const handleGenerateOverview = useCallback(async () => {
     if (!initiative) return;
@@ -636,7 +643,7 @@ export function ProjectStandaloneChatView({
   }, [initiativeId]);
 
   useEffect(() => {
-    if (!hideTiles || !initiative || initiative.shared_role === 'viewer') return;
+    if (!isOverviewLanding || !initiative || initiative.shared_role === 'viewer') return;
     if (projectMaterials.length === 0) return;
     if (initiative.overview_description?.trim()) return;
     if (overviewGenerating) return;
@@ -647,9 +654,9 @@ export function ProjectStandaloneChatView({
     void handleGenerateOverview();
   }, [
     handleGenerateOverview,
-    hideTiles,
     initiative,
     initiativeId,
+    isOverviewLanding,
     overviewGenerating,
     projectMaterials.length,
   ]);
@@ -672,8 +679,8 @@ export function ProjectStandaloneChatView({
           onLoadSession={handleLoadSession}
           onDeleteSession={onDeleteChat}
           hideTiles={hideTiles}
-          layoutMode={hideTiles ? 'overview' : 'default'}
-          headerContent={hideTiles ? (
+          layoutMode={landingLayoutMode ?? (hideTiles ? 'overview' : 'default')}
+          headerContent={landingHeaderContent ?? (hideTiles ? (
             initiative ? (
               <InitiativeOverviewHeader
                 initiative={initiative}
@@ -685,8 +692,8 @@ export function ProjectStandaloneChatView({
                 onRefresh={handleGenerateOverview}
               />
             ) : null
-          ) : undefined}
-          extraInputActions={hideTiles ? (
+          ) : undefined)}
+          extraInputActions={isOverviewLanding ? (
             <CompareProjectPicker
               currentProjectId={initiativeId}
               selected={compareProject}
@@ -717,7 +724,7 @@ export function ProjectStandaloneChatView({
       retryingMessageId={null}
       initiativeId={initiativeId}
       onCitationClick={onCitationClick}
-      extraInputActions={hideTiles ? (
+      extraInputActions={isOverviewLanding ? (
         <CompareProjectPicker
           currentProjectId={initiativeId}
           selected={compareProject}

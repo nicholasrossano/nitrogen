@@ -30,6 +30,12 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Synthetic messages sent by UI actions that carry no project detail.
+_SKIP_EXTRACTION_MESSAGES = {
+    "I've uploaded my documents.",
+    "I don't have any documents to upload.",
+}
+
 
 def _log_chat_stream_debug(event: str, **fields) -> None:
     serialized = " ".join(f"{key}={value!r}" for key, value in fields.items())
@@ -52,6 +58,66 @@ def _build_project_context(initiative: Initiative) -> str:
     if initiative.goal:
         parts.append(f"- Goal: {initiative.goal}")
     return "\n".join(parts) if parts else ""
+
+
+def _to_title_case(text: str) -> str:
+    """Convert extracted titles into consistent title case."""
+    if not text:
+        return text
+    minor_words = {
+        "a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
+        "at", "by", "in", "of", "on", "to", "up", "as", "is", "it",
+    }
+    words = text.split()
+    formatted: list[str] = []
+    for idx, word in enumerate(words):
+        if idx == 0 or idx == len(words) - 1 or word.lower() not in minor_words:
+            formatted.append(word if word.isupper() and len(word) > 1 else word.capitalize())
+        else:
+            formatted.append(word.lower())
+    return " ".join(formatted)
+
+
+async def _update_initiative_from_inputs(
+    db: AsyncSession,
+    initiative: Initiative,
+    extracted: dict,
+) -> bool:
+    """Persist extracted initiative context fields when currently unset."""
+    if not extracted:
+        return False
+
+    updated = False
+
+    if extracted.get("project_title") and not initiative.title:
+        initiative.title = _to_title_case(extracted["project_title"])
+        updated = True
+
+    if extracted.get("geography") and not initiative.geography:
+        initiative.geography = extracted["geography"]
+        updated = True
+
+    if extracted.get("project_description") and not initiative.project_description:
+        initiative.project_description = extracted["project_description"]
+        updated = True
+
+    if extracted.get("project_type") and not initiative.project_type:
+        initiative.project_type = extracted["project_type"]
+        updated = True
+
+    if extracted.get("target_beneficiaries") and not initiative.target_population:
+        initiative.target_population = extracted["target_beneficiaries"]
+        updated = True
+
+    if extracted.get("project_goal") and not initiative.goal:
+        initiative.goal = extracted["project_goal"]
+        updated = True
+
+    if updated:
+        await db.flush()
+        await db.refresh(initiative)
+
+    return updated
 
 
 async def _execute_project_action(
@@ -433,6 +499,7 @@ async def chat_stream(
                 .order_by(CoreChatMessage.created_at)
             )
             prior_msgs = prior_msgs_result.scalars().all()
+            conversation_msgs = [*prior_msgs, user_msg]
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
             ctx = await build_context(db, user, resolved_initiative_id)
             ctx.chat_id = chat.id
@@ -507,6 +574,29 @@ async def chat_stream(
                     mode=ChatMode.PROJECT if verified_initiative else ChatMode.STANDALONE,
                 )
 
+                if verified_initiative:
+                    should_extract = (
+                        data.content not in _SKIP_EXTRACTION_MESSAGES
+                        and (
+                            not verified_initiative.project_description
+                            or not verified_initiative.project_type
+                            or not verified_initiative.geography
+                            or not verified_initiative.title
+                        )
+                    )
+                    if should_extract:
+                        extracted = await service.extract_inputs_from_message(
+                            message=data.content,
+                            initiative=verified_initiative,
+                        )
+                        updated = await _update_initiative_from_inputs(
+                            db,
+                            verified_initiative,
+                            extracted,
+                        )
+                        if updated:
+                            project_context = _build_project_context(verified_initiative)
+
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
                 if _tool_hint and data.initiative_id:
@@ -564,7 +654,7 @@ async def chat_stream(
                 else:
                     if verified_initiative:
                         action_result = await service.get_next_action(
-                            messages=prior_msgs,
+                            messages=conversation_msgs,
                             initiative=verified_initiative,
                             tool_hint=data.tool_hint or None,
                             field_context=field_context,
@@ -588,14 +678,14 @@ async def chat_stream(
 
                         model_inputs_context = (
                             data.model_inputs_context
-                            or ChatService._format_model_inputs_from_messages(prior_msgs, field_context)
+                            or ChatService._format_model_inputs_from_messages(conversation_msgs, field_context)
                         )
                         generation_task = asyncio.create_task(
                             _execute_project_action(
                                 service=service,
                                 initiative=verified_initiative,
                                 action_result=action_result,
-                                chat_history=prior_msgs,
+                                chat_history=conversation_msgs,
                                 tool_hint=data.tool_hint or None,
                                 model_inputs_context=model_inputs_context,
                                 field_context=field_context,
