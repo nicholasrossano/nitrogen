@@ -131,6 +131,28 @@ def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = N
     return data
 
 
+def _safe_append_list_item(
+    results: list[dict],
+    initiative: Initiative,
+    shared_role: str | None = None,
+    owner_email: str | None = None,
+) -> None:
+    """Append a list item while preventing one malformed row from failing the full response."""
+    try:
+        results.append(
+            _initiative_to_list_item(
+                initiative,
+                shared_role=shared_role,
+                owner_email=owner_email,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to serialize initiative %s for list response; skipping row",
+            initiative.id,
+        )
+
+
 @router.post("/initiatives", response_model=InitiativeResponse, status_code=status.HTTP_201_CREATED)
 async def create_initiative(
     data: InitiativeCreate,
@@ -264,10 +286,15 @@ async def list_initiatives(
 
     results = []
     for init in owned_initiatives:
-        results.append(_initiative_to_list_item(init, owner_email=user.email))
+        _safe_append_list_item(results, init, owner_email=user.email)
 
     for init, role, owner_email in shared_initiatives:
-        results.append(_initiative_to_list_item(init, shared_role=role, owner_email=owner_email))
+        _safe_append_list_item(
+            results,
+            init,
+            shared_role=role,
+            owner_email=owner_email,
+        )
 
     results.sort(key=lambda x: x["updated_at"], reverse=True)
     return results
