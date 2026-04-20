@@ -45,6 +45,14 @@
 - If a temporary shim is unavoidable, mark it clearly with owner + removal trigger in the same PR; do not leave indefinite legacy paths.
 - For noteworthy architecture changes, do not keep dual legacy + new infra paths; complete a migration audit in-phase (all callers moved, legacy path removed, CI/tests green).
 
+## Backend Schema & Deployment Safety
+
+- For schema/ORM renames, use expand/contract: add new column or alias-compatible mapping first, deploy app+migration safely, then remove legacy names in a later change.
+- Never merge backend model changes to `main` that assume columns/tables not present in current production DB.
+- Before merging schema-sensitive backend work to `main`, run a quick smoke check against a real project: initiative detail, chat history, evidence, materials, and Drive-linked endpoints.
+- Keep feature-branch schema upgrades isolated; for production incidents, ship a minimal hotfix on `main` that preserves current prod schema compatibility.
+- When hotfixing `main` during a long-lived feature branch, backport intentionally (or verify the feature branch already contains equivalent/future-safe behavior) to avoid regressions at merge time.
+
 **Learning & iteration:**
 - When I receive feedback or correction from you, interpret whether it reflects a reusable pattern or preference.
 - If it seems fundamental enough (not just a one-off fix), add it to AGENTS.md automatically.
