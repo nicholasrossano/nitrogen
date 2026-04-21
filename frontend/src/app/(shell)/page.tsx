@@ -47,13 +47,9 @@ function HomePageContent() {
   };
 
   const handleDeleteProject = async (id: string) => {
-    if (!confirm('Are you sure you want to move this project to trash?')) {
-      return;
-    }
-    
     try {
       await api.deleteInitiative(id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (error) {
       console.error('Failed to delete project:', error);
     }
@@ -62,7 +58,7 @@ function HomePageContent() {
   const handlePermanentDelete = async (id: string) => {
     try {
       await api.permanentlyDeleteInitiative(id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (error) {
       console.error('Failed to permanently delete project:', error);
     }
@@ -71,7 +67,7 @@ function HomePageContent() {
   const handleRestoreProject = async (id: string) => {
     try {
       await api.restoreInitiative(id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (error) {
       console.error('Failed to restore project:', error);
     }
