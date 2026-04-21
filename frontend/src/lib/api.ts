@@ -1551,6 +1551,7 @@ export const api = {
     initiativeId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
     compareInitiativeIds?: string[] | null,
+    allowInitialProjectOnboarding?: boolean,
   ) => {
     const token = await getAuthToken();
     const devMode = isDevMode();
@@ -1570,6 +1571,7 @@ export const api = {
       has_model_inputs_context: Boolean(modelInputsContext),
       initiative_id: initiativeId ?? null,
       compare_mode: Boolean(compareInitiativeIds?.length),
+      allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
     });
 
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
@@ -1584,6 +1586,7 @@ export const api = {
         model_inputs_context: modelInputsContext ?? null,
         initiative_id: initiativeId ?? null,
         compare_initiative_ids: compareInitiativeIds ?? null,
+        allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
       }),
     });
 

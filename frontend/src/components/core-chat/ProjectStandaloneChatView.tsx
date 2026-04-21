@@ -43,8 +43,14 @@ interface ProjectStandaloneChatViewProps {
   landingHeaderContent?: React.ReactNode;
   /** Landing layout override */
   landingLayoutMode?: 'default' | 'overview';
+  /** Hide landing composer in overview mode */
+  hideLandingComposer?: boolean;
+  /** Allow the backend to return the initial upload-docs onboarding prompt */
+  allowInitialProjectOnboarding?: boolean;
   /** When false, empty state stays in conversation mode instead of showing the landing UI */
   useLandingWhenEmpty?: boolean;
+  /** Optional override for sends initiated from the landing composer */
+  onLandingSend?: (content: string, toolHint?: string) => void;
   initialChatId?: string | null;
   initialTitle?: string | null;
   onMessageSent?: () => void;
@@ -70,6 +76,9 @@ interface ProjectStandaloneChatViewProps {
   sessions?: ChatSummary[];
   /** Active module context from the workspace panel */
   activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
+  /** Automatically send a message into this chat view when it becomes active */
+  pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
+  onPendingAutoSendHandled?: () => void;
   /** Delete a chat from shared history */
   onDeleteChat?: (chatId: string) => void;
   /** Ask parent to refresh shared chat history */
@@ -108,7 +117,10 @@ export function ProjectStandaloneChatView({
   hideTiles = false,
   landingHeaderContent,
   landingLayoutMode,
+  hideLandingComposer = false,
+  allowInitialProjectOnboarding = false,
   useLandingWhenEmpty = true,
+  onLandingSend,
   initialChatId = null,
   initialTitle = null,
   onMessageSent,
@@ -120,6 +132,8 @@ export function ProjectStandaloneChatView({
   onSendRef,
   sessions = [],
   activeModuleContext = null,
+  pendingAutoSend = null,
+  onPendingAutoSendHandled,
   onDeleteChat,
   onChatListDirty,
 }: ProjectStandaloneChatViewProps) {
@@ -145,6 +159,7 @@ export function ProjectStandaloneChatView({
   const autoOverviewAttemptRef = useRef<string | null>(null);
   const associatedModuleKeysRef = useRef<Set<string>>(new Set());
   const lastLoadedChatIdRef = useRef<string | null>(null);
+  const lastAutoSendRequestIdRef = useRef<string | null>(null);
 
   const initiative = useInitiativeStore((s) => s.initiative);
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
@@ -397,9 +412,17 @@ export function ProjectStandaloneChatView({
           });
         },
         compareIds,
+        allowInitialProjectOnboarding,
       );
     },
-    [initiativeId, currentChatId, compareProject, onChatListDirty, refreshChatModules],
+    [
+      initiativeId,
+      currentChatId,
+      compareProject,
+      onChatListDirty,
+      refreshChatModules,
+      allowInitialProjectOnboarding,
+    ],
   );
 
   const handleUploadFile = useCallback(
@@ -465,6 +488,14 @@ export function ProjectStandaloneChatView({
     },
     [activeModuleContext, localMessages, onMessageSent, sendViaStream],
   );
+
+  useEffect(() => {
+    if (!pendingAutoSend?.requestId) return;
+    if (lastAutoSendRequestIdRef.current === pendingAutoSend.requestId) return;
+    lastAutoSendRequestIdRef.current = pendingAutoSend.requestId;
+    void handleSend(pendingAutoSend.content, pendingAutoSend.toolHint);
+    onPendingAutoSendHandled?.();
+  }, [handleSend, onPendingAutoSendHandled, pendingAutoSend]);
 
   const handleEditMessage = useCallback(
     async (messageId: string, newContent: string) => {
@@ -673,7 +704,7 @@ export function ProjectStandaloneChatView({
     return (
       <>
         <LandingInput
-          onSend={handleSend}
+          onSend={onLandingSend ?? handleSend}
           onUploadFile={handleUploadFile}
           sessions={sessions}
           onLoadSession={handleLoadSession}
@@ -702,6 +733,7 @@ export function ProjectStandaloneChatView({
           ) : undefined}
           topComposerContent={associatedModulesTray}
           inputChips={inputChips}
+          hideComposer={hideLandingComposer}
         />
       </>
     );

@@ -28,6 +28,8 @@ interface LandingInputProps {
   topComposerContent?: React.ReactNode;
   /** Alternate landing layout for initiative overview pages */
   layoutMode?: 'default' | 'overview';
+  /** Hide composer input area (used when side chat is active) */
+  hideComposer?: boolean;
 }
 
 function relativeTime(ts: number): string {
@@ -56,6 +58,7 @@ export function LandingInput({
   inputChips,
   topComposerContent,
   layoutMode = 'default',
+  hideComposer = false,
 }: LandingInputProps) {
   const devMode = useSettingsStore((s) => s.devMode);
   const [input, setInput] = useState('');
@@ -256,11 +259,13 @@ export function LandingInput({
       <div className="flex flex-col items-center h-full px-4">
         <div className="w-full max-w-3xl flex-1 min-h-0 flex flex-col pt-6">
           {headerContent}
-          <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end pb-4">
-            {renderComposer(
-              'w-full pb-4'
-            )}
-          </div>
+          {!hideComposer && (
+            <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end pb-4">
+              {renderComposer(
+                'w-full pb-4'
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

@@ -20,7 +20,7 @@ import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { api, type SourceCitation } from '@/lib/api';
-import { openGooglePicker } from '@/lib/googlePicker';
+import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
@@ -67,6 +67,7 @@ function InitiativePageContent() {
 
   const [activeView, setActiveView] = useState<InitiativeView>(viewFromUrl);
   const [panelVisibility, setPanelVisibility] = useState({
+    overview: { workspace: true, chat: false },
     modules: { workspace: true, chat: false },
     framework: { workspace: true, chat: false },
   });
@@ -86,6 +87,11 @@ function InitiativePageContent() {
   const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [pendingChatToOpen, setPendingChatToOpen] = useState<{ chatId: string; title?: string | null } | null>(null);
+  const [pendingOverviewAutoSend, setPendingOverviewAutoSend] = useState<{
+    requestId: string;
+    content: string;
+    toolHint?: string;
+  } | null>(null);
   const [preferArtifactsTab, setPreferArtifactsTab] = useState(false);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>([]);
@@ -157,17 +163,21 @@ function InitiativePageContent() {
     [visibleWorkspaceTabs, activeWorkspaceTabId],
   );
   const showTabbedWorkspace = activeView === 'modules' || isDocumentTab(activeWorkspaceTab);
+  const overviewWorkspaceOpen = activeView === 'overview' && panelVisibility.overview.workspace;
+  const overviewChatOpen = activeView === 'overview' && panelVisibility.overview.chat;
   const modulesWorkspaceOpen = activeView === 'modules' && panelVisibility.modules.workspace;
   const modulesChatOpen = activeView === 'modules' && panelVisibility.modules.chat;
   const frameworkWorkspaceOpen =
     activeView === 'framework' && (!hasProjectPlan || panelVisibility.framework.workspace);
   const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && panelVisibility.framework.chat;
-  const workspaceOpen = modulesWorkspaceOpen || frameworkWorkspaceOpen;
-  const chatOpen = modulesChatOpen || frameworkChatOpen;
-  const sideChatOpen = modulesChatOpen || frameworkChatOpen;
-  const showPrimaryPanel = activeView === 'overview' || activeView === 'files' || workspaceOpen;
-  const isChatPrimaryMode = activeView === 'overview' || (activeView === 'framework' && !hasProjectPlan);
-  const workspaceToggleEnabled = !isViewer && (activeView === 'framework' || activeView === 'modules');
+  const workspaceOpen = overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen;
+  const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
+  const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
+  const showPrimaryPanel = activeView === 'files' || workspaceOpen;
+  const isChatPrimaryMode = activeView === 'framework' && !hasProjectPlan;
+  const workspaceToggleEnabled = !isViewer && (
+    activeView === 'overview' || activeView === 'framework' || activeView === 'modules'
+  );
   const chatToggleEnabled =
     activeView === 'modules' || activeView === 'overview' || activeView === 'framework';
   const workspaceToggleActive = isChatPrimaryMode ? false : workspaceOpen;
@@ -176,7 +186,7 @@ function InitiativePageContent() {
   const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
 
   const setPanelOpen = useCallback(
-    (view: 'modules' | 'framework', panel: 'workspace' | 'chat', open: boolean) => {
+    (view: 'overview' | 'modules' | 'framework', panel: 'workspace' | 'chat', open: boolean) => {
       setPanelVisibility((prev) => {
         const current = prev[view];
         const next = { ...current, [panel]: open };
@@ -201,6 +211,10 @@ function InitiativePageContent() {
         setPanelOpen('modules', 'workspace', !panelVisibility.modules.workspace);
         return;
       }
+      if (activeView === 'overview') {
+        setPanelOpen('overview', 'workspace', !panelVisibility.overview.workspace);
+        return;
+      }
       if (activeView === 'framework' && hasProjectPlan) {
         setPanelOpen('framework', 'workspace', !panelVisibility.framework.workspace);
       }
@@ -222,6 +236,10 @@ function InitiativePageContent() {
       if (!chatToggleEnabled || chatToggleLocked) return;
       if (activeView === 'modules') {
         setPanelOpen('modules', 'chat', !panelVisibility.modules.chat);
+        return;
+      }
+      if (activeView === 'overview') {
+        setPanelOpen('overview', 'chat', !panelVisibility.overview.chat);
         return;
       }
       if (activeView === 'framework' && hasProjectPlan) {
@@ -269,24 +287,12 @@ function InitiativePageContent() {
   }, [activeView, panelVisibility.modules.chat, setPanelOpen]);
 
   const handleFilesViewDriveImport = useCallback(async () => {
-    if (!driveConnected) {
-      connectDrive(initiativeId);
-      return;
-    }
-    const accessToken = await getDriveAccessToken();
-    return new Promise<void>((resolve, reject) => {
-      openGooglePicker(accessToken, async (files) => {
-        if (files.length === 0) {
-          resolve();
-          return;
-        }
-        try {
-          await importFromDrive(initiativeId, files.map((f) => f.id));
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
+    await importFromDriveViaPicker({
+      initiativeId,
+      driveConnected,
+      connectDrive,
+      getDriveAccessToken,
+      importFromDrive,
     });
   }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, initiativeId]);
 
@@ -301,6 +307,7 @@ function InitiativePageContent() {
       if (activeView === 'overview') {
         setResearchLandingResetSignal((prev) => prev + 1);
       }
+      setPanelOpen('overview', 'workspace', true);
       setActiveView('overview');
       router.replace(`/initiatives/${initiativeId}?view=research`);
       return true;
@@ -365,6 +372,7 @@ function InitiativePageContent() {
     if (!initiativeId) return;
 
     setPanelVisibility({
+      overview: { workspace: true, chat: false },
       modules: { workspace: true, chat: false },
       framework: { workspace: true, chat: false },
     });
@@ -375,6 +383,7 @@ function InitiativePageContent() {
     setChatEditorWidgets([]);
     setWorkspaceLaunchMode('idle');
     setPendingChatToOpen(null);
+    setPendingOverviewAutoSend(null);
     setPreferArtifactsTab(false);
     setPageReady(false);
     setChromeReady(false);
@@ -705,6 +714,7 @@ function InitiativePageContent() {
           <ProjectStandaloneChatView
             initiativeId={initiativeId}
             hideTiles={true}
+            allowInitialProjectOnboarding={true}
             useLandingWhenEmpty={true}
             landingLayoutMode="overview"
             landingHeaderContent={(
@@ -721,19 +731,27 @@ function InitiativePageContent() {
       }
 
       return (
-        <div className="h-full flex overflow-hidden">
-          <div className="flex-1 min-w-0">
-            <ProjectChatTabsPanel
-              initiativeId={initiativeId}
-              researchMode={true}
-              resetToLandingSignal={researchLandingResetSignal}
-              onEditorWidgetsChange={handleChatEditorWidgetsChange}
-              onCitationClick={handleCitationClick}
-              onOpenWorkspaceModule={handleOpenWorkspaceModule}
-            />
-          </div>
-          {renderResearchPanel}
-        </div>
+        <ProjectStandaloneChatView
+          key={researchLandingResetSignal}
+          initiativeId={initiativeId}
+          hideTiles={true}
+          allowInitialProjectOnboarding={false}
+          useLandingWhenEmpty={true}
+          showLanding={overviewChatOpen}
+          landingLayoutMode="overview"
+          hideLandingComposer={overviewChatOpen}
+          onLandingSend={(content, toolHint) => {
+            setPanelOpen('overview', 'chat', true);
+            setPendingOverviewAutoSend({
+              requestId: `overview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              content,
+              toolHint,
+            });
+          }}
+          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onCitationClick={handleCitationClick}
+          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+        />
       );
     }
 
@@ -775,7 +793,25 @@ function InitiativePageContent() {
     return <div className="h-full" />;
   })();
 
-  const sideChatContent = modulesChatOpen ? (
+  const sideChatContent = overviewChatOpen ? (
+    <div className="h-full flex overflow-hidden">
+      <div className="flex-1 min-w-0">
+        <ProjectChatTabsPanel
+          initiativeId={initiativeId}
+          researchMode={false}
+          pendingChatToOpen={pendingChatToOpen}
+          pendingAutoSend={pendingOverviewAutoSend}
+          onPendingSessionHandled={() => setPendingChatToOpen(null)}
+          onPendingAutoSendHandled={() => setPendingOverviewAutoSend(null)}
+          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onCitationClick={handleCitationClick}
+          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onSendRef={chatSendRef}
+        />
+      </div>
+      {renderResearchPanel}
+    </div>
+  ) : modulesChatOpen ? (
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel

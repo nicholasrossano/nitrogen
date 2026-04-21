@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.database import get_db
 from app.core.execution_context import build_context
@@ -23,6 +23,7 @@ from app.services.chat import ChatMode, ChatResponse as ServiceChatResponse, Cha
 from app.services import module_service
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
+from app.models.project_material import ProjectMaterial
 from app.core.rate_limit import limiter
 from app.schemas.chat import FieldContext
 
@@ -150,6 +151,52 @@ async def _execute_project_action(
     )
 
 
+async def _should_trigger_initial_project_onboarding(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    initiative: Initiative,
+    current_user_message_id: uuid.UUID,
+) -> bool:
+    """Only show the upload-documents onboarding widget for the first project chat."""
+    if getattr(initiative, "project_plan", None) or getattr(initiative, "evidence_ready", False):
+        return False
+
+    prior_project_message_count = await db.scalar(
+        select(func.count(CoreChatMessage.id))
+        .select_from(CoreChatMessage)
+        .join(CoreChat, CoreChatMessage.chat_id == CoreChat.id)
+        .where(
+            CoreChat.user_id == user_id,
+            CoreChat.initiative_id == initiative.id,
+            CoreChatMessage.id != current_user_message_id,
+        )
+    )
+    if (prior_project_message_count or 0) > 0:
+        return False
+
+    uploaded_material_count = await db.scalar(
+        select(func.count(ProjectMaterial.id)).where(
+            ProjectMaterial.initiative_id == initiative.id,
+        )
+    )
+    return (uploaded_material_count or 0) == 0
+
+
+async def _build_initial_project_onboarding_response() -> ServiceChatResponse:
+    return ServiceChatResponse(
+        content="Please upload any relevant project materials, such as feasibility studies, site assessments, or permit applications.",
+        sources=[],
+        tiers_used=[],
+        latency_ms=0,
+        widget_type="document_request",
+        widget_data={
+            "allow_multiple": True,
+            "suggested_types": [],
+        },
+    )
+
+
 class ChatHistoryMessage(BaseModel):
     role: str
     content: str
@@ -164,6 +211,7 @@ class ChatStreamRequest(BaseModel):
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
     initiative_id: Optional[str] = None
     compare_initiative_ids: Optional[list[str]] = None
+    allow_initial_project_onboarding: bool = False
 
 
 class TitleRequest(BaseModel):
@@ -516,6 +564,7 @@ async def chat_stream(
                 field_name=(field_context or {}).get("field_name"),
                 has_field_context=bool(field_context),
                 has_model_inputs_context=bool(data.model_inputs_context),
+                allow_initial_project_onboarding=data.allow_initial_project_onboarding,
             )
 
             # --- Compare mode ---
@@ -574,8 +623,35 @@ async def chat_stream(
                     mode=ChatMode.PROJECT if verified_initiative else ChatMode.STANDALONE,
                 )
 
+                should_use_initial_project_onboarding = False
                 if verified_initiative:
+                    is_first_turn_in_thread = len(data.history) == 0
+                    should_force_scripted_onboarding = (
+                        data.allow_initial_project_onboarding
+                        and is_first_turn_in_thread
+                        and not field_context
+                        and not data.tool_hint
+                        and not verified_initiative.project_plan
+                        and not verified_initiative.evidence_ready
+                    )
+                    should_use_initial_project_onboarding = await _should_trigger_initial_project_onboarding(
+                        db,
+                        user_id=user.uid,
+                        initiative=verified_initiative,
+                        current_user_message_id=user_msg.id,
+                    )
+                    should_use_initial_project_onboarding = (
+                        should_force_scripted_onboarding
+                        or (
+                            should_use_initial_project_onboarding
+                            and data.allow_initial_project_onboarding
+                            and not field_context
+                            and not data.tool_hint
+                        )
+                    )
                     should_extract = (
+                        not should_use_initial_project_onboarding
+                        and
                         data.content not in _SKIP_EXTRACTION_MESSAGES
                         and (
                             not verified_initiative.project_description
@@ -653,11 +729,78 @@ async def chat_stream(
                     generation_task = asyncio.create_task(_open_workflow_workspace())
                 else:
                     if verified_initiative:
+                        if should_use_initial_project_onboarding:
+                            generation_task = asyncio.create_task(
+                                _build_initial_project_onboarding_response()
+                            )
+                            while not generation_task.done():
+                                try:
+                                    event_json = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                                    yield f"data: {event_json}\n\n"
+                                except asyncio.TimeoutError:
+                                    continue
+
+                            while not event_queue.empty():
+                                event_json = await event_queue.get()
+                                yield f"data: {event_json}\n\n"
+
+                            result = generation_task.result()
+                            _log_chat_stream_debug(
+                                "response",
+                                chat_id=str(chat.id),
+                                initiative_id=data.initiative_id,
+                                widget_type=result.widget_type,
+                                has_widget_data=bool(result.widget_data),
+                                citation_count=0,
+                            )
+
+                            tokens = [t for t in result.content.split(' ') if t]
+                            for i, token in enumerate(tokens):
+                                chunk = {"type": "word", "content": token, "is_last": i == len(tokens) - 1}
+                                yield f"data: {json.dumps(chunk)}\n\n"
+                                await asyncio.sleep(0.02)
+
+                            sources_list = []
+                            assistant_msg = CoreChatMessage(
+                                chat_id=chat.id,
+                                role="assistant",
+                                content=result.content,
+                                sources=sources_list,
+                                thinking_lines=thinking_lines,
+                                completion_meta={
+                                    "latency_ms": result.latency_ms,
+                                    "citation_count": 0,
+                                    "tiers_used": result.tiers_used,
+                                },
+                                widget_type=result.widget_type,
+                                widget_data=result.widget_data,
+                            )
+                            db.add(assistant_msg)
+                            await db.commit()
+
+                            complete = {
+                                "type": "complete",
+                                "content": result.content,
+                                "sources": sources_list,
+                                "tiers_used": result.tiers_used,
+                                "citation_count": 0,
+                                "latency_ms": result.latency_ms,
+                                "widget_type": result.widget_type,
+                                "widget_data": result.widget_data,
+                                "thinking_lines": thinking_lines,
+                                "chat_id": str(chat.id),
+                                "user_message_id": str(user_msg.id),
+                                "assistant_message_id": str(assistant_msg.id),
+                            }
+                            yield f"data: {json.dumps(complete)}\n\n"
+                            return
+
                         action_result = await service.get_next_action(
                             messages=conversation_msgs,
                             initiative=verified_initiative,
                             tool_hint=data.tool_hint or None,
                             field_context=field_context,
+                            onboarding_mode=bool(data.allow_initial_project_onboarding),
                         )
                         _log_chat_stream_debug(
                             "project-action",

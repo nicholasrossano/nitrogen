@@ -23,8 +23,10 @@ interface ProjectChatTabsPanelProps {
   researchMode?: boolean;
   resetToLandingSignal?: number;
   pendingChatToOpen?: { chatId: string; title?: string | null } | null;
+  pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
   activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
   onPendingSessionHandled?: () => void;
+  onPendingAutoSendHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   onCitationClick?: (citation: SourceCitation) => void;
   onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
@@ -58,8 +60,10 @@ export function ProjectChatTabsPanel({
   researchMode = false,
   resetToLandingSignal = 0,
   pendingChatToOpen = null,
+  pendingAutoSend = null,
   activeModuleContext = null,
   onPendingSessionHandled,
+  onPendingAutoSendHandled,
   onEditorWidgetsChange,
   onCitationClick,
   onOpenWorkspaceModule,
@@ -445,6 +449,8 @@ export function ProjectChatTabsPanel({
                 onCitationClick={isActive ? onCitationClick : undefined}
                 onOpenWorkspaceModule={isActive ? onOpenWorkspaceModule : undefined}
                 onSendRef={isActive ? onSendRef : undefined}
+                pendingAutoSend={isActive ? pendingAutoSend : null}
+                onPendingAutoSendHandled={isActive ? onPendingAutoSendHandled : undefined}
               />
             </div>
           );
