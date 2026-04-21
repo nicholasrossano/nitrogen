@@ -242,12 +242,21 @@ async def import_from_drive(
     # Expand any folder IDs into their direct file children
     expanded_file_metas: list[dict] = []
     for file_id in body.file_ids:
-        meta = await drive.get_file_metadata(file_id)
-        if meta.get("mimeType") == "application/vnd.google-apps.folder":
-            children = await drive.list_folder_files(file_id)
-            expanded_file_metas.extend(children)
-        else:
-            expanded_file_metas.append(meta)
+        try:
+            meta = await drive.get_file_metadata(file_id)
+            if meta.get("mimeType") == "application/vnd.google-apps.folder":
+                children = await drive.list_folder_files(file_id)
+                expanded_file_metas.extend(children)
+            else:
+                expanded_file_metas.append(meta)
+        except Exception as e:
+            safe_error = sanitize_exception(e)
+            logger.error(
+                "Drive import metadata lookup failed for file %s: %s",
+                file_id,
+                safe_error,
+            )
+            errors.append({"file_id": file_id, "error": safe_error})
 
     if len(expanded_file_metas) > 50:
         raise HTTPException(status_code=400, detail="Folder contains too many files (max 50 at once)")

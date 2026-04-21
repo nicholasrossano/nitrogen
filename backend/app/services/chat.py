@@ -1990,14 +1990,42 @@ class ChatService:
         "carbon_model": "Building your carbon emissions model…",
     }
 
+    # Onboarding-only tools. These are intentionally unavailable in ongoing
+    # project chat so new chats inside an existing project can never re-trigger
+    # the initial onboarding widgets.
+    _ONBOARDING_ONLY_TOOLS: set[str] = {
+        "ask_for_documents",
+        "ask_clarifying_questions",
+    }
+
+    # Prepended to the orchestration system prompt when onboarding_mode is False.
+    # The LLM must treat the session as ongoing project chat, not onboarding.
+    _PROJECT_CHAT_DIRECTIVE: str = (
+        "IMPORTANT MODE: This is an ongoing project chat inside an existing "
+        "project, NOT the initial project onboarding flow. Do NOT ask the user "
+        "to upload documents. Do NOT ask clarifying onboarding questions about "
+        "geography or project type (those have already been captured). Ignore "
+        "Rules 1 and 3 in the decision rules below — they apply only during "
+        "initial project onboarding. If the user asks a question, answer it "
+        "(send_message). If the user requests model/tool/plan work, use the "
+        "appropriate tool.\n\n"
+    )
+
     async def get_next_action(
         self,
         messages: list,
         initiative,
         tool_hint: str | None = None,
         field_context: dict[str, Any] | None = None,
+        onboarding_mode: bool = False,
     ):
         """Decide what action to take next (PROJECT mode).
+
+        Args:
+            onboarding_mode: True only for the initial new-project onboarding
+                surface. When False, onboarding-only tools (ask_for_documents,
+                ask_clarifying_questions) are removed from the tool list and
+                the system prompt is marked as ongoing project chat.
 
         Returns an OrchestrationResult.
         """
@@ -2037,16 +2065,6 @@ class ChatService:
         )
         user_message_count = sum(1 for m in messages if m.role == "user")
 
-        if not has_document_request and user_message_count == 1:
-            return OrchestrationResult(
-                action="ask_for_documents",
-                parameters={
-                    "message": "Please upload any relevant project materials, such as feasibility studies, site assessments, or permit applications.",
-                    "suggested_types": [],
-                },
-                sources_used=[],
-            )
-
         context_results = await self.retrieval.retrieve_for_context(initiative)
         context_str = self.retrieval.format_context_for_prompt(context_results)
 
@@ -2070,17 +2088,27 @@ class ChatService:
             model_inputs_context=model_inputs_context or "No model has been run yet.",
         )
 
+        if not onboarding_mode:
+            system_prompt = self._PROJECT_CHAT_DIRECTIVE + system_prompt
+
         api_messages: list[dict] = [{"role": "system", "content": system_prompt}]
         recent_messages = messages[-15:] if len(messages) > 15 else messages
         for msg in recent_messages:
             api_messages.append({"role": msg.role, "content": msg.content})
+
+        tools = self._get_tool_list()
+        if not onboarding_mode:
+            tools = [
+                t for t in tools
+                if (t.get("function") or {}).get("name") not in self._ONBOARDING_ONLY_TOOLS
+            ]
 
         try:
             client = await self._get_client()
             response = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
                 messages=api_messages,
-                tools=self._get_tool_list(),
+                tools=tools,
                 tool_choice="required",
                 temperature=0.7,
             )

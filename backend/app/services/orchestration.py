@@ -144,8 +144,12 @@ class OrchestrationService:
 
         self._chat = ChatService(db, mode=ChatMode.PROJECT, ctx=ctx)
 
-    async def get_next_action(self, messages, initiative, tool_hint=None) -> OrchestrationResult:
-        return await self._chat.get_next_action(messages, initiative, tool_hint)
+    async def get_next_action(
+        self, messages, initiative, tool_hint=None, onboarding_mode: bool = False,
+    ) -> OrchestrationResult:
+        return await self._chat.get_next_action(
+            messages, initiative, tool_hint, onboarding_mode=onboarding_mode,
+        )
 
     async def extract_inputs_from_message(self, message, initiative) -> dict[str, Any]:
         return await self._chat.extract_inputs_from_message(message, initiative)
