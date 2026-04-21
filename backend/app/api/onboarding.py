@@ -46,6 +46,23 @@ _SKIP_EXTRACTION_MESSAGES = {
     "I don't have any documents to upload.",
 }
 
+_INITIAL_ONBOARDING_DOCUMENT_PROMPT = (
+    "Please upload any relevant project materials, such as feasibility studies, "
+    "site assessments, or permit applications."
+)
+
+
+def _build_initial_onboarding_document_response() -> tuple[str, dict, str, list]:
+    return (
+        "document_request",
+        {
+            "allow_multiple": True,
+            "suggested_types": [],
+        },
+        _INITIAL_ONBOARDING_DOCUMENT_PROMPT,
+        [],
+    )
+
 
 def build_stage_status(initiative: Initiative) -> StageStatus:
     """Build stage status from initiative."""
@@ -110,81 +127,75 @@ async def send_chat_message_stream(
             user_message_count = sum(1 for m in messages if m.role == "user")
             is_first_user_message = user_message_count == 1
 
-            extraction_task = None
-            if data.content not in _SKIP_EXTRACTION_MESSAGES:
-                if is_first_user_message:
-                    # For the first message, kick off extraction concurrently so the
-                    # scripted response can stream immediately without waiting ~3s for LLM.
-                    extraction_task = asyncio.create_task(
-                        chat_service.extract_inputs_from_message(
-                            message=data.content,
-                            initiative=initiative,
-                        )
-                    )
-                else:
+            thinking_lines: list[str] = []
+            if is_first_user_message:
+                widget_type, widget_data, assistant_response, sources = (
+                    _build_initial_onboarding_document_response()
+                )
+            else:
+                if data.content not in _SKIP_EXTRACTION_MESSAGES:
                     extracted = await chat_service.extract_inputs_from_message(
                         message=data.content,
                         initiative=initiative,
                     )
                     await update_initiative_from_inputs(db, initiative, extracted)
 
-            tool_hint = data.tool_hint or None
-            action_result = await chat_service.get_next_action(
-                messages=messages,
-                initiative=initiative,
-                tool_hint=tool_hint,
-            )
-
-            # Collect thinking lines from the research pipeline
-            thinking_lines: list[str] = []
-            thinking_queue: asyncio.Queue[str] = asyncio.Queue()
-
-            async def on_thinking(text: str):
-                thinking_lines.append(text)
-                await thinking_queue.put(json.dumps({"type": "thinking", "text": text}))
-
-            # Send a thinking indicator for heavy actions
-            if action_result.action == "generate_project_plan":
-                await on_thinking("Generating your project plan...")
-            elif action_result.action == "run_lcoe_tool":
-                await on_thinking("Building your LCOE model...")
-            elif action_result.action == "run_carbon_tool":
-                await on_thinking("Building your carbon emissions model...")
-            elif action_result.action == "propose_input_value":
-                await on_thinking("Researching a value for this input...")
-
-            # Flush any queued thinking events before execute_action
-            while not thinking_queue.empty():
-                event_json = await thinking_queue.get()
-                yield f"data: {event_json}\n\n"
-
-            _model_inputs_ctx = ChatService._format_model_inputs_from_messages(messages)
-
-            generation_task = asyncio.create_task(
-                chat_service.execute_project_action(
+                tool_hint = data.tool_hint or None
+                action_result = await chat_service.get_next_action(
+                    messages=messages,
                     initiative=initiative,
-                    action_result=action_result,
-                    chat_history=messages,
                     tool_hint=tool_hint,
-                    model_inputs_context=_model_inputs_ctx,
-                    on_thinking=on_thinking,
+                    onboarding_mode=True,
                 )
-            )
 
-            # Stream thinking events while the action runs
-            while not generation_task.done():
-                try:
-                    event_json = await asyncio.wait_for(thinking_queue.get(), timeout=0.1)
+                thinking_queue: asyncio.Queue[str] = asyncio.Queue()
+
+                async def on_thinking(text: str):
+                    thinking_lines.append(text)
+                    await thinking_queue.put(json.dumps({"type": "thinking", "text": text}))
+
+                # Send a thinking indicator for heavy actions
+                if action_result.action == "generate_project_plan":
+                    await on_thinking("Generating your project plan...")
+                elif action_result.action == "run_lcoe_tool":
+                    await on_thinking("Building your LCOE model...")
+                elif action_result.action == "run_carbon_tool":
+                    await on_thinking("Building your carbon emissions model...")
+                elif action_result.action == "propose_input_value":
+                    await on_thinking("Researching a value for this input...")
+
+                # Flush any queued thinking events before execute_action
+                while not thinking_queue.empty():
+                    event_json = await thinking_queue.get()
                     yield f"data: {event_json}\n\n"
-                except asyncio.TimeoutError:
-                    continue
 
-            # Flush remaining thinking events
-            while not thinking_queue.empty():
-                event_json = await thinking_queue.get()
-                yield f"data: {event_json}\n\n"
+                _model_inputs_ctx = ChatService._format_model_inputs_from_messages(messages)
 
-            widget_type, widget_data, assistant_response, sources = generation_task.result()
+                generation_task = asyncio.create_task(
+                    chat_service.execute_project_action(
+                        initiative=initiative,
+                        action_result=action_result,
+                        chat_history=messages,
+                        tool_hint=tool_hint,
+                        model_inputs_context=_model_inputs_ctx,
+                        on_thinking=on_thinking,
+                    )
+                )
+
+                # Stream thinking events while the action runs
+                while not generation_task.done():
+                    try:
+                        event_json = await asyncio.wait_for(thinking_queue.get(), timeout=0.1)
+                        yield f"data: {event_json}\n\n"
+                    except asyncio.TimeoutError:
+                        continue
+
+                # Flush remaining thinking events
+                while not thinking_queue.empty():
+                    event_json = await thinking_queue.get()
+                    yield f"data: {event_json}\n\n"
+
+                widget_type, widget_data, assistant_response, sources = generation_task.result()
 
             # Stream the response word by word
             words = assistant_response.split()
@@ -238,21 +249,8 @@ async def send_chat_message_stream(
             }
             yield f"data: {json.dumps(final_data)}\n\n"
 
-            # For first-message fast-path: await the background extraction task now
-            # (after the client has already received the complete event).
-            if extraction_task is not None:
-                try:
-                    extracted = await asyncio.wait_for(extraction_task, timeout=20.0)
-                    await update_initiative_from_inputs(db, initiative, extracted)
-                except asyncio.TimeoutError:
-                    logger.warning("First-message input extraction timed out")
-                except Exception as exc:
-                    logger.warning(f"First-message input extraction failed: {exc}")
-
         except Exception as e:
             logger.error(f"Stream error: {e}", exc_info=True)
-            if extraction_task is not None and not extraction_task.done():
-                extraction_task.cancel()
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(
@@ -702,35 +700,44 @@ async def send_chat_message(
         ctx=ctx,
     )
     
-    if data.content not in _SKIP_EXTRACTION_MESSAGES:
-        extracted = await chat_service.extract_inputs_from_message(
-            message=data.content,
-            initiative=initiative,
+    user_message_count = sum(1 for m in messages if m.role == "user")
+    is_first_user_message = user_message_count == 1
+
+    if is_first_user_message:
+        widget_type, widget_data, assistant_response, sources = (
+            _build_initial_onboarding_document_response()
         )
-        await update_initiative_from_inputs(db, initiative, extracted)
+    else:
+        if data.content not in _SKIP_EXTRACTION_MESSAGES:
+            extracted = await chat_service.extract_inputs_from_message(
+                message=data.content,
+                initiative=initiative,
+            )
+            await update_initiative_from_inputs(db, initiative, extracted)
 
-    tool_hint = data.tool_hint or None
-    field_context = data.field_context.model_dump() if data.field_context else None
+        tool_hint = data.tool_hint or None
+        field_context = data.field_context.model_dump() if data.field_context else None
 
-    action_result = await chat_service.get_next_action(
-        messages=messages,
-        initiative=initiative,
-        tool_hint=tool_hint,
-        field_context=field_context,
-    )
-    
-    logger.info(f"Orchestration chose action: {action_result.action}")
+        action_result = await chat_service.get_next_action(
+            messages=messages,
+            initiative=initiative,
+            tool_hint=tool_hint,
+            field_context=field_context,
+            onboarding_mode=True,
+        )
 
-    _model_inputs_ctx2 = ChatService._format_model_inputs_from_messages(messages, field_context)
+        logger.info(f"Orchestration chose action: {action_result.action}")
 
-    widget_type, widget_data, assistant_response, sources = await chat_service.execute_project_action(
-        initiative=initiative,
-        action_result=action_result,
-        chat_history=messages,
-        tool_hint=tool_hint,
-        model_inputs_context=_model_inputs_ctx2,
-        field_context=field_context,
-    )
+        _model_inputs_ctx2 = ChatService._format_model_inputs_from_messages(messages, field_context)
+
+        widget_type, widget_data, assistant_response, sources = await chat_service.execute_project_action(
+            initiative=initiative,
+            action_result=action_result,
+            chat_history=messages,
+            tool_hint=tool_hint,
+            model_inputs_context=_model_inputs_ctx2,
+            field_context=field_context,
+        )
     
     # Convert sources to citation format
     source_citations = [
