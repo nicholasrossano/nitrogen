@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PageLoader } from '@/components/ui/PageLoader';
+
+const PINNED_PROJECTS_STORAGE_KEY = 'nitrogen-pinned-project-ids';
+const MAX_PINNED_PROJECTS = 3;
 
 function HomePageContent() {
   const router = useRouter();
@@ -16,6 +19,9 @@ function HomePageContent() {
   const [error, setError] = useState<string | null>(null);
   const [isTrashView, setIsTrashView] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const prevCardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -34,6 +40,29 @@ function HomePageContent() {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PINNED_PROJECTS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const normalized = parsed
+        .filter((id): id is string => typeof id === 'string')
+        .slice(0, MAX_PINNED_PROJECTS);
+      setPinnedProjectIds(normalized);
+    } catch (err) {
+      console.warn('Failed to read pinned projects:', err);
+    }
+  }, []);
+
+  const persistPinnedProjects = useCallback((ids: string[]) => {
+    try {
+      localStorage.setItem(PINNED_PROJECTS_STORAGE_KEY, JSON.stringify(ids));
+    } catch (err) {
+      console.warn('Failed to persist pinned projects:', err);
+    }
+  }, []);
 
   const handleNewProject = async () => {
     setCreating(true);
@@ -73,6 +102,22 @@ function HomePageContent() {
     }
   };
 
+  const handleTogglePinProject = useCallback((id: string) => {
+    setPinnedProjectIds((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((pinnedId) => pinnedId !== id);
+        persistPinnedProjects(next);
+        return next;
+      }
+      if (prev.length >= MAX_PINNED_PROJECTS) {
+        return prev;
+      }
+      const next = [...prev, id];
+      persistPinnedProjects(next);
+      return next;
+    });
+  }, [persistPinnedProjects]);
+
   const pageTitle = isTrashView ? 'Trash' : 'All Projects';
 
   const filteredProjects = projects.filter((p: Initiative) => {
@@ -83,6 +128,42 @@ function HomePageContent() {
     const desc = (p.project_description || '').toLowerCase();
     return title.includes(q) || sector.includes(q) || desc.includes(q);
   });
+  const pinnedProjectSet = new Set(pinnedProjectIds);
+  const pinnedProjects = filteredProjects
+    .filter((p) => pinnedProjectSet.has(p.id))
+    .sort((a, b) => (a.title || 'New Project').localeCompare(b.title || 'New Project', undefined, { sensitivity: 'base' }));
+  const unpinnedProjects = filteredProjects.filter((p) => !pinnedProjectSet.has(p.id));
+  const displayedProjects = isTrashView ? filteredProjects : [...pinnedProjects, ...unpinnedProjects];
+
+  useLayoutEffect(() => {
+    const nextPositions = new Map<string, DOMRect>();
+    displayedProjects.forEach((project) => {
+      const element = cardRefs.current.get(project.id);
+      if (element) {
+        nextPositions.set(project.id, element.getBoundingClientRect());
+      }
+    });
+
+    displayedProjects.forEach((project) => {
+      const element = cardRefs.current.get(project.id);
+      const nextRect = nextPositions.get(project.id);
+      const prevRect = prevCardPositionsRef.current.get(project.id);
+      if (!element || !nextRect || !prevRect) return;
+
+      const deltaX = prevRect.left - nextRect.left;
+      const deltaY = prevRect.top - nextRect.top;
+      if (deltaX === 0 && deltaY === 0) return;
+
+      element.style.transition = 'none';
+      element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      requestAnimationFrame(() => {
+        element.style.transition = 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)';
+        element.style.transform = 'translate(0px, 0px)';
+      });
+    });
+
+    prevCardPositionsRef.current = nextPositions;
+  }, [displayedProjects]);
 
   return (
     <>
@@ -152,7 +233,7 @@ function HomePageContent() {
                 Try again
               </button>
             </div>
-          ) : filteredProjects.length === 0 ? (
+          ) : displayedProjects.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 max-w-md mx-auto text-center">
               <div className={`w-16 h-16 rounded-lg flex items-center justify-center mb-6 ${isTrashView ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
                 {isTrashView ? (
@@ -197,14 +278,28 @@ function HomePageContent() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {filteredProjects.map((project) => (
-                <ProjectCard 
-                  key={project.id} 
-                  project={project} 
-                  onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
-                  onRestore={isTrashView ? handleRestoreProject : undefined}
-                  isTrash={isTrashView}
-                />
+              {displayedProjects.map((project) => (
+                <div
+                  key={project.id}
+                  ref={(node) => {
+                    if (node) {
+                      cardRefs.current.set(project.id, node);
+                    } else {
+                      cardRefs.current.delete(project.id);
+                    }
+                  }}
+                  className="will-change-transform"
+                >
+                  <ProjectCard
+                    project={project}
+                    onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
+                    onRestore={isTrashView ? handleRestoreProject : undefined}
+                    isTrash={isTrashView}
+                    isPinned={pinnedProjectSet.has(project.id)}
+                    canPinMore={pinnedProjectSet.has(project.id) || pinnedProjectIds.length < MAX_PINNED_PROJECTS}
+                    onTogglePin={handleTogglePinProject}
+                  />
+                </div>
               ))}
             </div>
           )}
