@@ -715,6 +715,7 @@ function InitiativePageContent() {
             initiativeId={initiativeId}
             hideTiles={true}
             allowInitialProjectOnboarding={true}
+            restoreLatestChatOnMount={true}
             useLandingWhenEmpty={true}
             landingLayoutMode="overview"
             landingHeaderContent={(

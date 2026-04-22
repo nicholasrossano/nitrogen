@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 @router.post("/initiatives/{initiative_id}/evidence", response_model=EvidenceUploadResponse)
-@limiter.limit("10/minute")
+@limiter.limit("120/minute")
 async def upload_evidence(
     request: Request,
     initiative_id: str,

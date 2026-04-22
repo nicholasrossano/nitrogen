@@ -1983,11 +1983,13 @@ class ChatService:
     _TOOL_HINT_ACTIONS: dict[str, str] = {
         "lcoe_model": "run_lcoe_tool",
         "carbon_model": "run_carbon_tool",
+        "generate_project_plan": "generate_project_plan",
     }
 
     _TOOL_HINT_MESSAGES: dict[str, str] = {
         "lcoe_model": "Building your LCOE model…",
         "carbon_model": "Building your carbon emissions model…",
+        "generate_project_plan": "Generating your project plan…",
     }
 
     # Onboarding-only tools. These are intentionally unavailable in ongoing

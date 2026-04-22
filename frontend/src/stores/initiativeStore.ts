@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult, FieldContext } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveImportResult, DriveSyncResult, FieldContext } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -43,7 +43,7 @@ interface InitiativeState {
   uploadMaterial: (id: string, file: File) => Promise<void>;
   deleteMaterial: (materialId: string) => Promise<void>;
   loadDriveLinkedFiles: (id: string) => Promise<void>;
-  importFromDrive: (id: string, fileIds: string[]) => Promise<DriveLinkedFile[]>;
+  importFromDrive: (id: string, fileIds: string[]) => Promise<DriveImportResult>;
   syncDriveFiles: (id: string) => Promise<DriveSyncResult>;
   sendMessage: (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => Promise<void>;
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
@@ -234,15 +234,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         driveLinkedFiles: links,
       }));
     }
-    return result.imported.map((f) => ({
-      id: f.drive_link_id,
-      evidence_doc_id: f.id,
-      drive_file_id: fileIds[result.imported.indexOf(f)] ?? '',
-      drive_file_name: f.filename,
-      drive_mime_type: '',
-      drive_modified_time: f.created_at,
-      last_synced_at: f.created_at,
-    }));
+    return result;
   },
 
   // Check Drive-linked files for changes and re-index updated ones
