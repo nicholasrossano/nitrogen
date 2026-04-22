@@ -6,13 +6,8 @@ import type { BuildItem, FieldDef, StageDef, StageState } from '@/lib/api';
 import { api } from '@/lib/api';
 import { PlanStructureColumn } from '@/components/plan-workspace/PlanStructureColumn';
 import type { PlanWorkspaceGroup, PlanWorkspaceItem } from '@/components/plan-workspace/types';
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { inferCategoryIconName } from './categoryIcons';
-
-// Gradient-ordered palette matching ProjectPlanView
-const CATEGORY_COLORS = [
-  '#005e72', '#4a6680', '#8d5e6a', '#7a5030',
-  '#a06548', '#7a6520', '#7a7a3a', '#6b7d6a',
-];
 
 // ── Deep Dive / Record Panel ──────────────────────────────────────────────
 
@@ -324,11 +319,11 @@ export function CategorizedWorkspaceStage({
     <div className="flex min-h-0 gap-0 overflow-hidden" style={{ minHeight: 400 }}>
       <div className="flex-1 overflow-y-auto p-1">
         <div className="space-y-4">
-          {groupRows.map((row, idx) => (
+          {groupRows.map((row) => (
             <PlanStructureColumn
               key={row.group.id}
               group={row.group}
-              color={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]}
+              color={DIAGRAM_ACCENT_COLOR}
               expanded={expandedByGroup[row.group.id] ?? true}
               onToggleExpanded={() =>
                 setExpandedByGroup((prev) => ({

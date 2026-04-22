@@ -149,6 +149,7 @@ function TableRow({
       : null;
 
   const STATUS_STYLES: Record<string, string> = {
+    validated: 'bg-green-50 text-green-700',
     confirmed: 'bg-green-50 text-green-700',
     inferred: 'bg-blue-50 text-blue-700',
     assumed: 'bg-amber-50 text-amber-700',
@@ -468,14 +469,14 @@ export function EditableTableStage({
       const nextContent = {
         ...item.content,
         [fieldName]: parsedValue,
-        ...(hasUserValue ? { status: 'confirmed', source: 'user' } : {}),
+        ...(hasUserValue ? { status: 'validated', source: 'user' } : {}),
       };
       setOptimisticContentByItemId((prev) => ({
         ...prev,
         [itemId]: {
           ...(prev[itemId] ?? {}),
           [fieldName]: parsedValue,
-          ...(hasUserValue ? { status: 'confirmed', source: 'user' } : {}),
+          ...(hasUserValue ? { status: 'validated', source: 'user' } : {}),
         },
       }));
       try {
@@ -518,13 +519,13 @@ export function EditableTableStage({
       const incomingValue = detail.value;
       const currentValue = row.content?.value;
       const isSameValue = String(currentValue ?? '') === String(incomingValue ?? '');
-      const isAlreadyConfirmed = row.content?.status === 'confirmed';
+      const isAlreadyConfirmed = row.content?.status === 'validated' || row.content?.status === 'confirmed';
       if (isSameValue && isAlreadyConfirmed) return;
 
       const nextContent = {
         ...row.content,
         value: incomingValue,
-        status: 'confirmed',
+        status: 'validated',
         source: 'user',
       };
       setOptimisticContentByItemId((prev) => ({
@@ -532,7 +533,7 @@ export function EditableTableStage({
         [row.id]: {
           ...(prev[row.id] ?? {}),
           value: incomingValue,
-          status: 'confirmed',
+          status: 'validated',
           source: 'user',
         },
       }));
@@ -565,7 +566,7 @@ export function EditableTableStage({
         ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?`
         : status === 'assumed'
           ? `Can you research and propose a better value for ${label} based on available data for this project?`
-          : status === 'confirmed'
+          : status === 'validated'
             ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?`
             : `Can you investigate and propose a value for ${label}?`;
 
@@ -648,7 +649,7 @@ export function EditableTableStage({
           next[update.row.id] = {
             ...(prev[update.row.id] ?? {}),
             value: update.value,
-            status: 'confirmed',
+            status: 'validated',
             source: 'user',
           };
         }
@@ -665,7 +666,7 @@ export function EditableTableStage({
             {
               ...update.row.content,
               value: update.value,
-              status: 'confirmed',
+              status: 'validated',
               source: 'user',
             },
             nextWorkflowVersion

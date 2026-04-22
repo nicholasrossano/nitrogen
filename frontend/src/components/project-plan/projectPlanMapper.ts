@@ -12,17 +12,7 @@ import type {
   PlanWorkspaceProgress,
   PlanWorkspaceSummaryData,
 } from '@/components/plan-workspace';
-
-const PLAN_COLORS = [
-  '#005e72',
-  '#4a6680',
-  '#8d5e6a',
-  '#7a5030',
-  '#a06548',
-  '#7a6520',
-  '#7a7a3a',
-  '#6b7d6a',
-];
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 
 function mapPlanItem(item: ProjectPlanItem, pillar: ProjectPlanPillar): PlanWorkspaceItem {
   const fallbackPhaseId =
@@ -124,10 +114,10 @@ export function mapProjectPlanToProgress(plan: ProjectPlan | null): PlanWorkspac
     completed,
     total,
     percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
-    segments: plan.pillars.map((pillar, idx) => ({
+    segments: plan.pillars.map((pillar) => ({
       id: pillar.id,
       label: pillar.name,
-      color: PLAN_COLORS[idx % PLAN_COLORS.length],
+      color: DIAGRAM_ACCENT_COLOR,
       completed: pillar.items.filter((item) => item.status === 'complete').length,
       total: pillar.items.length,
     })),

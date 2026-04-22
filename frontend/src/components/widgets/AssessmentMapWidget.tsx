@@ -16,6 +16,7 @@ import {
   type PlanWorkspaceInspectorState,
   type PlanWorkspaceItem,
 } from '@/components/plan-workspace';
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import type { WorkspaceWidgetProps } from '@/lib/widgetRegistry';
 import { api } from '@/lib/api';
 
@@ -260,7 +261,7 @@ export function AssessmentMapWidget({
       options: groups.map((group) => ({
         id: group.id,
         label: group.label,
-        color: group.color,
+        color: DIAGRAM_ACCENT_COLOR,
       })),
     }),
     [groups],
@@ -343,7 +344,6 @@ export function AssessmentMapWidget({
           showItemBranchDelete={false}
           showItemRightActions={false}
           enableItemSorting={false}
-          colors={groups.map((group) => group.color)}
         />
       </div>
     </div>

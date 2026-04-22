@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { DeepDiveResult, ProjectPlanItem, ProjectPlanPhase, ProjectPlanPillar } from '@/lib/api';
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { PlanSubItem } from './PlanSubItem';
 
 interface PillarColumnProps {
@@ -63,7 +64,7 @@ const DOTTED_LINE_H_STYLE = {
   backgroundImage: 'repeating-linear-gradient(to right, #C8C4BE 0px, #C8C4BE 3px, transparent 3px, transparent 7px)',
 } as const;
 
-export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete, color = '#005e72', expanded: expandedProp, onToggleExpanded, onAddItem, phases }: PillarColumnProps) {
+export function PillarColumn({ pillar, deepDiveCache = {}, onDeepDive, onDeleteItem, onDeleteElement, onRegisterRef, completedIds, onToggleComplete, color = DIAGRAM_ACCENT_COLOR, expanded: expandedProp, onToggleExpanded, onAddItem, phases }: PillarColumnProps) {
   const [showAll, setShowAll] = useState(false);
   const [internalExpanded, setInternalExpanded] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
