@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import { ProjectStandaloneChatView } from './ProjectStandaloneChatView';
+import { DeepDiveWidget } from '@/components/plan-workspace/DeepDiveWidget';
+import type {
+  PlanWorkspaceInspectorDocumentSource,
+  PlanWorkspaceInspectorState,
+} from '@/components/plan-workspace';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { SourceCitation } from '@/lib/api';
@@ -16,6 +21,12 @@ interface ProjectChatTab {
   isLanding: boolean;
   /** True only for auto-created placeholder tabs. */
   isFallback: boolean;
+}
+
+interface PendingDeepDiveContext {
+  requestId: string;
+  state: PlanWorkspaceInspectorState;
+  onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
 }
 
 interface ProjectChatTabsPanelProps {
@@ -32,6 +43,11 @@ interface ProjectChatTabsPanelProps {
   onCitationClick?: (citation: SourceCitation) => void;
   onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
+  /** Fixed content rendered above the messages area in the active chat tab */
+  topContent?: React.ReactNode;
+  /** Creates or updates a chat tab with a pinned deep-dive widget */
+  pendingDeepDive?: PendingDeepDiveContext | null;
+  onPendingDeepDiveHandled?: () => void;
 }
 
 function makeTab(title = 'New Chat', isLanding = false, isFallback = false): ProjectChatTab {
@@ -119,6 +135,9 @@ export function ProjectChatTabsPanel({
   onCitationClick,
   onOpenWorkspaceModule,
   onSendRef,
+  topContent,
+  pendingDeepDive = null,
+  onPendingDeepDiveHandled,
 }: ProjectChatTabsPanelProps) {
   const initialStateRef = useRef<StoredProjectChatTabsState | null>(null);
   if (!initialStateRef.current) {
@@ -138,8 +157,10 @@ export function ProjectChatTabsPanel({
   const [tabs, setTabs] = useState<ProjectChatTab[]>(() => initialStateRef.current!.tabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => initialStateRef.current!.activeTabId ?? initialStateRef.current!.tabs[0].id);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [deepDiveByTabId, setDeepDiveByTabId] = useState<Record<string, PendingDeepDiveContext>>({});
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
 
   const resolvedActiveTabId = useMemo(
     () => (tabs.some((tab) => tab.id === activeTabId) ? activeTabId : tabs[0]?.id ?? null),
@@ -159,6 +180,38 @@ export function ProjectChatTabsPanel({
       activeTabId: resolvedActiveTabId,
     });
   }, [sessionStorageKey, tabs, resolvedActiveTabId]);
+
+  useEffect(() => {
+    deepDiveByTabIdRef.current = deepDiveByTabId;
+  }, [deepDiveByTabId]);
+
+  useEffect(() => {
+    if (!pendingDeepDive) return;
+
+    const existingTabEntry = Object.entries(deepDiveByTabIdRef.current).find(
+      ([, value]) => value.requestId === pendingDeepDive.requestId,
+    );
+
+    if (existingTabEntry) {
+      const [tabId] = existingTabEntry;
+      setDeepDiveByTabId((prev) => ({
+        ...prev,
+        [tabId]: pendingDeepDive,
+      }));
+      setActiveTabId(tabId);
+      onPendingDeepDiveHandled?.();
+      return;
+    }
+
+    const tab = makeTab(pendingDeepDive.state.item.title, false, false);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setDeepDiveByTabId((prev) => ({
+      ...prev,
+      [tab.id]: pendingDeepDive,
+    }));
+    onPendingDeepDiveHandled?.();
+  }, [onPendingDeepDiveHandled, pendingDeepDive]);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -213,6 +266,12 @@ export function ProjectChatTabsPanel({
     const idx = tabs.findIndex((tab) => tab.id === tabId);
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     setTabs(nextTabs);
+    setDeepDiveByTabId((prev) => {
+      if (!(tabId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
 
     if (tabId === activeTabId) {
       const fallback = nextTabs[Math.max(0, idx - 1)] ?? nextTabs[0];
@@ -278,6 +337,7 @@ export function ProjectChatTabsPanel({
     const resetTab = makeTab('New Chat', true, true);
     setTabs([resetTab]);
     setActiveTabId(resetTab.id);
+    setDeepDiveByTabId({});
     setShowHistory(false);
   }, [researchMode, resetToLandingSignal]);
 
@@ -322,6 +382,18 @@ export function ProjectChatTabsPanel({
   const handleDeleteSession = useCallback((chatId: string) => {
     setSessions((prev) => prev.filter((session) => session.id !== chatId));
     const nextTabs = tabs.filter((tab) => tab.chatId !== chatId);
+    setDeepDiveByTabId((prev) => {
+      const removedTabIds = new Set(
+        tabs.filter((tab) => tab.chatId === chatId).map((tab) => tab.id),
+      );
+      if (removedTabIds.size === 0) return prev;
+
+      const next = { ...prev };
+      removedTabIds.forEach((tabId) => {
+        delete next[tabId];
+      });
+      return next;
+    });
     if (nextTabs.length === 0) {
       const replacement = makeTab('New Chat', researchMode, true);
       setTabs([replacement]);
@@ -521,6 +593,14 @@ export function ProjectChatTabsPanel({
                 onSendRef={isActive ? onSendRef : undefined}
                 pendingAutoSend={isActive ? pendingAutoSend : null}
                 onPendingAutoSendHandled={isActive ? onPendingAutoSendHandled : undefined}
+                topContent={isActive ? (
+                  deepDiveByTabId[tab.id] ? (
+                    <DeepDiveWidget
+                      state={deepDiveByTabId[tab.id].state}
+                      onOpenDocument={deepDiveByTabId[tab.id].onOpenDocument}
+                    />
+                  ) : topContent
+                ) : undefined}
               />
             </div>
           );

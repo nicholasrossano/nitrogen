@@ -19,6 +19,7 @@ import {
   type WorkspaceWidgetFooterAction,
   type WorkspaceWidgetFooterState,
 } from '@/lib/widgetRegistry';
+import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -67,7 +68,7 @@ function resolveLatestAvailableStageId(
     if (!stageState) continue;
     const status = stageState.status;
     const hasStarted = status === 'draft'
-      || status === 'confirmed'
+      || status === 'validated'
       || status === 'populating'
       || status === 'error'
       || (status === 'pending' && hasRenderableStageData(stageState));
@@ -105,11 +106,11 @@ function StageStepper({
         const stageState = stages[def.id];
         const status = stageState?.status ?? 'pending';
         const isActive = def.id === currentStageId;
-        const isConfirmed = status === 'confirmed';
+        const isConfirmed = status === 'validated';
 
         // Can navigate to a stage if it's confirmed or is the current stage,
         // or if the prior stage is confirmed
-        const priorConfirmed = idx === 0 || stages[stageDefs[idx - 1]?.id]?.status === 'confirmed';
+        const priorConfirmed = idx === 0 || stages[stageDefs[idx - 1]?.id]?.status === 'validated';
         const isAccessible = isConfirmed || isActive || priorConfirmed;
 
         return (
@@ -190,7 +191,7 @@ function ConfirmationBar({
     </button>
   );
 
-  if (status === 'confirmed') {
+  if (status === 'validated') {
     if (!isEditingConfirmedStage) return null;
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider bg-emerald-50/60">
@@ -269,6 +270,7 @@ interface ModuleWorkspaceProps {
   onAddToChat?: (text: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
+  onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
 }
 
 export function ModuleWorkspace({
@@ -278,6 +280,7 @@ export function ModuleWorkspace({
   onAddToChat,
   onOpenDecisionLog,
   onExportDecisionLog,
+  onInspectorStateChange,
 }: ModuleWorkspaceProps) {
   const [state, setState] = useState<StagedModuleWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -433,11 +436,12 @@ export function ModuleWorkspace({
             isActive
             outputFooterAction={outputFooterAction}
             outputFooterState={outputFooterState}
+            onInspectorStateChange={onInspectorStateChange}
           />
         </Suspense>
       );
     },
-    [fetchState, initiativeId, instanceId, state?.workflow_version]
+    [fetchState, initiativeId, instanceId, onInspectorStateChange, state?.workflow_version]
   );
 
   const handlePopulate = useCallback(async (stageId: string) => {
@@ -567,7 +571,7 @@ export function ModuleWorkspace({
   const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
 
   // All stages confirmed → show export button for modules that support it
-  const allConfirmed = stageDefs.length > 0 && stageDefs.every((s) => stages[s.id]?.status === 'confirmed');
+  const allConfirmed = stageDefs.length > 0 && stageDefs.every((s) => stages[s.id]?.status === 'validated');
   const hasExport = !!mod.export_format;
   const finalApproval = ws.final_approval ?? {
     status: 'pending',
@@ -581,10 +585,10 @@ export function ModuleWorkspace({
   const terminalStageId = terminalStageDef?.id ?? null;
   const terminalStageState = terminalStageId ? stages[terminalStageId] : null;
   const terminalStageReady = !!terminalStageState && (
-    terminalStageState.status === 'confirmed'
+    terminalStageState.status === 'validated'
     || (terminalStageState.status === 'draft' && hasMeaningfulValue(terminalStageState.data))
   );
-  const stagesBeforeTerminalConfirmed = stageDefs.slice(0, -1).every((s) => stages[s.id]?.status === 'confirmed');
+  const stagesBeforeTerminalConfirmed = stageDefs.slice(0, -1).every((s) => stages[s.id]?.status === 'validated');
   const canApproveFinal = hasExport
     && requiresFinalApproval
     && !finalApproved
@@ -630,7 +634,7 @@ export function ModuleWorkspace({
   const renderStageContent = () => {
     const { component, widget, fields, id: stageId } = currentStageDef;
     const stageData = currentStageState.data;
-    const isConfirmed = currentStageState.status === 'confirmed';
+    const isConfirmed = currentStageState.status === 'validated';
     const readOnly = isConfirmed && !isEditingConfirmedStage;
 
     if (component === 'computed_results') {
@@ -712,9 +716,9 @@ export function ModuleWorkspace({
     && (currentStageState.status === 'draft'
       || (currentStageState.status === 'pending'
         && hasComputedWidgetData)
-      || (currentStageState.status === 'confirmed' && isEditingConfirmedStage));
+      || (currentStageState.status === 'validated' && isEditingConfirmedStage));
   const requiresPendingChangesForConfirm =
-    currentStageState.status === 'confirmed' && isEditingConfirmedStage;
+    currentStageState.status === 'validated' && isEditingConfirmedStage;
   const canConfirmCurrentStage = requiresPendingChangesForConfirm
     ? hasPendingConfirmedStageChanges
     : true;
@@ -754,7 +758,7 @@ export function ModuleWorkspace({
     ? `${badgeConfirmedAt}${badgeConfirmedBy ? ` by ${badgeConfirmedBy}` : ''}`
     : null;
   const showConfirmedBadge =
-    currentStageState.status === 'confirmed'
+    currentStageState.status === 'validated'
     && !isEditingConfirmedStage;
   const showEditInBadge =
     showConfirmedBadge
@@ -891,7 +895,7 @@ export function ModuleWorkspace({
                     {currentStageState.status === 'pending' && 'Not started'}
                     {currentStageState.status === 'populating' && 'Generating…'}
                     {currentStageState.status === 'draft' && 'Ready for your review'}
-                    {currentStageState.status === 'confirmed' && 'Confirmed'}
+                    {currentStageState.status === 'validated' && 'Confirmed'}
                     {currentStageState.status === 'error' && 'Generation failed'}
                   </p>
                 </div>

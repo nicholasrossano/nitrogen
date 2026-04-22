@@ -156,6 +156,7 @@ export function AssessmentMapWidget({
   instanceId,
   workflowVersion,
   onWorkflowUpdated,
+  onInspectorStateChange,
 }: WorkspaceWidgetProps) {
   const mapData = data as AssessmentMapData;
   const incomingGroups = useMemo<AssessmentGroup[]>(() => mapData?.groups ?? [], [mapData]);
@@ -278,6 +279,10 @@ export function AssessmentMapWidget({
     };
   }, [inspector]);
 
+  useEffect(() => {
+    onInspectorStateChange?.(inspectorState);
+  }, [inspectorState, onInspectorStateChange]);
+
   const handleOpenItem = useCallback(
     (workspaceItem: PlanWorkspaceItem, workspaceGroup: PlanWorkspaceGroup) => {
       const group = groups.find((candidate) => candidate.id === workspaceGroup.id);
@@ -294,13 +299,13 @@ export function AssessmentMapWidget({
         error: null,
         latencyMs: cached?.latencyMs ?? 1,
       });
-      setLocalInspectorOpen(true);
+      if (!onInspectorStateChange) setLocalInspectorOpen(true);
 
       if (isStakeholderModule) {
         void hydrateStakeholder(item, group, !cached);
       }
     },
-    [detailCache, groups, hydrateStakeholder, isStakeholderModule],
+    [detailCache, groups, hydrateStakeholder, isStakeholderModule, onInspectorStateChange],
   );
 
   const handleRetryInspector = useCallback(() => {
@@ -327,8 +332,8 @@ export function AssessmentMapWidget({
           groups={workspaceGroups}
           filterConfig={filterConfig}
           displayModes={[{ id: 'group', label: 'Category', icon: LayoutGrid }]}
-          inspectorState={inspectorState}
-          showInspector={localInspectorOpen}
+          inspectorState={onInspectorStateChange ? null : inspectorState}
+          showInspector={onInspectorStateChange ? false : localInspectorOpen}
           onInspectorChange={(open, hasItem) => {
             setLocalInspectorOpen(open);
             if (!open && !hasItem) {

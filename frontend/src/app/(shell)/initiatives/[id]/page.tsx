@@ -16,6 +16,7 @@ import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandal
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
+import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -53,6 +54,15 @@ function isDocumentTab(tab: WorkspacePanelTab | null): tab is Extract<WorkspaceP
   return tab?.kind === 'document';
 }
 
+interface PendingDeepDiveRequest {
+  requestId: string;
+  state: PlanWorkspaceInspectorState;
+}
+
+function inspectorRequestKey(state: PlanWorkspaceInspectorState): string {
+  return `${state.groupName}::${state.item.id}`;
+}
+
 function InitiativePageContent() {
   const params = useParams();
   const router = useRouter();
@@ -83,6 +93,8 @@ function InitiativePageContent() {
   const [showPlanOverlay, setShowPlanOverlay] = useState(false);
 
   const [showInspector, setShowInspector] = useState(false);
+  const [frameworkDeepDiveRequest, setFrameworkDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
+  const [modulesDeepDiveRequest, setModulesDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
@@ -97,6 +109,8 @@ function InitiativePageContent() {
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>([]);
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(null);
   const onboardingSeenRef = useRef(false);
+  const frameworkDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
+  const modulesDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
 
   const {
     initiative,
@@ -380,6 +394,10 @@ function InitiativePageContent() {
     setWorkspaceTabs([]);
     setActiveWorkspaceTabId(null);
     setShowInspector(false);
+    setFrameworkDeepDiveRequest(null);
+    setModulesDeepDiveRequest(null);
+    frameworkDeepDiveRef.current = null;
+    modulesDeepDiveRef.current = null;
     setResearchCitation(null);
     setChatEditorWidgets([]);
     setWorkspaceLaunchMode('idle');
@@ -627,9 +645,56 @@ function InitiativePageContent() {
     };
   }, [isResizingResearch, handleResearchMouseMove, handleResearchMouseUp]);
 
-  const handleInspectorChange = useCallback((open: boolean) => {
+  const handleInspectorChange = useCallback((open: boolean, hasItem?: boolean) => {
     setShowInspector(open);
-  }, []);
+    if (open && hasItem) {
+      setPanelOpen('framework', 'chat', true);
+    }
+    if (!open) {
+      frameworkDeepDiveRef.current = null;
+      setFrameworkDeepDiveRequest(null);
+    }
+  }, [setPanelOpen]);
+
+  const handleFrameworkInspectorStateChange = useCallback((state: PlanWorkspaceInspectorState | null) => {
+    if (!state) {
+      frameworkDeepDiveRef.current = null;
+      setFrameworkDeepDiveRequest(null);
+      return;
+    }
+
+    const key = inspectorRequestKey(state);
+    const existing = frameworkDeepDiveRef.current;
+    const requestId = existing?.key === key
+      ? existing.requestId
+      : `framework-deep-dive-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    frameworkDeepDiveRef.current = { key, requestId };
+    setFrameworkDeepDiveRequest({ requestId, state });
+    if (existing?.key !== key) {
+      setPanelOpen('framework', 'chat', true);
+    }
+  }, [setPanelOpen]);
+
+  const handleModuleInspectorStateChange = useCallback((state: PlanWorkspaceInspectorState | null) => {
+    if (!state) {
+      modulesDeepDiveRef.current = null;
+      setModulesDeepDiveRequest(null);
+      return;
+    }
+
+    const key = inspectorRequestKey(state);
+    const existing = modulesDeepDiveRef.current;
+    const requestId = existing?.key === key
+      ? existing.requestId
+      : `module-deep-dive-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    modulesDeepDiveRef.current = { key, requestId };
+    setModulesDeepDiveRequest({ requestId, state });
+    if (existing?.key !== key) {
+      setPanelOpen('modules', 'chat', true);
+    }
+  }, [setPanelOpen]);
 
   const handleTitleUpdate = useCallback((title: string) => {
     updateTitle(initiativeId, title);
@@ -705,6 +770,7 @@ function InitiativePageContent() {
           }}
           onOpenDecisionLog={openDecisionLogTab}
           onExportDecisionLog={exportDecisionLog}
+          onModuleInspectorStateChange={handleModuleInspectorStateChange}
         />
       );
     }
@@ -783,10 +849,15 @@ function InitiativePageContent() {
           {renderPlanOverlay}
           <ProjectPlanView
             initiativeId={initiativeId}
-            showInspector={showInspector}
+            showInspector={false}
             onInspectorChange={handleInspectorChange}
+            onInspectorStateChange={handleFrameworkInspectorStateChange}
             onOpenFullDoc={openWorkspaceDocument}
-            onViewModeChange={() => setShowInspector(false)}
+            onViewModeChange={() => {
+              setShowInspector(false);
+              frameworkDeepDiveRef.current = null;
+              setFrameworkDeepDiveRequest(null);
+            }}
           />
         </div>
       );
@@ -828,6 +899,10 @@ function InitiativePageContent() {
           onCitationClick={handleCitationClick}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
+          pendingDeepDive={modulesDeepDiveRequest ? {
+            requestId: modulesDeepDiveRequest.requestId,
+            state: modulesDeepDiveRequest.state,
+          } : null}
         />
       </div>
       {renderResearchPanel}
@@ -843,6 +918,15 @@ function InitiativePageContent() {
           onCitationClick={handleCitationClick}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
+          pendingDeepDive={frameworkDeepDiveRequest ? {
+            requestId: frameworkDeepDiveRequest.requestId,
+            state: frameworkDeepDiveRequest.state,
+            onOpenDocument: (source) => openWorkspaceDocument({
+              evidence_doc_id: source.evidenceDocId,
+              chunk_id: source.chunkId ?? null,
+              source_title: source.title,
+            }),
+          } : null}
         />
       </div>
       {renderResearchPanel}

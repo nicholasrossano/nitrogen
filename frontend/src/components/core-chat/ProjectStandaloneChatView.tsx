@@ -85,6 +85,8 @@ interface ProjectStandaloneChatViewProps {
   onDeleteChat?: (chatId: string) => void;
   /** Ask parent to refresh shared chat history */
   onChatListDirty?: () => void;
+  /** Fixed content rendered above the messages area (e.g. a deep-dive context widget) */
+  topContent?: React.ReactNode;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -139,6 +141,7 @@ export function ProjectStandaloneChatView({
   onPendingAutoSendHandled,
   onDeleteChat,
   onChatListDirty,
+  topContent,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -805,6 +808,7 @@ export function ProjectStandaloneChatView({
       ) : undefined}
       topComposerContent={associatedModulesTray}
       inputChips={inputChips}
+      topContent={topContent}
     />
   );
 }

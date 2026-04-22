@@ -12,6 +12,7 @@
  */
 
 import type { ComponentType } from 'react';
+import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
 export interface WorkspaceWidgetFooterAction {
   label: string;
@@ -34,6 +35,8 @@ export interface WorkspaceWidgetProps {
   isActive?: boolean;
   outputFooterAction?: WorkspaceWidgetFooterAction;
   outputFooterState?: WorkspaceWidgetFooterState;
+  /** Called when diagram item inspector state changes — drives the chat-panel deep-dive widget */
+  onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
 }
 
 type WidgetComponent = ComponentType<WorkspaceWidgetProps>;

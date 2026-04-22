@@ -638,7 +638,7 @@ export function EditableTableStage({
               value: address,
             }
           : null,
-      ].filter((update): update is { row: BuildItem; value: string | number } => update !== null);
+      ].filter((update): update is Exclude<typeof update, null> => update !== null);
 
       if (updates.length === 0) return;
 
