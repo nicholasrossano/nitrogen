@@ -649,13 +649,14 @@ async def chat_stream(
                             and not data.tool_hint
                         )
                     )
+                    # Extract structured fields (type, geography, title) from the user's
+                    # message whenever they're missing — including the first message even when
+                    # we're returning a scripted response.  Skip synthetic UI messages that
+                    # carry no project detail (e.g. "I've uploaded my documents.").
                     should_extract = (
-                        not should_use_initial_project_onboarding
-                        and
                         data.content not in _SKIP_EXTRACTION_MESSAGES
                         and (
-                            not verified_initiative.project_description
-                            or not verified_initiative.project_type
+                            not verified_initiative.project_type
                             or not verified_initiative.geography
                             or not verified_initiative.title
                         )
@@ -795,10 +796,21 @@ async def chat_stream(
                             yield f"data: {json.dumps(complete)}\n\n"
                             return
 
+                        # Synthetic transition messages ("I've uploaded my documents.",
+                        # "I don't have any documents.") are known onboarding pivot points —
+                        # bypass orchestration LLM and go directly to plan generation.
+                        _effective_tool_hint = data.tool_hint or None
+                        if (
+                            data.content in _SKIP_EXTRACTION_MESSAGES
+                            and data.allow_initial_project_onboarding
+                            and not field_context
+                        ):
+                            _effective_tool_hint = "generate_project_plan"
+
                         action_result = await service.get_next_action(
                             messages=conversation_msgs,
                             initiative=verified_initiative,
-                            tool_hint=data.tool_hint or None,
+                            tool_hint=_effective_tool_hint,
                             field_context=field_context,
                             onboarding_mode=bool(data.allow_initial_project_onboarding),
                         )

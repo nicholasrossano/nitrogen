@@ -110,6 +110,56 @@ class GoogleDriveService:
                     break
         return results
 
+    async def list_folder_files_recursive(self, folder_id: str, max_files: int = 200) -> list[dict]:
+        """Return metadata for all supported files inside a folder, including nested folders."""
+        queue: list[str] = [folder_id]
+        visited: set[str] = set()
+        results: list[dict] = []
+
+        async with httpx.AsyncClient() as client:
+            while queue:
+                current_folder_id = queue.pop(0)
+                if current_folder_id in visited:
+                    continue
+                visited.add(current_folder_id)
+
+                page_token = None
+                while True:
+                    params: dict = {
+                        "q": f"'{current_folder_id}' in parents and trashed=false",
+                        "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,size)",
+                        "pageSize": 100,
+                    }
+                    if page_token:
+                        params["pageToken"] = page_token
+
+                    resp = await client.get(
+                        f"{DRIVE_BASE_URL}/files",
+                        headers=self._headers,
+                        params=params,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    for file_meta in data.get("files", []):
+                        mime_type = file_meta.get("mimeType", "")
+                        if mime_type == "application/vnd.google-apps.folder":
+                            child_folder_id = file_meta.get("id")
+                            if child_folder_id and child_folder_id not in visited:
+                                queue.append(child_folder_id)
+                            continue
+
+                        if self.is_supported(mime_type):
+                            results.append(file_meta)
+                            if len(results) >= max_files:
+                                return results
+
+                    page_token = data.get("nextPageToken")
+                    if not page_token:
+                        break
+
+        return results
+
     def get_file_type(self, mime_type: str) -> Optional[str]:
         return DRIVE_MIME_TO_FILE_TYPE.get(mime_type)
 

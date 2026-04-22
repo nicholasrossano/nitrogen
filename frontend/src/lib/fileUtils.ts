@@ -60,7 +60,49 @@ export const SUPPORTED_MIME_TYPES = new Set([
   'application/vnd.ms-excel',
 ]);
 
+const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+};
+
+export const SUPPORTED_FILE_EXTENSIONS = new Set([
+  '.pdf',
+  '.docx',
+  '.xlsx',
+  '.xls',
+]);
+
 export const SUPPORTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls';
+
+function hasSupportedExtension(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  for (const ext of SUPPORTED_FILE_EXTENSIONS) {
+    if (lower.endsWith(ext)) return true;
+  }
+  return false;
+}
+
+function getSupportedExtension(filename: string): string | null {
+  const lower = filename.toLowerCase();
+  for (const ext of SUPPORTED_FILE_EXTENSIONS) {
+    if (lower.endsWith(ext)) return ext;
+  }
+  return null;
+}
+
+function normalizeSupportedFile(file: File): File {
+  if (SUPPORTED_MIME_TYPES.has(file.type)) return file;
+
+  const ext = getSupportedExtension(file.name);
+  if (!ext) return file;
+
+  const inferredType = EXTENSION_TO_MIME_TYPE[ext];
+  if (!inferredType || file.type === inferredType) return file;
+
+  return new File([file], file.name, { type: inferredType });
+}
 
 /** Filter a file list down to supported types only */
 export function filterSupportedFiles(files: File[]): {
@@ -71,8 +113,10 @@ export function filterSupportedFiles(files: File[]): {
   const rejected: string[] = [];
 
   for (const f of files) {
-    if (SUPPORTED_MIME_TYPES.has(f.type)) {
-      accepted.push(f);
+    // Folder uploads often produce files with empty or inconsistent MIME types,
+    // so fall back to extension checks for the document formats we actually support.
+    if (SUPPORTED_MIME_TYPES.has(f.type) || hasSupportedExtension(f.name)) {
+      accepted.push(normalizeSupportedFile(f));
     } else {
       rejected.push(f.name);
     }

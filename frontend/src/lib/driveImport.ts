@@ -1,16 +1,18 @@
 import { openGooglePicker } from '@/lib/googlePicker';
-import type { DriveLinkedFile } from '@/lib/api';
+import type { DriveImportResult } from '@/lib/api';
 
 interface ImportFromDriveViaPickerArgs {
   initiativeId: string;
   driveConnected: boolean;
   connectDrive: (initiativeId: string) => Promise<void>;
   getDriveAccessToken: () => Promise<string>;
-  importFromDrive: (initiativeId: string, fileIds: string[]) => Promise<DriveLinkedFile[]>;
+  importFromDrive: (initiativeId: string, fileIds: string[]) => Promise<DriveImportResult>;
 }
 
 interface ImportFromDriveViaPickerResult {
   importedCount: number;
+  errorCount: number;
+  firstError: string | null;
 }
 
 export async function importFromDriveViaPicker({
@@ -22,7 +24,7 @@ export async function importFromDriveViaPicker({
 }: ImportFromDriveViaPickerArgs): Promise<ImportFromDriveViaPickerResult> {
   if (!driveConnected) {
     await connectDrive(initiativeId);
-    return { importedCount: 0 };
+    return { importedCount: 0, errorCount: 0, firstError: null };
   }
 
   const accessToken = await getDriveAccessToken();
@@ -31,20 +33,24 @@ export async function importFromDriveViaPicker({
       accessToken,
       async (files) => {
         if (files.length === 0) {
-          resolve({ importedCount: 0 });
+          resolve({ importedCount: 0, errorCount: 0, firstError: null });
           return;
         }
         try {
-          const imported = await importFromDrive(
+          const result = await importFromDrive(
             initiativeId,
             files.map((file) => file.id),
           );
-          resolve({ importedCount: imported.length });
+          resolve({
+            importedCount: result.imported.length,
+            errorCount: result.errors.length,
+            firstError: result.errors[0]?.error ?? null,
+          });
         } catch (err) {
           reject(err);
         }
       },
-      () => resolve({ importedCount: 0 }),
+      () => resolve({ importedCount: 0, errorCount: 0, firstError: null }),
     );
   });
 }

@@ -49,6 +49,8 @@ interface ProjectStandaloneChatViewProps {
   allowInitialProjectOnboarding?: boolean;
   /** When false, empty state stays in conversation mode instead of showing the landing UI */
   useLandingWhenEmpty?: boolean;
+  /** Restore latest existing chat for this initiative on initial mount */
+  restoreLatestChatOnMount?: boolean;
   /** Optional override for sends initiated from the landing composer */
   onLandingSend?: (content: string, toolHint?: string) => void;
   initialChatId?: string | null;
@@ -120,6 +122,7 @@ export function ProjectStandaloneChatView({
   hideLandingComposer = false,
   allowInitialProjectOnboarding = false,
   useLandingWhenEmpty = true,
+  restoreLatestChatOnMount = false,
   onLandingSend,
   initialChatId = null,
   initialTitle = null,
@@ -160,6 +163,7 @@ export function ProjectStandaloneChatView({
   const associatedModuleKeysRef = useRef<Set<string>>(new Set());
   const lastLoadedChatIdRef = useRef<string | null>(null);
   const lastAutoSendRequestIdRef = useRef<string | null>(null);
+  const hasAttemptedAutoRestoreRef = useRef(false);
 
   const initiative = useInitiativeStore((s) => s.initiative);
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
@@ -206,6 +210,35 @@ export function ProjectStandaloneChatView({
     }
     void loadChat(initialChatId, initialTitle);
   }, [currentChatId, initialChatId, initialTitle, loadChat]);
+
+  useEffect(() => {
+    if (!restoreLatestChatOnMount) return;
+    if (initialChatId) return;
+    if (showLanding) return;
+    if (currentChatId) return;
+    if (localMessages.length > 0) return;
+    if (hasAttemptedAutoRestoreRef.current) return;
+
+    hasAttemptedAutoRestoreRef.current = true;
+
+    void api.getChats(initiativeId)
+      .then(async ({ chats }) => {
+        const latest = chats?.[0];
+        if (!latest?.id) return;
+        await loadChat(latest.id, latest.title);
+      })
+      .catch(() => {
+        // Keep default landing behavior if auto-restore fails.
+      });
+  }, [
+    currentChatId,
+    initialChatId,
+    initiativeId,
+    loadChat,
+    localMessages.length,
+    restoreLatestChatOnMount,
+    showLanding,
+  ]);
 
   useEffect(() => {
     const nextMeta = {

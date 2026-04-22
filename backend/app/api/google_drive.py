@@ -245,7 +245,11 @@ async def import_from_drive(
         try:
             meta = await drive.get_file_metadata(file_id)
             if meta.get("mimeType") == "application/vnd.google-apps.folder":
-                children = await drive.list_folder_files(file_id)
+                children = await drive.list_folder_files_recursive(file_id, max_files=200)
+                if not children:
+                    errors.append(
+                        {"file_id": file_id, "error": "No supported files found in selected folder"}
+                    )
                 expanded_file_metas.extend(children)
             else:
                 expanded_file_metas.append(meta)

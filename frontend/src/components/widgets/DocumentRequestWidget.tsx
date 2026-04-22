@@ -1,14 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { FileUp, FolderOpen, HardDriveDownload, Loader2 } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { UploadToast, UploadItem } from '@/components/ui/UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
-import { useGoogleDriveStore } from '@/stores/googleDriveStore';
-import { warmGooglePicker } from '@/lib/googlePicker';
-import { importFromDriveViaPicker } from '@/lib/driveImport';
+import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 
 interface DocumentRequestWidgetProps {
   initiativeId: string;
@@ -32,24 +30,7 @@ export function DocumentRequestWidget({
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials, importFromDrive } = useInitiativeStore();
-  const driveConnected = useGoogleDriveStore((s) => s.connected);
-  const connectDrive = useGoogleDriveStore((s) => s.connect);
-  const getDriveAccessToken = useGoogleDriveStore((s) => s.getAccessToken);
-  const [driveImporting, setDriveImporting] = useState(false);
-  const [driveConnecting, setDriveConnecting] = useState(false);
-
-  useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) return;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      const idleCallbackId = window.requestIdleCallback(() => warmGooglePicker(), { timeout: 2000 });
-      return () => window.cancelIdleCallback(idleCallbackId);
-    }
-
-    const timer = window.setTimeout(() => warmGooglePicker(), 250);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials } = useInitiativeStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
@@ -137,38 +118,6 @@ export function DocumentRequestWidget({
     folderInputRef.current?.click();
   }, [uploading]);
 
-  const handleDriveImport = useCallback(async () => {
-    if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || uploading || driveImporting) return;
-    try {
-      setDriveConnecting(!driveConnected);
-      setDriveImporting(driveConnected);
-      const { importedCount } = await importFromDriveViaPicker({
-        initiativeId,
-        driveConnected,
-        connectDrive,
-        getDriveAccessToken,
-        importFromDrive,
-      });
-      if (importedCount > 0) {
-        await sendProgressMessage("I've uploaded my documents.");
-      }
-    } catch (err) {
-      console.error('Could not open Drive picker:', err);
-    } finally {
-      setDriveConnecting(false);
-      setDriveImporting(false);
-    }
-  }, [
-    connectDrive,
-    driveConnected,
-    driveImporting,
-    getDriveAccessToken,
-    importFromDrive,
-    initiativeId,
-    sendProgressMessage,
-    uploading,
-  ]);
-
   const handleNoDocuments = useCallback(() => {
     void sendProgressMessage("I don't have any documents to upload.");
   }, [sendProgressMessage]);
@@ -209,41 +158,18 @@ export function DocumentRequestWidget({
     <div className="border-t border-divider bg-white px-4 py-4">
       <div className="flex flex-col items-center gap-3">
         {/* Drop zone */}
-        <div
+        <UploadDropzone
+          isDragging={isDragging}
+          uploading={uploading}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onClick={() => !uploading && fileInputRef.current?.click()}
-          className={`
-            flex flex-col items-center justify-center gap-2 w-64 min-h-[120px] rounded-lg cursor-pointer
-            border border-dashed transition-colors duration-150
-            ${isDragging
-              ? 'border-accent/60 bg-accent-wash/60'
-              : 'border-[#c8c4be] bg-black/[0.04] hover:border-[#aaa69f] hover:bg-black/[0.07]'
-            }
-            ${uploading ? 'pointer-events-none opacity-60' : ''}
-          `}
-        >
-          {uploading ? (
-            <>
-              <Loader2 className="w-4 h-4 text-text-secondary animate-spin" />
-              <span className="text-[11px] text-text-secondary">Uploading…</span>
-            </>
-          ) : (
-            <>
-              <FileUp className={`w-4 h-4 ${isDragging ? 'text-accent' : 'text-text-secondary'}`} />
-              <div className="text-center">
-                <span className={`text-[11px] ${isDragging ? 'text-accent' : 'text-text-secondary'}`}>
-                  {isDragging ? 'Drop files here' : 'Upload files'}
-                </span>
-                {!isDragging && (
-                  <p className="text-[10px] text-text-tertiary mt-0.5">or drag and drop</p>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+          dragLabel="Drop files or folder"
+          idleLabel="Upload files"
+          className="w-64 min-h-[140px] px-2"
+        />
 
         <input
           ref={fileInputRef}
@@ -263,30 +189,12 @@ export function DocumentRequestWidget({
         />
 
         {!uploading && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
+          <div className="flex items-center">
+            <UploadActionButton
               onClick={handleFolderSelect}
-              className="btn-secondary !px-3 !py-1.5 text-xs"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              Upload folder
-            </button>
-            {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
-              <button
-                type="button"
-                onClick={() => void handleDriveImport()}
-                disabled={driveConnecting || driveImporting}
-                className="btn-secondary !px-3 !py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {driveConnecting || driveImporting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <HardDriveDownload className="w-3.5 h-3.5" />
-                )}
-                Import from Drive
-              </button>
-            )}
+              icon={<FolderOpen className="w-4 h-4" />}
+              label="Select folder"
+            />
           </div>
         )}
 
