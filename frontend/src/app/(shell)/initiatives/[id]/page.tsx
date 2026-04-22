@@ -13,10 +13,13 @@ import { ProjectWorkspaceEditorPanel } from '@/components/editor/ProjectWorkspac
 import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
+import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
+import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
+import { mapProjectPlanToProgress } from '@/components/project-plan/projectPlanMapper';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -25,7 +28,6 @@ import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
-const ProjectPlanView = dynamic(() => import('@/components/project-plan').then((m) => ({ default: m.ProjectPlanView })), { ssr: false });
 const ProjectFilesView = dynamic(() => import('@/components/files').then((m) => ({ default: m.ProjectFilesView })), { ssr: false });
 const MIN_CHAT_PANEL_PERCENT = 20;
 const MAX_CHAT_PANEL_PERCENT = 60;
@@ -159,7 +161,6 @@ function InitiativePageContent() {
   const [planViewReady, setPlanViewReady] = useState(true);
   const [showPlanOverlay, setShowPlanOverlay] = useState(false);
 
-  const [showInspector, setShowInspector] = useState(false);
   const [frameworkDeepDiveRequest, setFrameworkDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [modulesDeepDiveRequest, setModulesDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
@@ -178,6 +179,11 @@ function InitiativePageContent() {
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(
     initialWorkspaceUiRef.current?.activeWorkspaceTabId ?? null,
   );
+  const [frameworkActiveModule, setFrameworkActiveModule] = useState<{
+    instanceId: string;
+    moduleId: string;
+    title: string;
+  } | null>(null);
   const onboardingSeenRef = useRef(false);
   const frameworkDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
   const modulesDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
@@ -217,6 +223,10 @@ function InitiativePageContent() {
 
   const hasProjectPlan = Boolean(projectPlan);
   const isOnboarding = Boolean(initiative && !isViewer && !hasProjectPlan);
+  const frameworkProgress = useMemo(
+    () => mapProjectPlanToProgress(projectPlan),
+    [projectPlan],
+  );
   const activeWorkspaceTab = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
     [workspaceTabs, activeWorkspaceTabId],
@@ -238,6 +248,14 @@ function InitiativePageContent() {
     }
     return null;
   }, [activeWorkspaceTab]);
+  const frameworkModuleContext = useMemo(() => {
+    if (!frameworkActiveModule) return null;
+    return {
+      instanceId: frameworkActiveModule.instanceId,
+      moduleId: frameworkActiveModule.moduleId,
+      title: frameworkActiveModule.title,
+    };
+  }, [frameworkActiveModule]);
   const visibleWorkspaceTabs = useMemo(
     () => (activeView === 'modules' ? workspaceTabs : workspaceTabs.filter((tab) => tab.kind === 'document')),
     [activeView, workspaceTabs],
@@ -461,7 +479,7 @@ function InitiativePageContent() {
     setChatPanelWidthPercent(storedWorkspaceUi?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT);
     setWorkspaceTabs(storedWorkspaceUi?.workspaceTabs ?? []);
     setActiveWorkspaceTabId(storedWorkspaceUi?.activeWorkspaceTabId ?? null);
-    setShowInspector(false);
+    setFrameworkActiveModule(null);
     setFrameworkDeepDiveRequest(null);
     setModulesDeepDiveRequest(null);
     frameworkDeepDiveRef.current = null;
@@ -510,11 +528,6 @@ function InitiativePageContent() {
     const timer = window.setTimeout(() => setShowPlanOverlay(false), 350);
     return () => window.clearTimeout(timer);
   }, [planViewReady, showPlanOverlay]);
-
-  useEffect(() => {
-    if (activeView === 'modules') return;
-    setShowInspector(false);
-  }, [activeView]);
 
   useEffect(() => {
     const hasArtifactsTab = workspaceTabs.some((tab) => tab.id === 'chat-artifacts');
@@ -624,6 +637,18 @@ function InitiativePageContent() {
     [],
   );
 
+  const handleOpenFrameworkModule = useCallback((module: {
+    instanceId: string;
+    moduleId: string;
+    title?: string | null;
+  }) => {
+    setFrameworkActiveModule({
+      instanceId: module.instanceId,
+      moduleId: module.moduleId,
+      title: module.title || module.moduleId.replace(/_/g, ' '),
+    });
+  }, []);
+
   const closeWorkspaceTab = useCallback((tabId: string) => {
     setWorkspaceTabs((prev) => {
       const nextTabs = prev.filter((tab) => tab.id !== tabId);
@@ -670,17 +695,6 @@ function InitiativePageContent() {
       document.body.style.userSelect = '';
     };
   }, [isResizingChat, handleChatMouseMove, handleChatMouseUp]);
-
-  const handleInspectorChange = useCallback((open: boolean, hasItem?: boolean) => {
-    setShowInspector(open);
-    if (open && hasItem) {
-      setPanelOpen('framework', 'chat', true);
-    }
-    if (!open) {
-      frameworkDeepDiveRef.current = null;
-      setFrameworkDeepDiveRequest(null);
-    }
-  }, [setPanelOpen]);
 
   const handleFrameworkInspectorStateChange = useCallback((state: PlanWorkspaceInspectorState | null) => {
     if (!state) {
@@ -851,20 +865,90 @@ function InitiativePageContent() {
       }
 
       return (
-        <div className="relative h-full">
+        <div className="relative h-full flex flex-col bg-surface overflow-hidden">
           {renderPlanOverlay}
-          <ProjectPlanView
-            initiativeId={initiativeId}
-            showInspector={false}
-            onInspectorChange={handleInspectorChange}
-            onInspectorStateChange={handleFrameworkInspectorStateChange}
-            onOpenFullDoc={openWorkspaceDocument}
-            onViewModeChange={() => {
-              setShowInspector(false);
-              frameworkDeepDiveRef.current = null;
-              setFrameworkDeepDiveRequest(null);
-            }}
-          />
+          {frameworkProgress && frameworkProgress.total > 0 && (
+            <div className="flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-divider bg-surface-header">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] text-text-tertiary">
+                  <span className="font-medium text-text-secondary">{frameworkProgress.completed}</span>
+                  {' '}of {frameworkProgress.total} complete
+                </span>
+                <span className="text-[11px] font-medium text-text-secondary tabular-nums">
+                  {frameworkProgress.percentage}%
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden bg-surface-subtle w-full">
+                <div className="h-full w-full flex">
+                  {frameworkProgress.segments.map((segment, idx) => {
+                    const widthPct = frameworkProgress.total > 0
+                      ? (segment.completed / frameworkProgress.total) * 100
+                      : 0;
+                    const hasLaterFilledSegment = frameworkProgress.segments
+                      .slice(idx + 1)
+                      .some((next) => next.completed > 0);
+                    return (
+                      <div
+                        key={segment.id}
+                        className="h-full transition-[width] duration-300 ease-out flex-shrink-0"
+                        style={{
+                          width: `${widthPct}%`,
+                          backgroundColor: widthPct > 0 ? segment.color : 'transparent',
+                          borderRadius: !hasLaterFilledSegment ? '0 9999px 9999px 0' : undefined,
+                          borderRight: widthPct > 0 && hasLaterFilledSegment ? '1px solid #F7F5F2' : undefined,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {frameworkActiveModule ? (
+              <div className="h-full flex flex-col">
+                <div className="flex-shrink-0 px-4 py-3 border-b border-divider bg-surface">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrameworkActiveModule(null);
+                      frameworkDeepDiveRef.current = null;
+                      setFrameworkDeepDiveRequest(null);
+                    }}
+                    className="btn-secondary !px-3 !py-1.5 !text-xs"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Back to framework
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <ModuleWorkspace
+                    instanceId={frameworkActiveModule.instanceId}
+                    moduleId={frameworkActiveModule.moduleId}
+                    initiativeId={initiativeId}
+                    onAddToChat={(text) => {
+                      setPanelOpen('framework', 'chat', true);
+                      chatSendRef.current?.(text, frameworkActiveModule.moduleId);
+                    }}
+                    onOpenDecisionLog={openDecisionLogTab}
+                    onExportDecisionLog={exportDecisionLog}
+                    onInspectorStateChange={handleFrameworkInspectorStateChange}
+                  />
+                </div>
+              </div>
+            ) : (
+              <FrameworkPlanView
+                initiativeId={initiativeId}
+                projectPlan={projectPlan}
+                readOnly={Boolean(isViewer)}
+                onOpenModule={(module) => handleOpenFrameworkModule({
+                  instanceId: module.id,
+                  moduleId: module.module_id,
+                  title: module.title,
+                })}
+              />
+            )}
+          </div>
         </div>
       );
     }
@@ -919,6 +1003,9 @@ function InitiativePageContent() {
           initiativeId={initiativeId}
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
+          pendingChatToOpen={pendingChatToOpen}
+          activeModuleContext={frameworkModuleContext}
+          onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
