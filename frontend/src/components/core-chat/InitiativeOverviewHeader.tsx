@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Files, Layers3, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
 import { api, type Initiative } from '@/lib/api';
 
@@ -151,24 +152,32 @@ export function InitiativeOverviewHeader({
           <div className="min-h-[20px] text-xs text-text-tertiary">
             {errorMessage ? <span className="text-red-500">{errorMessage}</span> : null}
           </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={!canRefresh || isGenerating}
-            className="btn-secondary !px-3 !py-1.5 text-xs"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-3.5 h-3.5" />
-                Refresh
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={!canRefresh || isGenerating}
+              className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-stroke-subtle bg-white text-text-secondary transition-colors enabled:hover:border-accent enabled:hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Refresh
+                </>
+              )}
+            </button>
+            <Link
+              href={`/initiatives/${initiative.id}?view=framework`}
+              className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+            >
+              View Framework Plan
+            </Link>
+          </div>
         </div>
       </div>
 
