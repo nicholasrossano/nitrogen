@@ -7,7 +7,7 @@
  * Uses the shared PlanWorkspaceView and inspector behavior.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LayoutGrid } from 'lucide-react';
 import {
   PlanWorkspaceView,
@@ -17,6 +17,7 @@ import {
   type PlanWorkspaceItem,
 } from '@/components/plan-workspace';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
+import { api } from '@/lib/api';
 import type { WorkspaceWidgetProps } from '@/lib/widgetRegistry';
 
 type ImplementationItemType = 'deliverable' | 'assessment';
@@ -132,8 +133,8 @@ function toInspectorResult(item: ImplementationPlanItem): PlanWorkspaceInspector
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   const supports = (item.supports ?? []).filter(Boolean).map((target) => ({
-    condition: target,
-    effect: 'This activity supports this downstream item.',
+    title: target,
+    description: 'This activity supports this downstream item.',
   }));
   const dependsOn = (item.depends_on ?? []).filter(Boolean).map((dependency) => ({
     condition: dependency,
@@ -164,15 +165,35 @@ function toInspectorResult(item: ImplementationPlanItem): PlanWorkspaceInspector
   };
 }
 
-export function ImplementationPlanWidget({ data }: WorkspaceWidgetProps) {
+export function ImplementationPlanWidget({
+  data,
+  instanceId,
+  onWorkflowUpdated,
+  onInspectorStateChange,
+}: WorkspaceWidgetProps) {
   const mapData = data as ImplementationPlanData;
+  const [widgetData, setWidgetData] = useState<ImplementationPlanData>(mapData);
   const groups = useMemo<ImplementationPlanGroup[]>(
-    () => mapData?.groups ?? [],
-    [mapData],
+    () => widgetData?.groups ?? [],
+    [widgetData],
   );
 
   const [selection, setSelection] = useState<PlanInspectorSelection | null>(null);
   const [localInspectorOpen, setLocalInspectorOpen] = useState(false);
+  const [pendingToggleIds, setPendingToggleIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setWidgetData(mapData);
+  }, [mapData]);
+
+  useEffect(() => {
+    if (!selection) return;
+    const nextGroup = groups.find((group) => group.id === selection.group.id);
+    const nextItem = nextGroup?.items.find((item) => item.id === selection.item.id);
+    if (!nextGroup || !nextItem) return;
+    if (nextGroup === selection.group && nextItem === selection.item) return;
+    setSelection({ group: nextGroup, item: nextItem });
+  }, [groups, selection]);
 
   const workspaceGroups = useMemo<PlanWorkspaceGroup[]>(
     () =>
@@ -210,18 +231,65 @@ export function ImplementationPlanWidget({ data }: WorkspaceWidgetProps) {
     };
   }, [selection]);
 
+  useEffect(() => {
+    onInspectorStateChange?.(inspectorState);
+  }, [inspectorState, onInspectorStateChange]);
+
   const handleOpenItem = useCallback(
     (workspaceItem: PlanWorkspaceItem, workspaceGroup: PlanWorkspaceGroup) => {
       const group = groups.find((candidate) => candidate.id === workspaceGroup.id);
       const item = group?.items.find((candidate) => candidate.id === workspaceItem.id);
       if (!group || !item) return;
       setSelection({ item, group });
-      setLocalInspectorOpen(true);
+      if (!onInspectorStateChange) setLocalInspectorOpen(true);
     },
-    [groups],
+    [groups, onInspectorStateChange],
   );
 
-  const noopToggleComplete = useCallback((_itemId: string) => {}, []);
+  const toggleComplete = useCallback(async (itemId: string) => {
+    if (!instanceId) return;
+    if (pendingToggleIds.has(itemId)) return;
+    const previousWidgetData = widgetData;
+    let updated = false;
+    const nextGroups = groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) => {
+        if (item.id !== itemId) return item;
+        const nextStatus = normalizeStatus(item.status) === 'complete' ? 'not_started' : 'complete';
+        return { ...item, status: nextStatus };
+      }),
+    }));
+    const nextWidgetData: ImplementationPlanData = {
+      ...previousWidgetData,
+      groups: nextGroups,
+      module_id: previousWidgetData?.module_id ?? 'implementation_plan',
+    };
+    setPendingToggleIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
+    setWidgetData(nextWidgetData);
+    try {
+      await api.persistModuleWorkflowWidget(
+        instanceId,
+        nextWidgetData,
+      );
+      updated = true;
+    } catch (error) {
+      console.error('[ImplementationPlanWidget] Failed to persist toggle', error);
+      setWidgetData(previousWidgetData);
+    } finally {
+      setPendingToggleIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }
+    if (updated) {
+      await onWorkflowUpdated?.();
+    }
+  }, [groups, instanceId, onWorkflowUpdated, pendingToggleIds, widgetData]);
   const noopDeleteItem = useCallback((_itemId: string) => {}, []);
   const noopRetryInspector = useCallback(() => {}, []);
 
@@ -241,8 +309,8 @@ export function ImplementationPlanWidget({ data }: WorkspaceWidgetProps) {
           groups={workspaceGroups}
           filterConfig={filterConfig}
           displayModes={[{ id: 'group', label: 'Category', icon: LayoutGrid }]}
-          inspectorState={inspectorState}
-          showInspector={localInspectorOpen}
+          inspectorState={onInspectorStateChange ? null : inspectorState}
+          showInspector={onInspectorStateChange ? false : localInspectorOpen}
           onInspectorChange={(open, hasItem) => {
             setLocalInspectorOpen(open);
             if (!open && !hasItem) {
@@ -252,9 +320,9 @@ export function ImplementationPlanWidget({ data }: WorkspaceWidgetProps) {
           onOpenItem={handleOpenItem}
           onRetryInspector={noopRetryInspector}
           onDeleteItem={noopDeleteItem}
-          onToggleComplete={noopToggleComplete}
+          onToggleComplete={toggleComplete}
           showItemKindBadge
-          showItemCompleteToggle={false}
+          showItemCompleteToggle
           showItemBranchDelete={false}
           showItemRightActions={false}
           enableItemSorting={false}
