@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
-import type { ChatMessage, FieldContext, ResearchStep, SourceCitation } from '@/lib/api';
+import type { ChatMessage, FieldContext, ResearchStep } from '@/lib/api';
+import type { ResearchPanelCitation } from './ResearchPanel';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
 import { AssociatedModulesTray, type AssociatedChatModule } from './AssociatedModulesTray';
@@ -58,8 +59,8 @@ interface ProjectStandaloneChatViewProps {
   onMessageSent?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
-  /** Called when user clicks an internal citation */
-  onCitationClick?: (citation: SourceCitation) => void;
+  /** Called when user opens an internal citation document */
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
   /** Called when the active chat metadata changes */
   onChatMetaChange?: (meta: { chatId: string | null; title: string | null }) => void;
   /** Called when this view enters or leaves its landing state */
@@ -87,6 +88,12 @@ interface ProjectStandaloneChatViewProps {
   onChatListDirty?: () => void;
   /** Fixed content rendered above the messages area (e.g. a deep-dive context widget) */
   topContent?: React.ReactNode;
+  /** Layout mode for top content when present */
+  topContentMode?: 'inline' | 'panel';
+  /** Ambient project context automatically included with every send in this chat view */
+  projectContext?: string | null;
+  /** Called before sending a message from the composer */
+  onBeforeSendMessage?: () => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -130,7 +137,7 @@ export function ProjectStandaloneChatView({
   initialTitle = null,
   onMessageSent,
   onEditorWidgetsChange,
-  onCitationClick,
+  onOpenDocument,
   onChatMetaChange,
   onLandingStateChange,
   onOpenWorkspaceModule,
@@ -142,6 +149,9 @@ export function ProjectStandaloneChatView({
   onDeleteChat,
   onChatListDirty,
   topContent,
+  topContentMode = 'inline',
+  projectContext = null,
+  onBeforeSendMessage,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -338,6 +348,7 @@ export function ProjectStandaloneChatView({
       content: string,
       currentMessages: ChatMessage[],
       toolHint?: string,
+      projectContextOverride?: string | null,
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
       associatedModule?: { instanceId: string; moduleId: string; title?: string | null } | null,
@@ -360,6 +371,7 @@ export function ProjectStandaloneChatView({
       debugChatFlow('transport-send', {
         surface: 'project-standalone-chat',
         route: '/api/v1/chat/stream',
+        has_project_context: Boolean(projectContextOverride),
         field_name: fieldContext?.field_name ?? null,
         model_type: fieldContext?.model_type ?? null,
         has_field_context: Boolean(fieldContext),
@@ -433,6 +445,7 @@ export function ProjectStandaloneChatView({
         },
         currentChatId,
         toolHint ?? null,
+        projectContextOverride ?? null,
         fieldContext ?? null,
         modelInputsContext ?? null,
         associatedModule
@@ -484,6 +497,7 @@ export function ProjectStandaloneChatView({
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
     ) => {
+      onBeforeSendMessage?.();
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -521,7 +535,15 @@ export function ProjectStandaloneChatView({
           : null;
 
       try {
-        await sendViaStream(content, updatedMessages, toolHint, fieldContext, modelInputsContext, associatedModule);
+        await sendViaStream(
+          content,
+          updatedMessages,
+          toolHint,
+          projectContext,
+          fieldContext,
+          modelInputsContext,
+          associatedModule,
+        );
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
@@ -529,7 +551,7 @@ export function ProjectStandaloneChatView({
         setSending(false);
       }
     },
-    [activeModuleContext, localMessages, onMessageSent, sendViaStream],
+    [activeModuleContext, localMessages, onBeforeSendMessage, onMessageSent, projectContext, sendViaStream],
   );
 
   useEffect(() => {
@@ -561,13 +583,13 @@ export function ProjectStandaloneChatView({
       setSending(true);
 
       try {
-        await sendViaStream(newContent, updatedMessages);
+        await sendViaStream(newContent, updatedMessages, undefined, projectContext);
       } catch {
         setLocalMessages(truncated);
         setSending(false);
       }
     },
-    [localMessages, sendViaStream],
+    [localMessages, projectContext, sendViaStream],
   );
 
   const handleRetryMessage = useCallback(
@@ -593,13 +615,13 @@ export function ProjectStandaloneChatView({
       setSending(true);
 
       try {
-        await sendViaStream(lastUserMsg.content, updatedMessages);
+        await sendViaStream(lastUserMsg.content, updatedMessages, undefined, projectContext);
       } catch {
         setLocalMessages(preceding);
         setSending(false);
       }
     },
-    [localMessages, sendViaStream],
+    [localMessages, projectContext, sendViaStream],
   );
 
   const handleSetFeedback = useCallback(
@@ -798,7 +820,7 @@ export function ProjectStandaloneChatView({
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
       initiativeId={initiativeId}
-      onCitationClick={onCitationClick}
+      onOpenDocument={onOpenDocument}
       extraInputActions={isOverviewLanding ? (
         <CompareProjectPicker
           currentProjectId={initiativeId}
@@ -809,6 +831,7 @@ export function ProjectStandaloneChatView({
       topComposerContent={associatedModulesTray}
       inputChips={inputChips}
       topContent={topContent}
+      topContentMode={topContentMode}
     />
   );
 }

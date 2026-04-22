@@ -255,6 +255,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         },
         get().currentChatId,
         toolHint,
+        null,
         fieldContext ?? null,
         modelInputsContext,
       );

@@ -146,6 +146,7 @@ describe('api', () => {
         jest.fn(),
         null,
         null,
+        null,
         {
           field_name: 'capacity_factor',
           label: 'Capacity factor',
@@ -155,6 +156,7 @@ describe('api', () => {
           status: 'assumed',
         },
         '### LCOE Model Inputs\n- Capacity factor (field_name=capacity_factor): 0.3 % [assumed]',
+        null,
         'initiative-1',
       );
 
