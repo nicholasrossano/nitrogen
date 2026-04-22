@@ -215,6 +215,8 @@ GUIDELINES:
 
 The user may be working inside a project workspace. Project documents are ALREADY searched automatically — you do not need to call any tool to search them. When the user asks about THEIR project's specific details (budget, partners, timeline, scope, deliverables, etc.), do NOT call search_scholarly_literature or search_web_sources — the project documents already provide the answer.
 
+If the context includes an "Active Deep Dive Context" block, treat that as a focused project item the user is actively exploring. In that case, prefer calling search_web_sources for questions that ask for more explanation, implementation context, dependencies, risks, best practices, institutional context, or external validation beyond the project's own documents. Only stay document-only when the user is clearly asking just for what the project documents say about that item.
+
 For general research questions that go BEYOND the project's own documents (e.g. industry benchmarks, regulatory standards, methodology comparisons, best practices), call BOTH search_scholarly_literature AND search_web_sources.
 
 For straightforward factual lookups like geographic coordinates, city/country names, dates, or unit conversions, prefer search_web_sources only. Scholarly literature is usually unnecessary.
@@ -233,6 +235,7 @@ When in doubt, call both search tools. More context is better than less.
 
 {model_inputs_context}
 {module_context}
+{project_context}
 
 Do not produce any text — only make tool calls (or no calls)."""
 
@@ -490,6 +493,7 @@ class ChatService:
                 history,
                 model_inputs_context=model_inputs_context,
                 module_context=module_context,
+                project_context=project_context,
                 initiative_id=initiative_id,
             )
         )
@@ -1288,6 +1292,7 @@ class ChatService:
         history: list[dict[str, str]],
         model_inputs_context: str | None = None,
         module_context: dict[str, Any] | None = None,
+        project_context: str | None = None,
         initiative_id: str | None = None,
     ) -> list:
         """
@@ -1310,9 +1315,14 @@ class ChatService:
                 details.append(f"- instance_id: {module_instance}")
             module_block = "\nActive module workspace context:\n" + "\n".join(details) + "\n"
 
+        project_block = ""
+        if project_context:
+            project_block = f"\nActive project context:\n{project_context}\n"
+
         planning_prompt = PLANNING_SYSTEM_PROMPT.format(
             model_inputs_context=inputs_block,
             module_context=module_block,
+            project_context=project_block,
         )
         messages: list[dict] = [{"role": "system", "content": planning_prompt}]
         for msg in (history[-6:] if len(history) > 6 else history):
@@ -2186,14 +2196,37 @@ class ChatService:
         messages.append({"role": "user", "content": user_message})
 
         client = await self._get_client()
-        resp = await client.chat.completions.create(
-            model=settings.openai_generation_model,
-            messages=messages,
-            temperature=0.4,
-            max_tokens=1200,
-        )
-        await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
-        return resp.choices[0].message.content or ""
+
+        async def _generate(curr_messages: list[dict[str, str]]) -> str:
+            resp = await client.chat.completions.create(
+                model=settings.openai_generation_model,
+                messages=curr_messages,
+                temperature=0.4,
+                max_tokens=1200,
+            )
+            await record_usage_from_response(
+                self.user_id,
+                settings.openai_generation_model,
+                resp,
+                self.db,
+                is_byok=self._is_byok,
+            )
+            return resp.choices[0].message.content or ""
+
+        content = await _generate(messages)
+        if facts and not _CITATION_RE.search(content):
+            retry_messages = messages + [
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": (
+                        "Rewrite the same answer using the exact bracketed citation tags from the evidence. "
+                        "Do not add new claims. Every evidence-backed claim must have an inline citation."
+                    ),
+                },
+            ]
+            content = await _generate(retry_messages)
+        return content
 
     def _extract_cited_sources(
         self,

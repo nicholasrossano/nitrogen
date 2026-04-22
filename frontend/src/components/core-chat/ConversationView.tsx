@@ -24,6 +24,8 @@ import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/M
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { sanitizeHref } from '@/lib/sanitizeHref';
 import { debugChatFlow } from '@/lib/chatDebug';
+import { SnippetCard } from './ResearchPanel';
+import type { ResearchPanelCitation } from './ResearchPanel';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -46,8 +48,8 @@ export interface ConversationViewProps {
   retryingMessageId: string | null;
   /** Required for rendering initiative-specific widgets (alignment, etc.) */
   initiativeId?: string;
-  /** Called when user clicks an internal citation (corpus/evidence) */
-  onCitationClick?: (citation: SourceCitation) => void;
+  /** Called when user opens an internal citation document */
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
   /** Extra action buttons rendered in the composer toolbar (before paperclip) */
   extraInputActions?: React.ReactNode;
   /** Attached tray rendered above and visually connected to the composer */
@@ -56,6 +58,8 @@ export interface ConversationViewProps {
   inputChips?: React.ReactNode;
   /** Fixed content rendered above the messages area (e.g. a deep-dive context widget) */
   topContent?: React.ReactNode;
+  /** How top content should be laid out when present */
+  topContentMode?: 'inline' | 'panel';
 }
 
 function preprocessMath(content: string): string {
@@ -97,11 +101,12 @@ export function ConversationView({
   onSetFeedback,
   retryingMessageId,
   initiativeId,
-  onCitationClick,
+  onOpenDocument,
   extraInputActions,
   topComposerContent,
   inputChips,
   topContent,
+  topContentMode = 'inline',
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -238,115 +243,12 @@ export function ConversationView({
   const latestMessage = messages[messages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
   const hideTextInput = showDocumentRequest;
+  const showTopContentAsPanel = Boolean(topContent) && topContentMode === 'panel';
 
-  return (
-    <div className="flex flex-col h-full">
-      {topContent && (
-        <div className="flex-shrink-0">
-          {topContent}
-        </div>
-      )}
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
-        <div className="max-w-[52rem] mx-auto">
-        <div className="w-[90%] mx-auto space-y-8">
-          {messages.map((msg, idx) => {
-            // Compute consecutive-assistant-run info
-            const isAssistant = msg.role !== 'user';
-            const nextIsAssistant = idx < messages.length - 1 && messages[idx + 1].role !== 'user';
-            // Only show toolbar on the last message of a consecutive assistant run
-            const showToolbar = !isAssistant || !nextIsAssistant;
-
-            // For grouped toolbar actions, find the start of this assistant run
-            let groupContent: string | undefined;
-            let groupRetryId = msg.id;
-            if (isAssistant) {
-              let start = idx;
-              while (start > 0 && messages[start - 1].role !== 'user') start--;
-              if (start < idx) {
-                groupContent = messages.slice(start, idx + 1).map(m => m.content).join('\n\n');
-                groupRetryId = messages[start].id;
-              }
-            }
-
-            return (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                animate={idx >= messages.length - 2}
-                isLatest={idx === messages.length - 1}
-                initiativeId={initiativeId}
-                feedback={messageFeedback[msg.id] ?? null}
-                onFeedback={(f) => onSetFeedback(msg.id, f)}
-                onEdit={(newContent) => onEditMessage(msg.id, newContent)}
-                onRetry={() => onRetryMessage(groupRetryId)}
-                retrying={retryingMessageId === msg.id}
-                showToolbar={showToolbar}
-                groupContent={groupContent}
-                onCitationClick={onCitationClick}
-              />
-            );
-          })}
-
-          {/* Active response: thinking log + streaming content, both inline */}
-          {sending && (
-            <div className="flex justify-start">
-              <div className="max-w-[90%] flex flex-col items-start">
-                <ThinkingLogs
-                  lines={thinkingLines}
-                  researchSteps={researchSteps}
-                  completionMeta={null}
-                  isThinking={isThinking}
-                  isStreaming={isStreaming}
-                />
-                {streamingContent && (
-                  <div className="prose-chat">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={streamingMarkdownComponents}
-                    >
-                      {preprocessMath(streamingContent)}
-                    </ReactMarkdown>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="flex justify-start">
-              <div className="px-4 py-3 text-sm text-indicator-orange bg-surface-subtle border border-stroke-subtle rounded-lg">
-                {error}
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-        </div>
-      </div>
-
-      {showDocumentRequest && latestMessage?.widget_data && initiativeId && (
-        <div className="flex-shrink-0 px-4 pb-4">
-          <div className="max-w-[52rem] mx-auto w-full">
-            <ChatWidgetRenderer
-              type={latestMessage.widget_type!}
-              data={latestMessage.widget_data}
-              initiativeId={initiativeId}
-              messageId={latestMessage.id}
-              isActive={true}
-              onDocumentRequestMessage={(content) => onSendMessage(content)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Composer */}
-      {!hideTextInput && (
-      <div className="flex-shrink-0 relative">
-        <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
-        <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
+  const composer = !hideTextInput ? (
+    <div className="flex-shrink-0 relative">
+      <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
+      <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
         {topComposerContent ? (
           <div className="relative z-10 mx-3 mb-[-1px]">
             {topComposerContent}
@@ -412,46 +314,163 @@ export function ConversationView({
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
             />
 
-            {/* Bottom row: left actions + attach + send */}
             <div className="flex items-center justify-between gap-2 px-4 pb-2.5">
               <div className="flex items-center gap-1.5 min-w-0">
                 {extraInputActions}
               </div>
               <div className="flex items-center gap-1.5">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileChange}
-                aria-label="Attach files"
-              />
-              <button
-                type="button"
-                disabled={sending}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                aria-label="Attach files"
-              >
-                <Paperclip className="w-[13px] h-[13px]" />
-              </button>
-              <button
-                type="submit"
-                disabled={sending || uploading || !input.trim()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
-              >
-                {uploading ? (
-                  <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
-                ) : (
-                  <ArrowUp className="w-[11px] h-[11px] text-white" />
-                )}
-              </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileChange}
+                  aria-label="Attach files"
+                />
+                <button
+                  type="button"
+                  disabled={sending}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                  aria-label="Attach files"
+                >
+                  <Paperclip className="w-[13px] h-[13px]" />
+                </button>
+                <button
+                  type="submit"
+                  disabled={sending || uploading || !input.trim()}
+                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+                >
+                  {uploading ? (
+                    <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+                  ) : (
+                    <ArrowUp className="w-[11px] h-[11px] text-white" />
+                  )}
+                </button>
               </div>
             </div>
           </div>
         </form>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div className="flex flex-col h-full">
+      {showTopContentAsPanel ? (
+        <div className="relative flex-1 min-h-0">
+          <div className="absolute inset-0">
+            {topContent}
+          </div>
+          <div className="absolute inset-x-0 bottom-0 z-10">
+            {composer}
+          </div>
+        </div>
+      ) : (
+        <>
+      {topContent && (
+        <div className="flex-shrink-0">
+          {topContent}
+        </div>
+      )}
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
+        <div className="max-w-[52rem] mx-auto">
+        <div className="w-[90%] mx-auto space-y-8">
+          {messages.map((msg, idx) => {
+            // Compute consecutive-assistant-run info
+            const isAssistant = msg.role !== 'user';
+            const nextIsAssistant = idx < messages.length - 1 && messages[idx + 1].role !== 'user';
+            // Only show toolbar on the last message of a consecutive assistant run
+            const showToolbar = !isAssistant || !nextIsAssistant;
+
+            // For grouped toolbar actions, find the start of this assistant run
+            let groupContent: string | undefined;
+            let groupRetryId = msg.id;
+            if (isAssistant) {
+              let start = idx;
+              while (start > 0 && messages[start - 1].role !== 'user') start--;
+              if (start < idx) {
+                groupContent = messages.slice(start, idx + 1).map(m => m.content).join('\n\n');
+                groupRetryId = messages[start].id;
+              }
+            }
+
+            return (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                animate={idx >= messages.length - 2}
+                isLatest={idx === messages.length - 1}
+                initiativeId={initiativeId}
+                feedback={messageFeedback[msg.id] ?? null}
+                onFeedback={(f) => onSetFeedback(msg.id, f)}
+                onEdit={(newContent) => onEditMessage(msg.id, newContent)}
+                onRetry={() => onRetryMessage(groupRetryId)}
+                retrying={retryingMessageId === msg.id}
+                showToolbar={showToolbar}
+                groupContent={groupContent}
+                onOpenDocument={onOpenDocument}
+              />
+            );
+          })}
+
+          {/* Active response: thinking log + streaming content, both inline */}
+          {sending && (
+            <div className="flex justify-start">
+              <div className="max-w-[90%] flex flex-col items-start">
+                <ThinkingLogs
+                  lines={thinkingLines}
+                  researchSteps={researchSteps}
+                  completionMeta={null}
+                  isThinking={isThinking}
+                  isStreaming={isStreaming}
+                />
+                {streamingContent && (
+                  <div className="prose-chat">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={streamingMarkdownComponents}
+                    >
+                      {preprocessMath(streamingContent)}
+                    </ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex justify-start">
+              <div className="px-4 py-3 text-sm text-indicator-orange bg-surface-subtle border border-stroke-subtle rounded-lg">
+                {error}
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
         </div>
       </div>
+
+      {showDocumentRequest && latestMessage?.widget_data && initiativeId && (
+        <div className="flex-shrink-0 px-4 pb-4">
+          <div className="max-w-[52rem] mx-auto w-full">
+            <ChatWidgetRenderer
+              type={latestMessage.widget_type!}
+              data={latestMessage.widget_data}
+              initiativeId={initiativeId}
+              messageId={latestMessage.id}
+              isActive={true}
+              onDocumentRequestMessage={(content) => onSendMessage(content)}
+            />
+          </div>
+        </div>
+      )}
+
+      {composer}
+        </>
       )}
     </div>
   );
@@ -470,14 +489,16 @@ function CitationChip({
   title,
   chunkIndex,
   sources,
-  onCitationClick,
+  onExpand,
+  selectedCitationKeys,
   projectLabel,
 }: {
   sourceType: string;
   title: string;
   chunkIndex?: number;
   sources: SourceCitation[];
-  onCitationClick?: (citation: SourceCitation) => void;
+  onExpand?: (citation: SourceCitation) => void;
+  selectedCitationKeys?: Set<string>;
   projectLabel?: string;
 }) {
   const type = sourceType.toLowerCase().trim();
@@ -501,6 +522,7 @@ function CitationChip({
 
   const url = matched?.source_url;
   const publisher = matched?.publisher;
+  const isSelected = Boolean(matched && selectedCitationKeys?.has(citationSelectionKey(matched)));
   const isInternal = matched && (
     matched.source_type === 'corpus' || matched.source_type === 'evidence'
   ) && matched.evidence_doc_id;
@@ -535,14 +557,19 @@ function CitationChip({
   const chip = (
     <span
       title={title.trim()}
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded border text-[10px] font-medium leading-none align-[0.1em] bg-surface-subtle border-stroke-subtle text-text-secondary hover:bg-accent/[0.07] hover:border-accent/30 hover:text-accent transition-colors cursor-pointer select-none"
+      className={[
+        'inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded border text-[10px] font-medium leading-none align-[0.1em] transition-colors cursor-pointer select-none',
+        isSelected
+          ? 'bg-accent/[0.12] border-accent/40 text-accent'
+          : 'bg-surface-subtle border-stroke-subtle text-text-secondary hover:bg-accent/[0.07] hover:border-accent/30 hover:text-accent',
+      ].join(' ')}
     >
       {icon}
       {label}
     </span>
   );
 
-  if (isInternal && matched && onCitationClick) {
+  if (isInternal && matched && onExpand) {
     return (
       <span
         role="button"
@@ -550,9 +577,9 @@ function CitationChip({
         className="no-underline"
         onClick={() => {
           track('citation_chip_clicked', { source_type: type, publisher: label, internal: true });
-          onCitationClick(matched);
+          onExpand(matched);
         }}
-        onKeyDown={(e) => { if (e.key === 'Enter') onCitationClick(matched); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') onExpand(matched); }}
       >
         {chip}
       </span>
@@ -580,16 +607,17 @@ function injectCitationChips(
   children: React.ReactNode,
   sources: SourceCitation[],
   keyPrefix = '0',
-  onCitationClick?: (citation: SourceCitation) => void,
+  onExpand?: (citation: SourceCitation) => void,
+  selectedCitationKeys?: Set<string>,
 ): React.ReactNode {
   if (typeof children === 'string') {
-    return splitOnCitations(children, sources, keyPrefix, onCitationClick);
+    return splitOnCitations(children, sources, keyPrefix, onExpand, selectedCitationKeys);
   }
   if (Array.isArray(children)) {
     return children.map((child, i) => (
       <Fragment key={`${keyPrefix}-arr-${i}`}>
         {typeof child === 'string'
-          ? splitOnCitations(child, sources, `${keyPrefix}-${i}`, onCitationClick)
+          ? splitOnCitations(child, sources, `${keyPrefix}-${i}`, onExpand, selectedCitationKeys)
           : child}
       </Fragment>
     ));
@@ -601,7 +629,8 @@ function splitOnCitations(
   text: string,
   sources: SourceCitation[],
   keyPrefix: string,
-  onCitationClick?: (citation: SourceCitation) => void,
+  onExpand?: (citation: SourceCitation) => void,
+  selectedCitationKeys?: Set<string>,
 ): React.ReactNode {
   const parts: React.ReactNode[] = [];
   const re = new RegExp(INLINE_CITATION_RE.source, 'g');
@@ -621,7 +650,8 @@ function splitOnCitations(
         sourceType={sourceType}
         title={title}
         chunkIndex={chunkIdx}
-        onCitationClick={onCitationClick}
+        onExpand={onExpand}
+        selectedCitationKeys={selectedCitationKeys}
         sources={sources}
         projectLabel={projectLabel || undefined}
       />
@@ -636,42 +666,119 @@ function splitOnCitations(
   return <>{parts}</>;
 }
 
+function citationSelectionKey(citation: SourceCitation): string {
+  return `${citation.evidence_doc_id ?? ''}:${citation.chunk_id ?? citation.source_title}`;
+}
+
+function toResearchPanelCitation(citation: SourceCitation): ResearchPanelCitation | null {
+  if (
+    (citation.source_type === 'corpus' || citation.source_type === 'evidence') &&
+    citation.evidence_doc_id
+  ) {
+    return {
+      evidence_doc_id: citation.evidence_doc_id,
+      chunk_id: citation.chunk_id ?? null,
+      source_title: citation.source_title,
+    };
+  }
+  return null;
+}
+
+function CitationInlineDrawer({
+  citations,
+  onOpenDocument,
+  className,
+}: {
+  citations: SourceCitation[];
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  className?: string;
+}) {
+  return (
+    <div className={['mt-2', className ?? ''].join(' ').trim()}>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {citations.map((citation) => {
+          const panelCitation = toResearchPanelCitation(citation);
+          const cardKey = `${citation.evidence_doc_id ?? 'external'}-${citation.chunk_id ?? citation.source_title}`;
+          return (
+            <div
+              key={cardKey}
+              className="w-full min-w-full h-56 flex-shrink-0"
+            >
+              {panelCitation ? (
+                <SnippetCard
+                  citation={panelCitation}
+                  textOnly={true}
+                  maxLines={10}
+                  onOpenFull={onOpenDocument ? () => onOpenDocument(panelCitation) : undefined}
+                />
+              ) : (
+                <div className="h-full rounded-lg border border-stroke-subtle bg-surface p-3 text-xs text-text-tertiary">
+                  Citation preview unavailable for this source.
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Markdown component factory (sources injected per-message)         */
 /* ------------------------------------------------------------------ */
 
 function makeMarkdownComponents(
   sources: SourceCitation[],
-  onCitationClick?: (citation: SourceCitation) => void,
+  selectedParagraphKey?: string | null,
+  selectedCitation?: SourceCitation | null,
+  selectedCitationKeys?: Set<string>,
+  onCitationExpand?: (citation: SourceCitation, paragraphKey: string) => void,
+  onOpenDocument?: (citation: ResearchPanelCitation) => void,
 ) {
   let _keySeq = 0;
-
-  const wrap = (Tag: string, className: string) => {
-    const Wrapped = ({ children }: any) => {
-      const prefix = `${Tag}-${_keySeq++}`;
-      return (
-        // @ts-expect-error dynamic tag
-        <Tag className={className}>{injectCitationChips(children, sources, prefix, onCitationClick)}</Tag>
-      );
-    };
-    Wrapped.displayName = `Wrapped_${Tag}`;
-    return Wrapped;
-  };
 
   return {
     p: ({ children }: any) => {
       const prefix = `p-${_keySeq++}`;
       return (
-        <p className="text-sm leading-relaxed">
-          {injectCitationChips(children, sources, prefix, onCitationClick)}
-        </p>
+        <div>
+          <p className="text-sm leading-relaxed">
+            {injectCitationChips(
+              children,
+              sources,
+              prefix,
+              onCitationExpand ? (citation) => onCitationExpand(citation, prefix) : undefined,
+              selectedCitationKeys,
+            )}
+          </p>
+          {selectedCitation && selectedParagraphKey === prefix && (
+            <CitationInlineDrawer
+              citations={[selectedCitation]}
+              onOpenDocument={onOpenDocument}
+            />
+          )}
+        </div>
       );
     },
     li: ({ children, node, ...rest }: any) => {
       const prefix = `li-${_keySeq++}`;
       return (
         <li className="leading-relaxed" {...rest}>
-          {injectCitationChips(children, sources, prefix, onCitationClick)}
+          {injectCitationChips(
+            children,
+            sources,
+            prefix,
+            onCitationExpand ? (citation) => onCitationExpand(citation, prefix) : undefined,
+            selectedCitationKeys,
+          )}
+          {selectedCitation && selectedParagraphKey === prefix && (
+            <CitationInlineDrawer
+              citations={[selectedCitation]}
+              onOpenDocument={onOpenDocument}
+              className="-ml-8 w-[calc(100%+2rem)]"
+            />
+          )}
         </li>
       );
     },
@@ -725,7 +832,7 @@ function MessageBubble({
   retrying,
   showToolbar = true,
   groupContent,
-  onCitationClick,
+  onOpenDocument,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -738,13 +845,41 @@ function MessageBubble({
   retrying: boolean;
   showToolbar?: boolean;
   groupContent?: string;
-  onCitationClick?: (citation: SourceCitation) => void;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
+  const [selectedCitationState, setSelectedCitationState] = useState<{
+    paragraphKey: string;
+    citation: SourceCitation;
+  } | null>(null);
+  const handleCitationExpand = useCallback((citation: SourceCitation, paragraphKey: string) => {
+    setSelectedCitationState((prev) => {
+      if (
+        prev &&
+        prev.paragraphKey === paragraphKey &&
+        citationSelectionKey(prev.citation) === citationSelectionKey(citation)
+      ) {
+        return null;
+      }
+      return { paragraphKey, citation };
+    });
+  }, []);
+  const selectedCitation = selectedCitationState?.citation ?? null;
+  const selectedParagraphKey = selectedCitationState?.paragraphKey ?? null;
+  const selectedCitationKeys = selectedCitation
+    ? new Set<string>([citationSelectionKey(selectedCitation)])
+    : undefined;
   const mdComponents = isUser
     ? streamingMarkdownComponents
-    : makeMarkdownComponents(message.sources ?? [], onCitationClick);
+    : makeMarkdownComponents(
+      message.sources ?? [],
+      selectedParagraphKey,
+      selectedCitation,
+      selectedCitationKeys,
+      handleCitationExpand,
+      onOpenDocument,
+    );
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
@@ -799,7 +934,7 @@ function MessageBubble({
                 onRetry={onRetry}
                 retrying={retrying}
                 sources={message.sources ?? undefined}
-                onCitationClick={onCitationClick}
+                onOpenDocument={onOpenDocument}
               />
             )}
           </div>
@@ -843,7 +978,7 @@ function MessageBubble({
             </ReactMarkdown>
           </div>
         ) : (
-          <div className="prose-chat">
+          <div className="prose-chat w-full">
             <ReactMarkdown
               remarkPlugins={[remarkMath]}
               rehypePlugins={[rehypeKatex]}

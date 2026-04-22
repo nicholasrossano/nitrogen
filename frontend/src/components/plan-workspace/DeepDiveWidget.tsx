@@ -12,6 +12,9 @@ import type { PlanWorkspaceInspectorDocumentSource, PlanWorkspaceInspectorState 
 
 interface DeepDiveWidgetProps {
   state: PlanWorkspaceInspectorState;
+  collapsed?: boolean;
+  layoutMode?: 'inline' | 'panel';
+  onCollapsedChange?: (collapsed: boolean) => void;
   onClose?: () => void;
   onRetry?: () => void;
   onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
@@ -34,15 +37,44 @@ function InlineBold({ text }: { text: string }) {
   );
 }
 
-export function DeepDiveWidget({ state, onClose, onRetry, onOpenDocument }: DeepDiveWidgetProps) {
-  const [collapsed, setCollapsed] = useState(false);
-
+export function DeepDiveWidget({
+  state,
+  collapsed: collapsedProp,
+  layoutMode = 'inline',
+  onCollapsedChange,
+  onClose,
+  onRetry,
+  onOpenDocument,
+}: DeepDiveWidgetProps) {
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
   const { item, groupName, result, loading, error } = state;
+  const collapsed = collapsedProp ?? internalCollapsed;
+
+  const setCollapsed = (nextValue: boolean | ((value: boolean) => boolean)) => {
+    const next = typeof nextValue === 'function' ? nextValue(collapsed) : nextValue;
+    if (collapsedProp === undefined) {
+      setInternalCollapsed(next);
+    }
+    onCollapsedChange?.(next);
+  };
+  const isPanelLayout = layoutMode === 'panel' && !collapsed;
 
   return (
-    <div className="border-b border-divider bg-surface-subtle/40">
+    <div
+      className={
+        isPanelLayout
+          ? 'flex h-full min-h-0 flex-col bg-surface-subtle/40'
+          : 'border-b border-divider bg-surface-subtle/40'
+      }
+    >
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-2.5">
+      <div
+        className={
+          isPanelLayout
+            ? 'flex items-center gap-2.5 border-b border-divider px-4 py-2.5'
+            : 'flex items-center gap-2.5 px-4 py-2.5'
+        }
+      >
         <div className="w-6 h-6 flex-shrink-0 bg-accent/10 rounded flex items-center justify-center">
           <Zap className="w-3 h-3 text-accent" />
         </div>
@@ -74,7 +106,13 @@ export function DeepDiveWidget({ state, onClose, onRetry, onOpenDocument }: Deep
 
       {/* Body */}
       {!collapsed && (
-        <div className="max-h-64 overflow-y-auto overflow-x-hidden px-4 pb-3">
+        <div
+          className={
+            isPanelLayout
+              ? 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-36 pt-3'
+              : 'max-h-64 overflow-y-auto overflow-x-hidden px-4 pb-3'
+          }
+        >
           {!result && !loading && !error && (
             <p className="text-xs text-text-tertiary italic py-1">
               This item was added manually. Research details are only available for generated items.
