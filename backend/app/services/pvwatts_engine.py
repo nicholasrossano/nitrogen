@@ -26,7 +26,7 @@ MONTH_LABELS = [
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ]
 
-InputStatus = Literal["confirmed", "inferred", "assumed", "missing"]
+InputStatus = Literal["validated", "inferred", "assumed", "missing"]
 InputSource = Literal["chat", "doc", "user", "assumption"]
 
 MODULE_TYPE_LABELS = {0: "Standard", 1: "Premium", 2: "Thin Film"}
@@ -72,7 +72,10 @@ class PVWattsInput:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PVWattsInput:
-        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+        payload = {k: d[k] for k in cls.__dataclass_fields__ if k in d}
+        if payload.get("status") == "confirmed":
+            payload["status"] = "validated"
+        return cls(**payload)
 
 
 @dataclass
@@ -144,8 +147,9 @@ class PVWattsEngine:
     @staticmethod
     def refresh_location_defaults(inputs: dict[str, PVWattsInput]) -> dict[str, PVWattsInput]:
         """Recompute tilt and azimuth from the current latitude whenever they are not
-        user-confirmed.  Rules:
-        - status == "confirmed"  → user explicitly set this value; never touch it.
+        user-validated.  Rules:
+        - status == "validated"  → user explicitly set this value; never touch it.
+        - status == "confirmed"  → legacy alias for validated; never touch it.
         - status == "inferred" | "assumed" | "missing" → recompute from lat.
         This must be called after any lat/lon change (initial build AND recalculate).
         """
@@ -156,7 +160,7 @@ class PVWattsEngine:
         lat_num = float(lat_inp.value)
 
         tilt_inp = inputs.get("tilt")
-        if tilt_inp is not None and tilt_inp.status != "confirmed":
+        if tilt_inp is not None and tilt_inp.status not in ("validated", "confirmed"):
             # Round to nearest whole degree — sub-degree precision is meaningless for a rule-of-thumb default
             tilt_val = round(abs(lat_num))
             inputs["tilt"] = PVWattsInput(
@@ -171,7 +175,7 @@ class PVWattsEngine:
             )
 
         azimuth_inp = inputs.get("azimuth")
-        if azimuth_inp is not None and azimuth_inp.status != "confirmed":
+        if azimuth_inp is not None and azimuth_inp.status not in ("validated", "confirmed"):
             az_val = 180.0 if lat_num >= 0 else 0.0
             direction = "south-facing (equator)" if lat_num >= 0 else "north-facing (equator)"
             inputs["azimuth"] = PVWattsInput(
@@ -192,7 +196,7 @@ class PVWattsEngine:
         known_values: dict[str, Any],
     ) -> dict[str, PVWattsInput]:
         """Build a full input set, filling gaps with defaults, then apply
-        location-derived defaults for any non-confirmed orientation fields."""
+        location-derived defaults for any non-validated orientation fields."""
         inputs: dict[str, PVWattsInput] = {}
 
         for defn in INPUT_FIELD_DEFS:
@@ -208,7 +212,7 @@ class PVWattsEngine:
                     value=val,
                     unit=defn["unit"],
                     source=src,
-                    status="inferred" if src in ("chat", "doc") else "confirmed",
+                    status="inferred" if src in ("chat", "doc") else "validated",
                     notes=known_values.get(f"_notes_{fname}", ""),
                     category=defn["category"],
                 )
@@ -236,7 +240,7 @@ class PVWattsEngine:
                 )
 
         # Always recompute location-derived orientation defaults from lat
-        # (overrides any LLM-extracted tilt/azimuth that wasn't user-confirmed)
+        # (overrides any LLM-extracted tilt/azimuth that wasn't user-validated)
         return PVWattsEngine.refresh_location_defaults(inputs)
 
     @staticmethod

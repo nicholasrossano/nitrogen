@@ -19,7 +19,7 @@ interface LCOEInput {
   value: number | string | null;
   unit: string;
   source: 'chat' | 'doc' | 'user' | 'assumption';
-  status: 'confirmed' | 'inferred' | 'assumed' | 'missing';
+  status: 'validated' | 'inferred' | 'assumed' | 'missing';
   notes: string;
   rationale: string;
   category: string;
@@ -37,7 +37,8 @@ interface LCOEInputsWidgetProps {
 
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
+  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
+  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
   inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
   assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
@@ -85,7 +86,7 @@ export function LCOEInputsWidget({
     const text =
       status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
       status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
-      status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
+      status === 'validated'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
     const input = fieldName ? localInputs[fieldName] : undefined;
     const fieldContext = fieldName ? {
@@ -155,8 +156,8 @@ export function LCOEInputsWidget({
   );
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
-    const isConfirmed = currentStatus === 'confirmed';
-    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'confirmed';
+    const isConfirmed = currentStatus === 'validated' || currentStatus === 'confirmed';
+    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'validated';
 
     if (!isConfirmed) {
       setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
@@ -306,7 +307,7 @@ export function LCOEInputsWidget({
                         <span
                           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                         >
-                          {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                          {(inp.status === 'validated' || inp.status === 'confirmed') && <CheckCircle2 className="w-2.5 h-2.5" />}
                           {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
                           {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                           {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
@@ -319,10 +320,10 @@ export function LCOEInputsWidget({
                         {isActive && !hasOutputWidget && (
                           <input
                             type="checkbox"
-                            checked={inp.status === 'confirmed'}
+                            checked={inp.status === 'validated' || inp.status === 'confirmed'}
                             disabled={isMissing || confirmingFields.has(inp.field_name)}
                             onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                            title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                            title={inp.status === 'validated' || inp.status === 'confirmed' ? 'Mark as inferred' : 'Mark as validated'}
                             className="w-3 h-3 rounded-full accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                           />
                         )}

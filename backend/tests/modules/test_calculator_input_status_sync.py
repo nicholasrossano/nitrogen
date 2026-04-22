@@ -37,7 +37,7 @@ async def test_lcoe_compute_stage_preserves_input_status_and_source(monkeypatch:
                             "field_name": "net_capacity_kw",
                             "variable": "Net Capacity",
                             "value": 250,
-                            "status": "confirmed",
+                            "status": "validated",
                             "source": "user",
                         }
                     }
@@ -49,7 +49,7 @@ async def test_lcoe_compute_stage_preserves_input_status_and_source(monkeypatch:
     widget_data = await module.compute_stage("results", confirmed_stages, {})
     row = widget_data["inputs"]["net_capacity_kw"]
     assert row["value"] == 250
-    assert row["status"] == "confirmed"
+    assert row["status"] == "validated"
     assert row["source"] == "user"
 
 
@@ -81,7 +81,7 @@ async def test_carbon_compute_stage_preserves_input_status_and_source(monkeypatc
                             "field_name": "devices_households",
                             "variable": "Devices / Households",
                             "value": 2000,
-                            "status": "confirmed",
+                            "status": "validated",
                             "source": "user",
                         }
                     }
@@ -93,7 +93,7 @@ async def test_carbon_compute_stage_preserves_input_status_and_source(monkeypatc
     widget_data = await module.compute_stage("results", confirmed_stages, {})
     row = widget_data["inputs"]["devices_households"]
     assert row["value"] == 2000
-    assert row["status"] == "confirmed"
+    assert row["status"] == "validated"
     assert row["source"] == "user"
 
 
@@ -138,7 +138,7 @@ async def test_pvwatts_compute_external_preserves_input_status_and_source(
                             "field_name": "system_capacity",
                             "variable": "System Capacity",
                             "value": 22.5,
-                            "status": "confirmed",
+                            "status": "validated",
                             "source": "user",
                         }
                     }
@@ -150,5 +150,5 @@ async def test_pvwatts_compute_external_preserves_input_status_and_source(
     widget_data = await module.compute_external("results", "pvwatts", confirmed_stages, {})
     row = widget_data["inputs"]["system_capacity"]
     assert row["value"] == 22.5
-    assert row["status"] == "confirmed"
+    assert row["status"] == "validated"
     assert row["source"] == "user"

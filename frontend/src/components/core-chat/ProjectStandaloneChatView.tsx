@@ -432,6 +432,13 @@ export function ProjectStandaloneChatView({
         toolHint ?? null,
         fieldContext ?? null,
         modelInputsContext ?? null,
+        associatedModule
+          ? {
+            instance_id: associatedModule.instanceId,
+            module_id: associatedModule.moduleId,
+            title: associatedModule.title ?? null,
+          }
+          : null,
         initiativeId,
         (step) => {
           setResearchSteps((prev) => {

@@ -209,6 +209,7 @@ class ChatStreamRequest(BaseModel):
     tool_hint: Optional[str] = None
     field_context: Optional[FieldContext] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
+    module_context: Optional[dict] = None
     initiative_id: Optional[str] = None
     compare_initiative_ids: Optional[list[str]] = None
     allow_initial_project_onboarding: bool = False
@@ -564,6 +565,7 @@ async def chat_stream(
                 field_name=(field_context or {}).get("field_name"),
                 has_field_context=bool(field_context),
                 has_model_inputs_context=bool(data.model_inputs_context),
+                has_module_context=bool(data.module_context),
                 allow_initial_project_onboarding=data.allow_initial_project_onboarding,
             )
 
@@ -807,44 +809,23 @@ async def chat_stream(
                         ):
                             _effective_tool_hint = "generate_project_plan"
 
-                        action_result = await service.get_next_action(
-                            messages=conversation_msgs,
-                            initiative=verified_initiative,
-                            tool_hint=_effective_tool_hint,
-                            field_context=field_context,
-                            onboarding_mode=bool(data.allow_initial_project_onboarding),
-                        )
-                        _log_chat_stream_debug(
-                            "project-action",
-                            chat_id=str(chat.id),
-                            action=action_result.action,
-                            field_name=(field_context or {}).get("field_name"),
-                            has_model_inputs_context=bool(data.model_inputs_context),
-                        )
-
-                        if action_result.action == "generate_project_plan":
-                            await on_thinking("Generating your project plan...")
-                        elif action_result.action == "run_lcoe_tool":
-                            await on_thinking("Building your LCOE model...")
-                        elif action_result.action == "run_carbon_tool":
-                            await on_thinking("Building your carbon emissions model...")
-                        elif action_result.action == "propose_input_value":
-                            await on_thinking("Researching a value for this input...")
-
                         model_inputs_context = (
                             data.model_inputs_context
                             or ChatService._format_model_inputs_from_messages(conversation_msgs, field_context)
                         )
                         generation_task = asyncio.create_task(
-                            _execute_project_action(
-                                service=service,
-                                initiative=verified_initiative,
-                                action_result=action_result,
-                                chat_history=conversation_msgs,
-                                tool_hint=data.tool_hint or None,
-                                model_inputs_context=model_inputs_context,
-                                field_context=field_context,
+                            service.generate_response(
+                                user_message=data.content,
+                                history=history,
                                 on_thinking=on_thinking,
+                                tool_hint=_effective_tool_hint,
+                                field_context=field_context,
+                                model_inputs_context=model_inputs_context,
+                                module_context=data.module_context or None,
+                                project_context=project_context,
+                                on_research_step=on_research_step,
+                                initiative_id=str(verified_initiative.id),
+                                initiative=verified_initiative,
                             )
                         )
                     else:
@@ -856,6 +837,7 @@ async def chat_stream(
                                 tool_hint=data.tool_hint or None,
                                 field_context=field_context,
                                 model_inputs_context=data.model_inputs_context or None,
+                                module_context=data.module_context or None,
                                 project_context=project_context,
                                 on_research_step=on_research_step,
                                 initiative_id=data.initiative_id if verified_initiative else None,

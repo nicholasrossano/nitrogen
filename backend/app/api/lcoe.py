@@ -30,7 +30,11 @@ class UpdateInputRequest(BaseModel):
     field_name: str
     value: Any
     source: str = "user"
-    status: str = "confirmed"
+    status: str = "validated"
+
+
+def _normalize_input_status(status: str) -> str:
+    return "validated" if status == "confirmed" else status
 
 
 @router.post("/lcoe/recalculate")
@@ -54,10 +58,11 @@ async def update_input_and_recalculate(
 ):
     """Update a single input field and recalculate."""
     inputs = data.inputs
+    normalized_status = _normalize_input_status(data.status)
     if data.field_name in inputs:
         inputs[data.field_name]["value"] = data.value
         inputs[data.field_name]["source"] = data.source
-        inputs[data.field_name]["status"] = data.status
+        inputs[data.field_name]["status"] = normalized_status
     else:
         inputs[data.field_name] = {
             "field_name": data.field_name,
@@ -65,7 +70,7 @@ async def update_input_and_recalculate(
             "value": data.value,
             "unit": "",
             "source": data.source,
-            "status": data.status,
+            "status": normalized_status,
             "notes": "",
             "rationale": "",
             "category": "general",

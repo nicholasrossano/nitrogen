@@ -16,17 +16,7 @@ import {
   mapProjectPlanToWorkspacePhases,
 } from './projectPlanMapper';
 import { useProjectPlanAdapter } from './useProjectPlanAdapter';
-
-const PLAN_COLORS = [
-  '#005e72',
-  '#4a6680',
-  '#8d5e6a',
-  '#7a5030',
-  '#a06548',
-  '#7a6520',
-  '#7a7a3a',
-  '#6b7d6a',
-];
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 
 const DELETE_ITEM_SURVEY: SurveyConfig = {
   id: 'project_plan_item_deleted',
@@ -95,10 +85,10 @@ export function ProjectPlanView({
       id: 'plan-group',
       label: 'Category',
       allLabel: 'All Categories',
-      options: groups.map((group, idx) => ({
+      options: groups.map((group) => ({
         id: group.id,
         label: group.name,
-        color: PLAN_COLORS[idx % PLAN_COLORS.length],
+        color: DIAGRAM_ACCENT_COLOR,
       })),
     }),
     [groups],
@@ -242,7 +232,6 @@ export function ProjectPlanView({
           emptyTitle: 'No framework yet',
           emptySubtitle: 'Describe your project in the chat and confirm the proposed categories to generate your plan.',
         }}
-        colors={PLAN_COLORS}
       />
 
       {activeSurvey && (

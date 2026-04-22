@@ -232,6 +232,7 @@ Call NEITHER search tool only when:
 When in doubt, call both search tools. More context is better than less.
 
 {model_inputs_context}
+{module_context}
 
 Do not produce any text — only make tool calls (or no calls)."""
 
@@ -394,13 +395,12 @@ class ChatService:
             self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
         return self._client
 
-    def _get_tool_list(self) -> list[dict]:
-        """Return the OpenAI tool definitions for the current mode's surface."""
+    def _get_tool_list(self, *, initiative_id: str | None = None) -> list[dict]:
+        """Return OpenAI tool definitions for the active chat surface."""
         from app.capabilities.registry import get_capability_registry
 
-        if self.mode == ChatMode.PROJECT:
-            return get_capability_registry().to_openai_tools("orchestration")
-        return get_capability_registry().to_openai_tools("standalone")
+        surface = "project" if initiative_id else "standalone"
+        return get_capability_registry().to_openai_tools(surface)
 
     _HINT_TO_PLANNER_TOOL: dict[str, str] = {}
 
@@ -413,9 +413,11 @@ class ChatService:
         project_context: str | None = None,
         tool_hint: str | None = None,
         model_inputs_context: str | None = None,
+        module_context: dict[str, Any] | None = None,
         field_context: dict[str, Any] | None = None,
         on_research_step: ResearchStepCallback | None = None,
         initiative_id: str | None = None,
+        initiative: Any | None = None,
         compare_contexts: list[dict] | None = None,
     ) -> ChatResponse:
         start = time.time()
@@ -433,6 +435,7 @@ class ChatService:
             field_name=(field_context or {}).get("field_name"),
             has_field_context=bool(field_context),
             has_model_inputs_context=bool(model_inputs_context),
+            has_module_context=bool(module_context),
             tool_hint=tool_hint,
             initiative_id=initiative_id,
         )
@@ -482,7 +485,13 @@ class ChatService:
 
         corpus_task = asyncio.create_task(_corpus_search())
         plan_task = asyncio.create_task(
-            self._plan_tool_calls(user_message, history, model_inputs_context=model_inputs_context)
+            self._plan_tool_calls(
+                user_message,
+                history,
+                model_inputs_context=model_inputs_context,
+                module_context=module_context,
+                initiative_id=initiative_id,
+            )
         )
         corpus_facts, tool_calls = await asyncio.gather(corpus_task, plan_task)
 
@@ -505,6 +514,43 @@ class ChatService:
         # Step 2: execute requested tools — search tools run in parallel
         widget_type: str | None = None
         widget_data: dict | None = None
+
+        async def _execute_generate_project_plan() -> None:
+            nonlocal widget_type, widget_data
+            if initiative is None:
+                logger.warning("Planner requested generate_project_plan without initiative context")
+                return
+            from app.plans.registry import get_plan_registry
+
+            plan_handler = get_plan_registry().default_handler(self.db, self.user_id)
+            structure = await plan_handler.propose_structure(
+                initiative=initiative,
+                chat_history=None,
+            )
+            widget_type = plan_handler.definition.structure_widget_type
+            widget_data = plan_handler.build_structure_widget_data(structure)
+
+        async def _execute_update_project_plan(user_request: str) -> None:
+            nonlocal widget_type, widget_data
+            if initiative is None:
+                logger.warning("Planner requested update_project_plan without initiative context")
+                return
+            from app.plans.registry import get_plan_registry
+            from sqlalchemy.orm.attributes import flag_modified
+
+            plan_handler = get_plan_registry().default_handler(self.db, self.user_id)
+            existing_plan = initiative.project_plan
+            plan_data = await plan_handler.generate_plan(
+                initiative=initiative,
+                existing_plan=existing_plan,
+                user_request=user_request,
+            )
+            initiative.project_plan = plan_data
+            flag_modified(initiative, "project_plan")
+            await self.db.commit()
+            await self.db.refresh(initiative)
+            widget_type = plan_handler.definition.summary_widget_type
+            widget_data = plan_handler.build_summary_widget_data(plan_data)
 
         # Parse all tool calls
         parsed_calls: list[tuple[str, dict]] = []
@@ -619,6 +665,20 @@ class ChatService:
                 }
                 await _think(f"{label_map.get(fn_name, 'Model')} calculation queued — use the editor workspace to interact with the model.")
 
+            elif fn_name == "generate_project_plan":
+                await _think("Generating your project plan...")
+                try:
+                    await _execute_generate_project_plan()
+                except Exception as e:
+                    logger.error(f"Project plan generation failed: {e}", exc_info=True)
+
+            elif fn_name == "update_project_plan":
+                await _think("Updating your project plan...")
+                try:
+                    await _execute_update_project_plan(args.get("user_request", ""))
+                except Exception as e:
+                    logger.error(f"Project plan update failed: {e}", exc_info=True)
+
             elif fn_name == "propose_input_value":
                 await _think(f"Proposing value for {args.get('field_name', 'field')}...")
                 planner_candidate_widget_data = {
@@ -732,6 +792,17 @@ class ChatService:
             )
         else:
             combined_context = project_context or ""
+            if module_context:
+                module_id = module_context.get("module_id") or module_context.get("moduleId") or "unknown"
+                module_title = module_context.get("title") or ""
+                module_instance = module_context.get("instance_id") or module_context.get("instanceId") or ""
+                module_lines = [f"- module_id: {module_id}"]
+                if module_title:
+                    module_lines.append(f"- title: {module_title}")
+                if module_instance:
+                    module_lines.append(f"- instance_id: {module_instance}")
+                module_block = "## Active Module Workspace\n" + "\n".join(module_lines)
+                combined_context = f"{combined_context}\n\n{module_block}" if combined_context else module_block
             if model_inputs_context:
                 combined_context = f"{combined_context}\n\n## Current Model Inputs\n{model_inputs_context}" if combined_context else f"## Current Model Inputs\n{model_inputs_context}"
             content = await self._generate_answer(
@@ -1216,6 +1287,8 @@ class ChatService:
         user_message: str,
         history: list[dict[str, str]],
         model_inputs_context: str | None = None,
+        module_context: dict[str, Any] | None = None,
+        initiative_id: str | None = None,
     ) -> list:
         """
         Ask a fast LLM which search tools (if any) to invoke.
@@ -1224,8 +1297,22 @@ class ChatService:
         inputs_block = ""
         if model_inputs_context:
             inputs_block = f"\nCurrent model inputs state:\n{model_inputs_context}\n"
+
+        module_block = ""
+        if module_context:
+            module_id = module_context.get("module_id") or module_context.get("moduleId") or "unknown"
+            module_title = module_context.get("title") or ""
+            module_instance = module_context.get("instance_id") or module_context.get("instanceId") or ""
+            details = [f"- module_id: {module_id}"]
+            if module_title:
+                details.append(f"- title: {module_title}")
+            if module_instance:
+                details.append(f"- instance_id: {module_instance}")
+            module_block = "\nActive module workspace context:\n" + "\n".join(details) + "\n"
+
         planning_prompt = PLANNING_SYSTEM_PROMPT.format(
             model_inputs_context=inputs_block,
+            module_context=module_block,
         )
         messages: list[dict] = [{"role": "system", "content": planning_prompt}]
         for msg in (history[-6:] if len(history) > 6 else history):
@@ -1237,7 +1324,7 @@ class ChatService:
             resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
                 messages=messages,
-                tools=self._get_tool_list(),
+                tools=self._get_tool_list(initiative_id=initiative_id),
                 tool_choice="auto",
                 temperature=0,
                 max_tokens=200,
