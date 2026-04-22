@@ -20,18 +20,13 @@ import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { api, type SourceCitation } from '@/lib/api';
+import { api } from '@/lib/api';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
 const ProjectPlanView = dynamic(() => import('@/components/project-plan').then((m) => ({ default: m.ProjectPlanView })), { ssr: false });
 const ProjectFilesView = dynamic(() => import('@/components/files').then((m) => ({ default: m.ProjectFilesView })), { ssr: false });
-const ResearchPanel = dynamic(() => import('@/components/core-chat/ResearchPanel').then((m) => ({ default: m.ResearchPanel })), { ssr: false });
-
-const MIN_RESEARCH_PANEL_PERCENT = 20;
-const MAX_RESEARCH_PANEL_PERCENT = 25;
-const DEFAULT_RESEARCH_PANEL_PERCENT = 25;
 const MIN_CHAT_PANEL_PERCENT = 20;
 const MAX_CHAT_PANEL_PERCENT = 60;
 const DEFAULT_CHAT_PANEL_PERCENT = 30;
@@ -81,8 +76,6 @@ function InitiativePageContent() {
     modules: { workspace: true, chat: false },
     framework: { workspace: true, chat: false },
   });
-  const [researchPanelWidthPercent, setResearchPanelWidthPercent] = useState(DEFAULT_RESEARCH_PANEL_PERCENT);
-  const [isResizingResearch, setIsResizingResearch] = useState(false);
   const [chatPanelWidthPercent, setChatPanelWidthPercent] = useState(DEFAULT_CHAT_PANEL_PERCENT);
   const [isResizingChat, setIsResizingChat] = useState(false);
 
@@ -96,7 +89,6 @@ function InitiativePageContent() {
   const [frameworkDeepDiveRequest, setFrameworkDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [modulesDeepDiveRequest, setModulesDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
-  const [researchCitation, setResearchCitation] = useState<ResearchPanelCitation | null>(null);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [pendingChatToOpen, setPendingChatToOpen] = useState<{ chatId: string; title?: string | null } | null>(null);
   const [pendingOverviewAutoSend, setPendingOverviewAutoSend] = useState<{
@@ -398,7 +390,6 @@ function InitiativePageContent() {
     setModulesDeepDiveRequest(null);
     frameworkDeepDiveRef.current = null;
     modulesDeepDiveRef.current = null;
-    setResearchCitation(null);
     setChatEditorWidgets([]);
     setWorkspaceLaunchMode('idle');
     setPendingChatToOpen(null);
@@ -438,11 +429,6 @@ function InitiativePageContent() {
   useEffect(() => {
     if (activeView === 'modules') return;
     setShowInspector(false);
-  }, [activeView]);
-
-  useEffect(() => {
-    if (activeView === 'framework' || activeView === 'modules' || activeView === 'overview') return;
-    setResearchCitation(null);
   }, [activeView]);
 
   useEffect(() => {
@@ -572,36 +558,6 @@ function InitiativePageContent() {
     setChatEditorWidgets(widgets);
   }, []);
 
-  const handleCitationClick = useCallback((citation: SourceCitation) => {
-    if (
-      (citation.source_type === 'corpus' || citation.source_type === 'evidence') &&
-      citation.evidence_doc_id
-    ) {
-      setResearchCitation({
-        evidence_doc_id: citation.evidence_doc_id,
-        chunk_id: citation.chunk_id ?? null,
-        source_title: citation.source_title,
-      });
-      return;
-    }
-    if (citation.source_url) {
-      window.open(citation.source_url, '_blank', 'noopener');
-    }
-  }, []);
-
-  const handleResearchMouseMove = useCallback((event: MouseEvent) => {
-    if (!isResizingResearch || !workspaceContainerRef.current) return;
-    const rect = workspaceContainerRef.current.getBoundingClientRect();
-    const nextPercent = ((rect.right - event.clientX) / rect.width) * 100;
-    setResearchPanelWidthPercent(
-      Math.min(MAX_RESEARCH_PANEL_PERCENT, Math.max(MIN_RESEARCH_PANEL_PERCENT, nextPercent)),
-    );
-  }, [isResizingResearch]);
-
-  const handleResearchMouseUp = useCallback(() => {
-    setIsResizingResearch(false);
-  }, []);
-
   const handleChatMouseMove = useCallback((event: MouseEvent) => {
     if (!isResizingChat || !workspaceContainerRef.current) return;
     const rect = workspaceContainerRef.current.getBoundingClientRect();
@@ -629,21 +585,6 @@ function InitiativePageContent() {
       document.body.style.userSelect = '';
     };
   }, [isResizingChat, handleChatMouseMove, handleChatMouseUp]);
-
-  useEffect(() => {
-    if (isResizingResearch) {
-      document.addEventListener('mousemove', handleResearchMouseMove);
-      document.addEventListener('mouseup', handleResearchMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
-    return () => {
-      document.removeEventListener('mousemove', handleResearchMouseMove);
-      document.removeEventListener('mouseup', handleResearchMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizingResearch, handleResearchMouseMove, handleResearchMouseUp]);
 
   const handleInspectorChange = useCallback((open: boolean, hasItem?: boolean) => {
     setShowInspector(open);
@@ -705,27 +646,6 @@ function InitiativePageContent() {
       className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${planViewReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
     >
       <PageLoader label="" />
-    </div>
-  ) : null;
-
-  const renderResearchPanel = researchCitation ? (
-    <div
-      className="relative flex-shrink-0 overflow-hidden border-l border-divider"
-      style={{ width: `${researchPanelWidthPercent}%` }}
-    >
-      <div
-        onMouseDown={(event) => {
-          event.preventDefault();
-          setIsResizingResearch(true);
-        }}
-        className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10 ${isResizingResearch ? 'bg-accent/50' : 'bg-transparent'}`}
-      />
-      <ResearchPanel
-        key={`${researchCitation.evidence_doc_id}-${researchCitation.chunk_id}`}
-        citation={researchCitation}
-        onClose={() => setResearchCitation(null)}
-        onOpenFullDoc={openWorkspaceDocument}
-      />
     </div>
   ) : null;
 
@@ -792,7 +712,7 @@ function InitiativePageContent() {
               />
             )}
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
-            onCitationClick={handleCitationClick}
+            onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceModule={handleOpenWorkspaceModule}
           />
         );
@@ -817,7 +737,7 @@ function InitiativePageContent() {
             });
           }}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
-          onCitationClick={handleCitationClick}
+          onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
         />
       );
@@ -830,7 +750,7 @@ function InitiativePageContent() {
             initiativeId={initiativeId}
             researchMode={false}
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
-            onCitationClick={handleCitationClick}
+            onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceModule={handleOpenWorkspaceModule}
           />
         );
@@ -878,12 +798,11 @@ function InitiativePageContent() {
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onPendingAutoSendHandled={() => setPendingOverviewAutoSend(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
-          onCitationClick={handleCitationClick}
+          onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
         />
       </div>
-      {renderResearchPanel}
     </div>
   ) : modulesChatOpen ? (
     <div className="h-full flex overflow-hidden">
@@ -896,16 +815,16 @@ function InitiativePageContent() {
           activeModuleContext={activeModuleContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
-          onCitationClick={handleCitationClick}
+          onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
           pendingDeepDive={modulesDeepDiveRequest ? {
             requestId: modulesDeepDiveRequest.requestId,
             state: modulesDeepDiveRequest.state,
           } : null}
+          onPendingDeepDiveHandled={() => setModulesDeepDiveRequest(null)}
         />
       </div>
-      {renderResearchPanel}
     </div>
   ) : frameworkChatOpen ? (
     <div className="h-full flex overflow-hidden">
@@ -915,7 +834,7 @@ function InitiativePageContent() {
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
-          onCitationClick={handleCitationClick}
+          onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
           pendingDeepDive={frameworkDeepDiveRequest ? {
@@ -927,9 +846,9 @@ function InitiativePageContent() {
               source_title: source.title,
             }),
           } : null}
+          onPendingDeepDiveHandled={() => setFrameworkDeepDiveRequest(null)}
         />
       </div>
-      {renderResearchPanel}
     </div>
   ) : null;
 
