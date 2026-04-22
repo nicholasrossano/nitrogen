@@ -187,7 +187,7 @@ class ImplementationPlanModule(BaseModule):
                         "category": category_label,
                         "item_type": content.get("item_type", "deliverable"),
                         "classification": content.get("classification", "unknown"),
-                        "status": content.get("status", "not_started"),
+                        "status": self._resolve_activity_status(content, item),
                         "phase": content.get("phase"),
                         "phase_order": content.get("phase_order"),
                         "supports": content.get("supports", []),
@@ -600,6 +600,20 @@ class ImplementationPlanModule(BaseModule):
         normalized = str(value).strip().lower()
         if normalized in {"not_started", "in_progress", "complete"}:
             return normalized
+        return "not_started"
+
+    def _resolve_activity_status(self, content: dict[str, Any], item: dict[str, Any]) -> str:
+        """Only trust completion state when explicitly user-edited.
+
+        The implementation plan keeps status fields so UI controls can be enabled
+        per-module, but we suppress model-inferred completion until we have
+        stronger completion semantics.
+        """
+        status = self._normalize_status(content.get("status"))
+        provenance = item.get("provenance", {}) if isinstance(item, dict) else {}
+        derivation = str((provenance or {}).get("derivation", "")).strip().lower()
+        if derivation == "user_edited":
+            return status
         return "not_started"
 
     @staticmethod
