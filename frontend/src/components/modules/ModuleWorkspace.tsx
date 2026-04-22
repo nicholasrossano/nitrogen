@@ -650,6 +650,7 @@ export function ModuleWorkspace({
           workflowVersion={state.workflow_version}
           fields={fields}
           items={stageData?.items ?? []}
+          isLoading={currentStageState.status === 'populating' || isPopulating}
           readOnly={readOnly}
           flush
           allowAddRows={currentStageDef.allow_add_rows}
@@ -666,6 +667,7 @@ export function ModuleWorkspace({
           workflowVersion={state.workflow_version}
           fields={fields}
           items={stageData?.items ?? []}
+          isLoading={currentStageState.status === 'populating' || isPopulating}
           readOnly={readOnly}
           onChanged={fetchState}
         />

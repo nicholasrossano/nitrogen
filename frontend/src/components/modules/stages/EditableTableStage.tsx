@@ -6,6 +6,7 @@ import { Pencil, Plus, Trash2, Check, X } from 'lucide-react';
 import type { BuildItem, FieldContext, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 interface Props {
   instanceId: string;
@@ -14,6 +15,7 @@ interface Props {
   workflowVersion?: number;
   fields: FieldDef[];
   items: BuildItem[];
+  isLoading?: boolean;
   allowAddRows: boolean;
   readOnly?: boolean;
   flush?: boolean;
@@ -304,6 +306,7 @@ export function EditableTableStage({
   workflowVersion,
   fields,
   items,
+  isLoading = false,
   allowAddRows,
   readOnly,
   flush = false,
@@ -702,6 +705,14 @@ export function EditableTableStage({
 
   if (fields.length === 0) {
     return <div className="text-sm text-text-tertiary text-center py-8">No fields configured.</div>;
+  }
+
+  if (isLoading && items.length === 0 && !adding) {
+    return (
+      <div className="py-10">
+        <PageLoader label="Loading stage..." />
+      </div>
+    );
   }
 
   if (items.length === 0 && !adding && !shouldShowSolarLocationMap) {
