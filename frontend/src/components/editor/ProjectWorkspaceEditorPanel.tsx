@@ -11,6 +11,7 @@ import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
 import { api, type ModuleInstance } from '@/lib/api';
 import type { EditorWidget } from './EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
+import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
 export type WorkspacePanelTab =
   | { id: 'chat-artifacts'; kind: 'artifacts'; title: 'Chat Outputs' }
@@ -33,6 +34,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
+  onModuleInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -50,6 +52,7 @@ export function ProjectWorkspaceEditorPanel({
   onOpenChatSession,
   onOpenDecisionLog,
   onExportDecisionLog,
+  onModuleInspectorStateChange,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   useEffect(() => {
@@ -205,6 +208,7 @@ export function ProjectWorkspaceEditorPanel({
             onAddToChat={(text) => onSendToChat?.(text, activeTab.moduleId)}
             onOpenDecisionLog={onOpenDecisionLog}
             onExportDecisionLog={onExportDecisionLog}
+            onInspectorStateChange={onModuleInspectorStateChange}
           />
         )}
 

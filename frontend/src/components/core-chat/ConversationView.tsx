@@ -54,6 +54,8 @@ export interface ConversationViewProps {
   topComposerContent?: React.ReactNode;
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
+  /** Fixed content rendered above the messages area (e.g. a deep-dive context widget) */
+  topContent?: React.ReactNode;
 }
 
 function preprocessMath(content: string): string {
@@ -99,6 +101,7 @@ export function ConversationView({
   extraInputActions,
   topComposerContent,
   inputChips,
+  topContent,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -238,6 +241,11 @@ export function ConversationView({
 
   return (
     <div className="flex flex-col h-full">
+      {topContent && (
+        <div className="flex-shrink-0">
+          {topContent}
+        </div>
+      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
         <div className="max-w-[52rem] mx-auto">
