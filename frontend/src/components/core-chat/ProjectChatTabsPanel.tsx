@@ -629,7 +629,7 @@ export function ProjectChatTabsPanel({
                   <span className="flex-shrink-0 text-text-tertiary">
                     <MessageSquare className="w-3.5 h-3.5" />
                   </span>
-                  <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={2000}>
+                  <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={1000}>
                     <span className="block truncate text-left">{tab.title}</span>
                   </Tooltip>
                   <span
