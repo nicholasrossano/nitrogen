@@ -238,7 +238,7 @@ export interface StageDef {
 }
 
 export interface StageState {
-  status: 'pending' | 'populating' | 'draft' | 'validated' | 'error';
+  status: 'pending' | 'populating' | 'draft' | 'validated' | 'confirmed' | 'error';
   confirmed_at: string | null;
   confirmed_by: string | null;
   confirmed_by_email?: string | null;
