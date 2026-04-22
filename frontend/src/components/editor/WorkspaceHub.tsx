@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FolderOpen, Plus } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { ModuleLandingPage } from '@/components/chat/ModuleLandingPage';
 import { OpenModuleBrowser } from '@/components/chat/OpenModuleModal';
 import { api, type ModuleInstance } from '@/lib/api';
@@ -97,33 +97,21 @@ export function WorkspaceHub({
     <div className="flex h-full flex-col overflow-hidden bg-white">
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8">
-          <div className="mb-8 flex items-center justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                if (mode === 'new') {
+          {mode === 'new' && (
+            <div className="mb-8 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => {
                   setMode('open');
                   writeStoredHubMode(initiativeId, 'open');
-                } else {
-                  setMode('new');
-                  writeStoredHubMode(initiativeId, 'new');
-                }
-              }}
-              className="btn-primary !h-[36px] !text-xs !leading-none !px-4 !py-0"
-            >
-              {mode === 'new' ? (
-                <>
-                  <FolderOpen className="w-3 h-3" />
-                  Open Module
-                </>
-              ) : (
-                <>
-                  <Plus className="w-3 h-3" />
-                  New Module
-                </>
-              )}
-            </button>
-          </div>
+                }}
+                className="btn-primary !h-[36px] !text-xs !leading-none !px-4 !py-0"
+              >
+                <FolderOpen className="w-3 h-3" />
+                Open Module
+              </button>
+            </div>
+          )}
         {idleDefaultPending ? (
           <p className="text-center text-sm text-text-tertiary py-12">Loading…</p>
         ) : mode === 'new' ? (
@@ -132,6 +120,10 @@ export function WorkspaceHub({
           <OpenModuleBrowser
             initiativeId={initiativeId}
             onSelect={onSelectExisting}
+            onSwitchToNew={() => {
+              setMode('new');
+              writeStoredHubMode(initiativeId, 'new');
+            }}
           />
         )}
         </div>
