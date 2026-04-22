@@ -151,6 +151,7 @@ function ConfirmationBar({
   hasPendingChanges,
   onStartEditConfirmedStage,
   suppressConfirmAction,
+  allFieldsFilled = true,
 }: {
   stageDef: StageDef;
   stageState: StageState;
@@ -163,6 +164,7 @@ function ConfirmationBar({
   hasPendingChanges: boolean;
   onStartEditConfirmedStage: () => void;
   suppressConfirmAction?: boolean;
+  allFieldsFilled?: boolean;
 }) {
   const status = stageState.status;
   const hasData = !!(stageState.data?.items?.length || stageState.data?.widget_data || stageState.data?.records);
@@ -226,8 +228,10 @@ function ConfirmationBar({
     }
     return (
       <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
-        <p className="text-xs text-text-tertiary">Review and confirm when ready</p>
-        <ConfirmCtaButton onClick={onConfirm} disabled={!hasData} loading={isConfirming} />
+        <p className="text-xs text-text-tertiary">
+          {!allFieldsFilled ? 'Fill in all values to confirm' : 'Review and confirm when ready'}
+        </p>
+        <ConfirmCtaButton onClick={onConfirm} disabled={!hasData || !allFieldsFilled} loading={isConfirming} />
       </div>
     );
   }
@@ -544,6 +548,21 @@ export function ModuleWorkspace({
   const isEditableInputTableStage =
     currentStageDef.component === 'table' && currentStageDef.widget === 'editable_table';
 
+  const allEditableTableFieldsFilled = isEditableInputTableStage
+    ? (() => {
+        const items = currentStageState.data?.items ?? [];
+        if (items.length === 0) return false;
+        const valueField = currentStageDef.fields.find((f) => f.name === 'value')
+          ?? currentStageDef.fields[1]
+          ?? currentStageDef.fields[0];
+        if (!valueField) return true;
+        return items.every((item) => {
+          const v = item.content?.[valueField.name];
+          return v !== null && v !== undefined && String(v).trim() !== '';
+        });
+      })()
+    : true;
+
   // Current stage index (used for deriving prior stages in workspace stages)
   const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
 
@@ -676,7 +695,8 @@ export function ModuleWorkspace({
   };
 
   const isComputedStage = currentStageDef.component === 'computed_results';
-  const isAssessmentMapWidget = isComputedStage && currentStageDef.widget === 'assessment_map';
+  const isAssessmentMapWidget = isComputedStage
+    && (currentStageDef.widget === 'assessment_map' || currentStageDef.widget === 'implementation_plan');
   const isCalculationComputedWidget = isComputedStage && [
     'lcoe_results',
     'carbon_results',
@@ -850,6 +870,7 @@ export function ModuleWorkspace({
                     isEditingConfirmedStage={isEditingConfirmedStage}
                     hasPendingChanges={hasPendingConfirmedStageChanges}
                     suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
+                    allFieldsFilled={allEditableTableFieldsFilled}
                     onStartEditConfirmedStage={() =>
                       {
                         setEditBaselineByStageId((prev) => ({
@@ -908,6 +929,7 @@ export function ModuleWorkspace({
                   isEditingConfirmedStage={isEditingConfirmedStage}
                   hasPendingChanges={hasPendingConfirmedStageChanges}
                   suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
+                  allFieldsFilled={allEditableTableFieldsFilled}
                   onStartEditConfirmedStage={() =>
                     {
                       setEditBaselineByStageId((prev) => ({

@@ -67,6 +67,10 @@ const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }
   // Assessment module map view (landscape mapping, stakeholder assessment)
   assessment_map: () =>
     import('@/components/widgets/AssessmentMapWidget').then((m) => ({ default: m.AssessmentMapWidget as unknown as WidgetComponent })),
+
+  // Implementation plan map view
+  implementation_plan: () =>
+    import('@/components/widgets/ImplementationPlanWidget').then((m) => ({ default: m.ImplementationPlanWidget as unknown as WidgetComponent })),
 };
 
 /**

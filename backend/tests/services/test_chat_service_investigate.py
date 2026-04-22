@@ -91,6 +91,39 @@ def test_normalize_proposal_unit_strips_unitless_placeholder():
     assert ChatService._normalize_proposal_unit(" USD/yr ") == "USD/yr"
 
 
+def test_coordinate_lookup_fields_skip_scholarly_search():
+    field_context = {
+        "field_name": "lat",
+        "label": "Latitude",
+    }
+
+    assert ChatService._is_coordinate_lookup_field(field_context)
+    assert not ChatService._should_run_scholarly_search(field_context)
+
+
+def test_fallback_external_search_query_focuses_coordinate_lookup():
+    query = ChatService._fallback_external_search_query(
+        "Can you investigate and propose a value for Latitude? Just pick a city in Malawi",
+        {
+            "field_name": "lat",
+            "label": "Latitude",
+        },
+    )
+
+    assert query == "Malawi city latitude"
+
+
+def test_normalize_external_tool_query_replaces_conversational_prompt():
+    fallback_query = "Malawi city latitude"
+
+    query = ChatService._normalize_external_tool_query(
+        'Can you investigate and propose a value for Latitude? Just pick a city in Malawi',
+        fallback_query,
+    )
+
+    assert query == fallback_query
+
+
 def test_lcoe_construction_period_uses_years_unit():
     inputs = LCOEEngine.build_default_inputs("solar_pv")
 

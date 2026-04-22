@@ -188,23 +188,42 @@ class LCOETool(BaseModule):
         inputs_data = (confirmed_stages.get("inputs") or {}).get("data") or {}
         items = inputs_data.get("items", [])
 
-        # Reconstruct known_values from item rows
+        # Reconstruct known_values from item rows and retain row-level metadata
+        # so computed widget inputs preserve user engagement status.
         known_values: dict[str, Any] = {}
+        stage_input_meta: dict[str, dict[str, Any]] = {}
         tech_type = None
         for item in items:
             content = item.get("content", {})
             var = content.get("variable", "")
+            explicit_field_name = content.get("field_name")
+            key = explicit_field_name if isinstance(explicit_field_name, str) and explicit_field_name else _variable_name_to_key(var)
             val = content.get("value")
+            stage_input_meta[key] = {
+                "value": val,
+                "status": content.get("status"),
+                "source": content.get("source"),
+            }
             if val is None:
                 continue
-            # Map display variable names back to engine keys
-            key = _variable_name_to_key(var)
             if key == "technology_type":
                 tech_type = val
             else:
                 known_values[key] = val
 
-        return await self.recalculate_from_values(tech_type=tech_type, known_values=known_values)
+        widget_data = await self.recalculate_from_values(tech_type=tech_type, known_values=known_values)
+        result_inputs = widget_data.get("inputs")
+        if isinstance(result_inputs, dict):
+            for field_name, meta in stage_input_meta.items():
+                current = result_inputs.get(field_name)
+                if not isinstance(current, dict):
+                    continue
+                current["value"] = meta.get("value")
+                if isinstance(meta.get("status"), str):
+                    current["status"] = meta["status"]
+                if isinstance(meta.get("source"), str):
+                    current["source"] = meta["source"]
+        return widget_data
 
     async def recalculate_from_values(
         self,

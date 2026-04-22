@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Pencil, Plus, Trash2, Check, X } from 'lucide-react';
 import type { BuildItem, FieldContext, FieldDef } from '@/lib/api';
@@ -22,9 +22,18 @@ interface Props {
 
 const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
 const LCOE_TECHNOLOGY_OPTIONS = ['solar_pv', 'wind', 'battery', 'mini_grid', 'clean_cooking', 'default'];
+const SolarLocationMap = lazy(() => import('@/components/widgets/solar/SolarLocationMap'));
 
 function normalizeKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function formatCategoryLabel(category: string): string {
+  return category
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 // ── Inline value editor ──────────────────────────────────────────────────
@@ -310,6 +319,7 @@ export function EditableTableStage({
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [overInteractive, setOverInteractive] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isUpdatingSolarLocation, setIsUpdatingSolarLocation] = useState(false);
 
   const proposalModelType = moduleId === 'lcoe_model'
     ? 'lcoe'
@@ -319,6 +329,7 @@ export function EditableTableStage({
         ? 'solar'
         : null;
   const enableInvestigate = !!proposalModelType && stageId === 'inputs' && !readOnly;
+  const isSolarInputsStage = moduleId === 'solar_estimate' && stageId === 'inputs';
 
   useEffect(() => {
     setMounted(true);
@@ -335,6 +346,38 @@ export function EditableTableStage({
       },
     };
   });
+
+  const findFieldRow = useCallback(
+    (fieldName: string) =>
+      effectiveItems.find((item) => {
+        const explicitFieldName = typeof item.content.field_name === 'string'
+          ? item.content.field_name
+          : '';
+        const variable = typeof item.content.variable === 'string'
+          ? item.content.variable
+          : '';
+        return explicitFieldName === fieldName || normalizeKey(variable) === fieldName;
+      }),
+    [effectiveItems]
+  );
+
+  const solarAddressRow = isSolarInputsStage ? findFieldRow('address') : undefined;
+  const solarLatRow = isSolarInputsStage ? findFieldRow('lat') : undefined;
+  const solarLonRow = isSolarInputsStage ? findFieldRow('lon') : undefined;
+  const shouldShowSolarLocationMap = !!(isSolarInputsStage && (solarAddressRow || solarLatRow || solarLonRow));
+  const solarAddress = typeof solarAddressRow?.content?.value === 'string' && solarAddressRow.content.value.trim()
+    ? solarAddressRow.content.value
+    : null;
+  const solarLat = typeof solarLatRow?.content?.value === 'number'
+    ? solarLatRow.content.value
+    : typeof solarLatRow?.content?.value === 'string' && solarLatRow.content.value.trim() !== ''
+      ? Number(solarLatRow.content.value)
+      : null;
+  const solarLon = typeof solarLonRow?.content?.value === 'number'
+    ? solarLonRow.content.value
+    : typeof solarLonRow?.content?.value === 'string' && solarLonRow.content.value.trim() !== ''
+      ? Number(solarLonRow.content.value)
+      : null;
 
   useEffect(() => {
     if (Object.keys(optimisticContentByItemId).length === 0) return;
@@ -371,12 +414,23 @@ export function EditableTableStage({
     timing: 'Timing',
     general: 'General',
   };
+  const encounteredCategories = Array.from(
+    new Set(
+      effectiveItems
+        .map((item) => String(item.content.category ?? 'general'))
+        .filter(Boolean)
+    )
+  );
+  const orderedCategories = [
+    ...categoryOrder.filter((cat) => encounteredCategories.includes(cat)),
+    ...encounteredCategories.filter((cat) => !categoryOrder.includes(cat)),
+  ];
 
   const groupedItems = hasCategories
-    ? categoryOrder
+    ? orderedCategories
         .map((cat) => ({
           cat,
-          label: CATEGORY_LABELS[cat] ?? cat,
+          label: CATEGORY_LABELS[cat] ?? formatCategoryLabel(cat),
           rows: effectiveItems.filter((i) => (i.content.category ?? 'general') === cat),
         }))
         .filter((g) => g.rows.length > 0)
@@ -560,11 +614,96 @@ export function EditableTableStage({
     [instanceId, stageId, onChanged, workflowVersion]
   );
 
+  const handleSolarLocationChange = useCallback(
+    async (lat: number, lon: number, address?: string) => {
+      if (!shouldShowSolarLocationMap || readOnly) return;
+
+      const updates = [
+        solarLatRow
+          ? {
+              row: solarLatRow,
+              value: lat,
+            }
+          : null,
+        solarLonRow
+          ? {
+              row: solarLonRow,
+              value: lon,
+            }
+          : null,
+        address !== undefined && solarAddressRow
+          ? {
+              row: solarAddressRow,
+              value: address,
+            }
+          : null,
+      ].filter((update): update is { row: BuildItem; value: string | number } => update !== null);
+
+      if (updates.length === 0) return;
+
+      setIsUpdatingSolarLocation(true);
+      setOptimisticContentByItemId((prev) => {
+        const next = { ...prev };
+        for (const update of updates) {
+          next[update.row.id] = {
+            ...(prev[update.row.id] ?? {}),
+            value: update.value,
+            status: 'confirmed',
+            source: 'user',
+          };
+        }
+        return next;
+      });
+
+      try {
+        let nextWorkflowVersion = workflowVersion;
+        for (const update of updates) {
+          const response = await api.editStageItem(
+            instanceId,
+            stageId,
+            update.row.id,
+            {
+              ...update.row.content,
+              value: update.value,
+              status: 'confirmed',
+              source: 'user',
+            },
+            nextWorkflowVersion
+          );
+          nextWorkflowVersion = response.workflow_version;
+        }
+        onChanged();
+      } catch (error) {
+        setOptimisticContentByItemId((prev) => {
+          const next = { ...prev };
+          for (const update of updates) {
+            delete next[update.row.id];
+          }
+          return next;
+        });
+        throw error;
+      } finally {
+        setIsUpdatingSolarLocation(false);
+      }
+    },
+    [
+      shouldShowSolarLocationMap,
+      readOnly,
+      solarLatRow,
+      solarLonRow,
+      solarAddressRow,
+      workflowVersion,
+      instanceId,
+      stageId,
+      onChanged,
+    ]
+  );
+
   if (fields.length === 0) {
     return <div className="text-sm text-text-tertiary text-center py-8">No fields configured.</div>;
   }
 
-  if (items.length === 0 && !adding) {
+  if (items.length === 0 && !adding && !shouldShowSolarLocationMap) {
     return (
       <div className="text-center py-8 text-sm text-text-tertiary">
         No rows yet.
@@ -579,6 +718,20 @@ export function EditableTableStage({
 
   return (
     <div className={flush ? 'overflow-hidden' : 'rounded-lg border border-divider overflow-hidden'}>
+      {shouldShowSolarLocationMap && (
+        <div className="px-4 py-4 border-b border-divider bg-surface-primary">
+          <Suspense fallback={<div className="h-[180px] bg-surface-subtle rounded-lg animate-pulse" />}>
+            <SolarLocationMap
+              lat={solarLat}
+              lon={solarLon}
+              address={solarAddress}
+              onLocationChange={handleSolarLocationChange}
+              disabled={readOnly || isUpdatingSolarLocation}
+            />
+          </Suspense>
+        </div>
+      )}
+
       {groupedItems.map((group) => (
         <div key={group.cat}>
           {group.label && (

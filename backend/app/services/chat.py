@@ -217,6 +217,8 @@ The user may be working inside a project workspace. Project documents are ALREAD
 
 For general research questions that go BEYOND the project's own documents (e.g. industry benchmarks, regulatory standards, methodology comparisons, best practices), call BOTH search_scholarly_literature AND search_web_sources.
 
+For straightforward factual lookups like geographic coordinates, city/country names, dates, or unit conversions, prefer search_web_sources only. Scholarly literature is usually unnecessary.
+
 Calculator modules (LCOE, Carbon, Solar) now live in the editor workspace panel. When the user asks to model project economics or emissions, encourage them to open the relevant module from the workspace — do NOT attempt to run the model inline.
 
 Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia", "change tilt to 20°"). Combine with search tools (scholarly + web) to ground the proposal in evidence. This supports the editor module's investigate → propose → confirm flow. When the user asks for a better, alternative, or different value, the proposal MUST differ from the current value shown in the model inputs.
@@ -445,6 +447,12 @@ class ChatService:
 
         # Step 1: corpus search (if enabled) + tool planning run in parallel (independent)
         search_query = await self._build_search_query(user_message, history)
+        external_search_query = await self._build_external_search_query(
+            user_message,
+            history,
+            field_context=field_context,
+        )
+        should_run_scholarly = self._should_run_scholarly_search(field_context)
 
         await _step("scan_docs", "Scanning project documents", "running")
 
@@ -529,27 +537,30 @@ class ChatService:
             fn_name in {"search_scholarly_literature", "search_web_sources"}
             for fn_name, _ in parsed_calls
         ):
-            parsed_calls.extend([
-                (
-                    "search_scholarly_literature",
-                    {
-                        "query": search_query,
-                        "reason": "Investigate requests should be grounded in external benchmarks when available.",
-                    },
-                ),
+            if should_run_scholarly:
+                parsed_calls.append(
+                    (
+                        "search_scholarly_literature",
+                        {
+                            "query": external_search_query,
+                            "reason": "Investigate requests should be grounded in external benchmarks when available.",
+                        },
+                    )
+                )
+            parsed_calls.append(
                 (
                     "search_web_sources",
                     {
-                        "query": search_query,
+                        "query": external_search_query,
                         "reason": "Investigate requests should cite current institutional or industry references when available.",
                     },
-                ),
-            ])
+                )
+            )
 
         # Run search tools (scholarly + web) concurrently
         async def _run_scholarly(query: str) -> list[RetrievedFact]:
             await _step("search_scholarly", "Searching scholarly databases", "running")
-            await _think(f"Searching scholarly databases: \"{query}\"...")
+            await _think("Searching scholarly databases for relevant evidence...")
             facts = await self.retrieval.search_openalex(query)
             if facts:
                 await _think(f"Found {len(facts)} scholarly works")
@@ -574,8 +585,13 @@ class ChatService:
         search_tasks = []
         search_labels = []
         for fn_name, args in parsed_calls:
-            tool_query = args.get("query", search_query)
+            tool_query = self._normalize_external_tool_query(
+                args.get("query"),
+                external_search_query,
+            )
             if fn_name == "search_scholarly_literature":
+                if not should_run_scholarly:
+                    continue
                 search_tasks.append(_run_scholarly(tool_query))
                 search_labels.append("openalex")
             elif fn_name == "search_web_sources":
@@ -935,7 +951,7 @@ class ChatService:
     ) -> list[RetrievedFact]:
         if search_type == "scholarly":
             await _step("search_scholarly", "Searching scholarly databases", "running")
-            await _think(f'Searching scholarly databases: "{query}"...')
+            await _think("Searching scholarly databases for relevant evidence...")
             facts = await self.retrieval.search_openalex(query)
             label = f"Found {len(facts)} scholarly works" if facts else "No scholarly works found"
             await _step("search_scholarly", label, "done")
@@ -1274,6 +1290,167 @@ class ChatService:
         except Exception as e:
             logger.warning(f"Query rewrite failed, using raw message: {e}")
             return user_message
+
+    @staticmethod
+    def _is_coordinate_lookup_field(field_context: dict[str, Any] | None) -> bool:
+        if not field_context:
+            return False
+        raw = " ".join(
+            str(part or "")
+            for part in (
+                field_context.get("field_name"),
+                field_context.get("label"),
+            )
+        ).lower()
+        return bool(
+            re.search(r"\b(latitude|longitude|coordinates?)\b", raw)
+            or re.search(r"\b(lat|lon|lng)\b", raw)
+        )
+
+    @classmethod
+    def _should_run_scholarly_search(cls, field_context: dict[str, Any] | None) -> bool:
+        return not cls._is_coordinate_lookup_field(field_context)
+
+    @staticmethod
+    def _extract_location_hint(user_message: str) -> str | None:
+        patterns = [
+            r"\b(in|for|at|near|within)\s+([A-Z][A-Za-z]+(?:[\s-][A-Z][A-Za-z]+){0,3})\b",
+            r"\b(in|for|at|near|within)\s+([a-z]+(?:[\s-][a-z]+){0,3})\b",
+        ]
+        for pattern in patterns:
+            matches = list(re.finditer(pattern, user_message))
+            for match in reversed(matches):
+                preposition = match.group(1).lower()
+                candidate = match.group(2).strip(" .,!?:;\"'")
+                candidate = re.split(
+                    r"\b(?:and|with|using|based|that|which|where)\b",
+                    candidate,
+                    maxsplit=1,
+                    flags=re.IGNORECASE,
+                )[0].strip()
+                if preposition == "for" and re.search(
+                    r"\b(latitude|longitude|coordinates?|value)\b",
+                    candidate,
+                    re.IGNORECASE,
+                ):
+                    continue
+                if candidate and 1 <= len(candidate.split()) <= 4:
+                    return candidate
+        return None
+
+    @classmethod
+    def _fallback_external_search_query(
+        cls,
+        user_message: str,
+        field_context: dict[str, Any] | None = None,
+    ) -> str:
+        location_hint = cls._extract_location_hint(user_message)
+        field_label = str(
+            (field_context or {}).get("label")
+            or (field_context or {}).get("field_name")
+            or ""
+        ).replace("_", " ").strip()
+        if cls._is_coordinate_lookup_field(field_context):
+            raw = " ".join(
+                str(part or "")
+                for part in (
+                    (field_context or {}).get("field_name"),
+                    (field_context or {}).get("label"),
+                )
+            ).lower()
+            axis = "coordinates"
+            if "latitude" in raw or re.search(r"\blat\b", raw):
+                axis = "latitude"
+            elif "longitude" in raw or re.search(r"\b(lon|lng)\b", raw):
+                axis = "longitude"
+            if location_hint:
+                if axis in {"latitude", "longitude"} and re.search(r"\bcity\b", user_message, re.IGNORECASE):
+                    return f"{location_hint} city {axis}"
+                return f"{location_hint} {axis}"
+            return axis
+        if field_label and location_hint and location_hint.lower() not in field_label.lower():
+            return f"{field_label} {location_hint}"
+        if field_label:
+            return field_label
+        return re.sub(r"\s+", " ", user_message).strip()
+
+    @classmethod
+    def _normalize_external_tool_query(
+        cls,
+        tool_query: str | None,
+        fallback_query: str,
+    ) -> str:
+        query = re.sub(r"\s+", " ", str(tool_query or "")).strip().strip("\"'")
+        if not query:
+            return fallback_query
+        conversational = re.search(
+            r"\b(can you|could you|please|investigate|propose|suggest|help me|just pick)\b",
+            query,
+            re.IGNORECASE,
+        )
+        if conversational or query.endswith("?") or len(query.split()) > 14:
+            return fallback_query
+        return query
+
+    async def _build_external_search_query(
+        self,
+        user_message: str,
+        history: list[dict[str, str]],
+        *,
+        field_context: dict[str, Any] | None = None,
+    ) -> str:
+        fallback_query = self._fallback_external_search_query(user_message, field_context)
+        try:
+            recent = history[-6:] if len(history) > 6 else history
+            context = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
+            field_block = ""
+            if field_context and field_context.get("field_name"):
+                field_block = (
+                    "\nActive field:\n"
+                    f"- label: {field_context.get('label') or field_context.get('field_name')}\n"
+                    f"- field_name: {field_context.get('field_name')}\n"
+                    f"- unit: {field_context.get('unit') or ''}\n"
+                )
+            client = await self._get_client()
+            resp = await client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Rewrite the user's latest request as a compact external-search query. "
+                            "Do not echo conversational phrasing. Remove words like investigate, propose, "
+                            "pick, or value unless they are essential to the topic. Focus on the factual "
+                            "thing to look up. If the active field is latitude or longitude, search for "
+                            "coordinates or location data rather than advice about choosing a value. "
+                            "Return ONLY the query. Max 12 words."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Conversation:\n{context}\n\n"
+                            f"Latest message: {user_message}"
+                            f"{field_block}\n"
+                            f"Fallback query: {fallback_query}"
+                        ),
+                    },
+                ],
+                temperature=0,
+                max_tokens=30,
+            )
+            await record_usage_from_response(
+                self.user_id,
+                settings.openai_orchestration_model,
+                resp,
+                self.db,
+                is_byok=self._is_byok,
+            )
+            candidate = (resp.choices[0].message.content or "").strip()
+            return self._normalize_external_tool_query(candidate, fallback_query)
+        except Exception as e:
+            logger.warning(f"External query rewrite failed, using fallback query: {e}")
+            return fallback_query
 
     @staticmethod
     def _is_investigate_request(user_message: str) -> bool:
