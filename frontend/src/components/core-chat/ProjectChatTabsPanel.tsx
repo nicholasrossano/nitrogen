@@ -21,6 +21,7 @@ interface ProjectChatTab {
 interface ProjectChatTabsPanelProps {
   initiativeId: string;
   researchMode?: boolean;
+  sessionStorageKey?: string;
   resetToLandingSignal?: number;
   pendingChatToOpen?: { chatId: string; title?: string | null } | null;
   pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
@@ -43,6 +44,55 @@ function makeTab(title = 'New Chat', isLanding = false, isFallback = false): Pro
   };
 }
 
+interface StoredProjectChatTabsState {
+  tabs: ProjectChatTab[];
+  activeTabId: string | null;
+}
+
+function isStoredProjectChatTab(value: unknown): value is ProjectChatTab {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<ProjectChatTab>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.title === 'string' &&
+    (typeof candidate.chatId === 'string' || candidate.chatId === null) &&
+    typeof candidate.isLanding === 'boolean' &&
+    typeof candidate.isFallback === 'boolean'
+  );
+}
+
+function readStoredProjectChatTabsState(storageKey: string): StoredProjectChatTabsState | null {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredProjectChatTabsState>;
+    if (!Array.isArray(parsed.tabs) || parsed.tabs.length === 0) return null;
+    const tabs = parsed.tabs.filter(isStoredProjectChatTab);
+    if (tabs.length === 0) return null;
+    return {
+      tabs,
+      activeTabId:
+        typeof parsed.activeTabId === 'string' && tabs.some((tab) => tab.id === parsed.activeTabId)
+          ? parsed.activeTabId
+          : tabs[0].id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProjectChatTabsState(
+  storageKey: string,
+  state: StoredProjectChatTabsState,
+) {
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60_000);
@@ -58,6 +108,7 @@ function relativeTime(ts: number): string {
 export function ProjectChatTabsPanel({
   initiativeId,
   researchMode = false,
+  sessionStorageKey,
   resetToLandingSignal = 0,
   pendingChatToOpen = null,
   pendingAutoSend = null,
@@ -69,12 +120,23 @@ export function ProjectChatTabsPanel({
   onOpenWorkspaceModule,
   onSendRef,
 }: ProjectChatTabsPanelProps) {
-  const initialTabRef = useRef<ProjectChatTab | null>(null);
-  if (!initialTabRef.current) {
-    initialTabRef.current = makeTab('New Chat', researchMode, true);
+  const initialStateRef = useRef<StoredProjectChatTabsState | null>(null);
+  if (!initialStateRef.current) {
+    const storedState = sessionStorageKey
+      ? readStoredProjectChatTabsState(sessionStorageKey)
+      : null;
+    if (storedState) {
+      initialStateRef.current = storedState;
+    } else {
+      const initialTab = makeTab('New Chat', researchMode, true);
+      initialStateRef.current = {
+        tabs: [initialTab],
+        activeTabId: initialTab.id,
+      };
+    }
   }
-  const [tabs, setTabs] = useState<ProjectChatTab[]>(() => [initialTabRef.current!]);
-  const [activeTabId, setActiveTabId] = useState<string>(() => initialTabRef.current!.id);
+  const [tabs, setTabs] = useState<ProjectChatTab[]>(() => initialStateRef.current!.tabs);
+  const [activeTabId, setActiveTabId] = useState<string>(() => initialStateRef.current!.activeTabId ?? initialStateRef.current!.tabs[0].id);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -89,6 +151,14 @@ export function ProjectChatTabsPanel({
     if (!resolvedActiveTabId || resolvedActiveTabId === activeTabId) return;
     setActiveTabId(resolvedActiveTabId);
   }, [resolvedActiveTabId, activeTabId]);
+
+  useEffect(() => {
+    if (!sessionStorageKey || !resolvedActiveTabId) return;
+    writeStoredProjectChatTabsState(sessionStorageKey, {
+      tabs,
+      activeTabId: resolvedActiveTabId,
+    });
+  }, [sessionStorageKey, tabs, resolvedActiveTabId]);
 
   const loadSessions = useCallback(async () => {
     try {
