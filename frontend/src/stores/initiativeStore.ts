@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveImportResult, DriveSyncResult, FieldContext } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveImportResult, DriveSyncResult, DriveLinkedFile, FieldContext } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];

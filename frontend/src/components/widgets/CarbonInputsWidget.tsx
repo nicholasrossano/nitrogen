@@ -159,7 +159,7 @@ export function CarbonInputsWidget({
   );
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
-    const isConfirmed = currentStatus === 'validated' || currentStatus === 'confirmed';
+    const isConfirmed = currentStatus === 'validated';
     const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'validated';
 
     if (!isConfirmed) {
@@ -310,7 +310,7 @@ export function CarbonInputsWidget({
                         <span
                           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                         >
-                          {(inp.status === 'validated' || inp.status === 'confirmed') && <CheckCircle2 className="w-2.5 h-2.5" />}
+                          {inp.status === 'validated' && <CheckCircle2 className="w-2.5 h-2.5" />}
                           {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
                           {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                           {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
@@ -323,10 +323,10 @@ export function CarbonInputsWidget({
                         {isActive && !hasOutputWidget && (
                           <input
                             type="checkbox"
-                            checked={inp.status === 'validated' || inp.status === 'confirmed'}
+                            checked={inp.status === 'validated'}
                             disabled={isMissing || confirmingFields.has(inp.field_name)}
                             onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                            title={inp.status === 'validated' || inp.status === 'confirmed' ? 'Mark as inferred' : 'Mark as validated'}
+                            title={inp.status === 'validated' ? 'Mark as inferred' : 'Mark as validated'}
                             className="w-3 h-3 rounded-full accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                           />
                         )}

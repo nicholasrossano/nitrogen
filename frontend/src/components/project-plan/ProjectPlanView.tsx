@@ -40,6 +40,8 @@ interface ProjectPlanViewProps {
   initiativeId: string;
   showInspector?: boolean;
   onInspectorChange?: (open: boolean, hasItem: boolean) => void;
+  /** Called whenever the inspector state changes (item selected, loading, result ready) */
+  onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onOpenFullDoc?: (citation: ResearchPanelCitation) => void;
   onViewModeChange?: (modeId: string) => void;
 }
@@ -56,6 +58,7 @@ export function ProjectPlanView({
   initiativeId,
   showInspector,
   onInspectorChange,
+  onInspectorStateChange,
   onOpenFullDoc,
   onViewModeChange,
 }: ProjectPlanViewProps) {
@@ -195,6 +198,10 @@ export function ProjectPlanView({
       error: deepDive.error,
     };
   }, [deepDive]);
+
+  useEffect(() => {
+    onInspectorStateChange?.(inspectorState);
+  }, [inspectorState, onInspectorStateChange]);
 
   const handleSurveySubmit = useCallback((response: SurveyResponse) => {
     console.info('[Survey]', response);
