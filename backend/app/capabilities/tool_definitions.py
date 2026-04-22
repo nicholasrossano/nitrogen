@@ -113,7 +113,7 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Generate Project Plan",
         description="Generate the project plan when enough context is available.",
-        surfaces=["orchestration"],
+        surfaces=["orchestration", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -138,7 +138,7 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Update Project Plan",
         description="Update the existing project plan based on user-requested changes.",
-        surfaces=["orchestration"],
+        surfaces=["orchestration", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -342,7 +342,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Scholarly Literature",
         description="Search OpenAlex for peer-reviewed academic papers.",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -375,7 +375,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Web Sources",
         description="Search the web for authoritative information.",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -409,7 +409,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run LCOE Model",
         description="Build an LCOE model from conversation context (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -446,7 +446,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Carbon Model",
         description="Build a carbon emissions model from conversation context (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -482,7 +482,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Solar Estimate",
         description="Generate a solar PV production estimate using PVWatts.",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -515,7 +515,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Input Value",
         description="Propose a value for a model input field (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -565,7 +565,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Template Value",
         description="Propose a value for a template/form requirement (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {

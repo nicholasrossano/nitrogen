@@ -18,17 +18,9 @@ import type {
   PlanWorkspacePhase,
   PlanWorkspaceProgress,
 } from './types';
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 
-const DEFAULT_COLORS = [
-  '#005e72',
-  '#4a6680',
-  '#8d5e6a',
-  '#7a5030',
-  '#a06548',
-  '#7a6520',
-  '#7a7a3a',
-  '#6b7d6a',
-];
+const DEFAULT_COLORS = [DIAGRAM_ACCENT_COLOR];
 
 const DEFAULT_DISPLAY_MODES: PlanWorkspaceDisplayMode[] = [
   { id: 'group', label: 'Category', icon: LayoutGrid },

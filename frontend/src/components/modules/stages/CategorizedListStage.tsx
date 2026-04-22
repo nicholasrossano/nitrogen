@@ -20,12 +20,8 @@ import { CSS } from '@dnd-kit/utilities';
 import type { BuildItem, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
 import { getIconByName } from '@/lib/icons';
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { inferCategoryIconName } from './categoryIcons';
-
-const CATEGORY_COLORS = [
-  '#005e72', '#4a6680', '#8d5e6a', '#7a5030',
-  '#a06548', '#7a6520', '#7a7a3a', '#6b7d6a',
-];
 
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -54,14 +50,12 @@ interface Props {
 
 function SortableRow({
   item,
-  index,
   fields,
   onDelete,
   onEdit,
   readOnly,
 }: {
   item: BuildItem;
-  index: number;
   fields: FieldDef[];
   onDelete: (id: string) => void;
   onEdit: (id: string, content: Record<string, any>) => void;
@@ -80,7 +74,7 @@ function SortableRow({
   const primaryLabel = primaryField ? String(item.content[primaryField.name] ?? '') : 'Item';
   const secondaryField = fields[1];
   const secondaryLabel = secondaryField ? String(item.content[secondaryField.name] ?? '') : null;
-  const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+  const color = DIAGRAM_ACCENT_COLOR;
   const inferredIcon = inferCategoryIconName(primaryLabel);
   const Icon = getIconByName(String(item.content.icon ?? inferredIcon));
 
@@ -353,11 +347,10 @@ export function CategorizedListStage({ instanceId, stageId, workflowVersion, fie
 
       {readOnly ? (
         <div className="flex flex-col gap-2.5">
-          {localItems.map((item, idx) => (
+          {localItems.map((item) => (
             <SortableRow
               key={item.id}
               item={item}
-              index={idx}
               fields={fields}
               onDelete={handleDelete}
               onEdit={handleEdit}
@@ -369,11 +362,10 @@ export function CategorizedListStage({ instanceId, stageId, workflowVersion, fie
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={localItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-2.5">
-              {localItems.map((item, idx) => (
+              {localItems.map((item) => (
                 <SortableRow
                   key={item.id}
                   item={item}
-                  index={idx}
                   fields={fields}
                   onDelete={handleDelete}
                   onEdit={handleEdit}

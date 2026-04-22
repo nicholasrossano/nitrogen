@@ -51,7 +51,7 @@ def test_requires_distinct_proposal_detects_alternative_requests():
     )
     assert not ChatService._requires_distinct_proposal(
         "Can you validate the current value for annual degradation?",
-        {"status": "confirmed"},
+        {"status": "validated"},
     )
     assert ChatService._requires_distinct_proposal(
         "Can you investigate the value for discount rate (WACC)?",

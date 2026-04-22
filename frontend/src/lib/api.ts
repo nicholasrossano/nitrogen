@@ -137,7 +137,7 @@ export interface BuildStage {
   id: string;
   name: string;
   stage_type: 'widget' | 'simple_list' | 'structured_list' | 'detail_node';
-  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'complete' | 'error';
+  status: 'pending' | 'generating' | 'in_progress' | 'validated' | 'complete' | 'error';
   widget_type?: string | null;
   widget_data?: Record<string, any> | null;
   items?: BuildItem[] | null;
@@ -146,7 +146,7 @@ export interface BuildStage {
 
 /** @deprecated Use BuildStage instead */
 export interface BuildLayer {
-  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'error';
+  status: 'pending' | 'generating' | 'in_progress' | 'validated' | 'error';
   items: BuildItem[];
 }
 
@@ -238,7 +238,7 @@ export interface StageDef {
 }
 
 export interface StageState {
-  status: 'pending' | 'populating' | 'draft' | 'confirmed' | 'error';
+  status: 'pending' | 'populating' | 'draft' | 'validated' | 'error';
   confirmed_at: string | null;
   confirmed_by: string | null;
   confirmed_by_email?: string | null;
@@ -1548,6 +1548,7 @@ export const api = {
     toolHint?: string | null,
     fieldContext?: FieldContext | null,
     modelInputsContext?: string | null,
+    moduleContext?: { instance_id: string; module_id: string; title?: string | null } | null,
     initiativeId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
     compareInitiativeIds?: string[] | null,
@@ -1569,6 +1570,7 @@ export const api = {
       field_name: fieldContext?.field_name ?? null,
       model_type: fieldContext?.model_type ?? null,
       has_model_inputs_context: Boolean(modelInputsContext),
+      has_module_context: Boolean(moduleContext),
       initiative_id: initiativeId ?? null,
       compare_mode: Boolean(compareInitiativeIds?.length),
       allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
@@ -1584,6 +1586,7 @@ export const api = {
         tool_hint: toolHint ?? null,
         field_context: fieldContext ?? null,
         model_inputs_context: modelInputsContext ?? null,
+        module_context: moduleContext ?? null,
         initiative_id: initiativeId ?? null,
         compare_initiative_ids: compareInitiativeIds ?? null,
         allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
@@ -1675,7 +1678,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
-    status: string = 'confirmed',
+    status: string = 'validated',
   ): Promise<any> {
     return fetchApi('/api/v1/lcoe/update-input', {
       method: 'POST',
@@ -1725,7 +1728,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
-    status: string = 'confirmed',
+    status: string = 'validated',
   ): Promise<any> {
     return fetchApi('/api/v1/carbon/update-input', {
       method: 'POST',
@@ -1792,7 +1795,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
-    status: string = 'confirmed',
+    status: string = 'validated',
   ): Promise<any> {
     return fetchApi('/api/v1/pvwatts/update-input', {
       method: 'POST',
