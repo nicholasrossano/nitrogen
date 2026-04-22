@@ -6,11 +6,8 @@ import {
   Sun,
   AlertTriangle,
   CheckCircle2,
-  Sparkles,
   Pencil,
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   Zap,
   Download,
 } from 'lucide-react';
@@ -174,7 +171,6 @@ export function SolarEstimateWidget({
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [isRecalculating, setIsRecalculating] = useState(false);
-  const [showAssumptions, setShowAssumptions] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hoveredRowInp, setHoveredRowInp] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -538,7 +534,6 @@ export function SolarEstimateWidget({
         {/* Footer */}
         <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 flex items-center justify-between gap-3">
           <span className="text-[10px] text-text-tertiary truncate">
-            {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
             Powered by PVWatts V8 (NREL)
           </span>
           {!forceInputsView && (
@@ -563,9 +558,12 @@ export function SolarEstimateWidget({
   const QualityIcon = qualityStyle.icon;
 
   const stationInfo = result.station_info || {};
+  const weatherCitation = stationInfo.state
+    ? `Weather data: ${stationInfo.city ? `${stationInfo.city}, ` : ''}${stationInfo.state}${stationInfo.weather_data_source ? ` (${stationInfo.weather_data_source})` : ''}${stationInfo.distance != null ? ` — ${(stationInfo.distance / 1000).toFixed(0)} km from site` : ''}`
+    : null;
 
   return (
-    <div className="flex flex-col h-full bg-surface-primary">
+    <div className="card-elevated overflow-hidden flex flex-col h-full bg-surface-primary">
       {/* Header with headline metrics */}
       <div className="shrink-0 border-b border-stroke-subtle">
         <PanelHeader
@@ -631,6 +629,7 @@ export function SolarEstimateWidget({
                     <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                     <RechartsTooltip
                       contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                      cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
                       formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'AC Energy']}
                     />
                     <Bar dataKey="kWh" radius={[3, 3, 0, 0]} maxBarSize={32}>
@@ -651,39 +650,6 @@ export function SolarEstimateWidget({
               </div>
             </div>
 
-            {/* Assumptions section (collapsible) */}
-            <div className="rounded-lg border border-stroke-subtle overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowAssumptions(!showAssumptions)}
-                className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-medium text-text-secondary hover:bg-surface-subtle transition-colors"
-              >
-                <span>Assumptions & Sources ({assumptionCount} assumed)</span>
-                {showAssumptions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-              </button>
-              {showAssumptions && (
-                <div className="border-t border-stroke-subtle px-3 py-2 space-y-1">
-                  {Object.entries(inputs).map(([key, inp]: [string, any]) => (
-                    <div key={key} className="flex items-center gap-2 text-[10px]">
-                      <span className="w-[120px] text-text-tertiary truncate">{inp.label}</span>
-                      <span className="font-mono text-text-primary">{formatValue(key, inp.value)}</span>
-                      <span className="text-text-tertiary">{inp.unit}</span>
-                      {renderStatusBadge(inp.status)}
-                      <span className="text-text-tertiary italic">{inp.source}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Weather station info */}
-            {stationInfo.state && (
-              <div className="text-[10px] text-text-tertiary px-1">
-                Weather data: {stationInfo.city ? `${stationInfo.city}, ` : ''}{stationInfo.state}
-                {stationInfo.weather_data_source && ` (${stationInfo.weather_data_source})`}
-                {stationInfo.distance != null && ` — ${(stationInfo.distance / 1000).toFixed(0)} km from site`}
-              </div>
-            )}
           </div>
         )}
 
@@ -744,8 +710,8 @@ export function SolarEstimateWidget({
       {/* Footer */}
       <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 flex items-center justify-between gap-3">
         <span className="text-[10px] text-text-tertiary truncate">
-          {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
           Powered by PVWatts V8 (NREL)
+          {weatherCitation && <><span className="mx-1.5">·</span>{weatherCitation}</>}
         </span>
         {outputFooterAction ? (
           <button
