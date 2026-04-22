@@ -22,6 +22,7 @@ import { api } from '@/lib/api';
 import { getIconByName } from '@/lib/icons';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { inferCategoryIconName } from './categoryIcons';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -42,6 +43,7 @@ interface Props {
   workflowVersion?: number;
   fields: FieldDef[];
   items: BuildItem[];
+  isLoading?: boolean;
   readOnly?: boolean;
   onChanged: () => void;
 }
@@ -263,7 +265,16 @@ function AddItemRow({
 
 // ── Main component ────────────────────────────────────────────────────────
 
-export function CategorizedListStage({ instanceId, stageId, workflowVersion, fields, items, readOnly, onChanged }: Props) {
+export function CategorizedListStage({
+  instanceId,
+  stageId,
+  workflowVersion,
+  fields,
+  items,
+  isLoading = false,
+  readOnly,
+  onChanged,
+}: Props) {
   const [adding, setAdding] = useState(false);
   const [localItems, setLocalItems] = useState(items);
   const [optimisticAddedItemId, setOptimisticAddedItemId] = useState<string | null>(null);
@@ -339,7 +350,13 @@ export function CategorizedListStage({ instanceId, stageId, workflowVersion, fie
 
   return (
     <div className="flex flex-col gap-2.5">
-      {localItems.length === 0 && !adding && (
+      {isLoading && localItems.length === 0 && !adding && (
+        <div className="py-10">
+          <PageLoader label="Loading stage..." />
+        </div>
+      )}
+
+      {localItems.length === 0 && !adding && !isLoading && (
         <div className="py-8 text-center text-sm text-text-tertiary">
           No items yet.{!readOnly && ' Click + to add one.'}
         </div>
