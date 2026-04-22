@@ -168,6 +168,7 @@ function toInspectorResult(item: ImplementationPlanItem): PlanWorkspaceInspector
 export function ImplementationPlanWidget({
   data,
   instanceId,
+  workflowVersion,
   onWorkflowUpdated,
   onInspectorStateChange,
 }: WorkspaceWidgetProps) {
@@ -274,6 +275,7 @@ export function ImplementationPlanWidget({
       await api.persistModuleWorkflowWidget(
         instanceId,
         nextWidgetData,
+        workflowVersion,
       );
       updated = true;
     } catch (error) {
@@ -289,7 +291,7 @@ export function ImplementationPlanWidget({
     if (updated) {
       await onWorkflowUpdated?.();
     }
-  }, [groups, instanceId, onWorkflowUpdated, pendingToggleIds, widgetData]);
+  }, [groups, instanceId, onWorkflowUpdated, pendingToggleIds, widgetData, workflowVersion]);
   const noopDeleteItem = useCallback((_itemId: string) => {}, []);
   const noopRetryInspector = useCallback(() => {}, []);
 
