@@ -1546,6 +1546,7 @@ export const api = {
     onError: (message: string) => void,
     chat_id?: string | null,
     toolHint?: string | null,
+    projectContext?: string | null,
     fieldContext?: FieldContext | null,
     modelInputsContext?: string | null,
     moduleContext?: { instance_id: string; module_id: string; title?: string | null } | null,
@@ -1566,6 +1567,7 @@ export const api = {
 
     debugChatFlow('api-send-chat-stream', {
       route: '/api/v1/chat/stream',
+      has_project_context: Boolean(projectContext),
       has_field_context: Boolean(fieldContext),
       field_name: fieldContext?.field_name ?? null,
       model_type: fieldContext?.model_type ?? null,
@@ -1584,6 +1586,7 @@ export const api = {
         history,
         chat_id: chat_id ?? null,
         tool_hint: toolHint ?? null,
+        project_context: projectContext ?? null,
         field_context: fieldContext ?? null,
         model_inputs_context: modelInputsContext ?? null,
         module_context: moduleContext ?? null,

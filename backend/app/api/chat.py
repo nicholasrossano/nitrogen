@@ -207,6 +207,7 @@ class ChatStreamRequest(BaseModel):
     history: list[ChatHistoryMessage] = Field(default=[], max_length=100)
     chat_id: Optional[str] = None
     tool_hint: Optional[str] = None
+    project_context: Optional[str] = Field(default=None, max_length=20000)
     field_context: Optional[FieldContext] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
     module_context: Optional[dict] = None
@@ -554,6 +555,7 @@ async def chat_stream(
             ctx.chat_id = chat.id
 
             verified_initiative: Initiative | None = None
+            project_context: str | None = None
             field_context = data.field_context.model_dump() if data.field_context else None
 
             _log_chat_stream_debug(
@@ -608,7 +610,6 @@ async def chat_stream(
 
             # --- Single project / normal mode ---
             if not compare_contexts:
-                project_context: str | None = None
                 if data.initiative_id:
                     try:
                         verified_initiative, _role = await get_initiative_with_role(
@@ -675,6 +676,14 @@ async def chat_stream(
                         )
                         if updated:
                             project_context = _build_project_context(verified_initiative)
+
+            supplemental_project_context = (data.project_context or "").strip()
+            if supplemental_project_context:
+                project_context = (
+                    f"{project_context}\n\n## Active Deep Dive Context\n{supplemental_project_context}"
+                    if project_context
+                    else f"## Active Deep Dive Context\n{supplemental_project_context}"
+                )
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
