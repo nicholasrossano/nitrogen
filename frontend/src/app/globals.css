@@ -654,6 +654,10 @@ textarea {
   background-color: rgba(110, 123, 109, 0.2); /* indicator-green/20 for visibility */
 }
 
+.project-action-btn-accent::before {
+  background-color: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
 /* Pill button (for input/output tags) with opacity fade */
 .pill-btn {
   @apply flex items-center gap-2 px-3 py-2 rounded text-sm border border-transparent text-text-primary;

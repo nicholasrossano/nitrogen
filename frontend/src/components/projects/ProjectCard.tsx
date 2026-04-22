@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { Layers, Clock, Trash2, RotateCcw, Users } from 'lucide-react';
+import { Layers, Clock, Trash2, RotateCcw, Users, Pin } from 'lucide-react';
 import { Initiative, api } from '@/lib/api';
 import { getIconByName, ICON_NAMES } from '@/lib/icons';
 
@@ -18,6 +18,9 @@ interface ProjectCardProps {
   onDelete?: (id: string) => void;
   onRestore?: (id: string) => void;
   isTrash?: boolean;
+  isPinned?: boolean;
+  canPinMore?: boolean;
+  onTogglePin?: (id: string) => void;
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -48,7 +51,15 @@ function getGeneratedModuleCount(project: Initiative): number {
   return Object.keys(project.deliverables).length;
 }
 
-export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  onDelete,
+  onRestore,
+  isTrash = false,
+  isPinned = false,
+  canPinMore = true,
+  onTogglePin,
+}: ProjectCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
@@ -139,6 +150,14 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
     }
   };
 
+  const handleTogglePin = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onTogglePin) {
+      onTogglePin(project.id);
+    }
+  };
+
   const CardWrapper = isTrash ? 'div' : Link;
   const cardProps = isTrash ? {} : { href: `/initiatives/${project.id}` };
 
@@ -170,15 +189,31 @@ export function ProjectCard({ project, onDelete, onRestore, isTrash = false }: P
             )}
           </>
         ) : (
-          canDelete && onDelete && (
-            <button
-              onClick={handleDelete}
-              className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity"
-              title="Delete project"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )
+          <>
+            {canDelete && onDelete && (
+              <button
+                onClick={handleDelete}
+                className="project-action-btn project-action-btn-danger absolute top-10 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary enabled:hover:text-indicator-orange transition-opacity"
+                title="Delete project"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            {onTogglePin && (
+              <button
+                onClick={handleTogglePin}
+                disabled={!isPinned && !canPinMore}
+                className={`project-action-btn project-action-btn-accent absolute top-2 right-2 p-1.5 rounded transition-opacity transition-colors ${
+                  isPinned
+                    ? 'opacity-100 text-accent'
+                    : 'opacity-0 group-hover:opacity-100 text-text-tertiary enabled:hover:text-accent'
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
+                title={isPinned ? 'Unpin project' : canPinMore ? 'Pin project' : 'Pin limit reached (max 3)'}
+              >
+                <Pin className={`w-4 h-4 ${isPinned ? 'text-accent fill-current' : ''}`} />
+              </button>
+            )}
+          </>
         )}
 
         {/* Icon and title */}
