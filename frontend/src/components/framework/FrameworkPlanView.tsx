@@ -1,15 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronDown, Loader2, Plus } from 'lucide-react';
+import { BookOpen, Loader2, Trash2 } from 'lucide-react';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
-import { type ModuleInstance, type ProjectPlan, api } from '@/lib/api';
+import { type ModuleInstance, api } from '@/lib/api';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 interface FrameworkPlanViewProps {
   initiativeId: string;
-  projectPlan: ProjectPlan | null;
   readOnly?: boolean;
   onOpenModule: (module: ModuleInstance) => void;
 }
@@ -17,7 +16,6 @@ interface FrameworkPlanViewProps {
 interface FrameworkPhase {
   id: string;
   name: string;
-  description?: string;
 }
 
 const PHASE_MATCHERS: Record<string, string[]> = {
@@ -32,15 +30,7 @@ function normalizeLabel(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
 }
 
-function getFrameworkPhases(projectPlan: ProjectPlan | null): FrameworkPhase[] {
-  if (projectPlan?.phases?.length) {
-    return projectPlan.phases.map((phase) => ({
-      id: phase.id,
-      name: phase.name,
-      description: phase.description,
-    }));
-  }
-
+function getFrameworkPhases(): FrameworkPhase[] {
   return MODULE_CATEGORIES.map((category) => ({
     id: category.id,
     name: category.name,
@@ -64,27 +54,8 @@ function resolvePhaseIdForModule(moduleId: string, phases: FrameworkPhase[]): st
   return phases[0]?.id ?? category.id;
 }
 
-function formatModuleStatus(status: ModuleInstance['status']): string {
-  switch (status) {
-    case 'complete':
-      return 'Complete';
-    case 'ready':
-      return 'Ready';
-    case 'generating':
-      return 'Generating';
-    case 'started':
-      return 'In progress';
-    case 'error':
-      return 'Needs attention';
-    case 'draft':
-    default:
-      return 'Not started';
-  }
-}
-
 export function FrameworkPlanView({
   initiativeId,
-  projectPlan,
   readOnly = false,
   onOpenModule,
 }: FrameworkPlanViewProps) {
@@ -94,9 +65,10 @@ export function FrameworkPlanView({
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [creatingModuleId, setCreatingModuleId] = useState<string | null>(null);
+  const [removingInstanceId, setRemovingInstanceId] = useState<string | null>(null);
   const libraryRef = useRef<HTMLDivElement>(null);
 
-  const phases = useMemo(() => getFrameworkPhases(projectPlan), [projectPlan]);
+  const phases = useMemo(() => getFrameworkPhases(), []);
 
   const moduleMetaById = useMemo(
     () => new Map(ALL_MODULES.map((module) => [module.id, module])),
@@ -173,7 +145,7 @@ export function FrameworkPlanView({
       modules: (buckets.get(phase.id) ?? []).sort((a, b) => (
         new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
       )),
-    }));
+    })).filter((phase) => phase.modules.length > 0);
 
     if (unmatched.length > 0) {
       result.push({
@@ -186,12 +158,16 @@ export function FrameworkPlanView({
     return result;
   }, [instances, phases]);
 
-  const completedCount = useMemo(
-    () => instances.filter((instance) => instance.status === 'complete').length,
+  const existingModuleIds = useMemo(
+    () => new Set(instances.map((instance) => instance.module_id)),
     [instances],
   );
 
   const handleCreateModule = async (moduleId: string) => {
+    if (existingModuleIds.has(moduleId)) {
+      setError('That module is already in this framework plan.');
+      return;
+    }
     setCreatingModuleId(moduleId);
     setError(null);
     try {
@@ -205,17 +181,24 @@ export function FrameworkPlanView({
     }
   };
 
+  const handleRemoveModule = async (instanceId: string) => {
+    if (removingInstanceId) return;
+    setRemovingInstanceId(instanceId);
+    setError(null);
+    try {
+      await api.deleteModuleInstance(initiativeId, instanceId);
+      setInstances((prev) => prev.filter((instance) => instance.id !== instanceId));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to remove module.');
+    } finally {
+      setRemovingInstanceId(null);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-surface overflow-hidden">
-      <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-divider bg-surface">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">Framework Plan</h2>
-            <p className="mt-1 text-xs text-text-tertiary">
-              Organize project work by phase, then open each module to complete it.
-            </p>
-          </div>
-
+      <div className="flex-shrink-0 px-4 pt-4 pb-3 bg-surface">
+        <div className="flex items-start justify-end gap-4">
           {!readOnly && (
             <div ref={libraryRef} className="relative flex-shrink-0">
               <button
@@ -223,9 +206,8 @@ export function FrameworkPlanView({
                 onClick={() => setLibraryOpen((open) => !open)}
                 className="btn-secondary !px-3 !py-1.5 !text-xs"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <BookOpen className="w-3.5 h-3.5" />
                 Module Library
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${libraryOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {libraryOpen && (
@@ -245,16 +227,17 @@ export function FrameworkPlanView({
                         <div className="space-y-1">
                           {category.modules.map((module) => {
                             const isCreating = creatingModuleId === module.id;
+                            const alreadyAdded = existingModuleIds.has(module.id);
                             return (
                               <button
                                 key={module.id}
                                 type="button"
-                                disabled={isCreating}
+                                disabled={isCreating || alreadyAdded}
                                 onClick={() => handleCreateModule(module.id)}
                                 className="w-full rounded-lg px-3 py-2 text-left transition-colors enabled:hover:bg-surface-subtle disabled:opacity-60 disabled:cursor-not-allowed"
                               >
-                                <div className="flex items-start gap-2.5">
-                                  <span className="mt-0.5 text-accent">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-accent">
                                     {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : module.icon}
                                   </span>
                                   <span className="min-w-0 flex-1">
@@ -262,7 +245,7 @@ export function FrameworkPlanView({
                                       {module.name}
                                     </span>
                                     <span className="mt-0.5 block text-[11px] leading-snug text-text-tertiary">
-                                      {module.description}
+                                      {alreadyAdded ? 'Already in this framework plan' : module.description}
                                     </span>
                                   </span>
                                 </div>
@@ -279,12 +262,6 @@ export function FrameworkPlanView({
           )}
         </div>
 
-        <div className="mt-3 flex items-center gap-3 text-xs text-text-tertiary">
-          <span>{instances.length} modules</span>
-          <span className="text-divider">•</span>
-          <span>{completedCount} complete</span>
-        </div>
-
         {error && (
           <p className="mt-3 text-xs text-indicator-orange">{error}</p>
         )}
@@ -296,78 +273,62 @@ export function FrameworkPlanView({
             <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
           </div>
         ) : (
-          <div className="h-full min-w-max px-4 py-4">
-            <div className="flex h-full gap-4 items-stretch">
+          <div className="h-full w-full px-6 pt-8 pb-4">
+            <div className="flex w-max min-w-full justify-center gap-12 items-start">
               {groupedPhases.map((phase) => (
                 <section
                   key={phase.id}
-                  className="w-[280px] flex-shrink-0 rounded-xl border border-divider bg-white/80 shadow-subtle overflow-hidden"
+                  className="w-[280px] flex-shrink-0"
                 >
-                  <div className="px-4 py-3 border-b border-divider bg-surface-subtle/60">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-medium text-text-primary">{phase.name}</h3>
-                      <span className="text-[11px] text-text-tertiary">{phase.modules.length}</span>
-                    </div>
-                    {phase.description && (
-                      <p className="mt-1 text-[11px] leading-5 text-text-tertiary">
-                        {phase.description}
-                      </p>
-                    )}
-                  </div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-3 px-0.5">
+                    {phase.name}
+                  </p>
+                  <div className="space-y-4 min-h-[220px]">
+                    {phase.modules.map((instance) => {
+                      const moduleMeta = moduleMetaById.get(instance.module_id);
+                      const moduleName = moduleMeta?.name || instance.module_id.replace(/_/g, ' ');
+                      const isRemoving = removingInstanceId === instance.id;
 
-                  <div className="p-3 space-y-2 min-h-[220px]">
-                    {phase.modules.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-divider px-3 py-4 text-center text-xs text-text-tertiary">
-                        No modules in this phase yet.
-                      </div>
-                    ) : (
-                      phase.modules.map((instance) => {
-                        const moduleMeta = moduleMetaById.get(instance.module_id);
-                        const isComplete = instance.status === 'complete';
-                        const moduleTitle = instance.title || moduleMeta?.name || instance.module_id.replace(/_/g, ' ');
-
-                        return (
+                      return (
+                        <div
+                          key={instance.id}
+                          className="group relative card-interactive border border-black/[0.04]"
+                        >
                           <button
-                            key={instance.id}
                             type="button"
                             onClick={() => onOpenModule(instance)}
-                            className="card-interactive w-full border border-black/[0.05] px-3 py-3 text-left"
+                            className="relative flex w-full items-center gap-3 px-4 py-3.5 text-left"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-text-primary leading-snug">
-                                  {moduleTitle}
-                                </p>
-                                <p className="mt-1 text-[11px] leading-snug text-text-tertiary">
-                                  {moduleMeta?.description ?? 'Open this module to continue work.'}
-                                </p>
-                              </div>
-                              {isComplete && (
-                                <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-500" />
-                              )}
-                            </div>
-
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                                isComplete
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : instance.status === 'error'
-                                    ? 'bg-red-50 text-red-600'
-                                    : instance.status === 'generating'
-                                      ? 'bg-amber-50 text-amber-700'
-                                      : 'bg-surface-subtle text-text-secondary'
-                              }`}
-                              >
-                                {formatModuleStatus(instance.status)}
-                              </span>
-                              <span className="text-[10px] text-text-tertiary">
-                                Open
+                            <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash">
+                              <span className="[&>svg]:w-5 [&>svg]:h-5 text-accent">
+                                {moduleMeta?.icon}
                               </span>
                             </div>
+                            <span className="text-xs font-medium text-text-secondary leading-snug text-left">
+                              {moduleName}
+                            </span>
                           </button>
-                        );
-                      })
-                    )}
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              disabled={isRemoving}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleRemoveModule(instance.id);
+                              }}
+                              title="Remove from framework plan"
+                              className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {isRemoving ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               ))}

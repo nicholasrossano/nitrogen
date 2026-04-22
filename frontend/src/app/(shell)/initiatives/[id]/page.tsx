@@ -939,7 +939,6 @@ function InitiativePageContent() {
             ) : (
               <FrameworkPlanView
                 initiativeId={initiativeId}
-                projectPlan={projectPlan}
                 readOnly={Boolean(isViewer)}
                 onOpenModule={(module) => handleOpenFrameworkModule({
                   instanceId: module.id,
