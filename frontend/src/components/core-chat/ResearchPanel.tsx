@@ -89,6 +89,101 @@ function RichHtmlContent({ html }: { html: string }) {
   );
 }
 
+function hasTableMarkup(html?: string | null): boolean {
+  return Boolean(html && /<table[\s>]/i.test(html));
+}
+
+function stripHtml(text: string): string {
+  return text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function findSpreadsheetPreviewHtml(
+  fileType: string | null,
+  selected: EvidenceChunkDetail | null,
+  chunks: EvidenceChunkDetail[],
+): string | null {
+  if (!selected || (fileType !== 'xlsx' && fileType !== 'xls')) return null;
+
+  if (hasTableMarkup(selected.content_html)) {
+    return selected.content_html ?? null;
+  }
+
+  const selectedIdx = chunks.findIndex((c) => c.id === selected.id);
+  if (selectedIdx < 0) return selected.content_html ?? null;
+
+  const maxDistance = 2;
+  const neighbors = [];
+  for (let offset = 1; offset <= maxDistance; offset += 1) {
+    const left = chunks[selectedIdx - offset];
+    const right = chunks[selectedIdx + offset];
+    if (left) neighbors.push(left);
+    if (right) neighbors.push(right);
+  }
+
+  const tableNeighbor = neighbors.find((c) => hasTableMarkup(c.content_html));
+  if (!tableNeighbor?.content_html) {
+    return selected.content_html ?? null;
+  }
+
+  if (selected.content_html?.trim()) {
+    return `${selected.content_html}\n${tableNeighbor.content_html}`;
+  }
+  return tableNeighbor.content_html;
+}
+
+function SpreadsheetTextContent({ text }: { text: string }) {
+  const rows = useMemo(() => {
+    return text
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0)
+      .filter((line) => !/^\[Sheet:/i.test(line))
+      .map((line) => line.split('\t').map((cell) => cell.trim()))
+      .filter((row) => row.length > 1 || row[0]?.length > 0)
+      .slice(0, 8);
+  }, [text]);
+
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const safeColumnCount = Math.min(columnCount, 8);
+  const looksTabular = safeColumnCount > 1 && rows.length > 0;
+
+  if (!looksTabular) {
+    return (
+      <p className="text-[13px] leading-relaxed text-text-secondary whitespace-pre-wrap">
+        {text}
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[12px]">
+        <tbody>
+          {rows.map((row, rowIdx) => (
+            <tr key={`${rowIdx}-${row.join('|')}`}>
+              {Array.from({ length: safeColumnCount }, (_, cellIdx) => {
+                const value = row[cellIdx] ?? '';
+                const isHeader = rowIdx === 0;
+                return (
+                  <td
+                    key={cellIdx}
+                    className={[
+                      'border border-stroke-subtle px-2 py-1.5 align-top',
+                      isHeader ? 'bg-surface-subtle font-medium text-text-primary' : 'text-text-secondary',
+                    ].join(' ')}
+                  >
+                    {value}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function SnippetCard({
   citation,
   onOpenFull,
@@ -101,6 +196,7 @@ export function SnippetCard({
   maxLines?: number;
 }) {
   const [chunk, setChunk] = useState<EvidenceChunkDetail | null>(null);
+  const [chunks, setChunks] = useState<EvidenceChunkDetail[]>([]);
   const [fileType, setFileType] = useState<string | null>(null);
   const [filename, setFilename] = useState(citation.source_title || '');
   const [loading, setLoading] = useState(true);
@@ -118,6 +214,7 @@ export function SnippetCard({
         if (cancelled) return;
         if (res.filename) setFilename(res.filename);
         setFileType(res.file_type || null);
+        setChunks(res.chunks);
 
         let match: EvidenceChunkDetail | undefined;
         if (citation.chunk_id) {
@@ -137,8 +234,14 @@ export function SnippetCard({
 
   const renderContent = () => {
     if (!chunk) return null;
+    const spreadsheetHtml = findSpreadsheetPreviewHtml(fileType, chunk, chunks);
+    const isSpreadsheet = fileType === 'xlsx' || fileType === 'xls';
+    const spreadsheetText = stripHtml(chunk.content);
 
     // Always render rich HTML when available (tables, formatted DOCX/XLSX content)
+    if (spreadsheetHtml) {
+      return <RichHtmlContent html={spreadsheetHtml} />;
+    }
     if (chunk.content_html) {
       return <RichHtmlContent html={chunk.content_html} />;
     }
@@ -153,8 +256,12 @@ export function SnippetCard({
       );
     }
 
+    if (isSpreadsheet) {
+      return <SpreadsheetTextContent text={spreadsheetText} />;
+    }
+
     const text = chunk.content;
-    const maxChars = maxLines ? maxLines * 120 : 400;
+    const maxChars = 400;
     const truncated = text.length > maxChars ? text.slice(0, maxChars).trimEnd() + '\u2026' : text;
     const lineClampStyle = maxLines ? { WebkitLineClamp: maxLines } : undefined;
     return (
@@ -164,7 +271,7 @@ export function SnippetCard({
           : 'text-[13px] leading-relaxed text-text-secondary whitespace-pre-wrap'}
         style={lineClampStyle}
       >
-        {truncated}
+        {maxLines ? text : truncated}
       </p>
     );
   };
@@ -183,7 +290,7 @@ export function SnippetCard({
         </span>
       </div>
 
-      <div className={constrained ? 'px-3 py-2.5 flex-1 min-h-0 overflow-hidden' : 'px-3 py-2.5'}>
+      <div className={constrained ? 'px-3 py-2.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden' : 'px-3 py-2.5'}>
         {loading ? (
           <div className="flex items-center gap-2 py-3">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />

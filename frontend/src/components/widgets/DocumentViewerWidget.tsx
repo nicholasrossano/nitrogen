@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { FileText, Loader2, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import { ZoomableContainer } from '@/components/viewers/ZoomableContainer';
@@ -43,10 +43,8 @@ type FileType = 'pdf' | 'docx' | 'xlsx' | 'xls' | 'text' | string;
 export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewerWidgetProps) {
   const evidenceDocId = data.evidence_doc_id as string | undefined;
   const chunkId = data.chunk_id as string | null | undefined;
-  const sourceTitle = data.source_title as string | undefined;
 
   const [fileType, setFileType] = useState<FileType | null>(null);
-  const [filename, setFilename] = useState(sourceTitle || '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +69,6 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
 
         const ft = chunkRes.file_type || 'text';
         setFileType(ft);
-        if (chunkRes.filename) setFilename(chunkRes.filename);
 
         if (chunkId) {
           const match = chunkRes.chunks.find((c: EvidenceChunkDetail) => c.id === chunkId);
@@ -101,7 +98,6 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
           if (cancelled) return;
           setFileType(res.file_type || 'text');
           setChunks([{ id: 'full', chunk_index: 0, content: res.content }]);
-          if (res.filename) setFilename(res.filename);
         } catch {
           if (!cancelled) setError('Could not load document');
         }
@@ -148,20 +144,16 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
   // Native viewers
   if (fileData) {
     return (
-      <div className="h-full flex flex-col">
-        <div className="flex items-center gap-2 px-4 py-3 min-h-[3rem] border-b border-divider flex-shrink-0">
-          <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-          <h3 className="text-sm font-medium text-text-primary truncate flex-1 min-w-0">{filename}</h3>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-subtle transition-colors flex-shrink-0 text-text-tertiary hover:text-text-secondary"
-              aria-label="Close document viewer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+      <div className="h-full flex flex-col relative">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded bg-white/80 hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary"
+            aria-label="Close document viewer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         <div className="flex-1 min-h-0">
           {fileType === 'pdf' && (
             <PdfViewer fileData={fileData} initialPage={initialPage} />
@@ -179,21 +171,16 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
 
   // Fallback: plain-text chunk rendering
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-3 min-h-[3rem] border-b border-divider flex-shrink-0">
-        <FileText className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-        <h3 className="text-sm font-medium text-text-primary truncate flex-1 min-w-0">{filename}</h3>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-subtle transition-colors flex-shrink-0 text-text-tertiary hover:text-text-secondary"
-            aria-label="Close document viewer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
+    <div className="h-full flex flex-col relative">
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded bg-white/80 hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary"
+          aria-label="Close document viewer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
       <ZoomableContainer className="flex-1 px-5 py-4">
         <div className="space-y-4">
           {chunks.map((chunk) => {
