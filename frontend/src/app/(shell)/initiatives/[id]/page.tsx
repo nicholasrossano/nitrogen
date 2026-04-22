@@ -54,6 +54,74 @@ interface PendingDeepDiveRequest {
   state: PlanWorkspaceInspectorState;
 }
 
+interface StoredInitiativeWorkspaceUiState {
+  panelVisibility: {
+    overview: { workspace: boolean; chat: boolean };
+    modules: { workspace: boolean; chat: boolean };
+    framework: { workspace: boolean; chat: boolean };
+  };
+  chatPanelWidthPercent: number;
+  workspaceTabs: WorkspacePanelTab[];
+  activeWorkspaceTabId: string | null;
+}
+
+const DEFAULT_PANEL_VISIBILITY: StoredInitiativeWorkspaceUiState['panelVisibility'] = {
+  overview: { workspace: true, chat: false },
+  modules: { workspace: true, chat: false },
+  framework: { workspace: true, chat: false },
+};
+
+function readStoredWorkspaceUiState(storageKey: string): StoredInitiativeWorkspaceUiState | null {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredInitiativeWorkspaceUiState>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.panelVisibility || !parsed.workspaceTabs) return null;
+
+    const tabs = Array.isArray(parsed.workspaceTabs)
+      ? parsed.workspaceTabs.filter(
+          (tab): tab is WorkspacePanelTab =>
+            Boolean(tab) &&
+            typeof tab === 'object' &&
+            typeof (tab as { id?: unknown }).id === 'string' &&
+            typeof (tab as { title?: unknown }).title === 'string' &&
+            typeof (tab as { kind?: unknown }).kind === 'string',
+        )
+      : [];
+
+    const parsedWidth = Number(parsed.chatPanelWidthPercent);
+    const clampedWidth = Number.isFinite(parsedWidth)
+      ? Math.min(MAX_CHAT_PANEL_PERCENT, Math.max(MIN_CHAT_PANEL_PERCENT, parsedWidth))
+      : DEFAULT_CHAT_PANEL_PERCENT;
+
+    const activeWorkspaceTabId =
+      typeof parsed.activeWorkspaceTabId === 'string' &&
+      tabs.some((tab) => tab.id === parsed.activeWorkspaceTabId)
+        ? parsed.activeWorkspaceTabId
+        : null;
+
+    return {
+      panelVisibility: parsed.panelVisibility,
+      chatPanelWidthPercent: clampedWidth,
+      workspaceTabs: tabs,
+      activeWorkspaceTabId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredWorkspaceUiState(storageKey: string, state: StoredInitiativeWorkspaceUiState) {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // Ignore private mode / quota errors.
+  }
+}
+
 function inspectorRequestKey(state: PlanWorkspaceInspectorState): string {
   return `${state.groupName}::${state.item.id}`;
 }
@@ -63,20 +131,26 @@ function InitiativePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initiativeId = params.id as string;
+  const workspaceUiStorageKey = `nitrogen_initiative_workspace_ui_${initiativeId}`;
+  const frameworkChatTabsStorageKey = `nitrogen_framework_chat_tabs_${initiativeId}`;
 
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const chatSendRef = useRef<((content: string, toolHint?: string) => void) | null>(null);
 
   const viewParam = searchParams.get('view');
   const viewFromUrl = viewFromSearchParam(viewParam);
+  const initialWorkspaceUiRef = useRef<StoredInitiativeWorkspaceUiState | null>(null);
+  if (!initialWorkspaceUiRef.current) {
+    initialWorkspaceUiRef.current = readStoredWorkspaceUiState(workspaceUiStorageKey);
+  }
 
   const [activeView, setActiveView] = useState<InitiativeView>(viewFromUrl);
-  const [panelVisibility, setPanelVisibility] = useState({
-    overview: { workspace: true, chat: false },
-    modules: { workspace: true, chat: false },
-    framework: { workspace: true, chat: false },
-  });
-  const [chatPanelWidthPercent, setChatPanelWidthPercent] = useState(DEFAULT_CHAT_PANEL_PERCENT);
+  const [panelVisibility, setPanelVisibility] = useState(
+    initialWorkspaceUiRef.current?.panelVisibility ?? DEFAULT_PANEL_VISIBILITY,
+  );
+  const [chatPanelWidthPercent, setChatPanelWidthPercent] = useState(
+    initialWorkspaceUiRef.current?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT,
+  );
   const [isResizingChat, setIsResizingChat] = useState(false);
 
   const [pageReady, setPageReady] = useState(false);
@@ -98,8 +172,12 @@ function InitiativePageContent() {
   } | null>(null);
   const [preferArtifactsTab, setPreferArtifactsTab] = useState(false);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
-  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>([]);
-  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(null);
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>(
+    initialWorkspaceUiRef.current?.workspaceTabs ?? [],
+  );
+  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(
+    initialWorkspaceUiRef.current?.activeWorkspaceTabId ?? null,
+  );
   const onboardingSeenRef = useRef(false);
   const frameworkDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
   const modulesDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
@@ -377,14 +455,12 @@ function InitiativePageContent() {
 
   useEffect(() => {
     if (!initiativeId) return;
+    const storedWorkspaceUi = readStoredWorkspaceUiState(workspaceUiStorageKey);
 
-    setPanelVisibility({
-      overview: { workspace: true, chat: false },
-      modules: { workspace: true, chat: false },
-      framework: { workspace: true, chat: false },
-    });
-    setWorkspaceTabs([]);
-    setActiveWorkspaceTabId(null);
+    setPanelVisibility(storedWorkspaceUi?.panelVisibility ?? DEFAULT_PANEL_VISIBILITY);
+    setChatPanelWidthPercent(storedWorkspaceUi?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT);
+    setWorkspaceTabs(storedWorkspaceUi?.workspaceTabs ?? []);
+    setActiveWorkspaceTabId(storedWorkspaceUi?.activeWorkspaceTabId ?? null);
     setShowInspector(false);
     setFrameworkDeepDiveRequest(null);
     setModulesDeepDiveRequest(null);
@@ -412,7 +488,16 @@ function InitiativePageContent() {
     loadDriveLinkedFiles(initiativeId).then(() => {
       syncDriveFiles(initiativeId).catch(() => {});
     });
-  }, [initiativeId, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles]);
+  }, [initiativeId, workspaceUiStorageKey, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles]);
+
+  useEffect(() => {
+    writeStoredWorkspaceUiState(workspaceUiStorageKey, {
+      panelVisibility,
+      chatPanelWidthPercent,
+      workspaceTabs,
+      activeWorkspaceTabId,
+    });
+  }, [workspaceUiStorageKey, panelVisibility, chatPanelWidthPercent, workspaceTabs, activeWorkspaceTabId]);
 
   useEffect(() => {
     if (!pageReady) return;
@@ -749,6 +834,7 @@ function InitiativePageContent() {
           <ProjectChatTabsPanel
             initiativeId={initiativeId}
             researchMode={false}
+            sessionStorageKey={frameworkChatTabsStorageKey}
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceModule={handleOpenWorkspaceModule}
