@@ -173,6 +173,7 @@ function InitiativePageContent() {
   const workspaceOpen = overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen;
   const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
   const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
+  const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${initiativeId}`;
   const showPrimaryPanel = activeView === 'files' || workspaceOpen;
   const isChatPrimaryMode = activeView === 'framework' && !hasProjectPlan;
   const workspaceToggleEnabled = !isViewer && (
@@ -800,6 +801,7 @@ function InitiativePageContent() {
         <ProjectChatTabsPanel
           initiativeId={initiativeId}
           researchMode={false}
+          sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
           pendingAutoSend={pendingOverviewAutoSend}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
@@ -818,6 +820,7 @@ function InitiativePageContent() {
         <ProjectChatTabsPanel
           initiativeId={initiativeId}
           researchMode={false}
+          sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
           activeModuleContext={activeModuleContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
@@ -835,6 +838,7 @@ function InitiativePageContent() {
         <ProjectChatTabsPanel
           initiativeId={initiativeId}
           researchMode={false}
+          sessionStorageKey={sideChatTabsStorageKey}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onCitationClick={handleCitationClick}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
