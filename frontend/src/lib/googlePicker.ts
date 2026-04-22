@@ -33,6 +33,13 @@ function loadGoogleApiScript(): Promise<void> {
   gapiScriptPromise = new Promise<void>((resolve, reject) => {
     const existingScript = document.getElementById('google-api-script') as HTMLScriptElement | null;
     if (existingScript) {
+      // If the script is already loaded, resolve immediately instead of
+      // waiting for a load event that has already fired.
+      // @ts-ignore
+      if (window.gapi || existingScript.dataset.loaded === 'true') {
+        resolve();
+        return;
+      }
       existingScript.addEventListener('load', () => resolve(), { once: true });
       existingScript.addEventListener(
         'error',
@@ -47,7 +54,10 @@ function loadGoogleApiScript(): Promise<void> {
     script.src = 'https://apis.google.com/js/api.js';
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    };
     script.onerror = () => reject(new Error('Failed to load Google API script.'));
     document.body.appendChild(script);
   }).catch((err) => {
