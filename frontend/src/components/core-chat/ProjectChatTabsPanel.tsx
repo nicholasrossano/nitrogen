@@ -233,7 +233,7 @@ export function ProjectChatTabsPanel({
   const [tabs, setTabs] = useState<ProjectChatTab[]>(() => initialStateRef.current!.tabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => initialStateRef.current!.activeTabId ?? initialStateRef.current!.tabs[0].id);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
+  const [sessionsLoadStatus, setSessionsLoadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [deepDiveByTabId, setDeepDiveByTabId] = useState<Record<string, PendingDeepDiveContext>>({});
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -291,6 +291,43 @@ export function ProjectChatTabsPanel({
       return;
     }
 
+    const reusablePlaceholderTab =
+      tabs.find((tab) =>
+        tab.id === resolvedActiveTabId &&
+        !tab.chatId &&
+        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      ) ??
+      tabs.find((tab) =>
+        !tab.chatId &&
+        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      );
+
+    if (reusablePlaceholderTab) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === reusablePlaceholderTab.id
+            ? {
+                ...tab,
+                title: pendingDeepDive.state.item.title,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(reusablePlaceholderTab.id);
+      setDeepDiveByTabId((prev) => ({
+        ...prev,
+        [reusablePlaceholderTab.id]: {
+          ...pendingDeepDive,
+          collapsed: pendingDeepDive.collapsed ?? prev[reusablePlaceholderTab.id]?.collapsed ?? false,
+        },
+      }));
+      handledDeepDiveRequestIdsRef.current.add(pendingDeepDive.requestId);
+      onPendingDeepDiveHandled?.();
+      return;
+    }
+
     const tab = makeTab(pendingDeepDive.state.item.title, false, false);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
@@ -303,7 +340,7 @@ export function ProjectChatTabsPanel({
     }));
     handledDeepDiveRequestIdsRef.current.add(pendingDeepDive.requestId);
     onPendingDeepDiveHandled?.();
-  }, [onPendingDeepDiveHandled, pendingDeepDive]);
+  }, [onPendingDeepDiveHandled, pendingDeepDive, resolvedActiveTabId, tabs]);
 
   const handleDeepDiveCollapsedChange = useCallback((tabId: string, collapsed: boolean) => {
     setDeepDiveByTabId((prev) => {
@@ -334,10 +371,10 @@ export function ProjectChatTabsPanel({
           messages: [],
         })),
       );
+      setSessionsLoadStatus('success');
     } catch (err) {
       console.warn('Failed to load chat sessions:', err);
-    } finally {
-      setHasLoadedSessions(true);
+      setSessionsLoadStatus('error');
     }
   }, [initiativeId]);
 
@@ -346,7 +383,7 @@ export function ProjectChatTabsPanel({
   }, [loadSessions]);
 
   useEffect(() => {
-    if (!hasLoadedSessions) return;
+    if (sessionsLoadStatus !== 'success') return;
     const sessionIds = new Set(sessions.map((session) => session.id));
     const staleTabIds = tabs
       .filter((tab) => tab.chatId && !sessionIds.has(tab.chatId))
@@ -375,7 +412,7 @@ export function ProjectChatTabsPanel({
       });
       return next;
     });
-  }, [hasLoadedSessions, sessions, tabs, researchMode]);
+  }, [sessionsLoadStatus, sessions, tabs, researchMode]);
 
   const findExistingNewChatTab = useCallback(
     () =>
