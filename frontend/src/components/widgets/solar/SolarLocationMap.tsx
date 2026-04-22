@@ -40,10 +40,12 @@ interface SolarLocationMapProps {
 function DraggableMarker({
   lat,
   lon,
+  draggable,
   onDragEnd,
 }: {
   lat: number;
   lon: number;
+  draggable: boolean;
   onDragEnd: (lat: number, lon: number) => void;
 }) {
   const markerRef = useRef<L.Marker>(null);
@@ -59,7 +61,7 @@ function DraggableMarker({
 
   return (
     <Marker
-      draggable
+      draggable={draggable}
       icon={iconRef.current}
       position={[lat, lon]}
       ref={markerRef}
@@ -276,7 +278,7 @@ export default function SolarLocationMap({
           >
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
             <InvalidateSizeOnMount />
-            <DraggableMarker lat={displayLat} lon={displayLon} onDragEnd={handleMapClick} />
+            <DraggableMarker lat={displayLat} lon={displayLon} draggable={!disabled} onDragEnd={handleMapClick} />
             <MapClickHandler onClick={handleMapClick} />
             <RecenterMap lat={displayLat} lon={displayLon} zoom={targetZoom} />
           </MapContainer>

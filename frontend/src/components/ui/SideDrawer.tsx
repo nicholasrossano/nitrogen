@@ -15,6 +15,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
+import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 
 export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'workspace';
 
@@ -464,38 +465,24 @@ export function SideDrawer() {
           >
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
 
-            <div
+            <UploadDropzone
+              isDragging={isDragging}
+              uploading={uploading}
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               onClick={handleFileSelect}
-              className={`
-                flex flex-col items-center justify-center gap-2 min-h-[140px] px-2 rounded-lg cursor-pointer
-                border border-dashed transition-colors duration-150
-                ${isDragging
-                  ? 'border-accent/60 bg-accent-wash/60 text-accent'
-                  : 'border-[#c8c4be] bg-black/[0.04] hover:border-[#aaa69f] hover:bg-black/[0.07]'
-                }
-              `}
-            >
-              {uploading ? (
-                <Loader2 className="w-4 h-4 text-text-secondary animate-spin" />
-              ) : (
-                <FileUp className={`w-4 h-4 ${isDragging ? 'text-accent' : 'text-text-secondary'}`} />
-              )}
-              <span className={`text-[11px] text-center leading-tight ${isDragging ? 'text-accent' : 'text-text-secondary'}`}>
-                {isDragging ? 'Drop files or folder' : 'Upload files'}
-              </span>
-            </div>
-            <button
+              dragLabel="Drop files or folder"
+              idleLabel="Upload files"
+              className="min-h-[140px] px-2"
+            />
+            <UploadActionButton
               onClick={handleFolderSelect}
               disabled={uploading}
-              className="flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-text-secondary bg-black/[0.04] enabled:hover:bg-black/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
-              Select folder
-            </button>
+              icon={<FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />}
+              label="Select folder"
+            />
 
             {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
               <div className="flex flex-col gap-1">

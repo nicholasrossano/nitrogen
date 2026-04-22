@@ -106,7 +106,7 @@ def build_deliverable_title(module: BaseModule, content: dict[str, Any] | None) 
 # Initiative context helpers
 # ---------------------------------------------------------------------------
 
-async def get_initiative_context(db: AsyncSession, initiative_id: Any) -> dict[str, str]:
+async def get_initiative_context(db: AsyncSession, initiative_id: Any) -> dict[str, Any]:
     initiative = await db.get(Initiative, initiative_id)
     if initiative is None:
         return {}
@@ -116,6 +116,7 @@ async def get_initiative_context(db: AsyncSession, initiative_id: Any) -> dict[s
         "geography": initiative.geography or "",
         "target_population": initiative.target_population or "",
         "project_type": initiative.project_type or "",
+        "project_plan": initiative.project_plan or {},
         "tool_inputs": dict(initiative.tool_inputs or {}),
     }
 

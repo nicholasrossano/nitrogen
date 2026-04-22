@@ -216,20 +216,39 @@ class CarbonTool(BaseModule):
         items = inputs_data.get("items", [])
 
         known_values: dict[str, Any] = {}
+        stage_input_meta: dict[str, dict[str, Any]] = {}
         method_pack = None
         for item in items:
             content = item.get("content", {})
             var = content.get("variable", "")
+            explicit_field_name = content.get("field_name")
+            key = explicit_field_name if isinstance(explicit_field_name, str) and explicit_field_name else var.lower().replace(" ", "_")
             val = content.get("value")
+            stage_input_meta[key] = {
+                "value": val,
+                "status": content.get("status"),
+                "source": content.get("source"),
+            }
             if val is None:
                 continue
-            key = var.lower().replace(" ", "_")
             if "method_pack" in key or "project_type" in key:
                 method_pack = val
             else:
                 known_values[key] = val
 
-        return await self.recalculate_from_values(method_pack=method_pack, known_values=known_values)
+        widget_data = await self.recalculate_from_values(method_pack=method_pack, known_values=known_values)
+        result_inputs = widget_data.get("inputs")
+        if isinstance(result_inputs, dict):
+            for field_name, meta in stage_input_meta.items():
+                current = result_inputs.get(field_name)
+                if not isinstance(current, dict):
+                    continue
+                current["value"] = meta.get("value")
+                if isinstance(meta.get("status"), str):
+                    current["status"] = meta["status"]
+                if isinstance(meta.get("source"), str):
+                    current["source"] = meta["source"]
+        return widget_data
 
     async def recalculate_from_values(
         self,

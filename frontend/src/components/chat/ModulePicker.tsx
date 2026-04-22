@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Calculator, Leaf, X, Check, Sun, Users, Map, ShieldCheck, BarChart2 } from 'lucide-react';
+import { Plus, Calculator, Leaf, X, Check, Sun, Users, Map, ShieldCheck, BarChart2, Network } from 'lucide-react';
 
 export interface ModuleOption {
   id: string;
@@ -45,6 +45,12 @@ export const ALL_MODULES: ModuleOption[] = [
     icon: <Map className="w-3.5 h-3.5" />,
   },
   {
+    id: 'implementation_plan',
+    name: 'Implementation Plan',
+    description: 'Convert your project framework into a phased execution plan',
+    icon: <Network className="w-3.5 h-3.5" />,
+  },
+  {
     id: 'esmp',
     name: 'Environmental & Social Management Plan',
     description: 'Draft an IFC-aligned ESMP for DFI submission',
@@ -75,7 +81,7 @@ export interface ModuleCategory {
 
 export const MODULE_CATEGORIES: ModuleCategory[] = [
   { id: 'opportunity', name: 'Opportunity Discovery', moduleIds: ['landscape_mapping'] },
-  { id: 'definition', name: 'Project Definition', moduleIds: ['stakeholder_assessment'] },
+  { id: 'definition', name: 'Project Definition', moduleIds: ['stakeholder_assessment', 'implementation_plan'] },
   { id: 'feasibility', name: 'Feasibility & Option Analysis', moduleIds: ['lcoe_model', 'solar_estimate'] },
   { id: 'impact', name: 'Impact Assessment', moduleIds: ['carbon_model'] },
   { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['esmp', 'mel_plan'] },

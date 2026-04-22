@@ -180,15 +180,23 @@ class PVWattsTool(BaseModule):
         inputs_data = (confirmed_stages.get("inputs") or {}).get("data") or {}
         items = inputs_data.get("items", [])
 
-        # Reconstruct serialized_inputs from item rows
+        # Reconstruct known_values from confirmed stage rows.
+        # Keep explicit field_name as the canonical key so the computed widget
+        # can stay in sync with stage-table statuses/provenance.
         known_values: dict[str, Any] = {}
+        stage_input_meta: dict[str, dict[str, Any]] = {}
         for item in items:
             content = item.get("content", {})
-            var = content.get("variable", "")
+            key = content.get("field_name") or str(content.get("variable", "")).lower().replace(" ", "_")
             val = content.get("value")
+            if key:
+                stage_input_meta[key] = {
+                    "value": val,
+                    "status": content.get("status"),
+                    "source": content.get("source"),
+                }
             if val is None:
                 continue
-            key = var.lower().replace(" ", "_")
             known_values[key] = val
 
         adapter = get_adapter_registry().get("pvwatts")
@@ -204,7 +212,19 @@ class PVWattsTool(BaseModule):
             request_id="pvwatts:compute_stage",
         )
         result = await adapter.execute(ctx, None, {"known_values": known_values, "resolve_address": True})
-        return dict(result.output)
+        widget_data = dict(result.output)
+        result_inputs = widget_data.get("inputs")
+        if isinstance(result_inputs, dict):
+            for field_name, meta in stage_input_meta.items():
+                current = result_inputs.get(field_name)
+                if not isinstance(current, dict):
+                    continue
+                current["value"] = meta.get("value")
+                if isinstance(meta.get("status"), str):
+                    current["status"] = meta["status"]
+                if isinstance(meta.get("source"), str):
+                    current["source"] = meta["source"]
+        return widget_data
 
     async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
         results_data = (confirmed_stages.get("results") or {}).get("data") or {}
