@@ -153,7 +153,7 @@ export function SideDrawer() {
       className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''} ${disabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
     >
       <Icon
-        className="w-4 h-4 flex-shrink-0"
+        className={`w-4 h-4 flex-shrink-0 ${activeItem === key ? '[&_*]:fill-current' : ''}`}
       />
       <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
         {label}
@@ -550,7 +550,7 @@ export function SideDrawer() {
             className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''} ${filesDisabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
           >
             <FolderOpen
-              className="w-4 h-4 flex-shrink-0"
+              className={`w-4 h-4 flex-shrink-0 ${activeItem === 'files' ? '[&_*]:fill-current' : ''}`}
             />
             <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               Files
