@@ -84,6 +84,12 @@ export function ProjectWorkspaceEditorPanel({
     // hub stays visible even after parent acknowledges the launch event.
     setLocalWorkspaceLaunchMode(workspaceLaunchMode);
   }, [workspaceLaunchMode]);
+  useEffect(() => {
+    // If a tab becomes active via an external action (e.g. opening a document
+    // from side chat), dismiss the local hub overlay so the active tab renders.
+    if (!activeTabId) return;
+    setLocalWorkspaceLaunchMode('idle');
+  }, [activeTabId]);
   const effectiveWorkspaceLaunchMode =
     localWorkspaceLaunchMode !== 'idle' ? localWorkspaceLaunchMode : workspaceLaunchMode;
   const showWorkspaceHub = effectiveWorkspaceLaunchMode !== 'idle' || !activeTabId;
@@ -150,6 +156,22 @@ export function ProjectWorkspaceEditorPanel({
           </div>
           {showModuleActions && (
             <div className="flex-shrink-0 flex items-center gap-0.5 px-1.5 border-l border-divider">
+              <button
+                onClick={() => {
+                  setLocalWorkspaceLaunchMode('open');
+                  onActiveTabChange(null);
+                }}
+                aria-pressed={openModeActive}
+                className={[
+                  'flex items-center justify-center w-7 h-7 rounded transition-colors',
+                  openModeActive
+                    ? 'bg-white text-text-primary shadow-subtle'
+                    : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
+                ].join(' ')}
+                title="Open module"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+              </button>
               {frameworkPlanModules && frameworkPlanModules.length > 0 && onNewModule && (
                 <div className="relative" ref={newModuleRef}>
                   <button
@@ -193,22 +215,6 @@ export function ProjectWorkspaceEditorPanel({
                   )}
                 </div>
               )}
-              <button
-                onClick={() => {
-                  setLocalWorkspaceLaunchMode('open');
-                  onActiveTabChange(null);
-                }}
-                aria-pressed={openModeActive}
-                className={[
-                  'flex items-center justify-center w-7 h-7 rounded transition-colors',
-                  openModeActive
-                    ? 'bg-white text-text-primary shadow-subtle'
-                    : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
-                ].join(' ')}
-                title="Open module"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-              </button>
             </div>
           )}
         </div>
