@@ -42,9 +42,9 @@ export function ProjectOnboardingHeader({
           Project Onboarding
         </p>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-text-secondary">
-          Start with a short description, upload supporting materials, then review the proposed
-          framework outline in chat. After confirmation, the full project plan is generated and
-          the rest of the workspace unlocks.
+          Start with a short description, upload supporting materials, then review the
+          recommended framework modules in chat. After confirmation, the full project plan is
+          generated and the rest of the workspace unlocks.
         </p>
       </div>
 
@@ -60,8 +60,8 @@ export function ProjectOnboardingHeader({
           Icon={FileUp}
         />
         <StepRow
-          title="Confirm the framework outline"
-          detail="Review and confirm the proposed plan. This will be the framework for your project."
+          title="Confirm recommended modules"
+          detail="Review the suggested modules for your project and confirm the framework you want to complete."
           Icon={Map}
         />
       </div>

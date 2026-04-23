@@ -168,6 +168,7 @@ interface Props {
   stageData: StageState['data'];
   /** Items from the prior list stage (used as category groupings) */
   categoryItems: BuildItem[];
+  interactionLocked?: boolean;
   readOnly: boolean;
   onChanged: () => void;
   onAddToChat?: (text: string) => void;
@@ -180,6 +181,7 @@ export function CategorizedWorkspaceStage({
   stageDef,
   stageData,
   categoryItems,
+  interactionLocked = false,
   readOnly,
   onChanged,
 }: Props) {
@@ -188,6 +190,7 @@ export function CategorizedWorkspaceStage({
   const [expandedByGroup, setExpandedByGroup] = useState<Record<string, boolean>>({});
 
   const isRecord = stageDef.component === 'record';
+  const interactionsDisabled = readOnly || interactionLocked;
   const items: BuildItem[] = useMemo(() => stageData?.items ?? [], [stageData?.items]);
   const records: Record<string, Record<string, any>> = useMemo(() => stageData?.records ?? {}, [stageData?.records]);
   const fields: FieldDef[] = stageDef.fields ?? [];
@@ -331,18 +334,18 @@ export function CategorizedWorkspaceStage({
                   [row.group.id]: !(prev[row.group.id] ?? true),
                 }))
               }
-              onDeleteItem={!readOnly ? handleDelete : undefined}
+              onDeleteItem={!interactionsDisabled ? handleDelete : undefined}
               onOpenItem={isRecord ? (planItem) => {
                 const selected = row.buildItems.find((item) => item.id === planItem.id) ?? null;
                 setSelectedItem((prev) => (prev?.id === selected?.id ? null : selected));
               } : undefined}
-              onAddItem={!readOnly ? (groupId, title) => handleAdd(groupId, title) : undefined}
+              onAddItem={!interactionsDisabled ? (groupId, title) => handleAdd(groupId, title) : undefined}
               showItemKindBadge={false}
               showItemCompleteToggle={false}
               showItemBranchDelete={false}
-              showItemRightActions={!readOnly}
-              enableItemSorting={!readOnly}
-              onReorderItems={!readOnly ? handleReorderWithinGroup : undefined}
+              showItemRightActions={!interactionsDisabled}
+              enableItemSorting={!interactionsDisabled}
+              onReorderItems={!interactionsDisabled ? handleReorderWithinGroup : undefined}
             />
           ))}
         </div>
@@ -358,7 +361,7 @@ export function CategorizedWorkspaceStage({
             item={selectedItem}
             record={records[selectedItem.id]}
             fields={fields}
-            readOnly={readOnly}
+            readOnly={interactionsDisabled}
             onClose={() => setSelectedItem(null)}
             onEnrich={() => handleEnrich(selectedItem.id)}
             onSaveField={(fieldName, value) => handleSaveField(selectedItem.id, fieldName, value)}

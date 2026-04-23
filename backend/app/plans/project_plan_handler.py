@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules import get_module_registry
 from app.plans.base import BasePlanHandler, PlanDefinition
 from app.services.project_plan import ProjectPlanService
 
@@ -25,7 +26,7 @@ class ProjectPlanHandler(BasePlanHandler):
             name="Framework",
             description="Structured plan for project approvals, financing, and design workstreams.",
             primary_ui_object="plan_workspace",
-            structure_widget_type="plan_structure_confirm",
+            structure_widget_type="tool_checklist",
             summary_widget_type="plan_summary",
         )
 
@@ -34,7 +35,36 @@ class ProjectPlanHandler(BasePlanHandler):
         initiative,
         chat_history: list | None = None,
     ) -> list[dict]:
-        return await self.service.propose_categories(initiative=initiative, chat_history=chat_history)
+        registry = get_module_registry()
+
+        if initiative.selected_tools:
+            selected = []
+            for module_id in initiative.selected_tools:
+                module = registry.get_module(module_id)
+                if module:
+                    selected.append(
+                        {
+                            "tool": module.definition.to_dict(),
+                            "confidence": 1.0,
+                            "recommended": True,
+                        }
+                    )
+            if selected:
+                return selected
+
+        recommendations = registry.recommend_modules(
+            project_description=initiative.project_description or initiative.title or "",
+            project_type=initiative.project_type,
+        )
+
+        return [
+            {
+                "tool": module.definition.to_dict(),
+                "confidence": confidence,
+                "recommended": confidence >= 0.35,
+            }
+            for module, confidence in recommendations
+        ]
 
     async def generate_plan(
         self,
@@ -53,19 +83,20 @@ class ProjectPlanHandler(BasePlanHandler):
         return self.attach_metadata(plan)
 
     def build_structure_widget_data(self, structure: list[dict]) -> dict:
+        recommended_count = len([item for item in structure if item.get("recommended")])
         return {
-            "planType": self.definition.id,
-            "title": "Proposed Plan Structure",
+            "title": "Recommended Framework Modules",
             "subtitle": (
-                f"Proposing the following {len(structure)} categories. Review and confirm to "
-                "generate the full breakdown, or propose changes in the chat."
+                "I've mapped the modules that look most relevant for this project. Remove any "
+                "that do not fit, then confirm to set up the framework plan."
             ),
             "pendingTitle": "Building your framework...",
-            "pendingSubtitleTemplate": "Generating detailed breakdown for {count} categories",
+            "pendingSubtitle": (
+                f"Setting up {recommended_count or len(structure)} recommended module"
+                f"{'' if (recommended_count or len(structure)) == 1 else 's'}"
+            ),
             "successMessage": "Framework generated. View it in the Framework tab.",
-            "footerHint": "Remove categories above · Request changes via the chat",
-            "confirmLabel": "Confirm & Generate Plan",
-            "minSelected": 2,
-            "options": structure,
-            "action": {"type": "confirm_project_plan_categories"},
+            "footerHint": "Remove modules above or request changes in chat",
+            "confirmLabel": "Confirm Framework Modules",
+            "recommendations": structure,
         }
