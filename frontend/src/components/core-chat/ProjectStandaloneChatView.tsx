@@ -73,7 +73,7 @@ interface ProjectStandaloneChatViewProps {
     chatId?: string | null;
     chatTitle?: string | null;
   }) => void;
-  /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
+  /** Ref that the parent can call to programmatically trigger a send */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Shared session history (project + user scoped) */
   sessions?: ChatSummary[];
@@ -638,7 +638,7 @@ export function ProjectStandaloneChatView({
     [loadChat],
   );
 
-  // Expose handleSend to parent via ref so ModuleLandingPage can trigger a send
+  // Expose handleSend to parent via ref for programmatic sends.
   useEffect(() => {
     if (onSendRef) onSendRef.current = handleSend;
     return () => {

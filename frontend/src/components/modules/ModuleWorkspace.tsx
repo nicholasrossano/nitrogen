@@ -547,6 +547,7 @@ export function ModuleWorkspace({
 
   const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
   const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
+  const isStageGenerating = currentStageState.status === 'populating' || isPopulating;
   const currentStageDataSignature = stableStringify(currentStageState.data ?? null);
   const baselineSignature = editBaselineByStageId[currentStageDef.id];
   const hasPendingConfirmedStageChanges =
@@ -654,7 +655,8 @@ export function ModuleWorkspace({
           workflowVersion={state.workflow_version}
           fields={fields}
           items={stageData?.items ?? []}
-          isLoading={currentStageState.status === 'populating' || isPopulating}
+          isLoading={isStageGenerating}
+          interactionLocked={isStageGenerating}
           readOnly={readOnly}
           flush
           allowAddRows={currentStageDef.allow_add_rows}
@@ -671,7 +673,8 @@ export function ModuleWorkspace({
           workflowVersion={state.workflow_version}
           fields={fields}
           items={stageData?.items ?? []}
-          isLoading={currentStageState.status === 'populating' || isPopulating}
+          isLoading={isStageGenerating}
+          interactionLocked={isStageGenerating}
           readOnly={readOnly}
           onChanged={fetchState}
         />
@@ -693,6 +696,7 @@ export function ModuleWorkspace({
           stageDef={currentStageDef}
           stageData={currentStageState.data}
           categoryItems={categoryItems}
+          interactionLocked={isStageGenerating}
           readOnly={readOnly}
           onChanged={fetchState}
           onAddToChat={onAddToChat}

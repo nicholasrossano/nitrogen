@@ -16,6 +16,7 @@ interface Props {
   fields: FieldDef[];
   items: BuildItem[];
   isLoading?: boolean;
+  interactionLocked?: boolean;
   allowAddRows: boolean;
   readOnly?: boolean;
   flush?: boolean;
@@ -307,6 +308,7 @@ export function EditableTableStage({
   fields,
   items,
   isLoading = false,
+  interactionLocked = false,
   allowAddRows,
   readOnly,
   flush = false,
@@ -324,6 +326,7 @@ export function EditableTableStage({
   const [overInteractive, setOverInteractive] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isUpdatingSolarLocation, setIsUpdatingSolarLocation] = useState(false);
+  const interactionsDisabled = !!readOnly || interactionLocked;
 
   const proposalModelType = moduleId === 'lcoe_model'
     ? 'lcoe'
@@ -332,12 +335,18 @@ export function EditableTableStage({
       : moduleId === 'solar_estimate'
         ? 'solar'
         : null;
-  const enableInvestigate = !!proposalModelType && stageId === 'inputs' && !readOnly;
+  const enableInvestigate = !!proposalModelType && stageId === 'inputs' && !interactionsDisabled;
   const isSolarInputsStage = moduleId === 'solar_estimate' && stageId === 'inputs';
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (interactionsDisabled) {
+      setAdding(false);
+    }
+  }, [interactionsDisabled]);
 
   const effectiveItems = items.map((item) => {
     const optimisticContent = optimisticContentByItemId[item.id];
@@ -620,7 +629,7 @@ export function EditableTableStage({
 
   const handleSolarLocationChange = useCallback(
     async (lat: number, lon: number, address?: string) => {
-      if (!shouldShowSolarLocationMap || readOnly) return;
+      if (!shouldShowSolarLocationMap || interactionsDisabled) return;
 
       const updates = [
         solarLatRow
@@ -692,7 +701,7 @@ export function EditableTableStage({
     },
     [
       shouldShowSolarLocationMap,
-      readOnly,
+      interactionsDisabled,
       solarLatRow,
       solarLonRow,
       solarAddressRow,
@@ -719,7 +728,7 @@ export function EditableTableStage({
     return (
       <div className="text-center py-8 text-sm text-text-tertiary">
         No rows yet.
-        {!readOnly && allowAddRows && (
+        {!interactionsDisabled && allowAddRows && (
           <button onClick={() => setAdding(true)} className="ml-2 text-accent hover:underline">
             Add one
           </button>
@@ -738,7 +747,7 @@ export function EditableTableStage({
               lon={solarLon}
               address={solarAddress}
               onLocationChange={handleSolarLocationChange}
-              disabled={readOnly || isUpdatingSolarLocation}
+              disabled={interactionsDisabled || isUpdatingSolarLocation}
             />
           </Suspense>
         </div>
@@ -756,7 +765,7 @@ export function EditableTableStage({
           <div>
             {group.rows.map((item) => (
               (() => {
-                const rowReadOnly = readOnly || deleting === item.id;
+                const rowReadOnly = interactionsDisabled || deleting === item.id;
                 const rawFieldName = typeof item.content?.field_name === 'string'
                   ? item.content.field_name
                   : '';
@@ -797,11 +806,11 @@ export function EditableTableStage({
         </div>
       ))}
 
-      {!readOnly && allowAddRows && adding && (
+      {!interactionsDisabled && allowAddRows && adding && (
         <AddRowForm fields={fields} onSubmit={handleAdd} onCancel={() => setAdding(false)} />
       )}
 
-      {!readOnly && allowAddRows && !adding && (
+      {!interactionsDisabled && allowAddRows && !adding && (
         <button
           onClick={() => setAdding(true)}
           className="flex items-center gap-1.5 w-full px-4 py-2 text-xs text-text-tertiary hover:text-text-secondary transition-colors border-t border-divider/50 hover:bg-surface-subtle/50"

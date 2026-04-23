@@ -44,6 +44,7 @@ interface Props {
   fields: FieldDef[];
   items: BuildItem[];
   isLoading?: boolean;
+  interactionLocked?: boolean;
   readOnly?: boolean;
   onChanged: () => void;
 }
@@ -272,12 +273,14 @@ export function CategorizedListStage({
   fields,
   items,
   isLoading = false,
+  interactionLocked = false,
   readOnly,
   onChanged,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [localItems, setLocalItems] = useState(items);
   const [optimisticAddedItemId, setOptimisticAddedItemId] = useState<string | null>(null);
+  const interactionsDisabled = !!readOnly || interactionLocked;
 
   // Sync when parent re-fetches (avoid mutating state during render).
   useEffect(() => {
@@ -289,11 +292,18 @@ export function CategorizedListStage({
     }
   }, [items, adding, optimisticAddedItemId]);
 
+  useEffect(() => {
+    if (interactionsDisabled) {
+      setAdding(false);
+    }
+  }, [interactionsDisabled]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
+      if (interactionsDisabled) return;
       if (!over || active.id === over.id) return;
       const oldIdx = localItems.findIndex((i) => i.id === active.id);
       const newIdx = localItems.findIndex((i) => i.id === over.id);
@@ -302,7 +312,7 @@ export function CategorizedListStage({
       await api.reorderStageItems(instanceId, stageId, reordered.map((i) => i.id), workflowVersion);
       onChanged();
     },
-    [instanceId, stageId, localItems, onChanged, workflowVersion]
+    [instanceId, stageId, localItems, onChanged, workflowVersion, interactionsDisabled]
   );
 
   const handleDelete = useCallback(
@@ -358,11 +368,11 @@ export function CategorizedListStage({
 
       {localItems.length === 0 && !adding && !isLoading && (
         <div className="py-8 text-center text-sm text-text-tertiary">
-          No items yet.{!readOnly && ' Click + to add one.'}
+          No items yet.{!interactionsDisabled && ' Click + to add one.'}
         </div>
       )}
 
-      {readOnly ? (
+      {interactionsDisabled ? (
         <div className="flex flex-col gap-2.5">
           {localItems.map((item) => (
             <SortableRow
@@ -393,7 +403,7 @@ export function CategorizedListStage({
         </DndContext>
       )}
 
-      {!readOnly && adding && (
+      {!interactionsDisabled && adding && (
         <AddItemRow
           fields={fields}
           onSubmit={handleAdd}
@@ -401,7 +411,7 @@ export function CategorizedListStage({
         />
       )}
 
-      {!readOnly && !adding && (
+      {!interactionsDisabled && !adding && (
         <div className="flex justify-center py-1">
           <button
             onClick={() => setAdding(true)}
