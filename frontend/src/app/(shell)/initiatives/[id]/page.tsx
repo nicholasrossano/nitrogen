@@ -469,11 +469,9 @@ function InitiativePageContent() {
     }
     if (item === 'workspace') {
       setPanelOpen('modules', 'workspace', true);
-      if (activeView === 'modules') {
-        // In modules view, drawer click should always show the module hub.
-        setWorkspaceLaunchMode('open');
-        setActiveWorkspaceTabId(null);
-      }
+      // Drawer click should always land on the module hub.
+      setWorkspaceLaunchMode('open');
+      setActiveWorkspaceTabId(null);
       setActiveView('modules');
       router.replace(`/initiatives/${initiativeId}?view=modules`);
       return true;
