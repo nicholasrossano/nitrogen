@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, FolderOpen, Plus, X } from 'lucide-react';
+import { FileText, FolderOpen, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { EditorSidePanel } from './EditorSidePanel';
 import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
-import { api, type ModuleInstance } from '@/lib/api';
+import { type ModuleInstance } from '@/lib/api';
 import type { EditorWidget } from './EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
@@ -65,24 +65,11 @@ export function ProjectWorkspaceEditorPanel({
     localWorkspaceLaunchMode !== 'idle' ? localWorkspaceLaunchMode : workspaceLaunchMode;
   const showWorkspaceHub = effectiveWorkspaceLaunchMode !== 'idle' || !activeTabId;
   const openModeActive = showWorkspaceHub && effectiveWorkspaceLaunchMode === 'open';
-  const newModeActive = showWorkspaceHub && effectiveWorkspaceLaunchMode === 'new';
 
   const activeTab = useMemo(() => {
     if (!activeTabId) return null;
     return tabs.find((tab) => tab.id === activeTabId) ?? null;
   }, [tabs, activeTabId]);
-
-  const openModuleTab = async (moduleId: string, moduleName?: string) => {
-    const instance = await api.createModuleInstance(initiativeId, moduleId);
-    setLocalWorkspaceLaunchMode('idle');
-    onOpenTab({
-      id: `module-${instance.id}`,
-      kind: 'module',
-      title: moduleName ?? instance.module_id.replace(/_/g, ' '),
-      instanceId: instance.id,
-      moduleId: instance.module_id,
-    });
-  };
 
   const openExistingModule = async (instance: ModuleInstance) => {
     setLocalWorkspaceLaunchMode('idle');
@@ -156,22 +143,6 @@ export function ProjectWorkspaceEditorPanel({
               >
                 <FolderOpen className="w-3.5 h-3.5" />
               </button>
-              <button
-                onClick={() => {
-                  setLocalWorkspaceLaunchMode('new');
-                  onActiveTabChange(null);
-                }}
-                aria-pressed={newModeActive}
-                className={[
-                  'flex items-center justify-center w-7 h-7 rounded transition-colors',
-                  newModeActive
-                    ? 'bg-white text-text-primary shadow-subtle'
-                    : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
-                ].join(' ')}
-                title="New module"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
             </div>
           )}
         </div>
@@ -186,7 +157,6 @@ export function ProjectWorkspaceEditorPanel({
             onLaunchModeHandled={() => {
               onWorkspaceLaunchModeHandled();
             }}
-            onSelectModule={openModuleTab}
             onSelectExisting={openExistingModule}
           />
         )}

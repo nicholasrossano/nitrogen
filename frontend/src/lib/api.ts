@@ -62,7 +62,7 @@ export interface Initiative {
 export interface ModuleInstance {
   id: string;
   module_id: string;
-  status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'error';
+  status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'completed' | 'error';
   title: string | null;
   started_by: string;
   started_by_email: string | null;
@@ -71,6 +71,7 @@ export interface ModuleInstance {
   chat_id: string | null;
   deliverable?: Record<string, any> | null;
   workflow_state?: Record<string, any> | null;
+  is_plan_complete?: boolean;
 }
 
 export interface ChatModuleSummary {
@@ -641,10 +642,14 @@ export const api = {
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
 
-  listModuleInstances: (initiativeId: string, options?: { archived?: boolean }) =>
-    fetchApi<ModuleInstance[]>(
-      `/api/v1/initiatives/${initiativeId}/modules${options?.archived ? '?archived=true' : ''}`
-    ),
+  listModuleInstances: (initiativeId: string, options?: { archived?: boolean }) => {
+    const params = new URLSearchParams();
+    if (options?.archived) params.set('archived', 'true');
+    const query = params.toString();
+    return fetchApi<ModuleInstance[]>(
+      `/api/v1/initiatives/${initiativeId}/modules${query ? `?${query}` : ''}`
+    );
+  },
 
   createModuleInstance: (initiativeId: string, moduleId: string) =>
     fetchApi<ModuleInstance>(`/api/v1/initiatives/${initiativeId}/modules`, {

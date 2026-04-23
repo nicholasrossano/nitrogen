@@ -19,3 +19,4 @@ class ModuleInstanceResponse(BaseModel):
     chat_id: Optional[UUID] = None
     deliverable: Optional[dict] = None
     workflow_state: Optional[dict] = None
+    is_plan_complete: bool = False

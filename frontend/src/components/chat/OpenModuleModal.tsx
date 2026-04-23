@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Clock, User, Trash2, Undo2, RotateCcw, Plus } from 'lucide-react';
+import { Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { api, type ModuleInstance } from '@/lib/api';
 
@@ -27,7 +27,6 @@ function formatEmail(email: string | null, fallback: string): string {
 interface OpenModuleBrowserProps {
   initiativeId: string;
   onSelect: (instance: ModuleInstance) => void;
-  onSwitchToNew?: () => void;
 }
 
 type EnrichedInstance = ModuleInstance & { index: number | null; displayName: string };
@@ -51,7 +50,7 @@ function enrich(instances: ModuleInstance[]): EnrichedInstance[] {
   });
 }
 
-export function OpenModuleBrowser({ initiativeId, onSelect, onSwitchToNew }: OpenModuleBrowserProps) {
+export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserProps) {
   const [instances, setInstances] = useState<ModuleInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [isTrashView, setIsTrashView] = useState(false);
@@ -102,16 +101,7 @@ export function OpenModuleBrowser({ initiativeId, onSelect, onSwitchToNew }: Ope
   return (
     <div className="w-full">
       <div className="w-full pt-3 pb-8">
-        {/* Keep New Module directly left of Trash in open mode */}
         <div className="mb-6 flex items-center justify-end gap-4">
-          <button
-            type="button"
-            onClick={onSwitchToNew}
-            className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
-          >
-            <Plus className="w-3 h-3" />
-            New Module
-          </button>
           <button
             type="button"
             onClick={handleTrashToggle}

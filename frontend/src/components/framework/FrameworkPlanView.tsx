@@ -1,14 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, Loader2, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpen, ChevronDown, Loader2, Trash2 } from 'lucide-react';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
-import { type ModuleInstance, api } from '@/lib/api';
+import { type ModuleInstance } from '@/lib/api';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 interface FrameworkPlanViewProps {
-  initiativeId: string;
+  plannedModuleIds: string[];
+  moduleInstances: ModuleInstance[];
+  loading: boolean;
+  onAddModuleToFrameworkPlan: (moduleId: string) => Promise<void>;
+  onRemoveModuleFromFrameworkPlan: (moduleId: string) => Promise<void>;
+  onCreateModuleInstanceInModulesView: (moduleId: string, moduleName: string) => Promise<void>;
+  onOpenExistingModuleInstanceInModulesView: (instance: ModuleInstance) => Promise<void>;
   readOnly?: boolean;
   onOpenModule: (module: ModuleInstance) => void;
 }
@@ -55,18 +61,26 @@ function resolvePhaseIdForModule(moduleId: string, phases: FrameworkPhase[]): st
 }
 
 export function FrameworkPlanView({
-  initiativeId,
+  plannedModuleIds,
+  moduleInstances,
+  loading,
+  onAddModuleToFrameworkPlan,
+  onRemoveModuleFromFrameworkPlan,
+  onCreateModuleInstanceInModulesView,
+  onOpenExistingModuleInstanceInModulesView,
   readOnly = false,
   onOpenModule,
 }: FrameworkPlanViewProps) {
   const devMode = useSettingsStore((s) => s.devMode);
-  const [instances, setInstances] = useState<ModuleInstance[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [creatingModuleId, setCreatingModuleId] = useState<string | null>(null);
-  const [removingInstanceId, setRemovingInstanceId] = useState<string | null>(null);
+  const [removingPlannedModuleId, setRemovingPlannedModuleId] = useState<string | null>(null);
+  const [creatingWorkspaceModuleId, setCreatingWorkspaceModuleId] = useState<string | null>(null);
+  const [openInstancePickerModuleId, setOpenInstancePickerModuleId] = useState<string | null>(null);
+  const [openingExistingInstanceId, setOpeningExistingInstanceId] = useState<string | null>(null);
   const libraryRef = useRef<HTMLDivElement>(null);
+  const instancePickerRef = useRef<HTMLDivElement>(null);
 
   const phases = useMemo(() => getFrameworkPhases(), []);
 
@@ -86,34 +100,6 @@ export function FrameworkPlanView({
   );
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadInstances = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await api.listModuleInstances(initiativeId);
-        if (!cancelled) {
-          setInstances(data);
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Failed to load modules.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadInstances();
-    return () => {
-      cancelled = true;
-    };
-  }, [initiativeId]);
-
-  useEffect(() => {
     if (!libraryOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
@@ -126,25 +112,34 @@ export function FrameworkPlanView({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [libraryOpen]);
 
-  const groupedPhases = useMemo(() => {
-    const buckets = new Map(phases.map((phase) => [phase.id, [] as ModuleInstance[]]));
-    const unmatched: ModuleInstance[] = [];
+  useEffect(() => {
+    if (!openInstancePickerModuleId) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!instancePickerRef.current?.contains(event.target as Node)) {
+        setOpenInstancePickerModuleId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openInstancePickerModuleId]);
 
-    instances.forEach((instance) => {
-      const phaseId = resolvePhaseIdForModule(instance.module_id, phases);
+  const groupedPhases = useMemo(() => {
+    const buckets = new Map(phases.map((phase) => [phase.id, [] as string[]]));
+    const unmatched: string[] = [];
+
+    plannedModuleIds.forEach((moduleId) => {
+      const phaseId = resolvePhaseIdForModule(moduleId, phases);
       const bucket = buckets.get(phaseId);
       if (bucket) {
-        bucket.push(instance);
+        bucket.push(moduleId);
       } else {
-        unmatched.push(instance);
+        unmatched.push(moduleId);
       }
     });
 
     const result = phases.map((phase) => ({
       ...phase,
-      modules: (buckets.get(phase.id) ?? []).sort((a, b) => (
-        new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
-      )),
+      modules: buckets.get(phase.id) ?? [],
     })).filter((phase) => phase.modules.length > 0);
 
     if (unmatched.length > 0) {
@@ -156,14 +151,14 @@ export function FrameworkPlanView({
     }
 
     return result;
-  }, [instances, phases]);
+  }, [plannedModuleIds, phases]);
 
   const existingModuleIds = useMemo(
-    () => new Set(instances.map((instance) => instance.module_id)),
-    [instances],
+    () => new Set(plannedModuleIds),
+    [plannedModuleIds],
   );
 
-  const handleCreateModule = async (moduleId: string) => {
+  const handleCreateModule = useCallback(async (moduleId: string) => {
     if (existingModuleIds.has(moduleId)) {
       setError('That module is already in this framework plan.');
       return;
@@ -171,29 +166,54 @@ export function FrameworkPlanView({
     setCreatingModuleId(moduleId);
     setError(null);
     try {
-      const instance = await api.createModuleInstance(initiativeId, moduleId);
-      setInstances((prev) => [...prev, instance]);
+      await onAddModuleToFrameworkPlan(moduleId);
       setLibraryOpen(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to create module.');
     } finally {
       setCreatingModuleId(null);
     }
-  };
+  }, [existingModuleIds, onAddModuleToFrameworkPlan]);
 
-  const handleRemoveModule = async (instanceId: string) => {
-    if (removingInstanceId) return;
-    setRemovingInstanceId(instanceId);
+  const handleRemoveModuleFromPlan = useCallback(async (moduleId: string) => {
+    if (removingPlannedModuleId) return;
+    setRemovingPlannedModuleId(moduleId);
     setError(null);
     try {
-      await api.deleteModuleInstance(initiativeId, instanceId);
-      setInstances((prev) => prev.filter((instance) => instance.id !== instanceId));
+      await onRemoveModuleFromFrameworkPlan(moduleId);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to remove module.');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to remove module from plan.');
     } finally {
-      setRemovingInstanceId(null);
+      setRemovingPlannedModuleId(null);
     }
-  };
+  }, [onRemoveModuleFromFrameworkPlan, removingPlannedModuleId]);
+
+  const handleCreateModuleInModulesView = useCallback(async (moduleId: string, moduleName: string) => {
+    if (creatingWorkspaceModuleId) return;
+    setCreatingWorkspaceModuleId(moduleId);
+    setError(null);
+    try {
+      await onCreateModuleInstanceInModulesView(moduleId, moduleName);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to create module instance.');
+    } finally {
+      setCreatingWorkspaceModuleId(null);
+    }
+  }, [creatingWorkspaceModuleId, onCreateModuleInstanceInModulesView]);
+
+  const handleOpenExistingInstance = useCallback(async (instance: ModuleInstance) => {
+    if (openingExistingInstanceId) return;
+    setOpeningExistingInstanceId(instance.id);
+    setError(null);
+    try {
+      await onOpenExistingModuleInstanceInModulesView(instance);
+      setOpenInstancePickerModuleId(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to open module instance.');
+    } finally {
+      setOpeningExistingInstanceId(null);
+    }
+  }, [onOpenExistingModuleInstanceInModulesView, openingExistingInstanceId]);
 
   return (
     <div className="h-full flex flex-col bg-surface overflow-hidden">
@@ -284,19 +304,28 @@ export function FrameworkPlanView({
                     {phase.name}
                   </p>
                   <div className="space-y-4 min-h-[220px]">
-                    {phase.modules.map((instance) => {
-                      const moduleMeta = moduleMetaById.get(instance.module_id);
-                      const moduleName = moduleMeta?.name || instance.module_id.replace(/_/g, ' ');
-                      const isRemoving = removingInstanceId === instance.id;
+                    {phase.modules.map((moduleId) => {
+                      const moduleMeta = moduleMetaById.get(moduleId);
+                      const moduleName = moduleMeta?.name || moduleId.replace(/_/g, ' ');
+                      const representativeInstance = moduleInstances.find((candidate) => candidate.module_id === moduleId) ?? null;
+                      const isRemoving = removingPlannedModuleId === moduleId;
+                      const isCreatingWorkspace = creatingWorkspaceModuleId === moduleId;
+                      const moduleInstancesForType = moduleInstances
+                        .filter((candidate) => candidate.module_id === moduleId)
+                        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+                      const instancePickerOpen = openInstancePickerModuleId === moduleId;
 
                       return (
                         <div
-                          key={instance.id}
-                          className="group relative card-interactive border border-black/[0.04]"
+                          key={moduleId}
+                          className={`group relative card-interactive border border-black/[0.04] overflow-visible ${instancePickerOpen ? 'z-40' : 'z-0'}`}
                         >
                           <button
                             type="button"
-                            onClick={() => onOpenModule(instance)}
+                            onClick={() => {
+                              if (representativeInstance) onOpenModule(representativeInstance);
+                            }}
+                            disabled={!representativeInstance}
                             className="relative flex w-full items-center gap-3 px-4 py-3.5 text-left"
                           >
                             <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash">
@@ -309,14 +338,78 @@ export function FrameworkPlanView({
                             </span>
                           </button>
                           {!readOnly && (
+                            <div className="px-4 pb-3 flex justify-end gap-2">
+                              {moduleInstancesForType.length > 0 && (
+                                <div ref={instancePickerOpen ? instancePickerRef : null} className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenInstancePickerModuleId((prev) => (
+                                        prev === moduleId ? null : moduleId
+                                      ));
+                                    }}
+                                    className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-stroke-subtle bg-white text-text-secondary transition-colors enabled:hover:border-stroke-muted enabled:hover:text-text-primary"
+                                  >
+                                    Open
+                                    <ChevronDown className="w-3 h-3" />
+                                  </button>
+                                  {instancePickerOpen && (
+                                    <div className="absolute right-0 top-full mt-1 z-50 min-w-[220px] max-h-64 overflow-y-auto rounded-lg border border-divider bg-white py-1 shadow-lg">
+                                      {moduleInstancesForType.map((moduleInstance, idx) => {
+                                        const openingThisInstance = openingExistingInstanceId === moduleInstance.id;
+                                        const title = moduleInstance.title || moduleName;
+                                        const label = moduleInstancesForType.length > 1
+                                          ? `${title} #${moduleInstancesForType.length - idx}`
+                                          : title;
+                                        return (
+                                          <button
+                                            key={moduleInstance.id}
+                                            type="button"
+                                            disabled={openingThisInstance || Boolean(openingExistingInstanceId)}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              void handleOpenExistingInstance(moduleInstance);
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-surface-subtle hover:text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                                          >
+                                            {openingThisInstance ? 'Opening…' : label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                disabled={isCreatingWorkspace}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleCreateModuleInModulesView(moduleId, moduleName);
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                              >
+                                {isCreatingWorkspace ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    New
+                                  </>
+                                ) : (
+                                  'New'
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {!readOnly && (
                             <button
                               type="button"
                               disabled={isRemoving}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                void handleRemoveModule(instance.id);
+                                void handleRemoveModuleFromPlan(moduleId);
                               }}
-                              title="Remove from framework plan"
+                              title="Remove module from framework plan"
                               className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {isRemoving ? (
