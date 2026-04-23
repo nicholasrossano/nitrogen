@@ -66,11 +66,11 @@ async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | Non
 
 
 def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
-    """Instances that finished generation (complete + deliverable), excluding trash."""
+    """Instances marked complete via final approval, excluding trash."""
     return sum(
         1
         for inst in instances
-        if not inst.archived and inst.status == "complete" and inst.deliverable
+        if not inst.archived and inst.is_plan_complete
     )
 
 
@@ -101,7 +101,7 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
     alignments_ts: dict = {}
 
     for inst in instances:
-        if inst.deliverable and inst.status == "complete":
+        if inst.deliverable and inst.is_plan_complete:
             prev = deliverables_ts.get(inst.module_id)
             if prev is None or inst.updated_at > prev:
                 deliverables[inst.module_id] = inst.deliverable
@@ -132,7 +132,7 @@ def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = N
     instances = _active_module_instances(initiative.module_instances or [])
     seen_tools: set[str] = set()
     for inst in instances:
-        if inst.deliverable and inst.status == "complete":
+        if inst.deliverable and inst.is_plan_complete:
             seen_tools.add(inst.module_id)
     data["deliverables"] = {t: True for t in seen_tools} if seen_tools else None
     data["module_instances_count"] = _count_active_module_instances(instances)
