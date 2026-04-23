@@ -112,6 +112,77 @@ def _module_definition_payload(module: BaseModule) -> dict[str, Any]:
     }
 
 
+def _module_export_filename(
+    *,
+    inst: ModuleInstance,
+    module: BaseModule,
+    user: AuthUser,
+    ext: str,
+    artifact_suffix: str | None = None,
+) -> str:
+    """Build a consistent filename for module-scoped exports."""
+    module_type = re.sub(r"[^\w.-]", "_", module.definition.id).strip("._") or "module"
+    version_token = f"version{max(inst.workflow_version, 1)}"
+    email_local = (user.email or "").split("@", 1)[0]
+    email_token = re.sub(r"[^\w.-]", "_", email_local).strip("._") or "user"
+    suffix = f"_{artifact_suffix}" if artifact_suffix else ""
+    return f"{module_type}{suffix}_{version_token}_{email_token}.{ext}"
+
+
+async def _read_response_bytes(response: Response) -> bytes:
+    """Materialize a FastAPI response body into bytes."""
+    body = getattr(response, "body", None)
+    if isinstance(body, bytes):
+        return body
+
+    body_iterator = getattr(response, "body_iterator", None)
+    if body_iterator is None:
+        raise RuntimeError("Export response did not expose body bytes")
+
+    chunks: list[bytes] = []
+    async for chunk in body_iterator:
+        chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode("utf-8"))
+    return b"".join(chunks)
+
+
+async def _generate_legacy_calculator_export(
+    module_id: str,
+    confirmed_stages: dict[str, Any],
+) -> bytes:
+    """Reuse existing calculator workbook exports for staged module workflows."""
+    results_data = (confirmed_stages.get("results") or {}).get("data") or {}
+    widget_data = results_data.get("widget_data") or {}
+
+    if module_id == "lcoe_model":
+        from app.api.lcoe import RecalculateRequest, export_lcoe_excel
+
+        response = await export_lcoe_excel(
+            RecalculateRequest(inputs=widget_data.get("inputs") or {})
+        )
+        return await _read_response_bytes(response)
+
+    if module_id == "carbon_model":
+        from app.api.carbon import RecalculateRequest, export_carbon_excel
+
+        response = await export_carbon_excel(
+            RecalculateRequest(inputs=widget_data.get("inputs") or {})
+        )
+        return await _read_response_bytes(response)
+
+    if module_id == "solar_estimate":
+        from app.api.pvwatts import ExportRequest, export_solar_excel
+
+        response = await export_solar_excel(
+            ExportRequest(
+                inputs=widget_data.get("inputs") or {},
+                result=widget_data.get("result") or {},
+            )
+        )
+        return await _read_response_bytes(response)
+
+    raise RuntimeError(f"No legacy export fallback is defined for module '{module_id}'")
+
+
 def _workflow_response(
     instance_id: _uuid.UUID,
     inst: ModuleInstance,
@@ -1195,6 +1266,18 @@ async def export_module_output(
             status_code=400,
             detail=f"Module '{module.definition.id}' does not implement generate_export()",
         )
+    except AttributeError as exc:
+        if "export_xlsx" not in str(exc):
+            raise
+        logger.warning(
+            "Falling back to legacy calculator export for module '%s': %s",
+            module.definition.id,
+            exc,
+        )
+        export_bytes = await _generate_legacy_calculator_export(
+            module.definition.id,
+            confirmed_stages,
+        )
 
     fmt = module.definition.export_format
     media_types = {
@@ -1203,9 +1286,7 @@ async def export_module_output(
     }
     media_type = media_types.get(fmt, "application/octet-stream")
 
-    initiative = await db.get(Initiative, inst.initiative_id)
-    initiative_title = initiative.title if initiative else "Export"
-    safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}").replace(" ", "_")[:60]
+    filename = _module_export_filename(inst=inst, module=module, user=user, ext=fmt)
     await append_decision_event(
         db,
         inst=inst,
@@ -1221,7 +1302,7 @@ async def export_module_output(
     return Response(
         content=export_bytes,
         media_type=media_type,
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.{fmt}")},
+        headers={"Content-Disposition": safe_content_disposition(filename)},
     )
 
 
@@ -1317,14 +1398,18 @@ async def export_writeup(
         initiative_title=context.get("project_title", ""),
     )
 
-    initiative = await db.get(Initiative, inst.initiative_id)
-    initiative_title = initiative.title if initiative else "Export"
-    safe_title = re.sub(r"[^\w\s\-.]", "_", f"{module.definition.name}_{initiative_title}_WriteUp").replace(" ", "_")[:60]
+    filename = _module_export_filename(
+        inst=inst,
+        module=module,
+        user=user,
+        ext="docx",
+        artifact_suffix="writeup",
+    )
 
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.docx")},
+        headers={"Content-Disposition": safe_content_disposition(filename)},
     )
 
 
@@ -1380,16 +1465,16 @@ async def export_module_decision_log_xlsx(
     )
     await db.commit()
 
-    initiative = await db.get(Initiative, inst.initiative_id)
-    initiative_title = initiative.title if initiative else "Export"
-    safe_title = re.sub(
-        r"[^\w\s\-.]",
-        "_",
-        f"{module.definition.name}_{initiative_title}_DecisionLog",
-    ).replace(" ", "_")[:60]
+    filename = _module_export_filename(
+        inst=inst,
+        module=module,
+        user=user,
+        ext="xlsx",
+        artifact_suffix="decision_log",
+    )
 
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.xlsx")},
+        headers={"Content-Disposition": safe_content_disposition(filename)},
     )

@@ -103,6 +103,18 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
     <div className="w-full">
       <div className="w-full pt-3 pb-8">
         <div className="mb-6 flex items-center justify-end gap-4">
+          <button
+            type="button"
+            onClick={handleTrashToggle}
+            className={`inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border transition-colors shrink-0 ${
+              isTrashView
+                ? 'border-accent text-accent bg-white enabled:hover:border-accent-hover enabled:hover:text-accent-hover'
+                : 'border-stroke-subtle bg-white text-text-secondary enabled:hover:border-accent enabled:hover:text-accent'
+            }`}
+          >
+            {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+            {isTrashView ? 'Back to Modules' : 'Trash'}
+          </button>
           {!isTrashView && enriched.length > 0 && (
             <Link
               href={`/initiatives/${initiativeId}?view=framework`}
@@ -111,14 +123,6 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
               View Framework Plan
             </Link>
           )}
-          <button
-            type="button"
-            onClick={handleTrashToggle}
-            className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
-          >
-            {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
-            {isTrashView ? 'Back to Modules' : 'Trash'}
-          </button>
         </div>
 
         {loading ? (

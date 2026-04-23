@@ -14,7 +14,7 @@ import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
-import { MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
+import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
@@ -266,6 +266,12 @@ function InitiativePageContent() {
       };
     },
     [frameworkModuleInstances, frameworkPlannedModuleIds],
+  );
+  const frameworkPlanModuleOptions = useMemo(
+    () => frameworkPlannedModuleIds
+      .map((id) => ALL_MODULES.find((m) => m.id === id))
+      .filter((m): m is (typeof ALL_MODULES)[number] => Boolean(m)),
+    [frameworkPlannedModuleIds],
   );
   const activeWorkspaceTab = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
@@ -896,6 +902,8 @@ function InitiativePageContent() {
           workspaceLaunchMode={workspaceLaunchMode}
           onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
           showModuleActions={activeView === 'modules'}
+          frameworkPlanModules={activeView === 'modules' ? frameworkPlanModuleOptions : undefined}
+          onNewModule={activeView === 'modules' ? handleCreateModuleInstanceInModulesView : undefined}
           onSendToChat={(content, toolHint) => {
             setPanelOpen('modules', 'chat', true);
             chatSendRef.current?.(content, toolHint);
