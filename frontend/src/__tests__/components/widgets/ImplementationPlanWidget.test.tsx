@@ -14,7 +14,7 @@ jest.mock('@/components/plan-workspace', () => ({
 }));
 
 describe('ImplementationPlanWidget', () => {
-  it('emits inspector state with requirements and dependencies in expected shapes', async () => {
+  it('emits inspector state focused on what-this-is content', async () => {
     const onInspectorStateChange = jest.fn();
 
     render(
@@ -54,18 +54,10 @@ describe('ImplementationPlanWidget', () => {
       expect(onInspectorStateChange).toHaveBeenCalledWith(
         expect.objectContaining({
           result: expect.objectContaining({
-            requirements: [
-              expect.objectContaining({
-                title: 'monitoring',
-                description: expect.any(String),
-              }),
-            ],
-            dependencies: [
-              expect.objectContaining({
-                condition: 'site survey',
-                effect: expect.any(String),
-              }),
-            ],
+            summaryTitle: 'What this is',
+            summary: expect.arrayContaining([expect.stringContaining('Deploy control devices')]),
+            requirements: [],
+            dependencies: [],
           }),
         }),
       );

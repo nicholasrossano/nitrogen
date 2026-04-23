@@ -17,6 +17,7 @@ import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
+import { ConfirmButton } from '@/components/ui';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGeneratingProgress';
 
@@ -770,13 +771,13 @@ export function LCOEModelWidget({
           Edit values in the Inputs stage to recalculate
         </p>
         {outputFooterAction ? (
-          <button
+          <ConfirmButton
             onClick={outputFooterAction.onClick}
-            disabled={outputFooterAction.disabled || outputFooterAction.loading}
-            className="btn-primary !text-xs !px-4 !py-1.5"
-          >
-            {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
-          </button>
+            disabled={outputFooterAction.disabled}
+            loading={outputFooterAction.loading}
+            label={outputFooterAction.label}
+            loadingLabel="Confirming…"
+          />
         ) : !instanceId && (
           <button
             onClick={handleExport}

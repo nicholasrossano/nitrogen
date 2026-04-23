@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { api, type ModuleInstance } from '@/lib/api';
 
@@ -102,6 +103,14 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
     <div className="w-full">
       <div className="w-full pt-3 pb-8">
         <div className="mb-6 flex items-center justify-end gap-4">
+          {!isTrashView && enriched.length > 0 && (
+            <Link
+              href={`/initiatives/${initiativeId}?view=framework`}
+              className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+            >
+              View Framework Plan
+            </Link>
+          )}
           <button
             type="button"
             onClick={handleTrashToggle}
@@ -124,7 +133,17 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
               {isTrashView ? 'Trash is empty.' : 'No modules started yet.'}
             </p>
             {!isTrashView && (
-              <p className="text-xs text-text-tertiary mt-1">Use &quot;New Module&quot; to begin.</p>
+              <>
+                <p className="text-xs text-text-tertiary mt-1">Use &quot;New Module&quot; to begin.</p>
+                <div className="mt-4 flex justify-center">
+                  <Link
+                    href={`/initiatives/${initiativeId}?view=framework`}
+                    className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+                  >
+                    View Framework Plan
+                  </Link>
+                </div>
+              </>
             )}
           </div>
         ) : (

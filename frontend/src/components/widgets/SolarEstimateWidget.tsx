@@ -26,6 +26,7 @@ import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
+import { ConfirmButton } from '@/components/ui';
 import { PanelHeader } from '@/components/ui/PanelHeader';
 
 const SolarLocationMap = lazy(() => import('./solar/SolarLocationMap'));
@@ -715,14 +716,14 @@ export function SolarEstimateWidget({
           {weatherCitation && <><span className="mx-1.5">·</span>{weatherCitation}</>}
         </span>
         {outputFooterAction ? (
-          <button
-            type="button"
+          <ConfirmButton
             onClick={outputFooterAction.onClick}
-            disabled={outputFooterAction.disabled || outputFooterAction.loading}
-            className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
-          >
-            {outputFooterAction.loading ? 'Confirming…' : outputFooterAction.label}
-          </button>
+            disabled={outputFooterAction.disabled}
+            loading={outputFooterAction.loading}
+            label={outputFooterAction.label}
+            loadingLabel="Confirming…"
+            className="shrink-0"
+          />
         ) : !instanceId && (
           <button
             type="button"

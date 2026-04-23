@@ -7,8 +7,6 @@ import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOve
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidget';
-import { PlanCategoriesWidget } from '@/components/widgets/PlanCategoriesWidget';
-import { PlanStructureConfirmWidget } from '@/components/widgets/PlanStructureConfirmWidget';
 import { PlanSummaryWidget } from '@/components/widgets/PlanSummaryWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
@@ -70,18 +68,6 @@ export function ChatWidgetRenderer({
           <PlanSummaryWidget data={data as any} />
         </ErrorBoundary>
       );
-    case 'plan_categories':
-      return initiativeId ? (
-        <ErrorBoundary>
-          <PlanCategoriesWidget data={data} initiativeId={initiativeId} isActive={isActive} />
-        </ErrorBoundary>
-      ) : null;
-    case 'plan_structure_confirm':
-      return initiativeId ? (
-        <ErrorBoundary>
-          <PlanStructureConfirmWidget data={data as any} initiativeId={initiativeId} isActive={isActive} />
-        </ErrorBoundary>
-      ) : null;
     case 'gs_proposed_field':
       return (
         <ErrorBoundary>
