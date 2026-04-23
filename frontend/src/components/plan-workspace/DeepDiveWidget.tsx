@@ -1,12 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, ExternalLink, HelpCircle, X, Zap } from 'lucide-react';
-
-import { SnippetCard } from '@/components/core-chat/ResearchPanel';
-import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
+import { AlertCircle, ChevronDown, ChevronUp, X, Zap } from 'lucide-react';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 import type { PlanWorkspaceInspectorDocumentSource, PlanWorkspaceInspectorState } from './types';
 
@@ -49,6 +45,22 @@ export function DeepDiveWidget({
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const { item, groupName, result, loading, error } = state;
   const collapsed = collapsedProp ?? internalCollapsed;
+  const inlineCitations = result
+    ? [
+        ...result.documentSources.map((source) => ({
+          key: `doc:${source.evidenceDocId}:${source.chunkId ?? source.title}`,
+          label: source.title,
+          type: 'document' as const,
+          source,
+        })),
+        ...result.linkSources.map((source) => ({
+          key: `link:${source.title}:${source.url ?? ''}`,
+          label: source.title,
+          type: 'link' as const,
+          source,
+        })),
+      ]
+    : [];
 
   const setCollapsed = (nextValue: boolean | ((value: boolean) => boolean)) => {
     const next = typeof nextValue === 'function' ? nextValue(collapsed) : nextValue;
@@ -149,123 +161,46 @@ export function DeepDiveWidget({
                   </h4>
                   <p className="text-xs text-text-secondary leading-relaxed">
                     <InlineBold text={result.summary.join(' ')} />
+                    {inlineCitations.length > 0 && (
+                      <span className="ml-1 inline-flex flex-wrap items-center gap-1 align-baseline">
+                        {inlineCitations.map((citation, idx) => {
+                          const tag = `[${idx + 1}]`;
+                          if (citation.type === 'document') {
+                            return (
+                              <button
+                                key={citation.key}
+                                type="button"
+                                title={citation.label}
+                                onClick={() => onOpenDocument?.(citation.source)}
+                                className="text-xs text-accent hover:underline"
+                              >
+                                {tag}
+                              </button>
+                            );
+                          }
+                          if (citation.source.url) {
+                            return (
+                              <a
+                                key={citation.key}
+                                href={citation.source.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={citation.label}
+                                className="text-xs text-accent hover:underline"
+                              >
+                                {tag}
+                              </a>
+                            );
+                          }
+                          return (
+                            <span key={citation.key} title={citation.label} className="text-xs text-text-tertiary">
+                              {tag}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    )}
                   </p>
-                </section>
-              )}
-
-              {result.detailFields && result.detailFields.length > 0 && (
-                <section>
-                  <h4 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">
-                    {result.detailFieldsTitle ?? 'Details'}
-                  </h4>
-                  <div className="space-y-1.5">
-                    {result.detailFields.map((field, idx) => (
-                      <div key={`${field.label}-${idx}`} className="rounded border border-stroke-subtle bg-white px-2.5 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
-                          {field.label}
-                        </p>
-                        <p className="mt-0.5 text-xs text-text-secondary">{field.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {result.requirements.length > 0 && (
-                <section>
-                  <h4 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">
-                    {result.requirementsTitle ?? 'Requirements'}
-                  </h4>
-                  <div className="space-y-1.5">
-                    {result.requirements.map((req, idx) => (
-                      <div
-                        key={`${req.title}-${idx}`}
-                        className="border border-stroke-subtle rounded px-2.5 py-1.5 flex items-center gap-1.5"
-                      >
-                        <span className="text-xs text-text-primary flex-1 min-w-0 leading-snug">{req.title}</span>
-                        <Tooltip content={req.description}>
-                          <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-surface-subtle text-text-tertiary hover:bg-surface-hover hover:text-text-secondary cursor-help transition-colors">
-                            <HelpCircle className="w-2.5 h-2.5" />
-                          </span>
-                        </Tooltip>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {result.dependencies.length > 0 && (
-                <section>
-                  <h4 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">
-                    {result.dependenciesTitle ?? 'Dependencies'}
-                  </h4>
-                  <div className="space-y-1.5">
-                    {result.dependencies.map((dep, idx) => {
-                      const condition = dep.condition.charAt(0).toUpperCase() + dep.condition.slice(1);
-                      return (
-                        <div key={`${dep.condition}-${idx}`} className="text-xs text-text-secondary bg-white rounded border border-stroke-subtle px-2.5 py-1.5">
-                          <span className="font-semibold text-text-primary block">{condition}</span>
-                          <span className="block mt-0.5">{dep.effect}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {result.documentSources.length > 0 && (
-                <section>
-                  <h4 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">
-                    {result.documentSourcesTitle ?? 'Project documents'}
-                  </h4>
-                  <div className="space-y-1.5">
-                    {result.documentSources.map((source, idx) => {
-                      const citation: ResearchPanelCitation = {
-                        evidence_doc_id: source.evidenceDocId,
-                        chunk_id: source.chunkId ?? null,
-                        source_title: source.title,
-                      };
-                      return (
-                        <SnippetCard
-                          key={`${source.evidenceDocId}-${idx}`}
-                          citation={citation}
-                          textOnly
-                          onOpenFull={onOpenDocument ? () => onOpenDocument(source) : undefined}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {result.linkSources.length > 0 && (
-                <section>
-                  <h4 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">
-                    {result.linkSourcesTitle ?? 'Sources'}
-                  </h4>
-                  <div className="space-y-1">
-                    {result.linkSources.map((source, idx) => (
-                      <div key={`${source.title}-${idx}`} className="flex items-start gap-1.5 min-w-0">
-                        <ExternalLink className="w-3 h-3 text-text-tertiary flex-shrink-0 mt-0.5" />
-                        {source.url ? (
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-accent hover:underline leading-snug min-w-0 break-words line-clamp-2 flex-1"
-                          >
-                            {source.title}
-                            {source.publisher && <span className="text-text-tertiary"> · {source.publisher}</span>}
-                          </a>
-                        ) : (
-                          <span className="text-xs text-text-secondary leading-snug min-w-0 break-words line-clamp-2 flex-1">
-                            {source.title}
-                            {source.publisher && <span className="text-text-tertiary"> · {source.publisher}</span>}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
                 </section>
               )}
 

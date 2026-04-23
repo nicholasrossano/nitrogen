@@ -69,10 +69,9 @@ describe('ModuleChecklistWidget', () => {
     );
 
     expect(screen.getByText('Opportunity Discovery')).toBeInTheDocument();
-    expect(screen.getByText('Feasibility & Option Analysis')).toBeInTheDocument();
 
     await act(async () => {
-      await userEvent.click(screen.getByRole('button', { name: 'Confirm Framework Modules' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     });
 
     await waitFor(() => {

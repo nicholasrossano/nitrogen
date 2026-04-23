@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -13,8 +12,6 @@ from app.core.auth import AuthUser, get_current_user
 from app.core.billing_guard import require_ai_access
 from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
-from app.models.onboarding import ChatMessage
-from app.models.initiative import InitiativeStage
 from app.plans.registry import get_plan_registry
 from app.services.deep_dive import DeepDiveService
 
@@ -39,10 +36,6 @@ def _ensure_plan_metadata(
 
 class StatusUpdate(BaseModel):
     status: str  # not_started | in_progress | complete
-
-
-class ConfirmCategoriesRequest(BaseModel):
-    categories: list[dict]  # [{id, name, summary}, ...]
 
 
 class DeepDiveRequest(BaseModel):
@@ -100,80 +93,6 @@ async def generate_project_plan(
         )
 
     initiative.project_plan = plan
-    flag_modified(initiative, "project_plan")
-    initiative.touch()
-    await db.commit()
-
-    return {"project_plan": plan}
-
-
-@router.post("/initiatives/{initiative_id}/project-plan/propose-categories")
-async def propose_plan_categories(
-    initiative_id: str,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
-):
-    """Propose high-level plan categories adapted to the project."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    if not initiative.project_description and not initiative.title:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Project needs a description before categories can be proposed.",
-        )
-
-    # Load recent chat messages for richer context
-    result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative.id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(12)
-    )
-    recent_messages = list(reversed(result.scalars().all()))
-    chat_history = [{"role": m.role, "content": m.content} for m in recent_messages]
-
-    handler = get_plan_registry().default_handler(db, user.uid)
-    try:
-        categories = await handler.propose_structure(initiative=initiative, chat_history=chat_history)
-    except Exception:
-        logger.exception("Category proposal failed for %s", initiative_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Category proposal failed. Please try again.",
-        )
-
-    return {"categories": categories}
-
-
-@router.post("/initiatives/{initiative_id}/project-plan/confirm-categories")
-async def confirm_plan_categories(
-    initiative_id: str,
-    body: ConfirmCategoriesRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
-):
-    """Accept confirmed categories and generate the full project plan."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    handler = get_plan_registry().default_handler(db, user.uid)
-    existing_plan = initiative.project_plan
-
-    try:
-        plan = await handler.generate_plan(
-            initiative=initiative,
-            existing_plan=existing_plan,
-            approved_structure=body.categories,
-        )
-    except Exception:
-        logger.exception("Plan generation (with categories) failed for %s", initiative_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Plan generation failed. Please try again.",
-        )
-
-    initiative.project_plan = plan
-    if initiative.stage in (InitiativeStage.DESCRIBE,):
-        initiative.stage = InitiativeStage.PLAN
     flag_modified(initiative, "project_plan")
     initiative.touch()
     await db.commit()

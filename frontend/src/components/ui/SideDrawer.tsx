@@ -99,8 +99,10 @@ export function SideDrawer() {
 
   const hasProject = !!initiativeId;
   const initiative = useInitiativeStore((s) => s.initiative);
+  const projectPlan = useInitiativeStore((s) => s.projectPlan);
   const isViewer = initiative?.shared_role === 'viewer';
-  const isOnboarding = Boolean(hasProject && initiative && !initiative.project_plan && !isViewer);
+  const hasProjectPlan = Boolean(projectPlan || initiative?.project_plan);
+  const isOnboarding = Boolean(hasProject && initiative && !hasProjectPlan && !isViewer);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
   const showMaterials = hasProject && !isViewer;

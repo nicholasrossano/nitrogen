@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { X, ExternalLink, AlertCircle, Zap, HelpCircle, PenLine } from 'lucide-react';
-
-import { SnippetCard } from '@/components/core-chat/ResearchPanel';
-import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
-import { Tooltip } from '@/components/ui/Tooltip';
+import { X, AlertCircle, Zap, PenLine } from 'lucide-react';
 import { PageLoader } from '@/components/ui/PageLoader';
 
 import type { PlanWorkspaceInspectorDocumentSource, PlanWorkspaceInspectorState } from './types';
@@ -53,6 +49,22 @@ export function PlanInspectorPanel({
   }, []);
 
   const { item, groupName, result, loading, error } = state;
+  const inlineCitations = result
+    ? [
+        ...result.documentSources.map((source) => ({
+          key: `doc:${source.evidenceDocId}:${source.chunkId ?? source.title}`,
+          label: source.title,
+          type: 'document' as const,
+          source,
+        })),
+        ...result.linkSources.map((source) => ({
+          key: `link:${source.title}:${source.url ?? ''}`,
+          label: source.title,
+          type: 'link' as const,
+          source,
+        })),
+      ]
+    : [];
 
   return (
     <div
@@ -126,125 +138,46 @@ export function PlanInspectorPanel({
                 </h3>
                 <p className="text-sm text-text-secondary leading-snug">
                   <InlineBold text={result.summary.join(' ')} />
+                  {inlineCitations.length > 0 && (
+                    <span className="ml-1 inline-flex flex-wrap items-center gap-1 align-baseline">
+                      {inlineCitations.map((citation, idx) => {
+                        const tag = `[${idx + 1}]`;
+                        if (citation.type === 'document') {
+                          return (
+                            <button
+                              key={citation.key}
+                              type="button"
+                              title={citation.label}
+                              onClick={() => onOpenDocument?.(citation.source)}
+                              className="text-xs text-accent hover:underline"
+                            >
+                              {tag}
+                            </button>
+                          );
+                        }
+                        if (citation.source.url) {
+                          return (
+                            <a
+                              key={citation.key}
+                              href={citation.source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={citation.label}
+                              className="text-xs text-accent hover:underline"
+                            >
+                              {tag}
+                            </a>
+                          );
+                        }
+                        return (
+                          <span key={citation.key} title={citation.label} className="text-xs text-text-tertiary">
+                            {tag}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  )}
                 </p>
-              </section>
-            )}
-
-            {result.detailFields && result.detailFields.length > 0 && (
-              <section>
-                <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  {result.detailFieldsTitle ?? 'Details'}
-                </h3>
-                <div className="space-y-2">
-                  {result.detailFields.map((field, idx) => (
-                    <div key={`${field.label}-${idx}`} className="rounded border border-stroke-subtle bg-surface px-3 py-2.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-                        {field.label}
-                      </p>
-                      <p className="mt-1 text-sm leading-snug text-text-secondary">{field.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {result.requirements.length > 0 && (
-              <section>
-                <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  {result.requirementsTitle ?? 'Requirements'}
-                </h3>
-                <div className="space-y-2">
-                  {result.requirements.map((requirement, idx) => (
-                    <div
-                      key={`${requirement.title}-${idx}`}
-                      className="border border-stroke-subtle rounded px-3 py-2.5 flex items-center gap-2"
-                    >
-                      <span className="text-sm font-medium text-text-primary flex-1 min-w-0 leading-snug">
-                        {requirement.title}
-                      </span>
-                      <Tooltip content={requirement.description}>
-                        <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-surface-subtle text-text-tertiary hover:bg-surface-hover hover:text-text-secondary cursor-help transition-colors">
-                          <HelpCircle className="w-3 h-3" />
-                        </span>
-                      </Tooltip>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {result.dependencies.length > 0 && (
-              <section>
-                <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  {result.dependenciesTitle ?? 'Dependencies'}
-                </h3>
-                <div className="space-y-2">
-                  {result.dependencies.map((dependency, idx) => {
-                    const condition = dependency.condition.charAt(0).toUpperCase() + dependency.condition.slice(1);
-                    return (
-                      <div key={`${dependency.condition}-${idx}`} className="text-xs text-text-secondary leading-relaxed bg-surface-subtle rounded px-3 py-2">
-                        <span className="font-semibold text-text-primary block">{condition}</span>
-                        <span className="block mt-1">{dependency.effect}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {result.documentSources.length > 0 && (
-              <section>
-                <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  {result.documentSourcesTitle ?? 'Project documents'}
-                </h3>
-                <div className="space-y-2">
-                  {result.documentSources.map((source, idx) => {
-                    const citation: ResearchPanelCitation = {
-                      evidence_doc_id: source.evidenceDocId,
-                      chunk_id: source.chunkId ?? null,
-                      source_title: source.title,
-                    };
-                    return (
-                      <SnippetCard
-                        key={`${source.evidenceDocId}-${idx}`}
-                        citation={citation}
-                        textOnly
-                        onOpenFull={onOpenDocument ? () => onOpenDocument(source) : undefined}
-                      />
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {result.linkSources.length > 0 && (
-              <section>
-                <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  {result.linkSourcesTitle ?? 'Sources'}
-                </h3>
-                <div className="space-y-1.5">
-                  {result.linkSources.map((source, idx) => (
-                    <div key={`${source.title}-${idx}`} className="flex items-start gap-2 min-w-0">
-                      <ExternalLink className="w-3 h-3 text-text-tertiary flex-shrink-0 mt-0.5" />
-                      {source.url ? (
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-accent hover:underline leading-snug min-w-0 break-words line-clamp-2 flex-1"
-                        >
-                          {source.title}
-                          {source.publisher && <span className="text-text-tertiary"> · {source.publisher}</span>}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-text-secondary leading-snug min-w-0 break-words line-clamp-2 flex-1">
-                          {source.title}
-                          {source.publisher && <span className="text-text-tertiary"> · {source.publisher}</span>}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </section>
             )}
 

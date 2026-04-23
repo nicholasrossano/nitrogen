@@ -61,7 +61,7 @@ export function ProjectOnboardingHeader({
         />
         <StepRow
           title="Confirm recommended modules"
-          detail="Review the suggested modules for your project and confirm the framework you want to complete."
+          detail="Review the suggested modules and confirm the framework you'll work towards."
           Icon={Map}
         />
       </div>

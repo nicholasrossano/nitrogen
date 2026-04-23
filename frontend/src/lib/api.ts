@@ -487,14 +487,6 @@ export interface DriveSyncResult {
   errors: { file_id: string; error: string }[];
 }
 
-// Plan category proposal types (approval stage)
-export interface ProposedCategory {
-  id: string;
-  name: string;
-  summary: string;
-  icon?: string;
-}
-
 // Project Plan types
 export interface ProjectPlanItem {
   id: string;
@@ -1299,6 +1291,22 @@ export const api = {
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
+  deepDiveImplementationItem: (
+    instanceId: string,
+    itemId: string,
+    body: {
+      item_title: string;
+      item_classification: string;
+      item_rationale: string;
+      pillar_name: string;
+    },
+    workflowVersion?: number,
+  ) =>
+    fetchApi<DeepDiveResult>(
+      `/api/v1/module-workflow/${instanceId}/implementation/${itemId}/deep-dive`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify(body) }
+    ),
+
   updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>, workflowVersion?: number) =>
     fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
@@ -1395,15 +1403,6 @@ export const api = {
     fetchApi<{ project_plan: ProjectPlan }>(
       `/api/v1/initiatives/${initiativeId}/project-plan`,
       { method: 'POST' }
-    ),
-
-  confirmPlanCategories: (initiativeId: string, categories: ProposedCategory[]) =>
-    fetchApi<{ project_plan: ProjectPlan }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/confirm-categories`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ categories }),
-      }
     ),
 
   updatePlanItemStatus: (

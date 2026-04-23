@@ -14,7 +14,7 @@ def test_project_plan_handler_exposes_plan_workspace_contract() -> None:
     assert isinstance(handler, BasePlanHandler)
     assert handler.definition.id == "project_plan"
     assert handler.definition.primary_ui_object == "plan_workspace"
-    assert handler.definition.structure_widget_type == "plan_structure_confirm"
+    assert handler.definition.structure_widget_type == "tool_checklist"
     assert handler.definition.summary_widget_type == "plan_summary"
 
 
@@ -57,6 +57,6 @@ def test_project_plan_handler_attaches_metadata_and_widget_shapes() -> None:
         {"id": "authorization", "name": "Authorization", "summary": "Permits", "icon": "Shield"},
         {"id": "capital", "name": "Capital", "summary": "Financing", "icon": "Banknote"},
     ])
-    assert structure_data["planType"] == "project_plan"
-    assert structure_data["action"]["type"] == "confirm_project_plan_categories"
-    assert structure_data["options"][0]["id"] == "authorization"
+    assert structure_data["title"] == "Recommended Framework Modules"
+    assert structure_data["confirmLabel"] == "Confirm Framework Modules"
+    assert structure_data["recommendations"][0]["id"] == "authorization"

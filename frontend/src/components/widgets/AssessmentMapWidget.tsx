@@ -65,6 +65,11 @@ interface MapInspectorState {
   latencyMs: number;
 }
 
+interface InspectorFieldSchema<T> {
+  label: string;
+  getValue: (item: T) => string | null;
+}
+
 function sourceLabel(provenance?: AssessmentItem['provenance']): string {
   if (!provenance) return 'Model (training data)';
   const derivation = (provenance.derivation || '').toLowerCase();
@@ -85,6 +90,46 @@ function sourceLabel(provenance?: AssessmentItem['provenance']): string {
   return 'Model (training data)';
 }
 
+function formatToken(value: string): string {
+  const cleaned = value.replace(/[_-]+/g, ' ').trim();
+  if (!cleaned) return '';
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+const STAKEHOLDER_DEEP_DIVE_SCHEMA: InspectorFieldSchema<AssessmentItem>[] = [
+  {
+    label: 'Role in project',
+    getValue: (item) => item.role_in_project?.trim() || null,
+  },
+  {
+    label: 'Influence level',
+    getValue: (item) => (item.influence_level ? formatToken(item.influence_level) : null),
+  },
+  {
+    label: 'Impact level',
+    getValue: (item) => (item.impact_level ? formatToken(item.impact_level) : null),
+  },
+  {
+    label: 'Engagement priority',
+    getValue: (item) => (item.engagement_priority ? formatToken(item.engagement_priority) : null),
+  },
+  {
+    label: 'Notes',
+    getValue: (item) => item.notes?.trim() || null,
+  },
+];
+
+const LANDSCAPE_DEEP_DIVE_SCHEMA: InspectorFieldSchema<AssessmentItem>[] = [
+  {
+    label: 'Role in project',
+    getValue: (item) => item.role_in_project?.trim() || null,
+  },
+  {
+    label: 'Notes',
+    getValue: (item) => item.notes?.trim() || null,
+  },
+];
+
 function mapAssessmentItemToWorkspaceItem(
   item: AssessmentItem,
   group: AssessmentGroup,
@@ -101,32 +146,27 @@ function mapAssessmentItemToWorkspaceItem(
   };
 }
 
-function toInspectorResult(item: AssessmentItem, latencyMs: number): PlanWorkspaceInspectorResult {
+function toInspectorResult(
+  item: AssessmentItem,
+  group: AssessmentGroup,
+  latencyMs: number,
+  isStakeholderModule: boolean,
+): PlanWorkspaceInspectorResult {
   const summary: string[] = [];
   if (item.description) summary.push(item.description);
   if (!item.description && item.role_in_project) summary.push(item.role_in_project);
 
+  const schema = isStakeholderModule ? STAKEHOLDER_DEEP_DIVE_SCHEMA : LANDSCAPE_DEEP_DIVE_SCHEMA;
   const detailFields = [
-    item.role_in_project
-      ? { label: 'Role in project', value: item.role_in_project }
-      : null,
-    item.influence_level
-      ? { label: 'Influence level', value: item.influence_level }
-      : null,
-    item.impact_level
-      ? { label: 'Impact level', value: item.impact_level }
-      : null,
-    item.engagement_priority
-      ? { label: 'Engagement priority', value: item.engagement_priority }
-      : null,
-    item.notes
-      ? { label: 'Notes', value: item.notes }
-      : null,
-    {
-      label: 'Source',
-      value: sourceLabel(item.provenance),
-    },
-  ].filter(Boolean) as Array<{ label: string; value: string }>;
+    { label: 'Category', value: group.label },
+    ...schema
+      .map((field) => {
+        const value = field.getValue(item);
+        return value ? { label: field.label, value } : null;
+      })
+      .filter(Boolean),
+    { label: 'Derived from', value: sourceLabel(item.provenance) },
+  ] as Array<{ label: string; value: string }>;
 
   const linkSources = (item.provenance?.sources ?? []).map((source) => ({
     title: source.title || source.url || 'Source',
@@ -135,18 +175,20 @@ function toInspectorResult(item: AssessmentItem, latencyMs: number): PlanWorkspa
   }));
 
   return {
-    summary: summary.length > 0 ? summary : ['No additional details available.'],
-    summaryTitle: 'Overview',
+    summary: summary.length > 0 ? summary : ['This is a mapped item relevant to your project context.'],
+    summaryTitle: 'What this is',
     requirements: [],
     dependencies: [],
     detailFields,
-    detailFieldsTitle: 'Stakeholder details',
+    detailFieldsTitle: isStakeholderModule ? 'Stakeholder profile' : 'Item details',
     documentSources: [],
     documentSourcesTitle: 'Project documents',
     linkSources,
     linkSourcesTitle: 'Citations',
     loadingLabel: 'Researching stakeholder details...',
-    emptySourcesMessage: 'No external citations were found for this stakeholder yet. Run deep dive again to retry retrieval.',
+    emptySourcesMessage: isStakeholderModule
+      ? 'No external citations are attached to this stakeholder yet.'
+      : 'No external citations are attached to this item yet.',
     latencyMs,
   };
 }
@@ -273,11 +315,11 @@ export function AssessmentMapWidget({
     return {
       item: mapAssessmentItemToWorkspaceItem(inspector.item, inspector.group),
       groupName: inspector.group.label,
-      result: toInspectorResult(inspector.item, inspector.latencyMs),
+      result: toInspectorResult(inspector.item, inspector.group, inspector.latencyMs, isStakeholderModule),
       loading: inspector.loading,
       error: inspector.error,
     };
-  }, [inspector]);
+  }, [inspector, isStakeholderModule]);
 
   useEffect(() => {
     onInspectorStateChange?.(inspectorState);

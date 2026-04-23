@@ -17,7 +17,7 @@ import {
   type PlanWorkspaceItem,
 } from '@/components/plan-workspace';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
-import { api } from '@/lib/api';
+import { api, type DeepDiveResult } from '@/lib/api';
 import type { WorkspaceWidgetProps } from '@/lib/widgetRegistry';
 
 type ImplementationItemType = 'deliverable' | 'assessment';
@@ -61,25 +61,6 @@ interface PlanInspectorSelection {
   group: ImplementationPlanGroup;
 }
 
-function sourceLabel(provenance?: ImplementationPlanItem['provenance']): string {
-  if (!provenance) return 'Model (training data)';
-  const derivation = (provenance.derivation || '').toLowerCase();
-  if (derivation.includes('user')) {
-    const email = provenance.user_email;
-    return email ? `Added by ${email}` : 'Added by user';
-  }
-  const sources = provenance.sources || [];
-  if (sources.length > 0) {
-    const cited = sources
-      .slice(0, 2)
-      .map((source) => source.title || source.url || '')
-      .filter(Boolean)
-      .join(', ');
-    return cited ? `Model (cited: ${cited})` : 'Model';
-  }
-  return 'Model (training data)';
-}
-
 function normalizeItemType(value: string | undefined): ImplementationItemType {
   return value === 'assessment' ? 'assessment' : 'deliverable';
 }
@@ -96,6 +77,10 @@ function normalizeStatus(value: string | undefined): ImplementationStatus {
     return value;
   }
   return 'not_started';
+}
+
+interface CachedDeepDiveState {
+  result: DeepDiveResult;
 }
 
 function mapPlanItemToWorkspaceItem(
@@ -118,50 +103,47 @@ function mapPlanItemToWorkspaceItem(
   };
 }
 
-function toInspectorResult(item: ImplementationPlanItem): PlanWorkspaceInspectorResult {
-  const summary = item.description?.trim()
+function toInspectorResult(
+  item: ImplementationPlanItem,
+  group: ImplementationPlanGroup,
+  deepDiveResult: DeepDiveResult | null,
+): PlanWorkspaceInspectorResult {
+  const fallbackSummary = item.description?.trim()
     ? [item.description.trim()]
-    : ['No additional details provided for this activity yet.'];
+    : [`This task belongs to ${group.label}. Open deep dive to generate contextual guidance and sources.`];
 
-  const detailFields = [
-    { label: 'Type', value: normalizeItemType(item.item_type) },
-    { label: 'Classification', value: normalizeClassification(item.classification) },
-    { label: 'Status', value: normalizeStatus(item.status).replace('_', ' ') },
-    item.phase ? { label: 'Phase ID', value: item.phase } : null,
-    typeof item.phase_order === 'number' ? { label: 'Phase order', value: String(item.phase_order) } : null,
-    { label: 'Source', value: sourceLabel(item.provenance) },
-  ].filter(Boolean) as Array<{ label: string; value: string }>;
+  const summary = deepDiveResult?.what_this_is?.length
+    ? deepDiveResult.what_this_is
+    : fallbackSummary;
 
-  const supports = (item.supports ?? []).filter(Boolean).map((target) => ({
-    title: target,
-    description: 'This activity supports this downstream item.',
-  }));
-  const dependsOn = (item.depends_on ?? []).filter(Boolean).map((dependency) => ({
-    condition: dependency,
-    effect: 'This activity depends on this prerequisite item.',
-  }));
-
-  const linkSources = (item.provenance?.sources ?? []).map((source) => ({
-    title: source.title || source.url || 'Source',
-    url: source.url ?? null,
-    publisher: null,
-  }));
+  const deepDiveSources = deepDiveResult?.sources ?? [];
+  const documentSources = deepDiveSources
+    .filter((source) => source.source_type === 'evidence' && source.evidence_doc_id)
+    .map((source) => ({
+      title: source.title,
+      evidenceDocId: source.evidence_doc_id!,
+      chunkId: source.chunk_id ?? null,
+    }));
+  const linkSources = deepDiveSources
+    .filter((source) => source.source_type !== 'evidence')
+    .map((source) => ({
+      title: source.title,
+      url: source.url ?? null,
+      publisher: source.publisher ?? null,
+    }));
 
   return {
     summary,
-    summaryTitle: 'Overview',
-    requirements: supports,
-    requirementsTitle: 'Supports',
-    dependencies: dependsOn,
-    dependenciesTitle: 'Depends on',
-    detailFields,
-    detailFieldsTitle: 'Activity details',
-    documentSources: [],
-    documentSourcesTitle: 'Project documents',
+    summaryTitle: 'What this is',
+    requirements: [],
+    dependencies: [],
+    detailFields: [],
+    documentSources,
     linkSources,
-    linkSourcesTitle: 'Citations',
-    emptySourcesMessage: 'No external citations were attached to this activity.',
-    latencyMs: 1,
+    emptySourcesMessage: deepDiveResult
+      ? 'No citations were returned for this deep dive yet.'
+      : 'Open deep dive to generate a researched explanation with inline citations.',
+    latencyMs: deepDiveResult?.latency_ms ?? 1,
   };
 }
 
@@ -182,6 +164,9 @@ export function ImplementationPlanWidget({
   const [selection, setSelection] = useState<PlanInspectorSelection | null>(null);
   const [localInspectorOpen, setLocalInspectorOpen] = useState(false);
   const [pendingToggleIds, setPendingToggleIds] = useState<Set<string>>(new Set());
+  const [deepDiveCache, setDeepDiveCache] = useState<Record<string, CachedDeepDiveState>>({});
+  const [inspectorLoading, setInspectorLoading] = useState(false);
+  const [inspectorError, setInspectorError] = useState<string | null>(null);
 
   useEffect(() => {
     setWidgetData(mapData);
@@ -223,14 +208,15 @@ export function ImplementationPlanWidget({
 
   const inspectorState = useMemo<PlanWorkspaceInspectorState | null>(() => {
     if (!selection) return null;
+    const cached = deepDiveCache[selection.item.id];
     return {
       item: mapPlanItemToWorkspaceItem(selection.item, selection.group),
       groupName: selection.group.label,
-      result: toInspectorResult(selection.item),
-      loading: false,
-      error: null,
+      result: toInspectorResult(selection.item, selection.group, cached?.result ?? null),
+      loading: inspectorLoading,
+      error: inspectorError,
     };
-  }, [selection]);
+  }, [deepDiveCache, inspectorError, inspectorLoading, selection]);
 
   useEffect(() => {
     onInspectorStateChange?.(inspectorState);
@@ -242,9 +228,34 @@ export function ImplementationPlanWidget({
       const item = group?.items.find((candidate) => candidate.id === workspaceItem.id);
       if (!group || !item) return;
       setSelection({ item, group });
+      setInspectorError(null);
+      setInspectorLoading(false);
       if (!onInspectorStateChange) setLocalInspectorOpen(true);
+      if (!instanceId) return;
+      if (deepDiveCache[item.id]) {
+        setInspectorLoading(false);
+        return;
+      }
+      setInspectorLoading(true);
+      void api.deepDiveImplementationItem(
+        instanceId,
+        item.id,
+        {
+          item_title: item.name,
+          item_classification: normalizeClassification(item.classification),
+          item_rationale: item.description?.trim() || '',
+          pillar_name: group.label,
+        },
+        workflowVersion,
+      ).then((result) => {
+        setDeepDiveCache((prev) => ({ ...prev, [item.id]: { result } }));
+        setInspectorLoading(false);
+      }).catch((error) => {
+        setInspectorError(error instanceof Error ? error.message : 'Deep dive failed');
+        setInspectorLoading(false);
+      });
     },
-    [groups, onInspectorStateChange],
+    [deepDiveCache, groups, instanceId, onInspectorStateChange, workflowVersion],
   );
 
   const toggleComplete = useCallback(async (itemId: string) => {
@@ -293,7 +304,28 @@ export function ImplementationPlanWidget({
     }
   }, [groups, instanceId, onWorkflowUpdated, pendingToggleIds, widgetData, workflowVersion]);
   const noopDeleteItem = useCallback((_itemId: string) => {}, []);
-  const noopRetryInspector = useCallback(() => {}, []);
+  const retryInspector = useCallback(() => {
+    if (!selection || !instanceId) return;
+    setInspectorError(null);
+    setInspectorLoading(true);
+    void api.deepDiveImplementationItem(
+      instanceId,
+      selection.item.id,
+      {
+        item_title: selection.item.name,
+        item_classification: normalizeClassification(selection.item.classification),
+        item_rationale: selection.item.description?.trim() || '',
+        pillar_name: selection.group.label,
+      },
+      workflowVersion,
+    ).then((result) => {
+      setDeepDiveCache((prev) => ({ ...prev, [selection.item.id]: { result } }));
+      setInspectorLoading(false);
+    }).catch((error) => {
+      setInspectorError(error instanceof Error ? error.message : 'Deep dive failed');
+      setInspectorLoading(false);
+    });
+  }, [instanceId, selection, workflowVersion]);
 
   if (!groups.length) {
     return (
@@ -320,7 +352,7 @@ export function ImplementationPlanWidget({
             }
           }}
           onOpenItem={handleOpenItem}
-          onRetryInspector={noopRetryInspector}
+          onRetryInspector={retryInspector}
           onDeleteItem={noopDeleteItem}
           onToggleComplete={toggleComplete}
           showItemKindBadge
