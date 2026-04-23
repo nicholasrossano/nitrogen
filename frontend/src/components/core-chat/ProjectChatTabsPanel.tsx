@@ -240,6 +240,7 @@ export function ProjectChatTabsPanel({
   const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
   const tabsRef = useRef<ProjectChatTab[]>([]);
   const handledDeepDiveRequestIdsRef = useRef<Set<string>>(new Set());
+  const autoSendTargetTabByRequestIdRef = useRef<Record<string, string>>({});
 
   const resolvedActiveTabId = useMemo(
     () => (tabs.some((tab) => tab.id === activeTabId) ? activeTabId : tabs[0]?.id ?? null),
@@ -512,6 +513,43 @@ export function ProjectChatTabsPanel({
     }
     onPendingSessionHandled?.();
   }, [pendingChatToOpen, tabs, resolvedActiveTabId, onPendingSessionHandled]);
+
+  useEffect(() => {
+    if (!pendingAutoSend?.requestId) return;
+
+    const existingTargetTabId = autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId];
+    if (existingTargetTabId) {
+      if (tabs.some((tab) => tab.id === existingTargetTabId) && resolvedActiveTabId !== existingTargetTabId) {
+        setActiveTabId(existingTargetTabId);
+        return;
+      }
+      if (!tabs.some((tab) => tab.id === existingTargetTabId)) {
+        delete autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId];
+      }
+    }
+
+    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    const reusablePlaceholderTab =
+      (activeTab &&
+      !activeTab.chatId &&
+      (activeTab.isFallback || activeTab.title.trim().toLowerCase() === 'new chat')
+        ? activeTab
+        : null) ??
+      findExistingNewChatTab();
+
+    if (reusablePlaceholderTab) {
+      autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId] = reusablePlaceholderTab.id;
+      if (resolvedActiveTabId !== reusablePlaceholderTab.id) {
+        setActiveTabId(reusablePlaceholderTab.id);
+      }
+      return;
+    }
+
+    const newTab = makeTab('New Chat', true, false);
+    autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId] = newTab.id;
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  }, [findExistingNewChatTab, pendingAutoSend, resolvedActiveTabId, tabs]);
 
   useEffect(() => {
     if (!researchMode || resetToLandingSignal === 0) return;
