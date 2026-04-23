@@ -14,16 +14,17 @@ import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
 import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
+import { MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
-import { mapProjectPlanToProgress } from '@/components/project-plan/projectPlanMapper';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { api } from '@/lib/api';
+import { api, type ModuleInstance } from '@/lib/api';
+import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -184,6 +185,9 @@ function InitiativePageContent() {
     moduleId: string;
     title: string;
   } | null>(null);
+  const [frameworkModuleInstances, setFrameworkModuleInstances] = useState<ModuleInstance[]>([]);
+  const [frameworkPlannedModuleIds, setFrameworkPlannedModuleIds] = useState<string[]>([]);
+  const [frameworkModulesLoading, setFrameworkModulesLoading] = useState(false);
   const onboardingSeenRef = useRef(false);
   const frameworkDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
   const modulesDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
@@ -224,8 +228,44 @@ function InitiativePageContent() {
   const hasProjectPlan = Boolean(projectPlan);
   const isOnboarding = Boolean(initiative && !isViewer && !hasProjectPlan);
   const frameworkProgress = useMemo(
-    () => mapProjectPlanToProgress(projectPlan),
-    [projectPlan],
+    () => {
+      const categoryForModuleId = new Map<string, string>();
+      MODULE_CATEGORIES.forEach((category) => {
+        category.moduleIds.forEach((moduleId) => categoryForModuleId.set(moduleId, category.id));
+      });
+
+      const approvedModuleIds = new Set(
+        frameworkModuleInstances
+          .filter((instance) => instance.is_plan_complete === true)
+          .map((instance) => instance.module_id),
+      );
+
+      const segments = MODULE_CATEGORIES.map((category) => {
+        const plannedInCategory = frameworkPlannedModuleIds.filter(
+          (moduleId) => categoryForModuleId.get(moduleId) === category.id,
+        );
+        const approvedCount = plannedInCategory.filter((moduleId) => approvedModuleIds.has(moduleId)).length;
+        return {
+          id: category.id,
+          label: category.name,
+          color: DIAGRAM_ACCENT_COLOR,
+          completed: approvedCount,
+          total: plannedInCategory.length,
+        };
+      }).filter((segment) => segment.total > 0);
+
+      const total = segments.reduce((sum, segment) => sum + segment.total, 0);
+      const completed = segments.reduce((sum, segment) => sum + segment.completed, 0);
+      if (total === 0) return null;
+
+      return {
+        completed,
+        total,
+        percentage: Math.round((completed / total) * 100),
+        segments,
+      };
+    },
+    [frameworkModuleInstances, frameworkPlannedModuleIds],
   );
   const activeWorkspaceTab = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
@@ -401,6 +441,18 @@ function InitiativePageContent() {
 
   const handlePlanReady = useCallback(() => setPlanViewReady(true), []);
 
+  const loadFrameworkModuleInstances = useCallback(async (targetInitiativeId: string) => {
+    setFrameworkModulesLoading(true);
+    try {
+      const instances = await api.listModuleInstances(targetInitiativeId);
+      setFrameworkModuleInstances(instances);
+    } catch {
+      setFrameworkModuleInstances([]);
+    } finally {
+      setFrameworkModulesLoading(false);
+    }
+  }, []);
+
   useShellNav(useCallback((item: NavItem): boolean => {
     if (item === 'home') {
       router.push('/');
@@ -480,6 +532,9 @@ function InitiativePageContent() {
     setWorkspaceTabs(storedWorkspaceUi?.workspaceTabs ?? []);
     setActiveWorkspaceTabId(storedWorkspaceUi?.activeWorkspaceTabId ?? null);
     setFrameworkActiveModule(null);
+    setFrameworkModuleInstances([]);
+    setFrameworkPlannedModuleIds([]);
+    setFrameworkModulesLoading(false);
     setFrameworkDeepDiveRequest(null);
     setModulesDeepDiveRequest(null);
     frameworkDeepDiveRef.current = null;
@@ -503,10 +558,35 @@ function InitiativePageContent() {
 
     loadEvidence(initiativeId);
     loadMaterials(initiativeId);
+    loadFrameworkModuleInstances(initiativeId);
     loadDriveLinkedFiles(initiativeId).then(() => {
       syncDriveFiles(initiativeId).catch(() => {});
     });
-  }, [initiativeId, workspaceUiStorageKey, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles]);
+  }, [initiativeId, workspaceUiStorageKey, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkModuleInstances]);
+
+  useEffect(() => {
+    if (activeView !== 'framework') return;
+    if (!initiativeId) return;
+    loadFrameworkModuleInstances(initiativeId);
+  }, [activeView, initiativeId, loadFrameworkModuleInstances]);
+
+  useEffect(() => {
+    if (!initiative) return;
+    if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) {
+      setFrameworkPlannedModuleIds(Array.from(new Set(initiative.selected_tools)));
+      return;
+    }
+    setFrameworkPlannedModuleIds([]);
+  }, [initiativeId, initiative?.selected_tools]);
+
+  useEffect(() => {
+    if (!initiative) return;
+    if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) return;
+    if (frameworkPlannedModuleIds.length > 0) return;
+    if (frameworkModuleInstances.length === 0) return;
+    const inferred = Array.from(new Set(frameworkModuleInstances.map((instance) => instance.module_id)));
+    setFrameworkPlannedModuleIds(inferred);
+  }, [initiative, frameworkModuleInstances, frameworkPlannedModuleIds.length]);
 
   useEffect(() => {
     writeStoredWorkspaceUiState(workspaceUiStorageKey, {
@@ -577,11 +657,14 @@ function InitiativePageContent() {
       title?: string | null;
       chatId?: string | null;
       chatTitle?: string | null;
+      openChatPanel?: boolean;
     }) => {
+      const openChatPanel = module.openChatPanel ?? true;
       setWorkspaceLaunchMode('idle');
       setPanelOpen('modules', 'workspace', true);
-      setPanelOpen('modules', 'chat', true);
-      if (module.chatId) {
+      setPanelOpen('modules', 'chat', openChatPanel);
+      loadFrameworkModuleInstances(initiativeId);
+      if (openChatPanel && module.chatId) {
         setPendingChatToOpen({
           chatId: module.chatId,
           title: module.chatTitle || module.title || null,
@@ -597,7 +680,7 @@ function InitiativePageContent() {
         moduleId: module.moduleId,
       });
     },
-    [initiativeId, openWorkspaceTab, router, setPanelOpen],
+    [initiativeId, openWorkspaceTab, router, setPanelOpen, loadFrameworkModuleInstances],
   );
 
   const openWorkspaceDocument = useCallback((citation: ResearchPanelCitation) => {
@@ -648,6 +731,43 @@ function InitiativePageContent() {
       title: module.title || module.moduleId.replace(/_/g, ' '),
     });
   }, []);
+
+  const handleCreateModuleInstanceInModulesView = useCallback(async (
+    moduleId: string,
+    moduleName: string,
+  ) => {
+    const instance = await api.createModuleInstance(initiativeId, moduleId);
+    setFrameworkModuleInstances((prev) => [...prev, instance]);
+    handleOpenWorkspaceModule({
+      instanceId: instance.id,
+      moduleId: instance.module_id,
+      title: moduleName,
+      openChatPanel: false,
+    });
+  }, [initiativeId, handleOpenWorkspaceModule]);
+
+  const handleOpenExistingModuleInstanceInModulesView = useCallback(async (
+    instance: ModuleInstance,
+  ) => {
+    handleOpenWorkspaceModule({
+      instanceId: instance.id,
+      moduleId: instance.module_id,
+      title: instance.title || instance.module_id.replace(/_/g, ' '),
+      openChatPanel: false,
+    });
+  }, [handleOpenWorkspaceModule]);
+
+  const handleAddModuleToFrameworkPlan = useCallback(async (moduleId: string) => {
+    const next = Array.from(new Set([...frameworkPlannedModuleIds, moduleId]));
+    const response = await api.selectTools(initiativeId, next);
+    setFrameworkPlannedModuleIds(response.selected_tools);
+  }, [frameworkPlannedModuleIds, initiativeId]);
+
+  const handleRemoveModuleFromFrameworkPlan = useCallback(async (moduleId: string) => {
+    const next = frameworkPlannedModuleIds.filter((id) => id !== moduleId);
+    const response = await api.selectTools(initiativeId, next);
+    setFrameworkPlannedModuleIds(response.selected_tools);
+  }, [frameworkPlannedModuleIds, initiativeId]);
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
     setWorkspaceTabs((prev) => {
@@ -938,7 +1058,13 @@ function InitiativePageContent() {
               </div>
             ) : (
               <FrameworkPlanView
-                initiativeId={initiativeId}
+                plannedModuleIds={frameworkPlannedModuleIds}
+                moduleInstances={frameworkModuleInstances}
+                loading={frameworkModulesLoading}
+                onAddModuleToFrameworkPlan={handleAddModuleToFrameworkPlan}
+                onRemoveModuleFromFrameworkPlan={handleRemoveModuleFromFrameworkPlan}
+                onCreateModuleInstanceInModulesView={handleCreateModuleInstanceInModulesView}
+                onOpenExistingModuleInstanceInModulesView={handleOpenExistingModuleInstanceInModulesView}
                 readOnly={Boolean(isViewer)}
                 onOpenModule={(module) => handleOpenFrameworkModule({
                   instanceId: module.id,

@@ -76,3 +76,16 @@ class ModuleInstance(Base):
     )
 
     initiative: Mapped["Initiative"] = relationship(back_populates="module_instances")
+
+    @property
+    def is_plan_complete(self) -> bool:
+        """Whether this instance should count as complete (approved-only)."""
+        state = self.workflow_state or {}
+        if not isinstance(state, dict):
+            return False
+
+        final_approval = state.get("final_approval") or {}
+        if isinstance(final_approval, dict) and final_approval.get("status") == "approved":
+            return True
+
+        return False
