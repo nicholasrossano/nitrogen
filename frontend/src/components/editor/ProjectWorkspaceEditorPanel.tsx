@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { FileText, FolderOpen, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
@@ -19,6 +19,12 @@ export type WorkspacePanelTab =
   | { id: string; kind: 'decision-log'; title: string; moduleInstanceId: string; moduleId?: string }
   | { id: string; kind: 'document'; title: string; citation: ResearchPanelCitation };
 
+export interface FrameworkPlanModuleOption {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+}
+
 interface ProjectWorkspaceEditorPanelProps {
   initiativeId: string;
   tabs: WorkspacePanelTab[];
@@ -30,6 +36,8 @@ interface ProjectWorkspaceEditorPanelProps {
   workspaceLaunchMode: WorkspaceLaunchMode;
   onWorkspaceLaunchModeHandled: () => void;
   showModuleActions?: boolean;
+  frameworkPlanModules?: FrameworkPlanModuleOption[];
+  onNewModule?: (moduleId: string, moduleName: string) => void;
   onSendToChat?: (content: string, toolHint?: string) => void;
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
@@ -48,6 +56,8 @@ export function ProjectWorkspaceEditorPanel({
   workspaceLaunchMode,
   onWorkspaceLaunchModeHandled,
   showModuleActions = true,
+  frameworkPlanModules,
+  onNewModule,
   onSendToChat,
   onOpenChatSession,
   onOpenDecisionLog,
@@ -55,6 +65,19 @@ export function ProjectWorkspaceEditorPanel({
   onModuleInspectorStateChange,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
+  const [showNewModuleDropdown, setShowNewModuleDropdown] = useState(false);
+  const newModuleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showNewModuleDropdown) return;
+    function handleOutsideClick(e: MouseEvent) {
+      if (newModuleRef.current && !newModuleRef.current.contains(e.target as Node)) {
+        setShowNewModuleDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showNewModuleDropdown]);
   useEffect(() => {
     if (workspaceLaunchMode === 'idle') return;
     // Persist parent-triggered launches (e.g. side drawer click) locally so the
@@ -127,6 +150,49 @@ export function ProjectWorkspaceEditorPanel({
           </div>
           {showModuleActions && (
             <div className="flex-shrink-0 flex items-center gap-0.5 px-1.5 border-l border-divider">
+              {frameworkPlanModules && frameworkPlanModules.length > 0 && onNewModule && (
+                <div className="relative" ref={newModuleRef}>
+                  <button
+                    onClick={() => setShowNewModuleDropdown((prev) => !prev)}
+                    className={[
+                      'flex items-center justify-center w-7 h-7 rounded transition-colors',
+                      showNewModuleDropdown
+                        ? 'bg-white text-text-primary shadow-subtle'
+                        : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
+                    ].join(' ')}
+                    title="New module"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  {showNewModuleDropdown && (
+                    <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-divider rounded-lg shadow-lg z-50 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-divider">
+                        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                          Framework Modules
+                        </h3>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {frameworkPlanModules.map((mod) => (
+                          <button
+                            key={mod.id}
+                            type="button"
+                            onClick={() => {
+                              onNewModule(mod.id, mod.name);
+                              setShowNewModuleDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-subtle text-left border-b border-divider last:border-b-0 transition-colors"
+                          >
+                            <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center text-accent [&>svg]:w-4 [&>svg]:h-4">
+                              {mod.icon}
+                            </span>
+                            <span className="text-xs text-text-primary">{mod.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={() => {
                   setLocalWorkspaceLaunchMode('open');
