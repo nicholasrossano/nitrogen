@@ -182,7 +182,7 @@ function HomePageContent() {
                 <button
                   onClick={handleNewProject}
                   disabled={creating}
-                  className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
+                  className="btn-primary shrink-0 !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg"
                 >
                   {creating ? (
                     <>
@@ -197,7 +197,7 @@ function HomePageContent() {
                   )}
                 </button>
               )}
-              <div className="relative h-[36px] flex-1 min-w-0">
+              <div className="relative h-7 flex-1 min-w-0">
                 <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                   <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 </span>
@@ -206,14 +206,14 @@ function HomePageContent() {
                   placeholder={isTrashView ? 'Search trash' : 'Search projects'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-[36px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+                  className="w-full h-7 appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-lg bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
                   aria-label={isTrashView ? 'Search trash' : 'Search projects'}
                 />
               </div>
             </div>
             <button
               onClick={() => setIsTrashView((v) => !v)}
-              className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
+              className={`btn-secondary shrink-0 !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg ${isTrashView ? '!border-accent !text-accent' : ''}`}
             >
               {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
               {isTrashView ? 'Back to Projects' : 'Trash'}
