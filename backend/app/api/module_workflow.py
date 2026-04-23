@@ -21,14 +21,17 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
+from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
 from app.core.permissions import require_viewer, require_editor
 from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 from app.modules.base import BaseModule
+from app.modules.implementation_plan import ImplementationPlanModule
 from app.modules.registry import get_module_registry
 from app.modules.stakeholder_assessment import StakeholderAssessmentModule
 from app.modules.utils import make_build_item
+from app.services.deep_dive import DeepDiveService
 from app.services.module_workflow_service import (
     clear_final_approval,
     confirm_stage,
@@ -807,8 +810,124 @@ async def enrich_stakeholder_from_map(
     return {"item_id": item_id, "record": enriched, "workflow_version": inst.workflow_version}
 
 
+@router.post("/module-workflow/{instance_id}/implementation/{item_id}/deep-dive")
+async def deep_dive_implementation_item(
+    instance_id: _uuid.UUID,
+    item_id: str,
+    body: ImplementationDeepDiveRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_ai_access),
+):
+    """Run and cache implementation-task deep dive research for inspector panels."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    if not isinstance(module, ImplementationPlanModule):
+        raise HTTPException(status_code=400, detail="Implementation deep dive is only supported for implementation plan")
+
+    state = await ensure_workflow_state(db, inst, module)
+    cache_key = "implementation_deep_dives"
+    cache = state.get(cache_key) if isinstance(state.get(cache_key), dict) else {}
+    cached = cache.get(item_id)
+    service = DeepDiveService(db, user_id=user.uid)
+
+    if cached:
+        serialized = cached
+    else:
+        initiative = await db.get(Initiative, inst.initiative_id)
+        if initiative is None:
+            raise HTTPException(status_code=404, detail="Initiative not found")
+        try:
+            generated = await service.generate(
+                initiative=initiative,
+                item_id=item_id,
+                item_title=body.item_title,
+                item_classification=body.item_classification,
+                item_rationale=body.item_rationale,
+                pillar_name=body.pillar_name,
+            )
+        except Exception:
+            logger.exception("Implementation deep dive failed for item %s in instance %s", item_id, instance_id)
+            raise HTTPException(status_code=500, detail="Deep dive failed. Please try again.")
+        serialized = _serialize_deep_dive_payload(generated)
+        cache[item_id] = serialized
+        state[cache_key] = cache
+        save_workflow_state(inst, state, increment_version=False)
+        await db.commit()
+
+    initiative = await db.get(Initiative, inst.initiative_id)
+    if initiative is not None:
+        evidence_sources = await service.get_evidence_sources(
+            initiative=initiative,
+            item_title=body.item_title,
+            item_rationale=body.item_rationale,
+        )
+        if evidence_sources:
+            non_evidence = [s for s in serialized.get("sources", []) if s.get("source_type") != "evidence"]
+            serialized = {
+                **serialized,
+                "sources": non_evidence + [
+                    {
+                        "title": source.title,
+                        "url": source.url,
+                        "source_type": source.source_type,
+                        **({"excerpt": source.excerpt} if source.excerpt else {}),
+                        **({"evidence_doc_id": source.evidence_doc_id} if source.evidence_doc_id else {}),
+                        **({"chunk_id": source.chunk_id} if source.chunk_id else {}),
+                    }
+                    for source in evidence_sources
+                ],
+            }
+    return serialized
+
+
 class UpdateRecordRequest(BaseModel):
     fields: dict[str, Any]
+
+
+class ImplementationDeepDiveRequest(BaseModel):
+    item_title: str
+    item_classification: str
+    item_rationale: str
+    pillar_name: str
+
+
+def _serialize_deep_dive_payload(result: Any) -> dict[str, Any]:
+    if isinstance(result, dict):
+        return result
+    return {
+        "item_id": result.item_id,
+        "item_title": result.item_title,
+        "pillar_name": result.pillar_name,
+        "what_this_is": list(result.what_this_is or []),
+        "elements": [
+            {
+                "title": element.title,
+                "description": element.description,
+                "classification": element.classification,
+            }
+            for element in (result.elements or [])
+        ],
+        "dependencies": [
+            {
+                "condition": dependency.condition,
+                "effect": dependency.effect,
+            }
+            for dependency in (result.dependencies or [])
+        ],
+        "sources": [
+            {
+                "title": source.title,
+                "url": source.url,
+                "source_type": source.source_type,
+                **({"publisher": source.publisher} if source.publisher else {}),
+                **({"excerpt": source.excerpt} if source.excerpt else {}),
+                **({"evidence_doc_id": source.evidence_doc_id} if source.evidence_doc_id else {}),
+                **({"chunk_id": source.chunk_id} if source.chunk_id else {}),
+            }
+            for source in (result.sources or [])
+        ],
+        "generated_at": result.generated_at,
+        "latency_ms": result.latency_ms,
+    }
 
 
 @router.patch("/module-workflow/{instance_id}/stages/{stage_id}/records/{item_id}")

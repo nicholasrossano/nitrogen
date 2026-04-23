@@ -1,4 +1,5 @@
 export { Button } from './Button';
+export { ConfirmButton } from './ConfirmButton';
 export { PanelHeader } from './PanelHeader';
 export { SideDrawer } from './SideDrawer';
 export type { NavItem } from './SideDrawer';

@@ -808,35 +808,83 @@ async def chat_stream(
                             return
 
                         # Synthetic transition messages ("I've uploaded my documents.",
-                        # "I don't have any documents.") are known onboarding pivot points —
-                        # bypass orchestration LLM and go directly to plan generation.
-                        _effective_tool_hint = data.tool_hint or None
-                        if (
+                        # "I don't have any documents.") are known onboarding pivot points.
+                        # True bypass: call the plan handler directly, no LLM research pipeline.
+                        _is_onboarding_pivot = (
                             data.content in _SKIP_EXTRACTION_MESSAGES
                             and data.allow_initial_project_onboarding
                             and not field_context
-                        ):
-                            _effective_tool_hint = "generate_project_plan"
+                        )
 
-                        model_inputs_context = (
-                            data.model_inputs_context
-                            or ChatService._format_model_inputs_from_messages(conversation_msgs, field_context)
-                        )
-                        generation_task = asyncio.create_task(
-                            service.generate_response(
-                                user_message=data.content,
-                                history=history,
-                                on_thinking=on_thinking,
-                                tool_hint=_effective_tool_hint,
-                                field_context=field_context,
-                                model_inputs_context=model_inputs_context,
-                                module_context=data.module_context or None,
-                                project_context=project_context,
-                                on_research_step=on_research_step,
-                                initiative_id=str(verified_initiative.id),
-                                initiative=verified_initiative,
+                        if _is_onboarding_pivot:
+                            async def _direct_module_proposal() -> ServiceChatResponse:
+                                from app.plans.registry import get_plan_registry as _get_plan_registry
+
+                                _plan_handler = _get_plan_registry().default_handler(db, user.uid)
+                                try:
+                                    _structure = await _plan_handler.propose_structure(
+                                        initiative=verified_initiative
+                                    )
+                                    _wt = _plan_handler.definition.structure_widget_type
+                                    _wd = _plan_handler.build_structure_widget_data(_structure)
+                                    _recs = _wd.get("recommendations") or []
+                                    _n = len([
+                                        r for r in _recs
+                                        if isinstance(r, dict) and r.get("recommended")
+                                    ]) or len(_recs)
+                                    _label = "module" if _n == 1 else "modules"
+                                    _msg = (
+                                        f"I've mapped the {_n} {_label} that look most relevant for this project. "
+                                        "Review them below and confirm the framework plan you want to start with."
+                                    ) if _n > 0 else (
+                                        "I've mapped the modules that look most relevant for this project. "
+                                        "Review them below and confirm the framework plan you want to start with."
+                                    )
+                                    return ServiceChatResponse(
+                                        content=_msg,
+                                        sources=[],
+                                        tiers_used=[],
+                                        latency_ms=0,
+                                        widget_type=_wt,
+                                        widget_data=_wd,
+                                    )
+                                except Exception as _e:
+                                    logger.error(
+                                        "Module proposal failed during onboarding pivot: %s",
+                                        _e,
+                                        exc_info=True,
+                                    )
+                                    return ServiceChatResponse(
+                                        content=(
+                                            "I wasn't able to analyze the project right now. "
+                                            "Could you describe a bit more so I can try again?"
+                                        ),
+                                        sources=[],
+                                        tiers_used=[],
+                                        latency_ms=0,
+                                    )
+
+                            generation_task = asyncio.create_task(_direct_module_proposal())
+                        else:
+                            model_inputs_context = (
+                                data.model_inputs_context
+                                or ChatService._format_model_inputs_from_messages(conversation_msgs, field_context)
                             )
-                        )
+                            generation_task = asyncio.create_task(
+                                service.generate_response(
+                                    user_message=data.content,
+                                    history=history,
+                                    on_thinking=on_thinking,
+                                    tool_hint=data.tool_hint or None,
+                                    field_context=field_context,
+                                    model_inputs_context=model_inputs_context,
+                                    module_context=data.module_context or None,
+                                    project_context=project_context,
+                                    on_research_step=on_research_step,
+                                    initiative_id=str(verified_initiative.id),
+                                    initiative=verified_initiative,
+                                )
+                            )
                     else:
                         generation_task = asyncio.create_task(
                             service.generate_response(

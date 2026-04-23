@@ -20,6 +20,7 @@ import {
   type WorkspaceWidgetFooterState,
 } from '@/lib/widgetRegistry';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
+import { ConfirmButton } from '@/components/ui';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -182,17 +183,14 @@ function ConfirmationBar({
     disabled?: boolean;
     loading?: boolean;
   }) => (
-    <button
+    <ConfirmButton
       onClick={onClick}
-      disabled={disabled || loading}
-      className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5 shrink-0"
-    >
-      {loading ? (
-        <><Loader2 className="w-3 h-3 animate-spin" /> Confirming...</>
-      ) : (
-        <>Confirm</>
-      )}
-    </button>
+      disabled={disabled}
+      loading={loading}
+      label="Confirm"
+      loadingLabel="Confirming..."
+      className="!px-3 shrink-0"
+    />
   );
 
   if (isStageConfirmed(status)) {

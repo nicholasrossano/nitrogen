@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
+import { ConfirmButton } from '@/components/ui';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
@@ -27,6 +29,7 @@ interface ModuleChecklistWidgetProps {
 }
 
 export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: ModuleChecklistWidgetProps) {
+  const router = useRouter();
   const recommendations = useMemo(
     () => ((data?.recommendations || []) as ModuleRecommendation[])
       .filter((recommendation) => recommendation?.tool?.id),
@@ -69,6 +72,11 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
     }
   }, [confirmedLocal, initialSelectedIds, initialSelectedKey]);
 
+  const selectedRecommendations = useMemo(
+    () => visibleRecommendations.filter((recommendation) => selectedModules.has(recommendation.tool.id)),
+    [selectedModules, visibleRecommendations],
+  );
+
   const groupedRecommendations = useMemo(() => {
     const categoryByModuleId = new Map<string, { id: string; name: string }>();
     MODULE_CATEGORIES.forEach((category) => {
@@ -80,10 +88,10 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
     const grouped = MODULE_CATEGORIES.map((category) => ({
       id: category.id,
       name: category.name,
-      items: visibleRecommendations.filter((recommendation) => category.moduleIds.includes(recommendation.tool.id)),
+      items: selectedRecommendations.filter((recommendation) => category.moduleIds.includes(recommendation.tool.id)),
     })).filter((category) => category.items.length > 0);
 
-    const otherItems = visibleRecommendations.filter(
+    const otherItems = selectedRecommendations.filter(
       (recommendation) => !categoryByModuleId.has(recommendation.tool.id),
     );
 
@@ -96,21 +104,9 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
     }
 
     return grouped;
-  }, [visibleRecommendations]);
+  }, [selectedRecommendations]);
 
-  const title = String(data?.title || 'Recommended Framework Modules');
-  const subtitle = String(
-    data?.subtitle ||
-      'Review the suggested modules for this project, remove any that do not fit, then confirm to set up the framework plan.',
-  );
-  const pendingTitle = String(data?.pendingTitle || 'Building your framework...');
-  const pendingSubtitle = String(
-    data?.pendingSubtitle ||
-      `Setting up ${selectedModules.size} recommended module${selectedModules.size === 1 ? '' : 's'}`,
-  );
-  const successMessage = String(data?.successMessage || 'Framework generated. View it in the Framework tab.');
-  const footerHint = String(data?.footerHint || 'Remove modules above or request changes in chat');
-  const confirmLabel = String(data?.confirmLabel || 'Confirm Framework Modules');
+  const title = 'Framework Plan';
 
   const confirmed = confirmedLocal || Boolean(projectPlan);
   const canInteract = isActive && !confirmed && !submitting;
@@ -152,6 +148,7 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
       if (afterGenerate.error || !afterGenerate.projectPlan) {
         throw new Error(afterGenerate.error || 'Failed to build framework.');
       }
+      router.replace(`/initiatives/${initiativeId}?view=framework`);
     } catch (nextError) {
       setConfirmedLocal(false);
       setError(nextError instanceof Error ? nextError.message : 'Failed to build framework.');
@@ -162,12 +159,9 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
 
   return (
     <div className="card-elevated overflow-hidden">
-      <div className="border-b border-divider px-5 py-4 bg-white">
+      <div className="border-b border-divider bg-white px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-          {confirmed ? pendingTitle : title}
-        </p>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-          {confirmed ? pendingSubtitle : subtitle}
+          {title}
         </p>
       </div>
 
@@ -181,13 +175,11 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
               {category.items.map((recommendation) => {
                 const moduleId = recommendation.tool.id;
                 const moduleMeta = moduleMetaById.get(moduleId);
-                const isSelected = selectedModules.has(moduleId);
-
                 return (
                   <div
                     key={moduleId}
                     className={`group relative overflow-hidden rounded-xl border border-black/[0.04] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors ${
-                      isSelected ? 'bg-accent-wash' : ''
+                      selectedModules.has(moduleId) ? 'bg-accent-wash' : ''
                     } ${!canInteract ? 'opacity-80' : ''}`}
                   >
                     <div className="flex items-start gap-3 px-4 py-3.5">
@@ -195,45 +187,24 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
                         {moduleMeta?.icon ?? <Check className="h-5 w-5" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-medium text-text-primary">
                             {recommendation.tool.name}
                           </p>
-                          {recommendation.recommended && (
-                            <span className="rounded-full bg-accent-wash px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-                              Recommended
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleModule(moduleId)}
+                            disabled={!canInteract}
+                            aria-label={`Remove ${recommendation.tool.name}`}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors enabled:hover:bg-white/60 enabled:hover:text-indicator-orange disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                         <p className="mt-1 text-xs leading-5 text-text-secondary">
                           {recommendation.tool.description}
                         </p>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 border-t border-divider px-4 py-2.5">
-                      <p className="text-[11px] text-text-tertiary">
-                        {isSelected ? 'Included in the starting framework plan' : 'Not included yet'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleModule(moduleId)}
-                        disabled={!canInteract}
-                        className={`btn-secondary !px-2.5 !py-1 !text-[11px] ${
-                          isSelected ? 'text-indicator-orange' : ''
-                        }`}
-                      >
-                        {isSelected ? (
-                          <>
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Remove
-                          </>
-                        ) : (
-                          <>
-                            <Check className="h-3.5 w-3.5" />
-                            Include
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 );
@@ -246,35 +217,22 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
         )}
       </div>
 
-      {(isActive || confirmed) && (
-        <div className="border-t border-divider bg-surface-header px-5 py-3">
-          {confirmed && !submitting ? (
-            <p className="text-center text-xs text-text-tertiary">{successMessage}</p>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] text-text-tertiary">{footerHint}</p>
-              <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={!canInteract || selectedModules.size === 0}
-                className="btn-primary !px-4 !py-1.5 !text-xs"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Building framework...
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-3.5 w-3.5" />
-                    {confirmLabel}
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+      {(isActive || confirmed) && !confirmed && (
+        <div className="border-t border-divider bg-white px-5 py-3">
+          <div className="flex items-center justify-end">
+            <ConfirmButton
+              onClick={handleConfirm}
+              disabled={!canInteract || selectedModules.size === 0}
+              loading={submitting}
+              label="Confirm"
+              loadingLabel="Confirming..."
+              size="sm"
+              className="!px-4 !py-1.5 !text-xs"
+            />
+          </div>
         </div>
       )}
+
     </div>
   );
 }

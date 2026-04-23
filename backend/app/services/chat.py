@@ -784,6 +784,28 @@ class ChatService:
             content = await self._generate_lcoe_answer(
                 user_message, history, widget_data, ranked_facts
             )
+        elif widget_type == "tool_checklist" and widget_data:
+            recommendations = widget_data.get("recommendations") or []
+            if isinstance(recommendations, list):
+                recommended_count = len([
+                    recommendation
+                    for recommendation in recommendations
+                    if isinstance(recommendation, dict) and recommendation.get("recommended")
+                ])
+                count_label = recommended_count or len(recommendations)
+            else:
+                count_label = 0
+            if count_label > 0:
+                module_label = "module" if count_label == 1 else "modules"
+                content = (
+                    f"I've mapped the {count_label} {module_label} that look most relevant for this "
+                    "project. Review them below and confirm the framework plan you want to start with."
+                )
+            else:
+                content = (
+                    "I've mapped the framework modules that look most relevant for this project. "
+                    "Review them below and confirm the framework plan you want to start with."
+                )
         elif is_propose_request:
             content = await self._generate_investigate_answer(
                 user_message,
@@ -2544,6 +2566,10 @@ class ChatService:
                 )
                 widget_type = plan_handler.definition.structure_widget_type
                 widget_data = plan_handler.build_structure_widget_data(structure)
+                assistant_response = (
+                    "I've outlined the modules that look most relevant for this project. "
+                    "Review them below and confirm the framework plan you want to start with."
+                )
             except Exception as e:
                 logger.error(f"Category proposal failed: {e}", exc_info=True)
                 assistant_response = "I wasn't able to analyze the project right now. Could you provide a bit more detail so I can try again?"
