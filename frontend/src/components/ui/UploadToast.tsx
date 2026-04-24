@@ -6,7 +6,13 @@ import { CheckCircle2, XCircle, Loader2, X } from 'lucide-react';
 export interface UploadItem {
   id: string;
   filename: string;
-  status: 'uploading' | 'done' | 'error';
+  /**
+   * - 'uploading': request is in-flight
+   * - 'processing': bytes are stored but backend is still parsing/indexing
+   * - 'done': fully indexed / ready for retrieval
+   * - 'error': upload or processing failed
+   */
+  status: 'uploading' | 'processing' | 'done' | 'error';
   errorMessage?: string;
 }
 
@@ -25,7 +31,9 @@ export function UploadToast({ items, onDismiss }: UploadToastProps) {
   const lastTickRef = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const allSettled = items.every((i) => i.status !== 'uploading');
+  const allSettled = items.every(
+    (i) => i.status !== 'uploading' && i.status !== 'processing',
+  );
 
   // Slide-up on mount
   useEffect(() => {
@@ -70,16 +78,19 @@ export function UploadToast({ items, onDismiss }: UploadToastProps) {
   const doneCount = items.filter((i) => i.status === 'done').length;
   const errorCount = items.filter((i) => i.status === 'error').length;
   const uploadingCount = items.filter((i) => i.status === 'uploading').length;
+  const processingCount = items.filter((i) => i.status === 'processing').length;
 
   const headerLabel = uploadingCount > 0
     ? `Uploading ${items.length === 1 ? 'file' : `${uploadingCount} of ${items.length} files`}…`
+    : processingCount > 0
+    ? `Processing ${items.length === 1 ? 'file' : `${processingCount} of ${items.length} files`}…`
     : errorCount > 0 && doneCount === 0
     ? 'Upload failed'
     : errorCount > 0
-    ? `${doneCount} uploaded, ${errorCount} failed`
+    ? `${doneCount} ready, ${errorCount} failed`
     : items.length === 1
-    ? 'Upload complete'
-    : `${doneCount} files uploaded`;
+    ? 'File ready'
+    : `${doneCount} files ready`;
 
   return (
     <div
@@ -92,7 +103,7 @@ export function UploadToast({ items, onDismiss }: UploadToastProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-divider">
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          {uploadingCount > 0 ? (
+          {uploadingCount > 0 || processingCount > 0 ? (
             <Loader2 className="w-3.5 h-3.5 text-accent animate-spin flex-shrink-0" />
           ) : errorCount > 0 && doneCount === 0 ? (
             <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
@@ -114,7 +125,7 @@ export function UploadToast({ items, onDismiss }: UploadToastProps) {
       <div className="px-4 py-3 space-y-2 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         {items.map((item) => (
           <div key={item.id} className="flex items-center gap-2">
-            {item.status === 'uploading' && (
+            {(item.status === 'uploading' || item.status === 'processing') && (
               <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0" />
             )}
             {item.status === 'done' && (
@@ -127,6 +138,9 @@ export function UploadToast({ items, onDismiss }: UploadToastProps) {
               <p className="text-xs text-text-primary truncate" title={item.filename}>
                 {item.filename}
               </p>
+              {item.status === 'processing' && (
+                <p className="text-[10px] text-text-tertiary truncate">Processing in background…</p>
+              )}
               {item.status === 'error' && item.errorMessage && (
                 <p className="text-[10px] text-red-400 truncate">{item.errorMessage}</p>
               )}

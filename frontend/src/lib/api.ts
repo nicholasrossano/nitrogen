@@ -409,6 +409,13 @@ export interface MemoResponse {
   created_at: string;
 }
 
+export type EvidenceProcessingStatus =
+  | 'uploaded'
+  | 'processing'
+  | 'lightweight_ready'
+  | 'indexed'
+  | 'failed';
+
 export interface EvidenceDoc {
   id: string;
   filename: string | null;
@@ -416,6 +423,13 @@ export interface EvidenceDoc {
   file_size?: number | null;
   created_at: string;
   chunk_count: number;
+  /**
+   * Backend processing lifecycle. Clients should prefer this over chunk_count
+   * for "is this doc ready?" — chunk_count only becomes non-zero once indexing
+   * completes.
+   */
+  processing_status?: EvidenceProcessingStatus;
+  processing_error?: string | null;
 }
 
 export interface ProjectMaterial {
@@ -425,6 +439,8 @@ export interface ProjectMaterial {
   file_size: number | null;
   created_at: string;
   source?: string; // "material" | "evidence"
+  processing_status?: EvidenceProcessingStatus;
+  processing_error?: string | null;
 }
 
 export interface GeneratedFile {

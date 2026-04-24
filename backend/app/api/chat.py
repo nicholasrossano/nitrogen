@@ -126,7 +126,11 @@ async def _should_trigger_initial_project_onboarding(
     current_user_message_id: uuid.UUID,
 ) -> bool:
     """Only show the upload-documents onboarding widget for the first project chat."""
-    if getattr(initiative, "project_plan", None) or getattr(initiative, "evidence_ready", False):
+    if (
+        getattr(initiative, "selected_tools", None)
+        or getattr(initiative, "project_plan", None)
+        or getattr(initiative, "evidence_ready", False)
+    ):
         return False
 
     prior_project_message_count = await db.scalar(
@@ -140,6 +144,18 @@ async def _should_trigger_initial_project_onboarding(
         )
     )
     if (prior_project_message_count or 0) > 0:
+        return False
+
+    # Any existing evidence doc (even one still processing) means onboarding
+    # has already been kicked off — don't re-prompt for uploads.
+    from app.models.evidence import EvidenceDoc
+
+    evidence_doc_count = await db.scalar(
+        select(func.count(EvidenceDoc.id)).where(
+            EvidenceDoc.initiative_id == initiative.id,
+        )
+    )
+    if (evidence_doc_count or 0) > 0:
         return False
 
     uploaded_material_count = await db.scalar(
@@ -601,6 +617,7 @@ async def chat_stream(
                         and is_first_turn_in_thread
                         and not field_context
                         and not data.tool_hint
+                        and not verified_initiative.selected_tools
                         and not verified_initiative.project_plan
                         and not verified_initiative.evidence_ready
                     )
@@ -786,6 +803,13 @@ async def chat_stream(
                         if _is_onboarding_pivot:
                             async def _direct_module_proposal() -> ServiceChatResponse:
                                 from app.plans.registry import get_plan_registry as _get_plan_registry
+
+                                # The conditional gate (wait for at least one
+                                # uploaded doc to pass the lightweight milestone,
+                                # or no-op when no files were uploaded) lives
+                                # inside ``propose_structure`` below.
+                                if on_thinking:
+                                    await on_thinking("Reviewing uploaded materials…")
 
                                 _plan_handler = _get_plan_registry().default_handler(db, user.uid)
                                 try:

@@ -176,3 +176,35 @@ export function checkDuplicates(
 
   return results;
 }
+
+/**
+ * Default concurrency for client-side uploads. Four is the sweet spot for
+ * small-to-medium files over a typical broadband connection — enough to hide
+ * per-request latency, low enough to avoid browser/network queueing.
+ */
+export const DEFAULT_UPLOAD_CONCURRENCY = 4;
+
+/**
+ * Run an async worker over each item with a bounded number of concurrent
+ * workers. Order of completion is not preserved, but the worker receives the
+ * item's original index so callers can correlate results back to the input.
+ *
+ * Kept intentionally tiny — we don't need p-limit's full feature set.
+ */
+export async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let cursor = 0;
+
+  const runners = Array.from({ length: limit }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      await worker(items[idx], idx);
+    }
+  });
+
+  await Promise.all(runners);
+}

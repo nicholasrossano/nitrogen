@@ -1,11 +1,18 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { FolderOpen } from 'lucide-react';
 import { UploadToast, UploadItem } from '@/components/ui/UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
-import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import {
+  extractFilesFromDrop,
+  filterSupportedFiles,
+  checkDuplicates,
+  SUPPORTED_EXTENSIONS,
+  runWithConcurrency,
+  DEFAULT_UPLOAD_CONCURRENCY,
+} from '@/lib/fileUtils';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 
 interface DocumentRequestWidgetProps {
@@ -30,7 +37,7 @@ export function DocumentRequestWidget({
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials } = useInitiativeStore();
+  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials, evidenceDocs } = useInitiativeStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
@@ -52,34 +59,80 @@ export function DocumentRequestWidget({
       filename: f.name,
       status: 'uploading',
     }));
-    setToastItems(initial);
+    // Merge with any in-flight items so concurrent calls (e.g. clean + renamed
+    // duplicates) share one toast.
+    setToastItems((prev) => [...prev, ...initial]);
     setShowToast(true);
 
     let successCount = 0;
-    for (let i = 0; i < filesToUpload.length; i++) {
-      const file = filesToUpload[i];
-      const item = initial[i];
-      try {
-        await uploadEvidence(initiativeId, file);
-        successCount++;
-        setToastItems((prev) =>
-          prev.map((t) => (t.id === item.id ? { ...t, status: 'done' } : t))
-        );
-      } catch (err) {
-        setToastItems((prev) =>
-          prev.map((t) =>
-            t.id === item.id
-              ? { ...t, status: 'error', errorMessage: err instanceof Error ? err.message : 'Upload failed' }
-              : t
-          )
-        );
-      }
-    }
+    await runWithConcurrency(
+      filesToUpload,
+      DEFAULT_UPLOAD_CONCURRENCY,
+      async (file, i) => {
+        const item = initial[i];
+        try {
+          await uploadEvidence(initiativeId, file);
+          successCount++;
+          // Upload finished → backend is now processing in the background.
+          // The effect below will flip this to 'done' once processing_status
+          // reaches 'indexed'/'lightweight_ready', or to 'error' on failure.
+          setToastItems((prev) =>
+            prev.map((t) =>
+              t.id === item.id ? { ...t, status: 'processing' } : t,
+            ),
+          );
+        } catch (err) {
+          setToastItems((prev) =>
+            prev.map((t) =>
+              t.id === item.id
+                ? {
+                    ...t,
+                    status: 'error',
+                    errorMessage: err instanceof Error ? err.message : 'Upload failed',
+                  }
+                : t
+            )
+          );
+        }
+      },
+    );
 
     if (successCount > 0) {
       await sendProgressMessage("I've uploaded my documents.");
     }
   }, [uploadEvidence, initiativeId, sendProgressMessage]);
+
+  // Advance toast items from 'processing' to 'done'/'error' based on the
+  // backend's per-doc lifecycle. We match by filename since the upload call
+  // doesn't hand back the server-side doc id to the toast item directly.
+  useEffect(() => {
+    setToastItems((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((t) => {
+        if (t.status !== 'processing') return t;
+        const match = evidenceDocs.find((d) => d.filename === t.filename);
+        if (!match?.processing_status) return t;
+        if (
+          match.processing_status === 'indexed' ||
+          match.processing_status === 'lightweight_ready'
+        ) {
+          changed = true;
+          return { ...t, status: 'done' as const };
+        }
+        if (match.processing_status === 'failed') {
+          changed = true;
+          return {
+            ...t,
+            status: 'error' as const,
+            errorMessage: match.processing_error || 'Processing failed',
+          };
+        }
+        return t;
+      });
+      return changed ? next : prev;
+    });
+  }, [evidenceDocs]);
 
   const handleUpload = useCallback(async (files: File[]) => {
     const existingNames = projectMaterials.map((m) => m.filename);
@@ -111,6 +164,9 @@ export function DocumentRequestWidget({
     }
   }, [handleUpload]);
 
+  // Only disable the dropzone / CTA while bytes are still in flight — once a
+  // file's bytes are uploaded, the user can continue onboarding even though
+  // the backend is still processing.
   const uploading = toastItems.some((i) => i.status === 'uploading');
 
   const handleFolderSelect = useCallback(() => {

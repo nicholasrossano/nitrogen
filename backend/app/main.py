@@ -81,6 +81,17 @@ async def lifespan(app: FastAPI):
     # Startup
     async with engine.begin():
         pass
+    # Restart-safety: pick up any evidence docs that were mid-processing when
+    # the previous worker died and re-enqueue them.  Fire-and-forget — a DB
+    # hiccup during reclaim must never prevent the API from serving.
+    try:
+        from app.services.evidence_processor import reclaim_stale_jobs
+
+        import asyncio as _asyncio
+
+        _asyncio.create_task(reclaim_stale_jobs())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not schedule reclaim_stale_jobs at startup: %s", exc)
     yield
     # Shutdown
     from app.core.http_client import close_http_client

@@ -166,6 +166,8 @@ async def list_materials(
             file_size=e.file_size,
             created_at=e.created_at,
             source="evidence",
+            processing_status=e.processing_status,
+            processing_error=e.processing_error,
         ))
 
     rows.sort(key=lambda r: r.created_at, reverse=True)
@@ -258,6 +260,8 @@ async def list_project_files(
             file_size=e.file_size,
             created_at=e.created_at,
             source="evidence",
+            processing_status=e.processing_status,
+            processing_error=e.processing_error,
         ))
     uploaded.sort(key=lambda r: r.created_at, reverse=True)
 
