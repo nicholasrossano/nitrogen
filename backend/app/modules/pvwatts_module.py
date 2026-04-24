@@ -33,7 +33,6 @@ from app.modules.base import (
     RefinementModel,
     ModuleDefinition,
     ModuleInput,
-    ModuleOutput,
 )
 
 settings = get_settings()

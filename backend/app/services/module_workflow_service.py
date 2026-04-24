@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -46,10 +45,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
+from app.models.module_instance import ModuleInstance
 from app.modules.base import BaseModule, StageDef
 from app.modules.utils import make_build_item
-from app.services import module_service
 
 logger = logging.getLogger(__name__)
 

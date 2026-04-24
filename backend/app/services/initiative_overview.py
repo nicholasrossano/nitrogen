@@ -65,7 +65,7 @@ def _build_overview_prompt(
     )
     user_prompt = (
         "Create a lightweight overview summary for this initiative.\n\n"
-        f"Project context:\n" + "\n".join(metadata_lines) + "\n\n"
+        "Project context:\n" + "\n".join(metadata_lines) + "\n\n"
         "Uploaded files:\n" + "\n".join(source_lines)
     )
     return system_prompt, user_prompt
