@@ -1,11 +1,25 @@
+import { CherryBlossomLoadingArt } from './CherryBlossomLoadingArt';
 import { DandelionLoadingArt } from './DandelionLoadingArt';
 import { FernLoadingArt } from './FernLoadingArt';
 import { DahliaLoadingArt } from './DahliaLoadingArt';
+import { OakLoadingArt } from './OakLoadingArt';
 import { PineLoadingArt } from './PineLoadingArt';
-import { WisteriaLoadingArt } from './WisteriaLoadingArt';
+import { SunflowerLoadingArt } from './SunflowerLoadingArt';
 import type { LoadingArtDefinition } from './types';
 
 export const loadingArtRegistry: LoadingArtDefinition[] = [
+  {
+    id: 'acacia',
+    name: 'Acacia',
+    description: 'An umbrella acacia silhouette with a branching crown that compresses toward the trunk on inhale and opens back out on exhale.',
+    Component: CherryBlossomLoadingArt,
+  },
+  {
+    id: 'dahlia',
+    name: 'Dahlia',
+    description: 'Seven concentric rings of petals bloom open from a tight bud and close again on each breath.',
+    Component: DahliaLoadingArt,
+  },
   {
     id: 'dandelion',
     name: 'Dandelion',
@@ -19,10 +33,10 @@ export const loadingArtRegistry: LoadingArtDefinition[] = [
     Component: FernLoadingArt,
   },
   {
-    id: 'dahlia',
-    name: 'Dahlia',
-    description: 'Seven concentric rings of petals bloom open from a tight bud and close again on each breath.',
-    Component: DahliaLoadingArt,
+    id: 'oak',
+    name: 'Oak',
+    description: 'A broad oak canopy gathers toward its trunk-and-branch scaffold on each inhale, then billows back into a lobed crown.',
+    Component: OakLoadingArt,
   },
   {
     id: 'pine',
@@ -31,10 +45,10 @@ export const loadingArtRegistry: LoadingArtDefinition[] = [
     Component: PineLoadingArt,
   },
   {
-    id: 'wisteria',
-    name: 'Wisteria',
-    description: 'A wisteria raceme — wide at the top, tapering to a point — cinches inward on each breath and blooms back open.',
-    Component: WisteriaLoadingArt,
+    id: 'sunflower',
+    name: 'Sunflower',
+    description: 'Fermat/phyllotaxis spiral disk of seeds surrounded by 21 tapered petals — closes to the disk edge on each breath and blooms back open.',
+    Component: SunflowerLoadingArt,
   },
 ];
 
