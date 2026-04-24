@@ -6,10 +6,20 @@ import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidge
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
+const replace = jest.fn();
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    replace,
+  }),
+}));
+
 describe('ModuleChecklistWidget', () => {
   beforeEach(() => {
+    replace.mockReset();
     useSettingsStore.setState({ devMode: false });
     useInitiativeStore.setState({
+      initiative: { id: 'initiative-123', selected_tools: null } as any,
       projectPlan: null,
       error: null,
       selectTools: async () => undefined,
@@ -19,17 +29,20 @@ describe('ModuleChecklistWidget', () => {
 
   it('groups recommended modules by framework category and confirms the selection', async () => {
     const selectTools = jest.fn().mockImplementation(async () => {
-      useInitiativeStore.setState({ error: null });
-    });
-    const generateProjectPlan = jest.fn().mockImplementation(async () => {
-      useInitiativeStore.setState({ projectPlan: { pillars: [] } as any, error: null });
+      useInitiativeStore.setState({
+        error: null,
+        initiative: {
+          id: 'initiative-123',
+          selected_tools: ['landscape_mapping'],
+        } as any,
+      });
     });
 
     useInitiativeStore.setState({
+      initiative: { id: 'initiative-123', selected_tools: null } as any,
       projectPlan: null,
       error: null,
       selectTools,
-      generateProjectPlan,
     });
 
     render(
@@ -76,7 +89,7 @@ describe('ModuleChecklistWidget', () => {
 
     await waitFor(() => {
       expect(selectTools).toHaveBeenCalledWith('initiative-123', ['landscape_mapping']);
-      expect(generateProjectPlan).toHaveBeenCalledWith('initiative-123');
+      expect(replace).toHaveBeenCalledWith('/initiatives/initiative-123?view=framework');
     });
   });
 });

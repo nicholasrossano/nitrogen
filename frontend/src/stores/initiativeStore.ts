@@ -72,6 +72,76 @@ interface InitiativeState {
 
 let latestLoadInitiativeRequest = 0;
 
+// ── Background poll: keep evidence_docs / projectMaterials in sync with the
+// server while any uploaded doc is still processing. We poll cheaply (list
+// endpoint, no heavy joins) and exit as soon as everything is indexed or
+// failed.  Only one poll runs per initiative at a time.
+const activeProcessingPolls = new Set<string>();
+
+async function schedulePollForProcessing(
+  initiativeId: string,
+  get: () => InitiativeState,
+  set: (partial: Partial<InitiativeState> | ((state: InitiativeState) => Partial<InitiativeState>)) => void,
+): Promise<void> {
+  if (activeProcessingPolls.has(initiativeId)) return;
+  activeProcessingPolls.add(initiativeId);
+
+  const POLL_INTERVAL_MS = 1500;
+  const MAX_POLLS = 80; // ~2 minutes of polling, then give up
+
+  try {
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+      let evidenceDocs: EvidenceDoc[];
+      try {
+        evidenceDocs = await api.getEvidence(initiativeId);
+      } catch {
+        // Transient network errors shouldn't kill the poll loop — try again.
+        continue;
+      }
+
+      set((state) => ({
+        evidenceDocs,
+        projectMaterials: state.projectMaterials.map((m) => {
+          const match = evidenceDocs.find((d) => d.id === m.id);
+          if (!match) return m;
+          return {
+            ...m,
+            filename: match.filename ?? m.filename,
+            file_type: match.file_type ?? m.file_type,
+            file_size: match.file_size ?? m.file_size,
+            processing_status: match.processing_status ?? m.processing_status,
+            processing_error: match.processing_error ?? m.processing_error,
+          };
+        }),
+      }));
+
+      const stillProcessing = evidenceDocs.some(
+        (d) =>
+          d.processing_status === 'uploaded' ||
+          d.processing_status === 'processing' ||
+          d.processing_status === 'lightweight_ready',
+      );
+      if (!stillProcessing) {
+        // Once everything has settled, refresh the initiative so flags like
+        // evidence_ready propagate.
+        try {
+          const initiative = await api.getInitiative(initiativeId);
+          set({ initiative });
+          get()._refreshPlanInBackground(initiativeId);
+        } catch {
+          // Non-fatal.
+        }
+        return;
+      }
+    }
+  } finally {
+    activeProcessingPolls.delete(initiativeId);
+  }
+}
+
+
 export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   // Initial state
   initiative: null,
@@ -168,11 +238,14 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         file_size: doc.file_size ?? file.size,
         created_at: doc.created_at,
         source: 'evidence',
+        processing_status: doc.processing_status ?? 'uploaded',
+        processing_error: doc.processing_error ?? null,
       };
       set(state => ({
         projectMaterials: [asMaterial, ...state.projectMaterials],
         evidenceDocs: [doc, ...state.evidenceDocs],
       }));
+      schedulePollForProcessing(id, get, set);
     } catch (error) {
       console.error('Failed to upload material:', error);
       throw error;
@@ -479,14 +552,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     try {
       const response = await api.uploadEvidence(id, file);
 
-      // Reload initiative context (needed so AI sees the new evidence)
-      const [initiative, { messages, stage_status }, evidenceDocs] = await Promise.all([
-        api.getInitiative(id),
-        api.getChatHistory(id),
-        api.getEvidence(id),
-      ]);
-
-      // Also surface the new file in projectMaterials so the Files tab updates immediately
+      // Optimistic: insert the new doc immediately, then refresh listings in
+      // parallel so we see server-side deduped filenames and processing state
+      // right away. We intentionally *do not* await a full initiative reload
+      // here — the endpoint now returns as soon as the file is stored, so
+      // blocking on initiative/messages reloads would undo the whole point of
+      // the async processing pipeline.
       const doc: EvidenceDoc = response.document;
       const asMaterial: ProjectMaterial = {
         id: doc.id,
@@ -495,19 +566,23 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         file_size: doc.file_size ?? file.size,
         created_at: doc.created_at,
         source: 'evidence',
+        processing_status: doc.processing_status ?? 'uploaded',
+        processing_error: doc.processing_error ?? null,
       };
 
       set((state) => ({
-        initiative,
-        messages,
-        stageStatus: stage_status,
-        evidenceDocs,
-        projectMaterials: [asMaterial, ...state.projectMaterials.filter((m) => m.id !== doc.id)],
+        evidenceDocs: [doc, ...state.evidenceDocs.filter((d) => d.id !== doc.id)],
+        projectMaterials: [
+          asMaterial,
+          ...state.projectMaterials.filter((m) => m.id !== doc.id),
+        ],
         loading: false,
         error: null,
       }));
 
-      get()._refreshPlanInBackground(id);
+      // Fire-and-forget refreshes to sync server state (e.g. initiative.evidence_ready
+      // once indexing completes). These poll in the background.
+      schedulePollForProcessing(id, get, set);
     } catch (error) {
       console.error('Failed to upload evidence:', error);
       set({ loading: false, error: null });
@@ -616,19 +691,22 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   selectTools: async (id: string, toolIds: string[]) => {
     set({ loading: true, error: null });
     try {
-      await api.selectTools(id, toolIds);
-      
-      const [initiative, { messages, stage_status }] = await Promise.all([
-        api.getInitiative(id),
-        api.getChatHistory(id),
-      ]);
-      
-      set({
-        initiative,
-        messages,
-        stageStatus: stage_status,
+      const response = await api.selectTools(id, toolIds);
+
+      // Keep confirmation fast: selecting modules should not block on a full
+      // initiative + chat-history reload before we can navigate into the
+      // framework view. We update the local initiative shape optimistically and
+      // let the project plan request refresh the rest of the view afterward.
+      set((state) => ({
+        initiative: state.initiative
+          ? {
+              ...state.initiative,
+              selected_tools: response.selected_tools,
+              stage: response.stage,
+            }
+          : state.initiative,
         loading: false,
-      });
+      }));
     } catch (error) {
       console.error('selectTools: error', error);
       set({

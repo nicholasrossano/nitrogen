@@ -10,17 +10,28 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
-from app.models.evidence import EvidenceDoc, EvidenceChunk
+from app.models.evidence import EvidenceDoc, EvidenceChunk, EvidenceDocStatus
 from app.schemas.evidence import (
     EvidenceTextInput,
     EvidenceDocResponse,
     EvidenceUploadResponse,
 )
-from app.services.document_parser import DocumentParserService
-from app.services.embeddings import EmbeddingsService
+from app.services.evidence_processing import create_uploaded_doc
+from app.services.evidence_processor import schedule_processing
+from app.core.filename_utils import deduplicate_filename
 from app.core.rate_limit import limiter
 
 router = APIRouter()
+
+
+_ALLOWED_UPLOAD_TYPES = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
+}
+
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
 @router.post("/initiatives/{initiative_id}/evidence", response_model=EvidenceUploadResponse)
@@ -34,38 +45,35 @@ async def upload_evidence(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Upload a file or paste text as evidence"""
+    """Upload a file (or paste text) as evidence.
+
+    This endpoint is fast by design: it validates, stores the bytes on disk,
+    creates an :class:`EvidenceDoc` row in the ``uploaded`` state, and
+    schedules background parsing/embedding.  Clients should watch the
+    document's ``processing_status`` for the transition to
+    ``lightweight_ready`` / ``indexed``.
+    """
+
     initiative = await require_editor(db, initiative_id, user)
-    
-    # Validate input
+
     if not file and not text_content:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Must provide either a file or text content",
         )
-    
-    parser = DocumentParserService()
-    embeddings_service = EmbeddingsService(user_id=user.uid, db=db)
+
     storage = get_uploads_storage()
-    
-    # Process file upload
+
     if file:
-        # Validate file type
-        allowed_types = {
-            "application/pdf": "pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-            "application/vnd.ms-excel": "xls",
-        }
-        file_type = allowed_types.get(file.content_type or "")
+        file_type = _ALLOWED_UPLOAD_TYPES.get(file.content_type or "")
         if not file_type:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File must be PDF, DOCX, or Excel (XLSX/XLS)",
             )
-        
+
         content = await file.read()
-        if len(content) > 50 * 1024 * 1024:
+        if len(content) > _MAX_UPLOAD_BYTES:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail="File size exceeds 50 MB limit",
@@ -75,80 +83,104 @@ async def upload_evidence(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File content does not match declared type",
             )
-        storage_path = await storage.save(content, file.filename, folder=str(initiative.id))
-        
-        # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
-        if file_type == "pdf":
-            pages = parser.parse_pdf_pages(content)
-            page_chunks = parser.chunk_pdf_pages(pages)
-            chunk_tuples = [(c, None, pg) for c, pg in page_chunks]
-        elif file_type == "docx":
-            html = parser.parse_docx_html(content)
-            html_chunks = parser.chunk_html(html)
-            chunk_tuples = [(plain, h, None) for plain, h in html_chunks]
-        else:
-            html = parser.parse_xlsx_html(content)
-            html_chunks = parser.chunk_html(html)
-            chunk_tuples = [(plain, h, None) for plain, h in html_chunks]
-        
-        filename = file.filename
-        file_size = len(content)
-    
-    # Process text paste
-    else:
-        text = text_content
-        filename = text_title or "Pasted text"
-        file_type = "text"
-        storage_path = None
-        file_size = None
-        chunk_tuples = [(c, None, None) for c in parser.chunk_text(text)]
-    
-    # Deduplicate filename within this initiative
-    filename = await deduplicate_filename(db, initiative.id, filename or "Untitled")
 
-    # Create evidence doc
+        storage_path = await storage.save(
+            content, file.filename, folder=str(initiative.id)
+        )
+
+        evidence_doc = await create_uploaded_doc(
+            db,
+            initiative=initiative,
+            filename=file.filename or "Untitled",
+            file_type=file_type,
+            storage_path=storage_path,
+            file_size=len(content),
+        )
+
+        # Kick off the parse/embed pipeline in the background; the response
+        # returns immediately.
+        schedule_processing(evidence_doc.id, user_id=user.uid)
+
+        return EvidenceUploadResponse(
+            success=True,
+            document=EvidenceDocResponse(
+                id=evidence_doc.id,
+                filename=evidence_doc.filename,
+                file_type=evidence_doc.file_type,
+                file_size=evidence_doc.file_size,
+                created_at=evidence_doc.created_at,
+                chunk_count=0,
+                processing_status=evidence_doc.processing_status,
+                processing_error=None,
+            ),
+            message="Upload received — processing in background",
+            stage=initiative.stage,
+            evidence_ready=initiative.evidence_ready,
+        )
+
+    # --- Text paste path -------------------------------------------------
+    # Text pastes are small and synchronous — keep the legacy behaviour
+    # (chunk + embed inline) so callers see the text immediately available.
+    from app.services.document_parser import DocumentParserService
+    from app.services.embeddings import EmbeddingsService
+
+    parser = DocumentParserService()
+    embeddings_service = EmbeddingsService(user_id=user.uid, db=db)
+
+    text = text_content or ""
+    filename = text_title or "Pasted text"
+    file_type = "text"
+    chunk_tuples = [(c, None, None) for c in parser.chunk_text(text)]
+
+    filename = await deduplicate_filename(db, initiative.id, filename)
+
     evidence_doc = EvidenceDoc(
         initiative_id=initiative.id,
         filename=filename,
         file_type=file_type,
-        storage_path=storage_path,
-        file_size=file_size,
+        storage_path=None,
+        file_size=None,
+        processing_status=EvidenceDocStatus.PROCESSING.value,
+        processing_attempts=1,
     )
     db.add(evidence_doc)
     await db.commit()
     await db.refresh(evidence_doc)
-    
-    # Embed plain-text chunks
+
     plain_texts = [t[0] for t in chunk_tuples]
     embeddings = await embeddings_service.embed_texts(plain_texts)
-    
-    # Store chunks
+
     for i, ((plain, html_content, page_num), embedding) in enumerate(
         zip(chunk_tuples, embeddings)
     ):
-        chunk = EvidenceChunk(
-            evidence_doc_id=evidence_doc.id,
-            chunk_index=i,
-            content=plain,
-            content_html=html_content,
-            page_number=page_num,
-            embedding=embedding,
+        db.add(
+            EvidenceChunk(
+                evidence_doc_id=evidence_doc.id,
+                chunk_index=i,
+                content=plain,
+                content_html=html_content,
+                page_number=page_num,
+                embedding=embedding,
+            )
         )
-        db.add(chunk)
-    
-    # Update initiative
+
+    evidence_doc.processing_status = EvidenceDocStatus.INDEXED.value
+    evidence_doc.preview_text = (text or "").strip()[:800] or None
     initiative.evidence_ready = True
-    initiative.touch()  # Update the initiative's updated_at timestamp
+    initiative.touch()
     await db.commit()
-    
+
     return EvidenceUploadResponse(
         success=True,
         document=EvidenceDocResponse(
             id=evidence_doc.id,
             filename=evidence_doc.filename,
             file_type=evidence_doc.file_type,
+            file_size=evidence_doc.file_size,
             created_at=evidence_doc.created_at,
             chunk_count=len(chunk_tuples),
+            processing_status=evidence_doc.processing_status,
+            processing_error=None,
         ),
         message=f"Evidence processed: {len(chunk_tuples)} chunks created",
         stage=initiative.stage,
@@ -203,8 +235,11 @@ async def list_evidence(
             id=doc.id,
             filename=doc.filename,
             file_type=doc.file_type,
+            file_size=doc.file_size,
             created_at=doc.created_at,
             chunk_count=chunk_count,
+            processing_status=doc.processing_status,
+            processing_error=doc.processing_error,
         )
         for doc, chunk_count in rows
     ]

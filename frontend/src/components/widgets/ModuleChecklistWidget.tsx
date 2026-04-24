@@ -36,7 +36,8 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
     [data],
   );
   const devMode = useSettingsStore((s) => s.devMode);
-  const { selectTools, generateProjectPlan, projectPlan } = useInitiativeStore();
+  const initiative = useInitiativeStore((s) => s.initiative);
+  const selectTools = useInitiativeStore((s) => s.selectTools);
   const [confirmedLocal, setConfirmedLocal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +109,9 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
 
   const title = 'Framework Plan';
 
-  const confirmed = confirmedLocal || Boolean(projectPlan);
+  const confirmed =
+    confirmedLocal ||
+    Boolean(initiative?.selected_tools && initiative.selected_tools.length > 0);
   const canInteract = isActive && !confirmed && !submitting;
 
   if (!visibleRecommendations.length) {
@@ -143,15 +146,10 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
       if (afterSelect.error) {
         throw new Error(afterSelect.error);
       }
-      await generateProjectPlan(initiativeId);
-      const afterGenerate = useInitiativeStore.getState();
-      if (afterGenerate.error || !afterGenerate.projectPlan) {
-        throw new Error(afterGenerate.error || 'Failed to build framework.');
-      }
       router.replace(`/initiatives/${initiativeId}?view=framework`);
     } catch (nextError) {
       setConfirmedLocal(false);
-      setError(nextError instanceof Error ? nextError.message : 'Failed to build framework.');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to confirm framework.');
     } finally {
       setSubmitting(false);
     }

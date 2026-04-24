@@ -52,6 +52,15 @@ class ProjectPlanHandler(BasePlanHandler):
             if selected:
                 return selected
 
+        # Conditional gate: when the user uploaded any files, wait for at least
+        # one doc to pass the lightweight-extraction milestone before running
+        # recommendations so the signal reflects what's actually in the docs.
+        # When no files exist (typed-context-only case), this returns
+        # immediately.
+        from app.services.evidence_processor import await_lightweight_readiness
+
+        await await_lightweight_readiness(initiative.id)
+
         recommendations = registry.recommend_modules(
             project_description=initiative.project_description or initiative.title or "",
             project_type=initiative.project_type,
