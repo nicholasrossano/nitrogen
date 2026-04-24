@@ -6,6 +6,15 @@ import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import DOMPurify from 'dompurify';
 import { PageLoader } from '@/components/ui/PageLoader';
+import {
+  extractPrimaryStructuredHtml,
+  getSnippetPreviewKind,
+  getSnippetPreviewLabel,
+  hasTableMarkup,
+  hasTabularRows,
+  looksLikeVisualPdfChunk,
+  normalizeSpreadsheetText,
+} from './snippetPreview';
 
 export interface ResearchPanelCitation {
   evidence_doc_id: string;
@@ -18,7 +27,15 @@ interface SpreadsheetSheetPreview {
   rows: string[][];
 }
 
-function MiniPdfPage({ evidenceDocId, pageNumber }: { evidenceDocId: string; pageNumber: number }) {
+function MiniPdfPage({
+  evidenceDocId,
+  pageNumber,
+  compact = false,
+}: {
+  evidenceDocId: string;
+  pageNumber: number;
+  compact?: boolean;
+}) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -62,7 +79,7 @@ function MiniPdfPage({ evidenceDocId, pageNumber }: { evidenceDocId: string; pag
       {blobUrl && (
         <iframe
           src={blobUrl}
-          className="w-full h-48 border-0"
+          className={compact ? 'w-full h-36 border-0' : 'w-full h-48 border-0'}
           title={`PDF page ${pageNumber}`}
         />
       )}
@@ -92,29 +109,6 @@ function RichHtmlContent({ html }: { html: string }) {
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
-}
-
-function hasTableMarkup(html?: string | null): boolean {
-  return Boolean(html && /<table[\s>]/i.test(html));
-}
-
-function extractFirstTableHtml(html: string): string {
-  const tableMatch = html.match(/<table[\s\S]*?<\/table>/i);
-  return tableMatch ? tableMatch[0] : html;
-}
-
-function normalizeSpreadsheetText(text: string): string {
-  return text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\r\n/g, '\n')
-    .trim();
-}
-
-function hasTabularRows(text: string): boolean {
-  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
-  return lines.some((line) => line.includes('\t') && line.split('\t').length > 1);
 }
 
 function pickSpreadsheetPreviewChunk(
@@ -397,9 +391,15 @@ export function SnippetCard({
       isSpreadsheet && spreadsheetSheets
         ? buildSpreadsheetSlice(spreadsheetSheets, spreadsheetChunk.content)
         : null;
+    const hasSpreadsheetTable = Boolean(spreadsheetRows && spreadsheetRows.length > 0);
+    const preferVisualPdfPreview = Boolean(
+      fileType === 'pdf' &&
+      chunk.page_number &&
+      (!textOnly || looksLikeVisualPdfChunk(chunk.content))
+    );
 
     // Spreadsheet citations: prioritize tabular slices over sheet-title chunks.
-    if (isSpreadsheet && spreadsheetRows && spreadsheetRows.length > 0) {
+    if (isSpreadsheet && hasSpreadsheetTable && spreadsheetRows) {
       return <SpreadsheetGridContent rows={spreadsheetRows} />;
     }
     if (isSpreadsheet && spreadsheetLoading) {
@@ -410,18 +410,21 @@ export function SnippetCard({
       );
     }
     if (isSpreadsheet && spreadsheetHtml && hasTableMarkup(spreadsheetHtml)) {
-      return <RichHtmlContent html={extractFirstTableHtml(spreadsheetHtml)} />;
+      return <RichHtmlContent html={extractPrimaryStructuredHtml(spreadsheetHtml)} />;
+    }
+    if (chunk.content_html && hasTableMarkup(chunk.content_html)) {
+      return <RichHtmlContent html={extractPrimaryStructuredHtml(chunk.content_html)} />;
     }
     if (chunk.content_html) {
       return <RichHtmlContent html={chunk.content_html} />;
     }
 
-    // PDF page preview — suppressed in textOnly mode (e.g. deep dive panel)
-    if (!textOnly && fileType === 'pdf' && chunk.page_number) {
+    if (preferVisualPdfPreview && chunk.page_number) {
       return (
         <MiniPdfPage
           evidenceDocId={citation.evidence_doc_id}
           pageNumber={chunk.page_number}
+          compact={constrained}
         />
       );
     }
@@ -447,6 +450,31 @@ export function SnippetCard({
   };
 
   const isSpreadsheetFile = fileType === 'xlsx' || fileType === 'xls';
+  const previewChunk = chunk ? (pickSpreadsheetPreviewChunk(fileType, chunk, chunks) ?? chunk) : null;
+  const hasStructuredHtml = Boolean(chunk?.content_html);
+  const hasTableHtml = hasTableMarkup(previewChunk?.content_html) || hasTableMarkup(chunk?.content_html);
+  const hasSpreadsheetRows = Boolean(
+    previewChunk &&
+    isSpreadsheetFile &&
+    (
+      (spreadsheetSheets && buildSpreadsheetSlice(spreadsheetSheets, previewChunk.content)?.length) ||
+      hasTabularRows(normalizeSpreadsheetText(previewChunk.content))
+    )
+  );
+  const hasPagePreview = fileType === 'pdf' && Boolean(chunk?.page_number);
+  const preferVisualPdfPreview = Boolean(
+    hasPagePreview && chunk && (!textOnly || looksLikeVisualPdfChunk(chunk.content))
+  );
+  const previewKind = getSnippetPreviewKind({
+    fileType,
+    hasStructuredHtml,
+    hasTableHtml,
+    hasSpreadsheetRows,
+    hasPagePreview,
+    preferVisualPdfPreview,
+  });
+  const previewLabel = getSnippetPreviewLabel(previewKind);
+  const showVisualFallbackHint = Boolean(textOnly && fileType === 'pdf' && preferVisualPdfPreview);
 
   return (
     <div
@@ -460,7 +488,27 @@ export function SnippetCard({
         <span className="text-xs font-medium text-text-primary truncate flex-1">
           {filename}
         </span>
+        {!loading && !error && chunk && (
+          <>
+            {chunk.page_number ? (
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
+                p. {chunk.page_number}
+              </span>
+            ) : null}
+            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
+              {previewLabel}
+            </span>
+          </>
+        )}
       </div>
+
+      {showVisualFallbackHint && (
+        <div className="border-b border-stroke-subtle bg-surface px-3 py-2">
+          <p className="text-[11px] leading-relaxed text-text-tertiary">
+            Showing the source page because this citation is mostly visual or highly structured.
+          </p>
+        </div>
+      )}
 
       <div
         className={
