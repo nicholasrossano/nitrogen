@@ -9,7 +9,6 @@ Stage workflow:
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from typing import Any
 
 from app.modules.base import (
