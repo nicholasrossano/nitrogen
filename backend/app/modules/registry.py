@@ -30,6 +30,7 @@ class ModuleRegistry:
         from app.modules.landscape_mapping import LandscapeMappingModule
         from app.modules.esmp import ESMPModule
         from app.modules.mel_plan import MELPlanModule
+        from app.modules.implementation_plan import ImplementationPlanModule
 
         tools = [
             LCOETool(),
@@ -39,6 +40,7 @@ class ModuleRegistry:
             LandscapeMappingModule(),
             ESMPModule(),
             MELPlanModule(),
+            ImplementationPlanModule(),
         ]
         
         for tool in tools:
@@ -162,6 +164,13 @@ class ModuleRegistry:
             "theory of change": ["mel_plan"],
             "iris": ["mel_plan"],
             "reporting": ["mel_plan"],
+
+            # Implementation plan
+            "implementation plan": ["implementation_plan"],
+            "implementation": ["implementation_plan"],
+            "workplan": ["implementation_plan"],
+            "execution plan": ["implementation_plan"],
+            "roadmap": ["implementation_plan"],
             
             # LCOE / economics
             "lcoe": ["lcoe_model"],

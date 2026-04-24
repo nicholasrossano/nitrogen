@@ -24,6 +24,12 @@ interface LandingInputProps {
   extraInputActions?: React.ReactNode;
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
+  /** Attached tray rendered above and visually connected to the composer */
+  topComposerContent?: React.ReactNode;
+  /** Alternate landing layout for initiative overview pages */
+  layoutMode?: 'default' | 'overview';
+  /** Hide composer input area (used when side chat is active) */
+  hideComposer?: boolean;
 }
 
 function relativeTime(ts: number): string {
@@ -38,7 +44,22 @@ function relativeTime(ts: number): string {
   return `${days}d ago`;
 }
 
-export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], onLoadSession, onDeleteSession, hideTiles, headerContent, placeholder = 'Ask anything', extraInputActions, inputChips }: LandingInputProps) {
+export function LandingInput({
+  onSend,
+  onUploadFile,
+  disabled,
+  sessions = [],
+  onLoadSession,
+  onDeleteSession,
+  hideTiles,
+  headerContent,
+  placeholder = 'Ask anything',
+  extraInputActions,
+  inputChips,
+  topComposerContent,
+  layoutMode = 'default',
+  hideComposer = false,
+}: LandingInputProps) {
   const devMode = useSettingsStore((s) => s.devMode);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
@@ -115,6 +136,141 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
     }
   };
 
+  const renderComposer = (containerClassName?: string) => (
+    <div className={containerClassName ?? 'w-full max-w-2xl'}>
+      {topComposerContent ? (
+        <div className="relative z-10 mx-3 mb-[-1px]">
+          {topComposerContent}
+        </div>
+      ) : null}
+      <form onSubmit={handleSubmit} className="relative">
+        <div
+          className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
+        >
+          {(inputChips || attachedFiles.length > 0) && (
+            <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+              {inputChips}
+              {attachedFiles.map((file, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
+                >
+                  <Paperclip className="w-2.5 h-2.5 shrink-0" />
+                  <span className="truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachedFile(i)}
+                    className="hover:opacity-60 transition-opacity shrink-0"
+                    aria-label="Remove file"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+              }}
+              onFocus={() => {
+                setFocused(true);
+              }}
+              onBlur={() => setFocused(false)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={1}
+              className="w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            />
+            {extraInputActions && (
+              <div className="absolute left-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+                {extraInputActions}
+              </div>
+            )}
+            <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+                aria-label="Attach files"
+              />
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                aria-label="Attach files"
+              >
+                <Paperclip className="w-[13px] h-[13px]" />
+              </button>
+              <button
+                type="submit"
+                disabled={disabled || uploading || !input.trim()}
+                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+              >
+                {uploading ? (
+                  <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+                ) : (
+                  <ArrowUp className="w-[11px] h-[11px] text-white" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderHistory = (containerClassName?: string, compact = false) => (
+    <div className={containerClassName ?? 'flex-1 min-h-0 w-full max-w-2xl flex flex-col'}>
+      {sessions.length > 0 && (
+        <div className={`${compact ? 'mt-2' : 'mt-12'} flex flex-col ${compact ? '' : 'min-h-0 flex-1'}`}>
+          <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3 px-1">
+            History
+          </p>
+          <div
+            ref={historyListRef}
+            onScroll={handleHistoryScroll}
+            className={`space-y-1 overflow-y-auto pr-1 [&::-webkit-scrollbar-thumb]:transition-colors [&::-webkit-scrollbar-thumb]:duration-300 ${compact ? 'h-36' : 'flex-1 min-h-0'} ${isScrolling ? '[&::-webkit-scrollbar-thumb]:bg-divider' : '[&::-webkit-scrollbar-thumb]:bg-transparent'}`}
+          >
+            {sessions.map((session) => (
+              <HistoryRow
+                key={session.id}
+                session={session}
+                onOpen={() => onLoadSession?.(session)}
+                onDelete={() => onDeleteSession?.(session.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (layoutMode === 'overview') {
+    return (
+      <div className="flex flex-col items-center h-full px-4">
+        <div className="w-full max-w-3xl flex-1 min-h-0 flex flex-col pt-6">
+          {headerContent}
+          {!hideComposer && (
+            <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end pb-4">
+              {renderComposer(
+                'w-full pb-4'
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center h-full px-4">
       <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
@@ -141,115 +297,9 @@ export function LandingInput({ onSend, onUploadFile, disabled, sessions = [], on
         )}
       </div>
 
-      <div className="w-full max-w-2xl">
-        <form onSubmit={handleSubmit} className="relative">
-          <div
-            className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
-          >
-            {(inputChips || attachedFiles.length > 0) && (
-              <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
-                {inputChips}
-                {attachedFiles.map((file, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
-                  >
-                    <Paperclip className="w-2.5 h-2.5 shrink-0" />
-                    <span className="truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachedFile(i)}
-                      className="hover:opacity-60 transition-opacity shrink-0"
-                      aria-label="Remove file"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                }}
-                onFocus={() => {
-                  setFocused(true);
-                }}
-                onBlur={() => setFocused(false)}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                disabled={disabled}
-                rows={1}
-                className="w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              />
-              {extraInputActions && (
-                <div className="absolute left-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-                  {extraInputActions}
-                </div>
-              )}
-              {/* Bottom-right: attach + send */}
-              <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileChange}
-                  aria-label="Attach files"
-                />
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                  aria-label="Attach files"
-                >
-                  <Paperclip className="w-[13px] h-[13px]" />
-                </button>
-                <button
-                  type="submit"
-                  disabled={disabled || uploading || !input.trim()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
-                >
-                  {uploading ? (
-                    <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
-                  ) : (
-                    <ArrowUp className="w-[11px] h-[11px] text-white" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
-      </div>
+      {renderComposer()}
 
-      <div className="flex-1 min-h-0 w-full max-w-2xl flex flex-col">
-        {sessions.length > 0 && (
-          <div className="mt-12 flex flex-col min-h-0 flex-1">
-            <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3 px-1">
-              History
-            </p>
-            <div
-              ref={historyListRef}
-              onScroll={handleHistoryScroll}
-              className={`space-y-1 overflow-y-auto flex-1 min-h-0 pr-1 [&::-webkit-scrollbar-thumb]:transition-colors [&::-webkit-scrollbar-thumb]:duration-300 ${isScrolling ? '[&::-webkit-scrollbar-thumb]:bg-divider' : '[&::-webkit-scrollbar-thumb]:bg-transparent'}`}
-            >
-              {sessions.map((session) => (
-                <HistoryRow
-                  key={session.id}
-                  session={session}
-                  onOpen={() => onLoadSession?.(session)}
-                  onDelete={() => onDeleteSession?.(session.id)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      {renderHistory()}
     </div>
   );
 }

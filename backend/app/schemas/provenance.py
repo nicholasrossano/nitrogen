@@ -81,8 +81,8 @@ class ProvenanceTraceCreate(BaseModel):
     """Schema for writing a new provenance trace row."""
 
     initiative_id: Optional[UUID] = None
-    session_id: Optional[UUID] = Field(
-        None, description="Core-chat session ID when not tied to an initiative"
+    chat_id: Optional[UUID] = Field(
+        None, description="Core-chat ID when not tied to an initiative"
     )
     trigger: str = Field(
         ...,
@@ -110,7 +110,7 @@ class ProvenanceTraceResponse(BaseModel):
 
     id: UUID
     initiative_id: Optional[UUID] = None
-    session_id: Optional[UUID] = None
+    chat_id: Optional[UUID] = None
     trigger: str
     trigger_ref: Optional[str] = None
     retrieval_context: list[dict] = []

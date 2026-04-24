@@ -12,12 +12,11 @@ import {
   ArrowLeft,
   Users,
   MessageSquare,
-  Plus,
 } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 
-type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'editor' | 'workspace';
+type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'workspace';
 
 interface PanelToggle {
   active: boolean;
@@ -27,13 +26,6 @@ interface PanelToggle {
   icon?: HeaderIcon;
 }
 
-interface HeaderPrimaryAction {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-}
-
 interface ProjectHeaderProps {
   initiative: Initiative;
   onTitleUpdate?: (title: string) => void;
@@ -41,8 +33,6 @@ interface ProjectHeaderProps {
   leftToggle?: PanelToggle;
   /** PanelRight button — shown on the right side when provided */
   rightToggle?: PanelToggle;
-  /** Header CTA styled like the New Project button */
-  primaryAction?: HeaderPrimaryAction;
   /** SquarePen "new chat" button */
   onNewChat?: () => void;
   /** Override the tooltip for the onNewChat button (default: "New chat") */
@@ -58,7 +48,6 @@ export function ProjectHeader({
   onTitleUpdate,
   leftToggle,
   rightToggle,
-  primaryAction,
   onNewChat,
   newChatTitle = 'New chat',
   onBack,
@@ -116,7 +105,6 @@ export function ProjectHeader({
     switch (icon) {
       case 'chat':
         return <MessageSquare className="w-4 h-4" />;
-      case 'editor':
       case 'workspace':
         return <PanelsTopLeft className="w-4 h-4" />;
       case 'panel-right':
@@ -135,18 +123,6 @@ export function ProjectHeader({
     <header className="flex-shrink-0">
       <div className="px-4 h-14 flex items-center relative">
         <div className="flex items-center gap-2">
-          {primaryAction && !readOnly && (
-            <button
-              onClick={primaryAction.onClick}
-              disabled={primaryAction.disabled}
-              title={primaryAction.title}
-              className="btn-primary shrink-0 !h-7 !text-xs !leading-none !px-3 !py-0"
-            >
-              <Plus className="w-3 h-3" />
-              {primaryAction.label}
-            </button>
-          )}
-
           {onBack && (
             <button
               onClick={onBack}
@@ -228,7 +204,15 @@ export function ProjectHeader({
                 onClick={leftToggle.disabled ? undefined : leftToggle.onClick}
                 disabled={leftToggle.disabled}
                 title={leftToggle.title}
-                className={`icon-btn p-1.5 ${leftToggle.active ? 'text-accent' : 'text-text-tertiary'} ${leftToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1.5 ${
+                  leftToggle.active
+                    ? leftToggle.disabled
+                      ? 'text-accent/70 cursor-not-allowed'
+                      : 'text-accent'
+                    : leftToggle.disabled
+                      ? 'text-text-tertiary opacity-40 cursor-not-allowed'
+                      : 'text-text-tertiary'
+                }`}
               >
                 {renderPanelIcon(leftToggle.icon, 'left')}
               </button>
@@ -238,7 +222,15 @@ export function ProjectHeader({
                 onClick={rightToggle.disabled ? undefined : rightToggle.onClick}
                 disabled={rightToggle.disabled}
                 title={rightToggle.title}
-                className={`icon-btn p-1.5 ${rightToggle.active ? 'text-accent' : 'text-text-tertiary'} ${rightToggle.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`icon-btn p-1.5 ${
+                  rightToggle.active
+                    ? rightToggle.disabled
+                      ? 'text-accent/70 cursor-not-allowed'
+                      : 'text-accent'
+                    : rightToggle.disabled
+                      ? 'text-text-tertiary opacity-40 cursor-not-allowed'
+                      : 'text-text-tertiary'
+                }`}
               >
                 {renderPanelIcon(rightToggle.icon, 'right')}
               </button>

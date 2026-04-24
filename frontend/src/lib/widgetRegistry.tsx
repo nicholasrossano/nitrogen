@@ -1,8 +1,8 @@
 /**
- * Module widget registry for the editor/workspace panel.
+ * Module widget registry for the workspace panel.
  *
  * Maps widget_type strings to their React components. All module widgets
- * that appear in the editor workspace are registered here. Chat interaction
+ * that appear in the workspace are registered here. Chat interaction
  * widgets (proposed_value, template_proposed_value) are NOT registered here —
  * they live in ChatMessage.tsx.
  *
@@ -12,20 +12,38 @@
  */
 
 import type { ComponentType } from 'react';
+import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
+
+export interface WorkspaceWidgetFooterAction {
+  label: string;
+  onClick: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}
+
+export interface WorkspaceWidgetFooterState {
+  mode: 'confirm';
+}
 
 export interface WorkspaceWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
+  outputFooterAction?: WorkspaceWidgetFooterAction;
+  outputFooterState?: WorkspaceWidgetFooterState;
+  /** Called when diagram item inspector state changes — drives the chat-panel deep-dive widget */
+  onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
 }
 
 type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
 
 // Lazy imports keep the initial bundle small
 const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }>> = {
+  // Legacy widget keys (preserved for existing module_instances during migration)
   lcoe_inputs: () =>
     import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
   lcoe_output: () =>
@@ -40,6 +58,22 @@ const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }
     import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
   document_viewer: () =>
     import('@/components/widgets/DocumentViewerWidget').then((m) => ({ default: m.DocumentViewerWidget as unknown as WidgetComponent })),
+
+  // Staged workflow result widget keys
+  lcoe_results: () =>
+    import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
+  carbon_results: () =>
+    import('@/components/widgets/CarbonModelWidget').then((m) => ({ default: m.CarbonModelWidget as unknown as WidgetComponent })),
+  solar_yield_results: () =>
+    import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
+
+  // Assessment module map view (landscape mapping, stakeholder assessment)
+  assessment_map: () =>
+    import('@/components/widgets/AssessmentMapWidget').then((m) => ({ default: m.AssessmentMapWidget as unknown as WidgetComponent })),
+
+  // Implementation plan map view
+  implementation_plan: () =>
+    import('@/components/widgets/ImplementationPlanWidget').then((m) => ({ default: m.ImplementationPlanWidget as unknown as WidgetComponent })),
 };
 
 /**

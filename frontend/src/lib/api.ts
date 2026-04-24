@@ -1,3 +1,5 @@
+import { debugChatFlow } from '@/lib/chatDebug';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Get the current user's ID token for API requests.
@@ -42,11 +44,14 @@ export interface Initiative {
   // Tool-based fields
   project_description: string | null;
   project_type: string | null;
+  overview_description: string | null;
+  overview_generated_at: string | null;
   selected_tools: string[] | null;
   tool_inputs: Record<string, any> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
   module_instances: ModuleInstance[] | null;
+  module_instances_count?: number;
   /** Non-archived module instances with status complete + deliverable (grid tile). */
   generated_modules_count?: number;
   // Sharing fields
@@ -57,15 +62,24 @@ export interface Initiative {
 export interface ModuleInstance {
   id: string;
   module_id: string;
-  status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'error';
+  status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'completed' | 'error';
   title: string | null;
   started_by: string;
   started_by_email: string | null;
   started_at: string;
   updated_at: string;
-  session_id: string | null;
+  chat_id: string | null;
   deliverable?: Record<string, any> | null;
   workflow_state?: Record<string, any> | null;
+  is_plan_complete?: boolean;
+}
+
+export interface ChatModuleSummary {
+  instance_id: string;
+  module_id: string;
+  title: string | null;
+  status: string;
+  started_at: string | null;
 }
 
 export interface ProjectShare {
@@ -124,7 +138,7 @@ export interface BuildStage {
   id: string;
   name: string;
   stage_type: 'widget' | 'simple_list' | 'structured_list' | 'detail_node';
-  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'complete' | 'error';
+  status: 'pending' | 'generating' | 'in_progress' | 'validated' | 'complete' | 'error';
   widget_type?: string | null;
   widget_data?: Record<string, any> | null;
   items?: BuildItem[] | null;
@@ -133,7 +147,7 @@ export interface BuildStage {
 
 /** @deprecated Use BuildStage instead */
 export interface BuildLayer {
-  status: 'pending' | 'generating' | 'in_progress' | 'confirmed' | 'error';
+  status: 'pending' | 'generating' | 'in_progress' | 'validated' | 'error';
   items: BuildItem[];
 }
 
@@ -198,6 +212,107 @@ export interface ModuleWorkflowState {
   module_definition: WorkflowModuleDefinition;
 }
 
+// ── Unified Staged Workflow Types (new architecture) ──────────────────────
+
+export interface FieldDef {
+  name: string;
+  field_type: 'text' | 'number' | 'long_text' | 'select';
+  required: boolean;
+  label: string | null;
+  options: string[] | null;
+  placeholder: string | null;
+}
+
+export interface PopulationStep {
+  type: string;
+  config: Record<string, any>;
+}
+
+export interface StageDef {
+  id: string;
+  title: string;
+  component: 'table' | 'list' | 'record' | 'computed_results';
+  widget: string;
+  allow_add_rows: boolean;
+  fields: FieldDef[];
+  population: PopulationStep[];
+}
+
+export interface StageState {
+  status: 'pending' | 'populating' | 'draft' | 'validated' | 'confirmed' | 'error';
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  confirmed_by_email?: string | null;
+  data: {
+    /** For table and list stages */
+    items?: BuildItem[];
+    /** For record stages */
+    source_stage_id?: string;
+    records?: Record<string, Record<string, any>>;
+    /** For computed_results stages */
+    widget_data?: Record<string, any>;
+  } | null;
+}
+
+export interface FinalApprovalState {
+  status: 'pending' | 'approved';
+  approved_at: string | null;
+  approved_by: string | null;
+  approved_by_email: string | null;
+}
+
+export interface StagedWorkflowState {
+  module_type: string;
+  current_stage_id: string | null;
+  stages: Record<string, StageState>;
+  final_approval: FinalApprovalState;
+}
+
+export interface StagedModuleDefinition extends ModuleDefinition {
+  export_format: string | null;
+  requires_final_approval: boolean;
+  stage_defs: StageDef[];
+}
+
+export interface StagedModuleWorkflowState {
+  instance_id: string;
+  module_id: string;
+  status: string;
+  workflow_version: number;
+  workflow_state: StagedWorkflowState;
+  module_definition: StagedModuleDefinition;
+}
+
+export interface DecisionLogHistoryRow {
+  module: string;
+  module_id: string;
+  module_instance_id: string;
+  stage: string;
+  stage_id: string;
+  entity_type: string;
+  entity_id: string;
+  item: string;
+  current_value: string;
+  source_type: string;
+  source_detail: string;
+  status: string;
+  confirmed_by: string;
+  confirmed_at: string;
+  final_approved_by: string;
+  final_approved_at: string;
+}
+
+export interface ModuleDecisionLogReport {
+  metadata: {
+    module_id: string;
+    module_name: string;
+    module_instance_id: string;
+    generated_at: string;
+    history_row_count: number;
+  };
+  history_rows: DecisionLogHistoryRow[];
+}
+
 export interface SourceCitation {
   source_type: 'corpus' | 'evidence' | 'openalex' | 'web' | 'llm_estimate';
   source_title: string;
@@ -239,6 +354,16 @@ export interface ChatMessage {
   completion_meta?: { latency_ms?: number; citation_count: number; tiers_used: string[] } | null;
   feedback?: 'like' | 'dislike' | null;
   created_at: string;
+}
+
+export interface FieldContext {
+  field_name: string;
+  label: string;
+  current_value?: number | null;
+  unit?: string | null;
+  model_type?: 'lcoe' | 'carbon' | 'solar' | null;
+  module_id?: string | null;
+  status?: string | null;
 }
 
 export interface StageStatus {
@@ -362,14 +487,6 @@ export interface DriveSyncResult {
   errors: { file_id: string; error: string }[];
 }
 
-// Plan category proposal types (approval stage)
-export interface ProposedCategory {
-  id: string;
-  name: string;
-  summary: string;
-  icon?: string;
-}
-
 // Project Plan types
 export interface ProjectPlanItem {
   id: string;
@@ -401,6 +518,8 @@ export interface ProjectPlanPhase {
 
 export interface ProjectPlan {
   generated_at: string;
+  plan_type?: string;
+  schema_version?: number;
   pillars: ProjectPlanPillar[];
   phases?: ProjectPlanPhase[];
   deep_dives?: Record<string, DeepDiveResult>;
@@ -496,6 +615,11 @@ async function fetchApi<T>(
   return JSON.parse(text) as T;
 }
 
+function workflowVersionHeaders(workflowVersion?: number): Record<string, string> | undefined {
+  if (workflowVersion === undefined || workflowVersion === null) return undefined;
+  return { 'X-Workflow-Version': String(workflowVersion) };
+}
+
 export const api = {
   // Initiatives
   listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false) =>
@@ -510,10 +634,14 @@ export const api = {
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
 
-  listModuleInstances: (initiativeId: string, options?: { archived?: boolean }) =>
-    fetchApi<ModuleInstance[]>(
-      `/api/v1/initiatives/${initiativeId}/modules${options?.archived ? '?archived=true' : ''}`
-    ),
+  listModuleInstances: (initiativeId: string, options?: { archived?: boolean }) => {
+    const params = new URLSearchParams();
+    if (options?.archived) params.set('archived', 'true');
+    const query = params.toString();
+    return fetchApi<ModuleInstance[]>(
+      `/api/v1/initiatives/${initiativeId}/modules${query ? `?${query}` : ''}`
+    );
+  },
 
   createModuleInstance: (initiativeId: string, moduleId: string) =>
     fetchApi<ModuleInstance>(`/api/v1/initiatives/${initiativeId}/modules`, {
@@ -540,6 +668,11 @@ export const api = {
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    }),
+
+  generateInitiativeOverview: (id: string) =>
+    fetchApi<Initiative>(`/api/v1/initiatives/${id}/overview`, {
+      method: 'POST',
     }),
 
   deleteInitiative: async (id: string) => {
@@ -593,10 +726,14 @@ export const api = {
       `/api/v1/initiatives/${initiativeId}/chat`
     ),
 
-  sendMessage: (initiativeId: string, content: string, toolHint?: string) =>
+  sendMessage: (initiativeId: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) =>
     fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ content, tool_hint: toolHint ?? null }),
+      body: JSON.stringify({
+        content,
+        tool_hint: toolHint ?? null,
+        field_context: fieldContext ?? null,
+      }),
     }),
 
   sendMessageStream: async (
@@ -605,11 +742,16 @@ export const api = {
     onWord: (word: string) => void,
     onComplete: (message: ChatMessage, stageStatus: any) => void,
     toolHint?: string,
+    fieldContext?: FieldContext | null,
   ) => {
     // Call the regular API since backend doesn't support streaming yet
     const response = await fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ content, tool_hint: toolHint ?? null }),
+      body: JSON.stringify({
+        content,
+        tool_hint: toolHint ?? null,
+        field_context: fieldContext ?? null,
+      }),
     });
 
     // Simulate word-by-word streaming for better UX
@@ -1070,11 +1212,12 @@ export const api = {
       { method: 'POST' }
     ),
 
-  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>) =>
-    fetchApi<{ instance_id: string; status: string; workflow_state: WorkflowState }>(
+  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ instance_id: string; status: string; workflow_state: StagedWorkflowState; workflow_version: number }>(
       `/api/v1/module-workflow/${instanceId}/widget-state`,
       {
         method: 'POST',
+        headers: workflowVersionHeaders(workflowVersion),
         body: JSON.stringify({ widget_data: widgetData }),
       }
     ),
@@ -1095,6 +1238,161 @@ export const api = {
     return { blob, filename };
   },
 
+  // ── Staged workflow endpoints ──────────────────────────────────────
+
+  getStagedModuleWorkflowState: (instanceId: string) =>
+    fetchApi<StagedModuleWorkflowState>(`/api/v1/module-workflow/${instanceId}/state`),
+
+  populateStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
+    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/populate`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
+  confirmStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
+    fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/confirm`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
+  addStageItem: (instanceId: string, stageId: string, content: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ item: BuildItem; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ content }) }
+    ),
+
+  editStageItem: (instanceId: string, stageId: string, itemId: string, content: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ item: BuildItem; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
+      { method: 'PATCH', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ content }) }
+    ),
+
+  deleteStageItem: (instanceId: string, stageId: string, itemId: string, workflowVersion?: number) =>
+    fetchApi<{ ok: boolean; remaining_count: number; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
+      { method: 'DELETE', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
+  reorderStageItems: (instanceId: string, stageId: string, itemIds: string[], workflowVersion?: number) =>
+    fetchApi<{ ok: boolean; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/reorder`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ item_ids: itemIds }) }
+    ),
+
+  enrichRecord: (instanceId: string, stageId: string, itemId: string, workflowVersion?: number) =>
+    fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}/enrich`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
+  enrichStakeholderFromMap: (instanceId: string, itemId: string, workflowVersion?: number) =>
+    fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stakeholders/${itemId}/enrich`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
+  deepDiveImplementationItem: (
+    instanceId: string,
+    itemId: string,
+    body: {
+      item_title: string;
+      item_classification: string;
+      item_rationale: string;
+      pillar_name: string;
+    },
+    workflowVersion?: number,
+  ) =>
+    fetchApi<DeepDiveResult>(
+      `/api/v1/module-workflow/${instanceId}/implementation/${itemId}/deep-dive`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify(body) }
+    ),
+
+  updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>, workflowVersion?: number) =>
+    fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
+      { method: 'PATCH', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ fields }) }
+    ),
+
+  approveFinalModuleOutput: (instanceId: string, workflowVersion?: number) =>
+    fetchApi<{ workflow_state: StagedWorkflowState; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/final-approval`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
+  exportStagedModule: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/export`,
+      { headers }
+    );
+    if (!res.ok) throw new Error('Export failed');
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'export.docx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  exportAssessmentWriteup: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/export/writeup`,
+      { headers }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).detail ?? 'Write-up export failed');
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'writeup.docx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  exportAssessmentDecisionLog: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/decision-log/export.xlsx`,
+      { headers }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).detail ?? 'Decision log export failed');
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.xlsx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  getModuleDecisionLog: (instanceId: string) => {
+    return fetchApi<ModuleDecisionLogReport>(`/api/v1/module-workflow/${instanceId}/decision-log`);
+  },
+
+  exportModuleDecisionLogXlsx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `${API_URL}/api/v1/module-workflow/${instanceId}/decision-log/export.xlsx`,
+      { headers }
+    );
+    if (!res.ok) throw new Error('Decision log export failed');
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.xlsx';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
   // Project Plan
   getProjectPlan: (initiativeId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
@@ -1105,15 +1403,6 @@ export const api = {
     fetchApi<{ project_plan: ProjectPlan }>(
       `/api/v1/initiatives/${initiativeId}/project-plan`,
       { method: 'POST' }
-    ),
-
-  confirmPlanCategories: (initiativeId: string, categories: ProposedCategory[]) =>
-    fetchApi<{ project_plan: ProjectPlan }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/confirm-categories`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ categories }),
-      }
     ),
 
   updatePlanItemStatus: (
@@ -1170,9 +1459,9 @@ export const api = {
     ),
 
   // Chat sessions — optionally scoped to a single project
-  getChatSessions: (initiativeId?: string) =>
+  getChats: (initiativeId?: string) =>
     fetchApi<{
-      sessions: {
+      chats: {
         id: string;
         title: string | null;
         created_at: string | null;
@@ -1183,20 +1472,29 @@ export const api = {
       }[];
     }>(
       initiativeId
-        ? `/api/v1/chat/sessions?initiative_id=${encodeURIComponent(initiativeId)}`
-        : '/api/v1/chat/sessions',
+        ? `/api/v1/chats?initiative_id=${encodeURIComponent(initiativeId)}`
+        : '/api/v1/chats',
     ),
 
-  getChatSessionMessages: (sessionId: string) =>
+  getChatMessages: (chatId: string) =>
     fetchApi<{
-      session_id: string;
+      chat_id: string;
       title: string | null;
       messages: ChatMessage[];
-    }>(`/api/v1/chat/sessions/${sessionId}/messages`),
+    }>(`/api/v1/chats/${chatId}/messages`),
 
-  deleteChatSession: (sessionId: string) =>
-    fetchApi<{ deleted: boolean; session_id: string }>(
-      `/api/v1/chat/sessions/${sessionId}`,
+  getChatModules: (chatId: string) =>
+    fetchApi<{ modules: ChatModuleSummary[] }>(`/api/v1/chats/${chatId}/modules`),
+
+  associateChatModule: (chatId: string, instanceId: string) =>
+    fetchApi<{ instance_id: string; chat_id: string; module_id: string }>(
+      `/api/v1/chats/${chatId}/modules/${instanceId}`,
+      { method: 'POST' },
+    ),
+
+  deleteChat: (chatId: string) =>
+    fetchApi<{ deleted: boolean; chat_id: string }>(
+      `/api/v1/chats/${chatId}`,
       { method: 'DELETE' },
     ),
 
@@ -1209,22 +1507,22 @@ export const api = {
       }
     ),
 
-  updateChatSessionTitle: (sessionId: string, title: string) =>
-    fetchApi<{ session_id: string; title: string }>(
-      `/api/v1/chat/sessions/${sessionId}/title`,
+  updateChatTitle: (chatId: string, title: string) =>
+    fetchApi<{ chat_id: string; title: string }>(
+      `/api/v1/chats/${chatId}/title`,
       {
         method: 'PATCH',
         body: JSON.stringify({ title }),
       }
     ),
 
-  saveSessionFromMessages: (
+  saveChatFromMessages: (
     messages: { role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; sources?: any[] | null; completion_meta?: Record<string, any> | null }[],
     title?: string,
     initiativeId?: string,
   ) =>
-    fetchApi<{ session_id: string; title: string | null }>(
-      '/api/v1/chat/sessions/save',
+    fetchApi<{ chat_id: string; title: string | null }>(
+      '/api/v1/chats/save',
       {
         method: 'POST',
         body: JSON.stringify({ title, messages, initiative_id: initiativeId }),
@@ -1245,17 +1543,21 @@ export const api = {
       widget_type?: string | null;
       widget_data?: Record<string, any> | null;
       thinking_lines?: string[];
-      session_id: string;
+      chat_id: string;
       user_message_id: string;
       assistant_message_id: string;
     }) => void,
     onError: (message: string) => void,
-    session_id?: string | null,
+    chat_id?: string | null,
     toolHint?: string | null,
+    projectContext?: string | null,
+    fieldContext?: FieldContext | null,
     modelInputsContext?: string | null,
+    moduleContext?: { instance_id: string; module_id: string; title?: string | null } | null,
     initiativeId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
     compareInitiativeIds?: string[] | null,
+    allowInitialProjectOnboarding?: boolean,
   ) => {
     const token = await getAuthToken();
     const devMode = isDevMode();
@@ -1267,17 +1569,34 @@ export const api = {
       headers['X-Billing-Test'] = 'true';
     }
 
+    debugChatFlow('api-send-chat-stream', {
+      route: '/api/v1/chat/stream',
+      has_project_context: Boolean(projectContext),
+      has_field_context: Boolean(fieldContext),
+      field_name: fieldContext?.field_name ?? null,
+      model_type: fieldContext?.model_type ?? null,
+      has_model_inputs_context: Boolean(modelInputsContext),
+      has_module_context: Boolean(moduleContext),
+      initiative_id: initiativeId ?? null,
+      compare_mode: Boolean(compareInitiativeIds?.length),
+      allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
+    });
+
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         content,
         history,
-        session_id: session_id ?? null,
+        chat_id: chat_id ?? null,
         tool_hint: toolHint ?? null,
+        project_context: projectContext ?? null,
+        field_context: fieldContext ?? null,
         model_inputs_context: modelInputsContext ?? null,
+        module_context: moduleContext ?? null,
         initiative_id: initiativeId ?? null,
         compare_initiative_ids: compareInitiativeIds ?? null,
+        allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
       }),
     });
 
@@ -1366,7 +1685,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
-    status: string = 'confirmed',
+    status: string = 'validated',
   ): Promise<any> {
     return fetchApi('/api/v1/lcoe/update-input', {
       method: 'POST',
@@ -1416,7 +1735,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
-    status: string = 'confirmed',
+    status: string = 'validated',
   ): Promise<any> {
     return fetchApi('/api/v1/carbon/update-input', {
       method: 'POST',
@@ -1483,7 +1802,7 @@ export const api = {
     inputs: Record<string, any>,
     fieldName: string,
     value: any,
-    status: string = 'confirmed',
+    status: string = 'validated',
   ): Promise<any> {
     return fetchApi('/api/v1/pvwatts/update-input', {
       method: 'POST',

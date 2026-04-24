@@ -6,11 +6,8 @@ import {
   Sun,
   AlertTriangle,
   CheckCircle2,
-  Sparkles,
   Pencil,
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   Zap,
   Download,
 } from 'lucide-react';
@@ -25,8 +22,11 @@ import {
   Cell,
 } from 'recharts';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
+import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
+import { ConfirmButton } from '@/components/ui';
 import { PanelHeader } from '@/components/ui/PanelHeader';
 
 const SolarLocationMap = lazy(() => import('./solar/SolarLocationMap'));
@@ -38,10 +38,11 @@ async function persistWidgetToDb(
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
+  workflowVersion?: number,
 ): Promise<boolean> {
   try {
     if (instanceId) {
-      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      await api.persistModuleWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
@@ -59,13 +60,22 @@ interface SolarEstimateWidgetProps {
   initiativeId: string;
   messageId?: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
+  outputFooterAction?: {
+    label: string;
+    onClick: () => void;
+    loading?: boolean;
+    disabled?: boolean;
+  };
+  outputFooterState?: WorkspaceWidgetFooterState;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
+  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
+  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
   inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
   assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
@@ -140,19 +150,22 @@ export function SolarEstimateWidget({
   initiativeId,
   messageId,
   instanceId,
+  workflowVersion,
   onWorkflowUpdated,
   workspaceView = 'output',
   isActive = true,
+  outputFooterAction,
+  outputFooterState,
 }: SolarEstimateWidgetProps) {
   const [data, setDataRaw] = useState(initialData);
   const setData = useCallback((newData: any) => {
     setDataRaw(newData);
     if (messageId || instanceId) {
-      persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData).then((persisted) => {
+      persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion).then((persisted) => {
         if (persisted && instanceId) onWorkflowUpdated?.();
       });
     }
-  }, [initiativeId, messageId, instanceId, onWorkflowUpdated]);
+  }, [initiativeId, messageId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   useEffect(() => { setDataRaw(initialData); }, [initialData]);
 
@@ -160,7 +173,6 @@ export function SolarEstimateWidget({
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [isRecalculating, setIsRecalculating] = useState(false);
-  const [showAssumptions, setShowAssumptions] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hoveredRowInp, setHoveredRowInp] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -176,7 +188,7 @@ export function SolarEstimateWidget({
       const fieldName = detail.field_name;
       const value = detail.value;
       if (!fieldName || value === undefined) return;
-      handleFieldUpdate(fieldName, value, 'confirmed');
+      handleFieldUpdate(fieldName, value, 'validated');
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
@@ -207,7 +219,7 @@ export function SolarEstimateWidget({
   );
 
   const handleFieldUpdate = useCallback(
-    async (fieldName: string, value: any, status: string = 'confirmed') => {
+    async (fieldName: string, value: any, status: string = 'validated') => {
       setIsRecalculating(true);
       try {
         const result = await api.updateSolarInput(inputs, fieldName, value, status);
@@ -273,10 +285,10 @@ export function SolarEstimateWidget({
   const handleLocationChange = useCallback(
     async (lat: number, lon: number, address?: string) => {
       const updatedInputs = { ...inputs };
-      if (updatedInputs.lat) { updatedInputs.lat = { ...updatedInputs.lat, value: lat, source: 'user', status: 'confirmed' }; }
-      if (updatedInputs.lon) { updatedInputs.lon = { ...updatedInputs.lon, value: lon, source: 'user', status: 'confirmed' }; }
+      if (updatedInputs.lat) { updatedInputs.lat = { ...updatedInputs.lat, value: lat, source: 'user', status: 'validated' }; }
+      if (updatedInputs.lon) { updatedInputs.lon = { ...updatedInputs.lon, value: lon, source: 'user', status: 'validated' }; }
       if (address && updatedInputs.address) {
-        updatedInputs.address = { ...updatedInputs.address, value: address, source: 'user', status: 'confirmed' };
+        updatedInputs.address = { ...updatedInputs.address, value: address, source: 'user', status: 'validated' };
       }
       setDataRaw((prev: any) => ({ ...prev, inputs: updatedInputs }));
       setIsRecalculating(true);
@@ -296,10 +308,28 @@ export function SolarEstimateWidget({
     const text =
       status === 'inferred'  ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
       status === 'assumed'   ? `Can you research and propose a better value for ${label} based on available data for this project?` :
-      status === 'confirmed' ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
+      status === 'validated' ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
-  }, []);
+    const input = inputs[fieldName];
+    const fieldContext = {
+      field_name: fieldName,
+      label,
+      current_value: typeof input?.value === 'number' ? input.value : null,
+      unit: input?.unit || null,
+      model_type: 'solar' as const,
+      status: status || null,
+    };
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext,
+        modelInputsContext: buildModelInputsContext('Solar Model', inputs, fieldContext),
+      },
+    }));
+  }, [inputs]);
 
   // Monthly chart data
   const chartData = useMemo(() => {
@@ -506,7 +536,6 @@ export function SolarEstimateWidget({
         {/* Footer */}
         <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 flex items-center justify-between gap-3">
           <span className="text-[10px] text-text-tertiary truncate">
-            {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
             Powered by PVWatts V8 (NREL)
           </span>
           {!forceInputsView && (
@@ -531,9 +560,12 @@ export function SolarEstimateWidget({
   const QualityIcon = qualityStyle.icon;
 
   const stationInfo = result.station_info || {};
+  const weatherCitation = stationInfo.state
+    ? `Weather data: ${stationInfo.city ? `${stationInfo.city}, ` : ''}${stationInfo.state}${stationInfo.weather_data_source ? ` (${stationInfo.weather_data_source})` : ''}${stationInfo.distance != null ? ` — ${(stationInfo.distance / 1000).toFixed(0)} km from site` : ''}`
+    : null;
 
   return (
-    <div className="flex flex-col h-full bg-surface-primary">
+    <div className="card-elevated overflow-hidden flex flex-col h-full bg-surface-primary">
       {/* Header with headline metrics */}
       <div className="shrink-0 border-b border-stroke-subtle">
         <PanelHeader
@@ -599,6 +631,7 @@ export function SolarEstimateWidget({
                     <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                     <RechartsTooltip
                       contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                      cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
                       formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'AC Energy']}
                     />
                     <Bar dataKey="kWh" radius={[3, 3, 0, 0]} maxBarSize={32}>
@@ -619,39 +652,6 @@ export function SolarEstimateWidget({
               </div>
             </div>
 
-            {/* Assumptions section (collapsible) */}
-            <div className="rounded-lg border border-stroke-subtle overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowAssumptions(!showAssumptions)}
-                className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-medium text-text-secondary hover:bg-surface-subtle transition-colors"
-              >
-                <span>Assumptions & Sources ({assumptionCount} assumed)</span>
-                {showAssumptions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-              </button>
-              {showAssumptions && (
-                <div className="border-t border-stroke-subtle px-3 py-2 space-y-1">
-                  {Object.entries(inputs).map(([key, inp]: [string, any]) => (
-                    <div key={key} className="flex items-center gap-2 text-[10px]">
-                      <span className="w-[120px] text-text-tertiary truncate">{inp.label}</span>
-                      <span className="font-mono text-text-primary">{formatValue(key, inp.value)}</span>
-                      <span className="text-text-tertiary">{inp.unit}</span>
-                      {renderStatusBadge(inp.status)}
-                      <span className="text-text-tertiary italic">{inp.source}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Weather station info */}
-            {stationInfo.state && (
-              <div className="text-[10px] text-text-tertiary px-1">
-                Weather data: {stationInfo.city ? `${stationInfo.city}, ` : ''}{stationInfo.state}
-                {stationInfo.weather_data_source && ` (${stationInfo.weather_data_source})`}
-                {stationInfo.distance != null && ` — ${(stationInfo.distance / 1000).toFixed(0)} km from site`}
-              </div>
-            )}
           </div>
         )}
 
@@ -712,18 +712,29 @@ export function SolarEstimateWidget({
       {/* Footer */}
       <div className="shrink-0 border-t border-stroke-subtle px-3 py-2.5 flex items-center justify-between gap-3">
         <span className="text-[10px] text-text-tertiary truncate">
-          {assumptionCount > 0 && <>{assumptionCount} assumed value{assumptionCount > 1 ? 's' : ''}<span className="mx-1.5">·</span></>}
           Powered by PVWatts V8 (NREL)
+          {weatherCitation && <><span className="mx-1.5">·</span>{weatherCitation}</>}
         </span>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={isExporting}
-          className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
-        >
-          <Download className="w-3 h-3" />
-          {isExporting ? 'Exporting…' : 'Export to Excel'}
-        </button>
+        {outputFooterAction ? (
+          <ConfirmButton
+            onClick={outputFooterAction.onClick}
+            disabled={outputFooterAction.disabled}
+            loading={outputFooterAction.loading}
+            label={outputFooterAction.label}
+            loadingLabel="Confirming…"
+            className="shrink-0"
+          />
+        ) : !instanceId && (
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="shrink-0 btn-primary !text-xs !px-4 !py-1.5"
+          >
+            <Download className="w-3 h-3" />
+            {isExporting ? 'Exporting…' : 'Export to Excel'}
+          </button>
+        )}
       </div>
 
       {investigateTooltip}

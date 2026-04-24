@@ -1,42 +1,99 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Search } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { ChatMessage, ResearchStep, SourceCitation } from '@/lib/api';
+import type { ChatMessage, FieldContext, ResearchStep } from '@/lib/api';
+import type { ResearchPanelCitation } from './ResearchPanel';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
+import { AssociatedModulesTray, type AssociatedChatModule } from './AssociatedModulesTray';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
+import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
-import type { CoreChatMessage, ChatSession } from '@/stores/chatStore';
+import type { CoreChatMessage, ChatSummary } from '@/stores/chatStore';
+import { debugChatFlow } from '@/lib/chatDebug';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
+const CHAT_MODULE_WIDGET_TYPES = new Set([
+  'module_workspace',
+  'lcoe_inputs',
+  'lcoe_output',
+  'carbon_inputs',
+  'carbon_output',
+  'solar_inputs',
+  'solar_output',
+]);
+const activeModulesCountCache = new Map<string, number>();
+
+const MODEL_TYPE_TO_MODULE_ID: Record<string, string> = {
+  lcoe: 'lcoe_model',
+  carbon: 'carbon_model',
+  solar: 'solar_estimate',
+};
 
 interface ProjectStandaloneChatViewProps {
   initiativeId: string;
   showLanding?: boolean;
   /** When true, hides the module tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
+  /** Custom content rendered above the landing composer */
+  landingHeaderContent?: React.ReactNode;
+  /** Landing layout override */
+  landingLayoutMode?: 'default' | 'overview';
+  /** Hide landing composer in overview mode */
+  hideLandingComposer?: boolean;
+  /** Allow the backend to return the initial upload-docs onboarding prompt */
+  allowInitialProjectOnboarding?: boolean;
   /** When false, empty state stays in conversation mode instead of showing the landing UI */
   useLandingWhenEmpty?: boolean;
-  initialSessionId?: string | null;
+  /** Restore latest existing chat for this initiative on initial mount */
+  restoreLatestChatOnMount?: boolean;
+  /** Optional override for sends initiated from the landing composer */
+  onLandingSend?: (content: string, toolHint?: string) => void;
+  initialChatId?: string | null;
   initialTitle?: string | null;
   onMessageSent?: () => void;
-  onBack?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
-  /** Called when user clicks an internal citation */
-  onCitationClick?: (citation: SourceCitation) => void;
-  /** Called when the active thread/session metadata changes */
-  onSessionMetaChange?: (meta: { sessionId: string | null; title: string | null }) => void;
+  /** Called when user opens an internal citation document */
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  /** Called when the active chat metadata changes */
+  onChatMetaChange?: (meta: { chatId: string | null; title: string | null }) => void;
   /** Called when this view enters or leaves its landing state */
   onLandingStateChange?: (isOnLanding: boolean) => void;
-  /** Ref that the parent can call to programmatically trigger a send (e.g. from ModuleLandingPage) */
+  /** Open a module workspace from a chat-associated module chip */
+  onOpenWorkspaceModule?: (module: {
+    instanceId: string;
+    moduleId: string;
+    title?: string | null;
+    chatId?: string | null;
+    chatTitle?: string | null;
+  }) => void;
+  /** Ref that the parent can call to programmatically trigger a send */
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
+  /** Shared session history (project + user scoped) */
+  sessions?: ChatSummary[];
+  /** Active module context from the workspace panel */
+  activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
+  /** Automatically send a message into this chat view when it becomes active */
+  pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
+  onPendingAutoSendHandled?: () => void;
+  /** Delete a chat from shared history */
+  onDeleteChat?: (chatId: string) => void;
+  /** Ask parent to refresh shared chat history */
+  onChatListDirty?: () => void;
+  /** Fixed content rendered above the messages area (e.g. a deep-dive context widget) */
+  topContent?: React.ReactNode;
+  /** Layout mode for top content when present */
+  topContentMode?: 'inline' | 'panel';
+  /** Ambient project context automatically included with every send in this chat view */
+  projectContext?: string | null;
+  /** Called before sending a message from the composer */
+  onBeforeSendMessage?: () => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -58,25 +115,49 @@ function toCoreMessage(m: ChatMessage): CoreChatMessage {
   };
 }
 
+function resolveFieldContextModuleId(fieldContext?: FieldContext | null): string | null {
+  if (!fieldContext) return null;
+  if (fieldContext.module_id) return fieldContext.module_id;
+  if (!fieldContext.model_type) return null;
+  return MODEL_TYPE_TO_MODULE_ID[fieldContext.model_type] ?? null;
+}
+
 export function ProjectStandaloneChatView({
   initiativeId,
   showLanding = false,
   hideTiles = false,
+  landingHeaderContent,
+  landingLayoutMode,
+  hideLandingComposer = false,
+  allowInitialProjectOnboarding = false,
   useLandingWhenEmpty = true,
-  initialSessionId = null,
+  restoreLatestChatOnMount = false,
+  onLandingSend,
+  initialChatId = null,
   initialTitle = null,
   onMessageSent,
-  onBack,
   onEditorWidgetsChange,
-  onCitationClick,
-  onSessionMetaChange,
+  onOpenDocument,
+  onChatMetaChange,
   onLandingStateChange,
+  onOpenWorkspaceModule,
   onSendRef,
+  sessions = [],
+  activeModuleContext = null,
+  pendingAutoSend = null,
+  onPendingAutoSendHandled,
+  onDeleteChat,
+  onChatListDirty,
+  topContent,
+  topContentMode = 'inline',
+  projectContext = null,
+  onBeforeSendMessage,
 }: ProjectStandaloneChatViewProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [chatModules, setChatModules] = useState<AssociatedChatModule[]>([]);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -84,11 +165,24 @@ export function ProjectStandaloneChatView({
   const [messageFeedback, setFeedbackMap] = useState<
     Record<string, 'like' | 'dislike' | null>
   >({});
-  const [dbSessions, setDbSessions] = useState<ChatSession[]>([]);
   const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
-  const lastReportedMetaRef = useRef<{ sessionId: string | null; title: string | null } | null>(null);
+  const [activeModulesCount, setActiveModulesCount] = useState<number | null>(
+    () => activeModulesCountCache.get(initiativeId) ?? null,
+  );
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [overviewGenerating, setOverviewGenerating] = useState(false);
+  const lastReportedMetaRef = useRef<{ chatId: string | null; title: string | null } | null>(null);
+  const autoOverviewAttemptRef = useRef<string | null>(null);
+  const associatedModuleKeysRef = useRef<Set<string>>(new Set());
+  const lastLoadedChatIdRef = useRef<string | null>(null);
+  const lastAutoSendRequestIdRef = useRef<string | null>(null);
+  const hasAttemptedAutoRestoreRef = useRef(false);
 
+  const initiative = useInitiativeStore((s) => s.initiative);
+  const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+  const generateInitiativeOverview = useInitiativeStore((s) => s.generateInitiativeOverview);
+  const isOverviewLanding = hideTiles && !landingHeaderContent;
 
   useEffect(() => {
     if (initialTitle && !sessionTitle) {
@@ -96,102 +190,138 @@ export function ProjectStandaloneChatView({
     }
   }, [initialTitle, sessionTitle]);
 
-  // Load session list from DB on mount — scoped to this project
-  useEffect(() => {
-    api.getChatSessions(initiativeId)
-      .then(({ sessions }) => {
-        setDbSessions(
-          sessions.map((s) => ({
-            id: s.id,
-            title: s.title || 'Untitled',
-            createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
-            messages: [],
-          })),
-        );
-      })
-      .catch((err) => console.warn('Failed to load chat sessions:', err));
-  }, [initiativeId]);
-
-  useEffect(() => {
-    if (!initialSessionId) return;
-    if (currentSessionId === initialSessionId || localMessages.length > 0) return;
-
-    let cancelled = false;
-    api.getChatSessionMessages(initialSessionId)
-      .then(({ messages, title }) => {
-        if (cancelled) return;
+  const loadChat = useCallback(
+    async (chatId: string, fallbackTitle?: string | null) => {
+      try {
+        const { messages, title } = await api.getChatMessages(chatId);
         setLocalMessages(messages);
-        setSessionTitle(title || initialTitle || 'Untitled');
-        setCurrentSessionId(initialSessionId);
+        setSessionTitle(title || fallbackTitle || 'Untitled');
+        setCurrentChatId(chatId);
         setFeedbackMap(
           Object.fromEntries(
             messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
           ) as Record<string, 'like' | 'dislike' | null>,
         );
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          console.error('Failed to load initial session messages:', err);
-        }
-      });
+        setThinkingLines([]);
+        setStreamingContent('');
+        setResearchSteps([]);
+        setError(null);
+        lastLoadedChatIdRef.current = chatId;
+        onMessageSent?.();
+      } catch (err) {
+        console.error('Failed to load chat messages:', err);
+        setError('Failed to load chat history.');
+      }
+    },
+    [onMessageSent],
+  );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [initialSessionId, initialTitle, currentSessionId, localMessages.length]);
+  useEffect(() => {
+    if (!initialChatId) return;
+    if (lastLoadedChatIdRef.current === initialChatId && currentChatId === initialChatId) {
+      return;
+    }
+    void loadChat(initialChatId, initialTitle);
+  }, [currentChatId, initialChatId, initialTitle, loadChat]);
+
+  useEffect(() => {
+    if (!restoreLatestChatOnMount) return;
+    if (initialChatId) return;
+    if (showLanding) return;
+    if (currentChatId) return;
+    if (localMessages.length > 0) return;
+    if (hasAttemptedAutoRestoreRef.current) return;
+
+    hasAttemptedAutoRestoreRef.current = true;
+
+    void api.getChats(initiativeId)
+      .then(async ({ chats }) => {
+        const latest = chats?.[0];
+        if (!latest?.id) return;
+        await loadChat(latest.id, latest.title);
+      })
+      .catch(() => {
+        // Keep default landing behavior if auto-restore fails.
+      });
+  }, [
+    currentChatId,
+    initialChatId,
+    initiativeId,
+    loadChat,
+    localMessages.length,
+    restoreLatestChatOnMount,
+    showLanding,
+  ]);
 
   useEffect(() => {
     const nextMeta = {
-      sessionId: currentSessionId,
+      chatId: currentChatId,
       title: sessionTitle,
     };
     const prevMeta = lastReportedMetaRef.current;
     if (
-      prevMeta?.sessionId === nextMeta.sessionId &&
+      prevMeta?.chatId === nextMeta.chatId &&
       prevMeta?.title === nextMeta.title
     ) {
       return;
     }
     lastReportedMetaRef.current = nextMeta;
-    onSessionMetaChange?.(nextMeta);
-  }, [currentSessionId, sessionTitle, onSessionMetaChange]);
+    onChatMetaChange?.(nextMeta);
+  }, [currentChatId, sessionTitle, onChatMetaChange]);
 
   // When showLanding transitions to true, clear current conversation
   // (it's already persisted to DB by the streaming endpoint)
   const prevShowLanding = useRef(showLanding);
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
-      // Refresh sessions list so the just-finished conversation appears in history
-      api.getChatSessions(initiativeId)
-        .then(({ sessions }) => {
-          setDbSessions(
-            sessions.map((s) => ({
-              id: s.id,
-              title: s.title || 'Untitled',
-              createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
-              messages: [],
-            })),
-          );
-        })
-        .catch(() => {});
+      // Refresh shared chats so the finished conversation appears in history.
+      onChatListDirty?.();
       setLocalMessages([]);
       setSessionTitle(null);
-      setCurrentSessionId(null);
+      setCurrentChatId(null);
+      setChatModules([]);
       setFeedbackMap({});
       setCompareProject(null);
+      lastLoadedChatIdRef.current = null;
     }
     prevShowLanding.current = showLanding;
-  }, [showLanding, localMessages, initiativeId]);
+  }, [showLanding, localMessages, onChatListDirty]);
 
-  // Persist the AI-generated title to the DB session once both are available
+  // Persist the AI-generated title to the DB chat once both are available
   const titlePersistedRef = useRef(false);
   useEffect(() => {
-    if (sessionTitle && currentSessionId && !titlePersistedRef.current) {
+    if (sessionTitle && currentChatId && !titlePersistedRef.current) {
       titlePersistedRef.current = true;
-      api.updateChatSessionTitle(currentSessionId, sessionTitle).catch(() => {});
+      api.updateChatTitle(currentChatId, sessionTitle).catch(() => {});
     }
-    if (!currentSessionId) titlePersistedRef.current = false;
-  }, [sessionTitle, currentSessionId]);
+    if (!currentChatId) titlePersistedRef.current = false;
+  }, [sessionTitle, currentChatId]);
+
+  const refreshChatModules = useCallback(async (chatId: string) => {
+    try {
+      const { modules } = await api.getChatModules(chatId);
+      setChatModules(modules);
+    } catch (err) {
+      console.warn('Failed to load chat modules:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentChatId) {
+      setChatModules([]);
+      return;
+    }
+    void refreshChatModules(currentChatId);
+  }, [currentChatId, refreshChatModules]);
+
+  useEffect(() => {
+    if (!currentChatId) return;
+    const latestAssistant = [...localMessages].reverse().find((message) => message.role === 'assistant');
+    if (!latestAssistant?.widget_type || !CHAT_MODULE_WIDGET_TYPES.has(latestAssistant.widget_type)) {
+      return;
+    }
+    void refreshChatModules(currentChatId);
+  }, [currentChatId, localMessages, refreshChatModules]);
 
   // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
@@ -213,10 +343,16 @@ export function ProjectStandaloneChatView({
     [localMessages],
   );
 
-  const sessions = dbSessions;
-
   const sendViaStream = useCallback(
-    async (content: string, currentMessages: ChatMessage[], toolHint?: string) => {
+    async (
+      content: string,
+      currentMessages: ChatMessage[],
+      toolHint?: string,
+      projectContextOverride?: string | null,
+      fieldContext?: FieldContext | null,
+      modelInputsContext?: string | null,
+      associatedModule?: { instanceId: string; moduleId: string; title?: string | null } | null,
+    ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
@@ -232,6 +368,18 @@ export function ProjectStandaloneChatView({
         ? [initiativeId, compareProject.id]
         : null;
 
+      debugChatFlow('transport-send', {
+        surface: 'project-standalone-chat',
+        route: '/api/v1/chat/stream',
+        has_project_context: Boolean(projectContextOverride),
+        field_name: fieldContext?.field_name ?? null,
+        model_type: fieldContext?.model_type ?? null,
+        has_field_context: Boolean(fieldContext),
+        has_model_inputs_context: Boolean(modelInputsContext),
+        initiative_id: initiativeId,
+        compare_mode: Boolean(compareIds),
+      });
+
       await api.sendChatStream(
         history,
         content,
@@ -244,8 +392,23 @@ export function ProjectStandaloneChatView({
           setStreamingContent('');
           setThinkingLines([]);
 
-          if (payload.session_id) {
-            setCurrentSessionId(payload.session_id);
+          const resolvedChatId = payload.chat_id || currentChatId;
+          if (payload.chat_id) {
+            setCurrentChatId(payload.chat_id);
+            onChatListDirty?.();
+          }
+
+          if (resolvedChatId && associatedModule) {
+            const associationKey = `${resolvedChatId}:${associatedModule.instanceId}`;
+            if (!associatedModuleKeysRef.current.has(associationKey)) {
+              associatedModuleKeysRef.current.add(associationKey);
+              void api.associateChatModule(resolvedChatId, associatedModule.instanceId)
+                .then(() => refreshChatModules(resolvedChatId))
+                .catch((err: unknown) => {
+                  associatedModuleKeysRef.current.delete(associationKey);
+                  console.warn('Failed to associate interacted module with chat:', err);
+                });
+            }
           }
 
           setLocalMessages((prev) =>
@@ -280,9 +443,18 @@ export function ProjectStandaloneChatView({
           setError(message);
           setSending(false);
         },
-        currentSessionId,
+        currentChatId,
         toolHint ?? null,
-        null,
+        projectContextOverride ?? null,
+        fieldContext ?? null,
+        modelInputsContext ?? null,
+        associatedModule
+          ? {
+            instance_id: associatedModule.instanceId,
+            module_id: associatedModule.moduleId,
+            title: associatedModule.title ?? null,
+          }
+          : null,
         initiativeId,
         (step) => {
           setResearchSteps((prev) => {
@@ -296,9 +468,17 @@ export function ProjectStandaloneChatView({
           });
         },
         compareIds,
+        allowInitialProjectOnboarding,
       );
     },
-    [initiativeId, currentSessionId, compareProject],
+    [
+      initiativeId,
+      currentChatId,
+      compareProject,
+      onChatListDirty,
+      refreshChatModules,
+      allowInitialProjectOnboarding,
+    ],
   );
 
   const handleUploadFile = useCallback(
@@ -311,7 +491,13 @@ export function ProjectStandaloneChatView({
   );
 
   const handleSend = useCallback(
-    async (content: string, toolHint?: string) => {
+    async (
+      content: string,
+      toolHint?: string,
+      fieldContext?: FieldContext | null,
+      modelInputsContext?: string | null,
+    ) => {
+      onBeforeSendMessage?.();
       onMessageSent?.();
 
       const isFirst = localMessages.length === 0;
@@ -338,8 +524,26 @@ export function ProjectStandaloneChatView({
       setLocalMessages(updatedMessages);
       setSending(true);
 
+      const matchedFieldContextModuleId = resolveFieldContextModuleId(fieldContext);
+      const associatedModule =
+        activeModuleContext &&
+        (
+          (matchedFieldContextModuleId && matchedFieldContextModuleId === activeModuleContext.moduleId) ||
+          (toolHint && toolHint === activeModuleContext.moduleId)
+        )
+          ? activeModuleContext
+          : null;
+
       try {
-        await sendViaStream(content, updatedMessages, toolHint);
+        await sendViaStream(
+          content,
+          updatedMessages,
+          toolHint,
+          projectContext,
+          fieldContext,
+          modelInputsContext,
+          associatedModule,
+        );
       } catch {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== userMsg.id),
@@ -347,8 +551,16 @@ export function ProjectStandaloneChatView({
         setSending(false);
       }
     },
-    [localMessages, onMessageSent, sendViaStream],
+    [activeModuleContext, localMessages, onBeforeSendMessage, onMessageSent, projectContext, sendViaStream],
   );
+
+  useEffect(() => {
+    if (!pendingAutoSend?.requestId) return;
+    if (lastAutoSendRequestIdRef.current === pendingAutoSend.requestId) return;
+    lastAutoSendRequestIdRef.current = pendingAutoSend.requestId;
+    void handleSend(pendingAutoSend.content, pendingAutoSend.toolHint);
+    onPendingAutoSendHandled?.();
+  }, [handleSend, onPendingAutoSendHandled, pendingAutoSend]);
 
   const handleEditMessage = useCallback(
     async (messageId: string, newContent: string) => {
@@ -371,13 +583,13 @@ export function ProjectStandaloneChatView({
       setSending(true);
 
       try {
-        await sendViaStream(newContent, updatedMessages);
+        await sendViaStream(newContent, updatedMessages, undefined, projectContext);
       } catch {
         setLocalMessages(truncated);
         setSending(false);
       }
     },
-    [localMessages, sendViaStream],
+    [localMessages, projectContext, sendViaStream],
   );
 
   const handleRetryMessage = useCallback(
@@ -403,13 +615,13 @@ export function ProjectStandaloneChatView({
       setSending(true);
 
       try {
-        await sendViaStream(lastUserMsg.content, updatedMessages);
+        await sendViaStream(lastUserMsg.content, updatedMessages, undefined, projectContext);
       } catch {
         setLocalMessages(preceding);
         setSending(false);
       }
     },
-    [localMessages, sendViaStream],
+    [localMessages, projectContext, sendViaStream],
   );
 
   const handleSetFeedback = useCallback(
@@ -420,36 +632,13 @@ export function ProjectStandaloneChatView({
   );
 
   const handleLoadSession = useCallback(
-    async (session: ChatSession) => {
-      try {
-        const { messages, title } = await api.getChatSessionMessages(session.id);
-        setLocalMessages(messages);
-        setSessionTitle(title || session.title);
-        setCurrentSessionId(session.id);
-        setFeedbackMap(
-          Object.fromEntries(
-            messages.filter((m) => m.feedback).map((m) => [m.id, m.feedback!]),
-          ) as Record<string, 'like' | 'dislike' | null>,
-        );
-        onMessageSent?.();
-      } catch (err) {
-        console.error('Failed to load session messages:', err);
-      }
+    async (session: ChatSummary) => {
+      await loadChat(session.id, session.title);
     },
-    [onMessageSent],
+    [loadChat],
   );
 
-  const handleDeleteSession = useCallback(
-    (id: string) => {
-      setDbSessions((prev) => prev.filter((s) => s.id !== id));
-      api.deleteChatSession(id).catch((err) => {
-        console.error('Failed to delete session:', err);
-      });
-    },
-    [],
-  );
-
-  // Expose handleSend to parent via ref so ModuleLandingPage can trigger a send
+  // Expose handleSend to parent via ref for programmatic sends.
   useEffect(() => {
     if (onSendRef) onSendRef.current = handleSend;
     return () => {
@@ -459,41 +648,157 @@ export function ProjectStandaloneChatView({
 
   const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
 
+  const associatedModules = useMemo(() => {
+    return chatModules
+      .filter((module, index, collection) =>
+        collection.findIndex((candidate) => candidate.instance_id === module.instance_id) === index,
+      );
+  }, [chatModules]);
+
+  const associatedModulesTray = useMemo(() => {
+    if (associatedModules.length === 0) return null;
+
+    return (
+      <AssociatedModulesTray
+        modules={associatedModules}
+        onOpenWorkspaceModule={
+          onOpenWorkspaceModule
+            ? (module) => onOpenWorkspaceModule({
+              ...module,
+              chatId: currentChatId,
+              chatTitle: sessionTitle,
+            })
+            : undefined
+        }
+      />
+    );
+  }, [associatedModules, currentChatId, onOpenWorkspaceModule, sessionTitle]);
+
+  const inputChips = useMemo(
+    () => (compareProject
+      ? <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
+      : undefined),
+    [compareProject],
+  );
+
   useEffect(() => {
     onLandingStateChange?.(isOnLanding);
   }, [isOnLanding, onLandingStateChange]);
 
+  useEffect(() => {
+    if (!isOverviewLanding || !isOnLanding) return;
+
+    const cachedCount = activeModulesCountCache.get(initiativeId);
+    if (cachedCount !== undefined) {
+      setActiveModulesCount(cachedCount);
+    } else {
+      setActiveModulesCount(null);
+    }
+
+    const hadCachedCount = cachedCount !== undefined;
+
+    let cancelled = false;
+    api.listModuleInstances(initiativeId)
+      .then((instances) => {
+        if (!cancelled) {
+          activeModulesCountCache.set(initiativeId, instances.length);
+          setActiveModulesCount(instances.length);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          if (!hadCachedCount) {
+            setActiveModulesCount(null);
+          }
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initiativeId, isOnLanding, isOverviewLanding]);
+
+  const handleGenerateOverview = useCallback(async () => {
+    if (!initiative) return;
+    setOverviewError(null);
+    setOverviewGenerating(true);
+    try {
+      await generateInitiativeOverview(initiativeId);
+    } catch (err) {
+      setOverviewError(err instanceof Error ? err.message : 'Failed to refresh overview.');
+    } finally {
+      setOverviewGenerating(false);
+    }
+  }, [generateInitiativeOverview, initiative, initiativeId]);
+
+  useEffect(() => {
+    setOverviewError(null);
+    setOverviewGenerating(false);
+    setActiveModulesCount(activeModulesCountCache.get(initiativeId) ?? null);
+    autoOverviewAttemptRef.current = null;
+  }, [initiativeId]);
+
+  useEffect(() => {
+    if (!isOverviewLanding || !initiative || initiative.shared_role === 'viewer') return;
+    if (projectMaterials.length === 0) return;
+    if (initiative.overview_description?.trim()) return;
+    if (overviewGenerating) return;
+
+    const attemptKey = `${initiativeId}:${projectMaterials.length}`;
+    if (autoOverviewAttemptRef.current === attemptKey) return;
+    autoOverviewAttemptRef.current = attemptKey;
+    void handleGenerateOverview();
+  }, [
+    handleGenerateOverview,
+    initiative,
+    initiativeId,
+    isOverviewLanding,
+    overviewGenerating,
+    projectMaterials.length,
+  ]);
+
   if (isOnLanding) {
+    const filesUploaded = projectMaterials.length;
+    const modulesCreated = activeModulesCount;
+    const canRefreshOverview = Boolean(
+      initiative &&
+      initiative.shared_role !== 'viewer' &&
+      filesUploaded > 0
+    );
+
     return (
       <>
         <LandingInput
-          onSend={handleSend}
+          onSend={onLandingSend ?? handleSend}
           onUploadFile={handleUploadFile}
           sessions={sessions}
           onLoadSession={handleLoadSession}
-          onDeleteSession={handleDeleteSession}
+          onDeleteSession={onDeleteChat}
           hideTiles={hideTiles}
-          headerContent={hideTiles ? (
-            <div className="text-center mb-8">
-              <div className="flex items-center justify-center gap-2.5 mb-3">
-                <Search className="w-7 h-7 text-accent" strokeWidth={1.75} />
-                <h1 className="text-[32px] font-semibold text-text-primary tracking-tight font-display">Research</h1>
-              </div>
-              <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-                Research and analyze project materials, compare against another project, or ask about past academic work and case studies.
-              </p>
-            </div>
-          ) : undefined}
-          extraInputActions={hideTiles ? (
+          layoutMode={landingLayoutMode ?? (hideTiles ? 'overview' : 'default')}
+          headerContent={landingHeaderContent ?? (hideTiles ? (
+            initiative ? (
+              <InitiativeOverviewHeader
+                initiative={initiative}
+                filesUploaded={filesUploaded}
+                modulesCreated={modulesCreated}
+                isGenerating={overviewGenerating}
+                errorMessage={overviewError}
+                canRefresh={canRefreshOverview}
+                onRefresh={handleGenerateOverview}
+              />
+            ) : null
+          ) : undefined)}
+          extraInputActions={isOverviewLanding ? (
             <CompareProjectPicker
               currentProjectId={initiativeId}
               selected={compareProject}
               onSelect={setCompareProject}
             />
           ) : undefined}
-          inputChips={compareProject ? (
-            <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
-          ) : undefined}
+          topComposerContent={associatedModulesTray}
+          inputChips={inputChips}
+          hideComposer={hideLandingComposer}
         />
       </>
     );
@@ -514,20 +819,19 @@ export function ProjectStandaloneChatView({
       messageFeedback={messageFeedback}
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
-      onBack={onBack}
-      title={sessionTitle}
       initiativeId={initiativeId}
-      onCitationClick={onCitationClick}
-      extraInputActions={hideTiles ? (
+      onOpenDocument={onOpenDocument}
+      extraInputActions={isOverviewLanding ? (
         <CompareProjectPicker
           currentProjectId={initiativeId}
           selected={compareProject}
           onSelect={setCompareProject}
         />
       ) : undefined}
-      inputChips={compareProject ? (
-        <CompareChip project={compareProject} onRemove={() => setCompareProject(null)} />
-      ) : undefined}
+      topComposerContent={associatedModulesTray}
+      inputChips={inputChips}
+      topContent={topContent}
+      topContentMode={topContentMode}
     />
   );
 }

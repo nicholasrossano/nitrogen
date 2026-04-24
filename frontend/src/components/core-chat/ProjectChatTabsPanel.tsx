@@ -3,99 +3,467 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import { ProjectStandaloneChatView } from './ProjectStandaloneChatView';
+import { DeepDiveWidget } from '@/components/plan-workspace/DeepDiveWidget';
+import type {
+  PlanWorkspaceInspectorDocumentSource,
+  PlanWorkspaceInspectorState,
+} from '@/components/plan-workspace';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
-import type { SourceCitation } from '@/lib/api';
+import type { ResearchPanelCitation } from './ResearchPanel';
+import { api } from '@/lib/api';
+import type { ChatSession } from '@/stores/chatStore';
 
 interface ProjectChatTab {
   id: string;
   title: string;
-  sessionId: string | null;
+  chatId: string | null;
   isLanding: boolean;
+  /** True only for auto-created placeholder tabs. */
+  isFallback: boolean;
 }
 
-interface ClosedChatTab extends ProjectChatTab {
-  closedAt: number;
+interface PendingDeepDiveContext {
+  requestId: string;
+  state: PlanWorkspaceInspectorState;
+  collapsed?: boolean;
+  onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
 }
 
 interface ProjectChatTabsPanelProps {
   initiativeId: string;
   researchMode?: boolean;
+  sessionStorageKey?: string;
   resetToLandingSignal?: number;
-  pendingSessionToOpen?: { sessionId: string; title?: string | null } | null;
+  pendingChatToOpen?: { chatId: string; title?: string | null } | null;
+  pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
+  activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
   onPendingSessionHandled?: () => void;
+  onPendingAutoSendHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
-  onCitationClick?: (citation: SourceCitation) => void;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
+  /** Fixed content rendered above the messages area in the active chat tab */
+  topContent?: React.ReactNode;
+  /** Creates or updates a chat tab with a pinned deep-dive widget */
+  pendingDeepDive?: PendingDeepDiveContext | null;
+  onPendingDeepDiveHandled?: () => void;
 }
 
-function makeTab(title = 'New Chat', isLanding = false): ProjectChatTab {
+function makeTab(title = 'New Chat', isLanding = false, isFallback = false): ProjectChatTab {
   return {
     id: `chat-tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     title,
-    sessionId: null,
+    chatId: null,
     isLanding,
+    isFallback,
   };
+}
+
+interface StoredProjectChatTabsState {
+  tabs: ProjectChatTab[];
+  activeTabId: string | null;
+}
+
+function isStoredProjectChatTab(value: unknown): value is ProjectChatTab {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<ProjectChatTab>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.title === 'string' &&
+    (typeof candidate.chatId === 'string' || candidate.chatId === null) &&
+    typeof candidate.isLanding === 'boolean' &&
+    typeof candidate.isFallback === 'boolean'
+  );
+}
+
+function readStoredProjectChatTabsState(storageKey: string): StoredProjectChatTabsState | null {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredProjectChatTabsState>;
+    if (!Array.isArray(parsed.tabs) || parsed.tabs.length === 0) return null;
+    const tabs = parsed.tabs.filter(isStoredProjectChatTab);
+    if (tabs.length === 0) return null;
+    return {
+      tabs,
+      activeTabId:
+        typeof parsed.activeTabId === 'string' && tabs.some((tab) => tab.id === parsed.activeTabId)
+          ? parsed.activeTabId
+          : tabs[0].id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProjectChatTabsState(
+  storageKey: string,
+  state: StoredProjectChatTabsState,
+) {
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return 'yesterday';
+  return `${days}d ago`;
+}
+
+function formatDeepDiveProjectContext(state: PlanWorkspaceInspectorState): string {
+  const lines: string[] = [
+    `The user is asking from a chat tab anchored to this deep-dive item. Default to this item as the current topic unless the user clearly switches topics.`,
+    '',
+    '## Selected Item',
+    `- Title: ${state.item.title}`,
+    `- Group: ${state.groupName}`,
+    `- Kind: ${state.item.kind}`,
+    `- Classification: ${state.item.classification}`,
+    `- Status: ${state.item.status}`,
+  ];
+
+  if (state.item.phaseId) {
+    lines.push(`- Phase: ${state.item.phaseId}`);
+  }
+  if (state.item.rationale) {
+    lines.push(`- Rationale: ${state.item.rationale}`);
+  }
+  if (state.item.supports?.length) {
+    lines.push(`- Supports: ${state.item.supports.join(', ')}`);
+  }
+  if (state.item.dependsOn?.length) {
+    lines.push(`- Depends on: ${state.item.dependsOn.join(', ')}`);
+  }
+
+  if (state.loading) {
+    lines.push('', '## Deep Dive Status', '- Research is still loading.');
+    return lines.join('\n');
+  }
+
+  if (state.error) {
+    lines.push('', '## Deep Dive Status', `- Research error: ${state.error}`);
+    return lines.join('\n');
+  }
+
+  if (!state.result) {
+    lines.push('', '## Deep Dive Status', '- No generated deep-dive result is available yet.');
+    return lines.join('\n');
+  }
+
+  if (state.result.summary.length) {
+    lines.push('', `## ${state.result.summaryTitle ?? 'Summary'}`);
+    state.result.summary.forEach((entry) => lines.push(`- ${entry}`));
+  }
+
+  if (state.result.detailFields?.length) {
+    lines.push('', `## ${state.result.detailFieldsTitle ?? 'Details'}`);
+    state.result.detailFields.forEach((field) => lines.push(`- ${field.label}: ${field.value}`));
+  }
+
+  if (state.result.requirements.length) {
+    lines.push('', `## ${state.result.requirementsTitle ?? 'Requirements'}`);
+    state.result.requirements.forEach((requirement) => {
+      lines.push(`- ${requirement.title}: ${requirement.description}`);
+    });
+  }
+
+  if (state.result.dependencies.length) {
+    lines.push('', `## ${state.result.dependenciesTitle ?? 'Dependencies'}`);
+    state.result.dependencies.forEach((dependency) => {
+      lines.push(`- ${dependency.condition}: ${dependency.effect}`);
+    });
+  }
+
+  if (state.result.documentSources.length || state.result.linkSources.length) {
+    lines.push('', '## Sources');
+    state.result.documentSources.forEach((source) => lines.push(`- Document: ${source.title}`));
+    state.result.linkSources.forEach((source) => {
+      lines.push(`- Link: ${source.title}${source.publisher ? ` (${source.publisher})` : ''}`);
+    });
+  }
+
+  return lines.join('\n');
 }
 
 export function ProjectChatTabsPanel({
   initiativeId,
   researchMode = false,
+  sessionStorageKey,
   resetToLandingSignal = 0,
-  pendingSessionToOpen = null,
+  pendingChatToOpen = null,
+  pendingAutoSend = null,
+  activeModuleContext = null,
   onPendingSessionHandled,
+  onPendingAutoSendHandled,
   onEditorWidgetsChange,
-  onCitationClick,
+  onOpenDocument,
+  onOpenWorkspaceModule,
   onSendRef,
+  topContent,
+  pendingDeepDive = null,
+  onPendingDeepDiveHandled,
 }: ProjectChatTabsPanelProps) {
-  const initialTabRef = useRef<ProjectChatTab | null>(null);
-  if (!initialTabRef.current) {
-    initialTabRef.current = makeTab('New Chat', researchMode);
+  const initialStateRef = useRef<StoredProjectChatTabsState | null>(null);
+  if (!initialStateRef.current) {
+    const storedState = sessionStorageKey
+      ? readStoredProjectChatTabsState(sessionStorageKey)
+      : null;
+    if (storedState) {
+      initialStateRef.current = storedState;
+    } else {
+      const initialTab = makeTab('New Chat', researchMode, true);
+      initialStateRef.current = {
+        tabs: [initialTab],
+        activeTabId: initialTab.id,
+      };
+    }
   }
-  const [tabs, setTabs] = useState<ProjectChatTab[]>(() => [initialTabRef.current!]);
-  const [activeTabId, setActiveTabId] = useState<string>(() => initialTabRef.current!.id);
-  const [closedTabs, setClosedTabs] = useState<ClosedChatTab[]>([]);
+  const [tabs, setTabs] = useState<ProjectChatTab[]>(() => initialStateRef.current!.tabs);
+  const [activeTabId, setActiveTabId] = useState<string>(() => initialStateRef.current!.activeTabId ?? initialStateRef.current!.tabs[0].id);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessionsLoadStatus, setSessionsLoadStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [deepDiveByTabId, setDeepDiveByTabId] = useState<Record<string, PendingDeepDiveContext>>({});
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
+  const tabsRef = useRef<ProjectChatTab[]>([]);
+  const handledDeepDiveRequestIdsRef = useRef<Set<string>>(new Set());
+  const autoSendTargetTabByRequestIdRef = useRef<Record<string, string>>({});
 
-  const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
+  const resolvedActiveTabId = useMemo(
+    () => (tabs.some((tab) => tab.id === activeTabId) ? activeTabId : tabs[0]?.id ?? null),
     [tabs, activeTabId],
   );
   const showTabBar = !researchMode || tabs.some((tab) => !tab.isLanding);
 
-  const handleCreateTab = useCallback(() => {
-    const tab = makeTab('New Chat', researchMode);
+  useEffect(() => {
+    if (!resolvedActiveTabId || resolvedActiveTabId === activeTabId) return;
+    setActiveTabId(resolvedActiveTabId);
+  }, [resolvedActiveTabId, activeTabId]);
+
+  useEffect(() => {
+    if (!sessionStorageKey || !resolvedActiveTabId) return;
+    writeStoredProjectChatTabsState(sessionStorageKey, {
+      tabs,
+      activeTabId: resolvedActiveTabId,
+    });
+  }, [sessionStorageKey, tabs, resolvedActiveTabId]);
+
+  useEffect(() => {
+    deepDiveByTabIdRef.current = deepDiveByTabId;
+  }, [deepDiveByTabId]);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  useEffect(() => {
+    if (!pendingDeepDive) return;
+    if (handledDeepDiveRequestIdsRef.current.has(pendingDeepDive.requestId)) return;
+
+    const existingTabEntry = Object.entries(deepDiveByTabIdRef.current).find(
+      ([, value]) => value.requestId === pendingDeepDive.requestId,
+    );
+
+    if (existingTabEntry) {
+      const [tabId] = existingTabEntry;
+      setDeepDiveByTabId((prev) => ({
+        ...prev,
+        [tabId]: {
+          ...pendingDeepDive,
+          collapsed: pendingDeepDive.collapsed ?? prev[tabId]?.collapsed ?? false,
+        },
+      }));
+      setActiveTabId(tabId);
+      handledDeepDiveRequestIdsRef.current.add(pendingDeepDive.requestId);
+      onPendingDeepDiveHandled?.();
+      return;
+    }
+
+    const reusablePlaceholderTab =
+      tabs.find((tab) =>
+        tab.id === resolvedActiveTabId &&
+        !tab.chatId &&
+        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      ) ??
+      tabs.find((tab) =>
+        !tab.chatId &&
+        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      );
+
+    if (reusablePlaceholderTab) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === reusablePlaceholderTab.id
+            ? {
+                ...tab,
+                title: pendingDeepDive.state.item.title,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(reusablePlaceholderTab.id);
+      setDeepDiveByTabId((prev) => ({
+        ...prev,
+        [reusablePlaceholderTab.id]: {
+          ...pendingDeepDive,
+          collapsed: pendingDeepDive.collapsed ?? prev[reusablePlaceholderTab.id]?.collapsed ?? false,
+        },
+      }));
+      handledDeepDiveRequestIdsRef.current.add(pendingDeepDive.requestId);
+      onPendingDeepDiveHandled?.();
+      return;
+    }
+
+    const tab = makeTab(pendingDeepDive.state.item.title, false, false);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
-  }, [researchMode]);
+    setDeepDiveByTabId((prev) => ({
+      ...prev,
+      [tab.id]: {
+        ...pendingDeepDive,
+        collapsed: pendingDeepDive.collapsed ?? false,
+      },
+    }));
+    handledDeepDiveRequestIdsRef.current.add(pendingDeepDive.requestId);
+    onPendingDeepDiveHandled?.();
+  }, [onPendingDeepDiveHandled, pendingDeepDive, resolvedActiveTabId, tabs]);
+
+  const handleDeepDiveCollapsedChange = useCallback((tabId: string, collapsed: boolean) => {
+    setDeepDiveByTabId((prev) => {
+      const current = prev[tabId];
+      if (!current || current.collapsed === collapsed) return prev;
+      return {
+        ...prev,
+        [tabId]: {
+          ...current,
+          collapsed,
+        },
+      };
+    });
+  }, []);
+
+  const handleDeepDiveMessageSent = useCallback((tabId: string) => {
+    handleDeepDiveCollapsedChange(tabId, true);
+  }, [handleDeepDiveCollapsedChange]);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const { chats: raw } = await api.getChats(initiativeId);
+      setSessions(
+        raw.map((session) => ({
+          id: session.id,
+          title: session.title || 'Untitled',
+          createdAt: session.created_at ? new Date(session.created_at).getTime() : Date.now(),
+          messages: [],
+        })),
+      );
+      setSessionsLoadStatus('success');
+    } catch (err) {
+      console.warn('Failed to load chat sessions:', err);
+      setSessionsLoadStatus('error');
+    }
+  }, [initiativeId]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  useEffect(() => {
+    if (sessionsLoadStatus !== 'success') return;
+    const sessionIds = new Set(sessions.map((session) => session.id));
+    const staleTabIds = tabs
+      .filter((tab) => tab.chatId && !sessionIds.has(tab.chatId))
+      .map((tab) => tab.id);
+    if (staleTabIds.length === 0) return;
+
+    const staleIdSet = new Set(staleTabIds);
+    const remainingTabs = tabs.filter((tab) => !staleIdSet.has(tab.id));
+
+    if (remainingTabs.length === 0) {
+      const replacement = makeTab('New Chat', researchMode, true);
+      setTabs([replacement]);
+      setActiveTabId(replacement.id);
+      setDeepDiveByTabId({});
+      return;
+    }
+
+    setTabs(remainingTabs);
+    setActiveTabId((current) =>
+      remainingTabs.some((tab) => tab.id === current) ? current : remainingTabs[0].id,
+    );
+    setDeepDiveByTabId((prev) => {
+      const next = { ...prev };
+      staleTabIds.forEach((tabId) => {
+        delete next[tabId];
+      });
+      return next;
+    });
+  }, [sessionsLoadStatus, sessions, tabs, researchMode]);
+
+  const findExistingNewChatTab = useCallback(
+    () =>
+      tabs.find(
+        (tab) =>
+          !tab.chatId &&
+          (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      ),
+    [tabs],
+  );
+
+  const handleCreateTab = useCallback(() => {
+    const existing = findExistingNewChatTab();
+    if (existing) {
+      setActiveTabId(existing.id);
+      return;
+    }
+
+    const tab = makeTab('New Chat', false, false);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+  }, [findExistingNewChatTab]);
 
   const handleCloseTab = useCallback((tabId: string) => {
-    setTabs((prev) => {
-      const closingTab = prev.find((tab) => tab.id === tabId);
-      if (closingTab?.sessionId) {
-        setClosedTabs((existing) => [
-          { ...closingTab, closedAt: Date.now() },
-          ...existing.filter((tab) => tab.sessionId !== closingTab.sessionId),
-        ].slice(0, 20));
-      }
+    if (tabs.length === 1) {
+      const replacement = makeTab('New Chat', researchMode, true);
+      setTabs([replacement]);
+      setActiveTabId(replacement.id);
+      return;
+    }
 
-      if (prev.length === 1) {
-        const replacement = makeTab('New Chat', researchMode);
-        setActiveTabId(replacement.id);
-        return [replacement];
-      }
-
-      const idx = prev.findIndex((tab) => tab.id === tabId);
-      const nextTabs = prev.filter((tab) => tab.id !== tabId);
-      if (tabId === activeTabId) {
-        const fallback = nextTabs[Math.max(0, idx - 1)] ?? nextTabs[0];
-        if (fallback) {
-          setActiveTabId(fallback.id);
-        }
-      }
-      return nextTabs;
+    const idx = tabs.findIndex((tab) => tab.id === tabId);
+    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
+    setTabs(nextTabs);
+    setDeepDiveByTabId((prev) => {
+      if (!(tabId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
     });
-  }, [activeTabId, researchMode]);
+
+    if (tabId === activeTabId) {
+      const fallback = nextTabs[Math.max(0, idx - 1)] ?? nextTabs[0];
+      if (fallback) {
+        setActiveTabId(fallback.id);
+      }
+    }
+  }, [tabs, activeTabId, researchMode]);
 
   useEffect(() => {
     if (!showHistory) return;
@@ -109,62 +477,211 @@ export function ProjectChatTabsPanel({
   }, [showHistory]);
 
   useEffect(() => {
-    if (!pendingSessionToOpen?.sessionId) return;
+    if (!resolvedActiveTabId) return;
+    const tabStrip = tabStripRef.current;
+    const activeTabButton = tabButtonRefs.current[resolvedActiveTabId];
+    if (!tabStrip || !activeTabButton) return;
 
-    const existingTab = tabs.find((tab) => tab.sessionId === pendingSessionToOpen.sessionId);
+    const stripRect = tabStrip.getBoundingClientRect();
+    const tabRect = activeTabButton.getBoundingClientRect();
+    const isOutOfView = tabRect.left < stripRect.left || tabRect.right > stripRect.right;
+    if (!isOutOfView) return;
+
+    activeTabButton.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  }, [resolvedActiveTabId, tabs]);
+
+  useEffect(() => {
+    if (!pendingChatToOpen?.chatId) return;
+
+    const existingTab = tabs.find((tab) => tab.chatId === pendingChatToOpen.chatId);
     if (existingTab) {
       setActiveTabId(existingTab.id);
       onPendingSessionHandled?.();
       return;
     }
 
-    const newTab: ProjectChatTab = {
-      id: makeTab().id,
-      title: pendingSessionToOpen.title?.trim() || 'Untitled',
-      sessionId: pendingSessionToOpen.sessionId,
-      isLanding: false,
-    };
+    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    if (activeTab && activeTab.isFallback && !activeTab.chatId) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeTab.id
+            ? {
+                ...tab,
+                title: pendingChatToOpen.title?.trim() || 'Untitled',
+                chatId: pendingChatToOpen.chatId,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(activeTab.id);
+    } else {
+      const newTab: ProjectChatTab = {
+        id: makeTab().id,
+        title: pendingChatToOpen.title?.trim() || 'Untitled',
+        chatId: pendingChatToOpen.chatId,
+        isLanding: false,
+        isFallback: false,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    }
+    onPendingSessionHandled?.();
+  }, [pendingChatToOpen, tabs, resolvedActiveTabId, onPendingSessionHandled]);
+
+  useEffect(() => {
+    if (!pendingAutoSend?.requestId) return;
+
+    const existingTargetTabId = autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId];
+    if (existingTargetTabId) {
+      if (tabs.some((tab) => tab.id === existingTargetTabId) && resolvedActiveTabId !== existingTargetTabId) {
+        setActiveTabId(existingTargetTabId);
+        return;
+      }
+      if (!tabs.some((tab) => tab.id === existingTargetTabId)) {
+        delete autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId];
+      }
+    }
+
+    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    const reusablePlaceholderTab =
+      (activeTab &&
+      !activeTab.chatId &&
+      (activeTab.isFallback || activeTab.title.trim().toLowerCase() === 'new chat')
+        ? activeTab
+        : null) ??
+      findExistingNewChatTab();
+
+    if (reusablePlaceholderTab) {
+      autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId] = reusablePlaceholderTab.id;
+      if (resolvedActiveTabId !== reusablePlaceholderTab.id) {
+        setActiveTabId(reusablePlaceholderTab.id);
+      }
+      return;
+    }
+
+    const newTab = makeTab('New Chat', true, false);
+    autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId] = newTab.id;
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
-    onPendingSessionHandled?.();
-  }, [pendingSessionToOpen, tabs, onPendingSessionHandled]);
+  }, [findExistingNewChatTab, pendingAutoSend, resolvedActiveTabId, tabs]);
 
   useEffect(() => {
     if (!researchMode || resetToLandingSignal === 0) return;
-    const resetTab = makeTab('New Chat', true);
+    const resetTab = makeTab('New Chat', true, true);
     setTabs([resetTab]);
     setActiveTabId(resetTab.id);
+    setDeepDiveByTabId({});
     setShowHistory(false);
   }, [researchMode, resetToLandingSignal]);
 
-  const handleReopenTab = (tabId: string) => {
-    const tab = closedTabs.find((entry) => entry.id === tabId);
-    if (!tab) return;
-    setTabs((prev) => [...prev, { id: tab.id, title: tab.title, sessionId: tab.sessionId, isLanding: false }]);
-    setActiveTabId(tab.id);
-    setClosedTabs((prev) => prev.filter((entry) => entry.id !== tabId));
+  const handleOpenSession = useCallback((session: ChatSession) => {
+    const existingTab = tabs.find((tab) => tab.chatId === session.id);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+      setShowHistory(false);
+      return;
+    }
+
+    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    if (activeTab && activeTab.isFallback && !activeTab.chatId) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeTab.id
+            ? {
+                ...tab,
+                title: session.title,
+                chatId: session.id,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(activeTab.id);
+    } else {
+      const newTab: ProjectChatTab = {
+        id: makeTab().id,
+        title: session.title,
+        chatId: session.id,
+        isLanding: false,
+        isFallback: false,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    }
     setShowHistory(false);
-  };
+  }, [tabs, resolvedActiveTabId]);
 
-  const handleDeleteClosedTab = (tabId: string) => {
-    setClosedTabs((prev) => prev.filter((entry) => entry.id !== tabId));
-  };
+  const handleDeleteSession = useCallback((chatId: string) => {
+    const currentTabs = tabsRef.current;
+    setSessions((prev) => prev.filter((session) => session.id !== chatId));
 
-  const handleTabMetaChange = useCallback((tabId: string, meta: { sessionId: string | null; title: string | null }) => {
+    const removedTabIds = new Set(
+      currentTabs.filter((tab) => tab.chatId === chatId).map((tab) => tab.id),
+    );
+    const nextTabs = currentTabs.filter((tab) => !removedTabIds.has(tab.id));
+
+    setDeepDiveByTabId((prev) => {
+      if (removedTabIds.size === 0) return prev;
+
+      const next = { ...prev };
+      removedTabIds.forEach((tabId) => {
+        delete next[tabId];
+      });
+      return next;
+    });
+    if (nextTabs.length === 0) {
+      const replacement = makeTab('New Chat', researchMode, true);
+      setTabs([replacement]);
+      setActiveTabId(replacement.id);
+    } else if (removedTabIds.size > 0) {
+      setTabs(nextTabs);
+      setActiveTabId((current) =>
+        nextTabs.some((tab) => tab.id === current) ? current : nextTabs[0].id,
+      );
+    }
+    api.deleteChat(chatId).catch((err) => {
+      console.error('Failed to delete session:', err);
+      loadSessions();
+    });
+  }, [loadSessions, researchMode]);
+
+  const handleTabMetaChange = useCallback((tabId: string, meta: { chatId: string | null; title: string | null }) => {
+    const chatId = meta.chatId;
+    if (chatId) {
+      const title = meta.title?.trim() || 'Untitled';
+      setSessions((prev) => {
+        const existing = prev.find((session) => session.id === chatId);
+        if (existing) {
+          return prev.map((session) =>
+            session.id === chatId ? { ...session, title } : session,
+          );
+        }
+        return [{ id: chatId, title, createdAt: Date.now(), messages: [] }, ...prev].slice(0, 50);
+      });
+    }
+
     setTabs((prev) => {
       let changed = false;
       const nextTabs = prev.map((tab) => {
         if (tab.id !== tabId) return tab;
         const nextTitle = meta.title?.trim() || tab.title;
-        if (tab.sessionId === meta.sessionId && tab.title === nextTitle) {
+        if (tab.chatId === meta.chatId && tab.title === nextTitle) {
           return tab;
         }
         changed = true;
         return {
           ...tab,
-          sessionId: meta.sessionId,
+          chatId: meta.chatId,
           title: nextTitle,
           isLanding: false,
+          isFallback: false,
         };
       });
       return changed ? nextTabs : prev;
@@ -187,16 +704,21 @@ export function ProjectChatTabsPanel({
     <div className="flex h-full flex-col overflow-hidden bg-white">
       {showTabBar && (
         <div className="flex-shrink-0 flex items-stretch border-b border-divider bg-surface-subtle/50 h-[36px]">
-          <div className="flex-1 flex items-stretch overflow-x-auto min-w-0" style={{ scrollbarWidth: 'none' }}>
+          <div
+            ref={tabStripRef}
+            className="flex-1 flex items-stretch overflow-x-auto min-w-0"
+            style={{ scrollbarWidth: 'none' }}
+          >
             {tabs.map((tab) => {
-              const isActive = tab.id === activeTabId;
-              const style = isActive
-                ? { flexShrink: 0, width: 136 }
-                : { flex: '1 1 0', minWidth: 72 };
+              const isActive = tab.id === resolvedActiveTabId;
+              const style = { flexShrink: 0, width: 148 };
 
               return (
                 <button
                   key={tab.id}
+                  ref={(node) => {
+                    tabButtonRefs.current[tab.id] = node;
+                  }}
                   onClick={() => setActiveTabId(tab.id)}
                   style={style}
                   className={[
@@ -206,7 +728,12 @@ export function ProjectChatTabsPanel({
                       : 'text-text-tertiary hover:text-text-secondary hover:bg-white/60',
                   ].join(' ')}
                 >
-                  <span className="flex-1 truncate text-left">{tab.title}</span>
+                  <span className="flex-shrink-0 text-text-tertiary">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </span>
+                  <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={1000}>
+                    <span className="block truncate text-left">{tab.title}</span>
+                  </Tooltip>
                   <span
                     onClick={(event) => {
                       event.stopPropagation();
@@ -243,28 +770,31 @@ export function ProjectChatTabsPanel({
                     </h3>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
-                    {closedTabs.length === 0 ? (
+                    {sessions.length === 0 ? (
                       <div className="px-3 py-6 text-xs text-text-tertiary text-center">
                         No chat history
                       </div>
                     ) : (
-                      closedTabs.map((tab) => (
+                      sessions.map((session) => (
                         <div
-                          key={tab.id}
+                          key={session.id}
                           className="group flex items-center gap-2 px-3 py-2.5 hover:bg-surface-subtle cursor-pointer border-b border-divider last:border-b-0 transition-colors"
-                          onClick={() => handleReopenTab(tab.id)}
+                          onClick={() => handleOpenSession(session)}
                         >
                           <MessageSquare className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-text-primary truncate">{tab.title}</p>
+                            <p className="text-xs text-text-primary truncate">{session.title}</p>
+                            <p className="text-[10px] text-text-tertiary mt-0.5">
+                              {relativeTime(session.createdAt)}
+                            </p>
                           </div>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteClosedTab(tab.id);
+                              handleDeleteSession(session.id);
                             }}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 text-text-tertiary hover:text-red-500 flex-shrink-0"
-                            title="Remove from history"
+                            title="Delete conversation"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -288,7 +818,9 @@ export function ProjectChatTabsPanel({
 
       <div className="relative flex-1 min-h-0">
         {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
+          const isActive = tab.id === resolvedActiveTabId;
+          const deepDive = deepDiveByTabId[tab.id];
+          const showExpandedDeepDive = Boolean(deepDive && !deepDive.collapsed);
           return (
             <div
               key={tab.id}
@@ -297,14 +829,35 @@ export function ProjectChatTabsPanel({
               <ProjectStandaloneChatView
                 initiativeId={initiativeId}
                 hideTiles={researchMode}
-                useLandingWhenEmpty={researchMode}
-                initialSessionId={tab.sessionId}
+                useLandingWhenEmpty={tab.isLanding}
+                initialChatId={tab.chatId}
                 initialTitle={tab.title}
-                onSessionMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
+                sessions={sessions}
+                activeModuleContext={activeModuleContext}
+                onDeleteChat={handleDeleteSession}
+                onChatListDirty={loadSessions}
+                onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
                 onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
                 onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
-                onCitationClick={isActive ? onCitationClick : undefined}
+                onOpenDocument={isActive ? onOpenDocument : undefined}
+                onOpenWorkspaceModule={isActive ? onOpenWorkspaceModule : undefined}
                 onSendRef={isActive ? onSendRef : undefined}
+                pendingAutoSend={isActive ? pendingAutoSend : null}
+                onPendingAutoSendHandled={isActive ? onPendingAutoSendHandled : undefined}
+                onBeforeSendMessage={isActive && deepDive ? () => handleDeepDiveMessageSent(tab.id) : undefined}
+                projectContext={deepDive ? formatDeepDiveProjectContext(deepDive.state) : null}
+                topContentMode={isActive && showExpandedDeepDive ? 'panel' : 'inline'}
+                topContent={isActive ? (
+                  deepDive ? (
+                    <DeepDiveWidget
+                      state={deepDive.state}
+                      collapsed={deepDive.collapsed}
+                      layoutMode={showExpandedDeepDive ? 'panel' : 'inline'}
+                      onCollapsedChange={(collapsed) => handleDeepDiveCollapsedChange(tab.id, collapsed)}
+                      onOpenDocument={deepDive.onOpenDocument}
+                    />
+                  ) : topContent
+                ) : undefined}
               />
             </div>
           );

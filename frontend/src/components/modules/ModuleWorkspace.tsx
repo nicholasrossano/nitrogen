@@ -1,300 +1,1005 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
-import type { ModuleWorkflowState, BuildItem } from '@/lib/api';
+import {
+  useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
+} from 'react';
+import {
+  Loader2, AlertCircle, CheckCircle2, Download, Pencil, ChevronDown, FileSpreadsheet,
+} from 'lucide-react';
+import type {
+  StagedModuleWorkflowState, StageDef, StageState, StagedWorkflowState,
+} from '@/lib/api';
 import { api } from '@/lib/api';
-import { SetupStage } from './SetupStage';
-import { BuildStage } from './BuildStage';
-import { OutputStage } from './OutputStage';
-import { LCOEModelWidget } from '@/components/widgets/LCOEModelWidget';
-import { CarbonModelWidget } from '@/components/widgets/CarbonModelWidget';
-import { SolarEstimateWidget } from '@/components/widgets/SolarEstimateWidget';
-import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
+import { EditableTableStage } from './stages/EditableTableStage';
+import { CategorizedListStage } from './stages/CategorizedListStage';
+import { CategorizedWorkspaceStage } from './stages/CategorizedWorkspaceStage';
+import {
+  WIDGET_REGISTRY,
+  type WorkspaceWidgetProps,
+  type WorkspaceWidgetFooterAction,
+  type WorkspaceWidgetFooterState,
+} from '@/lib/widgetRegistry';
+import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
+import { ConfirmButton, WorkspaceTabLoader } from '@/components/ui';
 
-type Stage = 'setup' | 'build' | 'output';
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, nested]) => `"${key}":${stableStringify(nested)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
 
-const STAGE_LABELS: Record<Stage, string> = {
-  setup:  'Setup',
-  build:  'Build',
-  output: 'Output',
-};
+function hasMeaningfulValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some((item) => hasMeaningfulValue(item));
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) => hasMeaningfulValue(item));
+  }
+  return true;
+}
 
-function StageToggle({
+function hasRenderableStageData(stageState?: StageState): boolean {
+  if (!stageState) return false;
+  const data = stageState.data;
+  if (!data) return false;
+  if (Array.isArray(data.items) && data.items.length > 0) return true;
+  if (Array.isArray(data.records) && data.records.length > 0) return true;
+  if (hasMeaningfulValue(data.widget_data)) return true;
+  return hasMeaningfulValue(data);
+}
+
+function isStageConfirmed(status?: StageState['status'] | 'confirmed' | null): boolean {
+  return status === 'validated' || status === 'confirmed';
+}
+
+function resolveLatestAvailableStageId(
+  stageDefs: StageDef[],
+  stages: Record<string, StageState>,
+  workflowCurrentStageId?: string | null
+): string | null {
+  if (stageDefs.length === 0) return null;
+
+  for (let i = stageDefs.length - 1; i >= 0; i -= 1) {
+    const def = stageDefs[i];
+    const stageState = stages[def.id];
+    if (!stageState) continue;
+    const status = stageState.status;
+    const hasStarted = status === 'draft'
+      || isStageConfirmed(status)
+      || status === 'populating'
+      || status === 'error'
+      || (status === 'pending' && hasRenderableStageData(stageState));
+    if (hasStarted) {
+      return def.id;
+    }
+  }
+
+  const workflowStageExists = workflowCurrentStageId
+    ? stageDefs.some((def) => def.id === workflowCurrentStageId)
+    : false;
+  if (workflowStageExists) {
+    return workflowCurrentStageId ?? null;
+  }
+
+  return stageDefs[0]?.id ?? null;
+}
+
+// ── Stage Stepper ─────────────────────────────────────────────────────────
+
+function StageStepper({
+  stageDefs,
   stages,
-  current,
-  setupConfirmed,
-  outputUnlocked,
-  onChange,
+  currentStageId,
+  onSelect,
 }: {
-  stages: Stage[];
-  current: Stage;
-  setupConfirmed: boolean;
-  outputUnlocked: boolean;
-  onChange: (s: Stage) => void;
+  stageDefs: StageDef[];
+  stages: Record<string, StageState>;
+  currentStageId: string | null;
+  onSelect: (id: string) => void;
 }) {
-  const accessible: Record<Stage, boolean> = {
-    setup: true,
-    build: setupConfirmed,
-    output: outputUnlocked,
-  };
-
   return (
-    <div className="flex justify-center">
-      <div className="flex items-center gap-1 p-1 bg-surface-subtle rounded-lg w-44">
-        {stages.map((stage) => (
+    <div className="flex items-center gap-1 p-1 bg-surface-subtle rounded-lg">
+      {stageDefs.map((def, idx) => {
+        const stageState = stages[def.id];
+        const status = stageState?.status ?? 'pending';
+        const isActive = def.id === currentStageId;
+        const isConfirmed = isStageConfirmed(status);
+
+        // Can navigate to a stage if it's confirmed or is the current stage,
+        // or if the prior stage is confirmed
+        const priorConfirmed = idx === 0 || isStageConfirmed(stages[stageDefs[idx - 1]?.id]?.status);
+        const isAccessible = isConfirmed || isActive || priorConfirmed;
+
+        return (
           <button
-            key={stage}
-            onClick={() => accessible[stage] && onChange(stage)}
-            disabled={!accessible[stage]}
-            className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${
-              current === stage
+            key={def.id}
+            onClick={() => isAccessible && onSelect(def.id)}
+            disabled={!isAccessible}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+              isActive
                 ? 'bg-surface text-text-primary shadow-sm'
-                : accessible[stage]
+                : isConfirmed
+                ? 'text-emerald-600 hover:bg-surface/50'
+                : isAccessible
                 ? 'text-text-secondary hover:text-text-primary'
                 : 'text-text-tertiary cursor-not-allowed opacity-50'
             }`}
           >
-            {STAGE_LABELS[stage]}
+            {isConfirmed && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />}
+            {status === 'populating' && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
+            <span>{def.title}</span>
           </button>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }
+
+// ── Confirmation Bar ──────────────────────────────────────────────────────
+
+function ConfirmationBar({
+  stageDef,
+  stageState,
+  onPopulate,
+  onConfirm,
+  onCancelEditConfirmedStage,
+  isPopulating,
+  isConfirming,
+  isEditingConfirmedStage,
+  hasPendingChanges,
+  onStartEditConfirmedStage,
+  suppressConfirmAction,
+  allFieldsFilled = true,
+}: {
+  stageDef: StageDef;
+  stageState: StageState;
+  onPopulate: () => void;
+  onConfirm: () => void;
+  onCancelEditConfirmedStage: () => void;
+  isPopulating: boolean;
+  isConfirming: boolean;
+  isEditingConfirmedStage: boolean;
+  hasPendingChanges: boolean;
+  onStartEditConfirmedStage: () => void;
+  suppressConfirmAction?: boolean;
+  allFieldsFilled?: boolean;
+}) {
+  const status = stageState.status;
+  const hasData = !!(stageState.data?.items?.length || stageState.data?.widget_data || stageState.data?.records);
+  const ConfirmCtaButton = ({
+    onClick,
+    disabled,
+    loading,
+  }: {
+    onClick: () => void;
+    disabled?: boolean;
+    loading?: boolean;
+  }) => (
+    <ConfirmButton
+      onClick={onClick}
+      disabled={disabled}
+      loading={loading}
+      label="Confirm"
+      loadingLabel="Confirming..."
+      className="!px-3 shrink-0"
+    />
+  );
+
+  if (isStageConfirmed(status)) {
+    if (!isEditingConfirmedStage) return null;
+    return (
+      <div className="flex items-center justify-between py-3 px-4 border-t border-divider bg-emerald-50/60">
+        <div className="flex items-center gap-2 text-xs text-emerald-700">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>Editing confirmed stage</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCancelEditConfirmedStage}
+            className="btn-secondary !py-1.5 !px-3 text-xs"
+          >
+            Cancel
+          </button>
+          {!suppressConfirmAction && (
+            <ConfirmCtaButton onClick={onConfirm} loading={isConfirming} disabled={!hasPendingChanges} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'pending' && !hasData) {
+    return (
+      <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
+        <p className="text-xs text-text-tertiary">Populate this stage to get started</p>
+        <ConfirmCtaButton onClick={onPopulate} loading={isPopulating} />
+      </div>
+    );
+  }
+
+  if (status === 'draft' || (status === 'pending' && hasData)) {
+    if (suppressConfirmAction) {
+      return null;
+    }
+    return (
+      <div className="flex items-center justify-between py-3 px-4 border-t border-divider">
+        <p className="text-xs text-text-tertiary">
+          {!allFieldsFilled ? 'Fill in all values to confirm' : 'Review and confirm when ready'}
+        </p>
+        <ConfirmCtaButton onClick={onConfirm} disabled={!hasData || !allFieldsFilled} loading={isConfirming} />
+      </div>
+    );
+  }
+
+  if (status === 'populating') {
+    return (
+      <div className="flex items-center gap-2 py-3 px-4 border-t border-divider">
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+        <span className="text-xs text-text-secondary">Generating {stageDef.title.toLowerCase()}...</span>
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="flex items-center justify-between py-3 px-4 border-t border-divider bg-red-50/50">
+        <div className="flex items-center gap-2 text-xs text-red-600">
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span>Generation failed</span>
+        </div>
+        <ConfirmCtaButton onClick={onPopulate} loading={isPopulating} />
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ── Main ModuleWorkspace ──────────────────────────────────────────────────
 
 interface ModuleWorkspaceProps {
   instanceId: string;
   moduleId: string;
   initiativeId?: string;
   onAddToChat?: (text: string) => void;
-  onBack?: () => void;
+  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
+  onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
 }
 
-export function ModuleWorkspace({ instanceId, moduleId, initiativeId, onAddToChat, onBack }: ModuleWorkspaceProps) {
-  const [state, setState] = useState<ModuleWorkflowState | null>(null);
+export function ModuleWorkspace({
+  instanceId,
+  moduleId,
+  initiativeId,
+  onAddToChat,
+  onOpenDecisionLog,
+  onExportDecisionLog,
+  onInspectorStateChange,
+}: ModuleWorkspaceProps) {
+  const [state, setState] = useState<StagedModuleWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeStage, setActiveStage] = useState<Stage>('setup');
-  const [buildCompleted, setBuildCompleted] = useState(false);
-  // Only auto-navigate on the very first load; subsequent fetchState calls
-  // (triggered by edits) must NOT override the user's manual tab choice.
-  const hasInitialized = useRef(false);
+  const [activeStageId, setActiveStageId] = useState<string | null>(null);
+  const [isPopulating, setIsPopulating] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isApprovingFinal, setIsApprovingFinal] = useState(false);
+  const [decisionMenuOpen, setDecisionMenuOpen] = useState(false);
+  const [editingConfirmedStageIds, setEditingConfirmedStageIds] = useState<Record<string, boolean>>({});
+  const [editBaselineByStageId, setEditBaselineByStageId] = useState<Record<string, string>>({});
+  const decisionMenuRef = useRef<HTMLDivElement>(null);
 
+  // Refresh callback for child components (onChanged / onWorkflowUpdated).
   const fetchState = useCallback(async () => {
     try {
-      const data = await api.getModuleWorkflowState(instanceId);
+      const data = await api.getStagedModuleWorkflowState(instanceId);
       setState(data);
-      if (!hasInitialized.current) {
-        hasInitialized.current = true;
-        setActiveStage('setup');
-      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to load module state');
-    } finally {
-      setLoading(false);
     }
   }, [instanceId]);
 
+  // One-time init: fetch state, auto-populate if the module is brand-new.
+  // Uses a cancelled flag so React Strict Mode double-invoke doesn't cause
+  // a stale GET response to overwrite the populated state.
   useEffect(() => {
-    fetchState();
-  }, [fetchState]);
+    let cancelled = false;
 
-  const handleAddToChat = useCallback(
-    (item: BuildItem) => {
-      if (!onAddToChat) return;
-      const name = item.content.name ?? item.content.title ?? 'Item';
-      const details = Object.entries(item.content)
-        .filter(([k]) => k !== 'name' && k !== 'title')
-        .map(([k, v]) => `**${k.replace(/_/g, ' ')}**: ${Array.isArray(v) ? v.join(', ') : v}`)
-        .join('\n');
-      onAddToChat(`${name}\n${details}`);
-    },
-    [onAddToChat]
-  );
+    async function initialize() {
+      setLoading(true);
+      setError(null);
+      setActiveStageId(null);
+      try {
+        const data = await api.getStagedModuleWorkflowState(instanceId);
+        if (cancelled) return;
+        setState(data);
+        const defs = data.module_definition.stage_defs ?? [];
+        const stages = data.workflow_state.stages ?? {};
+        setActiveStageId(resolveLatestAvailableStageId(
+          defs,
+          stages,
+          data.workflow_state.current_stage_id
+        ));
+        setLoading(false);
 
-  const moduleName = state?.module_definition.name ?? null;
+        // Auto-populate the first stage when the module is brand-new (all stages pending).
+        // Covers calculator modules (start_from_predefined_rows) and assessment
+        // modules (seed_from_template + adapt_with_ai_from_project_materials).
+        const allPending = defs.length > 0 && defs.every((d) => stages[d.id]?.status === 'pending');
+        const firstDef = defs[0];
 
-  const renderWidget = useCallback(
+        if (allPending && firstDef) {
+          const hasPopulationSteps = firstDef.population?.some((p) =>
+            p.type !== 'await_user_confirmation'
+          );
+          if (hasPopulationSteps) {
+            setIsPopulating(true);
+            try {
+              const result = await api.populateStage(instanceId, firstDef.id, data.workflow_version);
+              if (cancelled) return;
+              setState((prev) => prev ? {
+                ...prev,
+                workflow_state: result.workflow_state,
+                workflow_version: result.workflow_version,
+              } : prev);
+            } catch {
+              // Silently ignore — user can click Retry in the ConfirmationBar
+              if (!cancelled) await fetchState();
+            } finally {
+              if (!cancelled) setIsPopulating(false);
+            }
+          }
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e.message ?? 'Failed to load module state');
+          setLoading(false);
+        }
+      }
+    }
+
+    initialize();
+    return () => { cancelled = true; };
+  }, [instanceId, fetchState]);
+
+  useEffect(() => {
+    if (!state) return;
+    const defs = state.module_definition.stage_defs ?? [];
+    const activeStageStillExists = !!activeStageId && defs.some((def) => def.id === activeStageId);
+    if (activeStageStillExists) return;
+    const nextStageId = resolveLatestAvailableStageId(
+      defs,
+      state.workflow_state.stages ?? {},
+      state.workflow_state.current_stage_id
+    );
+    if (nextStageId !== activeStageId) {
+      setActiveStageId(nextStageId);
+    }
+  }, [state, activeStageId]);
+
+  useEffect(() => {
+    if (!decisionMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!decisionMenuRef.current?.contains(event.target as Node)) {
+        setDecisionMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [decisionMenuOpen]);
+
+  // Lazy widget rendering for computed_results stages
+  const widgetCache = useRef<Record<string, ComponentType<WorkspaceWidgetProps>>>({});
+  const renderComputedWidget = useCallback(
     (
-      type: string | null | undefined,
-      data: Record<string, any> | null | undefined,
-      stageView: 'build' | 'output' = 'output',
+      widgetType: string,
+      widgetData: Record<string, any> | null | undefined,
+      outputFooterAction?: WorkspaceWidgetFooterAction,
+      outputFooterState?: WorkspaceWidgetFooterState
     ) => {
-      if (!type || !data) {
+      if (!widgetData) {
         return (
-          <div className="card p-6 text-sm text-text-secondary">
-            This stage does not have content yet.
+          <div className="card p-8 text-center text-sm text-text-secondary">
+            Results will appear here after computation.
           </div>
         );
       }
 
-      switch (type) {
-        case 'lcoe_inputs':
-        case 'lcoe_output':
-          return (
-            <LCOEModelWidget
-              data={data}
-              initiativeId={initiativeId ?? ''}
-              instanceId={instanceId}
-              onWorkflowUpdated={fetchState}
-              workspaceView={stageView}
-              isActive
-            />
-          );
-        case 'carbon_inputs':
-        case 'carbon_output':
-          return (
-            <CarbonModelWidget
-              data={data}
-              initiativeId={initiativeId ?? ''}
-              instanceId={instanceId}
-              onWorkflowUpdated={fetchState}
-              workspaceView={stageView}
-              isActive
-            />
-          );
-        case 'solar_inputs':
-        case 'solar_output':
-          return (
-            <SolarEstimateWidget
-              data={data}
-              initiativeId={initiativeId ?? ''}
-              instanceId={instanceId}
-              onWorkflowUpdated={fetchState}
-              workspaceView={stageView}
-              isActive
-            />
-          );
-        case 'document_viewer':
-          return <DocumentViewerWidget data={data} initiativeId={initiativeId ?? ''} isActive />;
-        default:
-          return (
-            <div className="card p-6 text-sm text-text-secondary">
-              Unsupported workflow widget: <code>{type}</code>
-            </div>
-          );
+      const loader = WIDGET_REGISTRY[widgetType];
+      if (!loader) {
+        return (
+          <div className="card p-6 text-sm text-text-secondary">
+            Unsupported widget: <code>{widgetType}</code>
+          </div>
+        );
       }
+
+      if (!widgetCache.current[widgetType]) {
+        widgetCache.current[widgetType] = lazy(() => loader());
+      }
+      const Widget = widgetCache.current[widgetType];
+
+      return (
+        <Suspense fallback={<WorkspaceTabLoader />}>
+          <Widget
+            data={widgetData}
+            initiativeId={initiativeId ?? ''}
+            instanceId={instanceId}
+            workflowVersion={state?.workflow_version}
+            onWorkflowUpdated={fetchState}
+            workspaceView="output"
+            isActive
+            outputFooterAction={outputFooterAction}
+            outputFooterState={outputFooterState}
+            onInspectorStateChange={onInspectorStateChange}
+          />
+        </Suspense>
+      );
     },
-    [fetchState, initiativeId, instanceId]
+    [fetchState, initiativeId, instanceId, onInspectorStateChange, state?.workflow_version]
   );
+
+  const handlePopulate = useCallback(async (stageId: string) => {
+    setIsPopulating(true);
+    try {
+      const result = await api.populateStage(instanceId, stageId, state?.workflow_version);
+      setState((prev) => prev ? {
+        ...prev,
+        workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
+      } : prev);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to populate stage');
+      fetchState();
+    } finally {
+      setIsPopulating(false);
+    }
+  }, [instanceId, state?.workflow_version, fetchState]);
+
+  const handleConfirm = useCallback(async (stageId: string) => {
+    setIsConfirming(true);
+    try {
+      const result = await api.confirmStage(instanceId, stageId, state?.workflow_version);
+      setState((prev) => prev ? {
+        ...prev,
+        workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
+      } : prev);
+      // Auto-advance to next stage
+      const ws = result.workflow_state as StagedWorkflowState;
+      if (ws.current_stage_id && ws.current_stage_id !== stageId) {
+        setActiveStageId(ws.current_stage_id);
+      }
+      setEditingConfirmedStageIds((prev) => ({ ...prev, [stageId]: false }));
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to confirm stage');
+      fetchState();
+    } finally {
+      setIsConfirming(false);
+    }
+  }, [instanceId, state?.workflow_version, fetchState]);
+
+  const handleApproveFinal = useCallback(async () => {
+    setIsApprovingFinal(true);
+    try {
+      const result = await api.approveFinalModuleOutput(instanceId, state?.workflow_version);
+      setState((prev) => prev ? {
+        ...prev,
+        workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
+      } : prev);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to approve final report');
+      fetchState();
+    } finally {
+      setIsApprovingFinal(false);
+    }
+  }, [instanceId, state?.workflow_version, fetchState]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      const { blob, filename } = await api.exportStagedModule(instanceId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message ?? 'Export failed');
+    }
+  }, [instanceId]);
+
+  if (loading) {
+    return <WorkspaceTabLoader />;
+  }
+
+  if (error || !state) {
+    return (
+      <div className="flex items-start gap-2 p-4 text-sm text-red-400">
+        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+        <span>{error ?? 'Module not found'}</span>
+      </div>
+    );
+  }
+
+  const { workflow_state: ws, module_definition: mod } = state;
+  const stageDefs = mod.stage_defs ?? [];
+  const stages = ws.stages ?? {};
+
+  const currentStageDef = stageDefs.find((s) => s.id === activeStageId) ?? stageDefs[0];
+  if (!currentStageDef) {
+    return <div className="p-4 text-sm text-text-secondary">No stages configured for this module.</div>;
+  }
+
+  const currentStageState = stages[currentStageDef.id] ?? { status: 'pending', confirmed_at: null, confirmed_by: null, data: null };
+  const isEditingConfirmedStage = !!editingConfirmedStageIds[currentStageDef.id];
+  const isStageGenerating = currentStageState.status === 'populating' || isPopulating;
+  const currentStageDataSignature = stableStringify(currentStageState.data ?? null);
+  const baselineSignature = editBaselineByStageId[currentStageDef.id];
+  const hasPendingConfirmedStageChanges =
+    isEditingConfirmedStage
+    && baselineSignature !== undefined
+    && baselineSignature !== currentStageDataSignature;
+  const isEditableInputTableStage =
+    currentStageDef.component === 'table' && currentStageDef.widget === 'editable_table';
+
+  const allEditableTableFieldsFilled = isEditableInputTableStage
+    ? (() => {
+        const items = currentStageState.data?.items ?? [];
+        if (items.length === 0) return false;
+        const valueField = currentStageDef.fields.find((f) => f.name === 'value')
+          ?? currentStageDef.fields[1]
+          ?? currentStageDef.fields[0];
+        if (!valueField) return true;
+        return items.every((item) => {
+          const v = item.content?.[valueField.name];
+          return v !== null && v !== undefined && String(v).trim() !== '';
+        });
+      })()
+    : true;
+
+  // Current stage index (used for deriving prior stages in workspace stages)
+  const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
+
+  // All stages confirmed → show export button for modules that support it
+  const allConfirmed = stageDefs.length > 0 && stageDefs.every((s) => isStageConfirmed(stages[s.id]?.status));
+  const hasExport = !!mod.export_format;
+  const finalApproval = ws.final_approval ?? {
+    status: 'pending',
+    approved_at: null,
+    approved_by: null,
+    approved_by_email: null,
+  };
+  const requiresFinalApproval = !!mod.requires_final_approval;
+  const finalApproved = finalApproval.status === 'approved';
+  const terminalStageDef = stageDefs[stageDefs.length - 1];
+  const terminalStageId = terminalStageDef?.id ?? null;
+  const terminalStageState = terminalStageId ? stages[terminalStageId] : null;
+  const terminalStageReady = !!terminalStageState && (
+    isStageConfirmed(terminalStageState.status)
+    || (terminalStageState.status === 'draft' && hasMeaningfulValue(terminalStageState.data))
+  );
+  const stagesBeforeTerminalConfirmed = stageDefs.slice(0, -1).every((s) => isStageConfirmed(stages[s.id]?.status));
+  const canApproveFinal = hasExport
+    && requiresFinalApproval
+    && !finalApproved
+    && stageDefs.length > 0
+    && stagesBeforeTerminalConfirmed
+    && terminalStageReady;
+  const canExportModule = hasExport && (
+    requiresFinalApproval
+      ? finalApproved
+      : allConfirmed
+  );
+  const moduleTitle = mod.name ?? moduleId.replace(/_/g, ' ');
+  const decisionLogContext = {
+    instanceId,
+    moduleId,
+    title: moduleTitle,
+  };
+
+  const handleDecisionLogOpen = async () => {
+    setDecisionMenuOpen(false);
+    onOpenDecisionLog?.(decisionLogContext);
+  };
+
+  const handleDecisionLogExport = async () => {
+    setDecisionMenuOpen(false);
+    try {
+      if (onExportDecisionLog) {
+        await onExportDecisionLog(decisionLogContext);
+        return;
+      }
+      const { blob, filename } = await api.exportModuleDecisionLogXlsx(instanceId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message ?? 'Decision log export failed');
+    }
+  };
+
+  const renderStageContent = () => {
+    const { component, widget, fields, id: stageId } = currentStageDef;
+    const stageData = currentStageState.data;
+    const isConfirmed = isStageConfirmed(currentStageState.status);
+    const readOnly = isConfirmed && !isEditingConfirmedStage;
+
+    if (component === 'computed_results') {
+      return renderComputedWidget(widget, stageData?.widget_data);
+    }
+
+    if (component === 'table' && widget === 'editable_table') {
+      return (
+        <EditableTableStage
+          instanceId={instanceId}
+          moduleId={moduleId}
+          stageId={stageId}
+          workflowVersion={state.workflow_version}
+          fields={fields}
+          items={stageData?.items ?? []}
+          isLoading={isStageGenerating}
+          interactionLocked={isStageGenerating}
+          readOnly={readOnly}
+          flush
+          allowAddRows={currentStageDef.allow_add_rows}
+          onChanged={fetchState}
+        />
+      );
+    }
+
+    if (component === 'list' && widget === 'categorized_list') {
+      return (
+        <CategorizedListStage
+          instanceId={instanceId}
+          stageId={stageId}
+          workflowVersion={state.workflow_version}
+          fields={fields}
+          items={stageData?.items ?? []}
+          isLoading={isStageGenerating}
+          interactionLocked={isStageGenerating}
+          readOnly={readOnly}
+          onChanged={fetchState}
+        />
+      );
+    }
+
+    if ((component === 'list' || component === 'record') && widget === 'categorized_workspace') {
+      // Find the prior confirmed list stage to get categories from
+      const priorListStage = stageDefs.slice(0, currentIdx).reverse().find((s) => s.component === 'list');
+      const categoryItems = priorListStage
+        ? (stages[priorListStage.id]?.data?.items ?? [])
+        : [];
+
+      return (
+        <CategorizedWorkspaceStage
+          instanceId={instanceId}
+          stageId={stageId}
+          workflowVersion={state.workflow_version}
+          stageDef={currentStageDef}
+          stageData={currentStageState.data}
+          categoryItems={categoryItems}
+          interactionLocked={isStageGenerating}
+          readOnly={readOnly}
+          onChanged={fetchState}
+          onAddToChat={onAddToChat}
+        />
+      );
+    }
+
+    // Fallback for unknown widgets — try the widget registry
+    return renderComputedWidget(widget, stageData?.widget_data ?? stageData as any);
+  };
+
+  const isComputedStage = currentStageDef.component === 'computed_results';
+  const isAssessmentMapWidget = isComputedStage
+    && (currentStageDef.widget === 'assessment_map' || currentStageDef.widget === 'implementation_plan');
+  const isCalculationComputedWidget = isComputedStage && [
+    'lcoe_results',
+    'carbon_results',
+    'solar_yield_results',
+    'lcoe_output',
+    'carbon_output',
+    'solar_output',
+  ].includes(currentStageDef.widget);
+  const hasComputedWidgetData = !!currentStageState.data?.widget_data;
+  const isTerminalComputedStage = isComputedStage && currentStageDef.id === terminalStageId;
+  const shouldShowTerminalStageApprove = !requiresFinalApproval
+    && isTerminalComputedStage
+    && (currentStageState.status === 'draft'
+      || (currentStageState.status === 'pending' && hasComputedWidgetData)
+      || (isStageConfirmed(currentStageState.status) && isEditingConfirmedStage));
+  const shouldShowMergedConfirmAction =
+    isCalculationComputedWidget
+    && !(requiresFinalApproval && currentStageDef.id === terminalStageId)
+    && (currentStageState.status === 'draft'
+      || (currentStageState.status === 'pending'
+        && hasComputedWidgetData)
+      || (isStageConfirmed(currentStageState.status) && isEditingConfirmedStage));
+  const requiresPendingChangesForConfirm =
+    isStageConfirmed(currentStageState.status) && isEditingConfirmedStage;
+  const canConfirmCurrentStage = requiresPendingChangesForConfirm
+    ? hasPendingConfirmedStageChanges
+    : true;
+  const computedFooterAction: WorkspaceWidgetFooterAction | undefined = shouldShowMergedConfirmAction
+    ? {
+        label: 'Confirm',
+        onClick: () => {
+          if (!canConfirmCurrentStage) {
+            setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+            setEditBaselineByStageId((prev) => {
+              const next = { ...prev };
+              delete next[currentStageDef.id];
+              return next;
+            });
+            return;
+          }
+          handleConfirm(currentStageDef.id);
+        },
+        loading: isConfirming,
+        disabled: !canConfirmCurrentStage,
+      }
+    : undefined;
+  // Only pass 'confirm' mode to the widget footer; 'confirmed' state is now
+  // handled universally by the floating badge below.
+  const computedFooterState: WorkspaceWidgetFooterState | undefined =
+    shouldShowMergedConfirmAction ? { mode: 'confirm' } : undefined;
+  const shouldShowSeparateConfirmationBar = !(
+    (isCalculationComputedWidget && shouldShowMergedConfirmAction)
+    || shouldShowTerminalStageApprove
+  );
+
+  // Floating confirmed badge — universal across all stage/widget types
+  const badgeConfirmedAt = currentStageState.confirmed_at
+    ? new Date(currentStageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
+  const badgeConfirmedBy = currentStageState.confirmed_by_email || currentStageState.confirmed_by || null;
+  const badgeConfirmedMeta = badgeConfirmedAt
+    ? `${badgeConfirmedAt}${badgeConfirmedBy ? ` by ${badgeConfirmedBy}` : ''}`
+    : null;
+  const showConfirmedBadge =
+    isStageConfirmed(currentStageState.status)
+    && !isEditingConfirmedStage;
+  const showEditInBadge =
+    showConfirmedBadge
+    && !isComputedStage
+    && !(requiresFinalApproval && currentStageDef.id === terminalStageId);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header — back arrow + centered module name */}
-      <div className="relative flex items-center px-4 py-3 border-b border-divider flex-shrink-0">
-        {onBack && (
+    <div className="relative flex flex-col h-full">
+      <div className={isAssessmentMapWidget ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
+        <div className={isAssessmentMapWidget
+          ? 'h-full w-full p-3 flex flex-col'
+          : 'w-full p-3 flex flex-col'}
+        >
+          {/* Workspace controls row (full panel width) */}
+          <div className="flex items-center justify-between gap-4">
+            <StageStepper
+              stageDefs={stageDefs}
+              stages={stages}
+              currentStageId={activeStageId}
+              onSelect={setActiveStageId}
+            />
+            <div className="flex items-center gap-2 shrink-0">
+              {initiativeId && (
+                <div ref={decisionMenuRef} className="relative">
+                  <button
+                    onClick={() => setDecisionMenuOpen((prev) => !prev)}
+                    className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
+                  >
+                    <FileSpreadsheet className="w-3 h-3" />
+                    Decision Log
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                  {decisionMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-20 min-w-[132px] rounded-lg border border-divider bg-white py-1 shadow-lg">
+                      <button
+                        onClick={handleDecisionLogOpen}
+                        className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={handleDecisionLogExport}
+                        className="flex w-full items-center px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-black/[0.04] hover:text-text-primary"
+                      >
+                        Export
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {(canApproveFinal || shouldShowTerminalStageApprove) && (
+                <button
+                  onClick={() => {
+                    if (shouldShowTerminalStageApprove) {
+                      if (!canConfirmCurrentStage) {
+                        setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                        setEditBaselineByStageId((prev) => {
+                          const next = { ...prev };
+                          delete next[currentStageDef.id];
+                          return next;
+                        });
+                        return;
+                      }
+                      handleConfirm(currentStageDef.id);
+                      return;
+                    }
+                    handleApproveFinal();
+                  }}
+                  disabled={shouldShowTerminalStageApprove ? !canConfirmCurrentStage || isConfirming : isApprovingFinal}
+                  className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
+                >
+                  {(shouldShowTerminalStageApprove ? isConfirming : isApprovingFinal)
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <CheckCircle2 className="w-3 h-3" />}
+                  Approve
+                </button>
+              )}
+              {allConfirmed && canExportModule && (
+                <button
+                  onClick={handleExport}
+                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
+                >
+                  <Download className="w-3 h-3" />
+                  Export
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className={isAssessmentMapWidget ? 'mt-[38px] flex min-h-0 flex-1 flex-col' : 'mt-[38px] max-w-3xl mx-auto w-full flex flex-col'}>
+            {/* Active stage content */}
+            {isComputedStage ? (
+              // Computed-results stages: no card wrapper, widget renders directly
+              // into the same container so width + stepper position are identical
+              // to editable stages.
+              <div className={isAssessmentMapWidget ? 'flex min-h-0 flex-1 flex-col gap-0' : 'flex flex-col gap-0'}>
+                {renderComputedWidget(
+                  currentStageDef.widget,
+                  currentStageState.data?.widget_data,
+                  computedFooterAction,
+                  computedFooterState
+                )}
+                {shouldShowSeparateConfirmationBar && (
+                  <ConfirmationBar
+                    stageDef={currentStageDef}
+                    stageState={currentStageState}
+                    onPopulate={() => handlePopulate(currentStageDef.id)}
+                    onConfirm={() => {
+                      if (!canConfirmCurrentStage) {
+                        setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                        setEditBaselineByStageId((prev) => {
+                          const next = { ...prev };
+                          delete next[currentStageDef.id];
+                          return next;
+                        });
+                        return;
+                      }
+                      handleConfirm(currentStageDef.id);
+                    }}
+                    onCancelEditConfirmedStage={() => {
+                      setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                      setEditBaselineByStageId((prev) => {
+                        const next = { ...prev };
+                        delete next[currentStageDef.id];
+                        return next;
+                      });
+                    }}
+                    isPopulating={isPopulating}
+                    isConfirming={isConfirming}
+                    isEditingConfirmedStage={isEditingConfirmedStage}
+                    hasPendingChanges={hasPendingConfirmedStageChanges}
+                    suppressConfirmAction={(requiresFinalApproval && currentStageDef.id === terminalStageId) || shouldShowTerminalStageApprove}
+                    allFieldsFilled={allEditableTableFieldsFilled}
+                    onStartEditConfirmedStage={() =>
+                      {
+                        setEditBaselineByStageId((prev) => ({
+                          ...prev,
+                          [currentStageDef.id]: currentStageDataSignature,
+                        }));
+                        setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+                      }
+                    }
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <div className="p-4 border-b border-divider">
+                  <h3 className="text-sm font-semibold text-text-primary">{currentStageDef.title}</h3>
+                  <p className="text-xs text-text-tertiary mt-0.5">
+                    {currentStageState.status === 'pending' && 'Not started'}
+                    {currentStageState.status === 'populating' && 'Generating…'}
+                    {currentStageState.status === 'draft' && 'Ready for your review'}
+                    {isStageConfirmed(currentStageState.status) && 'Confirmed'}
+                    {currentStageState.status === 'error' && 'Generation failed'}
+                  </p>
+                </div>
+
+                <div className={isEditableInputTableStage ? '' : 'p-4'}>
+                  {renderStageContent()}
+                </div>
+
+                <ConfirmationBar
+                  stageDef={currentStageDef}
+                  stageState={currentStageState}
+                  onPopulate={() => handlePopulate(currentStageDef.id)}
+                  onConfirm={() => {
+                    if (!canConfirmCurrentStage) {
+                      setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                      setEditBaselineByStageId((prev) => {
+                        const next = { ...prev };
+                        delete next[currentStageDef.id];
+                        return next;
+                      });
+                      return;
+                    }
+                    handleConfirm(currentStageDef.id);
+                  }}
+                  onCancelEditConfirmedStage={() => {
+                    setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
+                    setEditBaselineByStageId((prev) => {
+                      const next = { ...prev };
+                      delete next[currentStageDef.id];
+                      return next;
+                    });
+                  }}
+                  isPopulating={isPopulating}
+                  isConfirming={isConfirming}
+                  isEditingConfirmedStage={isEditingConfirmedStage}
+                  hasPendingChanges={hasPendingConfirmedStageChanges}
+                  suppressConfirmAction={(requiresFinalApproval && currentStageDef.id === terminalStageId) || shouldShowTerminalStageApprove}
+                  allFieldsFilled={allEditableTableFieldsFilled}
+                  onStartEditConfirmedStage={() =>
+                    {
+                      setEditBaselineByStageId((prev) => ({
+                        ...prev,
+                        [currentStageDef.id]: currentStageDataSignature,
+                      }));
+                      setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+                    }
+                  }
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+    {/* Floating confirmed badge — bottom-right of workspace */}
+    {showConfirmedBadge && (
+      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 py-1.5 px-3 rounded-md text-xs text-emerald-700 bg-emerald-50/80 border border-emerald-100 shadow-sm pointer-events-auto">
+        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+        <span>{badgeConfirmedMeta ? `Confirmed • ${badgeConfirmedMeta}` : 'Confirmed'}</span>
+        {showEditInBadge && (
           <button
-            onClick={onBack}
-            className="p-1 rounded hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
-            title="Close module"
+            onClick={() => {
+              setEditBaselineByStageId((prev) => ({
+                ...prev,
+                [currentStageDef.id]: currentStageDataSignature,
+              }));
+              setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
+            }}
+            className="ml-1 flex items-center gap-1 text-emerald-700 enabled:hover:text-emerald-900 transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <Pencil className="w-3 h-3" />
+            Edit
           </button>
         )}
-        <h3 className="absolute inset-x-0 text-center text-sm font-medium text-text-primary truncate px-10 pointer-events-none">
-          {moduleName ?? '…'}
-        </h3>
       </div>
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
-          </div>
-        ) : error || !state ? (
-          <div className="flex items-start gap-2 p-4 text-sm text-red-400">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{error ?? 'Module not found'}</span>
-          </div>
-        ) : (() => {
-          const { workflow_state: ws, module_definition: mod } = state;
-          const hasLayeredBuild = (mod.build_layers?.length ?? 0) > 0;
-          const hasSetupForm = ws.setup.mode === 'form' && (mod.setup_fields?.length ?? 0) > 0;
-          const stages: Stage[] = ['setup', 'build', 'output'];
-          const setupConfirmed = ws.setup.confirmed;
-          const outputComplete = ws.output?.status === 'complete';
-          // For widget modules, the single stage has status "complete" when computable.
-          // For assessment modules, check if last stage has items (handled by OutputStage).
-          const mainStage = ws.build?.stages?.[0];
-          const buildReadyForOutput =
-            mainStage?.status === 'complete' ||
-            ws.build?.stages?.some((s) => s.status === 'confirmed') ||
-            false;
-          const outputUnlocked =
-            buildCompleted ||
-            buildReadyForOutput ||
-            outputComplete ||
-            Boolean(ws.output?.widget_data) ||
-            Boolean(ws.output?.content);
-
-          // Widget stage data for non-layered builds
-          const widgetStage = !hasLayeredBuild ? mainStage : null;
-
-          return (
-            <div className="max-w-2xl mx-auto w-full px-4 py-5 flex flex-col gap-4">
-              {/* Stage toggle — compact, centered */}
-              <StageToggle
-                stages={stages}
-                current={activeStage}
-                setupConfirmed={setupConfirmed}
-                outputUnlocked={outputUnlocked}
-                onChange={setActiveStage}
-              />
-
-              {/* Stage content */}
-              {activeStage === 'setup' && (
-                <SetupStage
-                  instanceId={instanceId}
-                  setup={ws.setup}
-                  setupFields={mod.setup_fields ?? []}
-                  autoGenerateDefaults={hasLayeredBuild && hasSetupForm}
-                  onConfirmed={() => {
-                    fetchState();
-                    setActiveStage('build');
-                  }}
-                />
-              )}
-
-              {activeStage === 'build' &&
-                (hasLayeredBuild ? (
-                  <BuildStage
-                    instanceId={instanceId}
-                    build={ws.build}
-                    layerDefs={mod.build_layers ?? []}
-                    readOnly={outputComplete}
-                    onStateUpdated={fetchState}
-                    onProceedToOutput={() => {
-                      setBuildCompleted(true);
-                      setActiveStage('output');
-                    }}
-                    onAddToChat={onAddToChat ? handleAddToChat : undefined}
-                  />
-                ) : (
-                  renderWidget(widgetStage?.widget_type, widgetStage?.widget_data, 'build')
-                ))}
-
-              {activeStage === 'output' &&
-                (hasLayeredBuild ? (
-                  <OutputStage
-                    instanceId={instanceId}
-                    output={ws.output}
-                    build={ws.build}
-                    layerDefs={mod.build_layers ?? []}
-                    onStateUpdated={fetchState}
-                  />
-                ) : ws.output.widget_data || ws.output.content ? (
-                  renderWidget(ws.output.widget_type, ws.output.widget_data ?? ws.output.content, 'output')
-                ) : (
-                  <div className="card p-6 text-sm text-text-secondary">
-                    Complete the build stage to generate the final output for this module.
-                  </div>
-                ))}
-            </div>
-          );
-        })()}
-      </div>
-    </div>
-  );
+    )}
+  </div>
+);
 }

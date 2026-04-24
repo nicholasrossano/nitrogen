@@ -3,7 +3,7 @@ from app.models.onboarding import ChatMessage
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
-from app.models.chat import CoreChatSession, CoreChatMessage
+from app.models.chat import CoreChat, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
 from app.models.project_material import ProjectMaterial
 from app.models.user import User
@@ -11,6 +11,7 @@ from app.models.project_share import ProjectShare
 from app.models.google_drive import UserGoogleConnection, DriveLinkedFile
 from app.models.subscription import Subscription, UsageRecord, UserApiKey
 from app.models.module_instance import ModuleInstance
+from app.models.decision_event import DecisionEvent
 
 __all__ = [
     "Initiative",
@@ -21,7 +22,7 @@ __all__ = [
     "Citation",
     "CorpusDocument",
     "CorpusChunk",
-    "CoreChatSession",
+    "CoreChat",
     "CoreChatMessage",
     "ProvenanceTrace",
     "ProjectMaterial",
@@ -33,4 +34,5 @@ __all__ = [
     "UsageRecord",
     "UserApiKey",
     "ModuleInstance",
+    "DecisionEvent",
 ]

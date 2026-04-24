@@ -1,8 +1,8 @@
 'use client';
 
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { Check, Edit2, Loader2, MapPin, Users, Target, DollarSign, Clock, AlertCircle, Flame, ClipboardList } from 'lucide-react';
-import { PanelHeader } from '@/components/ui';
+import { Edit2, MapPin, Users, Target, DollarSign, Clock, AlertCircle, Flame, ClipboardList } from 'lucide-react';
+import { ConfirmButton, PanelHeader } from '@/components/ui';
 
 interface ConfirmationWidgetProps {
   data: Record<string, any>;
@@ -155,20 +155,12 @@ export function ConfirmationWidget({ data, initiativeId, isActive = true }: Conf
             <Edit2 className="w-4 h-4" />
             Edit
           </button>
-          <button
+          <ConfirmButton
             onClick={handleConfirm}
             disabled={loading}
-            className="btn-primary flex-1 py-2.5"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                Confirm
-              </>
-            )}
-          </button>
+            loading={loading}
+            className="flex-1 py-2.5"
+          />
         </div>
       )}
     </div>

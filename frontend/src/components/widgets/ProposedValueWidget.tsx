@@ -34,13 +34,16 @@ function ConfidenceIcon({ confidence, className }: { confidence: string; classNa
 
 function formatValue(value: number, unit?: string): string {
   const formatted = value.toLocaleString(undefined, { maximumFractionDigits: 6 });
-  if (!unit) return formatted;
-  const currencyUnits = ['usd', 'eur', 'gbp'];
-  const lowerUnit = unit.toLowerCase();
-  if (currencyUnits.some(c => lowerUnit.includes(c))) {
-    return `${formatted} ${unit}`;
+  const normalizedUnit = (unit || '').trim();
+  if (!normalizedUnit || ['unitless', 'none', 'n/a', 'na', 'null', 'no unit'].includes(normalizedUnit.toLowerCase())) {
+    return formatted;
   }
-  return `${formatted} ${unit}`;
+  const currencyUnits = ['usd', 'eur', 'gbp'];
+  const lowerUnit = normalizedUnit.toLowerCase();
+  if (currencyUnits.some(c => lowerUnit.includes(c))) {
+    return `${formatted} ${normalizedUnit}`;
+  }
+  return `${formatted} ${normalizedUnit}`;
 }
 
 export function ProposedValueWidget({ data, messageId, onConfirmed }: ProposedValueWidgetProps) {

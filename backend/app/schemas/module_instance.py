@@ -16,6 +16,7 @@ class ModuleInstanceResponse(BaseModel):
     started_by_email: Optional[str] = None
     started_at: datetime
     updated_at: datetime
-    session_id: Optional[UUID] = None
+    chat_id: Optional[UUID] = None
     deliverable: Optional[dict] = None
     workflow_state: Optional[dict] = None
+    is_plan_complete: bool = False

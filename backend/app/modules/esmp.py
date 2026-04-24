@@ -1,38 +1,30 @@
 """Environmental & Social Management Plan (ESMP) Module.
 
-Three-layer Build workflow:
-  risk_themes  (simple_list)    → high-level E&S risk themes
-  risks        (structured_list) → specific risks per theme
-  mitigation   (structured_list) → mitigation measure + monitoring per risk
+Stage workflow:
+  1. Risk Themes         (list / categorized_list)
+  2. Risks               (list / categorized_workspace)
+  3. Mitigation & Monitoring (record / categorized_workspace)
 
-After Mitigation layer is confirmed, "Generate Output" drafts the full ESMP
-document with executive summary, per-theme sections, and inline citations.
+Export: DOCX generated on demand from confirmed stage data.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from uuid import UUID
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.base import ModuleDefinition, ModuleManifest
-from app.modules.assessment_base import (
-    AssessmentModuleDef,
-    BaseAssessmentModule,
-    BuildLayerDef,
-    SetupFieldDef,
-    make_build_item,
-    llm_json,
-)
+from app.modules.base import BaseModule, FieldDef, PopulationStep, StageDef, ModuleDefinition, ModuleManifest
+from app.modules.retrieval import retrieve_evidence
+from app.modules.utils import llm_json
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class ESMPModule(BaseAssessmentModule):
+class ESMPModule(BaseModule):
     """Environmental & Social Management Plan — IFC/DFI-standard E&S plan."""
 
     @property
@@ -57,9 +49,7 @@ class ESMPModule(BaseAssessmentModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="Draft an IFC-aligned ESMP with risk, mitigation, and monitoring commitments.",
-            primary_ui_object="assessment_viewer",
-            workspace_build_widget="assessment_build",
-            workspace_output_widget="assessment_output",
+            primary_ui_object="categorized_workspace",
             export_artifact_types=["docx"],
             adapter_bindings={"research_source": "retrieval"},
             input_dependencies=[],
@@ -70,272 +60,115 @@ class ESMPModule(BaseAssessmentModule):
         )
 
     @property
-    def assessment_definition(self) -> AssessmentModuleDef:
-        return AssessmentModuleDef(
-            setup_fields=[
-                SetupFieldDef(
-                    name="geography",
-                    label="Geography / Location",
-                    description="Where is the project located?",
-                    field_type="text",
-                    placeholder="e.g. Northern Ghana, Nairobi county Kenya",
-                ),
-                SetupFieldDef(
-                    name="project_type",
-                    label="Project Type",
-                    description="What type of project is this?",
-                    field_type="select",
-                    options=[
-                        "Energy Access",
-                        "Clean Cooking",
-                        "Water & Sanitation",
-                        "Agriculture",
-                        "Health",
-                        "Education",
-                        "Financial Inclusion",
-                        "Other",
-                    ],
-                ),
-                SetupFieldDef(
-                    name="ifc_category",
-                    label="IFC Risk Category",
-                    description="Project risk category under IFC Performance Standards",
-                    field_type="select",
-                    options=[
-                        "Category A — High risk (significant adverse impacts)",
-                        "Category B — Moderate risk (limited/reversible impacts)",
-                        "Category C — Low risk (minimal or no adverse impacts)",
-                    ],
-                ),
-                SetupFieldDef(
-                    name="financing_institution",
-                    label="Lead Financing Institution",
-                    description="Which DFI or funder requires this ESMP? (optional)",
-                    field_type="text",
-                    required=False,
-                    placeholder="e.g. IFC, AfDB, KfW, USAID, bilateral donor",
-                ),
-            ],
-            build_layers=[
-                BuildLayerDef(
-                    id="risk_themes",
-                    name="Risk Themes",
-                    view_type="simple_list",
-                    description="High-level E&S risk themes relevant to this project",
-                    item_schema={"title": "Risk theme name"},
-                ),
-                BuildLayerDef(
-                    id="risks",
-                    name="Risks",
-                    view_type="structured_list",
-                    description="Specific risks identified within each theme",
-                    item_schema={
-                        "risk": "Description of the specific risk",
-                        "parent": "Which Risk Theme this belongs to",
-                    },
-                ),
-                BuildLayerDef(
-                    id="mitigation",
-                    name="Mitigation & Monitoring",
-                    view_type="structured_list",
-                    description="Mitigation measure and monitoring indicator for each risk",
-                    item_schema={
-                        "risk": "The risk being addressed",
-                        "measure": "Mitigation measure to be implemented",
-                        "indicator": "Monitoring indicator to track effectiveness",
-                        "responsible_party": "Who is responsible",
-                        "timing": "When / frequency (e.g. pre-construction, quarterly)",
-                        "parent": "Which Risk Theme this belongs to",
-                    },
-                ),
-            ],
-            output_type="assessment_document",
-        )
+    def stage_defs(self) -> list[StageDef]:
+        return [
+            StageDef(
+                id="risk_themes",
+                title="Risk Themes",
+                component="list",
+                widget="categorized_list",
+                fields=[
+                    FieldDef("label", "text", required=True, label="Risk Theme"),
+                    FieldDef("description", "long_text", label="Description"),
+                ],
+                population=[
+                    PopulationStep("seed_from_template"),
+                    PopulationStep("adapt_with_ai_from_project_materials", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="risks",
+                title="Risks",
+                component="list",
+                widget="categorized_workspace",
+                fields=[
+                    FieldDef("risk", "long_text", required=True, label="Risk Description"),
+                    FieldDef("category", "text", required=True, label="Risk Theme"),
+                ],
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "risk_themes"}),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("propose_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="mitigation",
+                title="Mitigation & Monitoring",
+                component="record",
+                widget="categorized_workspace",
+                fields=[
+                    FieldDef("measure", "long_text", label="Mitigation Measure"),
+                    FieldDef("indicator", "long_text", label="Monitoring Indicator"),
+                    FieldDef("responsible_party", "select", label="Responsible Party",
+                             options=["Developer", "Contractor", "Operator", "Government", "Community"]),
+                    FieldDef("timing", "text", label="Timing / Frequency"),
+                ],
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "risks"}),
+                    PopulationStep("enrich_selected_item_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+        ]
 
-    async def generate_setup_defaults(
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def generate_items_for_stage(
         self,
-        db: AsyncSession,
-        initiative_id: UUID,
+        stage_id: str,
+        step_type: str,
+        context: dict,
+        prior_data: dict[str, Any],
+    ) -> list[dict]:
+        if stage_id == "risk_themes":
+            return await self._generate_risk_themes(context)
+        elif stage_id == "risks":
+            prior_themes = (prior_data.get("risk_themes") or {}).get("data", {}).get("items", [])
+            return await self._generate_risks(context, prior_themes)
+        return []
+
+    async def enrich_record(
+        self,
+        stage_id: str,
+        item_content: dict,
+        existing_record: dict,
         context: dict,
     ) -> dict:
-        return await llm_json(
-            system=(
-                "You are helping configure an Environmental & Social Management Plan for a development "
-                "project. Based on the project context, suggest sensible defaults for: geography, "
-                "project_type, ifc_category, financing_institution. "
-                "For project_type choose from: Energy Access, Clean Cooking, Water & Sanitation, "
-                "Agriculture, Health, Education, Financial Inclusion, Other. "
-                "For ifc_category choose from: "
-                "'Category A — High risk (significant adverse impacts)', "
-                "'Category B — Moderate risk (limited/reversible impacts)', "
-                "'Category C — Low risk (minimal or no adverse impacts)'. "
-                "Return a JSON object with those four keys. Use empty string for fields that cannot be inferred."
-            ),
-            user_msg=f"Project context:\n{json.dumps(context, indent=2)}",
-        )
+        if stage_id != "mitigation":
+            raise ValueError(f"enrich_record called for unexpected stage '{stage_id}'")
+        return await self._enrich_mitigation(item_content, existing_record, context)
 
-    async def generate_layer(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        layer_id: str,
-        setup_fields: dict,
-        prior_layers: dict,
-        context: dict,
-    ) -> list[dict]:
-        if layer_id == "risk_themes":
-            return await self._generate_risk_themes(setup_fields, context)
-        elif layer_id == "risks":
-            theme_items = prior_layers.get("risk_themes", {}).get("items", [])
-            return await self._generate_risks(setup_fields, theme_items, context)
-        elif layer_id == "mitigation":
-            theme_items = prior_layers.get("risk_themes", {}).get("items", [])
-            risk_items = prior_layers.get("risks", {}).get("items", [])
-            return await self._generate_mitigation(setup_fields, theme_items, risk_items, context)
-        else:
-            logger.warning(f"Unknown layer_id: {layer_id}")
-            return []
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        theme_items = (confirmed_stages.get("risk_themes") or {}).get("data", {}).get("items", [])
+        risk_items = (confirmed_stages.get("risks") or {}).get("data", {}).get("items", [])
+        records = (confirmed_stages.get("mitigation") or {}).get("data", {}).get("records", {})
 
-    async def _generate_risk_themes(self, setup: dict, context: dict) -> list[dict]:
-        data = await llm_json(
-            system=(
-                "You are an E&S specialist applying IFC Performance Standards. "
-                "Generate 5–8 high-level E&S risk themes appropriate for the project. "
-                "Common themes include: Land Acquisition & Resettlement, Biodiversity & Natural Habitats, "
-                "Community Health Safety & Security, Labor & Working Conditions, Cultural Heritage, "
-                "Gender & Social Inclusion, Water Resources, Air Quality & Noise, Waste Management, "
-                "Climate Risk & Resilience. Tailor to the project type and IFC risk category. "
-                "Return JSON with key 'themes', a list of objects with 'title' only."
-            ),
-            user_msg=(
-                f"Project type: {setup.get('project_type', '')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"IFC category: {setup.get('ifc_category', '')}\n"
-                f"Project description: {context.get('project_description', '')}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={"title": t.get("title", "")},
-                derivation="inferred",
-                rationale="Generated from project context and IFC Performance Standards",
-            )
-            for t in data.get("themes", [])
-        ]
-
-    async def _generate_risks(
-        self, setup: dict, theme_items: list[dict], context: dict
-    ) -> list[dict]:
-        themes = [i["content"].get("title", "") for i in theme_items]
-        themes_list = "\n".join(f"- {t}" for t in themes)
-        data = await llm_json(
-            system=(
-                "You are an E&S specialist. For each risk theme listed, identify 2–4 specific risks "
-                "relevant to this project. Each item must have: "
-                "'risk' (a concise description of the specific risk, 1–2 sentences) and "
-                "'parent' (exactly matching one theme title). "
-                "Return JSON with key 'risks', a flat list."
-            ),
-            user_msg=(
-                f"Project type: {setup.get('project_type', '')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"IFC category: {setup.get('ifc_category', '')}\n"
-                f"Project description: {context.get('project_description', '')}\n\n"
-                f"Risk themes:\n{themes_list}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={
-                    "risk": r.get("risk", ""),
-                    "parent": r.get("parent", ""),
-                },
-                derivation="inferred",
-                rationale="Identified from project context and IFC Performance Standards",
-            )
-            for r in data.get("risks", [])
-        ]
-
-    async def _generate_mitigation(
-        self,
-        setup: dict,
-        theme_items: list[dict],
-        risk_items: list[dict],
-        context: dict,
-    ) -> list[dict]:
-        themes = [i["content"].get("title", "") for i in theme_items]
-        risks_text = "\n".join(
-            f"- [{r['content'].get('parent', '')}] {r['content'].get('risk', '')}"
-            for r in risk_items
-        )
-        data = await llm_json(
-            system=(
-                "You are an E&S specialist drafting mitigation and monitoring commitments. "
-                "For each risk listed, provide: "
-                "'risk' (repeat the risk description), "
-                "'measure' (the mitigation action to implement), "
-                "'indicator' (monitoring indicator to track effectiveness), "
-                "'responsible_party' (developer, contractor, operator, or government), "
-                "'timing' (pre-construction, construction, operations, quarterly, annually, etc.), "
-                "'parent' (the risk theme, exactly matching one of the themes listed). "
-                "Return JSON with key 'measures', a flat list. "
-                "Be specific and actionable — these will appear in a funder submission."
-            ),
-            user_msg=(
-                f"Project type: {setup.get('project_type', '')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"Financing institution: {setup.get('financing_institution', 'Not specified')}\n\n"
-                f"Risk themes: {', '.join(themes)}\n\n"
-                f"Risks to address:\n{risks_text}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={
-                    "risk": m.get("risk", ""),
-                    "measure": m.get("measure", ""),
-                    "indicator": m.get("indicator", ""),
-                    "responsible_party": m.get("responsible_party", ""),
-                    "timing": m.get("timing", ""),
-                    "parent": m.get("parent", ""),
-                },
-                derivation="inferred",
-                rationale="Mitigation and monitoring measures per IFC Performance Standards",
-            )
-            for m in data.get("measures", [])
-        ]
-
-    async def generate_output(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        setup_fields: dict,
-        confirmed_build: dict,
-    ) -> dict:
-        theme_items = confirmed_build.get("risk_themes", {}).get("items", [])
-        risk_items = confirmed_build.get("risks", {}).get("items", [])
-        mitigation_items = confirmed_build.get("mitigation", {}).get("items", [])
-
-        themes = [i["content"].get("title", "") for i in theme_items]
-
+        themes = [i["content"].get("label", "") for i in theme_items]
         by_theme: dict[str, dict] = {t: {"risks": [], "measures": []} for t in themes}
+
         for item in risk_items:
-            parent = item["content"].get("parent", "")
+            cat = item["content"].get("category", "")
             risk = item["content"].get("risk", "")
-            if parent in by_theme:
-                by_theme[parent]["risks"].append(risk)
-        for item in mitigation_items:
-            parent = item["content"].get("parent", "")
-            c = item["content"]
-            entry = (
-                f"Risk: {c.get('risk', '')}\n"
-                f"  Measure: {c.get('measure', '')}\n"
-                f"  Indicator: {c.get('indicator', '')}\n"
-                f"  Responsible: {c.get('responsible_party', '')}\n"
-                f"  Timing: {c.get('timing', '')}"
-            )
-            if parent in by_theme:
-                by_theme[parent]["measures"].append(entry)
+            if cat in by_theme:
+                by_theme[cat]["risks"].append(risk)
+
+        for item_id, record in records.items():
+            source_item = next((r for r in risk_items if r["id"] == item_id), None)
+            if source_item:
+                parent = source_item["content"].get("category", "")
+                entry = (
+                    f"Risk: {source_item['content'].get('risk', '')}\n"
+                    f"  Measure: {record.get('measure', '')}\n"
+                    f"  Indicator: {record.get('indicator', '')}\n"
+                    f"  Responsible: {record.get('responsible_party', '')}\n"
+                    f"  Timing: {record.get('timing', '')}"
+                )
+                if parent in by_theme:
+                    by_theme[parent]["measures"].append(entry)
 
         outline_text = "\n\n".join(
             f"### {theme}\n"
@@ -344,45 +177,33 @@ class ESMPModule(BaseAssessmentModule):
             for theme in themes
         )
 
-        geography = setup_fields.get("geography", "")
-        project_type = setup_fields.get("project_type", "")
+        geography = context.get("geography", "")
+        project_type = context.get("project_type", "")
         queries = [
             f"environmental social management {theme} {project_type} {geography}".strip()
             for theme in themes[:5]
         ] + [f"IFC Performance Standards {project_type} {geography}"]
 
-        context_str, citations = await self._retrieve_evidence(queries, db, initiative_id)
+        context_str, citations = await retrieve_evidence(queries, None, None)
         evidence_block = (
             f"\n\nRetrieved sources — cite as [1], [2] … inline:\n{context_str}"
             if context_str else ""
         )
 
-        funder = setup_fields.get("financing_institution", "") or "DFI funders"
-        ifc_cat = setup_fields.get("ifc_category", "")
-
         result = await llm_json(
             system=(
                 "You are a senior E&S specialist drafting a professional Environmental & Social "
-                "Management Plan (ESMP) for submission to a development finance institution. "
-                "Using the confirmed risk themes, identified risks, and mitigation commitments, "
-                "write a complete ESMP. The document must:\n"
-                "  • Open with an Executive Summary (4–6 sentences: project overview, "
-                "    IFC category rationale, key risks, and the management approach)\n"
-                "  • Include one section per risk theme. Each section must describe the risks, "
-                "    mitigation measures, and monitoring commitments in professional prose. "
-                "    Cite retrieved sources as [1], [2], etc. where relevant.\n"
-                "  • Close with a Monitoring & Reporting section describing the overall framework "
-                "    (frequency, responsible parties, reporting to funder)\n"
-                "  • Use formal language appropriate for a DFI submission\n\n"
-                "Return JSON with keys:\n"
-                "  title (string),\n"
-                "  executive_summary (string),\n"
-                "  sections (list of {theme, body} — one per risk theme),\n"
-                "  monitoring_and_reporting (string)"
+                "Management Plan (ESMP) for DFI submission. Write a complete ESMP using the "
+                "confirmed risk themes, risks, and mitigation commitments:\n"
+                "  • Executive Summary (4–6 sentences)\n"
+                "  • One section per risk theme with risks, mitigation, and monitoring in prose. "
+                "    Cite sources as [1], [2], etc.\n"
+                "  • Monitoring & Reporting section\n\n"
+                "Return JSON with keys: title, executive_summary, "
+                "sections (list of {theme, body}), monitoring_and_reporting"
             ),
             user_msg=(
-                f"Project: {project_type}, Geography: {geography}, "
-                f"IFC Category: {ifc_cat}, Funder: {funder}\n\n"
+                f"Project: {project_type}, Geography: {geography}\n\n"
                 f"Risk themes, risks, and mitigation:\n{outline_text}"
                 f"{evidence_block}"
             ),
@@ -391,4 +212,78 @@ class ESMPModule(BaseAssessmentModule):
         result = result or {"title": "Environmental & Social Management Plan"}
         if citations:
             result["citations"] = citations
-        return result
+
+        from app.services.docx_exporter import DocxExporterService
+        exporter = DocxExporterService()
+        return exporter.generate_assessment_docx(
+            content=result,
+            initiative_title=context.get("project_title", ""),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Private generation helpers                                           #
+    # ------------------------------------------------------------------ #
+
+    async def _generate_risk_themes(self, context: dict) -> list[dict]:
+        data = await llm_json(
+            system=(
+                "You are an E&S specialist applying IFC Performance Standards. "
+                "Generate 5–8 high-level E&S risk themes for the project. "
+                "Return JSON with key 'themes', a list of objects with 'label' and optional 'description'."
+            ),
+            user_msg=(
+                f"Project type: {context.get('project_type', '')}\n"
+                f"Geography: {context.get('geography', '')}\n"
+                f"Description: {context.get('project_description', '')}"
+            ),
+        )
+        return [
+            {"label": t.get("label", t.get("title", "")), "description": t.get("description", "")}
+            for t in data.get("themes", [])
+        ]
+
+    async def _generate_risks(self, context: dict, theme_items: list[dict]) -> list[dict]:
+        themes = [i["content"].get("label", "") for i in theme_items]
+        themes_list = "\n".join(f"- {t}" for t in themes)
+        data = await llm_json(
+            system=(
+                "You are an E&S specialist. For each risk theme listed, identify 2–4 specific risks. "
+                "Each item must have 'risk' (description, 1–2 sentences) and 'category' "
+                "(exactly matching one theme label). Return JSON with key 'risks', a flat list."
+            ),
+            user_msg=(
+                f"Project type: {context.get('project_type', '')}\n"
+                f"Geography: {context.get('geography', '')}\n"
+                f"Risk themes:\n{themes_list}"
+            ),
+        )
+        return [
+            {"risk": r.get("risk", ""), "category": r.get("category", r.get("parent", ""))}
+            for r in data.get("risks", [])
+        ]
+
+    async def _enrich_mitigation(
+        self,
+        item_content: dict,
+        existing_record: dict,
+        context: dict,
+    ) -> dict:
+        data = await llm_json(
+            system=(
+                "You are an E&S specialist. Provide mitigation and monitoring for the given risk. "
+                "Return JSON with keys: measure, indicator, responsible_party "
+                "(one of: Developer, Contractor, Operator, Government, Community), timing."
+            ),
+            user_msg=(
+                f"Risk: {item_content.get('risk', '')}\n"
+                f"Category: {item_content.get('category', '')}\n"
+                f"Project type: {context.get('project_type', '')}\n"
+                f"Geography: {context.get('geography', '')}"
+            ),
+        )
+        return {
+            "measure": data.get("measure", existing_record.get("measure", "")),
+            "indicator": data.get("indicator", existing_record.get("indicator", "")),
+            "responsible_party": data.get("responsible_party", existing_record.get("responsible_party", "")),
+            "timing": data.get("timing", existing_record.get("timing", "")),
+        }

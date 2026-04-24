@@ -115,6 +115,20 @@ npm run dev
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Check the [open issues](../../issues) for things to work on; issues tagged `good first issue` are a great starting point.
 
+## Security Checks
+
+Run the local secret scanner before opening a PR or preparing an open-source release:
+
+```bash
+./scripts/security_check.sh
+```
+
+For a deeper scan that also checks commit history:
+
+```bash
+./scripts/security_check.sh --history
+```
+
 ## License
 
 [GNU Affero General Public License v3.0](LICENSE): any modifications must be open-sourced under the same license, including when deployed as a hosted service.
