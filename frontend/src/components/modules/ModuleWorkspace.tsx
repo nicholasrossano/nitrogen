@@ -799,7 +799,7 @@ export function ModuleWorkspace({
                     className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
                   >
                     <FileSpreadsheet className="w-3 h-3" />
-                    Decision Log
+                    Log
                     <ChevronDown className="w-3 h-3 opacity-60" />
                   </button>
                   {decisionMenuOpen && (
