@@ -258,12 +258,13 @@ function buildSpreadsheetSlice(
 
   for (const sheet of sheets) {
     const rowTexts = sheet.rows.map((row) => row.join(' ').toLowerCase());
-    rowTexts.forEach((rowText, rowIndex) => {
+    for (let rowIndex = 0; rowIndex < rowTexts.length; rowIndex += 1) {
+      const rowText = rowTexts[rowIndex];
       const score = scoreRowAgainstNeedle(rowText, needleTokens);
       if (!best || score > best.score) {
         best = { sheet, rowIndex, score };
       }
-    });
+    }
   }
 
   if (!best || best.score <= 0) {
