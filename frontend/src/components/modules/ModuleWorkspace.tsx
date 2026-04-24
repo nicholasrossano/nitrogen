@@ -20,7 +20,7 @@ import {
   type WorkspaceWidgetFooterState,
 } from '@/lib/widgetRegistry';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
-import { ConfirmButton } from '@/components/ui';
+import { ConfirmButton, WorkspaceTabLoader } from '@/components/ui';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -427,7 +427,7 @@ export function ModuleWorkspace({
       const Widget = widgetCache.current[widgetType];
 
       return (
-        <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-text-tertiary" /></div>}>
+        <Suspense fallback={<WorkspaceTabLoader />}>
           <Widget
             data={widgetData}
             initiativeId={initiativeId ?? ''}
@@ -518,11 +518,7 @@ export function ModuleWorkspace({
   }, [instanceId]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
-      </div>
-    );
+    return <WorkspaceTabLoader />;
   }
 
   if (error || !state) {

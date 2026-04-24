@@ -7,3 +7,4 @@ export { ShellNavContext, useShellNav } from './ShellContext';
 export { SettingsModal } from './SettingsModal';
 export { UploadToast } from './UploadToast';
 export type { UploadItem } from './UploadToast';
+export { WorkspaceTabLoader } from './WorkspaceTabLoader';

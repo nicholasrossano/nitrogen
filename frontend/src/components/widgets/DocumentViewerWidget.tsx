@@ -2,33 +2,27 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Loader2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import { ZoomableContainer } from '@/components/viewers/ZoomableContainer';
+import { WorkspaceTabLoader } from '@/components/ui';
 
 const PdfViewer = dynamic(
   () => import('@/components/viewers/PdfViewer').then((m) => m.PdfViewer),
-  { ssr: false, loading: () => <ViewerSkeleton label="Loading PDF viewer…" /> },
+  { ssr: false, loading: () => <ViewerSkeleton /> },
 );
 const DocxViewer = dynamic(
   () => import('@/components/viewers/DocxViewer').then((m) => m.DocxViewer),
-  { ssr: false, loading: () => <ViewerSkeleton label="Loading document viewer…" /> },
+  { ssr: false, loading: () => <ViewerSkeleton /> },
 );
 const XlsxViewer = dynamic(
   () => import('@/components/viewers/XlsxViewer').then((m) => m.XlsxViewer),
-  { ssr: false, loading: () => <ViewerSkeleton label="Loading spreadsheet viewer…" /> },
+  { ssr: false, loading: () => <ViewerSkeleton /> },
 );
 
-function ViewerSkeleton({ label }: { label: string }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <div className="flex flex-col items-center gap-2">
-        <Loader2 className="w-5 h-5 animate-spin text-accent" />
-        <span className="text-xs text-text-tertiary">{label}</span>
-      </div>
-    </div>
-  );
+function ViewerSkeleton() {
+  return <WorkspaceTabLoader />;
 }
 
 interface DocumentViewerWidgetProps {
@@ -123,14 +117,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
   }, [loading, chunkId, chunks.length, scrollToHighlight]);
 
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="w-5 h-5 animate-spin text-accent" />
-          <span className="text-xs text-text-tertiary">Loading document…</span>
-        </div>
-      </div>
-    );
+    return <WorkspaceTabLoader />;
   }
 
   if (error) {

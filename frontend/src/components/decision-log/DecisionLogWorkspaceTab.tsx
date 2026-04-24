@@ -9,6 +9,7 @@ import type {
 } from '@/lib/api';
 import { api } from '@/lib/api';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
+import { WorkspaceTabLoader } from '@/components/ui';
 
 interface DecisionLogWorkspaceTabProps {
   moduleInstanceId: string;
@@ -70,11 +71,7 @@ export function DecisionLogWorkspaceTab({
   }, [moduleInstanceId]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
-      </div>
-    );
+    return <WorkspaceTabLoader />;
   }
 
   if (error) {
