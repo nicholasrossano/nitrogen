@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, Download, Pencil, ChevronDown, FileSpreadsheet,
+  Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, FileSpreadsheet,
 } from 'lucide-react';
 import type {
   StagedModuleWorkflowState, StageDef, StageState, StagedWorkflowState,
@@ -20,7 +20,7 @@ import {
   type WorkspaceWidgetFooterState,
 } from '@/lib/widgetRegistry';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
-import { ConfirmButton, WorkspaceTabLoader } from '@/components/ui';
+import { ConfirmButton, ExportButton, WorkspaceTabLoader } from '@/components/ui';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -848,13 +848,9 @@ export function ModuleWorkspace({
                 </button>
               )}
               {allConfirmed && canExportModule && (
-                <button
+                <ExportButton
                   onClick={handleExport}
-                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
-                >
-                  <Download className="w-3 h-3" />
-                  Export
-                </button>
+                />
               )}
             </div>
           </div>
