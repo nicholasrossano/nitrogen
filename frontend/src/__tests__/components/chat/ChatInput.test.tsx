@@ -48,7 +48,7 @@ describe('ChatInput', () => {
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'Hello world' } });
     fireEvent.submit(textarea.closest('form')!);
-    expect(onSend).toHaveBeenCalledWith('Hello world');
+    expect(onSend).toHaveBeenCalledWith('Hello world', null, null);
   });
 
   it('calls sendMessage from store when onSend is not provided', () => {
@@ -56,7 +56,7 @@ describe('ChatInput', () => {
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'Test message' } });
     fireEvent.submit(textarea.closest('form')!);
-    expect(mockSendMessage).toHaveBeenCalledWith(initiativeId, 'Test message');
+    expect(mockSendMessage).toHaveBeenCalledWith(initiativeId, 'Test message', undefined, null);
   });
 
   it('clears input after submit', () => {
