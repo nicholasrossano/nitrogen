@@ -20,6 +20,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
+import { ShellPageHeader } from '@/components/ui';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -1159,7 +1160,7 @@ function InitiativePageContent() {
 
   return (
     <>
-      <div className={`flex-shrink-0 h-14 transition-opacity duration-300 ${chromeReady ? 'opacity-100' : 'opacity-0'}`}>
+      <ShellPageHeader chromeReady={chromeReady}>
         {initiative && (
           <ProjectHeader
             initiative={initiative}
@@ -1169,7 +1170,7 @@ function InitiativePageContent() {
             rightToggle={chatHeaderToggle}
           />
         )}
-      </div>
+      </ShellPageHeader>
 
       <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
         <div className="h-full bg-surface rounded-lg shadow-workspace overflow-hidden relative">

@@ -120,8 +120,8 @@ export function ProjectHeader({
   const hasRightControls = onNewChat || leftToggle || rightToggle || canShare || initiative.shared_role;
 
   return (
-    <header className="flex-shrink-0">
-      <div className="px-4 h-14 flex items-center relative">
+    <div className="h-full flex-shrink-0">
+      <div className="px-4 h-full flex items-center relative w-full">
         <div className="flex items-center gap-2">
           {onBack && (
             <button
@@ -255,6 +255,6 @@ export function ProjectHeader({
           onClose={() => setShowShareModal(false)}
         />
       )}
-    </header>
+    </div>
   );
 }

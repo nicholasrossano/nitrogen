@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ShellPageHeader } from '@/components/ui';
 import { LoadingArtHost, getLoadingArtById, loadingArtRegistry } from '@/components/ui/loading-art';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -31,11 +32,13 @@ function LoadingArtLabContent() {
 
   return (
     <>
-      <header className="shrink-0 h-14 px-4 flex items-center relative">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <h1 className="text-[13px] font-medium text-text-primary truncate">Art Lab</h1>
+      <ShellPageHeader>
+        <div className="px-4 h-full flex items-center relative">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <h1 className="text-[13px] font-medium text-text-primary truncate">Art Lab</h1>
+          </div>
         </div>
-      </header>
+      </ShellPageHeader>
 
       <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
         <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-hidden">

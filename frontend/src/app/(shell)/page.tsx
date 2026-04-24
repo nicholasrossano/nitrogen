@@ -7,6 +7,7 @@ import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { ShellPageHeader } from '@/components/ui';
 
 const PINNED_PROJECTS_STORAGE_KEY = 'nitrogen-pinned-project-ids';
 const MAX_PINNED_PROJECTS = 3;
@@ -167,11 +168,13 @@ function HomePageContent() {
 
   return (
     <>
-      <header className="shrink-0 h-14 px-4 flex items-center relative">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <h1 className="text-[13px] font-medium text-text-primary truncate">{pageTitle}</h1>
+      <ShellPageHeader>
+        <div className="px-4 h-full flex items-center relative">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <h1 className="text-[13px] font-medium text-text-primary truncate">{pageTitle}</h1>
+          </div>
         </div>
-      </header>
+      </ShellPageHeader>
 
       <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
         <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-auto">
