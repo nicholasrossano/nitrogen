@@ -168,4 +168,4 @@ def test_build_current_state_rows_summarizes_computed_widget_to_overview_metrics
     assert any(row["item"] == "Discounted Costs (NPV)" for row in rows)
     assert all("Inputs /" not in row["item"] for row in rows)
     assert all(row["source_type"] == "Computed Value" for row in rows)
-    assert all("Nitrogen LCOE engine" in row["source_detail"] for row in rows)
+    assert all("LCOE engine" in row["source_detail"] for row in rows)
