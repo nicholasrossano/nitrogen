@@ -15,10 +15,8 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.adapters import get_adapter_registry
 from app.config import get_settings
@@ -36,10 +34,7 @@ from app.modules.base import (
     RefinementModel,
     ModuleDefinition,
     ModuleInput,
-    ModuleOutput,
 )
-from app.models.initiative import Initiative
-from app.models.onboarding import ChatMessage
 
 settings = get_settings()
 logger = logging.getLogger(__name__)

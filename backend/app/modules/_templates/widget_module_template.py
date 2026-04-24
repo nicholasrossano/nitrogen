@@ -25,7 +25,6 @@ from app.modules.base import (
     ModuleDefinition,
     ModuleInput,
     ModuleManifest,
-    ModuleOutput,
     RefinementModel,
 )
 
