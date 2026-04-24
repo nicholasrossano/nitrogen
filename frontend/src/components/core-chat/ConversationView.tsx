@@ -483,6 +483,7 @@ export function ConversationView({
 // Matches citations with optional project prefix for compare mode:
 // [Evidence: file.pdf, p3], [A-Evidence: file.pdf, p3], [B-Web: Title]
 const INLINE_CITATION_RE = /\[(?:([AB])-)?([\w\s]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]/g;
+const LEADING_CITATION_PUNCTUATION_RE = /^[.,!?;:]+/;
 
 function CitationChip({
   sourceType,
@@ -639,11 +640,25 @@ function splitOnCitations(
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
+    const suffix = text.slice(re.lastIndex);
+    const punctuationMatch = suffix.match(LEADING_CITATION_PUNCTUATION_RE);
+    const punctuation = punctuationMatch?.[0] ?? '';
+
     if (m.index > last) {
-      parts.push(<span key={`${keyPrefix}-t${partIdx++}`}>{text.slice(last, m.index)}</span>);
+      let beforeCitationText = text.slice(last, m.index);
+      if (punctuation) {
+        // When punctuation is moved before the chip, avoid rendering "word ."
+        beforeCitationText = beforeCitationText.replace(/[ \t]+$/, '');
+      }
+      if (beforeCitationText.length > 0) {
+        parts.push(<span key={`${keyPrefix}-t${partIdx++}`}>{beforeCitationText}</span>);
+      }
     }
     const [, projectLabel, sourceType, title, chunkIdxStr] = m;
     const chunkIdx = chunkIdxStr ? parseInt(chunkIdxStr, 10) : undefined;
+    if (punctuation) {
+      parts.push(<span key={`${keyPrefix}-p${partIdx++}`}>{punctuation}</span>);
+    }
     parts.push(
       <CitationChip
         key={`${keyPrefix}-c${m.index}`}
@@ -656,7 +671,7 @@ function splitOnCitations(
         projectLabel={projectLabel || undefined}
       />
     );
-    last = re.lastIndex;
+    last = re.lastIndex + punctuation.length;
   }
   if (last < text.length) {
     parts.push(<span key={`${keyPrefix}-t${partIdx}`}>{text.slice(last)}</span>);
