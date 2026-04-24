@@ -406,8 +406,8 @@ export function SideDrawer() {
       className="group w-12 hover:w-[var(--side-drawer-expanded-width)] data-[open]:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out pb-2"
       style={drawerStyle}
     >
-      {/* Spacer matches the h-14 header in the content column */}
-      <div className="shrink-0 h-14" />
+      {/* Spacer matches the shell header slot in the content column */}
+      <div className="shrink-0 h-12" />
       <nav className="flex-1 pt-1">
         {GLOBAL_ITEMS.map((item) => renderNavButton(item))}
 
