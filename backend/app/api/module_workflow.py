@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
+from app.core.filename_utils import safe_content_disposition
 from app.core.permissions import require_viewer, require_editor
 from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
@@ -1232,8 +1233,6 @@ async def export_module_output(
 
     The document is synthesized on demand — nothing is stored.
     """
-    from app.core.filename_utils import safe_content_disposition
-
     inst, module = await _get_workflow_instance(db, instance_id, user)
 
     if module.definition.export_format is None:
@@ -1322,7 +1321,6 @@ async def export_writeup(
     Subsequent calls return the cached version instantly unless backing
     stages have been re-confirmed (which invalidates the cache).
     """
-    from app.core.filename_utils import safe_content_disposition
     from app.services.docx_exporter import DocxExporterService
 
     inst, module = await _get_workflow_instance(db, instance_id, user)
