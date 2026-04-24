@@ -101,6 +101,14 @@ Follow `docs/style-guide.md` as the source of truth.
 - Draft add rows should be neutral grey (not confirmed color), collect only the primary label by default, and be launched from a centered green add-dot affordance.
 - Preserve node rhythm/alignment: draft rows use the same vertical spacing as active nodes, and title text stays vertically centered when no subtitle is present.
 
+## Loading Art Authoring
+
+- For new loading-art shapes, prefer deterministic math generators over ad-hoc hand-tuned rejection fields: **IFS** for fractal leaves/ferns, **L-system recursion** for branching trees, and **polar/parametric curves** for radial flowers.
+- Treat geometry seeding as a reusable package: each piece should only define how it seeds `homeX/homeY/foldX/foldY`; keep breathing/shimmer physics in shared helpers (`physics.ts`) instead of per-piece rewrites.
+- When sampling by rejection, use a continuous scalar field (smooth union / weighted field) plus bounded attempts; avoid disconnected lobe-by-lobe samplers that create seam bands or hollow centers.
+- For families of related shapes (e.g. many flowers or trees), add small reusable math helpers (spiral sampler, branch generator, polar sampler) before adding the next piece so new variants are mostly parameter changes, not bespoke geometry code.
+- Keep `loadingArtRegistry` alphabetized by `name`, and when removing a piece, remove its file plus any index exports/imports in the same change.
+
 ## Documentation Maintenance
 
 Nitrogen docs live in `docs/` and are automatically rendered on the public docs site (Mintlify) on every push to `main`. Keep them current by following these rules — the goal is docs that update alongside code, not after.
