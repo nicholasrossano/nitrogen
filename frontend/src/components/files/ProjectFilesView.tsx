@@ -24,7 +24,12 @@ import {
   dataTableBodyClass,
   dataTablePaginationButtonClass,
 } from '@/components/ui/ReadOnlyDataTable';
-import { filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import {
+  filterSupportedFiles,
+  SUPPORTED_EXTENSIONS,
+  runWithConcurrency,
+  DEFAULT_UPLOAD_CONCURRENCY,
+} from '@/lib/fileUtils';
 
 interface ProjectFilesViewProps {
   initiativeId: string;
@@ -204,9 +209,17 @@ export function ProjectFilesView({
     if (accepted.length === 0) return;
     setUploading(true);
     try {
-      for (const file of accepted) {
-        await onUploadFile(file);
-      }
+      await runWithConcurrency(
+        accepted,
+        DEFAULT_UPLOAD_CONCURRENCY,
+        async (file) => {
+          try {
+            await onUploadFile(file);
+          } catch (err) {
+            console.error('Failed to upload file:', file.name, err);
+          }
+        },
+      );
     } finally {
       setUploading(false);
     }
@@ -416,6 +429,25 @@ export function ProjectFilesView({
                           {isDrive && (
                             <span className="text-[9px] font-medium text-[#4285F4] bg-[#4285F4]/10 rounded px-1 py-0.5 flex-shrink-0">
                               Drive
+                            </span>
+                          )}
+                          {(mat.processing_status === 'uploaded' ||
+                            mat.processing_status === 'processing' ||
+                            mat.processing_status === 'lightweight_ready') && (
+                            <span
+                              className="flex items-center gap-1 text-[10px] font-medium text-text-tertiary bg-black/[0.04] rounded px-1.5 py-0.5 flex-shrink-0"
+                              title="Processing in background — file is usable, retrieval will improve once indexing finishes."
+                            >
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              Processing
+                            </span>
+                          )}
+                          {mat.processing_status === 'failed' && (
+                            <span
+                              className="text-[10px] font-medium text-red-500 bg-red-50 rounded px-1.5 py-0.5 flex-shrink-0"
+                              title={mat.processing_error || 'Processing failed'}
+                            >
+                              Failed
                             </span>
                           )}
                         </div>

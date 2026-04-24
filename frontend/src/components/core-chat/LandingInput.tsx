@@ -104,13 +104,20 @@ export function LandingInput({
 
     if (attachedFiles.length > 0 && onUploadFile) {
       setUploading(true);
-      for (const file of attachedFiles) {
-        try {
-          await onUploadFile(file);
-        } catch (err) {
-          console.error('Failed to upload attachment:', file.name, err);
-        }
-      }
+      const { runWithConcurrency, DEFAULT_UPLOAD_CONCURRENCY } = await import(
+        '@/lib/fileUtils'
+      );
+      await runWithConcurrency(
+        attachedFiles,
+        DEFAULT_UPLOAD_CONCURRENCY,
+        async (file) => {
+          try {
+            await onUploadFile(file);
+          } catch (err) {
+            console.error('Failed to upload attachment:', file.name, err);
+          }
+        },
+      );
       setUploading(false);
     }
 

@@ -11,6 +11,10 @@ class ProjectMaterialResponse(BaseModel):
     file_size: Optional[int] = None
     created_at: datetime
     source: str = "material"  # "material" or "evidence"
+    # Only meaningful for source == "evidence"; plain project materials have no
+    # background processing lifecycle and are treated as immediately ready.
+    processing_status: Optional[str] = None
+    processing_error: Optional[str] = None
 
     class Config:
         from_attributes = True

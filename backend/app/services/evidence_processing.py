@@ -8,7 +8,7 @@ from sqlalchemy import select, func, delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.filename_utils import deduplicate_filename
-from app.models.evidence import EvidenceChunk, EvidenceDoc
+from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
 from app.models.initiative import Initiative
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
@@ -42,6 +42,40 @@ def parse_file_to_chunks(
         raise ValueError(f"Unsupported file_type for processing: {file_type}")
 
 
+async def create_uploaded_doc(
+    db: AsyncSession,
+    *,
+    initiative: Initiative,
+    filename: str,
+    file_type: str,
+    storage_path: str | None,
+    file_size: int | None,
+) -> EvidenceDoc:
+    """Fast-path: persist an EvidenceDoc in the ``uploaded`` state.
+
+    Does *not* parse, chunk, or embed.  Callers are responsible for
+    scheduling background processing via
+    :func:`app.services.evidence_processor.schedule_processing`.
+    """
+
+    filename = await deduplicate_filename(db, initiative.id, filename or "Untitled")
+
+    evidence_doc = EvidenceDoc(
+        initiative_id=initiative.id,
+        filename=filename,
+        file_type=file_type,
+        storage_path=storage_path,
+        file_size=file_size,
+        processing_status=EvidenceDocStatus.UPLOADED.value,
+        processing_attempts=0,
+    )
+    db.add(evidence_doc)
+    initiative.touch()
+    await db.commit()
+    await db.refresh(evidence_doc)
+    return evidence_doc
+
+
 async def store_evidence_doc(
     db: AsyncSession,
     initiative: Initiative,
@@ -52,8 +86,11 @@ async def store_evidence_doc(
     file_size: int | None,
 ) -> tuple[EvidenceDoc, int]:
     """
-    Parse, chunk, embed, and persist an evidence document.
-    Returns (evidence_doc, chunk_count).
+    Synchronous fallback: parse, chunk, embed, and persist an evidence document
+    in one shot.  Still used by the Google Drive import/sync path, which runs
+    in its own long-lived handler and benefits from deterministic completion.
+    The interactive upload endpoint now uses ``create_uploaded_doc`` +
+    background processing instead.
     """
     parser = DocumentParserService()
     embeddings_service = EmbeddingsService()
@@ -68,6 +105,8 @@ async def store_evidence_doc(
         file_type=file_type,
         storage_path=storage_path,
         file_size=file_size,
+        processing_status=EvidenceDocStatus.PROCESSING.value,
+        processing_attempts=1,
     )
     db.add(evidence_doc)
     await db.commit()
@@ -89,6 +128,7 @@ async def store_evidence_doc(
         )
         db.add(chunk)
 
+    evidence_doc.processing_status = EvidenceDocStatus.INDEXED.value
     initiative.evidence_ready = True
     initiative.touch()
     await db.commit()

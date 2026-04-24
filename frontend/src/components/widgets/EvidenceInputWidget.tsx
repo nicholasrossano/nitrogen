@@ -5,7 +5,14 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { Upload, FileText, Loader2, ClipboardPaste } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
-import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import {
+  extractFilesFromDrop,
+  filterSupportedFiles,
+  checkDuplicates,
+  SUPPORTED_EXTENSIONS,
+  runWithConcurrency,
+  DEFAULT_UPLOAD_CONCURRENCY,
+} from '@/lib/fileUtils';
 
 interface EvidenceInputWidgetProps {
   initiativeId: string;
@@ -28,9 +35,17 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
   } | null>(null);
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
-    for (const file of filesToUpload) {
-      await uploadEvidence(initiativeId, file);
-    }
+    await runWithConcurrency(
+      filesToUpload,
+      DEFAULT_UPLOAD_CONCURRENCY,
+      async (file) => {
+        try {
+          await uploadEvidence(initiativeId, file);
+        } catch (err) {
+          console.error('Failed to upload evidence:', file.name, err);
+        }
+      },
+    );
   }, [initiativeId, uploadEvidence]);
 
   const handleFiles = async (files: File[]) => {

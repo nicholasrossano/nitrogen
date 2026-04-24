@@ -160,9 +160,6 @@ function InitiativePageContent() {
   const [pageReady, setPageReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [chromeReady, setChromeReady] = useState(false);
-  const [planViewReady, setPlanViewReady] = useState(true);
-  const [showPlanOverlay, setShowPlanOverlay] = useState(false);
-
   const [frameworkDeepDiveRequest, setFrameworkDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [modulesDeepDiveRequest, setModulesDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
@@ -212,7 +209,6 @@ function InitiativePageContent() {
   const loadInitiative = useInitiativeStore((s) => s.loadInitiative);
   const loadEvidence = useInitiativeStore((s) => s.loadEvidence);
   const loadMaterials = useInitiativeStore((s) => s.loadMaterials);
-  const loadProjectPlan = useInitiativeStore((s) => s.loadProjectPlan);
   const loadDriveLinkedFiles = useInitiativeStore((s) => s.loadDriveLinkedFiles);
   const syncDriveFiles = useInitiativeStore((s) => s.syncDriveFiles);
   const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
@@ -227,7 +223,16 @@ function InitiativePageContent() {
   const connectDrive = useGoogleDriveStore((s) => s.connect);
 
   const hasProjectPlan = Boolean(projectPlan);
-  const isOnboarding = Boolean(initiative && !isViewer && !hasProjectPlan);
+  const hasFrameworkSelection = Boolean(
+    hasProjectPlan ||
+    frameworkPlannedModuleIds.length > 0 ||
+    (initiative?.selected_tools?.length ?? 0) > 0,
+  );
+  const isOnboarding = Boolean(
+    initiative &&
+    !isViewer &&
+    !hasFrameworkSelection,
+  );
   const frameworkProgress = useMemo(
     () => {
       const categoryForModuleId = new Map<string, string>();
@@ -318,14 +323,14 @@ function InitiativePageContent() {
   const modulesWorkspaceOpen = activeView === 'modules' && panelVisibility.modules.workspace;
   const modulesChatOpen = activeView === 'modules' && panelVisibility.modules.chat;
   const frameworkWorkspaceOpen =
-    activeView === 'framework' && (!hasProjectPlan || panelVisibility.framework.workspace);
-  const frameworkChatOpen = activeView === 'framework' && hasProjectPlan && panelVisibility.framework.chat;
+    activeView === 'framework' && (!hasFrameworkSelection || panelVisibility.framework.workspace);
+  const frameworkChatOpen = activeView === 'framework' && hasFrameworkSelection && panelVisibility.framework.chat;
   const workspaceOpen = overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen;
   const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
   const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
   const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${initiativeId}`;
   const showPrimaryPanel = activeView === 'files' || workspaceOpen;
-  const isChatPrimaryMode = activeView === 'framework' && !hasProjectPlan;
+  const isChatPrimaryMode = activeView === 'framework' && !hasFrameworkSelection;
   const workspaceToggleEnabled = !isViewer && (
     activeView === 'overview' || activeView === 'framework' || activeView === 'modules'
   );
@@ -366,7 +371,7 @@ function InitiativePageContent() {
         setPanelOpen('overview', 'workspace', !panelVisibility.overview.workspace);
         return;
       }
-      if (activeView === 'framework' && hasProjectPlan) {
+      if (activeView === 'framework' && hasFrameworkSelection) {
         setPanelOpen('framework', 'workspace', !panelVisibility.framework.workspace);
       }
     },
@@ -393,7 +398,7 @@ function InitiativePageContent() {
         setPanelOpen('overview', 'chat', !panelVisibility.overview.chat);
         return;
       }
-      if (activeView === 'framework' && hasProjectPlan) {
+      if (activeView === 'framework' && hasFrameworkSelection) {
         setPanelOpen('framework', 'chat', !panelVisibility.framework.chat);
       }
     },
@@ -447,8 +452,6 @@ function InitiativePageContent() {
     });
   }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, initiativeId]);
 
-  const handlePlanReady = useCallback(() => setPlanViewReady(true), []);
-
   const loadFrameworkModuleInstances = useCallback(async (targetInitiativeId: string) => {
     setFrameworkModulesLoading(true);
     try {
@@ -490,15 +493,12 @@ function InitiativePageContent() {
       return true;
     }
     if (item === 'plan') {
-      setPlanViewReady(false);
-      setShowPlanOverlay(true);
-      loadProjectPlan(initiativeId).finally(handlePlanReady);
       setActiveView('framework');
       router.replace(`/initiatives/${initiativeId}?view=framework`);
       return true;
     }
     return false;
-  }, [router, initiativeId, loadProjectPlan, handlePlanReady, activeView, setPanelOpen]));
+  }, [router, initiativeId, activeView, setPanelOpen]));
 
   useEffect(() => {
     if (isViewer && (activeView === 'overview' || activeView === 'modules')) {
@@ -521,13 +521,11 @@ function InitiativePageContent() {
       onboardingSeenRef.current = true;
       return;
     }
-    if (!hasProjectPlan || !onboardingSeenRef.current || isViewer) return;
+    if (!hasFrameworkSelection || !onboardingSeenRef.current || isViewer) return;
     onboardingSeenRef.current = false;
-    setPlanViewReady(true);
-    setShowPlanOverlay(false);
     setActiveView('framework');
     router.replace(`/initiatives/${initiativeId}?view=framework`);
-  }, [initiative, hasProjectPlan, isOnboarding, isViewer, initiativeId, router]);
+  }, [initiative, hasFrameworkSelection, isOnboarding, isViewer, initiativeId, router]);
 
   useEffect(() => {
     if (!initiativeId) return;
@@ -553,8 +551,6 @@ function InitiativePageContent() {
     setPageReady(false);
     setChromeReady(false);
     setShowOverlay(true);
-    setShowPlanOverlay(false);
-    setPlanViewReady(true);
     onboardingSeenRef.current = false;
 
     reset();
@@ -608,12 +604,6 @@ function InitiativePageContent() {
     const timer = window.setTimeout(() => setShowOverlay(false), 350);
     return () => window.clearTimeout(timer);
   }, [pageReady]);
-
-  useEffect(() => {
-    if (!planViewReady || !showPlanOverlay) return;
-    const timer = window.setTimeout(() => setShowPlanOverlay(false), 350);
-    return () => window.clearTimeout(timer);
-  }, [planViewReady, showPlanOverlay]);
 
   useEffect(() => {
     const hasArtifactsTab = workspaceTabs.some((tab) => tab.id === 'chat-artifacts');
@@ -866,14 +856,6 @@ function InitiativePageContent() {
     updateTitle(initiativeId, title);
   }, [initiativeId, updateTitle]);
 
-  const renderPlanOverlay = showPlanOverlay ? (
-    <div
-      className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-surface/95 backdrop-blur-xl transition-opacity duration-300 ${planViewReady ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-    >
-      <PageLoader label="" />
-    </div>
-  ) : null;
-
   const primaryWorkspaceContent = (() => {
     if (activeView === 'files') {
       return (
@@ -971,7 +953,7 @@ function InitiativePageContent() {
     }
 
     if (activeView === 'framework') {
-      if (!hasProjectPlan && !isViewer) {
+      if (!hasFrameworkSelection && !isViewer) {
         return (
           <ProjectChatTabsPanel
             initiativeId={initiativeId}
@@ -984,7 +966,7 @@ function InitiativePageContent() {
         );
       }
 
-      if (!hasProjectPlan) {
+      if (!hasFrameworkSelection) {
         return (
           <div className="h-full flex items-center justify-center">
             <p className="text-sm text-text-tertiary">No framework yet</p>
@@ -994,7 +976,6 @@ function InitiativePageContent() {
 
       return (
         <div className="relative h-full flex flex-col bg-surface overflow-hidden">
-          {renderPlanOverlay}
           {frameworkProgress && frameworkProgress.total > 0 && (
             <div className="flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-divider bg-surface-header">
               <div className="flex items-center justify-between mb-1.5">
