@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
+from app.models.module_instance import ModuleInstance
 from app.modules.lcoe_module import LCOETool
 from app.modules.stakeholder_assessment import StakeholderAssessmentModule
 from app.modules.carbon_module import CarbonTool
