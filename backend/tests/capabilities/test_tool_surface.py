@@ -14,8 +14,8 @@ def test_orchestration_surface_exposes_scripted_onboarding_tools():
     assert "send_message" in names
     assert "ask_for_documents" in names
     assert "ask_clarifying_questions" in names
-    assert "run_lcoe_tool" in names
-    assert "run_carbon_tool" in names
+    assert "run_lcoe" in names
+    assert "run_carbon" in names
     assert "search_web_sources" not in names
 
 
@@ -26,7 +26,7 @@ def test_project_surface_exposes_research_tools_and_plan_updates():
     assert "search_scholarly_literature" in names
     assert "generate_project_plan" in names
     assert "update_project_plan" in names
-    assert "run_lcoe_model" in names
+    assert "run_lcoe" in names
     assert "send_message" not in names
     assert "ask_for_documents" not in names
 
@@ -36,7 +36,7 @@ def test_standalone_surface_excludes_onboarding_only_tools():
 
     assert "search_web_sources" in names
     assert "search_scholarly_literature" in names
-    assert "run_lcoe_model" in names
-    assert "run_carbon_model" in names
+    assert "run_lcoe" in names
+    assert "run_carbon" in names
     assert "send_message" not in names
     assert "ask_for_documents" not in names

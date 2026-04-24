@@ -19,7 +19,7 @@ from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
-from app.services.chat import ChatMode, ChatResponse as ServiceChatResponse, ChatService
+from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
 from app.services import module_service
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
@@ -606,7 +606,6 @@ async def chat_stream(
                 service = ChatService(
                     db,
                     ctx=ctx,
-                    mode=ChatMode.PROJECT if verified_initiative else ChatMode.STANDALONE,
                 )
 
                 should_use_initial_project_onboarding = False

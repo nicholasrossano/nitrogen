@@ -1,0 +1,155 @@
+"""Routing logic for project/onboarding chat actions."""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING, Any
+
+from app.config import get_settings
+from app.core.llm_client import record_usage_from_response
+from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT, ProjectChatAction
+from app.services.tiered_retrieval import RetrievedFact
+
+if TYPE_CHECKING:
+    from app.services.chat import ChatService
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+class ProjectChatRouter:
+    """Typed router for project chat turns."""
+
+    TOOL_HINT_ACTIONS: dict[str, str] = {
+        "lcoe_model": "run_lcoe",
+        "carbon_model": "run_carbon",
+        "generate_project_plan": "generate_project_plan",
+    }
+
+    TOOL_HINT_MESSAGES: dict[str, str] = {
+        "lcoe_model": "Building your LCOE model…",
+        "carbon_model": "Building your carbon emissions model…",
+        "generate_project_plan": "Generating your project plan…",
+    }
+
+    PROJECT_CHAT_DIRECTIVE: str = (
+        "IMPORTANT MODE: This is an ongoing project chat inside an existing "
+        "project, NOT the initial project onboarding flow. Do NOT ask the user "
+        "to upload documents. Do NOT ask clarifying onboarding questions about "
+        "geography or project type (those have already been captured). Ignore "
+        "Rules 1 and 3 in the decision rules below — they apply only during "
+        "initial project onboarding. If the user asks a question, answer it "
+        "(send_message). If the user requests model/tool/plan work, use the "
+        "appropriate tool.\n\n"
+    )
+
+    def __init__(self, chat_service: "ChatService") -> None:
+        self.chat_service = chat_service
+
+    async def get_next_action(
+        self,
+        messages: list,
+        initiative,
+        tool_hint: str | None = None,
+        field_context: dict[str, Any] | None = None,
+        onboarding_mode: bool = False,
+    ) -> ProjectChatAction:
+        if tool_hint and tool_hint in self.TOOL_HINT_ACTIONS:
+            return ProjectChatAction(
+                action=self.TOOL_HINT_ACTIONS[tool_hint],
+                parameters={"message": self.TOOL_HINT_MESSAGES[tool_hint]},
+                sources_used=[],
+            )
+
+        if field_context and field_context.get("field_name"):
+            return ProjectChatAction(
+                action="propose_input_value",
+                parameters={
+                    "field_name": field_context.get("field_name"),
+                    "label": field_context.get("label"),
+                    "current_value": field_context.get("current_value"),
+                    "unit": field_context.get("unit"),
+                    "model_type": field_context.get("model_type", "lcoe"),
+                    "module_id": field_context.get("module_id"),
+                    "status": field_context.get("status"),
+                },
+                sources_used=[],
+            )
+
+        has_document_request = any(
+            m.widget_type == "document_request" for m in messages if m.role == "assistant"
+        )
+        clarifying_asked = sum(
+            1 for m in messages if m.role == "assistant" and m.widget_type == "clarifying_questions"
+        )
+        user_message_count = sum(1 for m in messages if m.role == "user")
+
+        context_results = await self.chat_service.retrieval.retrieve_for_context(initiative)
+        context_str = self.chat_service.retrieval.format_context_for_prompt(context_results)
+
+        sources_used: list[RetrievedFact] = []
+        for result in context_results.values():
+            sources_used.extend(result.facts)
+
+        model_inputs_context = self.chat_service._format_model_inputs_from_messages(messages, field_context)
+        system_prompt = ORCHESTRATION_SYSTEM_PROMPT.format(
+            retrieved_context=context_str if context_str else "No additional context available.",
+            title=initiative.title or "Not set",
+            project_type=initiative.project_type or "Unknown",
+            description=(initiative.project_description or "Not provided")[:500],
+            geography=initiative.geography or "Not specified",
+            has_documents="Yes" if initiative.evidence_ready else "No",
+            has_plan="Yes" if initiative.project_plan else "No",
+            documents_requested="Yes" if has_document_request else "No",
+            clarifying_asked=clarifying_asked,
+            user_message_count=user_message_count,
+            model_inputs_context=model_inputs_context or "No model has been run yet.",
+        )
+        if not onboarding_mode:
+            system_prompt = self.PROJECT_CHAT_DIRECTIVE + system_prompt
+
+        api_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        recent_messages = messages[-15:] if len(messages) > 15 else messages
+        for msg in recent_messages:
+            api_messages.append({"role": msg.role, "content": msg.content})
+
+        tools = self.chat_service._get_tool_list(
+            initiative_id=str(initiative.id) if getattr(initiative, "id", None) else None,
+            onboarding_mode=onboarding_mode,
+            orchestration_mode=True,
+            field_context=field_context,
+        )
+
+        try:
+            client = await self.chat_service._get_client()
+            response = await client.chat.completions.create(
+                model=settings.openai_orchestration_model,
+                messages=api_messages,
+                tools=tools,
+                tool_choice="required",
+                temperature=0.7,
+            )
+            await record_usage_from_response(
+                self.chat_service.user_id,
+                settings.openai_orchestration_model,
+                response,
+                self.chat_service.db,
+                is_byok=self.chat_service._is_byok,
+            )
+            tool_call = response.choices[0].message.tool_calls[0]
+            action = tool_call.function.name
+            parameters = json.loads(tool_call.function.arguments)
+            logger.info("Orchestration chose action: %s", action)
+            return ProjectChatAction(
+                action=action,
+                parameters=parameters,
+                sources_used=sources_used,
+            )
+        except Exception as exc:
+            logger.error("Orchestration failed: %s", exc, exc_info=True)
+            return ProjectChatAction(
+                action="send_message",
+                parameters={"message": "I'm here to help. Could you tell me more about your project?"},
+                sources_used=[],
+            )

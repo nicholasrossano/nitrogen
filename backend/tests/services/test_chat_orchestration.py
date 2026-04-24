@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.execution_context import ExecutionContext
-from app.services.chat import ChatMode, ChatService
+from app.services.chat import ChatService
 
 
 class _FakeCompletions:
@@ -37,7 +37,7 @@ def _build_ctx():
 
 
 def _build_service():
-    return ChatService(db=SimpleNamespace(), ctx=_build_ctx(), mode=ChatMode.PROJECT)
+    return ChatService(db=SimpleNamespace(), ctx=_build_ctx())
 
 
 @pytest.mark.asyncio
@@ -49,14 +49,14 @@ async def test_get_next_action_short_circuits_for_tool_hint(monkeypatch: pytest.
 
     monkeypatch.setattr(service, "_get_client", fail_get_client)
 
-    result = await service.get_next_action(
+    result = await service.project_router.get_next_action(
         messages=[],
         initiative=SimpleNamespace(),
         tool_hint="lcoe_model",
         onboarding_mode=True,
     )
 
-    assert result.action == "run_lcoe_tool"
+    assert result.action == "run_lcoe"
     assert "LCOE" in result.parameters["message"]
     assert result.sources_used == []
 
@@ -70,7 +70,7 @@ async def test_get_next_action_short_circuits_for_field_context(monkeypatch: pyt
 
     monkeypatch.setattr(service, "_get_client", fail_get_client)
 
-    result = await service.get_next_action(
+    result = await service.project_router.get_next_action(
         messages=[],
         initiative=SimpleNamespace(),
         field_context={
@@ -130,7 +130,7 @@ async def test_get_next_action_returns_mocked_llm_tool_call(monkeypatch: pytest.
         project_plan=None,
     )
 
-    result = await service.get_next_action(
+    result = await service.project_router.get_next_action(
         messages=messages,
         initiative=initiative,
         onboarding_mode=True,

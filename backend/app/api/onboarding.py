@@ -25,7 +25,7 @@ from app.schemas.chat import (
     MessageFeedbackRequest,
     MessageWidgetUpdateRequest,
 )
-from app.services.chat import ChatService, ChatMode
+from app.services.chat import ChatService
 from app.services.chat_agent import ChatAgentService
 from app.services import module_service
 from app.modules import get_module_registry
@@ -179,7 +179,6 @@ async def send_chat_message(
     ctx = await build_context(db, user, initiative.id)
     chat_service = ChatService(
         db,
-        mode=ChatMode.PROJECT,
         ctx=ctx,
     )
     
@@ -201,7 +200,7 @@ async def send_chat_message(
         tool_hint = data.tool_hint or None
         field_context = data.field_context.model_dump() if data.field_context else None
 
-        action_result = await chat_service.get_next_action(
+        action_result = await chat_service.project_router.get_next_action(
             messages=messages,
             initiative=initiative,
             tool_hint=tool_hint,
@@ -213,7 +212,7 @@ async def send_chat_message(
 
         _model_inputs_ctx2 = ChatService._format_model_inputs_from_messages(messages, field_context)
 
-        widget_type, widget_data, assistant_response, sources = await chat_service.execute_project_action(
+        widget_type, widget_data, assistant_response, sources = await chat_service.project_tool_executor.execute_project_action(
             initiative=initiative,
             action_result=action_result,
             chat_history=messages,

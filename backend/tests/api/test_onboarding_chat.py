@@ -7,6 +7,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api import onboarding as onboarding_api
 from app.main import app
+from app.services.project_chat_router import ProjectChatRouter
+from app.services.project_tool_executor import ProjectToolExecutor
 
 
 class _FakeScalarResult:
@@ -105,8 +107,8 @@ async def test_onboarding_chat_first_user_message_returns_hardcoded_document_req
     app.dependency_overrides[onboarding_api.require_ai_access] = override_ai_access
     monkeypatch.setattr(onboarding_api, "require_editor", fake_require_editor)
     monkeypatch.setattr(onboarding_api.ChatService, "extract_inputs_from_message", fail_extract_inputs)
-    monkeypatch.setattr(onboarding_api.ChatService, "get_next_action", fail_get_next_action)
-    monkeypatch.setattr(onboarding_api.ChatService, "execute_project_action", fail_execute_project_action)
+    monkeypatch.setattr(ProjectChatRouter, "get_next_action", fail_get_next_action)
+    monkeypatch.setattr(ProjectToolExecutor, "execute_project_action", fail_execute_project_action)
 
     try:
         async with AsyncClient(
@@ -214,8 +216,8 @@ async def test_onboarding_chat_skips_input_extraction_for_synthetic_document_upl
     app.dependency_overrides[onboarding_api.require_ai_access] = override_ai_access
     monkeypatch.setattr(onboarding_api, "require_editor", fake_require_editor)
     monkeypatch.setattr(onboarding_api.ChatService, "extract_inputs_from_message", fake_extract_inputs)
-    monkeypatch.setattr(onboarding_api.ChatService, "get_next_action", fake_get_next_action)
-    monkeypatch.setattr(onboarding_api.ChatService, "execute_project_action", fake_execute_project_action)
+    monkeypatch.setattr(ProjectChatRouter, "get_next_action", fake_get_next_action)
+    monkeypatch.setattr(ProjectToolExecutor, "execute_project_action", fake_execute_project_action)
 
     try:
         async with AsyncClient(

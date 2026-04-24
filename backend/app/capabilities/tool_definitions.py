@@ -1,6 +1,11 @@
 """Register all built-in capabilities into the CapabilityRegistry."""
 
-from app.capabilities.registry import CapabilityEntry, CapabilityKind, CapabilityRegistry
+from app.capabilities.registry import (
+    CapabilityEntry,
+    CapabilityKind,
+    CapabilityRegistry,
+    CapabilityRoute,
+)
 
 
 def register_all(registry: CapabilityRegistry) -> None:
@@ -11,7 +16,6 @@ def register_all(registry: CapabilityRegistry) -> None:
     _register_prompts(registry)
     _register_adapters(registry)
     _register_resources(registry)
-    _register_canonical_aliases(registry)
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +28,8 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Send Message",
         description="Send a conversational message to the user.",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -49,7 +54,9 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Ask for Documents",
         description="Ask the user to upload relevant project documents.",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
+        onboarding_only=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -79,7 +86,9 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Ask Clarifying Questions",
         description="Ask targeted clarifying questions when critical project information is missing.",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
+        onboarding_only=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -109,7 +118,8 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Generate Project Plan",
         description="Generate the project plan when enough context is available.",
-        surfaces=["orchestration", "project"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION, CapabilityRoute.PROJECT_CHAT],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -134,7 +144,8 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Update Project Plan",
         description="Update the existing project plan based on user-requested changes.",
-        surfaces=["orchestration", "project"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION, CapabilityRoute.PROJECT_CHAT],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -159,15 +170,16 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
     ))
 
     registry.register(CapabilityEntry(
-        id="run_lcoe_tool",
+        id="run_lcoe:orchestration",
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run LCOE Tool",
         description="Run the LCOE model to estimate cost per kWh (orchestration variant).",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
-                "name": "run_lcoe_tool",
+                "name": "run_lcoe",
                 "description": "Run the LCOE (Levelized Cost of Energy) tool to model project economics. Use this when the user asks for LCOE, cost per kWh, project economics, feasibility analysis, or when evaluating whether an energy project is financially viable. Also use when the user mentions capex, opex, discount rate, WACC, or capacity factor in the context of project costing.",
                 "parameters": {
                     "type": "object",
@@ -184,15 +196,16 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
     ))
 
     registry.register(CapabilityEntry(
-        id="run_carbon_tool",
+        id="run_carbon:orchestration",
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Carbon Tool",
         description="Run the Carbon Emissions Calculator (orchestration variant).",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
-                "name": "run_carbon_tool",
+                "name": "run_carbon",
                 "description": "Run the Carbon Emissions Calculator to estimate emission reductions (tCO₂e). Use this when the user asks about carbon credits, emission reductions, baseline vs project emissions, cookstove methodology, fNRB, leakage, tCO₂e, or Gold Standard ER calculations. Also use when discussing fuel consumption savings from clean cooking or improved stove programs.",
                 "parameters": {
                     "type": "object",
@@ -213,7 +226,8 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Input Value",
         description="Propose a value for a model input field (orchestration variant).",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -264,7 +278,8 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Template Value",
         description="Propose a value for a template/form requirement (orchestration variant).",
-        surfaces=["orchestration"],
+        routes=[CapabilityRoute.PROJECT_ORCHESTRATION],
+        requires_initiative=True,
         openai_tool_def={
             "type": "function",
             "function": {
@@ -312,7 +327,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Scholarly Literature",
         description="Search OpenAlex for peer-reviewed academic papers.",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -345,7 +360,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Web Sources",
         description="Search the web for authoritative information.",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -375,15 +390,15 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
     ))
 
     registry.register(CapabilityEntry(
-        id="run_lcoe_model",
+        id="run_lcoe:chat",
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run LCOE Model",
         description="Build an LCOE model from conversation context (standalone variant).",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
-                "name": "run_lcoe_model",
+                "name": "run_lcoe",
                 "description": (
                     "Build an LCOE (Levelized Cost of Energy) model to estimate cost per kWh. "
                     "ALWAYS use this when the user asks for: LCOE, levelized cost, cost of energy, "
@@ -412,15 +427,15 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
     ))
 
     registry.register(CapabilityEntry(
-        id="run_carbon_model",
+        id="run_carbon:chat",
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Carbon Model",
         description="Build a carbon emissions model from conversation context (standalone variant).",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
-                "name": "run_carbon_model",
+                "name": "run_carbon",
                 "description": (
                     "Build a Carbon Emissions model to estimate emission reductions (tCO₂e). "
                     "ALWAYS use this when the user asks about: carbon credits, emission reductions, "
@@ -448,15 +463,15 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
     ))
 
     registry.register(CapabilityEntry(
-        id="run_solar_estimate",
+        id="run_solar:chat",
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Solar Estimate",
         description="Generate a solar PV production estimate using PVWatts.",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
-                "name": "run_solar_estimate",
+                "name": "run_solar",
                 "description": (
                     "Generate a solar PV production estimate (annual and monthly kWh) using PVWatts. "
                     "ALWAYS use this when the user asks for: solar production estimate, PV energy yield, "
@@ -485,7 +500,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Input Value",
         description="Propose a value for a model input field (standalone variant).",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -535,7 +550,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Template Value",
         description="Propose a value for a template/form requirement (standalone variant).",
-        surfaces=["standalone", "project"],
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -600,7 +615,11 @@ def _register_modules(registry: CapabilityRegistry) -> None:
                 kind=CapabilityKind.MODULE,
                 name=defn.name,
                 description=defn.description,
-                surfaces=["both"],
+                routes=[
+                    CapabilityRoute.STANDALONE_CHAT,
+                    CapabilityRoute.PROJECT_CHAT,
+                    CapabilityRoute.PROJECT_ORCHESTRATION,
+                ],
                 visibility="public",
             ))
     except Exception:
@@ -623,7 +642,11 @@ def _register_prompts(registry: CapabilityRegistry) -> None:
                 kind=CapabilityKind.PROMPT,
                 name=defn.name,
                 description=defn.description,
-                surfaces=["both"],
+                routes=[
+                    CapabilityRoute.STANDALONE_CHAT,
+                    CapabilityRoute.PROJECT_CHAT,
+                    CapabilityRoute.PROJECT_ORCHESTRATION,
+                ],
                 visibility="internal",
             ))
     except Exception:
@@ -646,7 +669,11 @@ def _register_adapters(registry: CapabilityRegistry) -> None:
                     description=defn.description,
                     input_schema=defn.input_schema,
                     output_schema=defn.output_schema,
-                    surfaces=["both"],
+                    routes=[
+                        CapabilityRoute.STANDALONE_CHAT,
+                        CapabilityRoute.PROJECT_CHAT,
+                        CapabilityRoute.PROJECT_ORCHESTRATION,
+                    ],
                     visibility=defn.visibility,
                 )
             )
@@ -669,35 +696,13 @@ def _register_resources(registry: CapabilityRegistry) -> None:
                     description=definition.description,
                     input_schema={"type": "object", "properties": {"uri": {"type": "string"}}},
                     output_schema={"type": "object"},
-                    surfaces=["both"],
+                    routes=[
+                        CapabilityRoute.STANDALONE_CHAT,
+                        CapabilityRoute.PROJECT_CHAT,
+                        CapabilityRoute.PROJECT_ORCHESTRATION,
+                    ],
                     visibility="internal" if definition.initiative_scoped else "public",
                 )
             )
     except Exception:
         pass
-
-
-def _register_canonical_aliases(registry: CapabilityRegistry) -> None:
-    """Register non-callable canonical IDs for normalized capability lookup.
-
-    These aliases intentionally have no openai_tool_def so current runtime tool
-    selection/function-calling behavior remains unchanged.
-    """
-    registry.register(CapabilityEntry(
-        id="run_lcoe",
-        kind=CapabilityKind.INTERNAL_TOOL,
-        name="Run LCOE",
-        description="Canonical alias for LCOE tool capabilities across surfaces.",
-        surfaces=["both"],
-        visibility="internal",
-        openai_tool_def=None,
-    ))
-    registry.register(CapabilityEntry(
-        id="run_carbon",
-        kind=CapabilityKind.INTERNAL_TOOL,
-        name="Run Carbon",
-        description="Canonical alias for Carbon tool capabilities across surfaces.",
-        surfaces=["both"],
-        visibility="internal",
-        openai_tool_def=None,
-    ))
