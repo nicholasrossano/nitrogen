@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { FileText, Loader2, ChevronRight } from 'lucide-react';
+import { FileText, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import DOMPurify from 'dompurify';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 export interface ResearchPanelCitation {
   evidence_doc_id: string;
@@ -54,9 +55,8 @@ function MiniPdfPage({ evidenceDocId, pageNumber }: { evidenceDocId: string; pag
   return (
     <div className="overflow-hidden rounded border border-stroke-subtle bg-white">
       {loading && (
-        <div className="flex items-center gap-2 py-4 justify-center">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-          <span className="text-xs text-text-tertiary">Loading page {pageNumber}…</span>
+        <div className="flex min-h-24 items-center justify-center">
+          <PageLoader label="" />
         </div>
       )}
       {blobUrl && (
@@ -403,9 +403,8 @@ export function SnippetCard({
     }
     if (isSpreadsheet && spreadsheetLoading) {
       return (
-        <div className="flex items-center gap-2 py-3">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-          <span className="text-xs text-text-tertiary">Loading table preview…</span>
+        <div className="flex min-h-24 items-center justify-center">
+          <PageLoader label="" />
         </div>
       );
     }
@@ -474,9 +473,8 @@ export function SnippetCard({
         }
       >
         {loading ? (
-          <div className="flex items-center gap-2 py-3">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-            <span className="text-xs text-text-tertiary">Loading…</span>
+          <div className="flex h-full min-h-24 items-center justify-center">
+            <PageLoader label="" />
           </div>
         ) : error ? (
           <p className="text-xs text-text-tertiary py-2">Could not load passage</p>
