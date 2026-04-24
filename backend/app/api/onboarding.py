@@ -1,12 +1,8 @@
 """Chat API endpoints with LLM-driven orchestration."""
 
-import asyncio
-import json
 import logging
-from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +27,6 @@ from app.schemas.chat import (
 )
 from app.services.chat import ChatService, ChatMode
 from app.services.chat_agent import ChatAgentService
-from app.plans.registry import get_plan_registry
 from app.services import module_service
 from app.modules import get_module_registry
 from app.api.chat_constants import (

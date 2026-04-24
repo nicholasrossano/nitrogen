@@ -94,7 +94,12 @@ export function FrameworkPlanView({
       ...category,
       modules: category.moduleIds
         .map((moduleId) => moduleMetaById.get(moduleId))
-        .filter((module): module is NonNullable<typeof module> => Boolean(module) && (devMode || !module.beta)),
+        .filter(
+          (
+            module,
+          ): module is NonNullable<(typeof ALL_MODULES)[number]> => Boolean(module),
+        )
+        .filter((module) => devMode || !module.beta),
     })).filter((category) => devMode || category.modules.length > 0),
     [devMode, moduleMetaById],
   );
