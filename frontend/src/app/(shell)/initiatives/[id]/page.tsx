@@ -46,7 +46,7 @@ function viewFromSearchParam(viewParam: string | null): InitiativeView {
 }
 
 function makeDocumentTabId(citation: ResearchPanelCitation): string {
-  return `document-${citation.evidence_doc_id}-${citation.chunk_id ?? 'root'}`;
+  return `document-${citation.evidence_doc_id}`;
 }
 
 function isDocumentTab(tab: WorkspacePanelTab | null): tab is Extract<WorkspacePanelTab, { kind: 'document' }> {
@@ -642,7 +642,15 @@ function InitiativePageContent() {
   }, [activeView, activeWorkspaceTabId, workspaceTabs]);
 
   const openWorkspaceTab = useCallback((tab: WorkspacePanelTab) => {
-    setWorkspaceTabs((prev) => (prev.some((existingTab) => existingTab.id === tab.id) ? prev : [...prev, tab]));
+    setWorkspaceTabs((prev) => {
+      const existingIndex = prev.findIndex((existingTab) => existingTab.id === tab.id);
+      if (existingIndex === -1) {
+        return [...prev, tab];
+      }
+      const next = [...prev];
+      next[existingIndex] = tab;
+      return next;
+    });
     setActiveWorkspaceTabId(tab.id);
   }, []);
 
