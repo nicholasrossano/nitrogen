@@ -18,6 +18,87 @@ const PICKER_SUPPORTED_MIMES = [
   'application/rtf',
 ].join(',');
 
+let gapiScriptPromise: Promise<void> | null = null;
+let pickerApiPromise: Promise<void> | null = null;
+
+function loadGoogleApiScript(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Google Picker is only available in the browser.'));
+  }
+
+  // @ts-ignore
+  if (window.gapi) return Promise.resolve();
+  if (gapiScriptPromise) return gapiScriptPromise;
+
+  gapiScriptPromise = new Promise<void>((resolve, reject) => {
+    const existingScript = document.getElementById('google-api-script') as HTMLScriptElement | null;
+    if (existingScript) {
+      // If the script is already loaded, resolve immediately instead of
+      // waiting for a load event that has already fired.
+      // @ts-ignore
+      if (window.gapi || existingScript.dataset.loaded === 'true') {
+        resolve();
+        return;
+      }
+      existingScript.addEventListener('load', () => resolve(), { once: true });
+      existingScript.addEventListener(
+        'error',
+        () => reject(new Error('Failed to load Google API script.')),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-api-script';
+    script.src = 'https://apis.google.com/js/api.js';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    };
+    script.onerror = () => reject(new Error('Failed to load Google API script.'));
+    document.body.appendChild(script);
+  }).catch((err) => {
+    gapiScriptPromise = null;
+    throw err;
+  });
+
+  return gapiScriptPromise;
+}
+
+function loadPickerApi(): Promise<void> {
+  if (pickerApiPromise) return pickerApiPromise;
+
+  pickerApiPromise = loadGoogleApiScript()
+    .then(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          try {
+            // @ts-ignore
+            window.gapi.load('picker', {
+              callback: () => resolve(),
+              onerror: () => reject(new Error('Failed to load Google Picker API.')),
+            });
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error('Failed to initialize Google Picker API.'));
+          }
+        }),
+    )
+    .catch((err) => {
+      pickerApiPromise = null;
+      throw err;
+    });
+
+  return pickerApiPromise;
+}
+
+export function warmGooglePicker(): void {
+  if (typeof window === 'undefined') return;
+  void loadPickerApi();
+}
+
 export function openGooglePicker(
   accessToken: string,
   onSelect: (files: DrivePickerFile[]) => void,
@@ -28,9 +109,8 @@ export function openGooglePicker(
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY ?? '';
   const appId = process.env.NEXT_PUBLIC_GOOGLE_PROJECT_NUMBER ?? '';
 
-  const launchPicker = () => {
-    // @ts-ignore — Google Picker API loaded via <script>
-    window.gapi.load('picker', () => {
+  void loadPickerApi()
+    .then(() => {
       // @ts-ignore
       const { google } = window;
 
@@ -44,6 +124,7 @@ export function openGooglePicker(
         .setAppId(appId)
         .setOAuthToken(accessToken)
         .setDeveloperKey(apiKey)
+        .setOrigin(window.location.origin)
         .addView(view)
         .setCallback((data: any) => {
           if (data.action === google.picker.Action.PICKED) {
@@ -63,16 +144,9 @@ export function openGooglePicker(
         .build();
 
       picker.setVisible(true);
+    })
+    .catch((err) => {
+      console.error('Could not initialize Google Picker:', err);
+      onCancel?.();
     });
-  };
-
-  // @ts-ignore
-  if (window.gapi) {
-    launchPicker();
-  } else {
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.onload = launchPicker;
-    document.body.appendChild(script);
-  }
 }

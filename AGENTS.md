@@ -27,6 +27,7 @@
 **Post-edit checks (always run):**
 - After every substantive edit, call `ReadLints` on the edited file(s) before finalizing.
 - Fix any linter errors introduced by the change before responding.
+- After adding or changing a backend Alembic migration or ORM column, run `cd backend && python3 -m alembic upgrade head` against the local dev DB before finalizing.
 - For JSX in particular: watch for ternary branches with multiple sibling elements — they must be wrapped in a fragment (`<>...</>`).
 - After substantial frontend/App Router shell changes, if Next dev shows missing `vendor-chunks/*` or `Cannot find module './*.js'` under `.next/server`, treat it as cache corruption first: clear `frontend/.next` and restart with `npm run dev:clean` before debugging code.
 - Never run `next build` into the same output dir as an active `next dev` server; keep build output isolated (for this repo, `npm run build` must use `.next-build`) so verification does not corrupt dev chunks.
@@ -39,6 +40,7 @@
 **Scope discipline:**
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
+- For staged `editable_table` inputs, always set `StageDef.allow_add_rows` explicitly (false for fixed variable lists, true only for intentionally extensible tables).
 
 **Architecture migration posture:**
 - For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
@@ -93,6 +95,12 @@ Follow `docs/style-guide.md` as the source of truth.
 - Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
 - The `<header className="shrink-0 h-14">` must always be present — even if empty — on every page state/branch. What changes is only the content inside it, never its presence. Never omit the header on any conditional render branch (e.g. a selection screen vs. an active workspace screen on the same route).
 
+**Pillar/node UI reuse (non-negotiable):**
+- For category/entity tree UIs, reuse shared pillar/node components (`PlanStructureColumn`, `PlanItemNode`) with prop-based variants; do not build lookalike duplicates.
+- Keep diagram mode clean (no right-side edit chrome); only show drag/delete controls in explicit editor mode.
+- Draft add rows should be neutral grey (not confirmed color), collect only the primary label by default, and be launched from a centered green add-dot affordance.
+- Preserve node rhythm/alignment: draft rows use the same vertical spacing as active nodes, and title text stays vertically centered when no subtitle is present.
+
 ## Documentation Maintenance
 
 Nitrogen docs live in `docs/` and are automatically rendered on the public docs site (Mintlify) on every push to `main`. Keep them current by following these rules — the goal is docs that update alongside code, not after.
@@ -122,6 +130,33 @@ Nitrogen docs live in `docs/` and are automatically rendered on the public docs 
 When creating a PR with `gh pr create`, always fill in the `.github/PULL_REQUEST_TEMPLATE.md` fields — never leave placeholder comment text in the final body. The template has two sections:
 - **Summary**: 1–3 sentences on what the PR does and why. Include `Closes #N` only if there is a known issue number, otherwise omit that line.
 - **Changes**: bullet points listing the key changes (one per logical change area).
+
+## GitHub Issues
+When creating or renaming issues, prefer plain-language titles that are easy to scan quickly; avoid overly technical phrasing unless the user asks for it.
+
+**Issue body format (default):**
+- Use this exact structure in order: `Title`, `Body`, `## Scope`, `## Done when`.
+- **Title**: short, specific, action-oriented.
+- **Body**: one short paragraph of context.
+- **Scope**: concise bullets for what the issue should do.
+- **Done when**: concise bullets for what completion looks like.
+
+**Epic + child issue format (default):**
+- When a feature spans multiple workstreams, create one epic plus child issues.
+- In the epic, include a `## Child issues` checklist that links each child issue.
+- In each child issue, include a parent reference (for example: `Parent epic: #123`).
+
+**Issue writing guidelines:**
+- Keep issues implementation-oriented, not PRD-like.
+- Keep issues short unless more detail is necessary.
+- Prefer one clear center of gravity per issue.
+- Separate core foundation work from connector-specific work.
+- Write plainly and avoid filler.
+
+**Issue labels:**
+- Use only active repo labels unless the user explicitly asks to add a new one.
+- Current type labels are `type/bug`, `type/feature`, and `type/docs` (do not reintroduce removed type labels).
+- Apply 1 `type/*` label and 1–2 `area/*` labels; use `contrib/*` only when explicitly contributor-facing.
 
 ## Environment Files
 

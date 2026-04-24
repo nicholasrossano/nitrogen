@@ -6,6 +6,7 @@ import json
 import logging
 
 from app.config import get_settings
+from app.core.log_sanitizer import sanitize_exception
 
 settings = get_settings()
 security = HTTPBearer(auto_error=False)
@@ -44,7 +45,10 @@ def _init_firebase():
                 cred = credentials.Certificate(sa_dict)
                 logger.info("Using Firebase credentials from FIREBASE_SERVICE_ACCOUNT_JSON env var")
             except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+                logger.warning(
+                    "Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: %s",
+                    sanitize_exception(e),
+                )
         
         # Option 2: Service account file path (for local dev)
         if not cred and settings.nitrogen_firebase_credentials and os.path.exists(settings.nitrogen_firebase_credentials):
@@ -62,7 +66,7 @@ def _init_firebase():
         logger.info("Firebase Admin SDK initialized successfully")
         return True
     except Exception as e:
-        logger.warning(f"Failed to initialize Firebase Admin SDK: {e}")
+        logger.warning("Failed to initialize Firebase Admin SDK: %s", sanitize_exception(e))
         return False
 
 
@@ -96,7 +100,7 @@ async def authenticate_bearer_token(token: str) -> AuthUser:
             email=decoded_token.get("email"),
         )
     except Exception as e:
-        logger.warning(f"Token verification failed: {e}")
+        logger.warning("Token verification failed: %s", sanitize_exception(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

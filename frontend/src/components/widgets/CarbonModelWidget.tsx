@@ -14,8 +14,11 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
+import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useChatStore } from '@/stores/chatStore';
+import { ConfirmButton } from '@/components/ui';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGeneratingProgress';
 
@@ -24,10 +27,11 @@ async function persistWidgetToDb(
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
+  workflowVersion?: number,
 ): Promise<boolean> {
   try {
     if (instanceId) {
-      await api.persistModuleWorkflowWidget(instanceId, widgetData);
+      await api.persistModuleWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
@@ -45,13 +49,22 @@ interface CarbonModelWidgetProps {
   initiativeId: string;
   messageId?: string;
   instanceId?: string;
+  workflowVersion?: number;
   onWorkflowUpdated?: () => void;
   workspaceView?: 'build' | 'output';
   isActive?: boolean;
+  outputFooterAction?: {
+    label: string;
+    onClick: () => void;
+    loading?: boolean;
+    disabled?: boolean;
+  };
+  outputFooterState?: WorkspaceWidgetFooterState;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
+  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
+  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
   inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
   assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
@@ -91,9 +104,12 @@ export function CarbonModelWidget({
   initiativeId,
   messageId,
   instanceId,
+  workflowVersion,
   onWorkflowUpdated,
   workspaceView = 'output',
   isActive = true,
+  outputFooterAction,
+  outputFooterState,
 }: CarbonModelWidgetProps) {
   const [data, setDataRaw] = useState(initialData);
   const setData = useCallback((newData: any) => {
@@ -133,10 +149,10 @@ export function CarbonModelWidget({
       (async () => {
         setIsRecalculating(true);
         try {
-          const newData = await api.updateCarbonInput(inputs, fieldName, value, 'confirmed');
+          const newData = await api.updateCarbonInput(inputs, fieldName, value, 'validated');
           setData(newData);
           if ((messageId && initiativeId) || instanceId) {
-            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
             if (persisted && instanceId) onWorkflowUpdated?.();
           }
         } catch { /* keep old */ }
@@ -145,7 +161,7 @@ export function CarbonModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId, instanceId]);
+  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -186,7 +202,7 @@ export function CarbonModelWidget({
       const newData = await api.updateCarbonInput(inputs, editingField, parsed);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -196,7 +212,7 @@ export function CarbonModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId]);
+  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -210,14 +226,32 @@ export function CarbonModelWidget({
     const text =
       status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
       status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
-      status === 'confirmed'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
+      status === 'validated'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label, fieldName } }));
-  }, []);
+    const input = fieldName ? inputs[fieldName] : undefined;
+    const fieldContext = fieldName ? {
+      field_name: fieldName,
+      label,
+      current_value: typeof input?.value === 'number' ? input.value : null,
+      unit: input?.unit || null,
+      model_type: 'carbon' as const,
+      status: status || null,
+    } : null;
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext,
+        modelInputsContext: buildModelInputsContext('Carbon Model', inputs, fieldContext),
+      },
+    }));
+  }, [inputs]);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
-    const isConfirmed = currentStatus === 'confirmed';
-    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'confirmed';
+    const isConfirmed = currentStatus === 'validated' || currentStatus === 'confirmed';
+    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'validated';
 
     if (!isConfirmed) {
       setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
@@ -236,7 +270,7 @@ export function CarbonModelWidget({
       const newData = await api.updateCarbonInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -250,7 +284,7 @@ export function CarbonModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId]);
+  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   const switchMethodPack = useCallback(async (newPack: string) => {
     if (newPack === currentMethodPack) return;
@@ -259,7 +293,7 @@ export function CarbonModelWidget({
       const newData = await api.switchCarbonMethodPack(newPack, inputs);
       setData(newData);
       if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -267,7 +301,7 @@ export function CarbonModelWidget({
     } finally {
       setIsSwitchingPack(false);
     }
-  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId]);
+  }, [currentMethodPack, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */
@@ -285,7 +319,7 @@ export function CarbonModelWidget({
   /*  Shared sub-renders                                                 */
   /* ------------------------------------------------------------------ */
 
-  const renderInputsTable = () => (
+  const renderInputsTable = (readOnly = false) => (
     <div className="divide-y divide-divider">
       {groupedInputs.map((group) => {
         const visibleInputs = group.inputs.filter((inp: any) => inp.field_name !== 'method_pack');
@@ -300,25 +334,25 @@ export function CarbonModelWidget({
             <div className="divide-y divide-stroke-subtle">
               {visibleInputs.map((inp: any) => {
                 const isMissing = inp.status === 'missing';
-                const isEditing = editingField === inp.field_name;
+                const isEditing = !readOnly && editingField === inp.field_name;
                 const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
-                const isSelect = inp.field_type === 'select' && inp.options?.length > 0;
+                const isSelect = !readOnly && inp.field_type === 'select' && inp.options?.length > 0;
 
                 return (
                   <div
                     key={inp.field_name}
-                    onMouseMove={(e) => {
+                    onMouseMove={readOnly ? undefined : (e) => {
                       const isInteractive = !!(e.target as HTMLElement).closest('button, input, select, a');
                       setOverInteractive(isInteractive);
                       setMousePos({ x: e.clientX, y: e.clientY });
                       setHoveredRowInp(inp);
                     }}
-                    onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
-                    onClick={(e) => {
+                    onMouseLeave={readOnly ? undefined : () => { setHoveredRowInp(null); setOverInteractive(false); }}
+                    onClick={readOnly ? undefined : (e) => {
                       if ((e.target as HTMLElement).closest('button, input, select, a')) return;
                       investigate(inp.label, inp.status, inp.field_name);
                     }}
-                    style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
+                    style={readOnly ? undefined : { cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
                     className={`px-5 py-2.5 flex items-center gap-3 ${
                       isMissing ? 'bg-red-50/40' : 'bg-white'
                     }`}
@@ -332,7 +366,7 @@ export function CarbonModelWidget({
                           <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
                         )}
                       </div>
-                      {inp.rationale && inp.status === 'assumed' && (
+                      {!readOnly && inp.rationale && inp.status === 'assumed' && (
                         <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
                           {inp.rationale}
                         </p>
@@ -349,10 +383,10 @@ export function CarbonModelWidget({
                               const newVal = e.target.value;
                               setIsRecalculating(true);
                               try {
-                                const newData = await api.updateCarbonInput(inputs, inp.field_name, newVal, 'confirmed');
+                                const newData = await api.updateCarbonInput(inputs, inp.field_name, newVal, 'validated');
                                 setData(newData);
                                 if ((messageId && initiativeId) || instanceId) {
-                                  const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData);
+                                  const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
                                   if (persisted && instanceId) onWorkflowUpdated?.();
                                 }
                               } catch { /* keep old */ }
@@ -378,6 +412,16 @@ export function CarbonModelWidget({
                           autoFocus
                           className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
                         />
+                      ) : readOnly ? (
+                        <span className="text-xs font-mono tabular-nums text-text-primary">
+                          {isMissing ? (
+                            <span className="text-red-500 italic">—</span>
+                          ) : (
+                            typeof inp.value === 'number'
+                              ? inp.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                              : typeof inp.value === 'boolean' ? (inp.value ? 'Yes' : 'No') : inp.value
+                          )}
+                        </span>
                       ) : (
                         <button
                           onClick={() => isActive && startEdit(inp.field_name, inp.value)}
@@ -404,7 +448,7 @@ export function CarbonModelWidget({
                       <span
                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                       >
-                        {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                        {(inp.status === 'validated' || inp.status === 'confirmed') && <CheckCircle2 className="w-2.5 h-2.5" />}
                         {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
                         {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                         {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
@@ -412,18 +456,20 @@ export function CarbonModelWidget({
                       </span>
                     </div>
 
-                    <div className="w-5 flex justify-center">
-                      {isActive && (
-                        <input
-                          type="checkbox"
-                          checked={inp.status === 'confirmed'}
-                          disabled={isMissing || confirmingFields.has(inp.field_name)}
-                          onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                          title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
-                          className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                        />
-                      )}
-                    </div>
+                    {!readOnly && (
+                      <div className="w-5 flex justify-center">
+                        {isActive && (
+                          <input
+                            type="checkbox"
+                            checked={inp.status === 'validated' || inp.status === 'confirmed'}
+                            disabled={isMissing || confirmingFields.has(inp.field_name)}
+                            onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
+                            title={inp.status === 'validated' || inp.status === 'confirmed' ? 'Mark as inferred' : 'Mark as validated'}
+                            className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -554,9 +600,9 @@ export function CarbonModelWidget({
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
-    { id: 'inputs' as const, label: 'Inputs' },
     ...(sensitivity.length > 0 ? [{ id: 'sensitivity' as const, label: 'Sensitivity' }] : []),
     { id: 'schedule' as const, label: 'ER Schedule' },
+    { id: 'inputs' as const, label: 'Inputs' },
   ];
 
   return (
@@ -582,7 +628,7 @@ export function CarbonModelWidget({
             </p>
           </div>
           <Tooltip
-            content="Reflects data quality. High = mostly confirmed inputs. Moderate = mix of inferred and assumed values. Low = significant assumptions or missing data."
+            content="Reflects data quality. High = mostly validated inputs. Moderate = mix of inferred and assumed values. Low = significant assumptions or missing data."
           >
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-help ${qualityStyle.bg}`}>
               <QualityIcon className={`w-3 h-3 ${qualityStyle.text}`} />
@@ -671,7 +717,16 @@ export function CarbonModelWidget({
         </div>
       )}
 
-      {activeTab === 'inputs' && renderInputsTable()}
+      {activeTab === 'inputs' && (
+        <>
+          {renderInputsTable(true)}
+          <div className="px-5 py-2.5 bg-surface-subtle border-t border-divider">
+            <p className="text-[10px] text-text-tertiary">
+              To edit values, go back to the <span className="font-medium">Inputs</span> stage.
+            </p>
+          </div>
+        </>
+      )}
 
       {activeTab === 'sensitivity' && sensitivity.length > 0 && (
         <div className="bg-white">
@@ -788,16 +843,26 @@ export function CarbonModelWidget({
 
       <div className="px-5 py-3 bg-surface-header border-t border-divider flex items-center justify-between">
         <p className="text-[10px] text-text-tertiary">
-          {activeTab === 'inputs' ? 'Edit any input to recalculate instantly' : 'Switch to Inputs to edit values'}
+          Edit values in the Inputs stage to recalculate
         </p>
-        <button
-          onClick={handleExport}
-          disabled={isExporting}
-          className="btn-primary !text-xs !px-4 !py-1.5"
-        >
-          <Download className="w-3 h-3" />
-          {isExporting ? 'Exporting…' : 'Export to Excel'}
-        </button>
+        {outputFooterAction ? (
+          <ConfirmButton
+            onClick={outputFooterAction.onClick}
+            disabled={outputFooterAction.disabled}
+            loading={outputFooterAction.loading}
+            label={outputFooterAction.label}
+            loadingLabel="Confirming…"
+          />
+        ) : !instanceId && (
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="btn-primary !text-xs !px-4 !py-1.5"
+          >
+            <Download className="w-3 h-3" />
+            {isExporting ? 'Exporting…' : 'Export to Excel'}
+          </button>
+        )}
       </div>
     </div>
 

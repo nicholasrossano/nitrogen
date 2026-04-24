@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -13,21 +12,30 @@ from app.core.auth import AuthUser, get_current_user
 from app.core.billing_guard import require_ai_access
 from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
-from app.models.onboarding import ChatMessage
-from app.models.initiative import InitiativeStage
+from app.plans.registry import get_plan_registry
 from app.services.deep_dive import DeepDiveService
-from app.services.project_plan import ProjectPlanService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _ensure_plan_metadata(
+    db: AsyncSession,
+    user_id: str | None,
+    plan: dict | None,
+) -> dict | None:
+    """Backfill plan metadata for legacy payloads without mutating storage eagerly."""
+
+    if not plan:
+        return plan
+    if plan.get("plan_type") and plan.get("schema_version"):
+        return plan
+    handler = get_plan_registry().default_handler(db, user_id)
+    return handler.attach_metadata(plan)
+
+
 class StatusUpdate(BaseModel):
     status: str  # not_started | in_progress | complete
-
-
-class ConfirmCategoriesRequest(BaseModel):
-    categories: list[dict]  # [{id, name, summary}, ...]
 
 
 class DeepDiveRequest(BaseModel):
@@ -51,7 +59,7 @@ async def get_project_plan(
 ):
     """Return the cached project plan, or null if none exists."""
     initiative = await require_viewer(db, initiative_id, user)
-    return {"project_plan": initiative.project_plan}
+    return {"project_plan": _ensure_plan_metadata(db, user.uid, initiative.project_plan)}
 
 
 @router.post("/initiatives/{initiative_id}/project-plan")
@@ -69,11 +77,11 @@ async def generate_project_plan(
             detail="Project needs a description before a plan can be generated.",
         )
 
-    service = ProjectPlanService(db, user_id=user.uid)
+    handler = get_plan_registry().default_handler(db, user.uid)
     existing_plan = initiative.project_plan
 
     try:
-        plan = await service.generate(
+        plan = await handler.generate_plan(
             initiative=initiative,
             existing_plan=existing_plan,
         )
@@ -85,80 +93,6 @@ async def generate_project_plan(
         )
 
     initiative.project_plan = plan
-    flag_modified(initiative, "project_plan")
-    initiative.touch()
-    await db.commit()
-
-    return {"project_plan": plan}
-
-
-@router.post("/initiatives/{initiative_id}/project-plan/propose-categories")
-async def propose_plan_categories(
-    initiative_id: str,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
-):
-    """Propose high-level plan categories adapted to the project."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    if not initiative.project_description and not initiative.title:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Project needs a description before categories can be proposed.",
-        )
-
-    # Load recent chat messages for richer context
-    result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.initiative_id == initiative.id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(12)
-    )
-    recent_messages = list(reversed(result.scalars().all()))
-    chat_history = [{"role": m.role, "content": m.content} for m in recent_messages]
-
-    service = ProjectPlanService(db, user_id=user.uid)
-    try:
-        categories = await service.propose_categories(initiative=initiative, chat_history=chat_history)
-    except Exception:
-        logger.exception("Category proposal failed for %s", initiative_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Category proposal failed. Please try again.",
-        )
-
-    return {"categories": categories}
-
-
-@router.post("/initiatives/{initiative_id}/project-plan/confirm-categories")
-async def confirm_plan_categories(
-    initiative_id: str,
-    body: ConfirmCategoriesRequest,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
-):
-    """Accept confirmed categories and generate the full project plan."""
-    initiative = await require_editor(db, initiative_id, user)
-
-    service = ProjectPlanService(db, user_id=user.uid)
-    existing_plan = initiative.project_plan
-
-    try:
-        plan = await service.generate(
-            initiative=initiative,
-            existing_plan=existing_plan,
-            approved_categories=body.categories,
-        )
-    except Exception:
-        logger.exception("Plan generation (with categories) failed for %s", initiative_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Plan generation failed. Please try again.",
-        )
-
-    initiative.project_plan = plan
-    if initiative.stage in (InitiativeStage.DESCRIBE,):
-        initiative.stage = InitiativeStage.PLAN
     flag_modified(initiative, "project_plan")
     initiative.touch()
     await db.commit()
@@ -186,6 +120,7 @@ async def update_plan_item_status(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     found = False
     for pillar in initiative.project_plan.get("pillars", []):
@@ -258,6 +193,7 @@ async def delete_plan_item(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     found = False
     for pillar in initiative.project_plan.get("pillars", []):
@@ -290,6 +226,7 @@ async def delete_plan_element(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     deep_dives = initiative.project_plan.get("deep_dives", {})
     dive = deep_dives.get(item_id)
@@ -321,6 +258,7 @@ async def add_plan_item(
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
+    initiative.project_plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan)
 
     title = body.title.strip()
     if not title:
@@ -375,7 +313,7 @@ async def deep_dive_plan_item(
     service = DeepDiveService(db, user_id=user.uid)
 
     # Check for cached LLM result
-    plan = initiative.project_plan or {}
+    plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan) or {}
     cached = plan.get("deep_dives", {}).get(item_id)
 
     if cached:

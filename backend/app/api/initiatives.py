@@ -1,6 +1,7 @@
 import logging
 import re
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -32,6 +33,7 @@ from app.schemas.initiative import (
 )
 from app.schemas.module_instance import ModuleInstanceResponse
 from app.services import module_service
+from app.services.initiative_overview import generate_initiative_overview
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +66,22 @@ async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | Non
 
 
 def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
-    """Instances that finished generation (complete + deliverable), excluding trash."""
+    """Instances marked complete via final approval, excluding trash."""
     return sum(
         1
         for inst in instances
-        if not inst.archived and inst.status == "complete" and inst.deliverable
+        if not inst.archived and inst.is_plan_complete
     )
+
+
+def _count_active_module_instances(instances: list[ModuleInstance]) -> int:
+    """Module instances started for this initiative, excluding trash."""
+    return sum(1 for inst in instances if not inst.archived)
+
+
+def _active_module_instances(instances: list[ModuleInstance]) -> list[ModuleInstance]:
+    """Return only non-archived module instances."""
+    return [inst for inst in instances if not inst.archived]
 
 
 def _initiative_to_response(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
@@ -80,7 +92,8 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
     """
     data = InitiativeResponse.model_validate(initiative).model_dump()
 
-    instances = initiative.module_instances or []
+    all_instances = initiative.module_instances or []
+    instances = _active_module_instances(all_instances)
 
     deliverables: dict = {}
     alignments: dict = {}
@@ -88,7 +101,7 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
     alignments_ts: dict = {}
 
     for inst in instances:
-        if inst.deliverable and inst.status == "complete":
+        if inst.deliverable and inst.is_plan_complete:
             prev = deliverables_ts.get(inst.module_id)
             if prev is None or inst.updated_at > prev:
                 deliverables[inst.module_id] = inst.deliverable
@@ -101,6 +114,7 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
 
     data["deliverables"] = deliverables or None
     data["module_alignments"] = alignments or None
+    data["module_instances_count"] = _count_active_module_instances(instances)
     data["generated_modules_count"] = _count_generated_module_instances(instances)
     data["module_instances"] = [
         ModuleInstanceResponse.model_validate(i).model_dump()
@@ -115,12 +129,13 @@ def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = N
     """Lightweight version for list endpoints — skips heavy fields."""
     data = InitiativeResponse.model_validate(initiative).model_dump()
     # Derive a simple deliverable count without iterating module instances
-    instances = initiative.module_instances or []
+    instances = _active_module_instances(initiative.module_instances or [])
     seen_tools: set[str] = set()
     for inst in instances:
-        if inst.deliverable and inst.status == "complete":
+        if inst.deliverable and inst.is_plan_complete:
             seen_tools.add(inst.module_id)
     data["deliverables"] = {t: True for t in seen_tools} if seen_tools else None
+    data["module_instances_count"] = _count_active_module_instances(instances)
     data["generated_modules_count"] = _count_generated_module_instances(instances)
     data["tool_alignments"] = None
     data["tool_inputs"] = None
@@ -333,6 +348,40 @@ async def update_initiative(
     )
 
 
+@router.post("/initiatives/{initiative_id}/overview", response_model=InitiativeResponse)
+async def generate_overview(
+    initiative_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Generate or refresh the stored initiative overview description."""
+    await ensure_user_exists(db, user)
+    initiative, role = await get_initiative_with_role(db, initiative_id, user)
+    if role == "viewer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewers cannot refresh this overview",
+        )
+
+    try:
+        initiative.overview_description = await generate_initiative_overview(db, initiative, user.uid)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    initiative.overview_generated_at = datetime.now(timezone.utc)
+    initiative.touch()
+    await db.commit()
+    await db.refresh(initiative)
+
+    owner_user = await db.get(User, initiative.user_id)
+    owner_email = owner_user.email if owner_user else None
+    return _initiative_to_response(
+        initiative,
+        shared_role=role if role != "owner" else None,
+        owner_email=owner_email,
+    )
+
+
 @router.delete("/initiatives/{initiative_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def archive_initiative(
     initiative_id: str,
@@ -484,7 +533,7 @@ async def create_module_instance(
     initiative = await require_editor(db, initiative_id, user)
     inst = await module_service.get_or_create_instance(
         db, initiative.id, body.module_id, user.uid
-        # no session_id → always creates a fresh instance
+        # no chat_id → always creates a fresh instance
     )
     await db.commit()
     await db.refresh(inst)

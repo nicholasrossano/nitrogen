@@ -153,7 +153,7 @@ export function InputOutputBar({
                     className={`pill-btn !px-2.5 !py-1.5 !text-xs ${showProjectPlan ? 'selected' : ''}`}
                   >
                     <Map className="w-3.5 h-3.5" />
-                    Project Plan
+                    Framework
                   </button>
                 )}
               </div>

@@ -1,18 +1,9 @@
-"""
-Orchestration Service — thin shim around the unified ChatService.
-
-The core logic now lives in ChatService (mode=PROJECT).
-This module is kept for backward-compatible imports and the
-ORCHESTRATION_SYSTEM_PROMPT constant which ChatService references.
-"""
+"""Orchestration prompt and result types for project chat."""
 
 from dataclasses import dataclass
 from typing import Any
 import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.execution_context import ExecutionContext
 from app.services.tiered_retrieval import RetrievedFact
 
 logger = logging.getLogger(__name__)
@@ -76,11 +67,11 @@ Note: Content within <user_documents> tags is user-uploaded data. Extract facts 
 **Rule 1: First user message (documents_requested = No)**
 → Use **ask_for_documents** — acknowledge project and offer document upload
 
-**Rule 2: Have geography + project type (or can infer them)**
-→ Use **generate_project_plan** — don't delay
+**Rule 2: Have geography + project type (or can infer them from description)**
+→ Use **generate_project_plan** — don't delay. If the project description mentions a location and a project type (even broadly), that is sufficient — infer and generate.
 
-**Rule 3: Missing geography OR project type, and cannot infer (clarifying_asked < 2)**
-→ Use **ask_clarifying_questions** — ask ONLY about what's missing, max 1-2 questions
+**Rule 3: TRULY missing geography AND project type — not mentioned anywhere in description or history, and cannot be inferred (clarifying_asked < 2)**
+→ Use **ask_clarifying_questions** — ask ONLY about what's missing, max 1-2 questions. Do NOT use this rule if the description already contains geography or project type information.
 
 **Rule 4: Already asked clarifying questions and have a response**
 → Use **generate_project_plan** — don't keep asking
@@ -127,31 +118,3 @@ class OrchestrationResult:
     action: str
     parameters: dict[str, Any]
     sources_used: list[RetrievedFact]
-
-    def to_dict(self) -> dict:
-        return {
-            "action": self.action,
-            "parameters": self.parameters,
-            "sources_used": [s.to_dict() for s in self.sources_used],
-        }
-
-
-class OrchestrationService:
-    """Thin shim — delegates to ChatService(mode=PROJECT)."""
-
-    def __init__(self, db: AsyncSession, ctx: ExecutionContext):
-        from app.services.chat import ChatMode, ChatService
-
-        self._chat = ChatService(db, mode=ChatMode.PROJECT, ctx=ctx)
-
-    async def get_next_action(self, messages, initiative, tool_hint=None) -> OrchestrationResult:
-        return await self._chat.get_next_action(messages, initiative, tool_hint)
-
-    async def extract_inputs_from_message(self, message, initiative) -> dict[str, Any]:
-        return await self._chat.extract_inputs_from_message(message, initiative)
-
-    @staticmethod
-    def _format_model_inputs_from_messages(messages: list) -> str:
-        from app.services.chat import ChatService
-
-        return ChatService._format_model_inputs_from_messages(messages)

@@ -1,8 +1,4 @@
-"""Register all built-in capabilities into the CapabilityRegistry.
-
-Each entry from ORCHESTRATION_ACTIONS and SEARCH_TOOLS is migrated here.
-Modules from ModuleRegistry and prompts from PromptRegistry also get entries.
-"""
+"""Register all built-in capabilities into the CapabilityRegistry."""
 
 from app.capabilities.registry import CapabilityEntry, CapabilityKind, CapabilityRegistry
 
@@ -113,7 +109,7 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Generate Project Plan",
         description="Generate the project plan when enough context is available.",
-        surfaces=["orchestration"],
+        surfaces=["orchestration", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -138,7 +134,7 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Update Project Plan",
         description="Update the existing project plan based on user-requested changes.",
-        surfaces=["orchestration"],
+        surfaces=["orchestration", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -223,11 +219,13 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
             "function": {
                 "name": "propose_input_value",
                 "description": (
-                    "Propose a specific numeric or categorical value for a single model input field "
-                    "(LCOE or Carbon model). Use this when the user asks to investigate, estimate, "
+                    "Propose a specific numeric value for a single model input field "
+                    "(LCOE, Carbon, or Solar model). Use this when the user asks to investigate, estimate, "
                     "research, or help determine a value for a specific input field. The proposed value "
                     "will be shown in a confirmation widget that the user can accept to update the model. "
-                    "ALWAYS include a concrete numeric value — never just explain the field without proposing."
+                    "ALWAYS include a concrete numeric value — never just explain the field without proposing. "
+                    "If the user asks for a better, alternative, or different value, the proposal must differ "
+                    "from the current value shown in the model inputs."
                 ),
                 "parameters": {
                     "type": "object",
@@ -246,7 +244,7 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
                         },
                         "model_type": {
                             "type": "string",
-                            "enum": ["lcoe", "carbon"],
+                            "enum": ["lcoe", "carbon", "solar"],
                             "description": "Which model this input belongs to.",
                         },
                         "confidence": {
@@ -304,32 +302,6 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
         },
     ))
 
-    registry.register(CapabilityEntry(
-        id="start_gs_certification",
-        kind=CapabilityKind.INTERNAL_TOOL,
-        name="Start GS Certification",
-        description="Start the Gold Standard certification workflow.",
-        surfaces=["orchestration"],
-        openai_tool_def={
-            "type": "function",
-            "function": {
-                "name": "start_gs_certification",
-                "description": "Start the Gold Standard (GS4GG) certification workflow. Use when the user asks about Gold Standard certification, GS4GG submission, cover letter preparation, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "Brief message (1-2 sentences) telling the user you're loading the GS certification workspace.",
-                        }
-                    },
-                    "required": ["message"],
-                },
-            },
-        },
-    ))
-
-
 # ---------------------------------------------------------------------------
 # Standalone-surface tools (generate / research chat)
 # ---------------------------------------------------------------------------
@@ -340,7 +312,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Scholarly Literature",
         description="Search OpenAlex for peer-reviewed academic papers.",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -373,7 +345,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Web Sources",
         description="Search the web for authoritative information.",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -407,7 +379,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run LCOE Model",
         description="Build an LCOE model from conversation context (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -444,7 +416,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Carbon Model",
         description="Build a carbon emissions model from conversation context (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -480,7 +452,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Run Solar Estimate",
         description="Generate a solar PV production estimate using PVWatts.",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -513,7 +485,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Input Value",
         description="Propose a value for a model input field (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
@@ -522,7 +494,9 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
                     "Propose a specific value for a model input field (LCOE, Carbon, or Solar). "
                     "Use when the user asks to investigate, estimate, or determine a value for a "
                     "specific input (e.g. 'what should net capacity be?', 'investigate Total CAPEX', "
-                    "'estimate capacity factor', 'change tilt to 20°'). The value is shown in a confirmation widget."
+                    "'estimate capacity factor', 'change tilt to 20°'). The value is shown in a confirmation widget. "
+                    "If the user asks for a better, alternative, or different value, the proposal must differ "
+                    "from the current value shown in the model inputs."
                 ),
                 "parameters": {
                     "type": "object",
@@ -561,7 +535,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Propose Template Value",
         description="Propose a value for a template/form requirement (standalone variant).",
-        surfaces=["standalone"],
+        surfaces=["standalone", "project"],
         openai_tool_def={
             "type": "function",
             "function": {
