@@ -39,8 +39,8 @@ class PromptRegistry:
         if self._loaded:
             return
 
-        # --- orchestration ---
-        from app.services.orchestration import ORCHESTRATION_SYSTEM_PROMPT
+        # --- project chat orchestration ---
+        from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT
 
         self._register(PromptDefinition(
             id="orchestration_system",
@@ -63,7 +63,7 @@ class PromptRegistry:
                 "model_inputs_context",
                 "retrieved_context",
             ],
-            owning_service="orchestration",
+            owning_service="project_chat",
             visibility="internal",
         ))
 
