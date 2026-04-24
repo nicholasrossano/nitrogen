@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
 
 import type {
   DecisionLogHistoryRow,
@@ -9,7 +8,7 @@ import type {
 } from '@/lib/api';
 import { api } from '@/lib/api';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
-import { WorkspaceTabLoader } from '@/components/ui';
+import { ExportButton, WorkspaceTabLoader } from '@/components/ui';
 
 interface DecisionLogWorkspaceTabProps {
   moduleInstanceId: string;
@@ -86,20 +85,10 @@ export function DecisionLogWorkspaceTab({
             <h1 className="text-lg font-semibold text-text-primary">Decision Log</h1>
             <p className="mt-1 text-sm text-text-tertiary">{subtitle}</p>
           </div>
-          <button
+          <ExportButton
             onClick={handleExport}
-            disabled={exporting}
-            className="btn-secondary !px-3 !py-1.5 text-xs flex items-center gap-1.5"
-          >
-            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Export
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-black/[0.04] px-2 py-1 text-[11px] font-medium text-text-tertiary">
-            {historyRows.length} history rows
-          </span>
+            loading={exporting}
+          />
         </div>
 
         <ReadOnlyDataTable

@@ -1,5 +1,6 @@
 export { Button } from './Button';
 export { ConfirmButton } from './ConfirmButton';
+export { ExportButton } from './ExportButton';
 export { PanelHeader } from './PanelHeader';
 export { SideDrawer } from './SideDrawer';
 export type { NavItem } from './SideDrawer';
