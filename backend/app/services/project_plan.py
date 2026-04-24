@@ -273,57 +273,6 @@ Each category will contain both Deliverables (formal outputs, submissions, appro
 You MUST respond with valid JSON matching the schema provided."""
 
 
-CATEGORY_PROPOSAL_SCHEMA = {
-    "type": "function",
-    "function": {
-        "name": "propose_plan_categories",
-        "description": "Propose high-level project plan categories tailored to this project",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "type": "string",
-                                "description": "Short lowercase slug (e.g. 'permitting', 'carbon_mrv', 'funding')",
-                            },
-                            "name": {
-                                "type": "string",
-                                "description": "Human-readable name (2-4 words)",
-                            },
-                            "summary": {
-                                "type": "string",
-                                "description": "1-2 sentence summary of what this category covers for this specific project",
-                            },
-                            "icon": {
-                                "type": "string",
-                                "description": (
-                                    "A lucide-react icon name that best represents this category. "
-                                    "Choose from: Shield, Scale, Lock, FileText, BookOpen, Flag, "
-                                    "Banknote, DollarSign, PiggyBank, TrendingUp, Coins, Wallet, CircleDollarSign, "
-                                    "Compass, Wrench, Hammer, Settings, Target, Rocket, "
-                                    "Leaf, TreePine, Sprout, Recycle, Waves, CloudRain, Mountain, "
-                                    "Zap, Sun, Battery, BatteryCharging, Plug, Wind, "
-                                    "Users, Handshake, HeartHandshake, Globe, MapPin, Map, Navigation, "
-                                    "BarChart3, Database, Network, Satellite, Award, CheckCircle"
-                                ),
-                            },
-                        },
-                        "required": ["id", "name", "summary", "icon"],
-                    },
-                    "minItems": 3,
-                    "maxItems": 6,
-                },
-            },
-            "required": ["categories"],
-        },
-    },
-}
-
-
 PLAN_FUNCTION_SCHEMA = {
     "type": "function",
     "function": {
@@ -480,66 +429,6 @@ class ProjectPlanService:
         if self._client is None:
             self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
         return self._client
-
-    async def propose_categories(self, initiative, chat_history: list | None = None) -> list[dict]:
-        """Propose high-level plan categories adapted to the project (lightweight LLM call)."""
-        evidence_text = await self._gather_evidence_text(initiative.id)
-        deliverables_summary = self._summarize_deliverables(initiative.get_deliverables_dict())
-
-        desc = initiative.project_description or "(No description provided.)"
-        project_type = initiative.project_type or "unclassified"
-        geography = initiative.geography or "unspecified"
-        title = initiative.title or "Untitled Project"
-
-        # Include recent chat messages so the model has the full conversation context,
-        # not just the brief extracted summary stored on the initiative.
-        # chat_history may be dicts or SQLAlchemy ChatMessage objects — handle both.
-        chat_context = ""
-        if chat_history:
-            recent = chat_history[-12:]
-            lines = []
-            for m in recent:
-                if isinstance(m, dict):
-                    role, content = m.get("role", ""), m.get("content", "")
-                else:
-                    role, content = getattr(m, "role", ""), getattr(m, "content", "")
-                if content:
-                    lines.append(f"{role.upper()}: {content}")
-            if lines:
-                chat_context = "\n\nCONVERSATION (most recent — use this as the primary source of detail):\n" + "\n".join(lines)
-
-        user_content = f"""Propose plan categories for the following project.
-
-PROJECT: {title}
-TYPE: {project_type}
-GEOGRAPHY: {geography}
-
-DESCRIPTION:
-{desc}{chat_context}
-
-UPLOADED DOCUMENTS:
-{evidence_text}
-
-EXISTING GENERATED OUTPUTS:
-{deliverables_summary}
-"""
-
-        client = await self._get_client()
-        response = await client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": CATEGORY_PROPOSAL_SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            tools=[CATEGORY_PROPOSAL_SCHEMA],
-            tool_choice={"type": "function", "function": {"name": "propose_plan_categories"}},
-            temperature=0.4,
-        )
-        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
-
-        tool_call = response.choices[0].message.tool_calls[0]
-        result = json.loads(tool_call.function.arguments)
-        return result.get("categories", [])
 
     async def generate(
         self,

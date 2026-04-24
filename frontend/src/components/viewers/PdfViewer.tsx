@@ -16,7 +16,10 @@ export function PdfViewer({ fileData, initialPage }: PdfViewerProps) {
       const blob = new Blob([fileData], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const page = initialPage && initialPage > 1 ? `page=${initialPage}&` : '';
-      return `${url}#${page}pagemode=none`;
+      // Keep the built-in PDF UI cleaner by default:
+      // - hide left navigation panes/thumbnails
+      // - open at 90% zoom
+      return `${url}#${page}navpanes=0&pagemode=none&zoom=90`;
     } catch {
       setError(true);
       return null;

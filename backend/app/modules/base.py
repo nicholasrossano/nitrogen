@@ -1,4 +1,4 @@
-"""Base classes for Nitrogen tools."""
+"""Base classes for Nitrogen module system."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -11,29 +11,29 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 
 
 class ExecutionModel(str, Enum):
-    """How the tool runs its core computation."""
+    """How the module runs its core computation."""
     SYNC_COMPUTATION = "sync_computation"
     ASYNC_LLM_GENERATION = "async_llm_generation"
 
 
 class RefinementModel(str, Enum):
-    """How the user iterates on tool output."""
+    """How the user iterates on module output."""
     EDIT_AND_RECOMPUTE = "edit_and_recompute"
     FEEDBACK_AND_REGENERATE = "feedback_and_regenerate"
 
 
 @dataclass
 class ModuleInput:
-    """Definition of an input field for a tool."""
+    """Definition of an input field for a module (used in chat path)."""
     name: str
     label: str
     description: str
     input_type: Literal["text", "textarea", "number", "select", "file", "checkbox"]
     required: bool = True
-    options: list[str] | None = None  # For select inputs
+    options: list[str] | None = None
     default: Any = None
     placeholder: str | None = None
-    
+
     def to_dict(self) -> dict:
         return {
             "name": self.name,
@@ -49,26 +49,26 @@ class ModuleInput:
 
 @dataclass
 class ModuleOutput:
-    """Result from running a tool."""
+    """Result from running a module."""
     module_id: str
-    output_type: str  # "memo", "checklist", "spreadsheet", "chart", etc.
+    output_type: str
     title: str
-    content: dict[str, Any]  # Structured content
-    file_path: str | None = None  # If exported to file
+    content: dict[str, Any]
+    file_path: str | None = None
 
 
 @dataclass
 class ModuleDefinition:
-    """Metadata about a tool."""
+    """Metadata about a module."""
     id: str
     name: str
     description: str
-    icon: str  # Lucide icon name (e.g., "FileText", "CheckSquare")
+    icon: str
     output_type: str
-    category: str  # "analysis", "documentation", "technical", etc.
-    keywords: list[str] = field(default_factory=list)  # For recommendation matching
-    export_format: str | None = None  # "xlsx", "docx", or None if not directly exportable
-    
+    category: str
+    keywords: list[str] = field(default_factory=list)
+    export_format: str | None = None
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -80,13 +80,109 @@ class ModuleDefinition:
         }
 
 
+@dataclass
+class FieldDef:
+    """Definition of a single field within a stage.
+
+    Used by editable_table, categorized_list, categorized_workspace, and
+    record stages to drive generic rendering and validation.
+    """
+    name: str
+    field_type: Literal["text", "number", "long_text", "select"]
+    required: bool = False
+    label: str | None = None
+    options: list[str] | None = None
+    placeholder: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "field_type": self.field_type,
+            "required": self.required,
+            "label": self.label or self.name.replace("_", " ").title(),
+            "options": self.options,
+            "placeholder": self.placeholder,
+        }
+
+
+@dataclass
+class PopulationStep:
+    """A single step in a stage's population pipeline.
+
+    Steps are executed in order. Each step receives the accumulated state
+    from prior steps and may extend or refine it.
+
+    Supported types:
+        start_from_predefined_rows      — module.get_predefined_rows(stage_id, context)
+        seed_from_template              — module.generate_items_for_stage(stage_id, step_type, …)
+        extract_from_project_materials  — RAG retrieval via retrieval adapter
+        infer_missing_with_ai           — LLM fills gaps in existing rows/items
+        adapt_with_ai_from_project_materials — LLM + RAG adapts template items
+        propose_with_ai                 — LLM proposes new items from prior stage + context
+        enrich_selected_item_with_ai    — LLM enriches per-record detail fields
+        read_confirmed_prior_stage      — reads confirmed data from config["stage_id"]
+        compute_with_module_logic       — module.compute_stage(stage_id, confirmed_stages, ctx)
+        compute_with_external_tool      — module.compute_external(stage_id, tool, confirmed, ctx)
+        await_user_confirmation         — terminates pipeline; sets status to "draft"
+    """
+    type: str
+    config: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {"type": self.type, "config": self.config}
+
+
+@dataclass
+class StageDef:
+    """Definition of a single stage in a module's workflow.
+
+    Every module is an ordered sequence of stages. Each stage is a
+    confirmable workspace with a component type, a widget renderer,
+    optional field definitions, and a population pipeline.
+
+    component types:
+        table           — editable rows with typed columns (e.g. inputs table)
+        list            — flat or grouped list of items
+        record          — per-item detail view, driven by a prior list stage
+        computed_results — opaque computed output owned by a specialized widget
+    """
+    id: str
+    title: str
+    component: Literal["table", "list", "record", "computed_results"]
+    widget: str
+    fields: list[FieldDef] = field(default_factory=list)
+    population: list[PopulationStep] = field(default_factory=list)
+    allow_add_rows: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "component": self.component,
+            "widget": self.widget,
+            "fields": [f.to_dict() for f in self.fields],
+            "population": [p.to_dict() for p in self.population],
+            "allow_add_rows": self.allow_add_rows,
+        }
+
+
+@dataclass(kw_only=True)
+class DecisionLogAttribution:
+    """Schema-backed decision-log attribution preferences for a module."""
+
+    include_adapter_bindings: bool = True
+    include_provenance_sources: bool = True
+    include_model_name: bool = True
+    adapter_labels: dict[str, str] = field(default_factory=dict)
+    widget_detail_labels: dict[str, str] = field(default_factory=dict)
+
+
 @dataclass(kw_only=True)
 class ModuleManifest(ModuleDefinition):
     """Full module contract metadata used for registry and exposure layers."""
     goal: str
     primary_ui_object: str
-    workspace_build_widget: str | None = None
-    workspace_output_widget: str | None = None
+    investigate_hint: str | None = None
     export_artifact_types: list[str]
     adapter_bindings: dict[str, str]
     input_dependencies: list[str]
@@ -94,15 +190,21 @@ class ModuleManifest(ModuleDefinition):
     downstream_dependencies: list[str]
     assumptions_behavior: Literal["tracks", "none"]
     evidence_behavior: Literal["rag_grounded", "user_uploaded", "both", "none"]
+    decision_log_attribution: DecisionLogAttribution = field(default_factory=DecisionLogAttribution)
 
 
 class BaseModule(ABC):
-    """Abstract base class for all Nitrogen tools."""
-    
+    """Abstract base class for all Nitrogen modules.
+
+    A module is an ordered sequence of stages, each of which is a
+    confirmable workspace. The module declares its stages via stage_defs
+    and implements hooks that the workflow service calls during population.
+    """
+
     @property
     @abstractmethod
     def definition(self) -> ModuleDefinition:
-        """Return tool metadata."""
+        """Return module metadata."""
         pass
 
     @property
@@ -110,116 +212,169 @@ class BaseModule(ABC):
     def manifest(self) -> ModuleManifest:
         """Return the full module manifest."""
         raise NotImplementedError
-    
+
     @property
     @abstractmethod
-    def required_inputs(self) -> list[ModuleInput]:
-        """Return list of required input fields."""
+    def stage_defs(self) -> list[StageDef]:
+        """Ordered stage definitions for this module's workflow."""
         pass
-    
+
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # These are called by the population step executor in the workflow     #
+    # service. Override only the hooks your module needs.                  #
+    # ------------------------------------------------------------------ #
+
+    async def get_predefined_rows(
+        self,
+        stage_id: str,
+        context: dict,
+    ) -> list[dict]:
+        """Return default/template rows for 'start_from_predefined_rows'.
+
+        Each row is a dict mapping field name → value. The executor wraps
+        rows in the standard item envelope with provenance tracking.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement get_predefined_rows()"
+        )
+
+    async def generate_items_for_stage(
+        self,
+        stage_id: str,
+        step_type: str,
+        context: dict,
+        prior_data: dict[str, Any],
+    ) -> list[dict]:
+        """Generate items for a stage during AI-assisted population.
+
+        Called for seed_from_template, propose_with_ai, and
+        adapt_with_ai_from_project_materials step types.
+
+        stage_id: the stage being populated
+        step_type: the population step type string
+        context: initiative context (project_title, geography, etc.)
+        prior_data: mapping of confirmed stage_id → stage data dict
+
+        Returns a list of content dicts (one per item); the executor wraps
+        them in standard item envelopes with provenance tracking.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement generate_items_for_stage()"
+        )
+
+    async def enrich_record(
+        self,
+        stage_id: str,
+        item_content: dict,
+        existing_record: dict,
+        context: dict,
+    ) -> dict:
+        """AI-enrich a single record for a record-component stage.
+
+        Called when the user triggers per-item enrichment via the API.
+        item_content: the item from the prior list stage
+        existing_record: current record data (may be empty / partial)
+        Returns a dict of enriched field name → value.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement enrich_record()"
+        )
+
+    async def compute_stage(
+        self,
+        stage_id: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Run module-specific computation for 'compute_with_module_logic'.
+
+        confirmed_stages maps stage_id → confirmed stage data dict.
+        Returns the widget_data dict for a computed_results stage.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement compute_stage()"
+        )
+
+    async def compute_external(
+        self,
+        stage_id: str,
+        tool: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Run an external tool for 'compute_with_external_tool'.
+
+        tool is the tool identifier string from the PopulationStep config.
+        Returns the widget_data dict for a computed_results stage.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement compute_external()"
+        )
+
+    async def generate_export(
+        self,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> bytes:
+        """Generate the export artifact (DOCX/XLSX) from confirmed stage data.
+
+        Called at download time; nothing is stored. Override in subclasses
+        that support export.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement generate_export()"
+        )
+
+    # ------------------------------------------------------------------ #
+    # Chat-path methods (not part of the stage contract)                  #
+    # These are used when modules are invoked from conversation context.   #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def required_inputs(self) -> list[ModuleInput]:
+        return []
+
     @property
     def optional_inputs(self) -> list[ModuleInput]:
-        """Return list of optional input fields. Override in subclass."""
         return []
-    
+
     @property
     def all_inputs(self) -> list[ModuleInput]:
-        """Return all inputs (required + optional)."""
         return self.required_inputs + self.optional_inputs
 
     @property
-    def workspace_setup_fields(self) -> list[dict[str, Any]]:
-        """Optional setup-field definitions for workspace-backed modules.
-
-        Launch modules all share the same setup/build/output lifecycle. Modules
-        that participate in the workspace flow should expose any setup form
-        fields here rather than relying on module_id branches in the workflow
-        service.
-        """
-        return []
-    
-    @property
     def execution_model(self) -> ExecutionModel:
-        """Whether execution is deterministic computation or LLM generation."""
         return ExecutionModel.SYNC_COMPUTATION
 
     @property
     def refinement_model(self) -> RefinementModel:
-        """How the user iterates on this tool's output."""
         return RefinementModel.EDIT_AND_RECOMPUTE
 
-    def is_exportable(self, content: dict) -> bool:
-        """Whether this deliverable content is in a state that can produce a downloadable file.
+    def get_questions_for_chat(self) -> list[str]:
+        return [inp.description for inp in self.required_inputs]
 
-        Default: True when the tool declares an export_format.
-        Override in subclasses with stricter requirements (e.g. model tools
-        that need a completed computation).
-        """
+    def validate_inputs(self, inputs: dict[str, Any]) -> tuple[bool, list[str]]:
+        missing = [
+            inp.label for inp in self.required_inputs
+            if inp.name not in inputs or inputs[inp.name] is None
+        ]
+        return len(missing) == 0, missing
+
+    def is_exportable(self, content: dict) -> bool:
         return self.definition.export_format is not None
 
-    def get_questions_for_chat(self) -> list[str]:
-        """Generate conversational questions to gather inputs."""
-        questions = []
-        for inp in self.required_inputs:
-            questions.append(inp.description)
-        return questions
-    
-    def validate_inputs(self, inputs: dict[str, Any]) -> tuple[bool, list[str]]:
-        """Validate that all required inputs are present."""
-        missing = []
-        for inp in self.required_inputs:
-            if inp.name not in inputs or inputs[inp.name] is None:
-                missing.append(inp.label)
-        return len(missing) == 0, missing
-    
-    @abstractmethod
-    async def execute(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        inputs: dict[str, Any],
-        include_corpus: bool = True,
-    ) -> ModuleOutput:
-        """Execute the tool and return output.
-        
-        If alignment is provided, use it to guide generation.
-        """
-        pass
-    
     async def execute_from_conversation(
         self,
         conversation_text: str,
         planner_args: dict | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> tuple[str, dict]:
-        """Execute tool using conversation text directly (no DB round-trip).
+        """Execute module from conversation text (chat path only).
 
-        This is the unified entry point for both project chat and research chat.
-        Returns (widget_type, widget_data).
-
-        Override in subclasses that support conversation-based execution.
+        Returns (widget_type, widget_data). Override in calculator modules
+        that support chat-based execution.
         """
         raise NotImplementedError(
             f"{self.definition.name} does not support conversation-based execution"
         )
-
-    async def build_workspace_widget_data(
-        self,
-        known_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Build initial widget-backed workflow state for single-layer modules.
-
-        Widget-backed modules should override this instead of depending on
-        central module_id branching in the workflow service.
-        """
-        raise NotImplementedError(
-            f"{self.definition.name} does not support widget-backed workspace build state"
-        )
-
-    async def export(
-        self,
-        output: ModuleOutput,
-        format: str = "docx",
-    ) -> str:
-        """Export output to file. Override in subclass for custom export."""
-        raise NotImplementedError(f"Export not implemented for {self.definition.name}")

@@ -55,6 +55,8 @@ class Initiative(Base):
     tool_alignments: Mapped[dict | None] = mapped_column(JSONB)  # Tool alignments (outline, params) keyed by tool_id
     deliverables: Mapped[dict | None] = mapped_column(JSONB)  # Generated output references
     project_plan: Mapped[dict | None] = mapped_column(JSONB)  # 3-pillar needs map
+    overview_description: Mapped[str | None] = mapped_column(Text)
+    overview_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     
     # Stage tracking
     stage: Mapped[str] = mapped_column(
@@ -152,11 +154,11 @@ class Initiative(Base):
     def get_deliverables_dict(self) -> dict:
         """Build a backward-compatible deliverables dict from module_instances.
 
-        Returns the latest complete instance's deliverable per tool_id.
+        Returns the latest approved instance's deliverable per tool_id.
         """
         result: dict[str, dict] = {}
         for inst in self.module_instances:
-            if inst.deliverable and inst.status == "complete":
+            if inst.deliverable and inst.is_plan_complete:
                 existing = result.get(inst.module_id)
                 if existing is None or inst.updated_at > existing.get("_updated_at", inst.updated_at):
                     d = dict(inst.deliverable)

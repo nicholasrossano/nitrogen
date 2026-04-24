@@ -2,14 +2,16 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useInitiativeStore } from '@/stores/initiativeStore';
-import { FileUp, Loader2 } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { UploadToast, UploadItem } from '@/components/ui/UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
+import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 
 interface DocumentRequestWidgetProps {
   initiativeId: string;
   isActive?: boolean;
+  onSendMessage?: (content: string) => void | Promise<void>;
   data?: {
     allow_multiple?: boolean;
   };
@@ -18,21 +20,31 @@ interface DocumentRequestWidgetProps {
 export function DocumentRequestWidget({ 
   initiativeId, 
   isActive = true,
+  onSendMessage,
   data 
 }: DocumentRequestWidgetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, sendMessage, projectMaterials } = useInitiativeStore();
+  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials } = useInitiativeStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
     filesToUpload: File[];
     cleanCount: number;
   } | null>(null);
+
+  const sendProgressMessage = useCallback(async (content: string) => {
+    if (onSendMessage) {
+      await onSendMessage(content);
+      return;
+    }
+    await sendLegacyMessage(initiativeId, content);
+  }, [initiativeId, onSendMessage, sendLegacyMessage]);
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
     const initial: UploadItem[] = filesToUpload.map((f) => ({
@@ -65,11 +77,9 @@ export function DocumentRequestWidget({
     }
 
     if (successCount > 0) {
-      setTimeout(() => {
-        sendMessage(initiativeId, "I've uploaded my documents.");
-      }, 500);
+      await sendProgressMessage("I've uploaded my documents.");
     }
-  }, [initiativeId, uploadEvidence, sendMessage]);
+  }, [uploadEvidence, initiativeId, sendProgressMessage]);
 
   const handleUpload = useCallback(async (files: File[]) => {
     const existingNames = projectMaterials.map((m) => m.filename);
@@ -101,9 +111,16 @@ export function DocumentRequestWidget({
     }
   }, [handleUpload]);
 
+  const uploading = toastItems.some((i) => i.status === 'uploading');
+
+  const handleFolderSelect = useCallback(() => {
+    if (uploading) return;
+    folderInputRef.current?.click();
+  }, [uploading]);
+
   const handleNoDocuments = useCallback(() => {
-    sendMessage(initiativeId, "I don't have any documents to upload.");
-  }, [initiativeId, sendMessage]);
+    void sendProgressMessage("I don't have any documents to upload.");
+  }, [sendProgressMessage]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -135,49 +152,24 @@ export function DocumentRequestWidget({
     if (accepted.length > 0) handleUpload(accepted);
   }, [handleUpload]);
 
-  const uploading = toastItems.some((i) => i.status === 'uploading');
-
   if (!isActive) return null;
 
   return (
     <div className="border-t border-divider bg-white px-4 py-4">
       <div className="flex flex-col items-center gap-3">
         {/* Drop zone */}
-        <div
+        <UploadDropzone
+          isDragging={isDragging}
+          uploading={uploading}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onClick={() => !uploading && fileInputRef.current?.click()}
-          className={`
-            flex flex-col items-center justify-center gap-2 w-64 min-h-[120px] rounded-lg cursor-pointer
-            border border-dashed transition-colors duration-150
-            ${isDragging
-              ? 'border-accent/60 bg-accent-wash/60'
-              : 'border-[#c8c4be] bg-black/[0.04] hover:border-[#aaa69f] hover:bg-black/[0.07]'
-            }
-            ${uploading ? 'pointer-events-none opacity-60' : ''}
-          `}
-        >
-          {uploading ? (
-            <>
-              <Loader2 className="w-4 h-4 text-text-secondary animate-spin" />
-              <span className="text-[11px] text-text-secondary">Uploading…</span>
-            </>
-          ) : (
-            <>
-              <FileUp className={`w-4 h-4 ${isDragging ? 'text-accent' : 'text-text-secondary'}`} />
-              <div className="text-center">
-                <span className={`text-[11px] ${isDragging ? 'text-accent' : 'text-text-secondary'}`}>
-                  {isDragging ? 'Drop files here' : 'Upload files'}
-                </span>
-                {!isDragging && (
-                  <p className="text-[10px] text-text-tertiary mt-0.5">or drag and drop</p>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+          dragLabel="Drop files or folder"
+          idleLabel="Upload files"
+          className="w-64 min-h-[140px] px-2"
+        />
 
         <input
           ref={fileInputRef}
@@ -187,6 +179,24 @@ export function DocumentRequestWidget({
           onChange={handleInputChange}
           className="hidden"
         />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          onChange={handleInputChange}
+          className="hidden"
+          {...{ webkitdirectory: '' }}
+        />
+
+        {!uploading && (
+          <div className="flex items-center">
+            <UploadActionButton
+              onClick={handleFolderSelect}
+              icon={<FolderOpen className="w-4 h-4" />}
+              label="Select folder"
+            />
+          </div>
+        )}
 
         {/* No documents option */}
         {!uploading && (

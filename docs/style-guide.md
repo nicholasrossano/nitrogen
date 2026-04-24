@@ -156,6 +156,30 @@ Card or node labels (primary title + metadata subtitle) must never reflow to mul
 
 ---
 
+## D2) Pillar / Node Reuse Pattern
+
+When building category/entity tree UIs (assessment workspaces, plan structures, similar node stacks), reuse the shared pillar/node primitives instead of rebuilding visual clones.
+
+### Shared primitives
+- Pillar headers and node rows should come from shared components (`PlanStructureColumn`, `PlanItemNode`) or extracted sub-primitives.
+- Variant behavior must be prop-driven (editor mode vs diagram mode), not copy-pasted component forks.
+
+### Mode rules
+- **Diagram mode**: no right-side editing chrome (drag handles / delete buttons).
+- **Editor mode**: right-side drag and delete controls are allowed and should be explicit.
+- Keep branch-line geometry and node card proportions identical across modes.
+
+### Draft add-node pattern
+- Add flow starts from a centered green add-dot button under the stack (same affordance as other node add patterns).
+- The in-progress add row should render as a **neutral draft node** (`border-divider` / subtle grey fill), not as a confirmed colored node.
+- Draft composer captures only the primary label/title by default unless the surface explicitly requires additional fields.
+
+### Rhythm & alignment
+- Maintain the same vertical gap cadence between active nodes and draft rows (no compressed draft spacing).
+- If subtitle metadata is absent, primary node labels remain vertically centered within the row.
+
+---
+
 ### Multi-Column Layouts with Independent Column Heights
 
 When displaying a set of cards or nodes across multiple columns, prefer **independent flex columns** over CSS Grid.
@@ -269,6 +293,7 @@ Most data surfaces and workspace elements use no border radius (0px) for a preci
 | Interactive pill tags (selection, toggle) | 4–6px | `rounded` |
 | Ghost row hovers (history items, nav rows) | 8–12px | `rounded-lg` / `rounded-xl` |
 | Primary / secondary buttons (`btn-primary`, `btn-secondary`) | 20px | `rounded-[20px]` |
+| Module workspace header actions (beside stage stepper: Decision log, Approve, Export) | 6px | `!rounded-md` — intentional override so they sit in the same visual tier as the stage toggle group |
 | Search inputs | 20px | `rounded-[20px]` |
 | Chat composer textarea | 28px | `rounded-[28px]` |
 | Message bubbles (user) | 16px | `rounded-2xl` |
@@ -434,6 +459,28 @@ Use only for irreversible destructive actions: Delete, Remove, Revoke.
 - **Disabled hover**: always add `:disabled:hover::before { opacity: 0 }` suppression — already included in the global classes.
 - Size overrides use Tailwind `!important` modifiers: `!px-4 !py-1.5` to make a smaller button, `!px-6 !py-3` for a larger one.
 - `w-full` makes any button full-width inside its container.
+
+### Module workspace header (aligned with stage toggle)
+Actions in the module workspace top bar that sit **next to the stage stepper** (Decision log, Approve, module Export, and the same pattern elsewhere) must match the **stage segment** typography, not the default global button size:
+
+- Stage segments use `text-xs font-medium` and `gap-1.5` between icon and label (`ModuleWorkspace` stage stepper).
+- `btn-primary` / `btn-secondary` default to `text-sm` and `gap-2` in `globals.css` — always override in this row with **`!text-xs !font-medium !gap-1.5`** so label text reads the same size and weight as the toggle.
+- Keep the compact control tier with **`!py-1.5 !px-3 !rounded-md`** alongside the stepper (see **F) Shape** — module workspace header row in the radius table).
+
+```tsx
+<button
+  type="button"
+  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+>
+  …
+</button>
+<button
+  type="button"
+  className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+>
+  …
+</button>
+```
 
 ---
 

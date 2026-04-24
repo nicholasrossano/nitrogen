@@ -1,14 +1,12 @@
 """
-PVWatts Tool — Solar Production Estimate inside chat.
+PVWatts Tool — Solar Production Estimate.
 
-Orchestration flow:
-1. Tool is invoked (by planner tool call or tool_hint).
-2. LLM extracts candidate inputs from chat history + docs.
-3. Engine fills gaps with defaults (tilt=abs(lat), azimuth by hemisphere, etc.).
-4. If address provided but no lat/lon, geocode first.
-5. Inputs table + map widget is shown; user confirms / edits.
-6. Engine calls PVWatts API; output widget is shown.
-7. User can iterate (edit input → re-run) or ask assistant to change inputs.
+Stage workflow:
+  1. Inputs  (table / editable_table)   — pre-populated from engine defaults; user confirms.
+  2. Results (computed_results / solar_yield_results) — auto-computed via PVWatts API
+     after Inputs confirmed; user confirms.
+
+Chat path uses execute_from_conversation() (not part of the stage contract).
 """
 
 from __future__ import annotations
@@ -25,6 +23,10 @@ from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
+    DecisionLogAttribution,
+    FieldDef,
+    PopulationStep,
+    StageDef,
     ExecutionModel,
     ModuleManifest,
     ProgressCallback,
@@ -40,93 +42,25 @@ logger = logging.getLogger(__name__)
 INPUT_EXTRACTION_SCHEMA = {
     "type": "object",
     "properties": {
-        "address": {
-            "type": "string",
-            "description": "Site address or location description (e.g. 'Nairobi, Kenya' or '123 Main St, Denver, CO')",
-        },
-        "lat": {
-            "type": "number",
-            "description": "Latitude of the site (-90 to 90)",
-        },
-        "lon": {
-            "type": "number",
-            "description": "Longitude of the site (-180 to 180)",
-        },
-        "system_capacity": {
-            "type": "number",
-            "description": "System capacity in kW DC",
-        },
-        "panel_count": {
-            "type": "integer",
-            "description": "Number of solar panels (used with panel_wattage to compute system_capacity if not directly given)",
-        },
-        "panel_wattage": {
-            "type": "number",
-            "description": "Wattage per panel in watts (used with panel_count to compute system_capacity)",
-        },
-        "module_type": {
-            "type": "integer",
-            "description": "Module type: 0=Standard, 1=Premium, 2=Thin film",
-        },
-        "array_type": {
-            "type": "integer",
-            "description": "Array type: 0=Fixed Open Rack, 1=Fixed Roof Mounted, 2=1-Axis, 3=1-Axis Backtracking, 4=2-Axis",
-        },
-        "tilt": {
-            "type": "number",
-            "description": "Tilt angle in degrees (0-90)",
-        },
-        "azimuth": {
-            "type": "number",
-            "description": "Azimuth angle in degrees (0-360, 180=south-facing in N hemisphere)",
-        },
-        "losses": {
-            "type": "number",
-            "description": "System losses as percentage (e.g. 14 for 14%)",
-        },
-        "dc_ac_ratio": {
-            "type": "number",
-            "description": "DC to AC ratio (e.g. 1.2)",
-        },
-        "notes": {
-            "type": "string",
-            "description": "Any additional notes about the system (shading, soiling, etc.)",
-        },
+        "address": {"type": "string", "description": "Site address or location description"},
+        "lat": {"type": "number", "description": "Latitude of the site (-90 to 90)"},
+        "lon": {"type": "number", "description": "Longitude of the site (-180 to 180)"},
+        "system_capacity": {"type": "number", "description": "System capacity in kW DC"},
+        "panel_count": {"type": "integer"},
+        "panel_wattage": {"type": "number"},
+        "module_type": {"type": "integer"},
+        "array_type": {"type": "integer"},
+        "tilt": {"type": "number"},
+        "azimuth": {"type": "number"},
+        "losses": {"type": "number"},
+        "dc_ac_ratio": {"type": "number"},
+        "notes": {"type": "string"},
     },
 }
 
 
 class PVWattsTool(BaseModule):
     """Solar production estimate tool using NREL PVWatts V8."""
-
-    @property
-    def workspace_setup_fields(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Project geography or address context.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Nairobi, Kenya",
-            },
-            {
-                "name": "address",
-                "label": "Site Address",
-                "description": "Address or place name for the solar site.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kisumu, Kenya",
-            },
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Working title for this module run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            },
-        ]
 
     @property
     def definition(self) -> ModuleDefinition:
@@ -151,9 +85,8 @@ class PVWattsTool(BaseModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="Estimate annual and monthly solar generation from site and system assumptions.",
-            primary_ui_object="solar_output",
-            workspace_build_widget="solar_inputs",
-            workspace_output_widget="solar_output",
+            primary_ui_object="solar_yield_results",
+            investigate_hint="For solar inputs, prefer site-specific geometry and equipment specs first, then fall back to climate-appropriate PV benchmarks and PVWatts-compatible defaults.",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "pvwatts"},
             input_dependencies=[],
@@ -161,7 +94,143 @@ class PVWattsTool(BaseModule):
             downstream_dependencies=["lcoe_model"],
             assumptions_behavior="tracks",
             evidence_behavior="none",
+            decision_log_attribution=DecisionLogAttribution(
+                adapter_labels={"pvwatts": "NREL PVWatts API"},
+            ),
         )
+
+    @property
+    def stage_defs(self) -> list[StageDef]:
+        return [
+            StageDef(
+                id="inputs",
+                title="Inputs",
+                component="table",
+                widget="editable_table",
+                allow_add_rows=False,
+                fields=[
+                    FieldDef("variable", "text", required=True, label="Variable"),
+                    FieldDef("value", "number", label="Value"),
+                    FieldDef("unit", "text", label="Unit"),
+                ],
+                population=[
+                    PopulationStep("start_from_predefined_rows"),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("infer_missing_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="results",
+                title="Results",
+                component="computed_results",
+                widget="solar_yield_results",
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "inputs"}),
+                    PopulationStep("compute_with_external_tool", {"tool": "pvwatts"}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+        ]
+
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def get_predefined_rows(self, stage_id: str, context: dict) -> list[dict]:
+        if stage_id != "inputs":
+            return []
+        from app.services.pvwatts_engine import PVWattsEngine
+
+        known_values: dict[str, Any] = {}
+        geography = context.get("geography") or context.get("tool_inputs", {}).get("address")
+        if geography:
+            known_values["address"] = geography
+
+        inputs = PVWattsEngine.build_default_inputs(known_values=known_values)
+        rows = []
+        for key, inp_obj in inputs.items():
+            d = inp_obj.to_dict() if hasattr(inp_obj, "to_dict") else {}
+            row = {
+                "field_name": key,
+                "variable": d.get("label", key),
+                "value": d.get("value"),
+                "unit": d.get("unit", ""),
+                "category": d.get("category", "general"),
+                "status": d.get("status", "assumed"),
+                "rationale": d.get("rationale", ""),
+            }
+            if d.get("field_type"):
+                row["field_type"] = d.get("field_type")
+            if d.get("options") is not None:
+                row["options"] = d.get("options")
+            rows.append(row)
+        return rows
+
+    async def compute_external(
+        self,
+        stage_id: str,
+        tool: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        if stage_id != "results" or tool != "pvwatts":
+            raise ValueError(f"compute_external called for unexpected stage/tool '{stage_id}/{tool}'")
+
+        inputs_data = (confirmed_stages.get("inputs") or {}).get("data") or {}
+        items = inputs_data.get("items", [])
+
+        # Reconstruct known_values from confirmed stage rows.
+        # Keep explicit field_name as the canonical key so the computed widget
+        # can stay in sync with stage-table statuses/provenance.
+        known_values: dict[str, Any] = {}
+        stage_input_meta: dict[str, dict[str, Any]] = {}
+        for item in items:
+            content = item.get("content", {})
+            key = content.get("field_name") or str(content.get("variable", "")).lower().replace(" ", "_")
+            val = content.get("value")
+            if key:
+                stage_input_meta[key] = {
+                    "value": val,
+                    "status": content.get("status"),
+                    "source": content.get("source"),
+                }
+            if val is None:
+                continue
+            known_values[key] = val
+
+        adapter = get_adapter_registry().get("pvwatts")
+        if adapter is None:
+            raise RuntimeError("pvwatts adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="pvwatts:compute_stage",
+        )
+        result = await adapter.execute(ctx, None, {"known_values": known_values, "resolve_address": True})
+        widget_data = dict(result.output)
+        result_inputs = widget_data.get("inputs")
+        if isinstance(result_inputs, dict):
+            for field_name, meta in stage_input_meta.items():
+                current = result_inputs.get(field_name)
+                if not isinstance(current, dict):
+                    continue
+                current["value"] = meta.get("value")
+                if isinstance(meta.get("status"), str):
+                    current["status"] = meta["status"]
+                if isinstance(meta.get("source"), str):
+                    current["source"] = meta["source"]
+        return widget_data
+
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        results_data = (confirmed_stages.get("results") or {}).get("data") or {}
+        widget_data = results_data.get("widget_data", {})
+        from app.services.pvwatts_engine import PVWattsEngine
+        return PVWattsEngine.export_xlsx(widget_data)
 
     def is_exportable(self, content: dict) -> bool:
         return bool(
@@ -169,6 +238,10 @@ class PVWattsTool(BaseModule):
             and content.get("result")
             and content.get("inputs")
         )
+
+    # ------------------------------------------------------------------ #
+    # Chat-path methods                                                    #
+    # ------------------------------------------------------------------ #
 
     @property
     def required_inputs(self) -> list[ModuleInput]:
@@ -210,7 +283,6 @@ class PVWattsTool(BaseModule):
         user_id: str | None = None,
         db: AsyncSession | None = None,
     ) -> dict[str, Any]:
-        """Extract solar estimate inputs from conversation text via LLM."""
         client, is_byok = await get_openai_client(user_id, db)
         try:
             resp = await client.chat.completions.create(
@@ -219,26 +291,10 @@ class PVWattsTool(BaseModule):
                     {
                         "role": "system",
                         "content": (
-                            "You are a solar energy analyst. Extract any solar PV production estimate "
-                            "inputs from the conversation below.\n\n"
-                            "LOCATION EXTRACTION — this is critical:\n"
-                            "- If an explicit address or place name is mentioned, return it as 'address'. "
-                            "Do NOT also return lat/lon — the geocoder will resolve coordinates from the address.\n"
-                            "- Only return lat/lon if the user explicitly provides numeric coordinates.\n"
-                            "- If the project name, title, or context mentions a country, city, or region "
-                            "(e.g. 'Zimbabwe Solar Farm', 'Kenya PV Project', 'Dubai rooftop'), "
-                            "extract that geographic reference as the 'address' field. "
-                            "For example, 'Zimbabwe Solar Farm' → address: 'Zimbabwe'.\n"
-                            "- Prefer the most specific location available (city > country).\n"
-                            "- NEVER guess or fabricate coordinates.\n\n"
-                            "OTHER INPUTS:\n"
-                            "- Only include values that are explicitly stated or clearly implied.\n"
-                            "- If the user mentions a number of panels and wattage per panel, extract those "
-                            "so system_capacity can be derived.\n"
-                            "- Convert units where needed (e.g. MW → kW, watts → kW for capacity).\n"
-                            "- Do NOT extract tilt or azimuth unless the user explicitly states a specific "
-                            "value (e.g. '30 degree tilt' or '270 degree azimuth'). "
-                            "These are always computed from latitude — never guess them."
+                            "You are a solar energy analyst. Extract solar PV production estimate "
+                            "inputs from the conversation. If an address/place is mentioned, return "
+                            "it as 'address' — do NOT also return lat/lon. Only return lat/lon if "
+                            "explicit numeric coordinates are given. Never fabricate coordinates."
                         ),
                     },
                     {"role": "user", "content": conversation_text},
@@ -263,39 +319,48 @@ class PVWattsTool(BaseModule):
             logger.error(f"Solar input extraction failed: {e}")
             return {}
 
+    async def recalculate(self, inputs_dict: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        adapter = get_adapter_registry().get("pvwatts")
+        if adapter is None:
+            raise RuntimeError("pvwatts adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="pvwatts:recalculate",
+        )
+        result = await adapter.execute(ctx, None, {"serialized_inputs": inputs_dict})
+        return dict(result.output)
+
     async def execute_from_conversation(
         self,
         conversation_text: str,
         planner_args: dict | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> tuple[str, dict]:
-        """Run solar estimate from conversation text — main entry for core chat."""
-
         async def _progress(msg: str) -> None:
             if on_progress:
                 await on_progress(msg)
 
-        planner_args = planner_args or {}
-
         await _progress("Extracting solar inputs from conversation...")
         extracted = await self.extract_inputs_from_text(conversation_text)
 
-        # Derive system_capacity from panel_count × panel_wattage if needed
         if "system_capacity" not in extracted:
             panel_count = extracted.pop("panel_count", None)
             panel_wattage = extracted.pop("panel_wattage", None)
             if panel_count and panel_wattage:
                 extracted["system_capacity"] = (panel_count * panel_wattage) / 1000.0
-                await _progress(f"Derived capacity: {panel_count} panels × {panel_wattage}W = {extracted['system_capacity']:.1f} kW DC")
+                await _progress(f"Derived capacity: {panel_count} × {panel_wattage}W = {extracted['system_capacity']:.1f} kW DC")
         else:
             extracted.pop("panel_count", None)
             extracted.pop("panel_wattage", None)
 
-        # When an address is present, ALWAYS geocode it — LLM-generated lat/lon
-        # are often hallucinated and won't match the address string.
         address = extracted.get("address")
         if address and ("lat" not in extracted or "lon" not in extracted):
-            await _progress(f"Geocoding: \"{address}\"...")
+            await _progress(f'Geocoding: "{address}"...')
 
         extracted.pop("notes", None)
 
@@ -312,80 +377,24 @@ class PVWattsTool(BaseModule):
             request_id="pvwatts:conversation",
         )
         await _progress("Calling PVWatts API for production estimate...")
-        result = await adapter.execute(
-            ctx,
-            None,
-            {
-                "known_values": extracted,
-                "resolve_address": True,
-            },
-        )
+        result = await adapter.execute(ctx, None, {"known_values": extracted, "resolve_address": True})
         widget_data: dict[str, Any] = dict(result.output)
+
         geocode = widget_data.get("geocode")
-        if isinstance(geocode, dict) and "lat" in geocode and "lon" in geocode:
+        if isinstance(geocode, dict) and "lat" in geocode:
             await _progress(f"Location: {geocode['lat']:.4f}, {geocode['lon']:.4f}")
-        elif address and ("lat" not in extracted or "lon" not in extracted):
-            await _progress(f"Could not geocode \"{address}\" — please provide coordinates")
+
         if widget_data.get("computable") and widget_data.get("result"):
             widget_type = "solar_output"
             solar_result = widget_data.get("result", {})
             await _progress(
                 f"Year 1 AC Energy: {solar_result.get('ac_annual', 0):,.0f} kWh | "
-                f"Capacity Factor: {solar_result.get('capacity_factor', 0):.1f}% "
-                f"({solar_result.get('assumption_count', 0)} assumptions, {solar_result.get('quality_label', 'unknown')} confidence)"
+                f"Capacity Factor: {solar_result.get('capacity_factor', 0):.1f}%"
             )
         else:
             widget_type = "solar_inputs"
             await _progress(
-                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to run estimate — showing input table"
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs — showing input table"
             )
 
         return widget_type, widget_data
-
-    async def recalculate(
-        self,
-        inputs_dict: dict[str, dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Recalculate from serialized inputs. Fast path for widget edits — no LLM.
-        Always refreshes location-derived defaults (tilt, azimuth) from the current
-        lat unless those fields have been user-confirmed."""
-        adapter = get_adapter_registry().get("pvwatts")
-        if adapter is None:
-            raise RuntimeError("pvwatts adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id="system",
-            user_email=None,
-            initiative_id=None,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id="pvwatts:recalculate",
-        )
-        result = await adapter.execute(
-            ctx,
-            None,
-            {
-                "serialized_inputs": inputs_dict,
-            },
-        )
-        return dict(result.output)
-
-    async def execute(self, db, initiative_id, inputs, **kwargs) -> ModuleOutput:
-        """Full execution for initiative-scoped tool runs (not used in core chat)."""
-        result_data = await self.recalculate(inputs)
-        return ModuleOutput(
-            module_id="solar_estimate",
-            output_type="solar",
-            title="Solar Production Estimate",
-            content=result_data,
-        )
-
-    async def build_workspace_widget_data(
-        self,
-        known_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        from app.services.pvwatts_engine import PVWattsEngine
-
-        inputs = PVWattsEngine.build_default_inputs(known_values=known_values)
-        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
-        return await self.recalculate(serialized_inputs)

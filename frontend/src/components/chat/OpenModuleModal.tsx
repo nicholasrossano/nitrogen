@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { api, type ModuleInstance } from '@/lib/api';
 
@@ -100,22 +101,28 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
 
   return (
     <div className="w-full">
-      <div className="w-full pb-8">
-        {/* Same btn-secondary styling as the main project grid Trash control; button on the right */}
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <p className="text-sm text-text-tertiary flex-1 min-w-0">
-            {isTrashView
-              ? 'Deleted modules. Restore to bring them back, or permanently delete.'
-              : 'Pick up where you or a collaborator left off in any module started in this project.'}
-          </p>
+      <div className="w-full pt-3 pb-8">
+        <div className="mb-6 flex items-center justify-end gap-4">
           <button
             type="button"
             onClick={handleTrashToggle}
-            className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
+            className={`inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border transition-colors shrink-0 ${
+              isTrashView
+                ? 'border-accent text-accent bg-white enabled:hover:border-accent-hover enabled:hover:text-accent-hover'
+                : 'border-stroke-subtle bg-white text-text-secondary enabled:hover:border-accent enabled:hover:text-accent'
+            }`}
           >
             {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
             {isTrashView ? 'Back to Modules' : 'Trash'}
           </button>
+          {!isTrashView && enriched.length > 0 && (
+            <Link
+              href={`/initiatives/${initiativeId}?view=framework`}
+              className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+            >
+              View Framework Plan
+            </Link>
+          )}
         </div>
 
         {loading ? (
@@ -130,7 +137,17 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
               {isTrashView ? 'Trash is empty.' : 'No modules started yet.'}
             </p>
             {!isTrashView && (
-              <p className="text-xs text-text-tertiary mt-1">Use &quot;New Module&quot; to begin.</p>
+              <>
+                <p className="text-xs text-text-tertiary mt-1">Use &quot;New Module&quot; to begin.</p>
+                <div className="mt-4 flex justify-center">
+                  <Link
+                    href={`/initiatives/${initiativeId}?view=framework`}
+                    className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+                  >
+                    View Framework Plan
+                  </Link>
+                </div>
+              </>
             )}
           </div>
         ) : (

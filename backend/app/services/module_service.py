@@ -23,14 +23,14 @@ async def _resolve_instance(
     tool_id: str,
     *,
     instance_id: uuid.UUID | None = None,
-    session_id: uuid.UUID | None = None,
+    chat_id: uuid.UUID | None = None,
     user_id: str | None = None,
 ) -> ModuleInstance:
     """Find or create the target instance for a write operation.
 
     Resolution order:
     1. Explicit instance_id → fetch that row.
-    2. session_id → find by (initiative_id, session_id, tool_id), or create.
+    2. chat_id → find by (initiative_id, chat_id, tool_id), or create.
     3. Otherwise → create a brand-new instance.
     """
     if instance_id:
@@ -39,12 +39,12 @@ async def _resolve_instance(
             raise ValueError(f"ModuleInstance {instance_id} not found")
         return inst
 
-    if session_id:
+    if chat_id:
         stmt = (
             select(ModuleInstance)
             .where(
                 ModuleInstance.initiative_id == initiative_id,
-                ModuleInstance.session_id == session_id,
+                ModuleInstance.chat_id == chat_id,
                 ModuleInstance.module_id == tool_id,
             )
             .limit(1)
@@ -62,7 +62,7 @@ async def _resolve_instance(
         module_id=tool_id,
         status="draft",
         started_by=user_id,
-        session_id=session_id,
+        chat_id=chat_id,
     )
     db.add(inst)
     await db.flush()
@@ -76,12 +76,12 @@ async def get_or_create_instance(
     initiative_id: uuid.UUID,
     tool_id: str,
     user_id: str,
-    session_id: uuid.UUID | None = None,
+    chat_id: uuid.UUID | None = None,
 ) -> ModuleInstance:
-    """Ensure a module instance exists for this (initiative, tool, session)."""
+    """Ensure a module instance exists for this (initiative, tool, chat)."""
     return await _resolve_instance(
         db, initiative_id, tool_id,
-        session_id=session_id, user_id=user_id,
+        chat_id=chat_id, user_id=user_id,
     )
 
 
@@ -94,13 +94,13 @@ async def save_deliverable(
     content,
     user_id: str,
     *,
-    session_id: uuid.UUID | None = None,
+    chat_id: uuid.UUID | None = None,
     instance_id: uuid.UUID | None = None,
 ) -> ModuleInstance:
     """Write deliverable output to an instance and mark complete."""
     inst = await _resolve_instance(
         db, initiative_id, tool_id,
-        instance_id=instance_id, session_id=session_id, user_id=user_id,
+        instance_id=instance_id, chat_id=chat_id, user_id=user_id,
     )
     inst.deliverable = {
         "title": title,
@@ -122,13 +122,13 @@ async def set_instance_error(
     error_message: str,
     user_id: str,
     *,
-    session_id: uuid.UUID | None = None,
+    chat_id: uuid.UUID | None = None,
     instance_id: uuid.UUID | None = None,
 ) -> ModuleInstance:
     """Mark an instance as errored."""
     inst = await _resolve_instance(
         db, initiative_id, tool_id,
-        instance_id=instance_id, session_id=session_id, user_id=user_id,
+        instance_id=instance_id, chat_id=chat_id, user_id=user_id,
     )
     inst.status = "error"
     inst.deliverable = {"error": error_message}

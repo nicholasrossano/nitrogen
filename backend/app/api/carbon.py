@@ -34,7 +34,11 @@ class UpdateInputRequest(BaseModel):
     field_name: str
     value: Any
     source: str = "user"
-    status: str = "confirmed"
+    status: str = "validated"
+
+
+def _normalize_input_status(status: str) -> str:
+    return "validated" if status == "confirmed" else status
 
 
 class SwitchMethodPackRequest(BaseModel):
@@ -55,13 +59,13 @@ async def switch_method_pack(
     data: SwitchMethodPackRequest,
     user: MockUser = Depends(get_current_user),
 ):
-    """Rebuild inputs for a new method pack, preserving user-confirmed values."""
+    """Rebuild inputs for a new method pack, preserving user-validated values."""
     preserved: dict[str, Any] = {}
     if data.current_inputs:
         for field_name, inp in data.current_inputs.items():
             if field_name == "method_pack":
                 continue
-            if inp.get("source") in ("chat", "user") or inp.get("status") == "confirmed":
+            if inp.get("source") in ("chat", "user") or inp.get("status") in ("validated", "confirmed"):
                 preserved[field_name] = inp.get("value")
 
     engine_inputs = CarbonEngine.build_default_inputs(
@@ -114,10 +118,11 @@ async def update_input_and_recalculate(
 ):
     """Update a single input field and recalculate."""
     inputs = data.inputs
+    normalized_status = _normalize_input_status(data.status)
     if data.field_name in inputs:
         inputs[data.field_name]["value"] = data.value
         inputs[data.field_name]["source"] = data.source
-        inputs[data.field_name]["status"] = data.status
+        inputs[data.field_name]["status"] = normalized_status
     else:
         inputs[data.field_name] = {
             "field_name": data.field_name,
@@ -125,7 +130,7 @@ async def update_input_and_recalculate(
             "value": data.value,
             "unit": "",
             "source": data.source,
-            "status": data.status,
+            "status": normalized_status,
             "applies_to": "general",
             "notes": "",
             "rationale": "",

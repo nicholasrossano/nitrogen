@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
-from sqlalchemy import String, DateTime, ForeignKey, Index
+from sqlalchemy import String, DateTime, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
@@ -53,10 +53,7 @@ class ModuleInstance(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="started")
     title: Mapped[str | None] = mapped_column(String(255))
     started_by: Mapped[str] = mapped_column(String(255), nullable=False)
-    # Keep Python attribute name `session_id` for compatibility with older callers,
-    # but map to the canonical DB column `chat_id`.
-    session_id: Mapped[uuid.UUID | None] = mapped_column(
-        "chat_id",
+    chat_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("core_chats.id", ondelete="SET NULL"),
         nullable=True,
@@ -65,6 +62,7 @@ class ModuleInstance(Base):
     alignment: Mapped[dict | None] = mapped_column(JSONB)
     deliverable: Mapped[dict | None] = mapped_column(JSONB)
     workflow_state: Mapped[dict | None] = mapped_column(JSONB)
+    workflow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -78,3 +76,16 @@ class ModuleInstance(Base):
     )
 
     initiative: Mapped["Initiative"] = relationship(back_populates="module_instances")
+
+    @property
+    def is_plan_complete(self) -> bool:
+        """Whether this instance should count as complete (approved-only)."""
+        state = self.workflow_state or {}
+        if not isinstance(state, dict):
+            return False
+
+        final_approval = state.get("final_approval") or {}
+        if isinstance(final_approval, dict) and final_approval.get("status") == "approved":
+            return True
+
+        return False

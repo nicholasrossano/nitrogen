@@ -43,7 +43,7 @@ ALLOWED_CONTENT_TYPES = {
     "/initiatives/{initiative_id}/materials",
     response_model=ProjectMaterialUploadResponse,
 )
-@limiter.limit("10/minute")
+@limiter.limit("120/minute")
 async def upload_material(
     request: Request,
     initiative_id: str,

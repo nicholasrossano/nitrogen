@@ -1,13 +1,13 @@
 """
-LCOE Tool — Levelized Cost of Energy modeling inside chat.
+LCOE Tool — Levelized Cost of Energy modeling.
 
-Orchestration flow:
-1. Tool is invoked (by orchestration action or directly).
-2. LLM extracts candidate inputs from chat history + uploaded docs.
-3. Engine fills gaps with technology-appropriate defaults.
-4. Inputs table widget is shown; user confirms / edits.
-5. Engine calculates LCOE; outputs widget is shown.
-6. User can iterate (edit input → recompute) or request sensitivity / export.
+Stage workflow:
+  1. Inputs  (table / editable_table)   — pre-populated from engine defaults,
+     then enriched from project materials; user confirms.
+  2. Results (computed_results / lcoe_results) — auto-computed after Inputs
+     are confirmed; user confirms.
+
+Chat path uses execute_from_conversation() (not part of the stage contract).
 """
 
 from __future__ import annotations
@@ -26,6 +26,10 @@ from app.core.execution_context import ExecutionContext
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.modules.base import (
     BaseModule,
+    DecisionLogAttribution,
+    FieldDef,
+    PopulationStep,
+    StageDef,
     ExecutionModel,
     ModuleManifest,
     ProgressCallback,
@@ -47,94 +51,23 @@ INPUT_EXTRACTION_SCHEMA = {
             "type": "string",
             "description": "Energy technology: solar_pv, wind, battery, mini_grid, clean_cooking, or other",
         },
-        "net_capacity_kw": {
-            "type": "number",
-            "description": "Net installed capacity in kW",
-        },
-        "capacity_factor": {
-            "type": "number",
-            "description": "Capacity factor as a decimal (0-1)",
-        },
-        "total_capex": {
-            "type": "number",
-            "description": "Total capital expenditure in project currency",
-        },
-        "annual_opex": {
-            "type": "number",
-            "description": "Annual operations & maintenance cost",
-        },
-        "annual_fuel_cost": {
-            "type": "number",
-            "description": "Annual fuel cost (diesel, biomass, etc.) — 0 if N/A",
-        },
-        "discount_rate": {
-            "type": "number",
-            "description": "Discount rate / WACC as a decimal (e.g. 0.08 for 8%)",
-        },
-        "project_life_years": {
-            "type": "integer",
-            "description": "Project operational lifetime in years",
-        },
-        "degradation_rate": {
-            "type": "number",
-            "description": "Annual production degradation as a decimal",
-        },
-        "construction_years": {
-            "type": "integer",
-            "description": "Number of construction years before operation",
-        },
-        "currency": {
-            "type": "string",
-            "description": "Currency code (e.g. USD, EUR, KES)",
-        },
-        "location": {
-            "type": "string",
-            "description": "Project location / country / region if mentioned",
-        },
+        "net_capacity_kw": {"type": "number", "description": "Net installed capacity in kW"},
+        "capacity_factor": {"type": "number", "description": "Capacity factor as a decimal (0-1)"},
+        "total_capex": {"type": "number", "description": "Total capital expenditure in project currency"},
+        "annual_opex": {"type": "number", "description": "Annual operations & maintenance cost"},
+        "annual_fuel_cost": {"type": "number", "description": "Annual fuel cost — 0 if N/A"},
+        "discount_rate": {"type": "number", "description": "Discount rate / WACC as a decimal"},
+        "project_life_years": {"type": "integer", "description": "Project operational lifetime in years"},
+        "degradation_rate": {"type": "number", "description": "Annual production degradation as a decimal"},
+        "construction_years": {"type": "integer", "description": "Number of construction years"},
+        "currency": {"type": "string", "description": "Currency code (e.g. USD, EUR, KES)"},
+        "location": {"type": "string", "description": "Project location / country / region"},
     },
 }
 
 
 class LCOETool(BaseModule):
-    """LCOE modeling tool for chat-based energy project economics."""
-
-    @property
-    def workspace_setup_fields(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": "geography",
-                "label": "Geography",
-                "description": "Project geography or market context.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "e.g. Kenya",
-            },
-            {
-                "name": "technology_type",
-                "label": "Technology Type",
-                "description": "Confirm the primary technology for the model.",
-                "field_type": "select",
-                "required": True,
-                "options": [
-                    "solar_pv",
-                    "wind",
-                    "battery",
-                    "mini_grid",
-                    "clean_cooking",
-                    "hydro",
-                    "other",
-                ],
-                "placeholder": None,
-            },
-            {
-                "name": "project_title",
-                "label": "Project Title",
-                "description": "Working title for this module run.",
-                "field_type": "text",
-                "required": False,
-                "placeholder": "Project title",
-            },
-        ]
+    """LCOE modeling tool."""
 
     @property
     def definition(self) -> ModuleDefinition:
@@ -159,9 +92,8 @@ class LCOETool(BaseModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="Estimate project levelized cost of energy and sensitivity ranges.",
-            primary_ui_object="lcoe_output",
-            workspace_build_widget="lcoe_inputs",
-            workspace_output_widget="lcoe_output",
+            primary_ui_object="lcoe_results",
+            investigate_hint="Prefer project-specific engineering or vendor data when available; otherwise anchor assumptions to comparable technology, geography, and operating conditions.",
             export_artifact_types=["xlsx"],
             adapter_bindings={"core_engine": "lcoe"},
             input_dependencies=["solar_estimate"],
@@ -169,7 +101,163 @@ class LCOETool(BaseModule):
             downstream_dependencies=[],
             assumptions_behavior="tracks",
             evidence_behavior="none",
+            decision_log_attribution=DecisionLogAttribution(
+                adapter_labels={"lcoe": "LCOE engine"},
+            ),
         )
+
+    @property
+    def stage_defs(self) -> list[StageDef]:
+        return [
+            StageDef(
+                id="inputs",
+                title="Inputs",
+                component="table",
+                widget="editable_table",
+                allow_add_rows=False,
+                fields=[
+                    FieldDef("variable", "text", required=True, label="Variable"),
+                    FieldDef("value", "number", label="Value"),
+                    FieldDef("unit", "text", label="Unit"),
+                ],
+                population=[
+                    PopulationStep("start_from_predefined_rows"),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("infer_missing_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="results",
+                title="Results",
+                component="computed_results",
+                widget="lcoe_results",
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "inputs"}),
+                    PopulationStep("compute_with_module_logic"),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+        ]
+
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def get_predefined_rows(self, stage_id: str, context: dict) -> list[dict]:
+        """Return default LCOE input rows from the engine."""
+        if stage_id != "inputs":
+            return []
+        from app.services.lcoe_engine import LCOEEngine
+
+        tech_type = context.get("tool_inputs", {}).get("technology_type") or context.get("project_type")
+        known_values: dict[str, Any] = {}
+        if tech_type:
+            known_values["technology_type"] = tech_type
+
+        inputs = LCOEEngine.build_default_inputs(tech_type=tech_type, known_values=known_values)
+        rows = []
+        for key, inp_obj in inputs.items():
+            d = inp_obj.to_dict() if hasattr(inp_obj, "to_dict") else {}
+            row = {
+                "field_name": key,
+                "variable": d.get("label", key),
+                "value": d.get("value"),
+                "unit": d.get("unit", ""),
+                "category": d.get("category", "general"),
+                "status": d.get("status", "assumed"),
+                "rationale": d.get("rationale", ""),
+            }
+            if d.get("field_type"):
+                row["field_type"] = d.get("field_type")
+            if d.get("options") is not None:
+                row["options"] = d.get("options")
+            rows.append(row)
+        return rows
+
+    async def compute_stage(
+        self,
+        stage_id: str,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> dict[str, Any]:
+        """Compute LCOE results from confirmed inputs stage."""
+        if stage_id != "results":
+            raise ValueError(f"compute_stage called for unexpected stage '{stage_id}'")
+
+        inputs_data = (confirmed_stages.get("inputs") or {}).get("data") or {}
+        items = inputs_data.get("items", [])
+
+        # Reconstruct known_values from item rows and retain row-level metadata
+        # so computed widget inputs preserve user engagement status.
+        known_values: dict[str, Any] = {}
+        stage_input_meta: dict[str, dict[str, Any]] = {}
+        tech_type = None
+        for item in items:
+            content = item.get("content", {})
+            var = content.get("variable", "")
+            explicit_field_name = content.get("field_name")
+            key = explicit_field_name if isinstance(explicit_field_name, str) and explicit_field_name else _variable_name_to_key(var)
+            val = content.get("value")
+            stage_input_meta[key] = {
+                "value": val,
+                "status": content.get("status"),
+                "source": content.get("source"),
+            }
+            if val is None:
+                continue
+            if key == "technology_type":
+                tech_type = val
+            else:
+                known_values[key] = val
+
+        widget_data = await self.recalculate_from_values(tech_type=tech_type, known_values=known_values)
+        result_inputs = widget_data.get("inputs")
+        if isinstance(result_inputs, dict):
+            for field_name, meta in stage_input_meta.items():
+                current = result_inputs.get(field_name)
+                if not isinstance(current, dict):
+                    continue
+                current["value"] = meta.get("value")
+                if isinstance(meta.get("status"), str):
+                    current["status"] = meta["status"]
+                if isinstance(meta.get("source"), str):
+                    current["source"] = meta["source"]
+        return widget_data
+
+    async def recalculate_from_values(
+        self,
+        tech_type: str | None,
+        known_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        adapter = get_adapter_registry().get("lcoe")
+        if adapter is None:
+            raise RuntimeError("lcoe adapter is not registered.")
+        ctx = ExecutionContext(
+            user_id="system",
+            user_email=None,
+            initiative_id=None,
+            initiative_role=None,
+            ai_access_granted=True,
+            is_byok=False,
+            request_id="lcoe:compute_stage",
+        )
+        result = await adapter.execute(ctx, None, {"tech_type": tech_type, "known_values": known_values})
+        result_data: dict[str, Any] = dict(result.output)
+        result_data["technology_type"] = tech_type
+        return result_data
+
+    async def generate_export(
+        self,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+    ) -> bytes:
+        """Generate XLSX from confirmed inputs and results."""
+        results_data = (confirmed_stages.get("results") or {}).get("data") or {}
+        widget_data = results_data.get("widget_data", {})
+
+        from app.services.lcoe_engine import LCOEEngine
+        return LCOEEngine.export_xlsx(widget_data)
 
     def is_exportable(self, content: dict) -> bool:
         return bool(
@@ -177,6 +265,10 @@ class LCOETool(BaseModule):
             and content.get("computable", False)
             and content.get("inputs")
         )
+
+    # ------------------------------------------------------------------ #
+    # Chat-path methods (not part of stage contract)                       #
+    # ------------------------------------------------------------------ #
 
     @property
     def required_inputs(self) -> list[ModuleInput]:
@@ -223,14 +315,6 @@ class LCOETool(BaseModule):
                 required=False,
                 default=0.08,
             ),
-            ModuleInput(
-                name="project_life_years",
-                label="Project Lifetime (years)",
-                description="Operational lifetime in years. Default depends on technology.",
-                input_type="number",
-                required=False,
-                default=25,
-            ),
         ]
 
     @property
@@ -248,7 +332,6 @@ class LCOETool(BaseModule):
         user_id: str | None = None,
         db: AsyncSession | None = None,
     ) -> dict[str, Any]:
-        """Extract LCOE inputs from raw conversation text via LLM."""
         client, is_byok = await get_openai_client(user_id, db)
         try:
             resp = await client.chat.completions.create(
@@ -286,80 +369,16 @@ class LCOETool(BaseModule):
             logger.error(f"LCOE input extraction failed: {e}")
             return {}
 
-    async def extract_inputs_from_context(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        user_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Extract LCOE inputs from DB-stored chat history and project context."""
-        result = await db.execute(
-            select(Initiative).where(Initiative.id == initiative_id)
-        )
-        initiative = result.scalar_one_or_none()
-        if not initiative:
-            return {}
-
-        msgs_result = await db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.initiative_id == initiative_id)
-            .order_by(ChatMessage.created_at)
-        )
-        messages = list(msgs_result.scalars().all())
-
-        conversation_text = "\n".join(
-            f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}"
-            for m in messages[-20:]
-        )
-
-        project_context = (
-            f"Project type: {initiative.project_type or 'Unknown'}\n"
-            f"Description: {initiative.project_description or 'N/A'}\n"
-            f"Geography: {initiative.geography or 'Not specified'}"
-        )
-
-        return await self.extract_inputs_from_text(
-            f"PROJECT CONTEXT:\n{project_context}\n\nCONVERSATION:\n{conversation_text}",
-            user_id=user_id,
-            db=db,
-        )
-
-    async def execute(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        inputs: dict[str, Any],
-        include_corpus: bool = True,
-    ) -> ModuleOutput:
-        """Full LCOE execution: extract → fill defaults → calculate → return structured output."""
-
-        extracted = await self.extract_inputs_from_context(db, initiative_id)
-        merged = {**extracted, **{k: v for k, v in inputs.items() if v is not None}}
-
-        tech_type = merged.pop("technology_type", None) or merged.pop("tech_type", None)
-        merged.pop("location", None)
-        adapter = get_adapter_registry().get("lcoe")
-        if adapter is None:
-            raise RuntimeError("lcoe adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id=getattr(self, "user_id", None) or "system",
-            user_email=None,
-            initiative_id=initiative_id,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id=f"lcoe:{initiative_id}",
-        )
-        result = await adapter.execute(ctx, db, {"tech_type": tech_type, "known_values": merged})
-        result_data: dict[str, Any] = dict(result.output)
-        result_data["technology_type"] = tech_type
-
-        return ModuleOutput(
-            module_id="lcoe_model",
-            output_type="lcoe",
-            title="LCOE Analysis",
-            content=result_data,
-        )
+    async def recalculate(self, inputs_dict: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Fast path recalculate for chat widget edits."""
+        known_values: dict[str, Any] = {}
+        for key, value in inputs_dict.items():
+            if isinstance(value, dict):
+                known_values[key] = value.get("value")
+            else:
+                known_values[key] = value
+        tech_type = known_values.pop("technology_type", None)
+        return await self.recalculate_from_values(tech_type=tech_type, known_values=known_values)
 
     async def execute_from_conversation(
         self,
@@ -367,8 +386,6 @@ class LCOETool(BaseModule):
         planner_args: dict | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> tuple[str, dict]:
-        """Run LCOE from conversation text — unified path for both chat contexts."""
-
         async def _progress(msg: str) -> None:
             if on_progress:
                 await on_progress(msg)
@@ -382,81 +399,43 @@ class LCOETool(BaseModule):
         if not tech_type and extracted.get("technology_type"):
             tech_type = extracted.pop("technology_type", None)
         extracted.pop("location", None)
-        adapter = get_adapter_registry().get("lcoe")
-        if adapter is None:
-            raise RuntimeError("lcoe adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id=getattr(self, "user_id", None) or "system",
-            user_email=None,
-            initiative_id=None,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id="lcoe:conversation",
-        )
+
         await _progress("Calculating LCOE...")
-        result = await adapter.execute(ctx, None, {"tech_type": tech_type, "known_values": extracted})
-        widget_data: dict[str, Any] = dict(result.output)
-        widget_data["technology_type"] = tech_type
+        widget_data = await self.recalculate_from_values(tech_type=tech_type, known_values=extracted)
+
         if widget_data.get("computable"):
             widget_type = "lcoe_output"
             lcoe_result = (widget_data.get("result") or {})
             await _progress(
                 f"LCOE: {lcoe_result.get('currency', '')} {lcoe_result.get('lcoe', 0):.4f}/kWh "
-                f"({lcoe_result.get('assumption_count', 0)} assumptions, {lcoe_result.get('quality_label', 'unknown')} confidence)"
+                f"({lcoe_result.get('assumption_count', 0)} assumptions)"
             )
         else:
             widget_type = "lcoe_inputs"
             await _progress(
-                f"Need {len(widget_data.get('missing_essentials', []))} more inputs to compute — showing input table"
+                f"Need {len(widget_data.get('missing_essentials', []))} more inputs — showing input table"
             )
 
         return widget_type, widget_data
 
-    async def recalculate(
-        self,
-        inputs_dict: dict[str, dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Recalculate from a dict of serialized LCOEInput dicts.
 
-        This is the fast path used when the user edits a single value
-        in the inputs table widget — no LLM call, pure math.
-        """
-        known_values: dict[str, Any] = {}
-        for key, value in inputs_dict.items():
-            if isinstance(value, dict):
-                known_values[key] = value.get("value")
-            else:
-                known_values[key] = value
-        tech_type = known_values.pop("technology_type", None)
-
-        adapter = get_adapter_registry().get("lcoe")
-        if adapter is None:
-            raise RuntimeError("lcoe adapter is not registered.")
-        ctx = ExecutionContext(
-            user_id=getattr(self, "user_id", None) or "system",
-            user_email=None,
-            initiative_id=None,
-            initiative_role=None,
-            ai_access_granted=True,
-            is_byok=False,
-            request_id="lcoe:recalculate",
-        )
-        result = await adapter.execute(ctx, None, {"tech_type": tech_type, "known_values": known_values})
-        result_data = dict(result.output)
-        result_data["technology_type"] = tech_type
-        return result_data
-
-    async def build_workspace_widget_data(
-        self,
-        known_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        from app.services.lcoe_engine import LCOEEngine
-
-        tech_type = known_values.get("technology_type")
-        inputs = LCOEEngine.build_default_inputs(
-            tech_type=tech_type,
-            known_values=known_values,
-        )
-        serialized_inputs = {key: value.to_dict() for key, value in inputs.items()}
-        return await self.recalculate(serialized_inputs)
+def _variable_name_to_key(variable_label: str) -> str:
+    """Map human-readable variable labels back to engine field keys."""
+    mapping = {
+        "Net Capacity": "net_capacity_kw",
+        "Capacity Factor": "capacity_factor",
+        "Total CAPEX": "total_capex",
+        "Annual O&M": "annual_opex",
+        "Annual Fuel Cost": "annual_fuel_cost",
+        "Discount Rate": "discount_rate",
+        "Project Life": "project_life_years",
+        "Degradation Rate": "degradation_rate",
+        "Construction Years": "construction_years",
+        "Technology Type": "technology_type",
+        "Currency": "currency",
+    }
+    for label, key in mapping.items():
+        if label.lower() in variable_label.lower():
+            return key
+    # Fallback: snake_case the label
+    return variable_label.lower().replace(" ", "_").replace("(", "").replace(")", "").replace("/", "_")

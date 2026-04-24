@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Loader2, Pencil } from 'lucide-react';
 import type { WorkflowSetup, SetupFieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
+import { ConfirmButton } from '@/components/ui';
 
 interface SetupStageProps {
   instanceId: string;
@@ -197,22 +198,14 @@ export function SetupStage({
 
         {/* Footer actions */}
         <div className="flex-shrink-0 px-5 py-3 border-t border-divider bg-surface-subtle flex justify-center">
-          <button
-            type="button"
+          <ConfirmButton
             onClick={handleConfirm}
-            disabled={!allRequired || confirming || drafting}
-            className="btn-primary !text-xs !px-4 !py-1.5"
-            style={{ width: '40%' }}
-          >
-            {confirming ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Confirming…
-              </>
-            ) : (
-              'Confirm Setup'
-            )}
-          </button>
+            disabled={!allRequired || drafting}
+            loading={confirming}
+            label="Confirm Setup"
+            loadingLabel="Confirming..."
+            className="w-[40%]"
+          />
         </div>
 
       </div>{/* end card-elevated */}

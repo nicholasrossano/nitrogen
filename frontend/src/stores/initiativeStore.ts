@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProposedCategory, ProjectMaterial, DriveLinkedFile, DriveSyncResult } from '@/lib/api';
+import { api, Initiative, ChatMessage, StageStatus, MemoContent, EvidenceDoc, ProjectPlan, ProjectMaterial, DriveImportResult, DriveSyncResult, DriveLinkedFile, FieldContext } from '@/lib/api';
 
 interface MessageVariantEntry {
   versions: ChatMessage[];
@@ -43,9 +43,9 @@ interface InitiativeState {
   uploadMaterial: (id: string, file: File) => Promise<void>;
   deleteMaterial: (materialId: string) => Promise<void>;
   loadDriveLinkedFiles: (id: string) => Promise<void>;
-  importFromDrive: (id: string, fileIds: string[]) => Promise<DriveLinkedFile[]>;
+  importFromDrive: (id: string, fileIds: string[]) => Promise<DriveImportResult>;
   syncDriveFiles: (id: string) => Promise<DriveSyncResult>;
-  sendMessage: (id: string, content: string, toolHint?: string) => Promise<void>;
+  sendMessage: (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => Promise<void>;
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
   retryMessage: (id: string, messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
@@ -58,17 +58,19 @@ interface InitiativeState {
   exportMemo: (id: string) => Promise<void>;
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
   generateAllDeliverables: (id: string) => Promise<void>;
+  generateInitiativeOverview: (id: string) => Promise<Initiative>;
   updateTitle: (id: string, title: string) => Promise<void>;
   _refreshPlanInBackground: (id: string) => Promise<void>;
   loadProjectPlan: (id: string) => Promise<void>;
   generateProjectPlan: (id: string) => Promise<void>;
-  confirmPlanCategories: (id: string, categories: ProposedCategory[]) => Promise<void>;
   updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => void;
   updatePlanItemStatus: (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => Promise<void>;
   deletePlanItem: (id: string, itemId: string) => Promise<void>;
   addPlanItem: (id: string, pillarId: string, title: string, itemType?: 'deliverable' | 'assessment', phaseId?: string) => Promise<void>;
   reset: () => void;
 }
+
+let latestLoadInitiativeRequest = 0;
 
 export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   // Initial state
@@ -95,9 +97,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
 
   // Load initiative details (also populates projectPlan from the response)
   loadInitiative: async (id: string) => {
+    const requestId = ++latestLoadInitiativeRequest;
     set({ loading: true, error: null });
     try {
       const initiative = await api.getInitiative(id);
+      if (requestId !== latestLoadInitiativeRequest) return;
       set({
         initiative,
         loading: false,
@@ -105,6 +109,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         projectPlan: initiative.project_plan ?? null,
       });
     } catch (error) {
+      if (requestId !== latestLoadInitiativeRequest) return;
       set({ 
         error: error instanceof Error ? error.message : 'Failed to load initiative',
         loading: false 
@@ -228,15 +233,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         driveLinkedFiles: links,
       }));
     }
-    return result.imported.map((f) => ({
-      id: f.drive_link_id,
-      evidence_doc_id: f.id,
-      drive_file_id: fileIds[result.imported.indexOf(f)] ?? '',
-      drive_file_name: f.filename,
-      drive_mime_type: '',
-      drive_modified_time: f.created_at,
-      last_synced_at: f.created_at,
-    }));
+    return result;
   },
 
   // Check Drive-linked files for changes and re-index updated ones
@@ -251,7 +248,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   },
 
   // Send a message with streaming
-  sendMessage: async (id: string, content: string, toolHint?: string) => {
+  sendMessage: async (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
     const { messages } = get();
     
     // Set sending state first
@@ -336,6 +333,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           set({ messages: finalMessages });
         },
         toolHint,
+        fieldContext,
       );
     } catch (error) {
       console.error('sendMessage: error', error);
@@ -668,6 +666,15 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
+  generateInitiativeOverview: async (id: string) => {
+    const initiative = await api.generateInitiativeOverview(id);
+    set((state) => ({
+      initiative,
+      projectPlan: initiative.project_plan ?? state.projectPlan,
+    }));
+    return initiative;
+  },
+
   // Update initiative title
   updateTitle: async (id: string, title: string) => {
     try {
@@ -707,25 +714,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     try {
       const response = await api.generateProjectPlan(id);
       set({ projectPlan: response.project_plan, projectPlanLoading: false });
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to generate project plan',
-        projectPlanLoading: false,
-      });
-    }
-  },
-
-  // Confirm proposed categories and generate the full plan
-  confirmPlanCategories: async (id: string, categories: ProposedCategory[]) => {
-    set({ projectPlanLoading: true, error: null });
-    try {
-      const response = await api.confirmPlanCategories(id, categories);
-      const initiative = await api.getInitiative(id);
-      set({
-        projectPlan: response.project_plan,
-        initiative,
-        projectPlanLoading: false,
-      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to generate project plan',

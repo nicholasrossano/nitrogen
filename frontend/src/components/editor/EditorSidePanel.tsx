@@ -12,8 +12,6 @@ const DocumentViewerWidget = dynamic(() => import('@/components/widgets/Document
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
 const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
 
-export type RightPanelMode = 'closed' | 'project_plan' | 'editor';
-
 export const EDITOR_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
   'carbon_inputs', 'carbon_output',
@@ -48,6 +46,8 @@ export interface EditorWidget {
 interface EditorSidePanelProps {
   widgets: EditorWidget[];
   initiativeId?: string;
+  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
 }
 
 const WIDGET_LABELS: Record<string, string> = {
@@ -64,7 +64,12 @@ const WIDGET_LABELS: Record<string, string> = {
   module_workspace: 'Module',
 };
 
-export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelProps) {
+export function EditorSidePanel({
+  widgets,
+  initiativeId = '',
+  onOpenDecisionLog,
+  onExportDecisionLog,
+}: EditorSidePanelProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const displayIndex = activeIndex ?? widgets.length - 1;
@@ -101,6 +106,8 @@ export function EditorSidePanel({ widgets, initiativeId = '' }: EditorSidePanelP
             data={widget.data}
             initiativeId={initiativeId}
             messageId={widget.messageId}
+            onOpenDecisionLog={onOpenDecisionLog}
+            onExportDecisionLog={onExportDecisionLog}
           />
         </ErrorBoundary>
       </div>
@@ -113,11 +120,15 @@ function EditorWidgetRenderer({
   data,
   initiativeId,
   messageId,
+  onOpenDecisionLog,
+  onExportDecisionLog,
 }: {
   type: string;
   data: Record<string, any>;
   initiativeId: string;
   messageId: string;
+  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
 }) {
   switch (type) {
     case 'lcoe_inputs':
@@ -142,6 +153,8 @@ function EditorWidgetRenderer({
           instanceId={data.instance_id}
           moduleId={data.module_id}
           initiativeId={initiativeId}
+          onOpenDecisionLog={onOpenDecisionLog}
+          onExportDecisionLog={onExportDecisionLog}
         />
       );
     default:

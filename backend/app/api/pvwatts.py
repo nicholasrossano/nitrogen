@@ -24,7 +24,11 @@ class UpdateInputRequest(BaseModel):
     field_name: str
     value: Any
     source: str = "user"
-    status: str = "confirmed"
+    status: str = "validated"
+
+
+def _normalize_input_status(status: str) -> str:
+    return "validated" if status == "confirmed" else status
 
 
 class GeocodeRequest(BaseModel):
@@ -55,10 +59,11 @@ async def update_input_and_recalculate(
 ):
     """Update a single input field and recalculate."""
     inputs = data.inputs
+    normalized_status = _normalize_input_status(data.status)
     if data.field_name in inputs:
         inputs[data.field_name]["value"] = data.value
         inputs[data.field_name]["source"] = data.source
-        inputs[data.field_name]["status"] = data.status
+        inputs[data.field_name]["status"] = normalized_status
     else:
         inputs[data.field_name] = {
             "field_name": data.field_name,
@@ -66,7 +71,7 @@ async def update_input_and_recalculate(
             "value": data.value,
             "unit": "",
             "source": data.source,
-            "status": data.status,
+            "status": normalized_status,
             "notes": "",
             "rationale": "",
             "category": "general",
@@ -286,7 +291,7 @@ async def export_solar_excel(
             elif field_name == "array_type":
                 val = ARRAY_TYPE_LABELS.get(int(val), str(val)) if val is not None else ""
             status = field.get("status", "")
-            row_fill = confirmed_fill if status == "confirmed" else assumed_fill if status == "assumed" else None
+            row_fill = confirmed_fill if status == "validated" else assumed_fill if status == "assumed" else None
             row_data = [field.get("label", field_name), val, field.get("unit", ""), status, field.get("notes", "")]
             for col, cell_val in enumerate(row_data, 1):
                 c = ws2.cell(row2, col, cell_val if cell_val is not None else "—")
@@ -296,7 +301,7 @@ async def export_solar_excel(
             row2 += 1
 
     row2 += 1
-    ws2.cell(row2, 1, "Green = user-confirmed  |  Yellow = assumed default").font = Font(italic=True, color="888888", size=9)
+    ws2.cell(row2, 1, "Green = user-validated  |  Yellow = assumed default").font = Font(italic=True, color="888888", size=9)
 
     buf = io.BytesIO()
     wb.save(buf)

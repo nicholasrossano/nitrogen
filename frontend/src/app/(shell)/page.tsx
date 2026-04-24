@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search } from 'lucide-react';
 import { api, Initiative } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { PageLoader } from '@/components/ui/PageLoader';
+
+const PINNED_PROJECTS_STORAGE_KEY = 'nitrogen-pinned-project-ids';
+const MAX_PINNED_PROJECTS = 3;
 
 function HomePageContent() {
   const router = useRouter();
@@ -15,6 +19,9 @@ function HomePageContent() {
   const [error, setError] = useState<string | null>(null);
   const [isTrashView, setIsTrashView] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const prevCardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -34,11 +41,34 @@ function HomePageContent() {
     loadProjects();
   }, [loadProjects]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PINNED_PROJECTS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const normalized = parsed
+        .filter((id): id is string => typeof id === 'string')
+        .slice(0, MAX_PINNED_PROJECTS);
+      setPinnedProjectIds(normalized);
+    } catch (err) {
+      console.warn('Failed to read pinned projects:', err);
+    }
+  }, []);
+
+  const persistPinnedProjects = useCallback((ids: string[]) => {
+    try {
+      localStorage.setItem(PINNED_PROJECTS_STORAGE_KEY, JSON.stringify(ids));
+    } catch (err) {
+      console.warn('Failed to persist pinned projects:', err);
+    }
+  }, []);
+
   const handleNewProject = async () => {
     setCreating(true);
     try {
       const initiative = await api.createInitiative();
-      router.push(`/initiatives/${initiative.id}`);
+      router.push(`/initiatives/${initiative.id}?view=overview`);
     } catch (error) {
       console.error('Failed to create project:', error);
       setCreating(false);
@@ -46,13 +76,9 @@ function HomePageContent() {
   };
 
   const handleDeleteProject = async (id: string) => {
-    if (!confirm('Are you sure you want to move this project to trash?')) {
-      return;
-    }
-    
     try {
       await api.deleteInitiative(id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (error) {
       console.error('Failed to delete project:', error);
     }
@@ -61,7 +87,7 @@ function HomePageContent() {
   const handlePermanentDelete = async (id: string) => {
     try {
       await api.permanentlyDeleteInitiative(id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (error) {
       console.error('Failed to permanently delete project:', error);
     }
@@ -70,11 +96,27 @@ function HomePageContent() {
   const handleRestoreProject = async (id: string) => {
     try {
       await api.restoreInitiative(id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (error) {
       console.error('Failed to restore project:', error);
     }
   };
+
+  const handleTogglePinProject = useCallback((id: string) => {
+    setPinnedProjectIds((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((pinnedId) => pinnedId !== id);
+        persistPinnedProjects(next);
+        return next;
+      }
+      if (prev.length >= MAX_PINNED_PROJECTS) {
+        return prev;
+      }
+      const next = [...prev, id];
+      persistPinnedProjects(next);
+      return next;
+    });
+  }, [persistPinnedProjects]);
 
   const pageTitle = isTrashView ? 'Trash' : 'All Projects';
 
@@ -86,6 +128,42 @@ function HomePageContent() {
     const desc = (p.project_description || '').toLowerCase();
     return title.includes(q) || sector.includes(q) || desc.includes(q);
   });
+  const pinnedProjectSet = new Set(pinnedProjectIds);
+  const pinnedProjects = filteredProjects
+    .filter((p) => pinnedProjectSet.has(p.id))
+    .sort((a, b) => (a.title || 'New Project').localeCompare(b.title || 'New Project', undefined, { sensitivity: 'base' }));
+  const unpinnedProjects = filteredProjects.filter((p) => !pinnedProjectSet.has(p.id));
+  const displayedProjects = isTrashView ? filteredProjects : [...pinnedProjects, ...unpinnedProjects];
+
+  useLayoutEffect(() => {
+    const nextPositions = new Map<string, DOMRect>();
+    displayedProjects.forEach((project) => {
+      const element = cardRefs.current.get(project.id);
+      if (element) {
+        nextPositions.set(project.id, element.getBoundingClientRect());
+      }
+    });
+
+    displayedProjects.forEach((project) => {
+      const element = cardRefs.current.get(project.id);
+      const nextRect = nextPositions.get(project.id);
+      const prevRect = prevCardPositionsRef.current.get(project.id);
+      if (!element || !nextRect || !prevRect) return;
+
+      const deltaX = prevRect.left - nextRect.left;
+      const deltaY = prevRect.top - nextRect.top;
+      if (deltaX === 0 && deltaY === 0) return;
+
+      element.style.transition = 'none';
+      element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      requestAnimationFrame(() => {
+        element.style.transition = 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)';
+        element.style.transform = 'translate(0px, 0px)';
+      });
+    });
+
+    prevCardPositionsRef.current = nextPositions;
+  }, [displayedProjects]);
 
   return (
     <>
@@ -99,12 +177,32 @@ function HomePageContent() {
         <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-auto">
           <div className="px-6 py-4">
           <div className="mb-6 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0 max-w-2xl">
+            <div className="relative h-7 flex-1 min-w-0 max-w-2xl">
+              <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
+              </span>
+              <input
+                type="search"
+                placeholder={isTrashView ? 'Search trash' : 'Search projects'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-7 appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-lg bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
+                aria-label={isTrashView ? 'Search trash' : 'Search projects'}
+              />
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsTrashView((v) => !v)}
+                className={`btn-secondary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg ${isTrashView ? '!border-accent !text-accent' : ''}`}
+              >
+                {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+                {isTrashView ? 'Back to Projects' : 'Trash'}
+              </button>
               {!isTrashView && (
                 <button
                   onClick={handleNewProject}
                   disabled={creating}
-                  className="btn-primary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0"
+                  className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg"
                 >
                   {creating ? (
                     <>
@@ -119,31 +217,11 @@ function HomePageContent() {
                   )}
                 </button>
               )}
-              <div className="relative h-[36px] flex-1 min-w-0">
-                <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                  <Search className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
-                </span>
-                <input
-                  type="search"
-                  placeholder={isTrashView ? 'Search trash' : 'Search projects'}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-[36px] appearance-none leading-none pl-[2.25rem] pr-4 text-xs rounded-[20px] bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors duration-150"
-                  aria-label={isTrashView ? 'Search trash' : 'Search projects'}
-                />
-              </div>
             </div>
-            <button
-              onClick={() => setIsTrashView((v) => !v)}
-              className={`btn-secondary shrink-0 !h-[36px] !text-xs !leading-none !px-4 !py-0 ${isTrashView ? '!border-accent !text-accent' : ''}`}
-            >
-              {isTrashView ? <Undo2 className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
-              {isTrashView ? 'Back to Projects' : 'Trash'}
-            </button>
           </div>
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-6 h-6 text-accent animate-spin" />
+              <PageLoader label="" />
             </div>
           ) : error ? (
             <div className="text-center py-20">
@@ -155,7 +233,7 @@ function HomePageContent() {
                 Try again
               </button>
             </div>
-          ) : filteredProjects.length === 0 ? (
+          ) : displayedProjects.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 max-w-md mx-auto text-center">
               <div className={`w-16 h-16 rounded-lg flex items-center justify-center mb-6 ${isTrashView ? 'bg-surface-subtle' : 'bg-accent-wash'}`}>
                 {isTrashView ? (
@@ -200,14 +278,28 @@ function HomePageContent() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {filteredProjects.map((project) => (
-                <ProjectCard 
-                  key={project.id} 
-                  project={project} 
-                  onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
-                  onRestore={isTrashView ? handleRestoreProject : undefined}
-                  isTrash={isTrashView}
-                />
+              {displayedProjects.map((project) => (
+                <div
+                  key={project.id}
+                  ref={(node) => {
+                    if (node) {
+                      cardRefs.current.set(project.id, node);
+                    } else {
+                      cardRefs.current.delete(project.id);
+                    }
+                  }}
+                  className="will-change-transform"
+                >
+                  <ProjectCard
+                    project={project}
+                    onDelete={isTrashView ? handlePermanentDelete : handleDeleteProject}
+                    onRestore={isTrashView ? handleRestoreProject : undefined}
+                    isTrash={isTrashView}
+                    isPinned={pinnedProjectSet.has(project.id)}
+                    canPinMore={pinnedProjectSet.has(project.id) || pinnedProjectIds.length < MAX_PINNED_PROJECTS}
+                    onTogglePin={handleTogglePinProject}
+                  />
+                </div>
               ))}
             </div>
           )}

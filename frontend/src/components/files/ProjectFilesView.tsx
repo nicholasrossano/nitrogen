@@ -16,6 +16,14 @@ import {
 type TabType = 'uploaded' | 'generated';
 import { api, ProjectMaterial, GeneratedFile, ProjectFilesResponse, DriveLinkedFile } from '@/lib/api';
 import { Tooltip } from '@/components/ui/Tooltip';
+import {
+  dataTableContainerClass,
+  dataTableHeaderCellClass,
+  dataTableTableClass,
+  dataTableHeaderRowClass,
+  dataTableBodyClass,
+  dataTablePaginationButtonClass,
+} from '@/components/ui/ReadOnlyDataTable';
 import { filterSupportedFiles, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface ProjectFilesViewProps {
@@ -231,7 +239,7 @@ export function ProjectFilesView({
   const pagedMaterials = materials.slice((uploadedPage - 1) * PAGE_SIZE, uploadedPage * PAGE_SIZE);
   const pagedGenerated = generatedFiles.slice((generatedPage - 1) * PAGE_SIZE, generatedPage * PAGE_SIZE);
 
-  const thClass = 'text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wide px-4 py-2.5';
+  const thClass = dataTableHeaderCellClass;
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -371,11 +379,11 @@ export function ProjectFilesView({
             </div>
             {hasUploaded ? (
             <>
-            <div className="rounded-lg overflow-hidden border border-divider">
+            <div className={dataTableContainerClass}>
               <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className={dataTableTableClass}>
                 <thead>
-                  <tr className="bg-black/[0.02]">
+                  <tr className={dataTableHeaderRowClass}>
                     <th className={thClass}>Name</th>
                     <th className={`${thClass} w-20`}>Type</th>
                     <th className={`${thClass} w-24`}>Size</th>
@@ -383,7 +391,7 @@ export function ProjectFilesView({
                     <th className={`${thClass} w-20 text-center`}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-divider">
+                <tbody className={dataTableBodyClass}>
                   {pagedMaterials.map((mat) => {
                     const isDrive = driveLinkedIds.has(mat.id);
                     return (
@@ -466,7 +474,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setUploadedPage((p) => Math.max(1, p - 1))}
                     disabled={uploadedPage === 1}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className={dataTablePaginationButtonClass}
                   >
                     Previous
                   </button>
@@ -474,7 +482,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setUploadedPage((p) => Math.min(uploadedTotalPages, p + 1))}
                     disabled={uploadedPage === uploadedTotalPages}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className={dataTablePaginationButtonClass}
                   >
                     Next
                   </button>
@@ -505,11 +513,11 @@ export function ProjectFilesView({
             </div>
             {hasGenerated ? (
             <>
-            <div className="rounded-lg overflow-hidden border border-divider">
+            <div className={dataTableContainerClass}>
               <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className={dataTableTableClass}>
                 <thead>
-                  <tr className="bg-black/[0.02]">
+                  <tr className={dataTableHeaderRowClass}>
                     <th className={thClass}>Name</th>
                     <th className={`${thClass} w-20`}>Type</th>
                     <th className={`${thClass} w-24`}>Size</th>
@@ -517,7 +525,7 @@ export function ProjectFilesView({
                     <th className={`${thClass} w-20 text-center`}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-divider">
+                <tbody className={dataTableBodyClass}>
                   {pagedGenerated.map((file) => (
                     <tr key={file.id}>
                       <td className="px-4 py-2.5 max-w-0 w-full">
@@ -586,7 +594,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setGeneratedPage((p) => Math.max(1, p - 1))}
                     disabled={generatedPage === 1}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className={dataTablePaginationButtonClass}
                   >
                     Previous
                   </button>
@@ -594,7 +602,7 @@ export function ProjectFilesView({
                   <button
                     onClick={() => setGeneratedPage((p) => Math.min(generatedTotalPages, p + 1))}
                     disabled={generatedPage === generatedTotalPages}
-                    className="px-2.5 py-1 rounded text-xs text-text-secondary enabled:hover:bg-black/[0.04] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className={dataTablePaginationButtonClass}
                   >
                     Next
                   </button>

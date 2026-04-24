@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Copy, Pencil, ThumbsUp, ThumbsDown, RefreshCw, Check, BookMarked, BookOpen, FileText, GraduationCap, Globe, AlertCircle } from 'lucide-react';
 import type { SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 
 interface ToolbarIconProps {
   icon: React.ReactNode;
@@ -88,7 +89,7 @@ interface AssistantMessageToolbarProps {
   retrying: boolean;
   hideRetry?: boolean;
   sources?: SourceCitation[];
-  onCitationClick?: (citation: SourceCitation) => void;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
 }
 
 function getSourceIcon(type: string) {
@@ -119,7 +120,7 @@ export function AssistantMessageToolbar({
   retrying,
   hideRetry = false,
   sources,
-  onCitationClick,
+  onOpenDocument,
 }: AssistantMessageToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -251,7 +252,7 @@ export function AssistantMessageToolbar({
                       <span className="text-[10px] uppercase tracking-wide text-text-tertiary shrink-0 w-14">
                         {getSourceLabel(source.source_type)}
                       </span>
-                      {isInternal && onCitationClick ? (
+                      {isInternal && onOpenDocument ? (
                         <button
                           className="text-xs text-accent hover:underline truncate text-left"
                           onClick={() => {
@@ -260,7 +261,11 @@ export function AssistantMessageToolbar({
                               source_id: source.chunk_id || source.source_title,
                               internal: true,
                             });
-                            onCitationClick(source);
+                            onOpenDocument({
+                              evidence_doc_id: source.evidence_doc_id!,
+                              chunk_id: source.chunk_id ?? null,
+                              source_title: source.source_title,
+                            });
                             setSourcesOpen(false);
                           }}
                         >

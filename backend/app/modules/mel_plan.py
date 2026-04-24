@@ -1,38 +1,28 @@
 """Monitoring, Evaluation & Learning (MEL) Plan Module.
 
-Three-layer Build workflow:
-  dimensions   (simple_list)    → result chain levels or thematic impact dimensions
-  indicators   (structured_list) → indicators per dimension
-  data_plan    (structured_list) → data collection details per indicator
+Stage workflow:
+  1. Impact Dimensions    (list / categorized_list)
+  2. Indicators           (list / categorized_workspace)
+  3. Data Collection Plan (record / categorized_workspace)
 
-After Data Plan layer is confirmed, "Generate Output" drafts the full MEL
-plan as a results framework with per-dimension sections and inline citations.
+Export: DOCX generated on demand from confirmed stage data.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from uuid import UUID
+from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.modules.base import ModuleDefinition, ModuleManifest
-from app.modules.assessment_base import (
-    AssessmentModuleDef,
-    BaseAssessmentModule,
-    BuildLayerDef,
-    SetupFieldDef,
-    make_build_item,
-    llm_json,
-)
+from app.modules.base import BaseModule, FieldDef, PopulationStep, StageDef, ModuleDefinition, ModuleManifest
+from app.modules.retrieval import retrieve_evidence
+from app.modules.utils import llm_json
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class MELPlanModule(BaseAssessmentModule):
+class MELPlanModule(BaseModule):
     """Monitoring, Evaluation & Learning Plan — results framework for grant/DFI reporting."""
 
     @property
@@ -57,9 +47,7 @@ class MELPlanModule(BaseAssessmentModule):
         return ModuleManifest(
             **self.definition.__dict__,
             goal="Produce a MEL plan with indicators and data collection strategy for reporting.",
-            primary_ui_object="assessment_viewer",
-            workspace_build_widget="assessment_build",
-            workspace_output_widget="assessment_output",
+            primary_ui_object="categorized_workspace",
             export_artifact_types=["docx"],
             adapter_bindings={"research_source": "retrieval"},
             input_dependencies=[],
@@ -70,290 +58,121 @@ class MELPlanModule(BaseAssessmentModule):
         )
 
     @property
-    def assessment_definition(self) -> AssessmentModuleDef:
-        return AssessmentModuleDef(
-            setup_fields=[
-                SetupFieldDef(
-                    name="geography",
-                    label="Geography / Location",
-                    description="Where is the project located?",
-                    field_type="text",
-                    placeholder="e.g. Northern Ghana, Nairobi county Kenya",
-                ),
-                SetupFieldDef(
-                    name="sector",
-                    label="Sector",
-                    description="What sector does the project operate in?",
-                    field_type="select",
-                    options=[
-                        "Energy Access",
-                        "Clean Cooking",
-                        "Water & Sanitation",
-                        "Agriculture",
-                        "Health",
-                        "Education",
-                        "Financial Inclusion",
-                        "Other",
-                    ],
-                ),
-                SetupFieldDef(
-                    name="reporting_framework",
-                    label="Reporting Framework",
-                    description="Which framework should indicators align to?",
-                    field_type="select",
-                    options=[
-                        "IRIS+ (GIIN)",
-                        "SDG Indicators",
-                        "EU Results Framework",
-                        "USAID Standard Indicators",
-                        "Donor-specific",
-                        "Internal only",
-                    ],
-                ),
-                SetupFieldDef(
-                    name="target_population",
-                    label="Target Population",
-                    description="Who are the primary beneficiaries?",
-                    field_type="text",
-                    placeholder="e.g. rural households in Northern Ghana, smallholder farmers",
-                ),
-            ],
-            build_layers=[
-                BuildLayerDef(
-                    id="dimensions",
-                    name="Impact Dimensions",
-                    view_type="simple_list",
-                    description="Result chain levels or thematic impact dimensions to measure",
-                    item_schema={"title": "Dimension or result level name"},
-                ),
-                BuildLayerDef(
-                    id="indicators",
-                    name="Indicators",
-                    view_type="structured_list",
-                    description="Specific indicators to track within each dimension",
-                    item_schema={
-                        "indicator_name": "Full indicator name",
-                        "unit": "Unit of measurement (e.g. households, %, tCO2e)",
-                        "parent": "Which Impact Dimension this belongs to",
-                    },
-                ),
-                BuildLayerDef(
-                    id="data_plan",
-                    name="Data Collection Plan",
-                    view_type="structured_list",
-                    description="Data collection method, baseline, and target for each indicator",
-                    item_schema={
-                        "indicator_name": "The indicator being planned (from Indicators layer)",
-                        "baseline": "Baseline value or source",
-                        "target": "Target value by project end",
-                        "data_source": "Where data comes from (e.g. household survey, admin records)",
-                        "collection_method": "How data is collected (survey, observation, records review)",
-                        "frequency": "How often data is collected (monthly, quarterly, annually)",
-                        "responsible_party": "Who collects and reports this data",
-                        "parent": "Which Impact Dimension this belongs to",
-                    },
-                ),
-            ],
-            output_type="assessment_document",
-        )
+    def stage_defs(self) -> list[StageDef]:
+        return [
+            StageDef(
+                id="dimensions",
+                title="Impact Dimensions",
+                component="list",
+                widget="categorized_list",
+                fields=[
+                    FieldDef("label", "text", required=True, label="Dimension"),
+                    FieldDef("description", "long_text", label="Description"),
+                ],
+                population=[
+                    PopulationStep("seed_from_template"),
+                    PopulationStep("adapt_with_ai_from_project_materials", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="indicators",
+                title="Indicators",
+                component="list",
+                widget="categorized_workspace",
+                fields=[
+                    FieldDef("indicator_name", "text", required=True, label="Indicator Name"),
+                    FieldDef("unit", "text", label="Unit"),
+                    FieldDef("dimension", "text", required=True, label="Impact Dimension"),
+                ],
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "dimensions"}),
+                    PopulationStep("extract_from_project_materials"),
+                    PopulationStep("propose_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+            StageDef(
+                id="data_plan",
+                title="Data Collection Plan",
+                component="record",
+                widget="categorized_workspace",
+                fields=[
+                    FieldDef("baseline", "text", label="Baseline"),
+                    FieldDef("target", "text", label="Target"),
+                    FieldDef("data_source", "text", label="Data Source"),
+                    FieldDef("collection_method", "text", label="Collection Method"),
+                    FieldDef("frequency", "select", label="Frequency",
+                             options=["Monthly", "Quarterly", "Semi-annual", "Annual", "End-line only"]),
+                    FieldDef("responsible_party", "text", label="Responsible Party"),
+                ],
+                population=[
+                    PopulationStep("read_confirmed_prior_stage", {"stage_id": "indicators"}),
+                    PopulationStep("enrich_selected_item_with_ai", {"require_citation": True}),
+                    PopulationStep("await_user_confirmation"),
+                ],
+            ),
+        ]
 
-    async def generate_setup_defaults(
+    # ------------------------------------------------------------------ #
+    # Population hooks                                                     #
+    # ------------------------------------------------------------------ #
+
+    async def generate_items_for_stage(
         self,
-        db: AsyncSession,
-        initiative_id: UUID,
+        stage_id: str,
+        step_type: str,
+        context: dict,
+        prior_data: dict[str, Any],
+    ) -> list[dict]:
+        if stage_id == "dimensions":
+            return await self._generate_dimensions(context)
+        elif stage_id == "indicators":
+            prior_dims = (prior_data.get("dimensions") or {}).get("data", {}).get("items", [])
+            return await self._generate_indicators(context, prior_dims)
+        return []
+
+    async def enrich_record(
+        self,
+        stage_id: str,
+        item_content: dict,
+        existing_record: dict,
         context: dict,
     ) -> dict:
-        return await llm_json(
-            system=(
-                "You are helping configure a Monitoring, Evaluation & Learning (MEL) Plan for a "
-                "development project. Based on the project context, suggest sensible defaults for: "
-                "geography, sector, reporting_framework, target_population. "
-                "For sector choose from: Energy Access, Clean Cooking, Water & Sanitation, "
-                "Agriculture, Health, Education, Financial Inclusion, Other. "
-                "For reporting_framework choose from: IRIS+ (GIIN), SDG Indicators, "
-                "EU Results Framework, USAID Standard Indicators, Donor-specific, Internal only. "
-                "Return a JSON object with those four keys. Use empty string for fields that cannot be inferred."
-            ),
-            user_msg=f"Project context:\n{json.dumps(context, indent=2)}",
-        )
+        if stage_id != "data_plan":
+            raise ValueError(f"enrich_record called for unexpected stage '{stage_id}'")
+        return await self._enrich_data_plan(item_content, existing_record, context)
 
-    async def generate_layer(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        layer_id: str,
-        setup_fields: dict,
-        prior_layers: dict,
-        context: dict,
-    ) -> list[dict]:
-        if layer_id == "dimensions":
-            return await self._generate_dimensions(setup_fields, context)
-        elif layer_id == "indicators":
-            dimension_items = prior_layers.get("dimensions", {}).get("items", [])
-            return await self._generate_indicators(setup_fields, dimension_items, context)
-        elif layer_id == "data_plan":
-            dimension_items = prior_layers.get("dimensions", {}).get("items", [])
-            indicator_items = prior_layers.get("indicators", {}).get("items", [])
-            return await self._generate_data_plan(setup_fields, dimension_items, indicator_items, context)
-        else:
-            logger.warning(f"Unknown layer_id: {layer_id}")
-            return []
+    async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        dimension_items = (confirmed_stages.get("dimensions") or {}).get("data", {}).get("items", [])
+        indicator_items = (confirmed_stages.get("indicators") or {}).get("data", {}).get("items", [])
+        records = (confirmed_stages.get("data_plan") or {}).get("data", {}).get("records", {})
 
-    async def _generate_dimensions(self, setup: dict, context: dict) -> list[dict]:
-        data = await llm_json(
-            system=(
-                "You are an MEL specialist. Generate 4–7 impact dimensions or result chain levels "
-                "for the project's results framework. These should cover the full theory of change — "
-                "typically: Inputs, Activities, Outputs, Outcomes, Impact — or thematic dimensions "
-                "like Access, Affordability, Reliability, Gender & Social Inclusion, Environment, "
-                "Livelihoods. Tailor to the sector and reporting framework. "
-                "Return JSON with key 'dimensions', a list of objects with 'title' only."
-            ),
-            user_msg=(
-                f"Sector: {setup.get('sector', '')}\n"
-                f"Reporting framework: {setup.get('reporting_framework', '')}\n"
-                f"Target population: {setup.get('target_population', '')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"Project description: {context.get('project_description', '')}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={"title": d.get("title", "")},
-                derivation="inferred",
-                rationale="Generated from project context and reporting framework requirements",
-            )
-            for d in data.get("dimensions", [])
-        ]
-
-    async def _generate_indicators(
-        self, setup: dict, dimension_items: list[dict], context: dict
-    ) -> list[dict]:
-        dimensions = [i["content"].get("title", "") for i in dimension_items]
-        dimensions_list = "\n".join(f"- {d}" for d in dimensions)
-        framework = setup.get("reporting_framework", "")
-        data = await llm_json(
-            system=(
-                "You are an MEL specialist. For each impact dimension listed, generate 2–4 "
-                "specific, measurable indicators. Each indicator must have: "
-                "'indicator_name' (full indicator name, specific and measurable), "
-                "'unit' (unit of measurement, e.g. households, %, tCO2e, USD, score), "
-                "'parent' (exactly matching one dimension title). "
-                "Where applicable, align indicators to the specified reporting framework. "
-                "Return JSON with key 'indicators', a flat list."
-            ),
-            user_msg=(
-                f"Sector: {setup.get('sector', '')}\n"
-                f"Reporting framework: {framework}\n"
-                f"Target population: {setup.get('target_population', '')}\n"
-                f"Geography: {setup.get('geography', '')}\n"
-                f"Project description: {context.get('project_description', '')}\n\n"
-                f"Impact dimensions:\n{dimensions_list}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={
-                    "indicator_name": ind.get("indicator_name", ""),
-                    "unit": ind.get("unit", ""),
-                    "parent": ind.get("parent", ""),
-                },
-                derivation="inferred",
-                rationale=f"Aligned to {framework or 'best practice MEL standards'}",
-            )
-            for ind in data.get("indicators", [])
-        ]
-
-    async def _generate_data_plan(
-        self,
-        setup: dict,
-        dimension_items: list[dict],
-        indicator_items: list[dict],
-        context: dict,
-    ) -> list[dict]:
-        dimensions = [i["content"].get("title", "") for i in dimension_items]
-        indicators_text = "\n".join(
-            f"- [{ind['content'].get('parent', '')}] "
-            f"{ind['content'].get('indicator_name', '')} "
-            f"({ind['content'].get('unit', '')})"
-            for ind in indicator_items
-        )
-        data = await llm_json(
-            system=(
-                "You are an MEL specialist drafting a data collection plan. "
-                "For each indicator listed, provide: "
-                "'indicator_name' (repeat the indicator name), "
-                "'baseline' (baseline value, or 'TBD — baseline survey required' if unknown), "
-                "'target' (target value by project end, or a realistic estimate), "
-                "'data_source' (where data comes from: household survey, admin records, "
-                "project MIS, national statistics, etc.), "
-                "'collection_method' (survey, direct observation, records review, sensor data, etc.), "
-                "'frequency' (monthly, quarterly, semi-annual, annual, end-line only), "
-                "'responsible_party' (project M&E officer, implementing partner, independent evaluator), "
-                "'parent' (the impact dimension, exactly matching one of the dimensions listed). "
-                "Return JSON with key 'data_plans', a flat list."
-            ),
-            user_msg=(
-                f"Sector: {setup.get('sector', '')}\n"
-                f"Reporting framework: {setup.get('reporting_framework', '')}\n"
-                f"Target population: {setup.get('target_population', '')}\n"
-                f"Geography: {setup.get('geography', '')}\n\n"
-                f"Impact dimensions: {', '.join(dimensions)}\n\n"
-                f"Indicators to plan for:\n{indicators_text}"
-            ),
-        )
-        return [
-            make_build_item(
-                content={
-                    "indicator_name": dp.get("indicator_name", ""),
-                    "baseline": dp.get("baseline", ""),
-                    "target": dp.get("target", ""),
-                    "data_source": dp.get("data_source", ""),
-                    "collection_method": dp.get("collection_method", ""),
-                    "frequency": dp.get("frequency", ""),
-                    "responsible_party": dp.get("responsible_party", ""),
-                    "parent": dp.get("parent", ""),
-                },
-                derivation="inferred",
-                rationale="Data collection plan aligned to reporting framework requirements",
-            )
-            for dp in data.get("data_plans", [])
-        ]
-
-    async def generate_output(
-        self,
-        db: AsyncSession,
-        initiative_id: UUID,
-        setup_fields: dict,
-        confirmed_build: dict,
-    ) -> dict:
-        dimension_items = confirmed_build.get("dimensions", {}).get("items", [])
-        indicator_items = confirmed_build.get("indicators", {}).get("items", [])
-        data_plan_items = confirmed_build.get("data_plan", {}).get("items", [])
-
-        dimensions = [i["content"].get("title", "") for i in dimension_items]
-
+        dimensions = [i["content"].get("label", "") for i in dimension_items]
         by_dimension: dict[str, dict] = {d: {"indicators": [], "data_plans": []} for d in dimensions}
+
         for item in indicator_items:
-            parent = item["content"].get("parent", "")
+            dim = item["content"].get("dimension", "")
             ind_name = item["content"].get("indicator_name", "")
             unit = item["content"].get("unit", "")
-            if parent in by_dimension:
-                by_dimension[parent]["indicators"].append(f"{ind_name} ({unit})")
-        for item in data_plan_items:
-            parent = item["content"].get("parent", "")
-            c = item["content"]
-            entry = (
-                f"Indicator: {c.get('indicator_name', '')}\n"
-                f"  Baseline: {c.get('baseline', '')}\n"
-                f"  Target: {c.get('target', '')}\n"
-                f"  Source: {c.get('data_source', '')}\n"
-                f"  Method: {c.get('collection_method', '')}\n"
-                f"  Frequency: {c.get('frequency', '')}\n"
-                f"  Responsible: {c.get('responsible_party', '')}"
-            )
-            if parent in by_dimension:
-                by_dimension[parent]["data_plans"].append(entry)
+            if dim in by_dimension:
+                by_dimension[dim]["indicators"].append(f"{ind_name} ({unit})")
+
+        for item_id, record in records.items():
+            source_item = next((i for i in indicator_items if i["id"] == item_id), None)
+            if source_item:
+                dim = source_item["content"].get("dimension", "")
+                entry = (
+                    f"Indicator: {source_item['content'].get('indicator_name', '')}\n"
+                    f"  Baseline: {record.get('baseline', '')}\n"
+                    f"  Target: {record.get('target', '')}\n"
+                    f"  Source: {record.get('data_source', '')}\n"
+                    f"  Method: {record.get('collection_method', '')}\n"
+                    f"  Frequency: {record.get('frequency', '')}\n"
+                    f"  Responsible: {record.get('responsible_party', '')}"
+                )
+                if dim in by_dimension:
+                    by_dimension[dim]["data_plans"].append(entry)
 
         outline_text = "\n\n".join(
             f"### {dim}\n"
@@ -362,49 +181,34 @@ class MELPlanModule(BaseAssessmentModule):
             for dim in dimensions
         )
 
-        geography = setup_fields.get("geography", "")
-        sector = setup_fields.get("sector", "")
-        framework = setup_fields.get("reporting_framework", "")
+        geography = context.get("geography", "")
+        sector = context.get("project_type", "")
         queries = [
             f"monitoring evaluation {dim} {sector} {geography}".strip()
             for dim in dimensions[:5]
         ] + [f"MEL best practices {sector} development impact indicators"]
 
-        context_str, citations = await self._retrieve_evidence(queries, db, initiative_id)
+        context_str, citations = await retrieve_evidence(queries, None, None)
         evidence_block = (
             f"\n\nRetrieved sources — cite as [1], [2] … inline:\n{context_str}"
             if context_str else ""
         )
 
-        target_pop = setup_fields.get("target_population", "")
-
         result = await llm_json(
             system=(
-                "You are a senior MEL specialist drafting a professional Monitoring, Evaluation & "
-                "Learning (MEL) Plan for a development project. Using the confirmed impact dimensions, "
-                "indicators, and data collection plan, write a complete MEL plan. The document must:\n"
-                "  • Open with an Executive Summary (4–6 sentences: project overview, theory of change "
-                "    summary, MEL approach, and key outcomes being tracked)\n"
-                "  • Include one section per impact dimension. Each section must present the indicators "
-                "    for that dimension, describe the data collection approach, and explain what the "
-                "    data will tell us about project performance. Cite sources as [1], [2], etc.\n"
-                "  • Include a Learning & Adaptive Management section describing how findings will be "
-                "    used to improve project delivery\n"
-                "  • Close with a Reporting section describing the reporting calendar and outputs "
-                "    (progress reports, mid-term review, end-line evaluation)\n"
-                "  • Use professional language appropriate for a funder submission\n\n"
-                "Return JSON with keys:\n"
-                "  title (string),\n"
-                "  executive_summary (string),\n"
-                "  sections (list of {theme, body} — one per impact dimension, "
-                "use 'theme' as the key name),\n"
-                "  learning_and_adaptive_management (string),\n"
-                "  reporting (string)"
+                "You are a senior MEL specialist drafting a professional MEL Plan for DFI submission. "
+                "Using the confirmed dimensions, indicators, and data collection plan:\n"
+                "  • Executive Summary (4–6 sentences)\n"
+                "  • One section per impact dimension with indicators and data collection approach. "
+                "    Cite sources as [1], [2], etc.\n"
+                "  • Learning & Adaptive Management section\n"
+                "  • Reporting section\n\n"
+                "Return JSON with keys: title, executive_summary, "
+                "sections (list of {theme, body}), learning_and_adaptive_management, reporting"
             ),
             user_msg=(
-                f"Project: Sector={sector}, Geography={geography}, "
-                f"Reporting framework={framework}, Target population={target_pop}\n\n"
-                f"Impact dimensions, indicators, and data plans:\n{outline_text}"
+                f"Project: Sector={sector}, Geography={geography}\n\n"
+                f"Dimensions, indicators, and data plans:\n{outline_text}"
                 f"{evidence_block}"
             ),
             model="gpt-4.1",
@@ -412,4 +216,85 @@ class MELPlanModule(BaseAssessmentModule):
         result = result or {"title": "Monitoring, Evaluation & Learning Plan"}
         if citations:
             result["citations"] = citations
-        return result
+
+        from app.services.docx_exporter import DocxExporterService
+        exporter = DocxExporterService()
+        return exporter.generate_assessment_docx(
+            content=result,
+            initiative_title=context.get("project_title", ""),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Private generation helpers                                           #
+    # ------------------------------------------------------------------ #
+
+    async def _generate_dimensions(self, context: dict) -> list[dict]:
+        data = await llm_json(
+            system=(
+                "You are an MEL specialist. Generate 4–7 impact dimensions or result chain levels "
+                "for the project's results framework. Return JSON with key 'dimensions', "
+                "a list of objects with 'label' and optional 'description'."
+            ),
+            user_msg=(
+                f"Sector: {context.get('project_type', '')}\n"
+                f"Geography: {context.get('geography', '')}\n"
+                f"Description: {context.get('project_description', '')}"
+            ),
+        )
+        return [
+            {"label": d.get("label", d.get("title", "")), "description": d.get("description", "")}
+            for d in data.get("dimensions", [])
+        ]
+
+    async def _generate_indicators(self, context: dict, dimension_items: list[dict]) -> list[dict]:
+        dimensions = [i["content"].get("label", "") for i in dimension_items]
+        dims_list = "\n".join(f"- {d}" for d in dimensions)
+        data = await llm_json(
+            system=(
+                "You are an MEL specialist. For each impact dimension listed, generate 2–4 "
+                "specific, measurable indicators. Each indicator must have: "
+                "'indicator_name', 'unit', 'dimension' (exactly matching one dimension label). "
+                "Return JSON with key 'indicators', a flat list."
+            ),
+            user_msg=(
+                f"Sector: {context.get('project_type', '')}\n"
+                f"Geography: {context.get('geography', '')}\n"
+                f"Impact dimensions:\n{dims_list}"
+            ),
+        )
+        return [
+            {
+                "indicator_name": ind.get("indicator_name", ""),
+                "unit": ind.get("unit", ""),
+                "dimension": ind.get("dimension", ind.get("parent", "")),
+            }
+            for ind in data.get("indicators", [])
+        ]
+
+    async def _enrich_data_plan(
+        self,
+        item_content: dict,
+        existing_record: dict,
+        context: dict,
+    ) -> dict:
+        data = await llm_json(
+            system=(
+                "You are an MEL specialist. Provide a data collection plan for the given indicator. "
+                "Return JSON with keys: baseline, target, data_source, collection_method, "
+                "frequency (Monthly/Quarterly/Semi-annual/Annual/End-line only), responsible_party."
+            ),
+            user_msg=(
+                f"Indicator: {item_content.get('indicator_name', '')} ({item_content.get('unit', '')})\n"
+                f"Dimension: {item_content.get('dimension', '')}\n"
+                f"Sector: {context.get('project_type', '')}\n"
+                f"Geography: {context.get('geography', '')}"
+            ),
+        )
+        return {
+            "baseline": data.get("baseline", existing_record.get("baseline", "")),
+            "target": data.get("target", existing_record.get("target", "")),
+            "data_source": data.get("data_source", existing_record.get("data_source", "")),
+            "collection_method": data.get("collection_method", existing_record.get("collection_method", "")),
+            "frequency": data.get("frequency", existing_record.get("frequency", "")),
+            "responsible_party": data.get("responsible_party", existing_record.get("responsible_party", "")),
+        }

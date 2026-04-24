@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.database import get_db
 from app.core.execution_context import build_context
@@ -19,15 +19,25 @@ from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
-from app.services.chat import ChatService
+from app.services.chat import ChatMode, ChatResponse as ServiceChatResponse, ChatService
 from app.services import module_service
-from app.models.chat import CoreChatSession, CoreChatMessage
+from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
+from app.models.project_material import ProjectMaterial
 from app.core.rate_limit import limiter
+from app.schemas.chat import FieldContext
+from app.api.chat_constants import (
+    INITIAL_ONBOARDING_DOCUMENT_PROMPT,
+    SKIP_EXTRACTION_MESSAGES as _SKIP_EXTRACTION_MESSAGES,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+def _log_chat_stream_debug(event: str, **fields) -> None:
+    serialized = " ".join(f"{key}={value!r}" for key, value in fields.items())
+    logger.info("[chat-stream-debug] %s %s", event, serialized)
 
 
 def _build_project_context(initiative: Initiative) -> str:
@@ -48,6 +58,112 @@ def _build_project_context(initiative: Initiative) -> str:
     return "\n".join(parts) if parts else ""
 
 
+def _to_title_case(text: str) -> str:
+    """Convert extracted titles into consistent title case."""
+    if not text:
+        return text
+    minor_words = {
+        "a", "an", "the", "and", "but", "or", "nor", "for", "so", "yet",
+        "at", "by", "in", "of", "on", "to", "up", "as", "is", "it",
+    }
+    words = text.split()
+    formatted: list[str] = []
+    for idx, word in enumerate(words):
+        if idx == 0 or idx == len(words) - 1 or word.lower() not in minor_words:
+            formatted.append(word if word.isupper() and len(word) > 1 else word.capitalize())
+        else:
+            formatted.append(word.lower())
+    return " ".join(formatted)
+
+
+async def _update_initiative_from_inputs(
+    db: AsyncSession,
+    initiative: Initiative,
+    extracted: dict,
+) -> bool:
+    """Persist extracted initiative context fields when currently unset."""
+    if not extracted:
+        return False
+
+    updated = False
+
+    if extracted.get("project_title") and not initiative.title:
+        initiative.title = _to_title_case(extracted["project_title"])
+        updated = True
+
+    if extracted.get("geography") and not initiative.geography:
+        initiative.geography = extracted["geography"]
+        updated = True
+
+    if extracted.get("project_description") and not initiative.project_description:
+        initiative.project_description = extracted["project_description"]
+        updated = True
+
+    if extracted.get("project_type") and not initiative.project_type:
+        initiative.project_type = extracted["project_type"]
+        updated = True
+
+    if extracted.get("target_beneficiaries") and not initiative.target_population:
+        initiative.target_population = extracted["target_beneficiaries"]
+        updated = True
+
+    if extracted.get("project_goal") and not initiative.goal:
+        initiative.goal = extracted["project_goal"]
+        updated = True
+
+    if updated:
+        await db.flush()
+        await db.refresh(initiative)
+
+    return updated
+
+
+async def _should_trigger_initial_project_onboarding(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    initiative: Initiative,
+    current_user_message_id: uuid.UUID,
+) -> bool:
+    """Only show the upload-documents onboarding widget for the first project chat."""
+    if getattr(initiative, "project_plan", None) or getattr(initiative, "evidence_ready", False):
+        return False
+
+    prior_project_message_count = await db.scalar(
+        select(func.count(CoreChatMessage.id))
+        .select_from(CoreChatMessage)
+        .join(CoreChat, CoreChatMessage.chat_id == CoreChat.id)
+        .where(
+            CoreChat.user_id == user_id,
+            CoreChat.initiative_id == initiative.id,
+            CoreChatMessage.id != current_user_message_id,
+        )
+    )
+    if (prior_project_message_count or 0) > 0:
+        return False
+
+    uploaded_material_count = await db.scalar(
+        select(func.count(ProjectMaterial.id)).where(
+            ProjectMaterial.initiative_id == initiative.id,
+        )
+    )
+    return (uploaded_material_count or 0) == 0
+
+
+async def _build_initial_project_onboarding_response() -> ServiceChatResponse:
+    return ServiceChatResponse(
+        content=INITIAL_ONBOARDING_DOCUMENT_PROMPT,
+        sources=[],
+        tiers_used=[],
+        latency_ms=0,
+        widget_type="document_request",
+        widget_data={
+            "allow_multiple": True,
+            "suggested_types": [],
+        },
+    )
+
+
 class ChatHistoryMessage(BaseModel):
     role: str
     content: str
@@ -56,11 +172,15 @@ class ChatHistoryMessage(BaseModel):
 class ChatStreamRequest(BaseModel):
     content: str = Field(..., max_length=50000)
     history: list[ChatHistoryMessage] = Field(default=[], max_length=100)
-    session_id: Optional[str] = None
+    chat_id: Optional[str] = None
     tool_hint: Optional[str] = None
+    project_context: Optional[str] = Field(default=None, max_length=20000)
+    field_context: Optional[FieldContext] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
+    module_context: Optional[dict] = None
     initiative_id: Optional[str] = None
     compare_initiative_ids: Optional[list[str]] = None
+    allow_initial_project_onboarding: bool = False
 
 
 class TitleRequest(BaseModel):
@@ -71,45 +191,45 @@ class FeedbackRequest(BaseModel):
     feedback: Optional[str] = None  # "like" | "dislike" | null to clear
 
 
-async def _get_or_create_session(
+async def _get_or_create_chat(
     db: AsyncSession,
     user_id: str,
-    session_id: Optional[str],
+    chat_id: Optional[str],
     initiative_id: Optional[uuid.UUID] = None,
-) -> CoreChatSession:
-    """Return an existing session or create a new one."""
-    if session_id:
+) -> CoreChat:
+    """Return an existing chat or create a new one."""
+    if chat_id:
         try:
-            sid = uuid.UUID(session_id)
+            cid = uuid.UUID(chat_id)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid session_id format")
+            raise HTTPException(status_code=400, detail="Invalid chat_id format")
         result = await db.execute(
-            select(CoreChatSession).where(
-                CoreChatSession.id == sid,
-                CoreChatSession.user_id == user_id,
+            select(CoreChat).where(
+                CoreChat.id == cid,
+                CoreChat.user_id == user_id,
             )
         )
-        session = result.scalar_one_or_none()
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if initiative_id and not session.initiative_id:
-            session.initiative_id = initiative_id
+        chat = result.scalar_one_or_none()
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        if initiative_id and not chat.initiative_id:
+            chat.initiative_id = initiative_id
             await db.flush()
-        return session
+        return chat
 
-    session = CoreChatSession(user_id=user_id, initiative_id=initiative_id)
-    db.add(session)
+    chat = CoreChat(user_id=user_id, initiative_id=initiative_id)
+    db.add(chat)
     await db.flush()
-    return session
+    return chat
 
 
-@router.get("/chat/sessions")
-async def list_sessions(
+@router.get("/chats")
+async def list_chats(
     initiative_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Return core chat sessions for the current user, most recent first.
+    """Return core chats for the current user, most recent first.
 
     When initiative_id is provided, only sessions scoped to that project are
     returned.  When omitted, all sessions (including unscoped ones) are returned.
@@ -118,18 +238,18 @@ async def list_sessions(
 
     query = (
         select(
-            CoreChatSession.id,
-            CoreChatSession.title,
-            CoreChatSession.created_at,
-            CoreChatSession.updated_at,
-            CoreChatSession.compare_initiative_ids,
-            CoreChatSession.initiative_id,
+            CoreChat.id,
+            CoreChat.title,
+            CoreChat.created_at,
+            CoreChat.updated_at,
+            CoreChat.compare_initiative_ids,
+            CoreChat.initiative_id,
             func.count(CoreChatMessage.id).label("message_count"),
         )
-        .outerjoin(CoreChatMessage, CoreChatMessage.session_id == CoreChatSession.id)
-        .where(CoreChatSession.user_id == user.uid)
-        .group_by(CoreChatSession.id)
-        .order_by(CoreChatSession.updated_at.desc())
+        .outerjoin(CoreChatMessage, CoreChatMessage.chat_id == CoreChat.id)
+        .where(CoreChat.user_id == user.uid)
+        .group_by(CoreChat.id)
+        .order_by(CoreChat.updated_at.desc())
         .limit(50)
     )
 
@@ -138,13 +258,13 @@ async def list_sessions(
             init_uuid = uuid.UUID(initiative_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid initiative_id")
-        query = query.where(CoreChatSession.initiative_id == init_uuid)
+        query = query.where(CoreChat.initiative_id == init_uuid)
 
     result = await db.execute(query)
     rows = result.all()
 
     return {
-        "sessions": [
+        "chats": [
             {
                 "id": str(r.id),
                 "title": r.title,
@@ -160,38 +280,38 @@ async def list_sessions(
     }
 
 
-@router.get("/chat/sessions/{session_id}/messages")
-async def get_session_messages(
-    session_id: str,
+@router.get("/chats/{chat_id}/messages")
+async def get_chat_messages(
+    chat_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Return all messages for a core chat session."""
+    """Return all messages for a core chat."""
     try:
-        sid = uuid.UUID(session_id)
+        cid = uuid.UUID(chat_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
 
-    session_result = await db.execute(
-        select(CoreChatSession).where(
-            CoreChatSession.id == sid,
-            CoreChatSession.user_id == user.uid,
+    chat_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
         )
     )
-    session = session_result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat = chat_result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
 
     messages_result = await db.execute(
         select(CoreChatMessage)
-        .where(CoreChatMessage.session_id == sid)
+        .where(CoreChatMessage.chat_id == cid)
         .order_by(CoreChatMessage.created_at)
     )
     messages = messages_result.scalars().all()
 
     return {
-        "session_id": str(session.id),
-        "title": session.title,
+        "chat_id": str(chat.id),
+        "title": chat.title,
         "messages": [
             {
                 "id": str(m.id),
@@ -210,31 +330,126 @@ async def get_session_messages(
     }
 
 
-@router.delete("/chat/sessions/{session_id}")
-async def delete_session(
-    session_id: str,
+@router.get("/chats/{chat_id}/modules")
+async def get_chat_modules(
+    chat_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Delete a core chat session and all its messages (CASCADE)."""
-    try:
-        sid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+    """Return module instances associated with a core chat."""
+    from app.models.module_instance import ModuleInstance
 
-    result = await db.execute(
-        select(CoreChatSession).where(
-            CoreChatSession.id == sid,
-            CoreChatSession.user_id == user.uid,
+    try:
+        cid = uuid.UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    chat_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
         )
     )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat = chat_result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
 
-    await db.delete(session)
+    modules_result = await db.execute(
+        select(ModuleInstance)
+        .where(ModuleInstance.chat_id == cid)
+        .order_by(ModuleInstance.started_at.asc())
+    )
+    modules = modules_result.scalars().all()
+
+    return {
+        "modules": [
+            {
+                "instance_id": str(module.id),
+                "module_id": module.module_id,
+                "title": module.title,
+                "status": module.status,
+                "started_at": module.started_at.isoformat() if module.started_at else None,
+            }
+            for module in modules
+        ]
+    }
+
+
+@router.post("/chats/{chat_id}/modules/{instance_id}")
+async def associate_chat_module(
+    chat_id: str,
+    instance_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Associate an existing module instance with a core chat."""
+    from app.models.module_instance import ModuleInstance
+
+    try:
+        cid = uuid.UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    try:
+        iid = uuid.UUID(instance_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid instance_id")
+
+    chat_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
+        )
+    )
+    chat = chat_result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    instance = await db.get(ModuleInstance, iid)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Module instance not found")
+
+    if chat.initiative_id and instance.initiative_id != chat.initiative_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Module instance belongs to a different initiative",
+        )
+
+    instance.chat_id = chat.id
     await db.commit()
-    return {"deleted": True, "session_id": session_id}
+
+    return {
+        "instance_id": str(instance.id),
+        "chat_id": str(chat.id),
+        "module_id": instance.module_id,
+    }
+
+
+@router.delete("/chats/{chat_id}")
+async def delete_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: MockUser = Depends(get_current_user),
+):
+    """Delete a core chat and all its messages (CASCADE)."""
+    try:
+        cid = uuid.UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
+        )
+    )
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    await db.delete(chat)
+    await db.commit()
+    return {"deleted": True, "chat_id": chat_id}
 
 
 @router.post("/chat/stream")
@@ -256,7 +471,7 @@ async def chat_stream(
 
     async def generate():
         try:
-            # Resolve initiative_id for session scoping.
+            # Resolve initiative_id for chat scoping.
             resolved_initiative_id: uuid.UUID | None = None
             if data.initiative_id:
                 try:
@@ -268,13 +483,13 @@ async def chat_stream(
                     # Keep session unscoped; access is enforced below where needed.
                     pass
 
-            # Persist session + user message upfront
-            session = await _get_or_create_session(
-                db, user.uid, data.session_id, initiative_id=resolved_initiative_id,
+            # Persist chat + user message upfront
+            chat = await _get_or_create_chat(
+                db, user.uid, data.chat_id, initiative_id=resolved_initiative_id,
             )
 
             user_msg = CoreChatMessage(
-                session_id=session.id,
+                chat_id=chat.id,
                 role="user",
                 content=data.content,
             )
@@ -296,16 +511,32 @@ async def chat_stream(
             # Reconstruct history server-side from stored messages
             prior_msgs_result = await db.execute(
                 select(CoreChatMessage)
-                .where(CoreChatMessage.session_id == session.id)
+                .where(CoreChatMessage.chat_id == chat.id)
                 .where(CoreChatMessage.id != user_msg.id)
                 .order_by(CoreChatMessage.created_at)
             )
             prior_msgs = prior_msgs_result.scalars().all()
+            conversation_msgs = [*prior_msgs, user_msg]
             history = [{"role": m.role, "content": m.content} for m in prior_msgs]
             ctx = await build_context(db, user, resolved_initiative_id)
-            service = ChatService(db, ctx=ctx)
+            ctx.chat_id = chat.id
 
             verified_initiative: Initiative | None = None
+            project_context: str | None = None
+            field_context = data.field_context.model_dump() if data.field_context else None
+
+            _log_chat_stream_debug(
+                "request",
+                chat_id=str(chat.id),
+                initiative_id=data.initiative_id,
+                compare=bool(data.compare_initiative_ids),
+                tool_hint=data.tool_hint,
+                field_name=(field_context or {}).get("field_name"),
+                has_field_context=bool(field_context),
+                has_model_inputs_context=bool(data.model_inputs_context),
+                has_module_context=bool(data.module_context),
+                allow_initial_project_onboarding=data.allow_initial_project_onboarding,
+            )
 
             # --- Compare mode ---
             compare_contexts: list[dict] | None = None
@@ -325,9 +556,10 @@ async def chat_stream(
                         break
 
                 if compare_contexts:
-                    # Persist compare_initiative_ids on the session
-                    if not session.compare_initiative_ids:
-                        session.compare_initiative_ids = data.compare_initiative_ids
+                    service = ChatService(db, ctx=ctx)
+                    # Persist compare_initiative_ids on the chat
+                    if not chat.compare_initiative_ids:
+                        chat.compare_initiative_ids = data.compare_initiative_ids
                         await db.flush()
 
                     generation_task = asyncio.create_task(
@@ -345,7 +577,6 @@ async def chat_stream(
 
             # --- Single project / normal mode ---
             if not compare_contexts:
-                project_context: str | None = None
                 if data.initiative_id:
                     try:
                         verified_initiative, _role = await get_initiative_with_role(
@@ -356,6 +587,71 @@ async def chat_stream(
                         yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
                         return
 
+                service = ChatService(
+                    db,
+                    ctx=ctx,
+                    mode=ChatMode.PROJECT if verified_initiative else ChatMode.STANDALONE,
+                )
+
+                should_use_initial_project_onboarding = False
+                if verified_initiative:
+                    is_first_turn_in_thread = len(data.history) == 0
+                    should_force_scripted_onboarding = (
+                        data.allow_initial_project_onboarding
+                        and is_first_turn_in_thread
+                        and not field_context
+                        and not data.tool_hint
+                        and not verified_initiative.project_plan
+                        and not verified_initiative.evidence_ready
+                    )
+                    should_use_initial_project_onboarding = await _should_trigger_initial_project_onboarding(
+                        db,
+                        user_id=user.uid,
+                        initiative=verified_initiative,
+                        current_user_message_id=user_msg.id,
+                    )
+                    should_use_initial_project_onboarding = (
+                        should_force_scripted_onboarding
+                        or (
+                            should_use_initial_project_onboarding
+                            and data.allow_initial_project_onboarding
+                            and not field_context
+                            and not data.tool_hint
+                        )
+                    )
+                    # Extract structured fields (type, geography, title) from the user's
+                    # message whenever they're missing — including the first message even when
+                    # we're returning a scripted response.  Skip synthetic UI messages that
+                    # carry no project detail (e.g. "I've uploaded my documents.").
+                    should_extract = (
+                        data.content not in _SKIP_EXTRACTION_MESSAGES
+                        and (
+                            not verified_initiative.project_type
+                            or not verified_initiative.geography
+                            or not verified_initiative.title
+                        )
+                    )
+                    if should_extract:
+                        extracted = await service.extract_inputs_from_message(
+                            message=data.content,
+                            initiative=verified_initiative,
+                        )
+                        updated = await _update_initiative_from_inputs(
+                            db,
+                            verified_initiative,
+                            extracted,
+                        )
+                        if updated:
+                            project_context = _build_project_context(verified_initiative)
+
+            supplemental_project_context = (data.project_context or "").strip()
+            if supplemental_project_context:
+                project_context = (
+                    f"{project_context}\n\n## Active Deep Dive Context\n{supplemental_project_context}"
+                    if project_context
+                    else f"## Active Deep Dive Context\n{supplemental_project_context}"
+                )
+
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
                 if _tool_hint and data.initiative_id:
@@ -363,7 +659,7 @@ async def chat_stream(
                     from app.services.chat import ChatResponse
                     from app.services.module_workflow_service import (
                         ensure_workflow_state,
-                        uses_layered_build,
+                        is_assessment_module,
                         uses_workspace_flow,
                     )
 
@@ -381,21 +677,21 @@ async def chat_stream(
                         if on_thinking:
                             await on_thinking(f"Opening {_workflow_module.definition.name} workspace...")
                         inst = await module_service.get_or_create_instance(
-                            db, verified_initiative.id, _tool_hint, user.uid, session_id=session.id,
+                            db, verified_initiative.id, _tool_hint, user.uid, chat_id=chat.id,
                         )
                         await ensure_workflow_state(db, inst, _workflow_module)
                         await db.commit()
 
-                        if uses_layered_build(_workflow_module):
+                        if is_assessment_module(_workflow_module):
                             intro = (
                                 f"Here's your **{_workflow_module.definition.name}** workspace. "
-                                "Review the setup, work through the build stage, and finalize the output when you're ready."
+                                "Work through each stage and confirm when you're ready to advance."
                             )
                             tiers_used = ["workspace_setup"]
                         else:
                             intro = (
                                 f"Here's your **{_workflow_module.definition.name}** workspace. "
-                                "Review the setup context, refine the build-stage inputs, and continue in the editor."
+                                "Review the inputs, confirm them, and the results will auto-compute."
                             )
                             tiers_used = ["workspace_build"]
 
@@ -411,18 +707,166 @@ async def chat_stream(
 
                     generation_task = asyncio.create_task(_open_workflow_workspace())
                 else:
-                    generation_task = asyncio.create_task(
-                        service.generate_response(
-                            user_message=data.content,
-                            history=history,
-                            on_thinking=on_thinking,
-                            tool_hint=data.tool_hint or None,
-                            model_inputs_context=data.model_inputs_context or None,
-                            project_context=project_context,
-                            on_research_step=on_research_step,
-                            initiative_id=data.initiative_id if verified_initiative else None,
+                    if verified_initiative:
+                        if should_use_initial_project_onboarding:
+                            generation_task = asyncio.create_task(
+                                _build_initial_project_onboarding_response()
+                            )
+                            while not generation_task.done():
+                                try:
+                                    event_json = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                                    yield f"data: {event_json}\n\n"
+                                except asyncio.TimeoutError:
+                                    continue
+
+                            while not event_queue.empty():
+                                event_json = await event_queue.get()
+                                yield f"data: {event_json}\n\n"
+
+                            result = generation_task.result()
+                            _log_chat_stream_debug(
+                                "response",
+                                chat_id=str(chat.id),
+                                initiative_id=data.initiative_id,
+                                widget_type=result.widget_type,
+                                has_widget_data=bool(result.widget_data),
+                                citation_count=0,
+                            )
+
+                            tokens = [t for t in result.content.split(' ') if t]
+                            for i, token in enumerate(tokens):
+                                chunk = {"type": "word", "content": token, "is_last": i == len(tokens) - 1}
+                                yield f"data: {json.dumps(chunk)}\n\n"
+                                await asyncio.sleep(0.02)
+
+                            sources_list = []
+                            assistant_msg = CoreChatMessage(
+                                chat_id=chat.id,
+                                role="assistant",
+                                content=result.content,
+                                sources=sources_list,
+                                thinking_lines=thinking_lines,
+                                completion_meta={
+                                    "latency_ms": result.latency_ms,
+                                    "citation_count": 0,
+                                    "tiers_used": result.tiers_used,
+                                },
+                                widget_type=result.widget_type,
+                                widget_data=result.widget_data,
+                            )
+                            db.add(assistant_msg)
+                            await db.commit()
+
+                            complete = {
+                                "type": "complete",
+                                "content": result.content,
+                                "sources": sources_list,
+                                "tiers_used": result.tiers_used,
+                                "citation_count": 0,
+                                "latency_ms": result.latency_ms,
+                                "widget_type": result.widget_type,
+                                "widget_data": result.widget_data,
+                                "thinking_lines": thinking_lines,
+                                "chat_id": str(chat.id),
+                                "user_message_id": str(user_msg.id),
+                                "assistant_message_id": str(assistant_msg.id),
+                            }
+                            yield f"data: {json.dumps(complete)}\n\n"
+                            return
+
+                        # Synthetic transition messages ("I've uploaded my documents.",
+                        # "I don't have any documents.") are known onboarding pivot points.
+                        # True bypass: call the plan handler directly, no LLM research pipeline.
+                        _is_onboarding_pivot = (
+                            data.content in _SKIP_EXTRACTION_MESSAGES
+                            and data.allow_initial_project_onboarding
+                            and not field_context
                         )
-                    )
+
+                        if _is_onboarding_pivot:
+                            async def _direct_module_proposal() -> ServiceChatResponse:
+                                from app.plans.registry import get_plan_registry as _get_plan_registry
+
+                                _plan_handler = _get_plan_registry().default_handler(db, user.uid)
+                                try:
+                                    _structure = await _plan_handler.propose_structure(
+                                        initiative=verified_initiative
+                                    )
+                                    _wt = _plan_handler.definition.structure_widget_type
+                                    _wd = _plan_handler.build_structure_widget_data(_structure)
+                                    _recs = _wd.get("recommendations") or []
+                                    _n = len([
+                                        r for r in _recs
+                                        if isinstance(r, dict) and r.get("recommended")
+                                    ]) or len(_recs)
+                                    _label = "module" if _n == 1 else "modules"
+                                    _msg = (
+                                        f"I've mapped the {_n} {_label} that look most relevant for this project. "
+                                        "Review them below and confirm the framework plan you want to start with."
+                                    ) if _n > 0 else (
+                                        "I've mapped the modules that look most relevant for this project. "
+                                        "Review them below and confirm the framework plan you want to start with."
+                                    )
+                                    return ServiceChatResponse(
+                                        content=_msg,
+                                        sources=[],
+                                        tiers_used=[],
+                                        latency_ms=0,
+                                        widget_type=_wt,
+                                        widget_data=_wd,
+                                    )
+                                except Exception as _e:
+                                    logger.error(
+                                        "Module proposal failed during onboarding pivot: %s",
+                                        _e,
+                                        exc_info=True,
+                                    )
+                                    return ServiceChatResponse(
+                                        content=(
+                                            "I wasn't able to analyze the project right now. "
+                                            "Could you describe a bit more so I can try again?"
+                                        ),
+                                        sources=[],
+                                        tiers_used=[],
+                                        latency_ms=0,
+                                    )
+
+                            generation_task = asyncio.create_task(_direct_module_proposal())
+                        else:
+                            model_inputs_context = (
+                                data.model_inputs_context
+                                or ChatService._format_model_inputs_from_messages(conversation_msgs, field_context)
+                            )
+                            generation_task = asyncio.create_task(
+                                service.generate_response(
+                                    user_message=data.content,
+                                    history=history,
+                                    on_thinking=on_thinking,
+                                    tool_hint=data.tool_hint or None,
+                                    field_context=field_context,
+                                    model_inputs_context=model_inputs_context,
+                                    module_context=data.module_context or None,
+                                    project_context=project_context,
+                                    on_research_step=on_research_step,
+                                    initiative_id=str(verified_initiative.id),
+                                    initiative=verified_initiative,
+                                )
+                            )
+                    else:
+                        generation_task = asyncio.create_task(
+                            service.generate_response(
+                                user_message=data.content,
+                                history=history,
+                                on_thinking=on_thinking,
+                                tool_hint=data.tool_hint or None,
+                                field_context=field_context,
+                                model_inputs_context=data.model_inputs_context or None,
+                                module_context=data.module_context or None,
+                                project_context=project_context,
+                                on_research_step=on_research_step,
+                                initiative_id=data.initiative_id if verified_initiative else None,
+                            )
+                        )
 
             while not generation_task.done():
                 try:
@@ -436,6 +880,14 @@ async def chat_stream(
                 yield f"data: {event_json}\n\n"
 
             result = generation_task.result()
+            _log_chat_stream_debug(
+                "response",
+                chat_id=str(chat.id),
+                initiative_id=data.initiative_id,
+                widget_type=result.widget_type,
+                has_widget_data=bool(result.widget_data),
+                citation_count=len([s for s in result.sources if s.source_type.value != "llm_estimate"]),
+            )
 
             # Stream response token-by-token
             tokens = [t for t in result.content.split(' ') if t]
@@ -447,7 +899,7 @@ async def chat_stream(
             # Persist assistant message
             sources_list = [s.to_dict() for s in result.sources]
             assistant_msg = CoreChatMessage(
-                session_id=session.id,
+                chat_id=chat.id,
                 role="assistant",
                 content=result.content,
                 sources=sources_list,
@@ -475,7 +927,7 @@ async def chat_stream(
                 "widget_data": result.widget_data,
                 "thinking_lines": thinking_lines,
                 # IDs for the frontend to track for feedback / retry
-                "session_id": str(session.id),
+                "chat_id": str(chat.id),
                 "user_message_id": str(user_msg.id),
                 "assistant_message_id": str(assistant_msg.id),
             }
@@ -515,10 +967,10 @@ async def set_message_feedback(
 
     result = await db.execute(
         select(CoreChatMessage)
-        .join(CoreChatSession)
+        .join(CoreChat)
         .where(
             CoreChatMessage.id == mid,
-            CoreChatSession.user_id == user.uid,
+            CoreChat.user_id == user.uid,
         )
     )
     msg = result.scalar_one_or_none()
@@ -552,10 +1004,10 @@ async def update_message_widget(
 
     result = await db.execute(
         select(CoreChatMessage)
-        .join(CoreChatSession)
+        .join(CoreChat)
         .where(
             CoreChatMessage.id == mid,
-            CoreChatSession.user_id == user.uid,
+            CoreChat.user_id == user.uid,
         )
     )
     msg = result.scalar_one_or_none()
@@ -572,32 +1024,32 @@ async def update_message_widget(
     return {"message_id": str(msg.id), "updated": True}
 
 
-@router.patch("/chat/sessions/{session_id}/title")
-async def update_session_title(
-    session_id: str,
+@router.patch("/chats/{chat_id}/title")
+async def update_chat_title(
+    chat_id: str,
     data: dict,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Update the AI-generated title on a session."""
+    """Update the AI-generated title on a chat."""
     try:
-        sid = uuid.UUID(session_id)
+        cid = uuid.UUID(chat_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+        raise HTTPException(status_code=400, detail="Invalid chat_id")
 
     result = await db.execute(
-        select(CoreChatSession).where(
-            CoreChatSession.id == sid,
-            CoreChatSession.user_id == user.uid,
+        select(CoreChat).where(
+            CoreChat.id == cid,
+            CoreChat.user_id == user.uid,
         )
     )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
 
-    session.title = data.get("title", "")
+    chat.title = data.get("title", "")
     await db.commit()
-    return {"session_id": str(session.id), "title": session.title}
+    return {"chat_id": str(chat.id), "title": chat.title}
 
 
 @router.post("/chat/title")
@@ -633,7 +1085,7 @@ async def generate_chat_title(
         return {"title": data.message[:40]}
 
 
-class SaveSessionMessage(BaseModel):
+class SaveChatMessage(BaseModel):
     role: str
     content: str
     widget_type: Optional[str] = None
@@ -642,19 +1094,19 @@ class SaveSessionMessage(BaseModel):
     completion_meta: Optional[dict] = None
 
 
-class SaveSessionRequest(BaseModel):
+class SaveChatRequest(BaseModel):
     title: Optional[str] = None
     initiative_id: Optional[str] = None
-    messages: list[SaveSessionMessage]
+    messages: list[SaveChatMessage]
 
 
-@router.post("/chat/sessions/save")
-async def save_session_from_messages(
-    data: SaveSessionRequest,
+@router.post("/chats/save")
+async def save_chat_from_messages(
+    data: SaveChatRequest,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Create a chat session from a list of messages (e.g. document flow)."""
+    """Create a chat from a list of messages (e.g. document flow)."""
     if not data.messages:
         raise HTTPException(status_code=400, detail="No messages provided")
 
@@ -668,13 +1120,13 @@ async def save_session_from_messages(
         except HTTPException:
             raise
 
-    session = CoreChatSession(user_id=user.uid, title=data.title, initiative_id=init_uuid)
-    db.add(session)
+    chat = CoreChat(user_id=user.uid, title=data.title, initiative_id=init_uuid)
+    db.add(chat)
     await db.flush()
 
     for msg in data.messages:
         db_msg = CoreChatMessage(
-            session_id=session.id,
+            chat_id=chat.id,
             role=msg.role,
             content=msg.content,
             widget_type=msg.widget_type,
@@ -685,6 +1137,6 @@ async def save_session_from_messages(
         db.add(db_msg)
 
     await db.commit()
-    return {"session_id": str(session.id), "title": session.title}
+    return {"chat_id": str(chat.id), "title": chat.title}
 
 

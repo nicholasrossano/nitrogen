@@ -13,6 +13,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { buildModelInputsContext } from '@/lib/modelInputsContext';
 
 interface CarbonOutputWidgetProps {
   data: Record<string, any>;
@@ -23,7 +24,8 @@ interface CarbonOutputWidgetProps {
 
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Confirmed' },
+  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
+  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
   inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
   assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
@@ -131,18 +133,36 @@ export function CarbonOutputWidget({
     [commitEdit, cancelEdit]
   );
 
-  const investigate = useCallback((label: string, status: string) => {
+  const investigate = useCallback((label: string, status: string, fieldName?: string) => {
     const text =
       status === 'inferred' ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
       status === 'assumed'  ? `Can you elaborate on the source of the value for ${label} and provide alternatives?` :
-      status === 'confirmed'? `Can you validate the value for ${label} and provide potential alternatives?` :
+      status === 'validated'? `Can you validate the value for ${label} and provide potential alternatives?` :
       `Can you help me investigate and estimate a value for ${label}?`;
-    window.dispatchEvent(new CustomEvent('nitrogen:draft', { detail: { text, label } }));
-  }, []);
+    const input = fieldName ? inputs[fieldName] : undefined;
+    const fieldContext = fieldName ? {
+      field_name: fieldName,
+      label,
+      current_value: typeof input?.value === 'number' ? input.value : null,
+      unit: input?.unit || null,
+      model_type: 'carbon' as const,
+      status: status || null,
+    } : null;
+
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text,
+        label,
+        fieldName,
+        fieldContext,
+        modelInputsContext: buildModelInputsContext('Carbon Model', inputs, fieldContext),
+      },
+    }));
+  }, [inputs]);
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
-    const isConfirmed = currentStatus === 'confirmed';
-    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'confirmed';
+    const isConfirmed = currentStatus === 'validated' || currentStatus === 'confirmed';
+    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'validated';
 
     if (!isConfirmed) {
       setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
@@ -328,7 +348,7 @@ export function CarbonOutputWidget({
                       onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('button, input, a')) return;
-                        investigate(inp.label, inp.status);
+                        investigate(inp.label, inp.status, inp.field_name);
                       }}
                       style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto` : undefined }}
                       className={`px-5 py-2.5 flex items-center gap-3 ${
@@ -388,7 +408,7 @@ export function CarbonOutputWidget({
                         <span
                           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                         >
-                          {inp.status === 'confirmed' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                          {(inp.status === 'validated' || inp.status === 'confirmed') && <CheckCircle2 className="w-2.5 h-2.5" />}
                           {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
                           {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                           {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
@@ -400,10 +420,10 @@ export function CarbonOutputWidget({
                         {isActive && (
                           <input
                             type="checkbox"
-                            checked={inp.status === 'confirmed'}
+                            checked={inp.status === 'validated' || inp.status === 'confirmed'}
                             disabled={isMissing || confirmingFields.has(inp.field_name)}
                             onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                            title={inp.status === 'confirmed' ? 'Mark as unconfirmed' : 'Confirm this value'}
+                            title={inp.status === 'validated' || inp.status === 'confirmed' ? 'Mark as inferred' : 'Mark as validated'}
                             className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                           />
                         )}

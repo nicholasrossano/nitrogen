@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, SourceCitation } from '@/lib/api';
+import { api, FieldContext, SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
 
 
@@ -22,12 +22,14 @@ export interface CoreChatMessage {
   widget_data?: Record<string, any> | null;
 }
 
-export interface ChatSession {
+export interface ChatSummary {
   id: string;
   title: string;
   createdAt: number;
   messages: CoreChatMessage[];
 }
+
+export type ChatSession = ChatSummary;
 
 interface ChatState {
   messages: CoreChatMessage[];
@@ -39,10 +41,10 @@ interface ChatState {
   pendingSessionTitle: string | null;
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
   retryingMessageId: string | null;
-  /** DB session UUID — persisted across messages in the same conversation */
-  currentDbSessionId: string | null;
+  /** DB chat UUID — persisted across messages in the same conversation */
+  currentChatId: string | null;
 
-  sendMessage: (content: string, toolHint?: string) => Promise<void>;
+  sendMessage: (content: string, toolHint?: string, fieldContext?: FieldContext | null) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
@@ -112,7 +114,7 @@ const BLANK_TRANSIENT = {
   error: null,
   pendingSessionTitle: null as string | null,
   retryingMessageId: null as string | null,
-  currentDbSessionId: null as string | null,
+  currentChatId: null as string | null,
 };
 
 export const useChatStore = create<ChatState>()((set, get) => ({
@@ -121,7 +123,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   messageFeedback: {},
   ...BLANK_TRANSIENT,
 
-  sendMessage: async (content: string, toolHint?: string) => {
+  sendMessage: async (content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
     const state = get();
     if (state.sending) return;
 
@@ -233,12 +235,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             sending: false,
             streamingContent: '',
             thinkingLines: [],
-            currentDbSessionId: payload.session_id,
+            currentChatId: payload.chat_id,
           }));
 
           const pendingTitle = get().pendingSessionTitle;
-          if (pendingTitle && payload.session_id) {
-            api.updateChatSessionTitle(payload.session_id, pendingTitle).catch(() => {});
+          if (pendingTitle && payload.chat_id) {
+            api.updateChatTitle(payload.chat_id, pendingTitle).catch(() => {});
             set({ pendingSessionTitle: null });
           }
 
@@ -251,8 +253,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         (message) => {
           set({ sending: false, error: message, streamingContent: '' });
         },
-        get().currentDbSessionId,
+        get().currentChatId,
         toolHint,
+        null,
+        fieldContext ?? null,
         modelInputsContext,
       );
     } catch (err: any) {

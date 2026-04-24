@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.core import google_oauth
 from app.core.auth import AuthUser, get_current_user, get_optional_user
 from app.core.database import get_db
+from app.core.log_sanitizer import sanitize_exception
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
 from app.models.evidence import EvidenceDoc, EvidenceChunk
@@ -112,7 +113,7 @@ async def google_oauth_callback(
     try:
         token_data = await google_oauth.exchange_code(code)
     except Exception as e:
-        logger.error(f"Google OAuth token exchange failed: {e}")
+        logger.error("Google OAuth token exchange failed: %s", sanitize_exception(e))
         return RedirectResponse(url=f"{frontend_url}?drive_error=token_exchange_failed")
 
     refresh_token = token_data.get("refresh_token", "")
@@ -176,7 +177,11 @@ async def get_drive_access_token(
     try:
         access_token = await _get_valid_access_token(db, connection)
     except Exception as e:
-        logger.error(f"Failed to refresh Google token for user {user.uid}: {e}")
+        logger.error(
+            "Failed to refresh Google token for user %s: %s",
+            user.uid,
+            sanitize_exception(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Failed to refresh Google token. Please reconnect Google Drive.",
@@ -237,12 +242,25 @@ async def import_from_drive(
     # Expand any folder IDs into their direct file children
     expanded_file_metas: list[dict] = []
     for file_id in body.file_ids:
-        meta = await drive.get_file_metadata(file_id)
-        if meta.get("mimeType") == "application/vnd.google-apps.folder":
-            children = await drive.list_folder_files(file_id)
-            expanded_file_metas.extend(children)
-        else:
-            expanded_file_metas.append(meta)
+        try:
+            meta = await drive.get_file_metadata(file_id)
+            if meta.get("mimeType") == "application/vnd.google-apps.folder":
+                children = await drive.list_folder_files_recursive(file_id, max_files=200)
+                if not children:
+                    errors.append(
+                        {"file_id": file_id, "error": "No supported files found in selected folder"}
+                    )
+                expanded_file_metas.extend(children)
+            else:
+                expanded_file_metas.append(meta)
+        except Exception as e:
+            safe_error = sanitize_exception(e)
+            logger.error(
+                "Drive import metadata lookup failed for file %s: %s",
+                file_id,
+                safe_error,
+            )
+            errors.append({"file_id": file_id, "error": safe_error})
 
     if len(expanded_file_metas) > 50:
         raise HTTPException(status_code=400, detail="Folder contains too many files (max 50 at once)")
@@ -327,8 +345,9 @@ async def import_from_drive(
                 }
             )
         except Exception as e:
-            logger.error(f"Drive import failed for file {file_id}: {e}")
-            errors.append({"file_id": file_id, "error": str(e)})
+            safe_error = sanitize_exception(e)
+            logger.error("Drive import failed for file %s: %s", file_id, safe_error)
+            errors.append({"file_id": file_id, "error": safe_error})
 
     return {"imported": imported, "errors": errors}
 
@@ -501,7 +520,8 @@ async def sync_drive_files(
             updated += 1
 
         except Exception as e:
-            logger.error(f"Drive sync failed for file {link.drive_file_id}: {e}")
-            errors.append({"file_id": link.drive_file_id, "error": str(e)})
+            safe_error = sanitize_exception(e)
+            logger.error("Drive sync failed for file %s: %s", link.drive_file_id, safe_error)
+            errors.append({"file_id": link.drive_file_id, "error": safe_error})
 
     return {"checked": len(links), "updated": updated, "errors": errors}

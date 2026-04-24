@@ -16,6 +16,7 @@ import traceback  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
+from app.core.log_sanitizer import sanitize_text, sanitize_exception  # noqa: E402
 import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
 from app.api import initiatives, onboarding, evidence, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
 from app.mcp import get_mcp_http_app  # noqa: E402
@@ -132,8 +133,13 @@ def _is_disk_full(exc: Exception) -> bool:
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """Return CORS-safe JSON on unhandled errors so the browser doesn't hide them."""
-    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
-    logger.error(traceback.format_exc())
+    logger.error(
+        "Unhandled exception on %s %s: %s",
+        request.method,
+        request.url.path,
+        sanitize_exception(exc),
+    )
+    logger.error(sanitize_text(traceback.format_exc()))
 
     if _is_disk_full(exc):
         return JSONResponse(

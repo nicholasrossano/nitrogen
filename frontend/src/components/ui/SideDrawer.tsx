@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Search, PanelsTopLeft, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Home, Layers3, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -15,6 +15,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuth } from '@/lib/auth';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
+import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 
 export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'workspace';
 
@@ -24,14 +25,19 @@ interface NavItemConfig {
   Icon: LucideIcon;
 }
 
+interface NavRenderConfig extends NavItemConfig {
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
 const GLOBAL_ITEMS: NavItemConfig[] = [
   { key: 'home', label: 'All Projects', Icon: LayoutGrid },
 ];
 
 const PROJECT_ITEMS: NavItemConfig[] = [
-  { key: 'plan', label: 'Project Plan', Icon: Map },
-  { key: 'workspace', label: 'Workspace', Icon: PanelsTopLeft },
-  { key: 'research', label: 'Research', Icon: Search },
+  { key: 'research', label: 'Overview', Icon: Home },
+  { key: 'plan', label: 'Framework', Icon: Map },
+  { key: 'workspace', label: 'Modules', Icon: Layers3 },
 ];
 
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
@@ -85,21 +91,37 @@ export function SideDrawer() {
     if (!initiativeId) return 'home';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
-    if (view === 'workspace') return 'workspace';
+    if (view === 'plan' || view === 'framework') return 'plan';
+    if (view === 'workspace' || view === 'modules') return 'workspace';
     if (view === 'files') return 'files';
-    return 'plan';
+    return 'research';
   }, [initiativeId, searchParams]);
 
   const hasProject = !!initiativeId;
   const initiative = useInitiativeStore((s) => s.initiative);
+  const projectPlan = useInitiativeStore((s) => s.projectPlan);
   const isViewer = initiative?.shared_role === 'viewer';
+  const hasProjectPlan = Boolean(projectPlan || initiative?.project_plan);
+  const isOnboarding = Boolean(hasProject && initiative && !hasProjectPlan && !isViewer);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
 
   const showMaterials = hasProject && !isViewer;
 
-  const projectItems = isViewer
-    ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
-    : PROJECT_ITEMS;
+  const projectItems: NavRenderConfig[] = (
+    isViewer
+      ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
+      : PROJECT_ITEMS
+  ).map((item) => {
+    const lockedDuringOnboarding = isOnboarding && item.key !== 'research';
+    return {
+      ...item,
+      disabled: lockedDuringOnboarding,
+      disabledReason: lockedDuringOnboarding ? 'Complete onboarding to unlock this area' : undefined,
+    };
+  });
+
+  const filesDisabled = isOnboarding;
+  const filesDisabledReason = filesDisabled ? 'Complete onboarding to unlock this area' : undefined;
 
   const longestLabelLength = useMemo(() => {
     const labels = GLOBAL_ITEMS.map((item) => item.label);
@@ -119,6 +141,27 @@ export function SideDrawer() {
     if (navHandlerRef.current?.(item)) return;
     if (item === 'home') { router.push('/'); return; }
   }, [navHandlerRef, router]);
+
+  const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
+    <button
+      key={key}
+      onClick={() => {
+        if (disabled) return;
+        handleNav(key);
+      }}
+      disabled={disabled}
+      title={disabled ? disabledReason : undefined}
+      aria-disabled={disabled || undefined}
+      className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''} ${disabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
+    >
+      <Icon
+        className={`w-4 h-4 flex-shrink-0 ${activeItem === key ? '[&_*]:fill-current' : ''}`}
+      />
+      <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+        {label}
+      </span>
+    </button>
+  ), [activeItem, handleNav]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -366,20 +409,7 @@ export function SideDrawer() {
       {/* Spacer matches the h-14 header in the content column */}
       <div className="shrink-0 h-14" />
       <nav className="flex-1 pt-1">
-        {GLOBAL_ITEMS.map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            onClick={() => handleNav(key)}
-            className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
-          >
-            <Icon
-              className="w-4 h-4 flex-shrink-0"
-            />
-            <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-              {label}
-            </span>
-          </button>
-        ))}
+        {GLOBAL_ITEMS.map((item) => renderNavButton(item))}
 
         {/* Project nav — always in the DOM, collapses/expands via CSS grid */}
         <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
@@ -393,20 +423,7 @@ export function SideDrawer() {
                 Current Project
               </span>
             </div>
-            {projectItems.map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                onClick={() => handleNav(key)}
-                className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''}`}
-              >
-                <Icon
-                  className="w-4 h-4 flex-shrink-0"
-                />
-                <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
-                  {label}
-                </span>
-              </button>
-            ))}
+            {projectItems.map((item) => renderNavButton(item))}
           </div>
         </div>
       </nav>
@@ -450,38 +467,24 @@ export function SideDrawer() {
           >
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
 
-            <div
+            <UploadDropzone
+              isDragging={isDragging}
+              uploading={uploading}
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               onClick={handleFileSelect}
-              className={`
-                flex flex-col items-center justify-center gap-2 min-h-[140px] px-2 rounded-lg cursor-pointer
-                border border-dashed transition-colors duration-150
-                ${isDragging
-                  ? 'border-accent/60 bg-accent-wash/60 text-accent'
-                  : 'border-[#c8c4be] bg-black/[0.04] hover:border-[#aaa69f] hover:bg-black/[0.07]'
-                }
-              `}
-            >
-              {uploading ? (
-                <Loader2 className="w-4 h-4 text-text-secondary animate-spin" />
-              ) : (
-                <FileUp className={`w-4 h-4 ${isDragging ? 'text-accent' : 'text-text-secondary'}`} />
-              )}
-              <span className={`text-[11px] text-center leading-tight ${isDragging ? 'text-accent' : 'text-text-secondary'}`}>
-                {isDragging ? 'Drop files or folder' : 'Upload files'}
-              </span>
-            </div>
-            <button
+              dragLabel="Drop files or folder"
+              idleLabel="Upload files"
+              className="min-h-[140px] px-2"
+            />
+            <UploadActionButton
               onClick={handleFolderSelect}
               disabled={uploading}
-              className="flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-text-secondary bg-black/[0.04] enabled:hover:bg-black/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
-              Select folder
-            </button>
+              icon={<FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />}
+              label="Select folder"
+            />
 
             {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
               <div className="flex flex-col gap-1">
@@ -535,25 +538,21 @@ export function SideDrawer() {
         </div>
       )}
 
-      {/* Spacer + collapsed-only divider between upload and files icons.
-          h-6 creates the visual gap; top-1/2 -translate-y-1/2 centers the line
-          inside that gap, which also centers it between the two icon midpoints.
-          The expanded panel is absolute so it's unaffected by this height. */}
-      {showMaterials && (
-        <div className="relative h-6">
-          <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-px bg-black/[0.16] opacity-100 group-hover:opacity-0 group-data-[open]:opacity-0 transition-opacity duration-150" />
-        </div>
-      )}
-
       {/* Files button — collapses with project items */}
       <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
         <div className="overflow-hidden">
           <button
-            onClick={() => handleNav('files')}
-            className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''}`}
+            onClick={() => {
+              if (filesDisabled) return;
+              handleNav('files');
+            }}
+            disabled={filesDisabled}
+            title={filesDisabled ? filesDisabledReason : undefined}
+            aria-disabled={filesDisabled || undefined}
+            className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''} ${filesDisabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
           >
             <FolderOpen
-              className="w-4 h-4 flex-shrink-0"
+              className={`w-4 h-4 flex-shrink-0 ${activeItem === 'files' ? '[&_*]:fill-current' : ''}`}
             />
             <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
               Files
@@ -561,6 +560,16 @@ export function SideDrawer() {
           </button>
         </div>
       </div>
+
+      {/* Spacer + divider below the files icon.
+          h-6 creates the visual gap; top-1/2 -translate-y-1/2 centers the line
+          inside that gap. Percentage insets make the divider scale proportionally
+          as the drawer expands. */}
+      {showMaterials && (
+        <div className="relative h-6">
+          <div className="absolute left-[10%] right-[10%] top-1/2 -translate-y-1/2 h-px bg-black/[0.16]" />
+        </div>
+      )}
 
       <UsagePill />
 

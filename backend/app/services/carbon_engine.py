@@ -25,7 +25,7 @@ from app.schemas.provenance import Derivation, ItemProvenance, ValidationStatus
 # Data structures
 # ---------------------------------------------------------------------------
 
-InputStatus = Literal["confirmed", "inferred", "assumed", "missing"]
+InputStatus = Literal["validated", "inferred", "assumed", "missing"]
 InputSource = Literal["chat", "doc", "user", "assumption"]
 AppliesTo = Literal["baseline", "project", "leakage", "general"]
 
@@ -72,7 +72,10 @@ class CarbonInput:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "CarbonInput":
-        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+        payload = {k: d[k] for k in cls.__dataclass_fields__ if k in d}
+        if payload.get("status") == "confirmed":
+            payload["status"] = "validated"
+        return cls(**payload)
 
 
 @dataclass

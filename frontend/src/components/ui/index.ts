@@ -1,4 +1,5 @@
 export { Button } from './Button';
+export { ConfirmButton } from './ConfirmButton';
 export { PanelHeader } from './PanelHeader';
 export { SideDrawer } from './SideDrawer';
 export type { NavItem } from './SideDrawer';
@@ -6,3 +7,4 @@ export { ShellNavContext, useShellNav } from './ShellContext';
 export { SettingsModal } from './SettingsModal';
 export { UploadToast } from './UploadToast';
 export type { UploadItem } from './UploadToast';
+export { WorkspaceTabLoader } from './WorkspaceTabLoader';

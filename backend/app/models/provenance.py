@@ -30,9 +30,9 @@ class ProvenanceTrace(Base):
         nullable=True,
         index=True,
     )
-    session_id: Mapped[uuid.UUID | None] = mapped_column(
+    chat_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("core_chat_sessions.id", ondelete="CASCADE"),
+        ForeignKey("core_chats.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
