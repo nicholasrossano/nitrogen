@@ -130,7 +130,7 @@ class CarbonTool(BaseModule):
             assumptions_behavior="tracks",
             evidence_behavior="none",
             decision_log_attribution=DecisionLogAttribution(
-                adapter_labels={"carbon": "Nitrogen carbon engine"},
+                adapter_labels={"carbon": "Carbon calculator engine"},
                 widget_detail_labels={"method_pack": "Method pack"},
             ),
         )

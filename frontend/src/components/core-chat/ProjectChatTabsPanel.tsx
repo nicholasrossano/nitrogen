@@ -237,6 +237,8 @@ export function ProjectChatTabsPanel({
   const [deepDiveByTabId, setDeepDiveByTabId] = useState<Record<string, PendingDeepDiveContext>>({});
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
   const tabsRef = useRef<ProjectChatTab[]>([]);
   const handledDeepDiveRequestIdsRef = useRef<Set<string>>(new Set());
@@ -475,6 +477,24 @@ export function ProjectChatTabsPanel({
   }, [showHistory]);
 
   useEffect(() => {
+    if (!resolvedActiveTabId) return;
+    const tabStrip = tabStripRef.current;
+    const activeTabButton = tabButtonRefs.current[resolvedActiveTabId];
+    if (!tabStrip || !activeTabButton) return;
+
+    const stripRect = tabStrip.getBoundingClientRect();
+    const tabRect = activeTabButton.getBoundingClientRect();
+    const isOutOfView = tabRect.left < stripRect.left || tabRect.right > stripRect.right;
+    if (!isOutOfView) return;
+
+    activeTabButton.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  }, [resolvedActiveTabId, tabs]);
+
+  useEffect(() => {
     if (!pendingChatToOpen?.chatId) return;
 
     const existingTab = tabs.find((tab) => tab.chatId === pendingChatToOpen.chatId);
@@ -684,7 +704,11 @@ export function ProjectChatTabsPanel({
     <div className="flex h-full flex-col overflow-hidden bg-white">
       {showTabBar && (
         <div className="flex-shrink-0 flex items-stretch border-b border-divider bg-surface-subtle/50 h-[36px]">
-          <div className="flex-1 flex items-stretch overflow-x-auto min-w-0" style={{ scrollbarWidth: 'none' }}>
+          <div
+            ref={tabStripRef}
+            className="flex-1 flex items-stretch overflow-x-auto min-w-0"
+            style={{ scrollbarWidth: 'none' }}
+          >
             {tabs.map((tab) => {
               const isActive = tab.id === resolvedActiveTabId;
               const style = { flexShrink: 0, width: 148 };
@@ -692,6 +716,9 @@ export function ProjectChatTabsPanel({
               return (
                 <button
                   key={tab.id}
+                  ref={(node) => {
+                    tabButtonRefs.current[tab.id] = node;
+                  }}
                   onClick={() => setActiveTabId(tab.id)}
                   style={style}
                   className={[

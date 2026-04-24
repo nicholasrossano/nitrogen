@@ -46,11 +46,26 @@ class _FakeDbSession:
     async def rollback(self):
         return None
 
-    async def execute(self, _query):
+    async def execute(self, *_args, **_kwargs):
         return _FakeExecuteResult([])
 
     async def scalar(self, _query):
         return 0
+
+    async def refresh(self, _obj):
+        return None
+
+
+def _collect_events(response):
+    return [
+        json.loads(line[6:])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+
+def _get_complete_event(response):
+    return next(event for event in _collect_events(response) if event.get("type") == "complete")
 
 
 @pytest.mark.asyncio
@@ -87,41 +102,29 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
     async def fake_build_context(_db, _user, _initiative_id):
         return SimpleNamespace(user_id="user-1", chat_id=None)
 
-    async def fake_get_next_action(self, messages, initiative, tool_hint=None, field_context=None, onboarding_mode=False):
-        return SimpleNamespace(
-            action="propose_input_value",
-            parameters={
-                "field_name": field_context["field_name"],
-                "label": field_context["label"],
-                "model_type": field_context["model_type"],
-                "current_value": field_context["current_value"],
-                "unit": field_context["unit"],
-                "status": field_context["status"],
-            },
-            sources_used=[],
-        )
-
-    async def fake_execute_project_action(
+    async def fake_generate_response(
         self,
-        initiative,
-        action_result,
-        chat_history=None,
-        tool_hint=None,
-        model_inputs_context=None,
-        field_context=None,
+        user_message,
+        history,
         on_thinking=None,
+        **kwargs,
     ):
-        return (
-            "proposed_value",
-            {
-                "field_name": field_context["field_name"],
-                "label": field_context["label"],
+        assert user_message == "Please investigate capacity factor."
+        assert kwargs["initiative_id"] == str(initiative_id)
+        assert kwargs["field_context"]["field_name"] == "capacity_factor"
+        return chat_api.ServiceChatResponse(
+            content="Try 42%.",
+            sources=[],
+            tiers_used=["planner"],
+            latency_ms=7,
+            widget_type="proposed_value",
+            widget_data={
+                "field_name": kwargs["field_context"]["field_name"],
+                "label": kwargs["field_context"]["label"],
                 "proposed_value": 0.42,
-                "unit": field_context["unit"],
-                "model_type": field_context["model_type"],
+                "unit": kwargs["field_context"]["unit"],
+                "model_type": kwargs["field_context"]["model_type"],
             },
-            "Try 42%.",
-            [],
         )
 
     app.dependency_overrides[chat_api.get_db] = override_db
@@ -129,8 +132,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
     monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
-    monkeypatch.setattr(chat_api.ChatService, "get_next_action", fake_get_next_action)
-    monkeypatch.setattr(chat_api.ChatService, "execute_project_action", fake_execute_project_action)
+    monkeypatch.setattr(chat_api.ChatService, "generate_response", fake_generate_response)
 
     try:
         async with AsyncClient(
@@ -159,12 +161,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
 
     assert response.status_code == 200
 
-    events = [
-        json.loads(line[6:])
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    complete_event = next(event for event in events if event.get("type") == "complete")
+    complete_event = _get_complete_event(response)
 
     assert complete_event["widget_type"] == "proposed_value"
     assert complete_event["widget_data"]["field_name"] == "capacity_factor"
@@ -213,11 +210,14 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
         assert current_user_message_id is not None
         return True
 
-    async def fail_extract_inputs(*_args, **_kwargs):
-        raise AssertionError("input extraction should be skipped for initial onboarding")
+    extract_calls = []
 
-    async def fail_get_next_action(*_args, **_kwargs):
-        raise AssertionError("orchestration should be skipped for initial onboarding")
+    async def fake_extract_inputs(self, message, initiative):
+        extract_calls.append((message, initiative.id))
+        return {}
+
+    async def fail_generate_response(*_args, **_kwargs):
+        raise AssertionError("research pipeline should be skipped for scripted initial onboarding")
 
     app.dependency_overrides[chat_api.get_db] = override_db
     app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
@@ -229,8 +229,8 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
         "_should_trigger_initial_project_onboarding",
         fake_should_trigger_initial_project_onboarding,
     )
-    monkeypatch.setattr(chat_api.ChatService, "extract_inputs_from_message", fail_extract_inputs)
-    monkeypatch.setattr(chat_api.ChatService, "get_next_action", fail_get_next_action)
+    monkeypatch.setattr(chat_api.ChatService, "extract_inputs_from_message", fake_extract_inputs)
+    monkeypatch.setattr(chat_api.ChatService, "generate_response", fail_generate_response)
 
     try:
         async with AsyncClient(
@@ -251,15 +251,11 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
 
     assert response.status_code == 200
 
-    events = [
-        json.loads(line[6:])
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    complete_event = next(event for event in events if event.get("type") == "complete")
+    complete_event = _get_complete_event(response)
 
     assert complete_event["widget_type"] == "document_request"
     assert complete_event["content"].startswith("Please upload any relevant project materials")
+    assert extract_calls == [("Testing", initiative_id)]
 
 
 @pytest.mark.asyncio
@@ -304,8 +300,14 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
         assert current_user_message_id is not None
         return False
 
-    async def fail_get_next_action(*_args, **_kwargs):
-        raise AssertionError("orchestration should be skipped for first-turn onboarding prompt")
+    extract_calls = []
+
+    async def fake_extract_inputs(self, message, initiative):
+        extract_calls.append((message, initiative.id))
+        return {}
+
+    async def fail_generate_response(*_args, **_kwargs):
+        raise AssertionError("research pipeline should be skipped for first-turn onboarding prompt")
 
     app.dependency_overrides[chat_api.get_db] = override_db
     app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
@@ -317,7 +319,8 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
         "_should_trigger_initial_project_onboarding",
         fake_should_trigger_initial_project_onboarding,
     )
-    monkeypatch.setattr(chat_api.ChatService, "get_next_action", fail_get_next_action)
+    monkeypatch.setattr(chat_api.ChatService, "extract_inputs_from_message", fake_extract_inputs)
+    monkeypatch.setattr(chat_api.ChatService, "generate_response", fail_generate_response)
 
     try:
         async with AsyncClient(
@@ -338,12 +341,8 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
 
     assert response.status_code == 200
 
-    events = [
-        json.loads(line[6:])
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    complete_event = next(event for event in events if event.get("type") == "complete")
+    complete_event = _get_complete_event(response)
 
     assert complete_event["widget_type"] == "document_request"
     assert complete_event["content"].startswith("Please upload any relevant project materials")
+    assert extract_calls == [("Testing", initiative_id)]

@@ -1,16 +1,4 @@
-"""
-Chat Service
-
-Two-step orchestration:
-  1. A lightweight planning call (function-calling) decides which data
-     sources to query. The planner is encouraged to use multiple sources
-     (scholarly + web) for comprehensive answers.
-  2. Requested tools run in parallel; the answer is generated from all
-     gathered evidence and cites only what it actually used.
-
-Tools are additive: as more are registered in SEARCH_TOOLS the planner
-will automatically consider them without changes elsewhere.
-"""
+"""Chat service for research, orchestration, and response composition."""
 
 import asyncio
 import json
@@ -50,152 +38,6 @@ ResearchStepCallback = Callable[[str, str, str], Awaitable[None]]  # (id, label,
 class ChatMode(str, Enum):
     STANDALONE = "standalone"
     PROJECT = "project"
-    COMPARE = "compare"
-
-
-# ---------------------------------------------------------------------------
-# Tool definitions are now in app.capabilities.tool_definitions and served
-# via the CapabilityRegistry.  The SEARCH_TOOLS list below is kept as a
-# fallback reference but is NOT used at runtime.
-# ---------------------------------------------------------------------------
-
-SEARCH_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_scholarly_literature",
-            "description": (
-                "Search OpenAlex for peer-reviewed academic papers, research studies, and published evidence. "
-                "Good for: empirical data, case studies, impact evaluations, published methodology comparisons, "
-                "and peer-reviewed analysis of specific topics or regions."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Focused search query for scholarly literature (max 20 words).",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "One sentence explaining why scholarly literature helps here.",
-                    },
-                },
-                "required": ["query", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_web_sources",
-            "description": (
-                "Search the web for information from NGOs, governments, standards bodies, news outlets, "
-                "industry reports, and other authoritative sources. Good for: current regulations, policies, "
-                "program requirements, recent developments, market data, country-specific information, "
-                "practical guidance, organizational reports, and real-world project examples."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Focused search query for web sources (max 20 words).",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "One sentence explaining why a web search helps here.",
-                    },
-                },
-                "required": ["query", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "propose_input_value",
-            "description": (
-                "Propose a specific value for a model input field (LCOE, Carbon, or Solar). "
-                "Use when the user asks to investigate, estimate, or determine a value for a "
-                "specific input (e.g. 'what should net capacity be?', 'investigate Total CAPEX', "
-                "'estimate capacity factor', 'change tilt to 20°'). The value is shown in a confirmation widget."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "field_name": {
-                        "type": "string",
-                        "description": "Exact field_name from the model inputs (e.g. 'net_capacity_kw', 'system_capacity', 'tilt').",
-                    },
-                    "proposed_value": {
-                        "type": "number",
-                        "description": "The proposed numeric value.",
-                    },
-                    "model_type": {
-                        "type": "string",
-                        "enum": ["lcoe", "carbon", "solar"],
-                        "description": "Which model this input belongs to.",
-                    },
-                    "confidence": {
-                        "type": "string",
-                        "enum": ["high", "moderate", "low"],
-                        "description": "Confidence in this estimate.",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "One sentence explaining the proposal.",
-                    },
-                },
-                "required": ["field_name", "proposed_value", "model_type", "confidence", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "propose_template_value",
-            "description": (
-                "Propose a value for a template/form requirement field. "
-                "Use when the user message contains a [TEMPLATE_CONTEXT] block. "
-                "ALWAYS combine with search_scholarly_literature AND search_web_sources. "
-                "Determine if the value can be researched or must be gathered offline, "
-                "then either propose a concrete value or provide specific guidance."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "requirement_label": {
-                        "type": "string",
-                        "description": "The full question/label of the template requirement.",
-                    },
-                    "field_type": {
-                        "type": "string",
-                        "description": "Field type: text, number, currency, boolean, yes_no, date, narrative, formula.",
-                    },
-                    "proposed_value": {
-                        "type": "string",
-                        "description": "The proposed value (as string). Use empty string if this must be gathered offline.",
-                    },
-                    "can_be_determined": {
-                        "type": "boolean",
-                        "description": "True if this value can be determined from research/project docs. False if user must gather offline.",
-                    },
-                    "confidence": {
-                        "type": "string",
-                        "enum": ["high", "moderate", "low"],
-                        "description": "Confidence in the proposal.",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Brief explanation of the proposal or why it must be gathered offline.",
-                    },
-                },
-                "required": ["requirement_label", "field_type", "can_be_determined", "confidence", "reason"],
-            },
-        },
-    },
-]
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -405,8 +247,6 @@ class ChatService:
         surface = "project" if initiative_id else "standalone"
         return get_capability_registry().to_openai_tools(surface)
 
-    _HINT_TO_PLANNER_TOOL: dict[str, str] = {}
-
     async def generate_response(
         self,
         user_message: str,
@@ -483,8 +323,6 @@ class ChatService:
             except ValueError:
                 return []
             return await self.retrieval.search_project_materials(search_query, iid)
-
-        forced_fn = self._HINT_TO_PLANNER_TOOL.get(tool_hint or "")
 
         corpus_task = asyncio.create_task(_corpus_search())
         plan_task = asyncio.create_task(
@@ -567,13 +405,6 @@ class ChatService:
             reason = args.get("reason", "")
             logger.info(f"Tool called: {fn_name} | query={args.get('query', '')!r} | reason={reason!r}")
             parsed_calls.append((fn_name, args))
-
-        # If user explicitly selected a computational tool, force it into execution
-        # (overrides planner; deduplicate in case planner also picked the same tool)
-        if forced_fn:
-            if not any(fn == forced_fn for fn, _ in parsed_calls):
-                logger.info(f"Injecting forced tool call from tool_hint: {forced_fn}")
-                parsed_calls.append((forced_fn, {"reason": "user explicitly selected this tool"}))
 
         is_investigate_request = bool(field_context) or self._is_investigate_request(user_message)
         _log_proposal_debug(

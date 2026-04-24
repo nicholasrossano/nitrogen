@@ -26,17 +26,14 @@ from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
 from app.core.rate_limit import limiter
 from app.schemas.chat import FieldContext
+from app.api.chat_constants import (
+    INITIAL_ONBOARDING_DOCUMENT_PROMPT,
+    SKIP_EXTRACTION_MESSAGES as _SKIP_EXTRACTION_MESSAGES,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# Synthetic messages sent by UI actions that carry no project detail.
-_SKIP_EXTRACTION_MESSAGES = {
-    "I've uploaded my documents.",
-    "I don't have any documents to upload.",
-}
-
 
 def _log_chat_stream_debug(event: str, **fields) -> None:
     serialized = " ".join(f"{key}={value!r}" for key, value in fields.items())
@@ -121,36 +118,6 @@ async def _update_initiative_from_inputs(
     return updated
 
 
-async def _execute_project_action(
-    *,
-    service: ChatService,
-    initiative: Initiative,
-    action_result,
-    chat_history: list,
-    tool_hint: str | None,
-    model_inputs_context: str | None,
-    field_context: dict | None,
-    on_thinking,
-) -> ServiceChatResponse:
-    widget_type, widget_data, assistant_response, sources = await service.execute_project_action(
-        initiative=initiative,
-        action_result=action_result,
-        chat_history=chat_history,
-        tool_hint=tool_hint,
-        model_inputs_context=model_inputs_context,
-        field_context=field_context,
-        on_thinking=on_thinking,
-    )
-    return ServiceChatResponse(
-        content=assistant_response,
-        sources=sources or [],
-        tiers_used=list({s.source_type.value for s in sources}) if sources else [],
-        latency_ms=0,
-        widget_type=widget_type,
-        widget_data=widget_data,
-    )
-
-
 async def _should_trigger_initial_project_onboarding(
     db: AsyncSession,
     *,
@@ -185,7 +152,7 @@ async def _should_trigger_initial_project_onboarding(
 
 async def _build_initial_project_onboarding_response() -> ServiceChatResponse:
     return ServiceChatResponse(
-        content="Please upload any relevant project materials, such as feasibility studies, site assessments, or permit applications.",
+        content=INITIAL_ONBOARDING_DOCUMENT_PROMPT,
         sources=[],
         tiers_used=[],
         latency_ms=0,

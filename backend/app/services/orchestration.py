@@ -1,18 +1,9 @@
-"""
-Orchestration Service — thin shim around the unified ChatService.
-
-The core logic now lives in ChatService (mode=PROJECT).
-This module is kept for backward-compatible imports and the
-ORCHESTRATION_SYSTEM_PROMPT constant which ChatService references.
-"""
+"""Orchestration prompt and result types for project chat."""
 
 from dataclasses import dataclass
 from typing import Any
 import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.execution_context import ExecutionContext
 from app.services.tiered_retrieval import RetrievedFact
 
 logger = logging.getLogger(__name__)
@@ -127,35 +118,3 @@ class OrchestrationResult:
     action: str
     parameters: dict[str, Any]
     sources_used: list[RetrievedFact]
-
-    def to_dict(self) -> dict:
-        return {
-            "action": self.action,
-            "parameters": self.parameters,
-            "sources_used": [s.to_dict() for s in self.sources_used],
-        }
-
-
-class OrchestrationService:
-    """Thin shim — delegates to ChatService(mode=PROJECT)."""
-
-    def __init__(self, db: AsyncSession, ctx: ExecutionContext):
-        from app.services.chat import ChatMode, ChatService
-
-        self._chat = ChatService(db, mode=ChatMode.PROJECT, ctx=ctx)
-
-    async def get_next_action(
-        self, messages, initiative, tool_hint=None, onboarding_mode: bool = False,
-    ) -> OrchestrationResult:
-        return await self._chat.get_next_action(
-            messages, initiative, tool_hint, onboarding_mode=onboarding_mode,
-        )
-
-    async def extract_inputs_from_message(self, message, initiative) -> dict[str, Any]:
-        return await self._chat.extract_inputs_from_message(message, initiative)
-
-    @staticmethod
-    def _format_model_inputs_from_messages(messages: list) -> str:
-        from app.services.chat import ChatService
-
-        return ChatService._format_model_inputs_from_messages(messages)
