@@ -6,7 +6,6 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Awaitable, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -33,11 +32,6 @@ def _log_proposal_debug(event: str, **fields: Any) -> None:
 
 ThinkingCallback = Callable[[str], Awaitable[None]]
 ResearchStepCallback = Callable[[str, str, str], Awaitable[None]]  # (id, label, status)
-
-
-class ChatMode(str, Enum):
-    STANDALONE = "standalone"
-    PROJECT = "project"
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -223,29 +217,73 @@ class ChatService:
         self,
         db: AsyncSession,
         ctx: "ExecutionContext",
-        mode: ChatMode = ChatMode.STANDALONE,
     ):
         self.db = db
         if ctx is None:
             raise ValueError("ChatService requires ExecutionContext")
         self.user_id = ctx.user_id
-        self.mode = mode
         self.ctx = ctx
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
         self.retrieval = TieredRetrievalService(db)
+        from app.services.project_chat_router import ProjectChatRouter
+        from app.services.project_tool_executor import ProjectToolExecutor
+
+        self.project_router = ProjectChatRouter(self)
+        self.project_tool_executor = ProjectToolExecutor(self)
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
             self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
         return self._client
 
-    def _get_tool_list(self, *, initiative_id: str | None = None) -> list[dict]:
-        """Return OpenAI tool definitions for the active chat surface."""
+    def _build_tool_context(
+        self,
+        *,
+        initiative_id: str | None = None,
+        onboarding_mode: bool = False,
+        orchestration_mode: bool = False,
+        field_context: dict[str, Any] | None = None,
+        module_context: dict[str, Any] | None = None,
+    ):
+        from app.capabilities.registry import CapabilityRoute, CapabilityToolContext
+
+        if orchestration_mode:
+            route = CapabilityRoute.PROJECT_ORCHESTRATION
+        elif initiative_id:
+            route = CapabilityRoute.PROJECT_CHAT
+        else:
+            route = CapabilityRoute.STANDALONE_CHAT
+
+        return CapabilityToolContext(
+            route=route,
+            initiative_id=initiative_id,
+            onboarding_mode=onboarding_mode,
+            has_field_context=bool(field_context),
+            has_module_context=bool(module_context),
+        )
+
+    def _get_tool_list(
+        self,
+        *,
+        initiative_id: str | None = None,
+        onboarding_mode: bool = False,
+        orchestration_mode: bool = False,
+        field_context: dict[str, Any] | None = None,
+        module_context: dict[str, Any] | None = None,
+    ) -> list[dict]:
+        """Return OpenAI tool definitions for the current chat turn context."""
         from app.capabilities.registry import get_capability_registry
 
-        surface = "project" if initiative_id else "standalone"
-        return get_capability_registry().to_openai_tools(surface)
+        return get_capability_registry().tools_for(
+            self._build_tool_context(
+                initiative_id=initiative_id,
+                onboarding_mode=onboarding_mode,
+                orchestration_mode=orchestration_mode,
+                field_context=field_context,
+                module_context=module_context,
+            )
+        )
 
     async def generate_response(
         self,
@@ -274,7 +312,7 @@ class ChatService:
 
         _log_proposal_debug(
             "generate-response-start",
-            mode=self.mode.value,
+            chat_scope="project" if initiative_id else "standalone",
             field_name=(field_context or {}).get("field_name"),
             has_field_context=bool(field_context),
             has_model_inputs_context=bool(model_inputs_context),
@@ -492,11 +530,11 @@ class ChatService:
         # Modules (LCOE / carbon / solar) live in the editor workspace — not chat.
         # If the planner calls a model tool, acknowledge it but do not execute inline.
         for fn_name, args in parsed_calls:
-            if fn_name in ("run_lcoe_model", "run_carbon_model", "run_solar_estimate"):
+            if fn_name in ("run_lcoe", "run_carbon", "run_solar"):
                 label_map = {
-                    "run_lcoe_model": "LCOE",
-                    "run_carbon_model": "Carbon",
-                    "run_solar_estimate": "Solar",
+                    "run_lcoe": "LCOE",
+                    "run_carbon": "Carbon",
+                    "run_solar": "Solar",
                 }
                 await _think(f"{label_map.get(fn_name, 'Model')} calculation queued — use the editor workspace to interact with the model.")
 
@@ -1187,7 +1225,10 @@ class ChatService:
             resp = await client.chat.completions.create(
                 model=settings.openai_orchestration_model,
                 messages=messages,
-                tools=self._get_tool_list(initiative_id=initiative_id),
+                tools=self._get_tool_list(
+                    initiative_id=initiative_id,
+                    module_context=module_context,
+                ),
                 tool_choice="auto",
                 temperature=0,
                 max_tokens=200,
@@ -2130,162 +2171,6 @@ class ChatService:
     # PROJECT mode — orchestration logic (migrated from OrchestrationService)
     # ===================================================================
 
-    _TOOL_HINT_ACTIONS: dict[str, str] = {
-        "lcoe_model": "run_lcoe_tool",
-        "carbon_model": "run_carbon_tool",
-        "generate_project_plan": "generate_project_plan",
-    }
-
-    _TOOL_HINT_MESSAGES: dict[str, str] = {
-        "lcoe_model": "Building your LCOE model…",
-        "carbon_model": "Building your carbon emissions model…",
-        "generate_project_plan": "Generating your project plan…",
-    }
-
-    # Onboarding-only tools. These are intentionally unavailable in ongoing
-    # project chat so new chats inside an existing project can never re-trigger
-    # the initial onboarding widgets.
-    _ONBOARDING_ONLY_TOOLS: set[str] = {
-        "ask_for_documents",
-        "ask_clarifying_questions",
-    }
-
-    # Prepended to the orchestration system prompt when onboarding_mode is False.
-    # The LLM must treat the session as ongoing project chat, not onboarding.
-    _PROJECT_CHAT_DIRECTIVE: str = (
-        "IMPORTANT MODE: This is an ongoing project chat inside an existing "
-        "project, NOT the initial project onboarding flow. Do NOT ask the user "
-        "to upload documents. Do NOT ask clarifying onboarding questions about "
-        "geography or project type (those have already been captured). Ignore "
-        "Rules 1 and 3 in the decision rules below — they apply only during "
-        "initial project onboarding. If the user asks a question, answer it "
-        "(send_message). If the user requests model/tool/plan work, use the "
-        "appropriate tool.\n\n"
-    )
-
-    async def get_next_action(
-        self,
-        messages: list,
-        initiative,
-        tool_hint: str | None = None,
-        field_context: dict[str, Any] | None = None,
-        onboarding_mode: bool = False,
-    ):
-        """Decide what action to take next (PROJECT mode).
-
-        Args:
-            onboarding_mode: True only for the initial new-project onboarding
-                surface. When False, onboarding-only tools (ask_for_documents,
-                ask_clarifying_questions) are removed from the tool list and
-                the system prompt is marked as ongoing project chat.
-
-        Returns an OrchestrationResult.
-        """
-        from app.services.orchestration import (
-            ORCHESTRATION_SYSTEM_PROMPT,
-            OrchestrationResult,
-        )
-
-        if tool_hint and tool_hint in self._TOOL_HINT_ACTIONS:
-            return OrchestrationResult(
-                action=self._TOOL_HINT_ACTIONS[tool_hint],
-                parameters={"message": self._TOOL_HINT_MESSAGES[tool_hint]},
-                sources_used=[],
-            )
-
-        if field_context and field_context.get("field_name"):
-            return OrchestrationResult(
-                action="propose_input_value",
-                parameters={
-                    "field_name": field_context.get("field_name"),
-                    "label": field_context.get("label"),
-                    "current_value": field_context.get("current_value"),
-                    "unit": field_context.get("unit"),
-                    "model_type": field_context.get("model_type", "lcoe"),
-                    "module_id": field_context.get("module_id"),
-                    "status": field_context.get("status"),
-                },
-                sources_used=[],
-            )
-
-        has_document_request = any(
-            m.widget_type == "document_request" for m in messages if m.role == "assistant"
-        )
-        clarifying_asked = sum(
-            1 for m in messages
-            if m.role == "assistant" and m.widget_type == "clarifying_questions"
-        )
-        user_message_count = sum(1 for m in messages if m.role == "user")
-
-        context_results = await self.retrieval.retrieve_for_context(initiative)
-        context_str = self.retrieval.format_context_for_prompt(context_results)
-
-        sources_used: list[RetrievedFact] = []
-        for result in context_results.values():
-            sources_used.extend(result.facts)
-
-        model_inputs_context = self._format_model_inputs_from_messages(messages, field_context)
-
-        system_prompt = ORCHESTRATION_SYSTEM_PROMPT.format(
-            retrieved_context=context_str if context_str else "No additional context available.",
-            title=initiative.title or "Not set",
-            project_type=initiative.project_type or "Unknown",
-            description=(initiative.project_description or "Not provided")[:500],
-            geography=initiative.geography or "Not specified",
-            has_documents="Yes" if initiative.evidence_ready else "No",
-            has_plan="Yes" if initiative.project_plan else "No",
-            documents_requested="Yes" if has_document_request else "No",
-            clarifying_asked=clarifying_asked,
-            user_message_count=user_message_count,
-            model_inputs_context=model_inputs_context or "No model has been run yet.",
-        )
-
-        if not onboarding_mode:
-            system_prompt = self._PROJECT_CHAT_DIRECTIVE + system_prompt
-
-        api_messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        recent_messages = messages[-15:] if len(messages) > 15 else messages
-        for msg in recent_messages:
-            api_messages.append({"role": msg.role, "content": msg.content})
-
-        tools = self._get_tool_list()
-        if not onboarding_mode:
-            tools = [
-                t for t in tools
-                if (t.get("function") or {}).get("name") not in self._ONBOARDING_ONLY_TOOLS
-            ]
-
-        try:
-            client = await self._get_client()
-            response = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
-                messages=api_messages,
-                tools=tools,
-                tool_choice="required",
-                temperature=0.7,
-            )
-            await record_usage_from_response(
-                self.user_id, settings.openai_orchestration_model, response,
-                self.db, is_byok=self._is_byok,
-            )
-            tool_call = response.choices[0].message.tool_calls[0]
-            action = tool_call.function.name
-            parameters = json.loads(tool_call.function.arguments)
-            logger.info(f"Orchestration chose action: {action}")
-
-            return OrchestrationResult(
-                action=action,
-                parameters=parameters,
-                sources_used=sources_used,
-            )
-        except Exception as e:
-            logger.error(f"Orchestration failed: {e}", exc_info=True)
-            return OrchestrationResult(
-                action="send_message",
-                parameters={"message": "I'm here to help. Could you tell me more about your project?"},
-                sources_used=[],
-            )
-
     async def extract_inputs_from_message(
         self,
         message: str,
@@ -2333,309 +2218,6 @@ class ChatService:
         except Exception as e:
             logger.error(f"Input extraction failed: {e}")
             return {}
-
-    async def execute_project_action(
-        self,
-        initiative,
-        action_result,
-        chat_history: list | None = None,
-        tool_hint: str | None = None,
-        model_inputs_context: str | None = None,
-        field_context: dict[str, Any] | None = None,
-        on_thinking: ThinkingCallback | None = None,
-    ) -> tuple[str | None, dict | None, str, list]:
-        """Execute an orchestration action and return (widget_type, widget_data, response, sources)."""
-        action = action_result.action
-        params = action_result.parameters
-        sources = action_result.sources_used
-
-        widget_type: str | None = None
-        widget_data: dict | None = None
-        assistant_response: str = params.get("message", "")
-
-        logger.info(f"Executing action: {action}")
-
-        if action == "send_message":
-            project_context = self._build_project_context(initiative)
-            history_dicts = self._chat_history_to_dicts(chat_history)
-            user_message = self._extract_last_user_message(chat_history, params)
-
-            try:
-                research_result = await self.generate_response(
-                    user_message=user_message,
-                    history=history_dicts,
-                    project_context=project_context or None,
-                    model_inputs_context=model_inputs_context,
-                    on_thinking=on_thinking,
-                )
-                assistant_response = research_result.content
-                sources = research_result.sources
-                if research_result.widget_type:
-                    widget_type = research_result.widget_type
-                    widget_data = research_result.widget_data
-            except Exception as e:
-                logger.error(f"Research pipeline failed for send_message, falling back: {e}")
-
-        elif action == "ask_for_documents":
-            widget_type = "document_request"
-            widget_data = {
-                "allow_multiple": True,
-                "suggested_types": params.get("suggested_types", []),
-            }
-
-        elif action == "ask_clarifying_questions":
-            widget_type = "clarifying_questions"
-            widget_data = {"fields_needed": params.get("fields_needed", [])}
-
-        elif action == "generate_project_plan":
-            from app.plans.registry import get_plan_registry
-
-            plan_handler = get_plan_registry().default_handler(self.db, self.user_id)
-            try:
-                structure = await plan_handler.propose_structure(
-                    initiative=initiative, chat_history=chat_history,
-                )
-                widget_type = plan_handler.definition.structure_widget_type
-                widget_data = plan_handler.build_structure_widget_data(structure)
-                assistant_response = (
-                    "I've outlined the modules that look most relevant for this project. "
-                    "Review them below and confirm the framework plan you want to start with."
-                )
-            except Exception as e:
-                logger.error(f"Category proposal failed: {e}", exc_info=True)
-                assistant_response = "I wasn't able to analyze the project right now. Could you provide a bit more detail so I can try again?"
-
-        elif action == "update_project_plan":
-            from app.plans.registry import get_plan_registry
-            from sqlalchemy.orm.attributes import flag_modified
-
-            plan_handler = get_plan_registry().default_handler(self.db, self.user_id)
-            existing_plan = initiative.project_plan
-            user_request = params.get("user_request", "")
-            try:
-                plan_data = await plan_handler.generate_plan(
-                    initiative=initiative,
-                    existing_plan=existing_plan,
-                    user_request=user_request,
-                )
-                initiative.project_plan = plan_data
-                flag_modified(initiative, "project_plan")
-                await self.db.commit()
-                await self.db.refresh(initiative)
-                widget_type = plan_handler.definition.summary_widget_type
-                widget_data = plan_handler.build_summary_widget_data(plan_data)
-            except Exception as e:
-                logger.error(f"Project plan update failed: {e}", exc_info=True)
-                assistant_response = "I wasn't able to update the project plan right now. Please try again."
-
-        elif action == "run_lcoe_tool":
-            from app.modules.lcoe_module import LCOETool
-            from app.services import module_service
-
-            lcoe_tool = LCOETool()
-            try:
-                yield_msg = params.get("message", "Building your LCOE model…")
-                tool_output = await lcoe_tool.execute(
-                    db=self.db, initiative_id=initiative.id,
-                    inputs=initiative.tool_inputs or {},
-                )
-                content = tool_output.content
-                computable = content.get("computable", False)
-
-                if computable and content.get("result") and content.get("inputs"):
-                    lcoe_val = content["result"]["lcoe"]
-                    currency = content["result"].get("currency", "USD")
-                    assumption_count = content["result"].get("assumption_count", 0)
-                    quality = content["result"].get("quality_label", "moderate")
-                    widget_type = "lcoe_output"
-                    widget_data = content
-                    assistant_response = (
-                        f"{yield_msg}\n\n"
-                        f"**LCOE: {currency} {lcoe_val:.4f}/kWh** "
-                        f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
-                        f"{quality} confidence). "
-                        "Review the inputs below — you can edit any value and I'll recalculate instantly."
-                    )
-                    await module_service.save_deliverable(
-                        self.db, initiative.id, "lcoe_model",
-                        f"LCOE Model ({currency} {lcoe_val:.4f}/kWh)", "lcoe", content,
-                        user_id=self.user_id or initiative.user_id,
-                        chat_id=self.ctx.chat_id,
-                    )
-                else:
-                    missing = content.get("missing_essentials", [])
-                    widget_type = "lcoe_inputs"
-                    widget_data = content
-                    missing_labels = {
-                        "net_capacity_kw": "net capacity (kW)",
-                        "total_capex": "total CAPEX",
-                        "annual_opex": "annual O&M cost",
-                    }
-                    nice_names = [missing_labels.get(m, m) for m in missing]
-                    assistant_response = (
-                        f"{yield_msg}\n\n"
-                        f"I've pre-filled what I could from our conversation. "
-                        f"To calculate the LCOE I still need: **{', '.join(nice_names)}**. "
-                        "Can you provide these?"
-                    )
-            except Exception as e:
-                logger.error(f"LCOE tool failed: {e}", exc_info=True)
-                assistant_response = "I wasn't able to build the LCOE model right now. Could you provide more details about the project costs and capacity?"
-
-        elif action == "run_carbon_tool":
-            from app.modules.carbon_module import CarbonTool
-            from app.services import module_service
-
-            carbon_tool = CarbonTool()
-            try:
-                yield_msg = params.get("message", "Building your carbon emissions model…")
-                tool_output = await carbon_tool.execute(
-                    db=self.db, initiative_id=initiative.id,
-                    inputs=initiative.tool_inputs or {},
-                )
-                content = tool_output.content
-                computable = content.get("computable", False)
-
-                if computable and content.get("result") and content.get("inputs"):
-                    net_er = content["result"]["net_er_tco2e"]
-                    assumption_count = content["result"].get("assumption_count", 0)
-                    quality = content["result"].get("quality_label", "moderate")
-                    widget_type = "carbon_output"
-                    widget_data = content
-                    assistant_response = (
-                        f"{yield_msg}\n\n"
-                        f"**Net Emission Reductions: {net_er:,.2f} tCO₂e/year** "
-                        f"({assumption_count} assumption{'s' if assumption_count != 1 else ''}, "
-                        f"{quality} confidence). "
-                        "Review the inputs below — you can edit any value and I'll recalculate instantly."
-                    )
-                    await module_service.save_deliverable(
-                        self.db, initiative.id, "carbon_model",
-                        f"Carbon ER Model ({net_er:,.2f} tCO₂e/yr)", "carbon", content,
-                        user_id=self.user_id or initiative.user_id,
-                        chat_id=self.ctx.chat_id,
-                    )
-                else:
-                    missing = content.get("missing_essentials", [])
-                    widget_type = "carbon_inputs"
-                    widget_data = content
-                    missing_labels = {
-                        "devices_households": "number of devices/households",
-                        "baseline_fuel_consumption_kg_yr": "baseline fuel consumption (kg/yr)",
-                    }
-                    nice_names = [missing_labels.get(m, m) for m in missing]
-                    assistant_response = (
-                        f"{yield_msg}\n\n"
-                        f"I've pre-filled what I could from our conversation. "
-                        f"To calculate emission reductions I still need: **{', '.join(nice_names)}**. "
-                        "Can you provide these?"
-                    )
-            except Exception as e:
-                logger.error(f"Carbon tool failed: {e}", exc_info=True)
-                assistant_response = "I wasn't able to build the carbon emissions model right now. Could you provide more details about the project?"
-
-        elif action == "propose_input_value":
-            project_context = self._build_project_context(initiative)
-            history_dicts = self._chat_history_to_dicts(chat_history)
-            user_message = self._extract_last_user_message(chat_history, params)
-            active_field_context = field_context or {
-                "field_name": params.get("field_name"),
-                "label": params.get("label"),
-                "current_value": params.get("current_value"),
-                "unit": params.get("unit"),
-                "model_type": params.get("model_type"),
-                "module_id": params.get("module_id"),
-                "status": params.get("status"),
-            }
-            _log_proposal_debug(
-                "execute-project-action",
-                action=action,
-                field_name=active_field_context.get("field_name"),
-                has_model_inputs_context=bool(model_inputs_context),
-            )
-
-            try:
-                research_result = await self.generate_response(
-                    user_message=user_message,
-                    history=history_dicts,
-                    project_context=project_context or None,
-                    model_inputs_context=model_inputs_context,
-                    field_context=active_field_context,
-                    on_thinking=on_thinking,
-                )
-                assistant_response = research_result.content
-                sources = research_result.sources
-                if research_result.widget_type == "proposed_value":
-                    widget_type = research_result.widget_type
-                    widget_data = research_result.widget_data
-                    _log_proposal_debug(
-                        "execute-project-action-widget",
-                        field_name=active_field_context.get("field_name"),
-                        source="generate_response",
-                        proposed_value=(widget_data or {}).get("proposed_value") if widget_data else None,
-                    )
-                else:
-                    hint_field = params.get("field_name")
-                    hint_model = params.get("model_type", "lcoe")
-                    if model_inputs_context:
-                        proposal = await self._extract_value_proposal(
-                            answer_text=assistant_response,
-                            user_message=user_message,
-                            model_inputs_context=model_inputs_context,
-                            hint_field_name=hint_field,
-                            hint_model_type=hint_model,
-                            current_value=self._resolve_current_value(active_field_context, model_inputs_context),
-                            require_distinct=self._requires_distinct_proposal(
-                                user_message,
-                                active_field_context,
-                            ),
-                        )
-                        if proposal:
-                            widget_type = "proposed_value"
-                            widget_data = proposal
-                            _log_proposal_debug(
-                                "execute-project-action-widget",
-                                field_name=active_field_context.get("field_name"),
-                                source="extract_value_proposal",
-                                proposed_value=proposal.get("proposed_value"),
-                            )
-            except Exception as e:
-                logger.error(f"propose_input_value action failed: {e}", exc_info=True)
-                assistant_response = params.get("message", "I wasn't able to research this value right now.")
-
-        # Generic deliverable persistence for tools that produce output via
-        # the research pipeline (e.g. solar).
-        _ALREADY_SAVED = {"lcoe_output", "lcoe_inputs", "carbon_output", "carbon_inputs"}
-        _WIDGET_TYPE_TO_TOOL_ID: dict[str, str] = {
-            "solar_output": "solar_estimate",
-            "solar_inputs": "solar_estimate",
-        }
-        if (
-            widget_type
-            and widget_type not in _ALREADY_SAVED
-            and widget_data
-            and isinstance(widget_data, dict)
-        ):
-            from app.modules.registry import get_module_registry
-            from app.services import module_service
-
-            _registry = get_module_registry()
-            _tool_id = _WIDGET_TYPE_TO_TOOL_ID.get(widget_type, "")
-            _tool = _registry.get_module(_tool_id)
-            if _tool and _tool.is_exportable(widget_data):
-                title = _tool.definition.name
-                if widget_type == "solar_output":
-                    annual = (widget_data.get("result") or {}).get("annual_kwh")
-                    if annual:
-                        title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
-                await module_service.save_deliverable(
-                    self.db, initiative.id, _tool_id,
-                    title, _tool.definition.output_type, widget_data,
-                    user_id=self.user_id or initiative.user_id,
-                    chat_id=self.ctx.chat_id,
-                )
-
-        return widget_type, widget_data, assistant_response, sources
 
     # -----------------------------------------------------------------------
     # PROJECT-mode helpers
