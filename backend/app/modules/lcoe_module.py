@@ -102,7 +102,7 @@ class LCOETool(BaseModule):
             assumptions_behavior="tracks",
             evidence_behavior="none",
             decision_log_attribution=DecisionLogAttribution(
-                adapter_labels={"lcoe": "Nitrogen LCOE engine"},
+                adapter_labels={"lcoe": "LCOE engine"},
             ),
         )
 

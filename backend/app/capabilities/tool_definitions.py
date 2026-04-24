@@ -1,8 +1,4 @@
-"""Register all built-in capabilities into the CapabilityRegistry.
-
-Each entry from ORCHESTRATION_ACTIONS and SEARCH_TOOLS is migrated here.
-Modules from ModuleRegistry and prompts from PromptRegistry also get entries.
-"""
+"""Register all built-in capabilities into the CapabilityRegistry."""
 
 from app.capabilities.registry import CapabilityEntry, CapabilityKind, CapabilityRegistry
 
@@ -305,32 +301,6 @@ def _register_orchestration_tools(registry: CapabilityRegistry) -> None:
             },
         },
     ))
-
-    registry.register(CapabilityEntry(
-        id="start_gs_certification",
-        kind=CapabilityKind.INTERNAL_TOOL,
-        name="Start GS Certification",
-        description="Start the Gold Standard certification workflow.",
-        surfaces=["orchestration"],
-        openai_tool_def={
-            "type": "function",
-            "function": {
-                "name": "start_gs_certification",
-                "description": "Start the Gold Standard (GS4GG) certification workflow. Use when the user asks about Gold Standard certification, GS4GG submission, cover letter preparation, design review, pre-monitoring requirements, or what documents are needed for Gold Standard project registration.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "Brief message (1-2 sentences) telling the user you're loading the GS certification workspace.",
-                        }
-                    },
-                    "required": ["message"],
-                },
-            },
-        },
-    ))
-
 
 # ---------------------------------------------------------------------------
 # Standalone-surface tools (generate / research chat)

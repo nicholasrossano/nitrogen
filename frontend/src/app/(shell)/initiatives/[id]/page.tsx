@@ -37,7 +37,7 @@ const DEFAULT_CHAT_PANEL_PERCENT = 30;
 type InitiativeView = 'overview' | 'modules' | 'framework' | 'files';
 
 function viewFromSearchParam(viewParam: string | null): InitiativeView {
-  if (viewParam === 'research' || viewParam === 'explore') return 'overview';
+  if (viewParam === 'overview' || viewParam === 'research' || viewParam === 'explore') return 'overview';
   if (viewParam === 'framework' || viewParam === 'plan') return 'framework';
   if (viewParam === 'workspace' || viewParam === 'modules') return 'modules';
   if (viewParam === 'files') return 'files';
@@ -310,7 +310,8 @@ function InitiativePageContent() {
     () => (visibleWorkspaceTabs.some((tab) => tab.id === activeWorkspaceTabId) ? activeWorkspaceTabId : null),
     [visibleWorkspaceTabs, activeWorkspaceTabId],
   );
-  const showTabbedWorkspace = activeView === 'modules' || isDocumentTab(activeWorkspaceTab);
+  const showTabbedWorkspace =
+    activeView === 'modules' || (activeView === 'framework' && isDocumentTab(activeWorkspaceTab));
   const overviewWorkspaceOpen = activeView === 'overview' && panelVisibility.overview.workspace;
   const overviewChatOpen = activeView === 'overview' && panelVisibility.overview.chat;
   const modulesWorkspaceOpen = activeView === 'modules' && panelVisibility.modules.workspace;
@@ -470,7 +471,7 @@ function InitiativePageContent() {
       }
       setPanelOpen('overview', 'workspace', true);
       setActiveView('overview');
-      router.replace(`/initiatives/${initiativeId}?view=research`);
+      router.replace(`/initiatives/${initiativeId}?view=overview`);
       return true;
     }
     if (item === 'workspace') {
@@ -509,7 +510,7 @@ function InitiativePageContent() {
     if (!initiative) return;
     if (isOnboarding && activeView !== 'overview') {
       setActiveView('overview');
-      router.replace(`/initiatives/${initiativeId}?view=research`);
+      router.replace(`/initiatives/${initiativeId}?view=overview`);
     }
   }, [initiative, isOnboarding, activeView, initiativeId, router]);
 
