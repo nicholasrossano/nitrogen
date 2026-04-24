@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
@@ -95,11 +95,6 @@ export function ProjectWorkspaceEditorPanel({
   const showWorkspaceHub = effectiveWorkspaceLaunchMode !== 'idle' || !activeTabId;
   const openModeActive = showWorkspaceHub && effectiveWorkspaceLaunchMode === 'open';
 
-  const activeTab = useMemo(() => {
-    if (!activeTabId) return null;
-    return tabs.find((tab) => tab.id === activeTabId) ?? null;
-  }, [tabs, activeTabId]);
-
   const openExistingModule = async (instance: ModuleInstance) => {
     setLocalWorkspaceLaunchMode('idle');
     onOpenTab({
@@ -109,6 +104,53 @@ export function ProjectWorkspaceEditorPanel({
       instanceId: instance.id,
       moduleId: instance.module_id,
     });
+  };
+
+  const renderTabContent = (tab: WorkspacePanelTab, isActive: boolean) => {
+    if (tab.kind === 'artifacts') {
+      return (
+        <EditorSidePanel
+          widgets={chatWidgets}
+          initiativeId={initiativeId}
+          onOpenDecisionLog={onOpenDecisionLog}
+          onExportDecisionLog={onExportDecisionLog}
+        />
+      );
+    }
+
+    if (tab.kind === 'module') {
+      return (
+        <ModuleWorkspace
+          instanceId={tab.instanceId}
+          moduleId={tab.moduleId}
+          initiativeId={initiativeId}
+          onAddToChat={(text) => onSendToChat?.(text, tab.moduleId)}
+          onOpenDecisionLog={onOpenDecisionLog}
+          onExportDecisionLog={onExportDecisionLog}
+          onInspectorStateChange={isActive ? onModuleInspectorStateChange : undefined}
+        />
+      );
+    }
+
+    if (tab.kind === 'decision-log') {
+      return <DecisionLogWorkspaceTab moduleInstanceId={tab.moduleInstanceId} />;
+    }
+
+    if (tab.kind === 'document') {
+      return (
+        <DocumentViewerWidget
+          data={{
+            evidence_doc_id: tab.citation.evidence_doc_id,
+            chunk_id: tab.citation.chunk_id,
+            source_title: tab.citation.source_title,
+          }}
+          initiativeId={initiativeId}
+          isActive={isActive}
+        />
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -220,57 +262,33 @@ export function ProjectWorkspaceEditorPanel({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="relative flex-1 min-h-0 overflow-hidden">
         {showWorkspaceHub && (
-          <WorkspaceHub
-            key={initiativeId}
-            initiativeId={initiativeId}
-            launchMode={effectiveWorkspaceLaunchMode}
-            onLaunchModeHandled={() => {
-              onWorkspaceLaunchModeHandled();
-            }}
-            onSelectExisting={openExistingModule}
-          />
+          <div className="absolute inset-0 z-10">
+            <WorkspaceHub
+              key={initiativeId}
+              initiativeId={initiativeId}
+              launchMode={effectiveWorkspaceLaunchMode}
+              onLaunchModeHandled={() => {
+                onWorkspaceLaunchModeHandled();
+              }}
+              onSelectExisting={openExistingModule}
+            />
+          </div>
         )}
 
-        {activeTab?.kind === 'artifacts' && (
-          <EditorSidePanel
-            widgets={chatWidgets}
-            initiativeId={initiativeId}
-            onOpenDecisionLog={onOpenDecisionLog}
-            onExportDecisionLog={onExportDecisionLog}
-          />
-        )}
-
-        {activeTab?.kind === 'module' && (
-          <ModuleWorkspace
-            instanceId={activeTab.instanceId}
-            moduleId={activeTab.moduleId}
-            initiativeId={initiativeId}
-            onAddToChat={(text) => onSendToChat?.(text, activeTab.moduleId)}
-            onOpenDecisionLog={onOpenDecisionLog}
-            onExportDecisionLog={onExportDecisionLog}
-            onInspectorStateChange={onModuleInspectorStateChange}
-          />
-        )}
-
-        {activeTab?.kind === 'decision-log' && (
-          <DecisionLogWorkspaceTab
-            moduleInstanceId={activeTab.moduleInstanceId}
-          />
-        )}
-
-        {activeTab?.kind === 'document' && (
-          <DocumentViewerWidget
-            data={{
-              evidence_doc_id: activeTab.citation.evidence_doc_id,
-              chunk_id: activeTab.citation.chunk_id,
-              source_title: activeTab.citation.source_title,
-            }}
-            initiativeId={initiativeId}
-            isActive
-          />
-        )}
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTabId && !showWorkspaceHub;
+          return (
+            <div
+              key={tab.id}
+              className={isActive ? 'h-full' : 'hidden h-full'}
+              aria-hidden={!isActive}
+            >
+              {renderTabContent(tab, isActive)}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
