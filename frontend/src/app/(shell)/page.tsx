@@ -178,7 +178,7 @@ function HomePageContent() {
 
       <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
         <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-auto">
-          <div className="px-6 py-4">
+          <div className="h-full px-6 py-4 flex flex-col">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div className="relative h-7 flex-1 min-w-0 max-w-2xl">
               <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
@@ -223,7 +223,7 @@ function HomePageContent() {
             </div>
           </div>
           {loading ? (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex flex-1 items-center justify-center">
               <PageLoader label="" />
             </div>
           ) : error ? (
