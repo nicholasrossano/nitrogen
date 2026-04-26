@@ -22,7 +22,7 @@ mammoth>=1.6.0
 
 # Auth
 firebase-admin>=6.4.0
-python-jose[cryptography]>=3.3.0
+python-jose[cryptography]>=3.5.0
 
 # Billing
 stripe>=8.0.0
