@@ -181,6 +181,8 @@ function InitiativePageContent() {
   const [frameworkModulesLoading, setFrameworkModulesLoading] = useState(false);
   const onboardingSeenRef = useRef(false);
   const modulesDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
+  const frameworkModulesCacheRef = useRef<Map<string, ModuleInstance[]>>(new Map());
+  const frameworkModulesRequestRef = useRef<Map<string, Promise<ModuleInstance[]>>>(new Map());
 
   const {
     initiative,
@@ -436,14 +438,34 @@ function InitiativePageContent() {
     });
   }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, initiativeId]);
 
-  const loadFrameworkModuleInstances = useCallback(async (targetInitiativeId: string) => {
+  const loadFrameworkModuleInstances = useCallback(async (
+    targetInitiativeId: string,
+    options?: { force?: boolean },
+  ) => {
+    const force = options?.force === true;
+    const cached = frameworkModulesCacheRef.current.get(targetInitiativeId);
+    if (cached && !force) {
+      setFrameworkModuleInstances(cached);
+      return;
+    }
+
+    let request = frameworkModulesRequestRef.current.get(targetInitiativeId);
+    if (!request || force) {
+      request = api.listModuleInstances(targetInitiativeId);
+      frameworkModulesRequestRef.current.set(targetInitiativeId, request);
+    }
+
     setFrameworkModulesLoading(true);
     try {
-      const instances = await api.listModuleInstances(targetInitiativeId);
+      const instances = await request;
+      frameworkModulesCacheRef.current.set(targetInitiativeId, instances);
       setFrameworkModuleInstances(instances);
     } catch {
       setFrameworkModuleInstances([]);
     } finally {
+      if (frameworkModulesRequestRef.current.get(targetInitiativeId) === request) {
+        frameworkModulesRequestRef.current.delete(targetInitiativeId);
+      }
       setFrameworkModulesLoading(false);
     }
   }, []);
@@ -710,7 +732,11 @@ function InitiativePageContent() {
     moduleName: string,
   ) => {
     const instance = await api.createModuleInstance(initiativeId, moduleId);
-    setFrameworkModuleInstances((prev) => [...prev, instance]);
+    setFrameworkModuleInstances((prev) => {
+      const next = [...prev, instance];
+      frameworkModulesCacheRef.current.set(initiativeId, next);
+      return next;
+    });
     handleOpenWorkspaceModule({
       instanceId: instance.id,
       moduleId: instance.module_id,
@@ -857,7 +883,7 @@ function InitiativePageContent() {
           onOpenDecisionLog={openDecisionLogTab}
           onExportDecisionLog={exportDecisionLog}
           onModuleInspectorStateChange={handleModuleInspectorStateChange}
-          onModuleApprovalChange={() => loadFrameworkModuleInstances(initiativeId)}
+          onModuleApprovalChange={() => loadFrameworkModuleInstances(initiativeId, { force: true })}
         />
       );
     }
