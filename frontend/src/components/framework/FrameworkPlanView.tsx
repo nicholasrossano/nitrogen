@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, Loader2, Trash2 } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, Loader2, Search, Trash2 } from 'lucide-react';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { type ModuleInstance } from '@/lib/api';
@@ -74,6 +74,7 @@ export function FrameworkPlanView({
   const devMode = useSettingsStore((s) => s.devMode);
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [moduleSearchQuery, setModuleSearchQuery] = useState('');
   const [creatingModuleId, setCreatingModuleId] = useState<string | null>(null);
   const [removingPlannedModuleId, setRemovingPlannedModuleId] = useState<string | null>(null);
   const [creatingWorkspaceModuleId, setCreatingWorkspaceModuleId] = useState<string | null>(null);
@@ -103,6 +104,22 @@ export function FrameworkPlanView({
     })).filter((category) => devMode || category.modules.length > 0),
     [devMode, moduleMetaById],
   );
+
+  const filteredCategories = useMemo(() => {
+    const query = moduleSearchQuery.trim().toLowerCase();
+    if (!query) return visibleCategories;
+
+    return visibleCategories
+      .map((category) => ({
+        ...category,
+        modules: category.modules.filter((module) => (
+          module.name.toLowerCase().includes(query)
+          || module.description.toLowerCase().includes(query)
+          || category.name.toLowerCase().includes(query)
+        )),
+      }))
+      .filter((category) => category.modules.length > 0);
+  }, [moduleSearchQuery, visibleCategories]);
 
   useEffect(() => {
     if (!libraryOpen) return;
@@ -238,13 +255,28 @@ export function FrameworkPlanView({
               {libraryOpen && (
                 <div className="absolute right-0 top-full z-30 mt-2 w-[360px] max-h-[420px] overflow-y-auto rounded-xl border border-divider bg-white shadow-lg">
                   <div className="px-4 pt-3 pb-2 border-b border-divider">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                      Add Module
-                    </p>
+                    <label htmlFor="module-library-search" className="sr-only">
+                      Search modules
+                    </label>
+                    <div className="flex items-center gap-2 rounded-lg border border-divider bg-surface-subtle px-3 py-2">
+                      <Search className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
+                      <input
+                        id="module-library-search"
+                        type="search"
+                        value={moduleSearchQuery}
+                        onChange={(event) => setModuleSearchQuery(event.target.value)}
+                        placeholder="Search modules..."
+                        className="w-full bg-transparent text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none"
+                      />
+                    </div>
                   </div>
 
                   <div className="p-2">
-                    {visibleCategories.map((category) => (
+                    {filteredCategories.length === 0 ? (
+                      <p className="px-2 py-6 text-center text-xs text-text-tertiary">
+                        No modules match your search.
+                      </p>
+                    ) : filteredCategories.map((category) => (
                       <div key={category.id} className="mb-2 last:mb-0">
                         <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
                           {category.name}
@@ -312,37 +344,85 @@ export function FrameworkPlanView({
                     {phase.modules.map((moduleId) => {
                       const moduleMeta = moduleMetaById.get(moduleId);
                       const moduleName = moduleMeta?.name || moduleId.replace(/_/g, ' ');
-                      const representativeInstance = moduleInstances.find((candidate) => candidate.module_id === moduleId) ?? null;
                       const isRemoving = removingPlannedModuleId === moduleId;
                       const isCreatingWorkspace = creatingWorkspaceModuleId === moduleId;
                       const moduleInstancesForType = moduleInstances
                         .filter((candidate) => candidate.module_id === moduleId)
                         .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+                      const completedInstances = moduleInstancesForType.filter(
+                        (candidate) => candidate.is_plan_complete === true,
+                      );
+                      const completedInstance = completedInstances[0] ?? null;
+                      const isModuleComplete = Boolean(completedInstance);
+                      const shouldOpenInstancePicker = moduleInstancesForType.length > 1 || completedInstances.length > 1;
+                      const directOpenInstance = shouldOpenInstancePicker
+                        ? null
+                        : completedInstance ?? moduleInstancesForType[0] ?? null;
                       const instancePickerOpen = openInstancePickerModuleId === moduleId;
 
                       return (
                         <div
                           key={moduleId}
-                          className={`group relative card-interactive border border-black/[0.04] overflow-visible ${instancePickerOpen ? 'z-40' : 'z-0'}`}
+                          className={[
+                            'group relative card-interactive overflow-visible',
+                            isModuleComplete
+                              ? 'border border-accent/35 bg-accent-wash/35 shadow-[0_12px_28px_-18px_rgba(0,94,114,0.55)]'
+                              : 'border border-black/[0.04]',
+                            instancePickerOpen ? 'z-40' : 'z-0',
+                          ].join(' ')}
                         >
                           <button
                             type="button"
                             onClick={() => {
-                              if (representativeInstance) onOpenModule(representativeInstance);
+                              if (moduleInstancesForType.length === 0) {
+                                if (!readOnly) void handleCreateModuleInModulesView(moduleId, moduleName);
+                                return;
+                              }
+
+                              if (shouldOpenInstancePicker) {
+                                setOpenInstancePickerModuleId((prev) => (
+                                  prev === moduleId ? null : moduleId
+                                ));
+                                return;
+                              }
+
+                              if (directOpenInstance) onOpenModule(directOpenInstance);
                             }}
-                            disabled={!representativeInstance}
+                            disabled={readOnly && moduleInstancesForType.length === 0}
                             className="relative flex w-full items-center gap-3 px-4 py-3.5 text-left"
                           >
-                            <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash">
-                              <span className="[&>svg]:w-5 [&>svg]:h-5 text-accent">
-                                {moduleMeta?.icon}
+                            <div
+                              className={[
+                                'w-10 h-10 flex-shrink-0 rounded flex items-center justify-center',
+                                isModuleComplete ? 'bg-accent text-white shadow-sm' : 'bg-accent-wash',
+                              ].join(' ')}
+                            >
+                              <span
+                                className={[
+                                  '[&>svg]:w-5 [&>svg]:h-5',
+                                  isModuleComplete ? 'text-white' : 'text-accent',
+                                ].join(' ')}
+                              >
+                                {isModuleComplete ? <Check className="w-5 h-5" strokeWidth={2.4} /> : moduleMeta?.icon}
                               </span>
                             </div>
-                            <span className="text-xs font-medium text-text-secondary leading-snug text-left">
-                              {moduleName}
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className={[
+                                  'block text-xs font-medium leading-snug text-left',
+                                  isModuleComplete ? 'text-accent' : 'text-text-secondary',
+                                ].join(' ')}
+                              >
+                                {moduleName}
+                              </span>
+                              {isModuleComplete && (
+                                <span className="mt-1 inline-flex items-center rounded-full border border-accent/20 bg-white/75 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+                                  Completed
+                                </span>
+                              )}
                             </span>
                           </button>
-                          {!readOnly && (
+                          {(moduleInstancesForType.length > 0 || !readOnly) && (
                             <div className="px-4 pb-3 flex justify-end gap-2">
                               {moduleInstancesForType.length > 0 && (
                                 <div ref={instancePickerOpen ? instancePickerRef : null} className="relative">
@@ -363,6 +443,7 @@ export function FrameworkPlanView({
                                     <div className="absolute right-0 top-full mt-1 z-50 min-w-[220px] max-h-64 overflow-y-auto rounded-lg border border-divider bg-white py-1 shadow-lg">
                                       {moduleInstancesForType.map((moduleInstance, idx) => {
                                         const openingThisInstance = openingExistingInstanceId === moduleInstance.id;
+                                        const isApprovedInstance = moduleInstance.is_plan_complete === true;
                                         const title = moduleInstance.title || moduleName;
                                         const label = moduleInstancesForType.length > 1
                                           ? `${title} #${moduleInstancesForType.length - idx}`
@@ -378,7 +459,14 @@ export function FrameworkPlanView({
                                             }}
                                             className="w-full px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-surface-subtle hover:text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
                                           >
-                                            {openingThisInstance ? 'Opening…' : label}
+                                            <span className="flex items-center gap-2">
+                                              <span className="min-w-0 flex-1 truncate">
+                                                {openingThisInstance ? 'Opening…' : label}
+                                              </span>
+                                              {isApprovedInstance && (
+                                                <Check className="w-3.5 h-3.5 flex-shrink-0 text-accent" strokeWidth={2.4} />
+                                              )}
+                                            </span>
                                           </button>
                                         );
                                       })}
@@ -386,24 +474,26 @@ export function FrameworkPlanView({
                                   )}
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                disabled={isCreatingWorkspace}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleCreateModuleInModulesView(moduleId, moduleName);
-                                }}
-                                className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                              >
-                                {isCreatingWorkspace ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    New
-                                  </>
-                                ) : (
-                                  'New'
-                                )}
-                              </button>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  disabled={isCreatingWorkspace}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCreateModuleInModulesView(moduleId, moduleName);
+                                  }}
+                                  className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  {isCreatingWorkspace ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      New
+                                    </>
+                                  ) : (
+                                    'New'
+                                  )}
+                                </button>
+                              )}
                             </div>
                           )}
                           {!readOnly && (
