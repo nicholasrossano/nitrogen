@@ -362,7 +362,7 @@ export function CategorizedListStage({
     <div className="flex flex-col gap-2.5">
       {isLoading && localItems.length === 0 && !adding && (
         <div className="py-10">
-          <PageLoader label="Loading stage..." />
+          <PageLoader />
         </div>
       )}
 

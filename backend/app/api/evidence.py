@@ -18,7 +18,6 @@ from app.schemas.evidence import (
 )
 from app.services.evidence_processing import create_uploaded_doc
 from app.services.evidence_processor import schedule_processing
-from app.core.filename_utils import deduplicate_filename
 from app.core.rate_limit import limiter
 
 router = APIRouter()

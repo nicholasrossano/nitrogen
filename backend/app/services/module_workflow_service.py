@@ -109,6 +109,7 @@ async def get_initiative_context(db: AsyncSession, initiative_id: Any) -> dict[s
     if initiative is None:
         return {}
     return {
+        "initiative_id": str(initiative_id),
         "project_title": initiative.title or "",
         "project_description": initiative.project_description or initiative.goal or "",
         "geography": initiative.geography or "",
@@ -345,6 +346,7 @@ async def populate_stage(
         raise ValueError(f"Stage '{stage_id}' not found in stage_defs for '{module.definition.id}'")
 
     context = await get_initiative_context(db, inst.initiative_id)
+    context["_db"] = db
 
     # Mark as populating
     state["stages"][stage_id]["status"] = "populating"
@@ -633,6 +635,7 @@ async def enrich_record_item(
     item_content = source_item.get("content", {})
     existing_record = records.get(item_id, {})
     context = await get_initiative_context(db, inst.initiative_id)
+    context["_db"] = db
 
     enriched = await module.enrich_record(stage_id, item_content, existing_record, context)
     records[item_id] = enriched

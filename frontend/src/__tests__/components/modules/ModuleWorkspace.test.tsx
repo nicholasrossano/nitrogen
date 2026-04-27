@@ -54,7 +54,7 @@ function baseWorkflowState() {
       icon: 'Network',
       output_type: 'implementation_plan',
       category: 'planning',
-      export_format: null,
+      export_format: null as string | null,
       requires_final_approval: true,
       stage_defs: [
         {
@@ -91,9 +91,9 @@ function baseWorkflowState() {
       current_stage_id: 'plan',
       final_approval: {
         status: 'pending',
-        approved_at: null,
-        approved_by: null,
-        approved_by_email: null,
+        approved_at: null as string | null,
+        approved_by: null as string | null,
+        approved_by_email: null as string | null,
       },
       stages: {
         phases: {
@@ -112,9 +112,9 @@ function baseWorkflowState() {
         },
         plan: {
           status: 'draft',
-          confirmed_at: null,
-          confirmed_by: null,
-          confirmed_by_email: null,
+          confirmed_at: null as string | null,
+          confirmed_by: null as string | null,
+          confirmed_by_email: null as string | null,
           data: { widget_data: { groups: [] } },
         },
       },
