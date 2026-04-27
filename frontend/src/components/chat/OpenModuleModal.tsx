@@ -34,6 +34,10 @@ type EnrichedInstance = ModuleInstance & { index: number | null; displayName: st
 
 function enrich(instances: ModuleInstance[]): EnrichedInstance[] {
   return instances.map((inst) => {
+    if (inst.display_name) {
+      return { ...inst, index: inst.instance_number ?? null, displayName: inst.display_name };
+    }
+
     const sameToolInstances = instances.filter((i) => i.module_id === inst.module_id);
     const hasDuplicates = sameToolInstances.length > 1;
     const index = hasDuplicates

@@ -268,6 +268,7 @@ function ConfirmationBar({
 interface ModuleWorkspaceProps {
   instanceId: string;
   moduleId: string;
+  moduleTitle?: string;
   initiativeId?: string;
   onAddToChat?: (text: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
@@ -279,6 +280,7 @@ interface ModuleWorkspaceProps {
 export function ModuleWorkspace({
   instanceId,
   moduleId,
+  moduleTitle,
   initiativeId,
   onAddToChat,
   onOpenDecisionLog,
@@ -602,11 +604,11 @@ export function ModuleWorkspace({
     && stagesBeforeTerminalConfirmed
     && terminalStageReady;
   const canExportModule = hasExport && finalApproved;
-  const moduleTitle = mod.name ?? moduleId.replace(/_/g, ' ');
+  const moduleDisplayTitle = moduleTitle || mod.name || moduleId.replace(/_/g, ' ');
   const decisionLogContext = {
     instanceId,
     moduleId,
-    title: moduleTitle,
+    title: moduleDisplayTitle,
   };
 
   const handleDecisionLogOpen = async () => {
