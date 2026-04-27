@@ -273,6 +273,7 @@ interface ModuleWorkspaceProps {
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
+  onApprovalChange?: () => void;
 }
 
 export function ModuleWorkspace({
@@ -283,6 +284,7 @@ export function ModuleWorkspace({
   onOpenDecisionLog,
   onExportDecisionLog,
   onInspectorStateChange,
+  onApprovalChange,
 }: ModuleWorkspaceProps) {
   const [state, setState] = useState<StagedModuleWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -495,13 +497,14 @@ export function ModuleWorkspace({
         workflow_state: result.workflow_state,
         workflow_version: result.workflow_version,
       } : prev);
+      onApprovalChange?.();
     } catch (e: any) {
-      setError(e.message ?? 'Failed to approve final report');
+      setError(e.message ?? 'Failed to approve module');
       fetchState();
     } finally {
       setIsApprovingFinal(false);
     }
-  }, [instanceId, state?.workflow_version, fetchState]);
+  }, [instanceId, state?.workflow_version, fetchState, onApprovalChange]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -569,8 +572,7 @@ export function ModuleWorkspace({
   // Current stage index (used for deriving prior stages in workspace stages)
   const currentIdx = stageDefs.findIndex((s) => s.id === currentStageDef.id);
 
-  // All stages confirmed → show export button for modules that support it
-  const allConfirmed = stageDefs.length > 0 && stageDefs.every((s) => isStageConfirmed(stages[s.id]?.status));
+  // Final approval is the same state that marks framework tiles complete.
   const hasExport = !!mod.export_format;
   const finalApproval = ws.final_approval ?? {
     status: 'pending',
@@ -578,27 +580,28 @@ export function ModuleWorkspace({
     approved_by: null,
     approved_by_email: null,
   };
-  const requiresFinalApproval = !!mod.requires_final_approval;
+  const requiresFinalApproval = !!mod.requires_final_approval || stageDefs.length > 0;
   const finalApproved = finalApproval.status === 'approved';
   const terminalStageDef = stageDefs[stageDefs.length - 1];
   const terminalStageId = terminalStageDef?.id ?? null;
   const terminalStageState = terminalStageId ? stages[terminalStageId] : null;
+  const terminalStageHasComputedWidgetData =
+    terminalStageDef?.component === 'computed_results'
+    && terminalStageState?.data?.widget_data != null;
   const terminalStageReady = !!terminalStageState && (
     isStageConfirmed(terminalStageState.status)
-    || (terminalStageState.status === 'draft' && hasMeaningfulValue(terminalStageState.data))
+    || (
+      terminalStageState.status === 'draft'
+      && (hasMeaningfulValue(terminalStageState.data) || terminalStageHasComputedWidgetData)
+    )
   );
   const stagesBeforeTerminalConfirmed = stageDefs.slice(0, -1).every((s) => isStageConfirmed(stages[s.id]?.status));
-  const canApproveFinal = hasExport
-    && requiresFinalApproval
+  const canApproveFinal = requiresFinalApproval
     && !finalApproved
     && stageDefs.length > 0
     && stagesBeforeTerminalConfirmed
     && terminalStageReady;
-  const canExportModule = hasExport && (
-    requiresFinalApproval
-      ? finalApproved
-      : allConfirmed
-  );
+  const canExportModule = hasExport && finalApproved;
   const moduleTitle = mod.name ?? moduleId.replace(/_/g, ' ');
   const decisionLogContext = {
     instanceId,
@@ -714,12 +717,6 @@ export function ModuleWorkspace({
     'solar_output',
   ].includes(currentStageDef.widget);
   const hasComputedWidgetData = !!currentStageState.data?.widget_data;
-  const isTerminalComputedStage = isComputedStage && currentStageDef.id === terminalStageId;
-  const shouldShowTerminalStageApprove = !requiresFinalApproval
-    && isTerminalComputedStage
-    && (currentStageState.status === 'draft'
-      || (currentStageState.status === 'pending' && hasComputedWidgetData)
-      || (isStageConfirmed(currentStageState.status) && isEditingConfirmedStage));
   const shouldShowMergedConfirmAction =
     isCalculationComputedWidget
     && !(requiresFinalApproval && currentStageDef.id === terminalStageId)
@@ -757,10 +754,16 @@ export function ModuleWorkspace({
     shouldShowMergedConfirmAction ? { mode: 'confirm' } : undefined;
   const shouldShowSeparateConfirmationBar = !(
     (isCalculationComputedWidget && shouldShowMergedConfirmAction)
-    || shouldShowTerminalStageApprove
   );
 
-  // Floating confirmed badge — universal across all stage/widget types
+  // Floating status badge — "Approved" uses the same final approval state as framework tiles.
+  const badgeApprovedAt = finalApproval.approved_at
+    ? new Date(finalApproval.approved_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
+  const badgeApprovedBy = finalApproval.approved_by_email || finalApproval.approved_by || null;
+  const badgeApprovedMeta = badgeApprovedAt
+    ? `${badgeApprovedAt}${badgeApprovedBy ? ` by ${badgeApprovedBy}` : ''}`
+    : null;
   const badgeConfirmedAt = currentStageState.confirmed_at
     ? new Date(currentStageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
     : null;
@@ -768,9 +771,12 @@ export function ModuleWorkspace({
   const badgeConfirmedMeta = badgeConfirmedAt
     ? `${badgeConfirmedAt}${badgeConfirmedBy ? ` by ${badgeConfirmedBy}` : ''}`
     : null;
+  const showApprovedBadge = finalApproved && !isEditingConfirmedStage;
   const showConfirmedBadge =
-    isStageConfirmed(currentStageState.status)
-    && !isEditingConfirmedStage;
+    !showApprovedBadge
+    && isStageConfirmed(currentStageState.status)
+    && !isEditingConfirmedStage
+    && !(requiresFinalApproval && currentStageDef.id === terminalStageId);
   const showEditInBadge =
     showConfirmedBadge
     && !isComputedStage
@@ -820,34 +826,29 @@ export function ModuleWorkspace({
                   )}
                 </div>
               )}
-              {(canApproveFinal || shouldShowTerminalStageApprove) && (
+              {canApproveFinal && (
                 <button
-                  onClick={() => {
-                    if (shouldShowTerminalStageApprove) {
-                      if (!canConfirmCurrentStage) {
-                        setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: false }));
-                        setEditBaselineByStageId((prev) => {
-                          const next = { ...prev };
-                          delete next[currentStageDef.id];
-                          return next;
-                        });
-                        return;
-                      }
-                      handleConfirm(currentStageDef.id);
-                      return;
-                    }
-                    handleApproveFinal();
-                  }}
-                  disabled={shouldShowTerminalStageApprove ? !canConfirmCurrentStage || isConfirming : isApprovingFinal}
+                  onClick={handleApproveFinal}
+                  disabled={isApprovingFinal}
                   className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
                 >
-                  {(shouldShowTerminalStageApprove ? isConfirming : isApprovingFinal)
+                  {isApprovingFinal
                     ? <Loader2 className="w-3 h-3 animate-spin" />
                     : <CheckCircle2 className="w-3 h-3" />}
                   Approve
                 </button>
               )}
-              {allConfirmed && canExportModule && (
+              {finalApproved && !canExportModule && (
+                <button
+                  type="button"
+                  disabled
+                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0 disabled:opacity-100 disabled:cursor-default"
+                >
+                  <CheckCircle2 className="w-3 h-3 text-accent" />
+                  Approved
+                </button>
+              )}
+              {canExportModule && (
                 <ExportButton
                   onClick={handleExport}
                 />
@@ -897,7 +898,7 @@ export function ModuleWorkspace({
                     isConfirming={isConfirming}
                     isEditingConfirmedStage={isEditingConfirmedStage}
                     hasPendingChanges={hasPendingConfirmedStageChanges}
-                    suppressConfirmAction={(requiresFinalApproval && currentStageDef.id === terminalStageId) || shouldShowTerminalStageApprove}
+                    suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
                     allFieldsFilled={allEditableTableFieldsFilled}
                     onStartEditConfirmedStage={() =>
                       {
@@ -956,7 +957,7 @@ export function ModuleWorkspace({
                   isConfirming={isConfirming}
                   isEditingConfirmedStage={isEditingConfirmedStage}
                   hasPendingChanges={hasPendingConfirmedStageChanges}
-                  suppressConfirmAction={(requiresFinalApproval && currentStageDef.id === terminalStageId) || shouldShowTerminalStageApprove}
+                  suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
                   allFieldsFilled={allEditableTableFieldsFilled}
                   onStartEditConfirmedStage={() =>
                     {
@@ -974,11 +975,15 @@ export function ModuleWorkspace({
         </div>
       </div>
 
-    {/* Floating confirmed badge — bottom-right of workspace */}
-    {showConfirmedBadge && (
-      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 py-1.5 px-3 rounded-md text-xs text-emerald-700 bg-emerald-50/80 border border-emerald-100 shadow-sm pointer-events-auto">
+    {/* Floating status badge — bottom-right of workspace */}
+    {(showApprovedBadge || showConfirmedBadge) && (
+      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 py-1.5 px-3 rounded-md text-xs text-accent bg-accent-wash/80 border border-accent/15 shadow-sm pointer-events-auto">
         <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-        <span>{badgeConfirmedMeta ? `Confirmed • ${badgeConfirmedMeta}` : 'Confirmed'}</span>
+        <span>
+          {showApprovedBadge
+            ? (badgeApprovedMeta ? `Approved • ${badgeApprovedMeta}` : 'Approved')
+            : (badgeConfirmedMeta ? `Confirmed • ${badgeConfirmedMeta}` : 'Confirmed')}
+        </span>
         {showEditInBadge && (
           <button
             onClick={() => {
@@ -988,7 +993,7 @@ export function ModuleWorkspace({
               }));
               setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
             }}
-            className="ml-1 flex items-center gap-1 text-emerald-700 enabled:hover:text-emerald-900 transition-colors"
+            className="ml-1 flex items-center gap-1 text-accent enabled:hover:text-accent-anchor transition-colors"
           >
             <Pencil className="w-3 h-3" />
             Edit

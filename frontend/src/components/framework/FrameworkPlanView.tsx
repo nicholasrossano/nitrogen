@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, Check, ChevronDown, Loader2, Search, Trash2 } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, Search, Trash2 } from 'lucide-react';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
+import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { type ModuleInstance } from '@/lib/api';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -295,7 +296,7 @@ export function FrameworkPlanView({
                               >
                                 <div className="flex items-center gap-2.5">
                                   <span className="text-accent">
-                                    {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : module.icon}
+                                    {isCreating ? <UniversalLoadingIcon size={16} /> : module.icon}
                                   </span>
                                   <span className="min-w-0 flex-1">
                                     <span className="block text-xs font-medium text-text-primary">
@@ -327,7 +328,7 @@ export function FrameworkPlanView({
       <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
         {loading ? (
           <div className="h-full flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
+            <UniversalLoadingIcon size={20} colorClassName="text-text-tertiary" />
           </div>
         ) : (
           <div className="h-full w-full px-6 pt-8 pb-4">
@@ -486,7 +487,7 @@ export function FrameworkPlanView({
                                 >
                                   {isCreatingWorkspace ? (
                                     <>
-                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      <UniversalLoadingIcon size={12} colorClassName="text-white" />
                                       New
                                     </>
                                   ) : (
@@ -508,7 +509,7 @@ export function FrameworkPlanView({
                               className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {isRemoving ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <UniversalLoadingIcon size={14} colorClassName="text-text-tertiary" />
                               ) : (
                                 <Trash2 className="w-3.5 h-3.5" />
                               )}

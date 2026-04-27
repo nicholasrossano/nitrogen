@@ -272,13 +272,15 @@ async def _handle_template_export(content, safe_title, initiative, initiative_id
     )
 
 
-_EXPORT_HANDLERS: dict[str, Any] = {
+from app.first_party.exports import build_export_handlers
+
+_EXPORT_HANDLERS: dict[str, Any] = build_export_handlers({
     "memo": _handle_memo_export,
     "lcoe": _handle_lcoe_export,
     "carbon": _handle_carbon_export,
     "solar": _handle_solar_export,
     "template": _handle_template_export,
-}
+})
 
 
 @router.get("/initiatives/{initiative_id}/deliverables/{tool_id}/export")

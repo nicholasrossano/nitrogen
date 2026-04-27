@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.config import get_settings
 from app.core.llm_client import record_usage_from_response
+from app.first_party.catalog import format_module_selection_context, get_tool_hint_action
 from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT, ProjectChatAction
 from app.services.tiered_retrieval import RetrievedFact
 
@@ -20,18 +21,6 @@ settings = get_settings()
 
 class ProjectChatRouter:
     """Typed router for project chat turns."""
-
-    TOOL_HINT_ACTIONS: dict[str, str] = {
-        "lcoe_model": "run_lcoe",
-        "carbon_model": "run_carbon",
-        "generate_project_plan": "generate_project_plan",
-    }
-
-    TOOL_HINT_MESSAGES: dict[str, str] = {
-        "lcoe_model": "Building your LCOE model…",
-        "carbon_model": "Building your carbon emissions model…",
-        "generate_project_plan": "Generating your project plan…",
-    }
 
     PROJECT_CHAT_DIRECTIVE: str = (
         "IMPORTANT MODE: This is an ongoing project chat inside an existing "
@@ -55,10 +44,11 @@ class ProjectChatRouter:
         field_context: dict[str, Any] | None = None,
         onboarding_mode: bool = False,
     ) -> ProjectChatAction:
-        if tool_hint and tool_hint in self.TOOL_HINT_ACTIONS:
+        if tool_hint and (hint_action := get_tool_hint_action(tool_hint)):
+            action, message = hint_action
             return ProjectChatAction(
-                action=self.TOOL_HINT_ACTIONS[tool_hint],
-                parameters={"message": self.TOOL_HINT_MESSAGES[tool_hint]},
+                action=action,
+                parameters={"message": message},
                 sources_used=[],
             )
 
@@ -106,6 +96,7 @@ class ProjectChatRouter:
             user_message_count=user_message_count,
             model_inputs_context=model_inputs_context or "No model has been run yet.",
         )
+        system_prompt = f"{system_prompt}\n\n{format_module_selection_context()}"
         if not onboarding_mode:
             system_prompt = self.PROJECT_CHAT_DIRECTIVE + system_prompt
 

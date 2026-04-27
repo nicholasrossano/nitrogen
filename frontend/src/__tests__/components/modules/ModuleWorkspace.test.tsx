@@ -7,6 +7,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStagedModuleWorkflowState: jest.fn(),
     confirmStage: jest.fn(),
+    approveFinalModuleOutput: jest.fn(),
   },
 }));
 
@@ -53,7 +54,7 @@ function baseWorkflowState() {
       output_type: 'implementation_plan',
       category: 'planning',
       export_format: null,
-      requires_final_approval: false,
+      requires_final_approval: true,
       stage_defs: [
         {
           id: 'phases',
@@ -151,19 +152,17 @@ describe('ModuleWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
   });
 
-  it('shows a top approve action for a terminal computed stage without export', async () => {
+  it('approves a terminal computed stage without showing an export action', async () => {
     mockedApi.getStagedModuleWorkflowState.mockResolvedValue(buildWorkflowState() as any);
-    mockedApi.confirmStage.mockResolvedValue({
-      stage_id: 'plan',
-      stage_state: {
-        status: 'confirmed',
-        confirmed_at: '2026-04-22T12:10:00Z',
-        confirmed_by: 'user-1',
-        confirmed_by_email: 'user@example.com',
-        data: { widget_data: { groups: [] } },
-      },
+    mockedApi.approveFinalModuleOutput.mockResolvedValue({
       workflow_state: {
         ...buildWorkflowState().workflow_state,
+        final_approval: {
+          status: 'approved',
+          approved_at: '2026-04-22T12:10:00Z',
+          approved_by: 'user-1',
+          approved_by_email: 'user@example.com',
+        },
         stages: {
           ...buildWorkflowState().workflow_state.stages,
           plan: {
@@ -185,11 +184,42 @@ describe('ModuleWorkspace', () => {
     const approveButton = screen.getByRole('button', { name: 'Approve' });
     expect(approveButton).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
 
     fireEvent.click(approveButton);
 
     await waitFor(() => {
-      expect(mockedApi.confirmStage).toHaveBeenCalledWith('instance-1', 'plan', 3);
+      expect(mockedApi.approveFinalModuleOutput).toHaveBeenCalledWith('instance-1', 3);
     });
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Approved/).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+  });
+
+  it('does not show a confirmed footer for a terminal stage awaiting final approval', async () => {
+    mockedApi.getStagedModuleWorkflowState.mockResolvedValue(buildWorkflowState({
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+    }) as any);
+
+    render(<ModuleWorkspace instanceId="instance-1" moduleId="implementation_plan" />);
+
+    await screen.findByText('Implementation plan widget');
+
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Confirmed/)).not.toBeInTheDocument();
   });
 });
