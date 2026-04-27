@@ -9,6 +9,7 @@ export interface LoadingArtProps {
 export interface LoadingArtDefinition {
   id: string;
   name: string;
+  enabled: boolean;
   description?: string;
   Component: ComponentType<LoadingArtProps>;
 }

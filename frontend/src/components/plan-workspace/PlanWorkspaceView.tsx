@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, Loader2, MessageSquare, Plus } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, MessageSquare, Plus } from 'lucide-react';
 
+import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { Tooltip } from '@/components/ui/Tooltip';
 
 import { PlanInspectorPanel } from './PlanInspectorPanel';
@@ -264,7 +265,7 @@ export function PlanWorkspaceView({
     <div className="h-full flex flex-col bg-surface overflow-hidden">
       {loading && (
         <div className="flex items-center justify-center gap-1.5 py-2 flex-shrink-0">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+          <UniversalLoadingIcon size={14} />
           <span className="text-xs text-accent">Updating...</span>
         </div>
       )}
@@ -671,7 +672,11 @@ function PhaseSection({
                       );
                     })}
                     {addingSaving && (
-                      <div className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin ml-1" />
+                      <UniversalLoadingIcon
+                        size={12}
+                        colorClassName="text-green-500"
+                        className="ml-1"
+                      />
                     )}
                   </div>
                 </div>

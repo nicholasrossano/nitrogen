@@ -176,7 +176,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
             <button
               onClick={handleShare}
               disabled={submitting || !email.trim()}
-              className="btn-primary !h-9 !px-3.5 !text-xs shrink-0 disabled:opacity-50"
+              className="btn-primary !h-9 !px-3.5 !text-xs !rounded-lg shrink-0 disabled:opacity-50"
             >
               {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
               Share

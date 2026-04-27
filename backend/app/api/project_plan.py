@@ -151,6 +151,7 @@ def _serialize_deep_dive(result) -> dict:
         "item_title": result.item_title,
         "pillar_name": result.pillar_name,
         "what_this_is": result.what_this_is,
+        "summary_citations": result.summary_citations,
         "elements": [
             {
                 "title": el.title,
@@ -315,6 +316,8 @@ async def deep_dive_plan_item(
     # Check for cached LLM result
     plan = _ensure_plan_metadata(db, user.uid, initiative.project_plan) or {}
     cached = plan.get("deep_dives", {}).get(item_id)
+    if cached and "summary_citations" not in cached:
+        cached = None
 
     if cached:
         logger.info("Returning cached deep dive for item %s (+ fresh evidence lookup)", item_id)
@@ -348,29 +351,5 @@ async def deep_dive_plan_item(
         flag_modified(initiative, "project_plan")
         initiative.touch()
         await db.commit()
-
-    # Always run a fresh evidence RAG lookup (fast, ~5 vector comparisons) so that
-    # document citations reflect current uploads regardless of when the LLM result was cached.
-    evidence_sources = await service.get_evidence_sources(
-        initiative=initiative,
-        item_title=body.item_title,
-        item_rationale=body.item_rationale,
-    )
-    if evidence_sources:
-        non_evidence = [s for s in serialized.get("sources", []) if s.get("source_type") != "evidence"]
-        serialized = {
-            **serialized,
-            "sources": non_evidence + [
-                {
-                    "title": s.title,
-                    "url": s.url,
-                    "source_type": s.source_type,
-                    **({"excerpt": s.excerpt} if s.excerpt else {}),
-                    **({"evidence_doc_id": s.evidence_doc_id} if s.evidence_doc_id else {}),
-                    **({"chunk_id": s.chunk_id} if s.chunk_id else {}),
-                }
-                for s in evidence_sources
-            ],
-        }
 
     return serialized

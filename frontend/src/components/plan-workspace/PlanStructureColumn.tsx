@@ -16,6 +16,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { getIconByName } from '@/lib/icons';
 
 import { PlanItemNode } from './PlanItemNode';
@@ -355,12 +356,20 @@ export function PlanStructureColumn({
                           );
                         })}
                         {addingSaving && (
-                          <div className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin ml-1" />
+                          <UniversalLoadingIcon
+                            size={12}
+                            colorClassName="text-green-500"
+                            className="ml-1"
+                          />
                         )}
                       </div>
                     )}
                     {(!phases || phases.length === 0) && addingSaving && (
-                      <div className="w-3.5 h-3.5 border-2 border-green-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                      <UniversalLoadingIcon
+                        size={14}
+                        colorClassName="text-green-500"
+                        className="flex-shrink-0"
+                      />
                     )}
                   </div>
                   <p className="text-[10px] text-text-tertiary mt-1 pl-1">Enter to save · Esc to cancel</p>

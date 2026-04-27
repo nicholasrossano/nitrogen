@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api, FieldContext, SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import { MODEL_INPUT_CONTEXT_SOURCES } from '@/first-party/modelInputs';
 
 
 export interface CompletionMeta {
@@ -53,25 +54,24 @@ interface ChatState {
 }
 
 function buildModelInputsContext(messages: CoreChatMessage[]): string | null {
-  let latestLcoe: Record<string, any> | null = null;
-  let latestCarbon: Record<string, any> | null = null;
-  let latestSolar: Record<string, any> | null = null;
+  const latestByLabel = new Map<string, Record<string, any>>();
+
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (!latestLcoe && (m.widget_type === 'lcoe_inputs' || m.widget_type === 'lcoe_output') && m.widget_data) {
-      latestLcoe = m.widget_data;
+    if (!m.widget_type || !m.widget_data) continue;
+
+    for (const source of MODEL_INPUT_CONTEXT_SOURCES) {
+      if (!latestByLabel.has(source.label) && source.widgetTypes.includes(m.widget_type)) {
+        latestByLabel.set(source.label, m.widget_data);
+      }
     }
-    if (!latestCarbon && (m.widget_type === 'carbon_inputs' || m.widget_type === 'carbon_output') && m.widget_data) {
-      latestCarbon = m.widget_data;
-    }
-    if (!latestSolar && (m.widget_type === 'solar_inputs' || m.widget_type === 'solar_output') && m.widget_data) {
-      latestSolar = m.widget_data;
-    }
-    if (latestLcoe && latestCarbon && latestSolar) break;
+
+    if (latestByLabel.size === MODEL_INPUT_CONTEXT_SOURCES.length) break;
   }
 
   const parts: string[] = [];
-  for (const [label, wd] of [['LCOE Model', latestLcoe], ['Carbon Model', latestCarbon], ['Solar Production Estimate', latestSolar]] as const) {
+  for (const { label } of MODEL_INPUT_CONTEXT_SOURCES) {
+    const wd = latestByLabel.get(label);
     if (!wd) continue;
     const inputs = (wd as Record<string, any>).inputs as Record<string, any> | undefined;
     if (!inputs) continue;

@@ -7,6 +7,13 @@ import type { BuildItem, FieldContext, FieldDef } from '@/lib/api';
 import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import { PageLoader } from '@/components/ui/PageLoader';
+import {
+  PROPOSAL_MODEL_TYPES_BY_MODULE_ID,
+  SOLAR_LOCATION_MODULE_ID,
+  TABLE_CATEGORY_LABELS,
+  TABLE_CATEGORY_ORDER,
+  TECHNOLOGY_TYPE_OPTIONS,
+} from '@/first-party/modelInputs';
 
 interface Props {
   instanceId: string;
@@ -24,7 +31,6 @@ interface Props {
 }
 
 const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
-const LCOE_TECHNOLOGY_OPTIONS = ['solar_pv', 'wind', 'battery', 'mini_grid', 'clean_cooking', 'default'];
 const SolarLocationMap = lazy(() => import('@/components/widgets/solar/SolarLocationMap'));
 
 function normalizeKey(value: string): string {
@@ -148,7 +154,7 @@ function TableRow({
   const rowOptions = Array.isArray(item.content.options)
     ? (item.content.options as string[])
     : normalizedFieldName === 'technology_type'
-      ? LCOE_TECHNOLOGY_OPTIONS
+      ? TECHNOLOGY_TYPE_OPTIONS
       : null;
 
   const STATUS_STYLES: Record<string, string> = {
@@ -328,15 +334,9 @@ export function EditableTableStage({
   const [isUpdatingSolarLocation, setIsUpdatingSolarLocation] = useState(false);
   const interactionsDisabled = !!readOnly || interactionLocked;
 
-  const proposalModelType = moduleId === 'lcoe_model'
-    ? 'lcoe'
-    : moduleId === 'carbon_model'
-      ? 'carbon'
-      : moduleId === 'solar_estimate'
-        ? 'solar'
-        : null;
+  const proposalModelType = PROPOSAL_MODEL_TYPES_BY_MODULE_ID[moduleId] ?? null;
   const enableInvestigate = !!proposalModelType && stageId === 'inputs' && !interactionsDisabled;
-  const isSolarInputsStage = moduleId === 'solar_estimate' && stageId === 'inputs';
+  const isSolarInputsStage = moduleId === SOLAR_LOCATION_MODULE_ID && stageId === 'inputs';
 
   useEffect(() => {
     setMounted(true);
@@ -418,15 +418,6 @@ export function EditableTableStage({
 
   // Group by category if items have a category field in content
   const hasCategories = effectiveItems.some((item) => item.content.category);
-  const categoryOrder = ['project', 'energy', 'costs', 'finance', 'timing', 'general'];
-  const CATEGORY_LABELS: Record<string, string> = {
-    project: 'Project Definition',
-    energy: 'Energy Production',
-    costs: 'Costs',
-    finance: 'Finance & Discounting',
-    timing: 'Timing',
-    general: 'General',
-  };
   const encounteredCategories = Array.from(
     new Set(
       effectiveItems
@@ -435,15 +426,15 @@ export function EditableTableStage({
     )
   );
   const orderedCategories = [
-    ...categoryOrder.filter((cat) => encounteredCategories.includes(cat)),
-    ...encounteredCategories.filter((cat) => !categoryOrder.includes(cat)),
+    ...TABLE_CATEGORY_ORDER.filter((cat) => encounteredCategories.includes(cat)),
+    ...encounteredCategories.filter((cat) => !TABLE_CATEGORY_ORDER.includes(cat)),
   ];
 
   const groupedItems = hasCategories
     ? orderedCategories
         .map((cat) => ({
           cat,
-          label: CATEGORY_LABELS[cat] ?? formatCategoryLabel(cat),
+          label: TABLE_CATEGORY_LABELS[cat] ?? formatCategoryLabel(cat),
           rows: effectiveItems.filter((i) => (i.content.category ?? 'general') === cat),
         }))
         .filter((g) => g.rows.length > 0)

@@ -16,35 +16,19 @@ class ModuleRegistry:
     def __init__(self):
         self._modules: dict[str, "BaseModule"] = {}
         self._loaded = False
+
+    def register(self, module: "BaseModule") -> None:
+        """Register a module implementation with the platform registry."""
+        self._modules[module.definition.id] = module
     
     def _load_modules(self):
         """Lazy load all tools."""
         if self._loaded:
             return
             
-        # Import modules here to avoid circular imports
-        from app.modules.lcoe_module import LCOETool
-        from app.modules.carbon_module import CarbonTool
-        from app.modules.pvwatts_module import PVWattsTool
-        from app.modules.stakeholder_assessment import StakeholderAssessmentModule
-        from app.modules.landscape_mapping import LandscapeMappingModule
-        from app.modules.esmp import ESMPModule
-        from app.modules.mel_plan import MELPlanModule
-        from app.modules.implementation_plan import ImplementationPlanModule
+        from app.first_party.registry import register_modules
 
-        tools = [
-            LCOETool(),
-            CarbonTool(),
-            PVWattsTool(),
-            StakeholderAssessmentModule(),
-            LandscapeMappingModule(),
-            ESMPModule(),
-            MELPlanModule(),
-            ImplementationPlanModule(),
-        ]
-        
-        for tool in tools:
-            self._modules[tool.definition.id] = tool
+        register_modules(self)
         invalid_modules = self._collect_manifest_errors()
         if invalid_modules:
             if self._should_fail_fast_on_manifest_errors():
@@ -139,67 +123,9 @@ class ModuleRegistry:
         
         description_lower = project_description.lower() if project_description else ""
         
-        # Keyword matching for boosting scores
-        keyword_scores = {
-            # ESMP
-            "esmp": ["esmp"],
-            "environmental": ["esmp"],
-            "safeguards": ["esmp"],
-            "e&s": ["esmp"],
-            "ifc": ["esmp"],
-            "social impact": ["esmp"],
-            "mitigation": ["esmp"],
-            "resettlement": ["esmp"],
-            "biodiversity": ["esmp"],
-            "esia": ["esmp"],
+        from app.first_party.catalog import get_first_party_catalog
 
-            # MEL Plan
-            "mel": ["mel_plan"],
-            "monitoring": ["mel_plan"],
-            "evaluation": ["mel_plan"],
-            "results framework": ["mel_plan"],
-            "logframe": ["mel_plan"],
-            "indicators": ["mel_plan"],
-            "impact measurement": ["mel_plan"],
-            "theory of change": ["mel_plan"],
-            "iris": ["mel_plan"],
-            "reporting": ["mel_plan"],
-
-            # Implementation plan
-            "implementation plan": ["implementation_plan"],
-            "implementation": ["implementation_plan"],
-            "workplan": ["implementation_plan"],
-            "execution plan": ["implementation_plan"],
-            "roadmap": ["implementation_plan"],
-            
-            # LCOE / economics
-            "lcoe": ["lcoe_model"],
-            "levelized": ["lcoe_model"],
-            "cost of energy": ["lcoe_model"],
-            "cost per kwh": ["lcoe_model"],
-            "economics": ["lcoe_model"],
-            "feasibility": ["lcoe_model"],
-            "capex": ["lcoe_model"],
-            "opex": ["lcoe_model"],
-            "wacc": ["lcoe_model"],
-            "discount rate": ["lcoe_model"],
-            "capacity factor": ["lcoe_model"],
-            "tariff": ["lcoe_model"],
-            
-            # Carbon / emissions
-            "carbon": ["carbon_model"],
-            "emissions": ["carbon_model"],
-            "tco2": ["carbon_model"],
-            "tco2e": ["carbon_model"],
-            "emission reductions": ["carbon_model"],
-            "carbon credits": ["carbon_model"],
-            "fnrb": ["carbon_model"],
-            "baseline emissions": ["carbon_model"],
-            "er calculation": ["carbon_model"],
-            "leakage": ["carbon_model"],
-            "gold standard": ["carbon_model"],
-            "emission factor": ["carbon_model"],
-        }
+        keyword_scores = get_first_party_catalog().recommendation_keywords
         
         # Calculate scores for each tool
         module_scores: dict[str, float] = {}
@@ -235,25 +161,11 @@ class ModuleRegistry:
         """Classify project type from description."""
         description_lower = description.lower()
         
-        # Energy access
-        if any(kw in description_lower for kw in ["mini-grid", "minigrid", "micro-grid", "microgrid", "solar", "pv", "battery"]):
-            return "energy_access"
-        
-        # Clean cooking
-        if any(kw in description_lower for kw in ["cookstove", "cooking", "lpg", "biogas", "ethanol", "fuel", "charcoal"]):
-            return "clean_cooking"
-        
-        # Agriculture
-        if any(kw in description_lower for kw in ["farm", "agriculture", "crop", "irrigation", "livestock"]):
-            return "agriculture"
-        
-        # Water/WASH
-        if any(kw in description_lower for kw in ["water", "sanitation", "wash", "well", "pump"]):
-            return "water_sanitation"
-        
-        # Health
-        if any(kw in description_lower for kw in ["health", "clinic", "hospital", "medical"]):
-            return "health"
+        from app.first_party.catalog import get_first_party_catalog
+
+        for project_type, keywords in get_first_party_catalog().project_type_keywords.items():
+            if any(kw in description_lower for kw in keywords):
+                return project_type
         
         # Default
         return "general"

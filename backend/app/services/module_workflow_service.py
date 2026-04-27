@@ -79,7 +79,7 @@ def _initial_final_approval_state() -> dict[str, Any]:
 
 def requires_final_approval(module: BaseModule) -> bool:
     """Whether a workspace module should require explicit final approval."""
-    return module.definition.export_format is not None
+    return bool(module.stage_defs)
 
 
 def clear_final_approval(state: dict[str, Any]) -> bool:

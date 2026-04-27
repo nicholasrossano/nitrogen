@@ -572,6 +572,7 @@ export interface DeepDiveResult {
   item_title: string;
   pillar_name: string;
   what_this_is: string[];
+  summary_citations?: number[][];
   elements: DeepDiveElement[];
   dependencies: DeepDiveDependency[];
   sources: DeepDiveSource[];

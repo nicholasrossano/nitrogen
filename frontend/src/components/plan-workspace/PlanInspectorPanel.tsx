@@ -1,8 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { X, AlertCircle, Zap, PenLine } from 'lucide-react';
 import { PageLoader } from '@/components/ui/PageLoader';
 
-import type { PlanWorkspaceInspectorDocumentSource, PlanWorkspaceInspectorState } from './types';
+import { DeepDiveSourcesMenu } from './DeepDiveSourcesMenu';
+import type {
+  PlanWorkspaceInspectorCitationSource,
+  PlanWorkspaceInspectorDocumentSource,
+  PlanWorkspaceInspectorState,
+} from './types';
 
 interface PlanInspectorPanelProps {
   state: PlanWorkspaceInspectorState;
@@ -28,6 +33,26 @@ function InlineBold({ text }: { text: string }) {
   );
 }
 
+function fallbackCitationSources(result: PlanWorkspaceInspectorState['result']): PlanWorkspaceInspectorCitationSource[] {
+  if (!result) return [];
+  return [
+    ...result.documentSources.map((source, idx) => ({
+      key: `doc:${source.evidenceDocId}:${source.chunkId ?? source.title}`,
+      label: source.title,
+      type: 'document' as const,
+      citationNumber: idx + 1,
+      ...source,
+    })),
+    ...result.linkSources.map((source, idx) => ({
+      key: `link:${source.title}:${source.url ?? ''}`,
+      label: source.title,
+      type: 'link' as const,
+      citationNumber: result.documentSources.length + idx + 1,
+      ...source,
+    })),
+  ];
+}
+
 export function PlanInspectorPanel({
   state,
   onClose,
@@ -49,22 +74,7 @@ export function PlanInspectorPanel({
   }, []);
 
   const { item, groupName, result, loading, error } = state;
-  const inlineCitations = result
-    ? [
-        ...result.documentSources.map((source) => ({
-          key: `doc:${source.evidenceDocId}:${source.chunkId ?? source.title}`,
-          label: source.title,
-          type: 'document' as const,
-          source,
-        })),
-        ...result.linkSources.map((source) => ({
-          key: `link:${source.title}:${source.url ?? ''}`,
-          label: source.title,
-          type: 'link' as const,
-          source,
-        })),
-      ]
-    : [];
+  const citationSources = result?.citationSources ?? fallbackCitationSources(result);
 
   return (
     <div
@@ -88,6 +98,9 @@ export function PlanInspectorPanel({
             {item.title}
           </h2>
         </div>
+        {result && citationSources.length > 0 && (
+          <DeepDiveSourcesMenu sources={citationSources} onOpenDocument={onOpenDocument} />
+        )}
         <button
           onClick={onClose}
           className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-subtle transition-colors flex-shrink-0 text-text-tertiary hover:text-text-secondary"
@@ -137,46 +150,53 @@ export function PlanInspectorPanel({
                   {result.summaryTitle ?? 'What this is'}
                 </h3>
                 <p className="text-sm text-text-secondary leading-snug">
-                  <InlineBold text={result.summary.join(' ')} />
-                  {inlineCitations.length > 0 && (
-                    <span className="ml-1 inline-flex flex-wrap items-center gap-1 align-baseline">
-                      {inlineCitations.map((citation, idx) => {
-                        const tag = `[${idx + 1}]`;
+                  {result.summary.map((sentence, sentenceIdx) => (
+                    <Fragment key={`${sentenceIdx}-${sentence}`}>
+                      {sentenceIdx > 0 ? ' ' : null}
+                      <InlineBold text={sentence} />
+                      {(result.summaryCitations?.[sentenceIdx] ?? []).map((citationNumber) => {
+                        const citation = citationSources.find((source) => source.citationNumber === citationNumber);
+                        if (!citation) return null;
+                        const tag = `[${citationNumber}]`;
                         if (citation.type === 'document') {
                           return (
                             <button
-                              key={citation.key}
+                              key={`${sentenceIdx}-${citation.key}`}
                               type="button"
                               title={citation.label}
-                              onClick={() => onOpenDocument?.(citation.source)}
-                              className="text-xs text-accent hover:underline"
+                              onClick={() => onOpenDocument?.(citation)}
+                              className="ml-1 text-xs text-accent hover:underline"
                             >
                               {tag}
                             </button>
                           );
                         }
-                        if (citation.source.url) {
+                        if (citation.url) {
                           return (
                             <a
-                              key={citation.key}
-                              href={citation.source.url}
+                              key={`${sentenceIdx}-${citation.key}`}
+                              href={citation.url}
                               target="_blank"
                               rel="noopener noreferrer"
                               title={citation.label}
-                              className="text-xs text-accent hover:underline"
+                              className="ml-1 text-xs text-accent hover:underline"
                             >
                               {tag}
                             </a>
                           );
                         }
                         return (
-                          <span key={citation.key} title={citation.label} className="text-xs text-text-tertiary">
+                          <span
+                            key={`${sentenceIdx}-${citation.key}`}
+                            title={citation.label}
+                            className="ml-1 text-xs text-text-tertiary"
+                          >
                             {tag}
                           </span>
                         );
                       })}
-                    </span>
-                  )}
+                    </Fragment>
+                  ))}
                 </p>
               </section>
             )}

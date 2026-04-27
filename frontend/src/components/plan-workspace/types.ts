@@ -81,8 +81,23 @@ export interface PlanWorkspaceInspectorLinkSource {
   publisher?: string | null;
 }
 
+export type PlanWorkspaceInspectorCitationSource =
+  | ({
+      key: string;
+      label: string;
+      type: 'document';
+      citationNumber: number;
+    } & PlanWorkspaceInspectorDocumentSource)
+  | ({
+      key: string;
+      label: string;
+      type: 'link';
+      citationNumber: number;
+    } & PlanWorkspaceInspectorLinkSource);
+
 export interface PlanWorkspaceInspectorResult {
   summary: string[];
+  summaryCitations?: number[][];
   summaryTitle?: string;
   requirements: Array<{
     title: string;
@@ -103,6 +118,7 @@ export interface PlanWorkspaceInspectorResult {
   documentSourcesTitle?: string;
   linkSources: PlanWorkspaceInspectorLinkSource[];
   linkSourcesTitle?: string;
+  citationSources?: PlanWorkspaceInspectorCitationSource[];
   loadingLabel?: string;
   emptySourcesMessage?: string;
   latencyMs: number;
