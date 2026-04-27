@@ -255,7 +255,7 @@ export function FrameworkPlanView({
 
               {libraryOpen && (
                 <div className="absolute right-0 top-full z-30 mt-2 w-[360px] max-h-[420px] overflow-y-auto rounded-xl border border-divider bg-white shadow-lg">
-                  <div className="px-4 pt-3 pb-2 border-b border-divider">
+                  <div className="sticky top-0 z-10 bg-white px-4 pt-3 pb-2 border-b border-divider">
                     <label htmlFor="module-library-search" className="sr-only">
                       Search modules
                     </label>
