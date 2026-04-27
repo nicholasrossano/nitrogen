@@ -1360,6 +1360,12 @@ export const api = {
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
+  revokeFinalModuleApproval: (instanceId: string, workflowVersion?: number) =>
+    fetchApi<{ workflow_state: StagedWorkflowState; workflow_version: number }>(
+      `/api/v1/module-workflow/${instanceId}/final-approval`,
+      { method: 'DELETE', headers: workflowVersionHeaders(workflowVersion) }
+    ),
+
   exportStagedModule: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};

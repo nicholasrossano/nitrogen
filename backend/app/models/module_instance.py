@@ -52,6 +52,7 @@ class ModuleInstance(Base):
     module_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="started")
     title: Mapped[str | None] = mapped_column(String(255))
+    instance_number: Mapped[int] = mapped_column(Integer, nullable=False)
     started_by: Mapped[str] = mapped_column(String(255), nullable=False)
     chat_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

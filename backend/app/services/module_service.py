@@ -9,13 +9,28 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
 
 
 # ── Instance resolution ────────────────────────────────────────────
+
+async def _next_instance_number(
+    db: AsyncSession,
+    initiative_id: uuid.UUID,
+    module_id: str,
+) -> int:
+    result = await db.execute(
+        select(func.coalesce(func.max(ModuleInstance.instance_number), 0))
+        .where(
+            ModuleInstance.initiative_id == initiative_id,
+            ModuleInstance.module_id == module_id,
+        )
+    )
+    return int(result.scalar_one()) + 1
+
 
 async def _resolve_instance(
     db: AsyncSession,
@@ -60,6 +75,7 @@ async def _resolve_instance(
     inst = ModuleInstance(
         initiative_id=initiative_id,
         module_id=tool_id,
+        instance_number=await _next_instance_number(db, initiative_id, tool_id),
         status="draft",
         started_by=user_id,
         chat_id=chat_id,

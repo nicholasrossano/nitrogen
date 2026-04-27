@@ -8,6 +8,7 @@ jest.mock('@/lib/api', () => ({
     getStagedModuleWorkflowState: jest.fn(),
     confirmStage: jest.fn(),
     approveFinalModuleOutput: jest.fn(),
+    revokeFinalModuleApproval: jest.fn(),
   },
 }));
 
@@ -221,5 +222,108 @@ describe('ModuleWorkspace', () => {
 
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
     expect(screen.queryByText(/^Confirmed/)).not.toBeInTheDocument();
+  });
+
+  it('shows export before approval only on the final stage for exportable modules', async () => {
+    mockedApi.getStagedModuleWorkflowState.mockResolvedValue(buildWorkflowState({
+      module_definition: {
+        ...buildWorkflowState().module_definition,
+        export_format: 'xlsx',
+      },
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+    }) as any);
+
+    render(<ModuleWorkspace instanceId="instance-1" moduleId="implementation_plan" initiativeId="initiative-1" />);
+
+    await screen.findByText('Implementation plan widget');
+
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    const actionLabels = screen.getAllByRole('button')
+      .map((button) => button.textContent?.trim())
+      .filter((label) => label === 'Log' || label === 'Export' || label === 'Approve');
+    expect(actionLabels).toEqual(['Log', 'Export', 'Approve']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Categories' }));
+
+    await screen.findByText('Categorized list stage');
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+  });
+
+  it('reverts final approval to an approvable state', async () => {
+    mockedApi.getStagedModuleWorkflowState.mockResolvedValue(buildWorkflowState({
+      workflow_version: 4,
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        final_approval: {
+          status: 'approved',
+          approved_at: '2026-04-22T12:10:00Z',
+          approved_by: 'user-1',
+          approved_by_email: 'user@example.com',
+        },
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+    }) as any);
+    mockedApi.revokeFinalModuleApproval.mockResolvedValue({
+      workflow_state: {
+        ...buildWorkflowState().workflow_state,
+        final_approval: {
+          status: 'pending',
+          approved_at: null,
+          approved_by: null,
+          approved_by_email: null,
+        },
+        stages: {
+          ...buildWorkflowState().workflow_state.stages,
+          plan: {
+            status: 'confirmed',
+            confirmed_at: '2026-04-22T12:10:00Z',
+            confirmed_by: 'user-1',
+            confirmed_by_email: 'user@example.com',
+            data: { widget_data: { groups: [] } },
+          },
+        },
+      },
+      workflow_version: 5,
+    } as any);
+
+    render(<ModuleWorkspace instanceId="instance-1" moduleId="implementation_plan" />);
+
+    await screen.findByText('Implementation plan widget');
+
+    const approvedButton = screen.getByRole('button', { name: 'Approved' });
+    expect(approvedButton).toBeInTheDocument();
+
+    fireEvent.click(approvedButton);
+
+    await waitFor(() => {
+      expect(mockedApi.revokeFinalModuleApproval).toHaveBeenCalledWith('instance-1', 4);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    });
   });
 });

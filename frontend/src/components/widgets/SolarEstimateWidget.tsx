@@ -624,23 +624,27 @@ export function SolarEstimateWidget({
                 Monthly AC Energy (kWh)
               </div>
               <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                  <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-stroke-subtle, #e5e7eb)" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                    <RechartsTooltip
-                      contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                      cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-                      formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'AC Energy']}
-                    />
-                    <Bar dataKey="kWh" radius={[3, 3, 0, 0]} maxBarSize={32}>
-                      {chartData.map((_: any, i: number) => (
-                        <Cell key={i} fill={`hsl(38, 92%, ${55 + (chartData[i].kWh / maxKwh) * 15}%)`} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {isActive ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                    <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-stroke-subtle, #e5e7eb)" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                      <RechartsTooltip
+                        contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                        cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
+                        formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'AC Energy']}
+                      />
+                      <Bar dataKey="kWh" radius={[3, 3, 0, 0]} maxBarSize={32}>
+                        {chartData.map((_: any, i: number) => (
+                          <Cell key={i} fill={`hsl(38, 92%, ${55 + (chartData[i].kWh / maxKwh) * 15}%)`} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full" />
+                )}
               </div>
             </div>
 

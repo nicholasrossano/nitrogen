@@ -238,6 +238,7 @@ async def run_backfill(*, apply: bool) -> BackfillStats:
                     inst = ModuleInstance(
                         initiative_id=initiative.id,
                         module_id=IMPLEMENTATION_MODULE_ID,
+                        instance_number=1,
                         status="ready",
                         title=title,
                         started_by=initiative.user_id,
