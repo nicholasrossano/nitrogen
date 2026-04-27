@@ -31,7 +31,7 @@ from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
 from app.models.initiative import Initiative
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
-from app.services.evidence_processing import parse_file_to_chunks
+from app.services.evidence_processing import parse_file_to_chunk_payloads
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,13 @@ async def process_evidence_doc(
 
         # --- Full indexing ----------------------------------------------
         try:
-            chunk_tuples = parse_file_to_chunks(parser, file_bytes, file_type)
+            chunk_payloads = await parse_file_to_chunk_payloads(
+                parser,
+                file_bytes,
+                file_type,
+                storage=storage,
+                preview_folder=f"{initiative.id}/previews",
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Parsing failed for evidence doc %s: %s", doc_id, exc, exc_info=True
@@ -184,19 +190,21 @@ async def process_evidence_doc(
 
         try:
             embeddings_service = EmbeddingsService(user_id=user_id, db=db)
-            plain_texts = [t[0] for t in chunk_tuples]
+            plain_texts = [payload.content for payload in chunk_payloads]
             embeddings = await embeddings_service.embed_texts(plain_texts)
 
-            for i, ((plain, html_content, page_num), embedding) in enumerate(
-                zip(chunk_tuples, embeddings)
-            ):
+            for i, (payload, embedding) in enumerate(zip(chunk_payloads, embeddings)):
                 db.add(
                     EvidenceChunk(
                         evidence_doc_id=doc.id,
                         chunk_index=i,
-                        content=plain,
-                        content_html=html_content,
-                        page_number=page_num,
+                        content=payload.content,
+                        content_html=payload.content_html,
+                        page_number=payload.page_number,
+                        chunk_kind=payload.chunk_kind,
+                        bbox=payload.bbox,
+                        preview_image_path=payload.preview_image_path,
+                        preview_mime_type=payload.preview_mime_type,
                         embedding=embedding,
                     )
                 )

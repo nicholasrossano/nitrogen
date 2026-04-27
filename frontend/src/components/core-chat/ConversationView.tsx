@@ -724,7 +724,7 @@ function CitationInlineDrawer({
           return (
             <div
               key={cardKey}
-              className="w-full min-w-full h-64 flex-shrink-0"
+              className="w-full min-w-full h-56 flex-shrink-0"
             >
               {panelCitation ? (
                 <SnippetCard
