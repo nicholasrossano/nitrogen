@@ -325,23 +325,30 @@ export function FrameworkPlanView({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <PageLoader label="" />
           </div>
         ) : (
-          <div className="h-full w-full px-6 pt-8 pb-4">
-            <div className="flex w-max min-w-full justify-center gap-12 items-start">
+          <div className="w-full px-6 pt-6 pb-10">
+            <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
               {groupedPhases.map((phase) => (
                 <section
                   key={phase.id}
-                  className="w-[280px] flex-shrink-0"
+                  className="rounded-2xl border border-divider/70 bg-white/70 p-4 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.35)]"
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-3 px-0.5">
-                    {phase.name}
-                  </p>
-                  <div className="space-y-4 min-h-[220px]">
+                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-divider/70 pb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                      {phase.name}
+                    </p>
+                    <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-text-tertiary">
+                      {phase.modules.length}
+                      {' '}
+                      {phase.modules.length === 1 ? 'module' : 'modules'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {phase.modules.map((moduleId) => {
                       const moduleMeta = moduleMetaById.get(moduleId);
                       const moduleName = moduleMeta?.name || moduleId.replace(/_/g, ' ');
@@ -457,7 +464,7 @@ export function FrameworkPlanView({
                                               event.stopPropagation();
                                               void handleOpenExistingInstance(moduleInstance);
                                             }}
-                                            className="w-full px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-surface-subtle hover:text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                                            className="w-full px-3 py-2 text-left text-xs text-text-secondary transition-colors enabled:hover:bg-surface-subtle enabled:hover:text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
                                           >
                                             <span className="flex items-center gap-2">
                                               <span className="min-w-0 flex-1 truncate">
@@ -482,7 +489,7 @@ export function FrameworkPlanView({
                                     event.stopPropagation();
                                     void handleCreateModuleInModulesView(moduleId, moduleName);
                                   }}
-                                  className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                                  className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors enabled:hover:bg-accent-hover enabled:hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   {isCreatingWorkspace ? (
                                     <>
@@ -505,7 +512,7 @@ export function FrameworkPlanView({
                                 void handleRemoveModuleFromPlan(moduleId);
                               }}
                               title="Remove module from framework plan"
-                              className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-indicator-orange transition-opacity z-10 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary enabled:hover:text-indicator-orange transition-opacity z-10 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {isRemoving ? (
                                 <UniversalLoadingIcon size={14} colorClassName="text-text-tertiary" />
