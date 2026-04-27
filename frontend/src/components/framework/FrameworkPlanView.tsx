@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Check, ChevronDown, Search, Trash2 } from 'lucide-react';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
-import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
+import { PageLoader, UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { type ModuleInstance } from '@/lib/api';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -328,7 +328,7 @@ export function FrameworkPlanView({
       <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
         {loading ? (
           <div className="h-full flex items-center justify-center">
-            <UniversalLoadingIcon size={20} colorClassName="text-text-tertiary" />
+            <PageLoader label="" />
           </div>
         ) : (
           <div className="h-full w-full px-6 pt-8 pb-4">
