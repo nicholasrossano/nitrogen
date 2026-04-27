@@ -42,6 +42,7 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
     from app.modules.lcoe_module import LCOETool
     from app.modules.mel_plan import MELPlanModule
     from app.modules.pvwatts_module import PVWattsTool
+    from app.modules.risk_assessment import RiskAssessmentModule
     from app.modules.stakeholder_assessment import StakeholderAssessmentModule
 
     selection_metadata = {
@@ -125,6 +126,20 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             selection_triggers=("MEL", "monitoring", "evaluation", "indicators", "logframe"),
             domain_tags=("measurement", "reporting"),
         ),
+        "risk_assessment": ModuleSelectionMetadata(
+            module_id="risk_assessment",
+            selection_description="Builds a structured project risk register with mitigations and ratings.",
+            selection_triggers=(
+                "risk",
+                "risk register",
+                "SORT",
+                "diligence",
+                "fiduciary",
+                "residual risk",
+                "risk mitigation",
+            ),
+            domain_tags=("risk", "diligence", "compliance"),
+        ),
     }
 
     return FirstPartyModuleCatalog(
@@ -136,9 +151,18 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             LandscapeMappingModule,
             ESMPModule,
             MELPlanModule,
+            RiskAssessmentModule,
             ImplementationPlanModule,
         ),
         recommendation_keywords={
+            "risk": ("risk_assessment",),
+            "risk register": ("risk_assessment",),
+            "sort": ("risk_assessment",),
+            "diligence": ("risk_assessment",),
+            "fiduciary": ("risk_assessment",),
+            "residual risk": ("risk_assessment",),
+            "project risk": ("risk_assessment",),
+            "risk mitigation": ("risk_assessment",),
             "esmp": ("esmp",),
             "environmental": ("esmp",),
             "safeguards": ("esmp",),

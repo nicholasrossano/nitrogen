@@ -988,7 +988,6 @@ function InitiativePageContent() {
                           width: `${widthPct}%`,
                           backgroundColor: widthPct > 0 ? segment.color : 'transparent',
                           borderRadius: !hasLaterFilledSegment ? '0 9999px 9999px 0' : undefined,
-                          borderRight: widthPct > 0 && hasLaterFilledSegment ? '1px solid #F7F5F2' : undefined,
                         }}
                       />
                     );

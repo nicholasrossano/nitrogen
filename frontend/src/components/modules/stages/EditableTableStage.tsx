@@ -710,7 +710,7 @@ export function EditableTableStage({
   if (isLoading && items.length === 0 && !adding) {
     return (
       <div className="py-10">
-        <PageLoader label="Loading stage..." />
+        <PageLoader />
       </div>
     );
   }

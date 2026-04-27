@@ -33,5 +33,9 @@ export const FIRST_PARTY_WIDGET_REGISTRY: Record<string, () => Promise<{ default
   // Implementation plan map view
   implementation_plan: () =>
     import('@/components/widgets/ImplementationPlanWidget').then((m) => ({ default: m.ImplementationPlanWidget as unknown as WidgetComponent })),
+
+  // Structured risk register view
+  risk_register_results: () =>
+    import('@/components/widgets/RiskRegisterResultsWidget').then((m) => ({ default: m.RiskRegisterResultsWidget as unknown as WidgetComponent })),
 };
 

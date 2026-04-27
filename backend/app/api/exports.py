@@ -15,6 +15,7 @@ from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
+from app.first_party.exports import build_export_handlers
 
 router = APIRouter()
 
@@ -271,8 +272,6 @@ async def _handle_template_export(content, safe_title, initiative, initiative_id
         headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.{ext}")},
     )
 
-
-from app.first_party.exports import build_export_handlers
 
 _EXPORT_HANDLERS: dict[str, Any] = build_export_handlers({
     "memo": _handle_memo_export,
