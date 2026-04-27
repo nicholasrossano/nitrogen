@@ -72,7 +72,6 @@ function LoadingArtLabContent() {
                       <LoadingArtHost
                         artId={selectedArt.id}
                         size={360}
-                        label=""
                       />
                     ) : null}
 

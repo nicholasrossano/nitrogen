@@ -13,7 +13,7 @@ interface UniversalLoadingIconProps {
 }
 
 interface PageLoaderProps {
-  /** Optional label shown below the icon. Defaults to "Loading…" */
+  /** Deprecated: labels are intentionally suppressed in universal loaders. */
   label?: string;
   /** Compact icon by default; use art for longer generation/research waits. */
   variant?: 'icon' | 'art';
@@ -72,7 +72,7 @@ export function UniversalLoadingIcon({
  * use the art variant for longer generation/research waits.
  */
 export function PageLoader({
-  label = 'Loading…',
+  label,
   variant = 'icon',
   size,
   className = '',
@@ -85,18 +85,14 @@ export function PageLoader({
     return (
       <LoadingArtHost
         size={size ?? 240}
-        label={label}
         className={['flex flex-col items-center justify-center gap-3', className].join(' ').trim()}
       />
     );
   }
 
   return (
-    <div className={['flex flex-col items-center justify-center gap-1.5', className].join(' ').trim()}>
+    <div className={['flex flex-col items-center justify-center', className].join(' ').trim()}>
       <UniversalLoadingIcon size={iconSize} />
-      {label && (
-        <span className="text-xs text-text-secondary font-medium tracking-wide">{label}</span>
-      )}
     </div>
   );
 }

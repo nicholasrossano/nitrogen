@@ -732,7 +732,11 @@ export function ModuleWorkspace({
 
   const isComputedStage = currentStageDef.component === 'computed_results';
   const isAssessmentMapWidget = isComputedStage
-    && (currentStageDef.widget === 'assessment_map' || currentStageDef.widget === 'implementation_plan');
+    && (
+      currentStageDef.widget === 'assessment_map'
+      || currentStageDef.widget === 'implementation_plan'
+      || currentStageDef.widget === 'risk_register_results'
+    );
   const isCalculationComputedWidget = isComputedStage && [
     'lcoe_results',
     'carbon_results',
