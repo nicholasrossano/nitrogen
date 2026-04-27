@@ -879,10 +879,10 @@ export function ModuleWorkspace({
                   {isApprovingFinal ? (
                     <Loader2 className="w-3 h-3 animate-spin text-white" />
                   ) : (
-                    <>
-                      <CheckCircle2 className="w-3 h-3 text-white group-hover:hidden" />
-                      <RotateCcw className="hidden w-3 h-3 text-white group-hover:block" />
-                    </>
+                    <span className="relative h-3 w-3">
+                      <CheckCircle2 className="absolute inset-0 h-3 w-3 text-white opacity-100 transition-opacity duration-150 ease-out group-hover:opacity-0" />
+                      <RotateCcw className="absolute inset-0 h-3 w-3 text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100" />
+                    </span>
                   )}
                   Approved
                 </button>
