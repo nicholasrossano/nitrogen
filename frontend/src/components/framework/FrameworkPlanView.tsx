@@ -442,13 +442,12 @@ export function FrameworkPlanView({
                                   </button>
                                   {instancePickerOpen && (
                                     <div className="absolute right-0 top-full mt-1 z-50 min-w-[220px] max-h-64 overflow-y-auto rounded-lg border border-divider bg-white py-1 shadow-lg">
-                                      {moduleInstancesForType.map((moduleInstance, idx) => {
+                                      {moduleInstancesForType.map((moduleInstance) => {
                                         const openingThisInstance = openingExistingInstanceId === moduleInstance.id;
                                         const isApprovedInstance = moduleInstance.is_plan_complete === true;
-                                        const title = moduleInstance.title || moduleName;
-                                        const label = moduleInstancesForType.length > 1
-                                          ? `${title} #${moduleInstancesForType.length - idx}`
-                                          : title;
+                                        const label = moduleInstance.display_name
+                                          || moduleInstance.title
+                                          || moduleName;
                                         return (
                                           <button
                                             key={moduleInstance.id}

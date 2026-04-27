@@ -12,6 +12,9 @@ class ModuleInstanceResponse(BaseModel):
     module_id: str
     status: str
     title: Optional[str] = None
+    instance_number: Optional[int] = None
+    creator_handle: Optional[str] = None
+    display_name: Optional[str] = None
     started_by: str
     started_by_email: Optional[str] = None
     started_at: datetime

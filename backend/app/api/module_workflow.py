@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
@@ -27,6 +28,7 @@ from app.core.filename_utils import safe_content_disposition
 from app.core.permissions import require_viewer, require_editor
 from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
+from app.models.user import User
 from app.modules.base import BaseModule
 from app.modules.implementation_plan import ImplementationPlanModule
 from app.modules.registry import get_module_registry
@@ -113,21 +115,51 @@ def _module_definition_payload(module: BaseModule) -> dict[str, Any]:
     }
 
 
-def _module_export_filename(
+async def _instance_creator_token(db: AsyncSession, inst: ModuleInstance) -> str:
+    creator = await db.get(User, inst.started_by)
+    email = (creator.email if creator else "").strip() if creator else ""
+    email_local = email.split("@", 1)[0].strip().lower()
+    if email_local:
+        return re.sub(r"[^\w.-]", "-", email_local).strip("._-") or "user"
+
+    fallback = re.sub(r"[^\w.-]", "-", inst.started_by).strip("._-").lower()
+    return fallback or "user"
+
+
+async def _instance_number(db: AsyncSession, inst: ModuleInstance) -> int:
+    rows = await db.execute(
+        select(ModuleInstance.id)
+        .where(
+            ModuleInstance.initiative_id == inst.initiative_id,
+            ModuleInstance.module_id == inst.module_id,
+        )
+        .order_by(ModuleInstance.started_at.asc(), ModuleInstance.id.asc())
+    )
+    for idx, row in enumerate(rows, start=1):
+        if row.id == inst.id:
+            return idx
+    return 1
+
+
+async def _module_export_filename(
     *,
+    db: AsyncSession,
     inst: ModuleInstance,
     module: BaseModule,
-    user: AuthUser,
     ext: str,
-    artifact_suffix: str | None = None,
+    prefix: str | None = None,
 ) -> str:
     """Build a consistent filename for module-scoped exports."""
-    module_type = re.sub(r"[^\w.-]", "_", module.definition.id).strip("._") or "module"
-    version_token = f"version{max(inst.workflow_version, 1)}"
-    email_local = (user.email or "").split("@", 1)[0]
-    email_token = re.sub(r"[^\w.-]", "_", email_local).strip("._") or "user"
-    suffix = f"_{artifact_suffix}" if artifact_suffix else ""
-    return f"{module_type}{suffix}_{version_token}_{email_token}.{ext}"
+    module_token = re.sub(r"[^\w.-]", "-", module.definition.name.lower()).strip("._-") or "module"
+    number_token = await _instance_number(db, inst)
+    creator_token = await _instance_creator_token(db, inst)
+    date_token = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    base = f"{module_token}_n{number_token}_{creator_token}_{date_token}"
+    if prefix:
+        safe_prefix = re.sub(r"[^\w.-]", "_", prefix).strip("._") + "_"
+    else:
+        safe_prefix = ""
+    return f"{safe_prefix}{base}.{ext}"
 
 
 async def _read_response_bytes(response: Response) -> bytes:
@@ -1271,7 +1303,7 @@ async def export_module_output(
     }
     media_type = media_types.get(fmt, "application/octet-stream")
 
-    filename = _module_export_filename(inst=inst, module=module, user=user, ext=fmt)
+    filename = await _module_export_filename(db=db, inst=inst, module=module, ext=fmt)
     await append_decision_event(
         db,
         inst=inst,
@@ -1382,12 +1414,12 @@ async def export_writeup(
         initiative_title=context.get("project_title", ""),
     )
 
-    filename = _module_export_filename(
+    filename = await _module_export_filename(
+        db=db,
         inst=inst,
         module=module,
-        user=user,
         ext="docx",
-        artifact_suffix="writeup",
+        prefix="writeup",
     )
 
     return Response(
@@ -1449,12 +1481,12 @@ async def export_module_decision_log_xlsx(
     )
     await db.commit()
 
-    filename = _module_export_filename(
+    filename = await _module_export_filename(
+        db=db,
         inst=inst,
         module=module,
-        user=user,
         ext="xlsx",
-        artifact_suffix="decision_log",
+        prefix="log",
     )
 
     return Response(

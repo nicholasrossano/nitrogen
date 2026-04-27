@@ -706,7 +706,7 @@ function InitiativePageContent() {
       openWorkspaceTab({
         id: `decision-log-${context.instanceId}`,
         kind: 'decision-log',
-        title: 'Decision Log',
+        title: `[Log] ${context.title}`,
         moduleInstanceId: context.instanceId,
         moduleId: context.moduleId,
       });
@@ -740,7 +740,7 @@ function InitiativePageContent() {
     handleOpenWorkspaceModule({
       instanceId: instance.id,
       moduleId: instance.module_id,
-      title: moduleName,
+      title: instance.display_name || moduleName,
       openChatPanel: false,
     });
   }, [initiativeId, handleOpenWorkspaceModule]);
@@ -751,7 +751,7 @@ function InitiativePageContent() {
     handleOpenWorkspaceModule({
       instanceId: instance.id,
       moduleId: instance.module_id,
-      title: instance.title || instance.module_id.replace(/_/g, ' '),
+      title: instance.display_name || instance.title || instance.module_id.replace(/_/g, ' '),
       openChatPanel: false,
     });
   }, [handleOpenWorkspaceModule]);

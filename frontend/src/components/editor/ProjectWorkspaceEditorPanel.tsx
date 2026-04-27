@@ -102,7 +102,7 @@ export function ProjectWorkspaceEditorPanel({
     onOpenTab({
       id: `module-${instance.id}`,
       kind: 'module',
-      title: instance.title || instance.module_id.replace(/_/g, ' '),
+      title: instance.display_name || instance.title || instance.module_id.replace(/_/g, ' '),
       instanceId: instance.id,
       moduleId: instance.module_id,
     });
@@ -125,6 +125,7 @@ export function ProjectWorkspaceEditorPanel({
         <ModuleWorkspace
           instanceId={tab.instanceId}
           moduleId={tab.moduleId}
+          moduleTitle={tab.title}
           initiativeId={initiativeId}
           onAddToChat={(text) => onSendToChat?.(text, tab.moduleId)}
           onOpenDecisionLog={onOpenDecisionLog}
