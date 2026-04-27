@@ -1,7 +1,6 @@
 import logging
 import re
 import shutil
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -174,23 +173,6 @@ def _humanize_module_id(module_id: str) -> str:
     return module_id.replace("_", " ").strip() or "Module"
 
 
-async def _build_instance_ordinals(
-    db: AsyncSession,
-    initiative_id: object,
-) -> dict[str, int]:
-    rows = await db.execute(
-        select(ModuleInstance.id, ModuleInstance.module_id)
-        .where(ModuleInstance.initiative_id == initiative_id)
-        .order_by(ModuleInstance.started_at.asc(), ModuleInstance.id.asc())
-    )
-    counts: dict[str, int] = defaultdict(int)
-    ordinals: dict[str, int] = {}
-    for row in rows:
-        counts[row.module_id] += 1
-        ordinals[str(row.id)] = counts[row.module_id]
-    return ordinals
-
-
 def _creator_handle_from_instance(inst: ModuleInstance, email_map: dict[str, str]) -> str:
     email = email_map.get(inst.started_by) or ""
     email_local = email.split("@", 1)[0].strip().lower()
@@ -212,21 +194,16 @@ def _serialize_module_instance(
     inst: ModuleInstance,
     *,
     email_map: dict[str, str],
-    instance_ordinals: dict[str, int],
+    module_names: dict[str, str],
 ) -> dict:
     data = ModuleInstanceResponse.model_validate(inst).model_dump()
     started_by_email = email_map.get(inst.started_by)
-    instance_number = instance_ordinals.get(str(inst.id))
     creator_handle = _creator_handle_from_instance(inst, email_map)
-    module_name = _resolve_module_name(inst.module_id)
-    display_name = (
-        f"{module_name} #{instance_number} · @{creator_handle}"
-        if instance_number is not None
-        else f"{module_name} · @{creator_handle}"
-    )
+    module_name = module_names.get(inst.module_id) or _humanize_module_id(inst.module_id)
+    display_name = f"{module_name} #{inst.instance_number} · @{creator_handle}"
 
     data["started_by_email"] = started_by_email
-    data["instance_number"] = instance_number
+    data["instance_number"] = inst.instance_number
     data["creator_handle"] = creator_handle
     data["display_name"] = display_name
     return data
@@ -234,7 +211,6 @@ def _serialize_module_instance(
 
 async def _serialize_module_instances(
     db: AsyncSession,
-    initiative_id: object,
     instances: list[ModuleInstance],
 ) -> list[dict]:
     if not instances:
@@ -246,12 +222,13 @@ async def _serialize_module_instances(
         rows = await db.execute(select(User.id, User.email).where(User.id.in_(uids)))
         email_map = {row.id: row.email for row in rows if row.email}
 
-    instance_ordinals = await _build_instance_ordinals(db, initiative_id)
+    unique_module_ids = {inst.module_id for inst in instances}
+    module_names = {module_id: _resolve_module_name(module_id) for module_id in unique_module_ids}
     return [
         _serialize_module_instance(
             inst,
             email_map=email_map,
-            instance_ordinals=instance_ordinals,
+            module_names=module_names,
         )
         for inst in instances
     ]
@@ -522,7 +499,7 @@ async def list_module_instances(
     await ensure_user_exists(db, user)
     initiative, _role = await get_initiative_with_role(db, initiative_id, user)
     instances = await module_service.list_instances(db, initiative.id, archived=archived)
-    return await _serialize_module_instances(db, initiative.id, instances)
+    return await _serialize_module_instances(db, instances)
 
 
 @router.delete(
@@ -565,7 +542,7 @@ async def restore_module_instance(
     inst.archived = False
     await db.commit()
     await db.refresh(inst)
-    serialized = await _serialize_module_instances(db, initiative.id, [inst])
+    serialized = await _serialize_module_instances(db, [inst])
     return serialized[0]
 
 
@@ -614,7 +591,7 @@ async def create_module_instance(
     )
     await db.commit()
     await db.refresh(inst)
-    serialized = await _serialize_module_instances(db, initiative.id, [inst])
+    serialized = await _serialize_module_instances(db, [inst])
     return serialized[0]
 
 

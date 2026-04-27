@@ -45,6 +45,7 @@ def _make_instance(module_id: str, initiative_id=None) -> ModuleInstance:
         id=uuid4(),
         initiative_id=iid,
         module_id=module_id,
+        instance_number=1,
         status="started",
         started_by="user-1",
     )
