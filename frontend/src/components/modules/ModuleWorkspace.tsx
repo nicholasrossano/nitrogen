@@ -4,7 +4,7 @@ import {
   useState, useEffect, useCallback, useRef, Suspense, lazy, type ComponentType,
 } from 'react';
 import {
-  Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, FileSpreadsheet,
+  Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, FileSpreadsheet, RotateCcw,
 } from 'lucide-react';
 import type {
   StagedModuleWorkflowState, StageDef, StageState, StagedWorkflowState,
@@ -269,6 +269,7 @@ interface ModuleWorkspaceProps {
   instanceId: string;
   moduleId: string;
   moduleTitle?: string;
+  isActive?: boolean;
   initiativeId?: string;
   onAddToChat?: (text: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
@@ -281,6 +282,7 @@ export function ModuleWorkspace({
   instanceId,
   moduleId,
   moduleTitle,
+  isActive = true,
   initiativeId,
   onAddToChat,
   onOpenDecisionLog,
@@ -439,7 +441,7 @@ export function ModuleWorkspace({
             workflowVersion={state?.workflow_version}
             onWorkflowUpdated={fetchState}
             workspaceView="output"
-            isActive
+            isActive={isActive}
             outputFooterAction={outputFooterAction}
             outputFooterState={outputFooterState}
             onInspectorStateChange={onInspectorStateChange}
@@ -447,7 +449,7 @@ export function ModuleWorkspace({
         </Suspense>
       );
     },
-    [fetchState, initiativeId, instanceId, onInspectorStateChange, state?.workflow_version]
+    [fetchState, initiativeId, instanceId, isActive, onInspectorStateChange, state?.workflow_version]
   );
 
   const handlePopulate = useCallback(async (stageId: string) => {
@@ -502,6 +504,24 @@ export function ModuleWorkspace({
       onApprovalChange?.();
     } catch (e: any) {
       setError(e.message ?? 'Failed to approve module');
+      fetchState();
+    } finally {
+      setIsApprovingFinal(false);
+    }
+  }, [instanceId, state?.workflow_version, fetchState, onApprovalChange]);
+
+  const handleRevokeFinalApproval = useCallback(async () => {
+    setIsApprovingFinal(true);
+    try {
+      const result = await api.revokeFinalModuleApproval(instanceId, state?.workflow_version);
+      setState((prev) => prev ? {
+        ...prev,
+        workflow_state: result.workflow_state,
+        workflow_version: result.workflow_version,
+      } : prev);
+      onApprovalChange?.();
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to revoke approval');
       fetchState();
     } finally {
       setIsApprovingFinal(false);
@@ -603,7 +623,10 @@ export function ModuleWorkspace({
     && stageDefs.length > 0
     && stagesBeforeTerminalConfirmed
     && terminalStageReady;
-  const canExportModule = hasExport && finalApproved;
+  const canExportModule = hasExport
+    && stageDefs.length > 0
+    && stagesBeforeTerminalConfirmed;
+  const showExportAction = canExportModule && currentStageDef.id === terminalStageId;
   const moduleDisplayTitle = moduleTitle || mod.name || moduleId.replace(/_/g, ' ');
   const decisionLogContext = {
     instanceId,
@@ -828,6 +851,11 @@ export function ModuleWorkspace({
                   )}
                 </div>
               )}
+              {showExportAction && (
+                <ExportButton
+                  onClick={handleExport}
+                />
+              )}
               {canApproveFinal && (
                 <button
                   onClick={handleApproveFinal}
@@ -840,20 +868,24 @@ export function ModuleWorkspace({
                   Approve
                 </button>
               )}
-              {finalApproved && !canExportModule && (
+              {finalApproved && (
                 <button
                   type="button"
-                  disabled
-                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0 disabled:opacity-100 disabled:cursor-default"
+                  onClick={handleRevokeFinalApproval}
+                  disabled={isApprovingFinal}
+                  title="Click to revoke approval"
+                  className="btn-primary group !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 !bg-accent !border-accent !text-white before:!opacity-100 flex items-center shrink-0 disabled:opacity-100"
                 >
-                  <CheckCircle2 className="w-3 h-3 text-accent" />
+                  {isApprovingFinal ? (
+                    <Loader2 className="w-3 h-3 animate-spin text-white" />
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3 h-3 text-white group-hover:hidden" />
+                      <RotateCcw className="hidden w-3 h-3 text-white group-hover:block" />
+                    </>
+                  )}
                   Approved
                 </button>
-              )}
-              {canExportModule && (
-                <ExportButton
-                  onClick={handleExport}
-                />
               )}
             </div>
           </div>
