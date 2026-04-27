@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector
 
 from app.core.database import Base
@@ -116,6 +116,12 @@ class EvidenceChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunk_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="text", server_default="text"
+    )
+    bbox: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    preview_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preview_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     
     # Vector embedding (1536 dimensions for OpenAI ada-002)
     embedding = mapped_column(Vector(1536))

@@ -314,6 +314,10 @@ async def get_evidence_chunks(
             EvidenceChunk.content,
             EvidenceChunk.content_html,
             EvidenceChunk.page_number,
+            EvidenceChunk.chunk_kind,
+            EvidenceChunk.bbox,
+            EvidenceChunk.preview_image_path,
+            EvidenceChunk.preview_mime_type,
         )
         .where(EvidenceChunk.evidence_doc_id == evidence_id)
         .order_by(EvidenceChunk.chunk_index)
@@ -331,10 +335,130 @@ async def get_evidence_chunks(
                 "content": c.content,
                 "content_html": c.content_html,
                 "page_number": c.page_number,
+                "chunk_kind": c.chunk_kind,
+                "bbox": c.bbox,
+                "preview_image_url": (
+                    f"/api/v1/evidence/{evidence_id}/chunks/{c.id}/preview"
+                    if c.preview_image_path
+                    else None
+                ),
+                "preview_mime_type": c.preview_mime_type,
             }
             for c in chunks
         ],
     }
+
+
+@router.get("/evidence/{evidence_id}/chunks/{chunk_id}")
+async def get_evidence_chunk(
+    evidence_id: UUID,
+    chunk_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Return one evidence chunk for lightweight citation previews."""
+    result = await db.execute(
+        select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
+    )
+    evidence_doc = result.scalar_one_or_none()
+
+    if not evidence_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence document not found",
+        )
+
+    await require_viewer(db, evidence_doc.initiative_id, user)
+
+    chunk_result = await db.execute(
+        select(
+            EvidenceChunk.id,
+            EvidenceChunk.chunk_index,
+            EvidenceChunk.content,
+            EvidenceChunk.content_html,
+            EvidenceChunk.page_number,
+            EvidenceChunk.chunk_kind,
+            EvidenceChunk.bbox,
+            EvidenceChunk.preview_image_path,
+            EvidenceChunk.preview_mime_type,
+        )
+        .where(
+            EvidenceChunk.evidence_doc_id == evidence_id,
+            EvidenceChunk.id == chunk_id,
+        )
+    )
+    chunk = chunk_result.first()
+    if not chunk:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence chunk not found",
+        )
+
+    return {
+        "id": str(evidence_doc.id),
+        "filename": evidence_doc.filename,
+        "file_type": evidence_doc.file_type,
+        "chunk": {
+            "id": str(chunk.id),
+            "chunk_index": chunk.chunk_index,
+            "content": chunk.content,
+            "content_html": chunk.content_html,
+            "page_number": chunk.page_number,
+            "chunk_kind": chunk.chunk_kind,
+            "bbox": chunk.bbox,
+            "preview_image_url": (
+                f"/api/v1/evidence/{evidence_id}/chunks/{chunk.id}/preview"
+                if chunk.preview_image_path
+                else None
+            ),
+            "preview_mime_type": chunk.preview_mime_type,
+        },
+    }
+
+
+@router.get("/evidence/{evidence_id}/chunks/{chunk_id}/preview")
+async def download_evidence_chunk_preview(
+    evidence_id: UUID,
+    chunk_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Download a cropped visual preview image for an evidence chunk."""
+    result = await db.execute(
+        select(EvidenceDoc, EvidenceChunk)
+        .join(EvidenceChunk, EvidenceChunk.evidence_doc_id == EvidenceDoc.id)
+        .where(EvidenceDoc.id == evidence_id, EvidenceChunk.id == chunk_id)
+    )
+    row = result.first()
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence chunk preview not found",
+        )
+
+    evidence_doc, chunk = row
+    await require_viewer(db, evidence_doc.initiative_id, user)
+
+    if not chunk.preview_image_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence chunk preview not available",
+        )
+
+    storage = get_uploads_storage()
+    try:
+        preview_bytes = await storage.load(chunk.preview_image_path)
+    except (FileNotFoundError, Exception) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence chunk preview file not available",
+        ) from exc
+
+    return Response(
+        content=preview_bytes,
+        media_type=chunk.preview_mime_type or "image/png",
+    )
 
 
 EVIDENCE_CONTENT_TYPE_MAP = {
@@ -414,9 +538,19 @@ async def delete_evidence(
     
     await require_editor(db, evidence_doc.initiative_id, user)
 
+    storage = get_uploads_storage()
     if evidence_doc.storage_path:
-        storage = get_uploads_storage()
         await storage.delete(evidence_doc.storage_path)
+
+    preview_result = await db.execute(
+        select(EvidenceChunk.preview_image_path).where(
+            EvidenceChunk.evidence_doc_id == evidence_id,
+            EvidenceChunk.preview_image_path.isnot(None),
+        )
+    )
+    for (preview_path,) in preview_result.all():
+        if preview_path:
+            await storage.delete(preview_path)
 
     # Delete all chunks first
     await db.execute(
