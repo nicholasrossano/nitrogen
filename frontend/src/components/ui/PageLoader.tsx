@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sprout, TreeDeciduous } from 'lucide-react';
 
 import { LoadingArtHost } from './loading-art';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 interface UniversalLoadingIconProps {
   size?: number;
@@ -76,7 +77,11 @@ export function PageLoader({
   size,
   className = '',
 }: PageLoaderProps) {
-  if (variant === 'art') {
+  const devMode = useSettingsStore((s) => s.devMode);
+  const useArtVariant = variant === 'art' && devMode;
+  const iconSize = variant === 'icon' ? (size ?? 40) : 40;
+
+  if (useArtVariant) {
     return (
       <LoadingArtHost
         size={size ?? 240}
@@ -88,7 +93,7 @@ export function PageLoader({
 
   return (
     <div className={['flex flex-col items-center justify-center gap-1.5', className].join(' ').trim()}>
-      <UniversalLoadingIcon size={size ?? 40} />
+      <UniversalLoadingIcon size={iconSize} />
       {label && (
         <span className="text-xs text-text-secondary font-medium tracking-wide">{label}</span>
       )}
