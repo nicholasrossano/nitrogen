@@ -26,17 +26,6 @@ function BillingSync() {
 
 function DevModePaywall() {
   const devMode = useSettingsStore((s) => s.devMode);
-  const triggerPaywall = useBillingStore((s) => s.triggerPaywall);
-  const dismissPaywall = useBillingStore((s) => s.dismissPaywall);
-
-  useEffect(() => {
-    if (devMode) {
-      // Developer mode should surface paywall UX immediately for testing.
-      triggerPaywall({ source: 'dev_mode' });
-      return;
-    }
-    dismissPaywall();
-  }, [devMode, triggerPaywall, dismissPaywall]);
 
   if (!devMode) return null;
   return <PaywallModal />;
