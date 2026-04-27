@@ -341,6 +341,10 @@ export interface EvidenceChunkDetail {
   content: string;
   content_html?: string | null;
   page_number?: number | null;
+  chunk_kind?: 'text' | 'visual' | string;
+  bbox?: Record<string, number> | null;
+  preview_image_url?: string | null;
+  preview_mime_type?: string | null;
 }
 
 export interface ChatMessage {
@@ -946,6 +950,14 @@ export const api = {
       chunks: EvidenceChunkDetail[];
     }>(`/api/v1/evidence/${evidenceId}/chunks`),
 
+  getEvidenceChunk: (evidenceId: string, chunkId: string) =>
+    fetchApi<{
+      id: string;
+      filename: string | null;
+      file_type: string | null;
+      chunk: EvidenceChunkDetail;
+    }>(`/api/v1/evidence/${evidenceId}/chunks/${chunkId}`),
+
   deleteEvidence: async (evidenceId: string) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -1075,6 +1087,19 @@ export const api = {
     });
     if (!response.ok) {
       throw new Error('Failed to fetch evidence file');
+    }
+    return response.arrayBuffer();
+  },
+
+  getEvidenceChunkPreviewBytes: async (evidenceId: string, chunkId: string): Promise<ArrayBuffer> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/evidence/${evidenceId}/chunks/${chunkId}/preview`, {
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch evidence chunk preview');
     }
     return response.arrayBuffer();
   },

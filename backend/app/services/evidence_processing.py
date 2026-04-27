@@ -3,15 +3,29 @@ Shared evidence processing helpers used by both the evidence upload endpoint
 and the Google Drive import endpoint.
 """
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import select, func, delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.filename_utils import deduplicate_filename
+from app.core.storage import StorageBackend
 from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
 from app.models.initiative import Initiative
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
+from app.services.pdf_visual_chunks import extract_pdf_visual_chunks
+
+
+@dataclass
+class EvidenceChunkPayload:
+    content: str
+    content_html: str | None = None
+    page_number: int | None = None
+    chunk_kind: str = "text"
+    bbox: dict | None = None
+    preview_image_path: str | None = None
+    preview_mime_type: str | None = None
 
 
 def parse_file_to_chunks(
@@ -40,6 +54,49 @@ def parse_file_to_chunks(
         return [(c, None, None) for c in parser.chunk_text(text)]
     else:
         raise ValueError(f"Unsupported file_type for processing: {file_type}")
+
+
+async def parse_file_to_chunk_payloads(
+    parser: DocumentParserService,
+    file_bytes: bytes,
+    file_type: str,
+    *,
+    storage: StorageBackend | None = None,
+    preview_folder: str = "",
+) -> list[EvidenceChunkPayload]:
+    """Parse bytes into chunk payloads, including visual PDF crops when possible."""
+
+    base_chunks = [
+        EvidenceChunkPayload(
+            content=plain,
+            content_html=html,
+            page_number=page_number,
+        )
+        for plain, html, page_number in parse_file_to_chunks(parser, file_bytes, file_type)
+    ]
+
+    if file_type != "pdf" or storage is None:
+        return base_chunks
+
+    visual_chunks = []
+    for idx, visual in enumerate(extract_pdf_visual_chunks(file_bytes)):
+        path = await storage.save(
+            visual.image_bytes,
+            f"visual-chunk-{idx}.png",
+            folder=preview_folder,
+        )
+        visual_chunks.append(
+            EvidenceChunkPayload(
+                content=visual.content,
+                page_number=visual.page_number,
+                chunk_kind="visual",
+                bbox=visual.bbox,
+                preview_image_path=path,
+                preview_mime_type=visual.mime_type,
+            )
+        )
+
+    return base_chunks + visual_chunks
 
 
 async def create_uploaded_doc(
@@ -95,7 +152,16 @@ async def store_evidence_doc(
     parser = DocumentParserService()
     embeddings_service = EmbeddingsService()
 
-    chunk_tuples = parse_file_to_chunks(parser, file_bytes, file_type)
+    from app.core.storage import get_uploads_storage
+
+    storage = get_uploads_storage()
+    chunk_payloads = await parse_file_to_chunk_payloads(
+        parser,
+        file_bytes,
+        file_type,
+        storage=storage,
+        preview_folder=f"{initiative.id}/previews",
+    )
 
     filename = await deduplicate_filename(db, initiative.id, filename or "Untitled")
 
@@ -112,18 +178,20 @@ async def store_evidence_doc(
     await db.commit()
     await db.refresh(evidence_doc)
 
-    plain_texts = [t[0] for t in chunk_tuples]
+    plain_texts = [payload.content for payload in chunk_payloads]
     embeddings = await embeddings_service.embed_texts(plain_texts)
 
-    for i, ((plain, html_content, page_num), embedding) in enumerate(
-        zip(chunk_tuples, embeddings)
-    ):
+    for i, (payload, embedding) in enumerate(zip(chunk_payloads, embeddings)):
         chunk = EvidenceChunk(
             evidence_doc_id=evidence_doc.id,
             chunk_index=i,
-            content=plain,
-            content_html=html_content,
-            page_number=page_num,
+            content=payload.content,
+            content_html=payload.content_html,
+            page_number=payload.page_number,
+            chunk_kind=payload.chunk_kind,
+            bbox=payload.bbox,
+            preview_image_path=payload.preview_image_path,
+            preview_mime_type=payload.preview_mime_type,
             embedding=embedding,
         )
         db.add(chunk)

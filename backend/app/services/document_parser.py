@@ -1,4 +1,5 @@
 import io
+import math
 import re
 import tiktoken
 
@@ -21,16 +22,7 @@ class DocumentParserService:
 
     def parse_pdf(self, content: bytes) -> str:
         """Parse PDF content to plain text (all pages concatenated)."""
-        import pdfplumber
-
-        text_parts = []
-        with pdfplumber.open(io.BytesIO(content)) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text_parts.append(page_text)
-
-        return "\n\n".join(text_parts)
+        return "\n\n".join(text for text, _ in self.parse_pdf_pages(content))
 
     def parse_pdf_pages(self, content: bytes) -> list[tuple[str, int]]:
         """Parse PDF returning (text, page_number) pairs (1-indexed)."""
@@ -42,7 +34,7 @@ class DocumentParserService:
                 page_text = page.extract_text()
                 if page_text and page_text.strip():
                     pages.append((page_text, page.page_number))
-        return pages
+        return _clean_pdf_pages(pages)
 
     def parse_docx(self, content: bytes) -> str:
         """Parse DOCX content to plain text."""
@@ -268,6 +260,8 @@ class DocumentParserService:
 # ======================================================================
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_DOCUSIGN_RE = re.compile(r"\bDocuSign\s+Envelope\s+ID\b", re.IGNORECASE)
+_STANDALONE_PAGE_RE = re.compile(r"^(?:page\s*)?-?\s*\d{1,4}\s*-?$", re.IGNORECASE)
 
 
 def _strip_tags(html: str) -> str:
@@ -282,6 +276,81 @@ def _esc(text: str) -> str:
         .replace("<", "&lt;")
         .replace(">", "&gt;")
     )
+
+
+def _clean_pdf_pages(pages: list[tuple[str, int]]) -> list[tuple[str, int]]:
+    """Remove conservative PDF boilerplate from extracted page text.
+
+    Only repeated margin lines, DocuSign IDs, and standalone page numbers are
+    removed. Repeated body text is preserved so tables and recurring labels are
+    not accidentally stripped.
+    """
+
+    if not pages:
+        return []
+
+    repeated_margin_lines = _find_repeated_margin_lines([text for text, _ in pages])
+    cleaned_pages: list[tuple[str, int]] = []
+    for text, page_number in pages:
+        cleaned = _clean_pdf_page_text(text, repeated_margin_lines)
+        if cleaned.strip():
+            cleaned_pages.append((cleaned, page_number))
+    return cleaned_pages
+
+
+def _find_repeated_margin_lines(page_texts: list[str]) -> set[str]:
+    if len(page_texts) < 3:
+        return set()
+
+    line_pages: dict[str, set[int]] = {}
+    for page_idx, text in enumerate(page_texts):
+        lines = [line for line in text.splitlines() if line.strip()]
+        margin_band_size = _pdf_margin_band_size(len(lines))
+        margin_lines = lines[:margin_band_size] + lines[-margin_band_size:]
+        for line in margin_lines:
+            normalized = _normalize_pdf_boilerplate_line(line)
+            if normalized:
+                line_pages.setdefault(normalized, set()).add(page_idx)
+
+    threshold = max(2, math.ceil(len(page_texts) * 0.5))
+    return {
+        normalized
+        for normalized, seen_pages in line_pages.items()
+        if len(seen_pages) >= threshold
+    }
+
+
+def _clean_pdf_page_text(text: str, repeated_margin_lines: set[str]) -> str:
+    lines = text.splitlines()
+    total = len(lines)
+    cleaned: list[str] = []
+
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        normalized = _normalize_pdf_boilerplate_line(stripped)
+        margin_band_size = _pdf_margin_band_size(total)
+        in_margin = idx < margin_band_size or idx >= max(total - margin_band_size, 0)
+
+        if _DOCUSIGN_RE.search(stripped):
+            continue
+        if in_margin and normalized in repeated_margin_lines:
+            continue
+        if in_margin and _STANDALONE_PAGE_RE.match(stripped):
+            continue
+
+        cleaned.append(line.rstrip())
+
+    return "\n".join(cleaned).strip()
+
+
+def _normalize_pdf_boilerplate_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line).strip().lower()
+
+
+def _pdf_margin_band_size(line_count: int) -> int:
+    if line_count <= 0:
+        return 0
+    return min(4, max(1, math.ceil(line_count * 0.15)))
 
 
 def _split_html_blocks(html: str, block_tags: set[str]) -> list[str]:

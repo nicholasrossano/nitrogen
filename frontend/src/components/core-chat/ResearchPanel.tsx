@@ -6,15 +6,8 @@ import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import DOMPurify from 'dompurify';
 import { PageLoader } from '@/components/ui/PageLoader';
-import {
-  extractPrimaryStructuredHtml,
-  getSnippetPreviewKind,
-  getSnippetPreviewLabel,
-  hasTableMarkup,
-  hasTabularRows,
-  looksLikeVisualPdfChunk,
-  normalizeSpreadsheetText,
-} from './snippetPreview';
+
+const CITATION_LOAD_TIMEOUT_MS = 12000;
 
 export interface ResearchPanelCitation {
   evidence_doc_id: string;
@@ -22,20 +15,84 @@ export interface ResearchPanelCitation {
   source_title: string;
 }
 
+type EvidenceChunksResponse = Awaited<ReturnType<typeof api.getEvidenceChunks>>;
+type EvidenceChunkResponse = Awaited<ReturnType<typeof api.getEvidenceChunk>>;
+type CitationChunkResponse = {
+  id: string;
+  filename: string | null;
+  file_type: string | null;
+  chunks: EvidenceChunkDetail[];
+};
+
+const evidenceChunksCache = new Map<string, Promise<EvidenceChunksResponse>>();
+const evidenceChunkCache = new Map<string, Promise<EvidenceChunkResponse>>();
+const visualPreviewBytesCache = new Map<string, Promise<ArrayBuffer>>();
+
+function getCachedEvidenceChunks(evidenceDocId: string): Promise<EvidenceChunksResponse> {
+  const cached = evidenceChunksCache.get(evidenceDocId);
+  if (cached) return cached;
+
+  const request = api.getEvidenceChunks(evidenceDocId).catch((error) => {
+    evidenceChunksCache.delete(evidenceDocId);
+    throw error;
+  });
+  evidenceChunksCache.set(evidenceDocId, request);
+  return request;
+}
+
+function getCachedEvidenceChunk(
+  evidenceDocId: string,
+  chunkId: string,
+): Promise<EvidenceChunkResponse> {
+  const cacheKey = `${evidenceDocId}:${chunkId}`;
+  const cached = evidenceChunkCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = api.getEvidenceChunk(evidenceDocId, chunkId).catch((error) => {
+    evidenceChunkCache.delete(cacheKey);
+    throw error;
+  });
+  evidenceChunkCache.set(cacheKey, request);
+  return request;
+}
+
+function getCitationChunks(citation: ResearchPanelCitation): Promise<CitationChunkResponse> {
+  if (citation.chunk_id) {
+    return getCachedEvidenceChunk(citation.evidence_doc_id, citation.chunk_id)
+      .then((res) => ({
+        id: res.id,
+        filename: res.filename,
+        file_type: res.file_type,
+        chunks: [res.chunk],
+      }))
+      .catch(() => getCachedEvidenceChunks(citation.evidence_doc_id));
+  }
+
+  return getCachedEvidenceChunks(citation.evidence_doc_id);
+}
+
+function getCachedEvidenceChunkPreviewBytes(
+  evidenceDocId: string,
+  chunkId: string,
+): Promise<ArrayBuffer> {
+  const cacheKey = `${evidenceDocId}:${chunkId}`;
+  const cached = visualPreviewBytesCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = api.getEvidenceChunkPreviewBytes(evidenceDocId, chunkId).catch((error) => {
+    visualPreviewBytesCache.delete(cacheKey);
+    throw error;
+  });
+  visualPreviewBytesCache.set(cacheKey, request);
+  return request;
+}
+
 interface SpreadsheetSheetPreview {
   name: string;
   rows: string[][];
 }
 
-function MiniPdfPage({
-  evidenceDocId,
-  pageNumber,
-  compact = false,
-}: {
-  evidenceDocId: string;
-  pageNumber: number;
-  compact?: boolean;
-}) {
+function MiniPdfPage({ evidenceDocId, pageNumber }: { evidenceDocId: string; pageNumber: number }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -79,11 +136,94 @@ function MiniPdfPage({
       {blobUrl && (
         <iframe
           src={blobUrl}
-          className={compact ? 'w-full h-36 border-0' : 'w-full h-48 border-0'}
+          className="w-full h-48 border-0"
           title={`PDF page ${pageNumber}`}
         />
       )}
     </div>
+  );
+}
+
+function VisualChunkPreview({
+  evidenceDocId,
+  chunk,
+}: {
+  evidenceDocId: string;
+  chunk: EvidenceChunkDetail;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!chunk.preview_image_url) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    let timedOut = false;
+    let url: string | null = null;
+    const cacheKey = `${evidenceDocId}:${chunk.id}`;
+
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      visualPreviewBytesCache.delete(cacheKey);
+      if (!cancelled) {
+        setError(true);
+        setLoading(false);
+      }
+    }, CITATION_LOAD_TIMEOUT_MS);
+
+    (async () => {
+      try {
+        const bytes = await getCachedEvidenceChunkPreviewBytes(evidenceDocId, chunk.id);
+        if (cancelled || timedOut) return;
+        const blob = new Blob([bytes], { type: chunk.preview_mime_type || 'image/png' });
+        url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+      } catch {
+        if (!cancelled && !timedOut) setError(true);
+      } finally {
+        window.clearTimeout(timeout);
+        if (!cancelled && !timedOut) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [evidenceDocId, chunk.id, chunk.preview_image_url, chunk.preview_mime_type]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-24 items-center justify-center">
+        <PageLoader label="" />
+      </div>
+    );
+  }
+
+  if (error || !blobUrl) {
+    return <p className="text-xs text-text-tertiary py-2">Could not load visual preview</p>;
+  }
+
+  return (
+    <figure className="space-y-2">
+      <div className="overflow-hidden rounded border border-stroke-subtle bg-white">
+        <img
+          src={blobUrl}
+          alt={chunk.content ? `Citation visual preview: ${chunk.content.slice(0, 120)}` : 'Citation visual preview'}
+          className="max-h-48 w-full object-contain"
+        />
+      </div>
+      {chunk.page_number && (
+        <figcaption className="text-[11px] text-text-tertiary">
+          Cropped visual from page {chunk.page_number}
+        </figcaption>
+      )}
+    </figure>
   );
 }
 
@@ -108,6 +248,77 @@ function RichHtmlContent({ html }: { html: string }) {
       className="rich-snippet text-[13px] leading-relaxed text-text-secondary"
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
+  );
+}
+
+function hasTableMarkup(html?: string | null): boolean {
+  return Boolean(html && /<table[\s>]/i.test(html));
+}
+
+function extractFirstTableHtml(html: string): string {
+  const tableMatch = html.match(/<table[\s\S]*?<\/table>/i);
+  return tableMatch ? tableMatch[0] : html;
+}
+
+function normalizeSpreadsheetText(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\r\n/g, '\n')
+    .trim();
+}
+
+function hasTabularRows(text: string): boolean {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  return lines.some((line) => line.includes('\t') && line.split('\t').length > 1);
+}
+
+function normalizeProsePreviewText(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const paragraphs: string[] = [];
+  let current = '';
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (current) {
+        paragraphs.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    if (!current) {
+      current = line;
+      continue;
+    }
+
+    if (shouldKeepLineBreak(current, line)) {
+      paragraphs.push(current);
+      current = line;
+    } else {
+      current = `${current.replace(/-\s*$/, '')} ${line}`;
+    }
+  }
+
+  if (current) paragraphs.push(current);
+  return paragraphs.join('\n\n');
+}
+
+function shouldKeepLineBreak(previous: string, next: string): boolean {
+  if (isStructuredPreviewLine(previous) || isStructuredPreviewLine(next)) return true;
+  if (/[.!?:;]$/.test(previous)) return true;
+  if (/^[A-Z0-9][A-Z0-9\s/&().,-]{3,}$/.test(previous) && previous.length <= 80) return true;
+  return false;
+}
+
+function isStructuredPreviewLine(line: string): boolean {
+  return (
+    /^\s*(?:[-*•]|\d+[.)]|[A-Za-z][.)])\s+/.test(line) ||
+    /^\s*[A-Za-z][\w\s/&()-]{0,40}:\s+/.test(line) ||
+    line.includes('\t') ||
+    /\s{2,}/.test(line)
   );
 }
 
@@ -293,14 +504,31 @@ export function SnippetCard({
   const constrained = Boolean(maxLines);
 
   useEffect(() => {
-    if (!citation.evidence_doc_id) return;
+    if (!citation.evidence_doc_id) {
+      setLoading(false);
+      setError(true);
+      return;
+    }
     let cancelled = false;
+    let timedOut = false;
     setLoading(true);
     setError(false);
 
-    api.getEvidenceChunks(citation.evidence_doc_id)
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      evidenceChunksCache.delete(citation.evidence_doc_id);
+      if (citation.chunk_id) {
+        evidenceChunkCache.delete(`${citation.evidence_doc_id}:${citation.chunk_id}`);
+      }
+      if (!cancelled) {
+        setError(true);
+        setLoading(false);
+      }
+    }, CITATION_LOAD_TIMEOUT_MS);
+
+    getCitationChunks(citation)
       .then((res) => {
-        if (cancelled) return;
+        if (cancelled || timedOut) return;
         if (res.filename) setFilename(res.filename);
         setFileType(res.file_type || null);
         setChunks(res.chunks);
@@ -312,13 +540,17 @@ export function SnippetCard({
         setChunk(match || res.chunks[0] || null);
       })
       .catch(() => {
-        if (!cancelled) setError(true);
+        if (!cancelled && !timedOut) setError(true);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        window.clearTimeout(timeout);
+        if (!cancelled && !timedOut) setLoading(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
   }, [citation.evidence_doc_id, citation.chunk_id]);
 
   useEffect(() => {
@@ -391,15 +623,18 @@ export function SnippetCard({
       isSpreadsheet && spreadsheetSheets
         ? buildSpreadsheetSlice(spreadsheetSheets, spreadsheetChunk.content)
         : null;
-    const hasSpreadsheetTable = Boolean(spreadsheetRows && spreadsheetRows.length > 0);
-    const preferVisualPdfPreview = Boolean(
-      fileType === 'pdf' &&
-      chunk.page_number &&
-      (!textOnly || looksLikeVisualPdfChunk(chunk.content))
-    );
+
+    if (chunk.preview_image_url) {
+      return (
+        <VisualChunkPreview
+          evidenceDocId={citation.evidence_doc_id}
+          chunk={chunk}
+        />
+      );
+    }
 
     // Spreadsheet citations: prioritize tabular slices over sheet-title chunks.
-    if (isSpreadsheet && hasSpreadsheetTable && spreadsheetRows) {
+    if (isSpreadsheet && spreadsheetRows && spreadsheetRows.length > 0) {
       return <SpreadsheetGridContent rows={spreadsheetRows} />;
     }
     if (isSpreadsheet && spreadsheetLoading) {
@@ -410,21 +645,18 @@ export function SnippetCard({
       );
     }
     if (isSpreadsheet && spreadsheetHtml && hasTableMarkup(spreadsheetHtml)) {
-      return <RichHtmlContent html={extractPrimaryStructuredHtml(spreadsheetHtml)} />;
-    }
-    if (chunk.content_html && hasTableMarkup(chunk.content_html)) {
-      return <RichHtmlContent html={extractPrimaryStructuredHtml(chunk.content_html)} />;
+      return <RichHtmlContent html={extractFirstTableHtml(spreadsheetHtml)} />;
     }
     if (chunk.content_html) {
       return <RichHtmlContent html={chunk.content_html} />;
     }
 
-    if (preferVisualPdfPreview && chunk.page_number) {
+    // PDF page preview — suppressed in textOnly mode (e.g. deep dive panel)
+    if (!textOnly && fileType === 'pdf' && chunk.page_number) {
       return (
         <MiniPdfPage
           evidenceDocId={citation.evidence_doc_id}
           pageNumber={chunk.page_number}
-          compact={constrained}
         />
       );
     }
@@ -433,7 +665,7 @@ export function SnippetCard({
       return <SpreadsheetTextContent text={spreadsheetText} />;
     }
 
-    const text = chunk.content;
+    const text = normalizeProsePreviewText(chunk.content);
     const maxChars = 400;
     const truncated = text.length > maxChars ? text.slice(0, maxChars).trimEnd() + '\u2026' : text;
     const lineClampStyle = maxLines ? { WebkitLineClamp: maxLines } : undefined;
@@ -450,31 +682,6 @@ export function SnippetCard({
   };
 
   const isSpreadsheetFile = fileType === 'xlsx' || fileType === 'xls';
-  const previewChunk = chunk ? (pickSpreadsheetPreviewChunk(fileType, chunk, chunks) ?? chunk) : null;
-  const hasStructuredHtml = Boolean(chunk?.content_html);
-  const hasTableHtml = hasTableMarkup(previewChunk?.content_html) || hasTableMarkup(chunk?.content_html);
-  const hasSpreadsheetRows = Boolean(
-    previewChunk &&
-    isSpreadsheetFile &&
-    (
-      (spreadsheetSheets && buildSpreadsheetSlice(spreadsheetSheets, previewChunk.content)?.length) ||
-      hasTabularRows(normalizeSpreadsheetText(previewChunk.content))
-    )
-  );
-  const hasPagePreview = fileType === 'pdf' && Boolean(chunk?.page_number);
-  const preferVisualPdfPreview = Boolean(
-    hasPagePreview && chunk && (!textOnly || looksLikeVisualPdfChunk(chunk.content))
-  );
-  const previewKind = getSnippetPreviewKind({
-    fileType,
-    hasStructuredHtml,
-    hasTableHtml,
-    hasSpreadsheetRows,
-    hasPagePreview,
-    preferVisualPdfPreview,
-  });
-  const previewLabel = getSnippetPreviewLabel(previewKind);
-  const showVisualFallbackHint = Boolean(textOnly && fileType === 'pdf' && preferVisualPdfPreview);
 
   return (
     <div
@@ -488,27 +695,7 @@ export function SnippetCard({
         <span className="text-xs font-medium text-text-primary truncate flex-1">
           {filename}
         </span>
-        {!loading && !error && chunk && (
-          <>
-            {chunk.page_number ? (
-              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
-                p. {chunk.page_number}
-              </span>
-            ) : null}
-            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
-              {previewLabel}
-            </span>
-          </>
-        )}
       </div>
-
-      {showVisualFallbackHint && (
-        <div className="border-b border-stroke-subtle bg-surface px-3 py-2">
-          <p className="text-[11px] leading-relaxed text-text-tertiary">
-            Showing the source page because this citation is mostly visual or highly structured.
-          </p>
-        </div>
-      )}
 
       <div
         className={
@@ -532,7 +719,7 @@ export function SnippetCard({
         )}
       </div>
 
-      {onOpenFull && !loading && !error && (
+      {onOpenFull && (
         <button
           onClick={onOpenFull}
           className="flex items-center justify-end gap-1 px-3 py-2 w-full text-xs text-text-tertiary enabled:hover:text-accent border-t border-stroke-subtle transition-colors"
