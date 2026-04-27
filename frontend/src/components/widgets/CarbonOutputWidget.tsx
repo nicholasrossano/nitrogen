@@ -223,9 +223,9 @@ export function CarbonOutputWidget({
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
-    { id: 'inputs' as const, label: 'Inputs' },
     ...(sensitivity.length > 0 ? [{ id: 'sensitivity' as const, label: 'Sensitivity' }] : []),
     { id: 'schedule' as const, label: 'ER Schedule' },
+    { id: 'inputs' as const, label: 'Inputs' },
   ];
 
   return (

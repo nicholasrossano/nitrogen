@@ -598,7 +598,7 @@ export function SolarEstimateWidget({
 
       {/* Tabs */}
       <div className="shrink-0 flex border-b border-stroke-subtle">
-        {(['overview', 'inputs', 'monthly'] as const).map((tab) => (
+        {(['overview', 'monthly', 'inputs'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
