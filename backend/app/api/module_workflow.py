@@ -18,7 +18,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
@@ -126,21 +125,6 @@ async def _instance_creator_token(db: AsyncSession, inst: ModuleInstance) -> str
     return fallback or "user"
 
 
-async def _instance_number(db: AsyncSession, inst: ModuleInstance) -> int:
-    rows = await db.execute(
-        select(ModuleInstance.id)
-        .where(
-            ModuleInstance.initiative_id == inst.initiative_id,
-            ModuleInstance.module_id == inst.module_id,
-        )
-        .order_by(ModuleInstance.started_at.asc(), ModuleInstance.id.asc())
-    )
-    for idx, row in enumerate(rows, start=1):
-        if row.id == inst.id:
-            return idx
-    return 1
-
-
 async def _module_export_filename(
     *,
     db: AsyncSession,
@@ -151,7 +135,7 @@ async def _module_export_filename(
 ) -> str:
     """Build a consistent filename for module-scoped exports."""
     module_token = re.sub(r"[^\w.-]", "-", module.definition.name.lower()).strip("._-") or "module"
-    number_token = await _instance_number(db, inst)
+    number_token = inst.instance_number
     creator_token = await _instance_creator_token(db, inst)
     date_token = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     base = f"{module_token}_n{number_token}_{creator_token}_{date_token}"
@@ -1234,6 +1218,38 @@ async def approve_final_output(
     }
 
 
+@router.delete("/module-workflow/{instance_id}/final-approval")
+async def revoke_final_approval(
+    instance_id: _uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Revoke final approval so the workflow can return to the approvable state."""
+    inst, module = await _get_editable_workflow_instance(db, instance_id, user)
+    _assert_workflow_version(inst, request)
+
+    state = await ensure_workflow_state(db, inst, module)
+    was_revoked = clear_final_approval(state)
+    if was_revoked:
+        save_workflow_state(inst, state, increment_version=True)
+        await append_decision_event(
+            db,
+            inst=inst,
+            event_type="final_approval_revoked",
+            entity_type="module",
+            actor_user_id=user.uid,
+            actor_email=user.email,
+            payload={"reason": "manual_revoke"},
+        )
+        await db.commit()
+
+    return {
+        "workflow_state": state,
+        "workflow_version": inst.workflow_version,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Export endpoint (generates artifact on demand from confirmed stage data)
 # ---------------------------------------------------------------------------
@@ -1269,11 +1285,6 @@ async def export_module_output(
         raise HTTPException(
             status_code=400,
             detail="At least one stage must be confirmed before exporting",
-        )
-    if requires_final_approval(module) and (state.get("final_approval") or {}).get("status") != "approved":
-        raise HTTPException(
-            status_code=400,
-            detail="Final approval is required before exporting this module",
         )
 
     try:

@@ -126,6 +126,7 @@ export function ProjectWorkspaceEditorPanel({
           instanceId={tab.instanceId}
           moduleId={tab.moduleId}
           moduleTitle={tab.title}
+          isActive={isActive}
           initiativeId={initiativeId}
           onAddToChat={(text) => onSendToChat?.(text, tab.moduleId)}
           onOpenDecisionLog={onOpenDecisionLog}
