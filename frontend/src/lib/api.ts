@@ -64,6 +64,9 @@ export interface ModuleInstance {
   module_id: string;
   status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'completed' | 'error';
   title: string | null;
+  instance_number?: number | null;
+  creator_handle?: string | null;
+  display_name?: string | null;
   started_by: string;
   started_by_email: string | null;
   started_at: string;
@@ -621,10 +624,6 @@ async function fetchApi<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    if (response.status === 402 && devMode) {
-      const paywall = new CustomEvent('nitrogen:paywall', { detail: error.detail ?? error });
-      window.dispatchEvent(paywall);
-    }
     throw new Error(error.detail?.message || error.detail || `HTTP ${response.status}`);
   }
 
@@ -1644,10 +1643,6 @@ export const api = {
 
     if (!response.ok || !response.body) {
       const err = await response.json().catch(() => ({ detail: 'Stream failed' }));
-      if (response.status === 402 && devMode) {
-        const paywall = new CustomEvent('nitrogen:paywall', { detail: err.detail ?? err });
-        window.dispatchEvent(paywall);
-      }
       onError(err.detail?.message || err.detail || `HTTP ${response.status}`);
       return;
     }
