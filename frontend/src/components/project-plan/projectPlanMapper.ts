@@ -126,8 +126,33 @@ export function mapProjectPlanToProgress(plan: ProjectPlan | null): PlanWorkspac
 
 export function mapDeepDiveToInspectorResult(result: DeepDiveResult | null): PlanWorkspaceInspectorResult | null {
   if (!result) return null;
+  const citationSources = result.sources.map((source, idx) => {
+    const citationNumber = idx + 1;
+    if (source.source_type === 'evidence' && source.evidence_doc_id) {
+      return {
+        key: `doc:${source.evidence_doc_id}:${source.chunk_id ?? source.title}`,
+        label: source.title,
+        type: 'document' as const,
+        citationNumber,
+        title: source.title,
+        evidenceDocId: source.evidence_doc_id,
+        chunkId: source.chunk_id ?? null,
+      };
+    }
+    return {
+      key: `link:${source.title}:${source.url ?? ''}`,
+      label: source.title,
+      type: 'link' as const,
+      citationNumber,
+      title: source.title,
+      url: source.url,
+      publisher: source.publisher,
+    };
+  });
+
   return {
     summary: result.what_this_is,
+    summaryCitations: result.summary_citations ?? [],
     requirements: result.elements.map((element) => ({
       title: element.title,
       description: element.description,
@@ -147,6 +172,7 @@ export function mapDeepDiveToInspectorResult(result: DeepDiveResult | null): Pla
         url: source.url,
         publisher: source.publisher,
       })),
+    citationSources,
     latencyMs: result.latency_ms,
   };
 }

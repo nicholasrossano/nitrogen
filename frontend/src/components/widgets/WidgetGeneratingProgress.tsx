@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { Check, Search, FileText, Save } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
+
 export interface GeneratingStep {
   label: string;
   icon: LucideIcon;
@@ -62,12 +64,8 @@ export function WidgetGeneratingProgress({
   return (
     <div className="px-5 py-10 flex flex-col items-center gap-5">
       <div className="relative flex items-center justify-center w-10 h-10">
-        <div className="absolute inset-0 rounded-full border-2 border-accent/20" />
-        <div
-          className="absolute inset-0 rounded-full border-2 border-accent border-t-transparent animate-spin"
-          style={{ animationDuration: '1.2s' }}
-        />
-        <StepIcon className="w-4.5 h-4.5 text-accent" />
+        <UniversalLoadingIcon size={40} />
+        <StepIcon className="absolute w-4.5 h-4.5 text-accent" />
       </div>
 
       <div className="text-center">

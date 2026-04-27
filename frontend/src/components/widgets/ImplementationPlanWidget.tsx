@@ -131,15 +131,41 @@ function toInspectorResult(
       url: source.url ?? null,
       publisher: source.publisher ?? null,
     }));
+  const citationSources = deepDiveSources
+    .map((source, idx) => {
+      const citationNumber = idx + 1;
+      if (source.source_type === 'evidence' && source.evidence_doc_id) {
+        return {
+          key: `doc:${source.evidence_doc_id}:${source.chunk_id ?? source.title}`,
+          label: source.title,
+          type: 'document' as const,
+          citationNumber,
+          title: source.title,
+          evidenceDocId: source.evidence_doc_id,
+          chunkId: source.chunk_id ?? null,
+        };
+      }
+      return {
+        key: `link:${source.title}:${source.url ?? ''}`,
+        label: source.title,
+        type: 'link' as const,
+        citationNumber,
+        title: source.title,
+        url: source.url ?? null,
+        publisher: source.publisher ?? null,
+      };
+    });
 
   return {
     summary,
+    summaryCitations: deepDiveResult?.summary_citations ?? [],
     summaryTitle: 'What this is',
     requirements: [],
     dependencies: [],
     detailFields: [],
     documentSources,
     linkSources,
+    citationSources,
     emptySourcesMessage: deepDiveResult
       ? 'No citations were returned for this deep dive yet.'
       : 'Open deep dive to generate a researched explanation with inline citations.',

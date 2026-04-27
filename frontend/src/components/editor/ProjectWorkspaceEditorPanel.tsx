@@ -43,6 +43,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
   onModuleInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
+  onModuleApprovalChange?: () => void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -63,6 +64,7 @@ export function ProjectWorkspaceEditorPanel({
   onOpenDecisionLog,
   onExportDecisionLog,
   onModuleInspectorStateChange,
+  onModuleApprovalChange,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [showNewModuleDropdown, setShowNewModuleDropdown] = useState(false);
@@ -128,6 +130,7 @@ export function ProjectWorkspaceEditorPanel({
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
           onInspectorStateChange={isActive ? onModuleInspectorStateChange : undefined}
+          onApprovalChange={onModuleApprovalChange}
         />
       );
     }

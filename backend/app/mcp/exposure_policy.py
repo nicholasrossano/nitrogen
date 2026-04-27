@@ -4,26 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
+from app.first_party.mcp import EXPOSED_ADAPTER_IDS, EXPOSED_RESOURCE_TYPES
+
 AdapterVisibility = Literal["internal", "module_bound", "exposed"]
 ResourceVisibility = Literal["internal", "exposed"]
-
-# Stable, low-state adapters that are safe to expose over MCP.
-EXPOSED_ADAPTER_IDS = frozenset({
-    "lcoe",
-    "carbon",
-    "pvwatts",
-    "retrieval",
-    "openalex",
-    "rag",
-})
-
-# Readable resources that map cleanly to stable URIs.
-EXPOSED_RESOURCE_TYPES = frozenset({
-    "evidence_doc",
-    "evidence_chunk",
-    "corpus_doc",
-    "memo_version",
-})
 
 
 def adapter_visibility(adapter_id: str, default: AdapterVisibility) -> AdapterVisibility:

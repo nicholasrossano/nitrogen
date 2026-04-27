@@ -257,7 +257,13 @@ def _get_auto_confirmable_final_stage(module: BaseModule, state: dict[str, Any])
     if final_stage_state.get("status") != "draft":
         return None
 
-    if not _has_meaningful_value(final_stage_state.get("data")):
+    final_stage_data = final_stage_state.get("data") or {}
+    has_computed_widget_data = (
+        getattr(final_stage, "component", None) == "computed_results"
+        and isinstance(final_stage_data, dict)
+        and final_stage_data.get("widget_data") is not None
+    )
+    if not has_computed_widget_data and not _has_meaningful_value(final_stage_data):
         return None
 
     prior_stage_defs = module.stage_defs[:-1]
@@ -900,6 +906,8 @@ async def deep_dive_implementation_item(
     cache = state.get(cache_key) if isinstance(state.get(cache_key), dict) else {}
     cached = cache.get(item_id)
     service = DeepDiveService(db, user_id=user.uid)
+    if cached and "summary_citations" not in cached:
+        cached = None
 
     if cached:
         serialized = cached
@@ -925,29 +933,6 @@ async def deep_dive_implementation_item(
         save_workflow_state(inst, state, increment_version=False)
         await db.commit()
 
-    initiative = await db.get(Initiative, inst.initiative_id)
-    if initiative is not None:
-        evidence_sources = await service.get_evidence_sources(
-            initiative=initiative,
-            item_title=body.item_title,
-            item_rationale=body.item_rationale,
-        )
-        if evidence_sources:
-            non_evidence = [s for s in serialized.get("sources", []) if s.get("source_type") != "evidence"]
-            serialized = {
-                **serialized,
-                "sources": non_evidence + [
-                    {
-                        "title": source.title,
-                        "url": source.url,
-                        "source_type": source.source_type,
-                        **({"excerpt": source.excerpt} if source.excerpt else {}),
-                        **({"evidence_doc_id": source.evidence_doc_id} if source.evidence_doc_id else {}),
-                        **({"chunk_id": source.chunk_id} if source.chunk_id else {}),
-                    }
-                    for source in evidence_sources
-                ],
-            }
     return serialized
 
 
@@ -970,6 +955,7 @@ def _serialize_deep_dive_payload(result: Any) -> dict[str, Any]:
         "item_title": result.item_title,
         "pillar_name": result.pillar_name,
         "what_this_is": list(result.what_this_is or []),
+        "summary_citations": list(result.summary_citations or []),
         "elements": [
             {
                 "title": element.title,
@@ -1152,7 +1138,7 @@ async def approve_final_output(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Approve the fully confirmed workflow so it becomes exportable."""
+    """Approve the fully confirmed workflow so it counts as plan-complete."""
     inst, module = await _get_editable_workflow_instance(db, instance_id, user)
     _assert_workflow_version(inst, request)
 

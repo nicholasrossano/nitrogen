@@ -164,14 +164,35 @@ DEEP_DIVE_FUNCTION = {
             "properties": {
                 "what_this_is": {
                     "type": "array",
-                    "items": {"type": "string"},
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": (
+                                    "One plain-English sentence summarizing what this requirement is "
+                                    "or why it exists. Bold the single most important takeaway sentence "
+                                    "using **markdown bold**. Bold at most one sentence across the array."
+                                ),
+                            },
+                            "source_indices": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "1-based indices of the [S1], [S2], etc. web sources used for this sentence.",
+                            },
+                            "document_indices": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "1-based indices of the [D1], [D2], etc. uploaded project documents used for this sentence.",
+                            },
+                        },
+                        "required": ["text"],
+                    },
                     "description": (
                         "2–3 plain-English sentences — no more — summarizing what this requirement "
                         "is and why it exists. Each sentence must add new information; do not restate "
                         "or paraphrase a point already made. Be concrete and specific to the project "
-                        "context. Bold the single most important takeaway sentence using **markdown "
-                        "bold** (e.g. '**This permit is required before any ground disturbance.**'). "
-                        "Bold at most one sentence."
+                        "context. Attach only the sources actually used for each sentence."
                     ),
                 },
                 "elements": {
@@ -204,6 +225,11 @@ DEEP_DIVE_FUNCTION = {
                                 "type": "array",
                                 "items": {"type": "integer"},
                                 "description": "1-based indices of the RETRIEVED EVIDENCE sources that support this element.",
+                            },
+                            "document_indices": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "1-based indices of the UPLOADED PROJECT DOCUMENTS that support this element.",
                             },
                         },
                         "required": ["title", "description", "classification"],
@@ -304,6 +330,7 @@ class DeepDiveResult:
     item_title: str
     pillar_name: str
     what_this_is: list[str]
+    summary_citations: list[list[int]]
     elements: list[DeepDiveElement]
     dependencies: list[DeepDiveDependency]
     sources: list[DeepDiveSource]
@@ -427,18 +454,52 @@ class DeepDiveService:
             evidence_chunks=evidence_chunks,
         )
 
-        # Attach per-element provenance from LLM-emitted source_indices
+        # Collect the exact source references the model attached to visible summary
+        # sentences and element classifications.
+        raw_summary = result_data.get("what_this_is", [])
+        summary_items: list[dict] = []
+        referenced_web_indices: set[int] = set()
+        referenced_doc_indices: set[int] = set()
+        for item in raw_summary:
+            if isinstance(item, str):
+                summary_items.append({"text": item, "source_indices": [], "document_indices": []})
+                continue
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or "").strip()
+            if not text:
+                continue
+            source_indices = [
+                idx for idx in item.get("source_indices", [])
+                if isinstance(idx, int) and 1 <= idx <= len(all_facts)
+            ]
+            document_indices = [
+                idx for idx in item.get("document_indices", [])
+                if isinstance(idx, int) and 1 <= idx <= len(evidence_chunks)
+            ]
+            referenced_web_indices.update(source_indices)
+            referenced_doc_indices.update(document_indices)
+            summary_items.append({
+                "text": text,
+                "source_indices": source_indices,
+                "document_indices": document_indices,
+            })
+
+        # Attach per-element provenance from LLM-emitted source indices.
         elements: list[DeepDiveElement] = []
-        referenced_indices: set[int] = set()
         for el in result_data.get("elements", []):
             indices = el.get("source_indices") or []
+            doc_indices = el.get("document_indices") or []
             source_attrs = []
             for idx in indices:
-                if 1 <= idx <= len(all_facts):
-                    referenced_indices.add(idx)
+                if isinstance(idx, int) and 1 <= idx <= len(all_facts):
+                    referenced_web_indices.add(idx)
                     source_attrs.append(
                         source_attribution_from_retrieved_fact(all_facts[idx - 1]).model_dump()
                     )
+            for idx in doc_indices:
+                if isinstance(idx, int) and 1 <= idx <= len(evidence_chunks):
+                    referenced_doc_indices.add(idx)
             derivation = Derivation.RESEARCHED if source_attrs else Derivation.INFERRED
             prov = ItemProvenance(
                 derivation=derivation,
@@ -452,27 +513,54 @@ class DeepDiveService:
                 provenance=prov,
             ))
 
-        # Build source list — web facts the LLM actually referenced
-        sources: list[DeepDiveSource] = [
-            DeepDiveSource(
+        # Build source list — only facts/documents the model explicitly cited.
+        sources: list[DeepDiveSource] = []
+        web_index_to_citation_number: dict[int, int] = {}
+        doc_index_to_citation_number: dict[int, int] = {}
+        for idx, f in enumerate(all_facts, 1):
+            if idx not in referenced_web_indices or not f.source_url:
+                continue
+            sources.append(DeepDiveSource(
                 title=f.source_title,
                 url=f.source_url,
                 source_type=f.source_type.value,
                 publisher=f.publisher,
-            )
-            for idx, f in enumerate(all_facts, 1)
-            if idx in referenced_indices and f.source_url
-        ]
+            ))
+            web_index_to_citation_number[idx] = len(sources)
 
-        # Evidence sources are NOT included here — they are added at the API layer
-        # (always re-fetched fresh so cached deep dives also get up-to-date citations)
+        for idx, chunk in enumerate(evidence_chunks, 1):
+            if idx not in referenced_doc_indices:
+                continue
+            sources.append(DeepDiveSource(
+                title=chunk.source_title,
+                url=None,
+                source_type="evidence",
+                excerpt=chunk.content[:300] if chunk.content else None,
+                evidence_doc_id=str(chunk.source_doc_id),
+                chunk_id=str(chunk.chunk_id),
+            ))
+            doc_index_to_citation_number[idx] = len(sources)
+
+        summary_citations: list[list[int]] = []
+        for item in summary_items:
+            citation_numbers: list[int] = []
+            for idx in item["source_indices"]:
+                citation_number = web_index_to_citation_number.get(idx)
+                if citation_number and citation_number not in citation_numbers:
+                    citation_numbers.append(citation_number)
+            for idx in item["document_indices"]:
+                citation_number = doc_index_to_citation_number.get(idx)
+                if citation_number and citation_number not in citation_numbers:
+                    citation_numbers.append(citation_number)
+            summary_citations.append(citation_numbers)
 
         elapsed_ms = int((time.time() - start) * 1000)
         return DeepDiveResult(
             item_id=item_id,
             item_title=item_title,
             pillar_name=pillar_name,
-            what_this_is=result_data.get("what_this_is", []),
+            what_this_is=[item["text"] for item in summary_items],
+            summary_citations=summary_citations,
             elements=elements,
             dependencies=[
                 DeepDiveDependency(
@@ -575,17 +663,20 @@ class DeepDiveService:
         source_cite_instruction = ""
         if facts:
             source_cite_instruction = (
-                "\n\nFor each element, include source_indices referencing the [S1], [S2], etc. "
-                "numbered sources above that support it. Required elements MUST cite at least one source."
+                "\n\nFor each 'what_this_is' sentence and each element, include source_indices "
+                "referencing only the [S1], [S2], etc. numbered web sources actually used for "
+                "that sentence or element. Required elements MUST cite at least one source."
             )
 
         uploaded_cite_instruction = ""
         if evidence_chunks:
             uploaded_cite_instruction = (
                 "\n\nThe project's uploaded documents are shown above as [D1], [D2], etc. "
-                "If any uploaded document provides evidence that an element has already been "
-                "completed or partially addressed, note this in the element's description "
-                "(e.g. 'The uploaded [document name] appears to satisfy this requirement.')."
+                "If any uploaded document supports a 'what_this_is' sentence or an element, "
+                "include its index in document_indices. If an uploaded document shows that an "
+                "element has already been completed or partially addressed, note this in the "
+                "element's description (e.g. 'The uploaded [document name] appears to satisfy "
+                "this requirement.')."
             )
 
         user_message = (
