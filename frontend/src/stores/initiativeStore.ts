@@ -45,8 +45,18 @@ interface InitiativeState {
   loadDriveLinkedFiles: (id: string) => Promise<void>;
   importFromDrive: (id: string, fileIds: string[]) => Promise<DriveImportResult>;
   syncDriveFiles: (id: string) => Promise<DriveSyncResult>;
+  /**
+   * @deprecated Legacy chat state path kept temporarily for compatibility.
+   * Active project chat surfaces use ProjectChatSurface + api.sendChatStream.
+   */
   sendMessage: (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => Promise<void>;
+  /**
+   * @deprecated Legacy chat state path kept temporarily for compatibility.
+   */
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
+  /**
+   * @deprecated Legacy chat state path kept temporarily for compatibility.
+   */
   retryMessage: (id: string, messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   setVariantIndex: (originalMessageId: string, index: number) => void;

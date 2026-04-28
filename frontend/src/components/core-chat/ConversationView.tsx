@@ -14,7 +14,7 @@ import {
   X,
   Paperclip,
 } from 'lucide-react';
-import type { CoreChatMessage } from '@/stores/chatStore';
+import type { CoreChatMessage } from '@/types/chat';
 import { FieldContext, SourceCitation, ResearchStep } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
@@ -418,6 +418,7 @@ export function ConversationView({
                 showToolbar={showToolbar}
                 groupContent={groupContent}
                 onOpenDocument={onOpenDocument}
+                onSendMessage={(content) => onSendMessage(content)}
               />
             );
           })}
@@ -855,6 +856,7 @@ function MessageBubble({
   showToolbar = true,
   groupContent,
   onOpenDocument,
+  onSendMessage,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -868,6 +870,7 @@ function MessageBubble({
   showToolbar?: boolean;
   groupContent?: string;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onSendMessage: (content: string) => void | Promise<void>;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -1021,6 +1024,7 @@ function MessageBubble({
               messageId={message.id}
               initiativeId={initiativeId}
               isActive={isLatest}
+              onSendMessage={(content) => onSendMessage(content)}
             />
           </div>
         )}
@@ -1036,12 +1040,14 @@ function ChatWidget({
   messageId,
   initiativeId,
   isActive,
+  onSendMessage,
 }: {
   type: string;
   data: Record<string, any>;
   messageId?: string;
   initiativeId?: string;
   isActive?: boolean;
+  onSendMessage?: (content: string) => void | Promise<void>;
 }) {
   return (
     <ChatWidgetRenderer
@@ -1050,6 +1056,7 @@ function ChatWidget({
       messageId={messageId}
       initiativeId={initiativeId}
       isActive={isActive}
+      onSendMessage={onSendMessage}
     />
   );
 }

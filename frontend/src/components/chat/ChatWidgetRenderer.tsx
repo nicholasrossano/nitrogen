@@ -20,6 +20,7 @@ interface ChatWidgetRendererProps {
   initiativeId?: string;
   messageId?: string;
   isActive?: boolean;
+  onSendMessage?: (content: string) => void | Promise<void>;
   onDocumentRequestMessage?: (content: string) => void | Promise<void>;
 }
 
@@ -29,13 +30,19 @@ export function ChatWidgetRenderer({
   initiativeId,
   messageId,
   isActive = true,
+  onSendMessage,
   onDocumentRequestMessage,
 }: ChatWidgetRendererProps) {
   switch (type) {
     case 'confirmation':
       return initiativeId ? (
         <ErrorBoundary>
-          <ConfirmationWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <ConfirmationWidget
+            data={data}
+            initiativeId={initiativeId}
+            isActive={isActive}
+            onSendMessage={onSendMessage}
+          />
         </ErrorBoundary>
       ) : null;
     case 'evidence_input':
@@ -53,7 +60,12 @@ export function ChatWidgetRenderer({
     case 'deliverables_overview':
       return initiativeId ? (
         <ErrorBoundary>
-          <DeliverablesOverviewWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <DeliverablesOverviewWidget
+            data={data}
+            initiativeId={initiativeId}
+            isActive={isActive}
+            onSendMessage={onSendMessage}
+          />
         </ErrorBoundary>
       ) : null;
     case 'project_plan':

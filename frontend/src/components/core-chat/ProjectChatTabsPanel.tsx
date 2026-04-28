@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
-import { ProjectStandaloneChatView } from './ProjectStandaloneChatView';
+import { ProjectChatSurface } from './ProjectChatSurface';
 import { DeepDiveWidget } from '@/components/plan-workspace/DeepDiveWidget';
 import type {
   PlanWorkspaceInspectorDocumentSource,
@@ -12,7 +12,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { api } from '@/lib/api';
-import type { ChatSession } from '@/stores/chatStore';
+import type { ChatSession } from '@/types/chat';
 
 interface ProjectChatTab {
   id: string;
@@ -36,7 +36,7 @@ interface ProjectChatTabsPanelProps {
   sessionStorageKey?: string;
   resetToLandingSignal?: number;
   pendingChatToOpen?: { chatId: string; title?: string | null } | null;
-  pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
+  pendingAutoSend?: PendingAutoSendRequest | null;
   activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
   onPendingSessionHandled?: () => void;
   onPendingAutoSendHandled?: () => void;
@@ -49,6 +49,12 @@ interface ProjectChatTabsPanelProps {
   /** Creates or updates a chat tab with a pinned deep-dive widget */
   pendingDeepDive?: PendingDeepDiveContext | null;
   onPendingDeepDiveHandled?: () => void;
+}
+
+interface PendingAutoSendRequest {
+  requestId: string;
+  content: string;
+  toolHint?: string;
 }
 
 function makeTab(title = 'New Chat', isLanding = false, isFallback = false): ProjectChatTab {
@@ -64,6 +70,20 @@ function makeTab(title = 'New Chat', isLanding = false, isFallback = false): Pro
 interface StoredProjectChatTabsState {
   tabs: ProjectChatTab[];
   activeTabId: string | null;
+}
+
+function normalizeProjectChatTabsState(
+  state: StoredProjectChatTabsState,
+  allowLanding: boolean,
+): StoredProjectChatTabsState {
+  if (allowLanding) return state;
+
+  return {
+    ...state,
+    tabs: state.tabs.map((tab) => (
+      tab.isLanding ? { ...tab, isLanding: false } : tab
+    )),
+  };
 }
 
 function isStoredProjectChatTab(value: unknown): value is ProjectChatTab {
@@ -221,7 +241,7 @@ export function ProjectChatTabsPanel({
       ? readStoredProjectChatTabsState(sessionStorageKey)
       : null;
     if (storedState) {
-      initialStateRef.current = storedState;
+      initialStateRef.current = normalizeProjectChatTabsState(storedState, researchMode);
     } else {
       const initialTab = makeTab('New Chat', researchMode, true);
       initialStateRef.current = {
@@ -233,16 +253,17 @@ export function ProjectChatTabsPanel({
   const [tabs, setTabs] = useState<ProjectChatTab[]>(() => initialStateRef.current!.tabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => initialStateRef.current!.activeTabId ?? initialStateRef.current!.tabs[0].id);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [sessionsLoadStatus, setSessionsLoadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [deepDiveByTabId, setDeepDiveByTabId] = useState<Record<string, PendingDeepDiveContext>>({});
   const [showHistory, setShowHistory] = useState(false);
+  const [pendingAutoSendByTabId, setPendingAutoSendByTabId] = useState<Record<string, PendingAutoSendRequest>>({});
   const historyRef = useRef<HTMLDivElement>(null);
   const tabStripRef = useRef<HTMLDivElement>(null);
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
   const tabsRef = useRef<ProjectChatTab[]>([]);
+  const activeTabIdRef = useRef<string | null>(null);
   const handledDeepDiveRequestIdsRef = useRef<Set<string>>(new Set());
-  const autoSendTargetTabByRequestIdRef = useRef<Record<string, string>>({});
+  const handledAutoSendRequestIdsRef = useRef<Set<string>>(new Set());
 
   const resolvedActiveTabId = useMemo(
     () => (tabs.some((tab) => tab.id === activeTabId) ? activeTabId : tabs[0]?.id ?? null),
@@ -270,6 +291,10 @@ export function ProjectChatTabsPanel({
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  useEffect(() => {
+    activeTabIdRef.current = resolvedActiveTabId;
+  }, [resolvedActiveTabId]);
 
   useEffect(() => {
     if (!pendingDeepDive) return;
@@ -374,48 +399,14 @@ export function ProjectChatTabsPanel({
           messages: [],
         })),
       );
-      setSessionsLoadStatus('success');
     } catch (err) {
       console.warn('Failed to load chat sessions:', err);
-      setSessionsLoadStatus('error');
     }
   }, [initiativeId]);
 
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
-
-  useEffect(() => {
-    if (sessionsLoadStatus !== 'success') return;
-    const sessionIds = new Set(sessions.map((session) => session.id));
-    const staleTabIds = tabs
-      .filter((tab) => tab.chatId && !sessionIds.has(tab.chatId))
-      .map((tab) => tab.id);
-    if (staleTabIds.length === 0) return;
-
-    const staleIdSet = new Set(staleTabIds);
-    const remainingTabs = tabs.filter((tab) => !staleIdSet.has(tab.id));
-
-    if (remainingTabs.length === 0) {
-      const replacement = makeTab('New Chat', researchMode, true);
-      setTabs([replacement]);
-      setActiveTabId(replacement.id);
-      setDeepDiveByTabId({});
-      return;
-    }
-
-    setTabs(remainingTabs);
-    setActiveTabId((current) =>
-      remainingTabs.some((tab) => tab.id === current) ? current : remainingTabs[0].id,
-    );
-    setDeepDiveByTabId((prev) => {
-      const next = { ...prev };
-      staleTabIds.forEach((tabId) => {
-        delete next[tabId];
-      });
-      return next;
-    });
-  }, [sessionsLoadStatus, sessions, tabs, researchMode]);
 
   const findExistingNewChatTab = useCallback(
     () =>
@@ -536,40 +527,53 @@ export function ProjectChatTabsPanel({
 
   useEffect(() => {
     if (!pendingAutoSend?.requestId) return;
+    if (handledAutoSendRequestIdsRef.current.has(pendingAutoSend.requestId)) return;
+    handledAutoSendRequestIdsRef.current.add(pendingAutoSend.requestId);
 
-    const existingTargetTabId = autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId];
-    if (existingTargetTabId) {
-      if (tabs.some((tab) => tab.id === existingTargetTabId) && resolvedActiveTabId !== existingTargetTabId) {
-        setActiveTabId(existingTargetTabId);
-        return;
-      }
-      if (!tabs.some((tab) => tab.id === existingTargetTabId)) {
-        delete autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId];
-      }
-    }
-
-    const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId);
+    const currentTabs = tabsRef.current;
+    const activeTab = currentTabs.find((tab) => tab.id === activeTabIdRef.current);
     const reusablePlaceholderTab =
       (activeTab &&
       !activeTab.chatId &&
       (activeTab.isFallback || activeTab.title.trim().toLowerCase() === 'new chat')
         ? activeTab
         : null) ??
-      findExistingNewChatTab();
+      currentTabs.find(
+        (tab) =>
+          !tab.chatId &&
+          (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      );
 
     if (reusablePlaceholderTab) {
-      autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId] = reusablePlaceholderTab.id;
-      if (resolvedActiveTabId !== reusablePlaceholderTab.id) {
-        setActiveTabId(reusablePlaceholderTab.id);
-      }
+      setPendingAutoSendByTabId((prev) => ({
+        ...prev,
+        [reusablePlaceholderTab.id]: pendingAutoSend,
+      }));
+      setActiveTabId(reusablePlaceholderTab.id);
       return;
     }
 
-    const newTab = makeTab('New Chat', true, false);
-    autoSendTargetTabByRequestIdRef.current[pendingAutoSend.requestId] = newTab.id;
+    const newTab = makeTab('New Chat', false, false);
+    setPendingAutoSendByTabId((prev) => ({
+      ...prev,
+      [newTab.id]: pendingAutoSend,
+    }));
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
-  }, [findExistingNewChatTab, pendingAutoSend, resolvedActiveTabId, tabs]);
+  }, [pendingAutoSend]);
+
+  const handleTabAutoSendHandled = useCallback(
+    (tabId: string, requestId: string) => {
+      setPendingAutoSendByTabId((prev) => {
+        if (prev[tabId]?.requestId !== requestId) return prev;
+        const next = { ...prev };
+        delete next[tabId];
+        return next;
+      });
+      onPendingAutoSendHandled?.();
+    },
+    [onPendingAutoSendHandled],
+  );
 
   useEffect(() => {
     if (!researchMode || resetToLandingSignal === 0) return;
@@ -671,14 +675,15 @@ export function ProjectChatTabsPanel({
       let changed = false;
       const nextTabs = prev.map((tab) => {
         if (tab.id !== tabId) return tab;
+        const nextChatId = meta.chatId ?? tab.chatId;
         const nextTitle = meta.title?.trim() || tab.title;
-        if (tab.chatId === meta.chatId && tab.title === nextTitle) {
+        if (tab.chatId === nextChatId && tab.title === nextTitle) {
           return tab;
         }
         changed = true;
         return {
           ...tab,
-          chatId: meta.chatId,
+          chatId: nextChatId,
           title: nextTitle,
           isLanding: false,
           isFallback: false,
@@ -821,15 +826,16 @@ export function ProjectChatTabsPanel({
           const isActive = tab.id === resolvedActiveTabId;
           const deepDive = deepDiveByTabId[tab.id];
           const showExpandedDeepDive = Boolean(deepDive && !deepDive.collapsed);
+          const tabPendingAutoSend = pendingAutoSendByTabId[tab.id] ?? null;
           return (
             <div
               key={tab.id}
               className={isActive ? 'absolute inset-0' : 'absolute inset-0 hidden'}
             >
-              <ProjectStandaloneChatView
+              <ProjectChatSurface
                 initiativeId={initiativeId}
                 hideTiles={researchMode}
-                useLandingWhenEmpty={tab.isLanding}
+                useLandingWhenEmpty={researchMode && tab.isLanding}
                 initialChatId={tab.chatId}
                 initialTitle={tab.title}
                 sessions={sessions}
@@ -842,8 +848,12 @@ export function ProjectChatTabsPanel({
                 onOpenDocument={isActive ? onOpenDocument : undefined}
                 onOpenWorkspaceModule={isActive ? onOpenWorkspaceModule : undefined}
                 onSendRef={isActive ? onSendRef : undefined}
-                pendingAutoSend={isActive ? pendingAutoSend : null}
-                onPendingAutoSendHandled={isActive ? onPendingAutoSendHandled : undefined}
+                pendingAutoSend={tabPendingAutoSend}
+                onPendingAutoSendHandled={
+                  tabPendingAutoSend
+                    ? () => handleTabAutoSendHandled(tab.id, tabPendingAutoSend.requestId)
+                    : undefined
+                }
                 onBeforeSendMessage={isActive && deepDive ? () => handleDeepDiveMessageSent(tab.id) : undefined}
                 projectContext={deepDive ? formatDeepDiveProjectContext(deepDive.state) : null}
                 topContentMode={isActive && showExpandedDeepDive ? 'panel' : 'inline'}

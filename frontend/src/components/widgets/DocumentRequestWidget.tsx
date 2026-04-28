@@ -37,7 +37,7 @@ export function DocumentRequestWidget({
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, sendMessage: sendLegacyMessage, projectMaterials, evidenceDocs } = useInitiativeStore();
+  const { uploadEvidence, projectMaterials, evidenceDocs } = useInitiativeStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
@@ -50,8 +50,13 @@ export function DocumentRequestWidget({
       await onSendMessage(content);
       return;
     }
-    await sendLegacyMessage(initiativeId, content);
-  }, [initiativeId, onSendMessage, sendLegacyMessage]);
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text: content,
+        label: null,
+      },
+    }));
+  }, [onSendMessage]);
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
     const initial: UploadItem[] = filesToUpload.map((f) => ({

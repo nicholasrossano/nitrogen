@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { CheckCircle2, Sparkles, AlertTriangle } from 'lucide-react';
-import { useChatStore } from '@/stores/chatStore';
 
 interface CoverLetterProposedValueWidgetProps {
   data: {
@@ -38,7 +37,9 @@ export function CoverLetterProposedValueWidget({ data, messageId }: CoverLetterP
     setStatus('confirmed');
     const newData = { ...data, confirmed: true, dismissed: false };
     if (messageId) {
-      useChatStore.getState().updateMessageWidgetData(messageId, newData);
+      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+        detail: { messageId, widgetData: newData },
+      }));
     }
     window.dispatchEvent(new CustomEvent('nitrogen:cover-letter-field-confirmed', {
       detail: {
@@ -51,7 +52,12 @@ export function CoverLetterProposedValueWidget({ data, messageId }: CoverLetterP
   const handleDismiss = useCallback(() => {
     setStatus('dismissed');
     if (messageId) {
-      useChatStore.getState().updateMessageWidgetData(messageId, { ...data, dismissed: true, confirmed: false });
+      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+        detail: {
+          messageId,
+          widgetData: { ...data, dismissed: true, confirmed: false },
+        },
+      }));
     }
   }, [data, messageId]);
 
