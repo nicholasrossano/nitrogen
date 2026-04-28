@@ -18,7 +18,7 @@ from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.log_sanitizer import sanitize_text, sanitize_exception  # noqa: E402
 import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import initiatives, onboarding, evidence, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow  # noqa: E402
+from app.api import initiatives, onboarding, evidence, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow, workspaces  # noqa: E402
 from app.mcp import get_mcp_http_app  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
@@ -171,6 +171,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(initiatives.router, prefix="/api/v1", tags=["initiatives"])
+app.include_router(workspaces.router, prefix="/api/v1", tags=["workspaces"])
 app.include_router(onboarding.router, prefix="/api/v1", tags=["onboarding"])
 app.include_router(evidence.router, prefix="/api/v1", tags=["evidence"])
 app.include_router(exports.router, prefix="/api/v1", tags=["exports"])

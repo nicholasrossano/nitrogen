@@ -82,6 +82,16 @@ interface InitiativeState {
 
 let latestLoadInitiativeRequest = 0;
 
+function withRequestTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => clearTimeout(timeout));
+  });
+}
+
 // ── Background poll: keep evidence_docs / projectMaterials in sync with the
 // server while any uploaded doc is still processing. We poll cheaply (list
 // endpoint, no heavy joins) and exit as soon as everything is indexed or
@@ -180,7 +190,10 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     const requestId = ++latestLoadInitiativeRequest;
     set({ loading: true, error: null });
     try {
-      const initiative = await api.getInitiative(id);
+      const initiative = await withRequestTimeout(
+        api.getInitiative(id),
+        'Project took too long to load. Please refresh and try again.',
+      );
       if (requestId !== latestLoadInitiativeRequest) return;
       set({
         initiative,

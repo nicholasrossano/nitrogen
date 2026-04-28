@@ -46,6 +46,12 @@ class DriveLinkedFile(Base):
         index=True,
         nullable=False,
     )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
     evidence_doc_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("evidence_docs.id", ondelete="SET NULL"),

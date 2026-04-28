@@ -18,13 +18,16 @@ from app.core.storage import get_uploads_storage
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.google_drive import DriveLinkedFile, UserGoogleConnection
 from app.services.evidence_processing import (
+    create_uploaded_doc,
     delete_evidence_doc_chunks,
     parse_file_to_chunks,
     store_evidence_doc,
 )
+from app.services.evidence_processor import schedule_processing
 from app.services.google_drive import GoogleDriveService
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
+from app.services.workspaces import require_workspace_member
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -317,6 +320,7 @@ async def import_from_drive(
             )
             link = DriveLinkedFile(
                 initiative_id=initiative.id,
+                workspace_id=initiative.workspace_id,
                 evidence_doc_id=evidence_doc.id,
                 user_id=user.uid,
                 drive_file_id=file_id,
@@ -347,6 +351,108 @@ async def import_from_drive(
         except Exception as e:
             safe_error = sanitize_exception(e)
             logger.error("Drive import failed for file %s: %s", file_id, safe_error)
+            errors.append({"file_id": file_id, "error": safe_error})
+
+    return {"imported": imported, "errors": errors}
+
+
+@router.post("/workspaces/{workspace_id}/drive/import")
+async def import_workspace_from_drive(
+    workspace_id: UUID,
+    body: DriveImportRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Import selected Drive files into workspace-level evidence."""
+    if not body.file_ids:
+        raise HTTPException(status_code=400, detail="No file IDs provided")
+    if len(body.file_ids) > 20:
+        raise HTTPException(status_code=400, detail="Cannot import more than 20 files at once")
+
+    await require_workspace_member(db, workspace_id, user.uid)
+
+    connection = await _get_connection(db, user.uid)
+    if not connection:
+        raise HTTPException(status_code=400, detail="Google Drive not connected")
+
+    access_token = await _get_valid_access_token(db, connection)
+    drive = GoogleDriveService(access_token)
+    storage = get_uploads_storage()
+
+    imported: list[dict] = []
+    errors: list[dict] = []
+
+    expanded_file_metas: list[dict] = []
+    for file_id in body.file_ids:
+        try:
+            meta = await drive.get_file_metadata(file_id)
+            if meta.get("mimeType") == "application/vnd.google-apps.folder":
+                children = await drive.list_folder_files_recursive(file_id, max_files=200)
+                if not children:
+                    errors.append(
+                        {"file_id": file_id, "error": "No supported files found in selected folder"}
+                    )
+                expanded_file_metas.extend(children)
+            else:
+                expanded_file_metas.append(meta)
+        except Exception as e:
+            safe_error = sanitize_exception(e)
+            logger.error(
+                "Workspace drive import metadata lookup failed for file %s: %s",
+                file_id,
+                safe_error,
+            )
+            errors.append({"file_id": file_id, "error": safe_error})
+
+    if len(expanded_file_metas) > 50:
+        raise HTTPException(status_code=400, detail="Folder contains too many files (max 50 at once)")
+
+    for meta in expanded_file_metas:
+        file_id = meta.get("id", "")
+        try:
+            mime_type = meta.get("mimeType", "")
+            filename = meta.get("name", "unknown")
+
+            if not drive.is_supported(mime_type):
+                errors.append({"file_id": file_id, "error": f"Unsupported type: {mime_type}"})
+                continue
+
+            file_bytes = await drive.download_file(file_id, mime_type)
+            if len(file_bytes) > 50 * 1024 * 1024:
+                errors.append({"file_id": file_id, "error": "File exceeds 50 MB limit"})
+                continue
+
+            file_type = drive.get_file_type(mime_type)
+            ext = _EXT_MAP.get(file_type or "", "")
+            storage_filename = filename if "." in filename else f"{filename}{ext}"
+            storage_path = await storage.save(
+                file_bytes, storage_filename, folder=f"workspaces/{workspace_id}"
+            )
+
+            evidence_doc = await create_uploaded_doc(
+                db=db,
+                workspace_id=workspace_id,
+                filename=filename,
+                file_type=file_type or "unknown",
+                storage_path=storage_path,
+                file_size=len(file_bytes),
+            )
+            schedule_processing(evidence_doc.id, user_id=user.uid)
+
+            imported.append(
+                {
+                    "file_id": file_id,
+                    "filename": filename,
+                    "evidence_doc_id": str(evidence_doc.id),
+                }
+            )
+        except Exception as e:
+            safe_error = sanitize_exception(e)
+            logger.error(
+                "Workspace drive import failed for file %s: %s",
+                file_id,
+                safe_error,
+            )
             errors.append({"file_id": file_id, "error": safe_error})
 
     return {"imported": imported, "errors": errors}

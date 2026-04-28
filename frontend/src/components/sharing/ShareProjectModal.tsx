@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, UserPlus, ChevronDown, Trash2, Loader2, Users } from 'lucide-react';
+import { X, UserPlus, Loader2, Users } from 'lucide-react';
 import { api, ProjectShare, UserSearchResult } from '@/lib/api';
+import { AccessMemberRow } from './AccessMemberRow';
+import { EmailAddressField } from './EmailAddressField';
+import { RoleDropdown } from './RoleDropdown';
 
 interface ShareProjectModalProps {
   initiativeId: string;
@@ -136,14 +139,12 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
         <div className="px-5 py-4 space-y-3">
           <div className="flex gap-2">
             <div className="relative flex-1" ref={dropdownRef}>
-              <input
+              <EmailAddressField
                 ref={inputRef}
-                type="email"
-                placeholder="Email address"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={setEmail}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !submitting) handleShare(); }}
-                className="w-full h-9 px-3 text-xs rounded-lg bg-surface border border-stroke-subtle text-text-primary placeholder:text-text-tertiary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors"
+                className="w-full flex-1 min-w-0 text-xs px-2 py-1.5 rounded-lg border border-stroke-subtle bg-white focus:outline-none focus:ring-1 focus:ring-accent"
               />
               {showDropdown && searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-stroke-subtle rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
@@ -162,17 +163,16 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
                 </div>
               )}
             </div>
-            <div className="relative inline-flex shrink-0">
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')}
-                className="h-9 appearance-none pl-3 pr-7 text-xs rounded-lg bg-surface border border-stroke-subtle text-text-primary focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none transition-colors cursor-pointer"
-              >
-                <option value="editor">Editor</option>
-                <option value="viewer">Viewer</option>
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none" />
-            </div>
+            <RoleDropdown
+              value={role}
+              onChange={(value) => setRole(value as 'editor' | 'viewer')}
+              options={[
+                { value: 'editor', label: 'Editor' },
+                { value: 'viewer', label: 'Viewer' },
+              ]}
+              disabled={submitting}
+              buttonClassName="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg bg-surface border border-stroke-subtle text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent/20 disabled:opacity-50"
+            />
             <button
               onClick={handleShare}
               disabled={submitting || !email.trim()}
@@ -191,17 +191,11 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
         <div className="px-5 pb-5">
           <div className="border border-stroke-subtle rounded-lg divide-y divide-stroke-subtle">
             {/* Owner row */}
-            <div className="flex items-center justify-between px-3 py-2.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-6 h-6 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-semibold text-accent">
-                    {(ownerEmail || '?')[0].toUpperCase()}
-                  </span>
-                </div>
-                <span className="text-xs text-text-primary truncate">{ownerEmail || 'You'}</span>
-              </div>
-              <span className="text-[10px] font-medium text-text-tertiary uppercase tracking-wide">Owner</span>
-            </div>
+            <AccessMemberRow
+              emailOrId={ownerEmail || 'You'}
+              roleLabel="Owner"
+              accentAvatar={true}
+            />
 
             {loading ? (
               <div className="flex items-center justify-center py-4">
@@ -213,45 +207,18 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
               </div>
             ) : (
               shares.filter(s => s.user_email !== ownerEmail).map((share) => (
-                <div key={share.id} className="flex items-center justify-between px-3 py-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 rounded-full bg-surface-subtle flex items-center justify-center flex-shrink-0">
-                      <span className="text-[10px] font-semibold text-text-secondary">
-                        {(share.user_email || '?')[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-xs text-text-primary truncate block">
-                        {share.user_email || share.user_id}
-                      </span>
-                      {share.user_display_name && (
-                        <span className="text-[10px] text-text-tertiary truncate block">
-                          {share.user_display_name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="relative inline-flex">
-                      <select
-                        value={share.role}
-                        onChange={(e) => handleRoleChange(share.id, e.target.value as 'editor' | 'viewer')}
-                        className="h-6 appearance-none pl-2 pr-6 text-[10px] rounded bg-surface border border-stroke-subtle text-text-secondary focus:border-accent focus:outline-none cursor-pointer transition-colors"
-                      >
-                        <option value="editor">Editor</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-tertiary pointer-events-none" />
-                    </div>
-                    <button
-                      onClick={() => handleRemove(share.id)}
-                      className="p-1 rounded text-text-tertiary hover:text-indicator-orange transition-colors"
-                      title="Remove access"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
+                <AccessMemberRow
+                  key={share.id}
+                  emailOrId={share.user_email || share.user_id}
+                  displayName={share.user_display_name}
+                  roleValue={share.role}
+                  roleOptions={[
+                    { value: 'editor', label: 'Editor' },
+                    { value: 'viewer', label: 'Viewer' },
+                  ]}
+                  onRoleChange={(value) => handleRoleChange(share.id, value as 'editor' | 'viewer')}
+                  onRemove={() => handleRemove(share.id)}
+                />
               ))
             )}
           </div>

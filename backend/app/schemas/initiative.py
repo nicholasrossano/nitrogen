@@ -7,12 +7,14 @@ from uuid import UUID
 class InitiativeCreate(BaseModel):
     """Schema for creating a new initiative"""
     title: Optional[str] = None
+    workspace_id: Optional[UUID] = None
 
 
 class InitiativeUpdate(BaseModel):
     """Schema for updating initiative fields"""
     title: Optional[str] = None
     icon: Optional[str] = None
+    workspace_id: Optional[UUID] = None
     sector: Optional[str] = None
     geography: Optional[str] = None
     target_population: Optional[str] = None
@@ -39,6 +41,7 @@ class InitiativeResponse(BaseModel):
     id: UUID
     slug: str = ""
     user_id: str
+    workspace_id: UUID
     title: Optional[str] = None
     icon: Optional[str] = None
     sector: str

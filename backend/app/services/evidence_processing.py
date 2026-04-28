@@ -102,7 +102,8 @@ async def parse_file_to_chunk_payloads(
 async def create_uploaded_doc(
     db: AsyncSession,
     *,
-    initiative: Initiative,
+    initiative: Initiative | None = None,
+    workspace_id: uuid.UUID | None = None,
     filename: str,
     file_type: str,
     storage_path: str | None,
@@ -115,10 +116,19 @@ async def create_uploaded_doc(
     :func:`app.services.evidence_processor.schedule_processing`.
     """
 
-    filename = await deduplicate_filename(db, initiative.id, filename or "Untitled")
+    if initiative is None and workspace_id is None:
+        raise ValueError("initiative or workspace_id is required")
+    resolved_workspace_id = initiative.workspace_id if initiative is not None else workspace_id
+    filename = await deduplicate_filename(
+        db,
+        initiative.id if initiative is not None else None,
+        filename or "Untitled",
+        workspace_id=resolved_workspace_id,
+    )
 
     evidence_doc = EvidenceDoc(
-        initiative_id=initiative.id,
+        initiative_id=initiative.id if initiative is not None else None,
+        workspace_id=resolved_workspace_id,
         filename=filename,
         file_type=file_type,
         storage_path=storage_path,
@@ -127,7 +137,8 @@ async def create_uploaded_doc(
         processing_attempts=0,
     )
     db.add(evidence_doc)
-    initiative.touch()
+    if initiative is not None:
+        initiative.touch()
     await db.commit()
     await db.refresh(evidence_doc)
     return evidence_doc
@@ -167,6 +178,7 @@ async def store_evidence_doc(
 
     evidence_doc = EvidenceDoc(
         initiative_id=initiative.id,
+        workspace_id=initiative.workspace_id,
         filename=filename,
         file_type=file_type,
         storage_path=storage_path,

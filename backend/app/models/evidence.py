@@ -36,10 +36,17 @@ class EvidenceDoc(Base):
         primary_key=True, 
         default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    initiative_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), 
         ForeignKey("initiatives.id", ondelete="CASCADE"),
-        index=True
+        index=True,
+        nullable=True,
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     )
     
     # Document metadata
@@ -77,7 +84,8 @@ class EvidenceDoc(Base):
     )
     
     # Relationships
-    initiative: Mapped["Initiative"] = relationship(back_populates="evidence_docs")
+    initiative: Mapped["Initiative | None"] = relationship(back_populates="evidence_docs")
+    workspace: Mapped["Workspace"] = relationship()
     chunks: Mapped[list["EvidenceChunk"]] = relationship(
         back_populates="evidence_doc", 
         cascade="all, delete-orphan"
@@ -138,3 +146,4 @@ class EvidenceChunk(Base):
 
 # Import for relationship typing
 from app.models.initiative import Initiative  # noqa: E402
+from app.models.workspace import Workspace  # noqa: E402
