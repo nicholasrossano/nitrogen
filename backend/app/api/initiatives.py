@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.config import get_settings
 from app.core.database import get_db
@@ -23,7 +23,10 @@ from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance
 from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
+from app.models.evidence import EvidenceDoc
+from app.models.google_drive import DriveLinkedFile
 from app.models.project_share import ProjectShare
+from app.models.project_material import ProjectMaterial
 from app.models.user import User
 from app.schemas.initiative import (
     InitiativeCreate,
@@ -415,6 +418,21 @@ async def update_initiative(
             )
         workspace, _membership = await resolve_workspace_for_user(db, user.uid, data.workspace_id)
         initiative.workspace_id = workspace.id
+        await db.execute(
+            update(ProjectMaterial)
+            .where(ProjectMaterial.initiative_id == initiative.id)
+            .values(workspace_id=workspace.id)
+        )
+        await db.execute(
+            update(EvidenceDoc)
+            .where(EvidenceDoc.initiative_id == initiative.id)
+            .values(workspace_id=workspace.id)
+        )
+        await db.execute(
+            update(DriveLinkedFile)
+            .where(DriveLinkedFile.initiative_id == initiative.id)
+            .values(workspace_id=workspace.id)
+        )
 
     await db.commit()
     await db.refresh(initiative)

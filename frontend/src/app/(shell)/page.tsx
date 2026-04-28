@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search } from 'lucide-react';
+import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search, ChevronDown, Check } from 'lucide-react';
 import { api, Initiative, type ProjectMaterial } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -47,7 +47,11 @@ function HomePageContent() {
     loading: workspaceLoading,
     error: workspaceError,
     loadWorkspaces,
+    setActiveWorkspace,
   } = useWorkspaceStore();
+  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
+  const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
   const driveConnected = useGoogleDriveStore((s) => s.connected);
   const driveStatusChecked = useGoogleDriveStore((s) => s.statusChecked);
   const checkDriveStatus = useGoogleDriveStore((s) => s.checkStatus);
@@ -58,6 +62,33 @@ function HomePageContent() {
     if (workspaceLoading || activeWorkspace || workspaces.length > 0) return;
     loadWorkspaces();
   }, [activeWorkspace, loadWorkspaces, workspaceLoading, workspaces.length]);
+
+  useEffect(() => {
+    if (!workspaceSwitcherOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!workspaceSwitcherRef.current?.contains(event.target as Node)) {
+        setWorkspaceSwitcherOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [workspaceSwitcherOpen]);
+
+  const workspaceOptions = useMemo(
+    () => (workspaces.length > 0 ? workspaces : (activeWorkspace ? [activeWorkspace] : []))
+      .filter((workspace, index, arr) => arr.findIndex((w) => w.id === workspace.id) === index),
+    [activeWorkspace, workspaces],
+  );
+
+  const handleWorkspaceSwitch = useCallback(async (workspaceId: string) => {
+    if (!workspaceId || workspaceId === activeWorkspace?.id) return;
+    setWorkspaceSwitching(true);
+    try {
+      await setActiveWorkspace(workspaceId);
+    } finally {
+      setWorkspaceSwitching(false);
+    }
+  }, [activeWorkspace?.id, setActiveWorkspace]);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -301,6 +332,53 @@ function HomePageContent() {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <h1 className="text-[13px] font-medium text-text-primary truncate">{pageTitle}</h1>
           </div>
+          {workspaceOptions.length > 0 && (
+            <div ref={workspaceSwitcherRef} className="relative ml-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (workspaceLoading || workspaceSwitching || workspaceOptions.length < 2) return;
+                  setWorkspaceSwitcherOpen((open) => !open);
+                }}
+                disabled={workspaceLoading || workspaceSwitching || workspaceOptions.length < 2}
+                className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
+                aria-label="Switch workspace"
+                aria-expanded={workspaceSwitcherOpen}
+              >
+                Switch
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </button>
+              {workspaceSwitcherOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-divider bg-white py-1 shadow-lg">
+                  {workspaceOptions.map((workspace) => {
+                    const selected = workspace.id === activeWorkspace?.id;
+                    return (
+                      <button
+                        key={workspace.id}
+                        type="button"
+                        onClick={() => {
+                          setWorkspaceSwitcherOpen(false);
+                          void handleWorkspaceSwitch(workspace.id);
+                        }}
+                        className={`flex h-8 w-full items-center gap-2 px-3 text-left text-xs transition-colors ${
+                          selected
+                            ? 'bg-surface-subtle text-text-primary'
+                            : 'text-text-secondary hover:bg-black/[0.04] hover:text-text-primary'
+                        }`}
+                      >
+                        <span className="w-3.5 shrink-0">
+                          {selected ? <Check className="w-3.5 h-3.5" /> : null}
+                        </span>
+                        <span className="truncate">
+                          {workspace.name} · {workspace.workspace_type === 'personal' ? 'Personal' : 'Team'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </ShellPageHeader>
 
