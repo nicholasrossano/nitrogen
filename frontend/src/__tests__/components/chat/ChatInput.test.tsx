@@ -2,19 +2,11 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ChatInput } from '@/components/chat/ChatInput';
 
-const mockSendMessage = jest.fn();
-
-jest.mock('@/stores/initiativeStore', () => ({
-  useInitiativeStore: () => ({
-    sendMessage: mockSendMessage,
-  }),
-}));
-
 describe('ChatInput', () => {
   const initiativeId = 'init-test-id';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('renders a textarea', () => {
@@ -51,12 +43,13 @@ describe('ChatInput', () => {
     expect(onSend).toHaveBeenCalledWith('Hello world', null, null);
   });
 
-  it('calls sendMessage from store when onSend is not provided', () => {
+  it('does not call a legacy store fallback when onSend is missing', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     render(<ChatInput initiativeId={initiativeId} />);
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'Test message' } });
     fireEvent.submit(textarea.closest('form')!);
-    expect(mockSendMessage).toHaveBeenCalledWith(initiativeId, 'Test message', undefined, null);
+    expect(warnSpy).toHaveBeenCalledWith('[ChatInput] Ignoring submit without onSend callback');
   });
 
   it('clears input after submit', () => {

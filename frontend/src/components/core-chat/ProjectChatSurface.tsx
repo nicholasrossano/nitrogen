@@ -1,0 +1,1 @@
+export { ProjectChatSurface } from './ProjectStandaloneChatView';

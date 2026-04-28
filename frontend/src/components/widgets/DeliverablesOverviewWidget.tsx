@@ -26,12 +26,18 @@ interface DeliverablesOverviewWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  onSendMessage?: (content: string) => Promise<void> | void;
 }
 
-export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true }: DeliverablesOverviewWidgetProps) {
+export function DeliverablesOverviewWidget({
+  data,
+  initiativeId,
+  isActive = true,
+  onSendMessage,
+}: DeliverablesOverviewWidgetProps) {
   const [loading, setLoading] = useState(false);
   const [modifying, setModifying] = useState(false);
-  const { generateAllDeliverables, sendMessage } = useInitiativeStore();
+  const { generateAllDeliverables } = useInitiativeStore();
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -43,13 +49,20 @@ export function DeliverablesOverviewWidget({ data, initiativeId, isActive = true
   };
 
   const handleModifyTools = async () => {
-    console.log('handleModifyTools: starting');
     setModifying(true);
     try {
-      await sendMessage(initiativeId, "I'd like to change my tool selection.");
-      console.log('handleModifyTools: completed');
+      if (onSendMessage) {
+        await onSendMessage("I'd like to change my tool selection.");
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+        detail: {
+          text: "I'd like to change my tool selection.",
+          label: null,
+        },
+      }));
     } catch (error) {
-      console.error('handleModifyTools: error', error);
+      console.error('[DeliverablesOverviewWidget] failed to request tool changes:', error);
     } finally {
       setModifying(false);
     }

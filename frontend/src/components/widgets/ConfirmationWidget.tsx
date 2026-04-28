@@ -8,17 +8,32 @@ interface ConfirmationWidgetProps {
   data: Record<string, any>;
   initiativeId: string;
   isActive?: boolean;
+  onSendMessage?: (content: string) => Promise<void> | void;
 }
 
-export function ConfirmationWidget({ data, initiativeId, isActive = true }: ConfirmationWidgetProps) {
-  const { confirmIntake, sendMessage, loading } = useInitiativeStore();
+export function ConfirmationWidget({
+  data,
+  initiativeId,
+  isActive = true,
+  onSendMessage,
+}: ConfirmationWidgetProps) {
+  const { confirmIntake, loading } = useInitiativeStore();
 
   const handleConfirm = async () => {
     await confirmIntake(initiativeId);
   };
 
   const handleEdit = async () => {
-    await sendMessage(initiativeId, "I'd like to make some changes to the initiative details.");
+    if (onSendMessage) {
+      await onSendMessage("I'd like to make some changes to the initiative details.");
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('nitrogen:draft', {
+      detail: {
+        text: "I'd like to make some changes to the initiative details.",
+        label: null,
+      },
+    }));
   };
 
   return (

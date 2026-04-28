@@ -15,14 +15,12 @@ import {
 import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
-import { useInitiativeStore } from '@/stores/initiativeStore';
-import { useChatStore } from '@/stores/chatStore';
 import { ConfirmButton } from '@/components/ui';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGeneratingProgress';
 
 /**
- * Persist widget data: write to DB first (source of truth), then sync in-memory stores.
+ * Persist widget data: write to DB first (source of truth), then notify the active chat surface.
  * Returns true if the DB write succeeded.
  */
 async function persistWidgetToDb(
@@ -38,8 +36,9 @@ async function persistWidgetToDb(
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
-    useInitiativeStore.getState().updateMessageWidgetData(messageId, widgetData);
-    useChatStore.getState().updateMessageWidgetData(messageId, widgetData);
+    window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+      detail: { messageId, widgetData },
+    }));
     return true;
   } catch (err) {
     console.error('[LCOEModelWidget] persist failed:', err);
