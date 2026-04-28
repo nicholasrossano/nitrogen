@@ -410,7 +410,7 @@ textarea {
 
 .btn-danger {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
-  @apply border border-indicator-orange text-indicator-orange bg-surface font-medium text-sm;
+  @apply border border-indicator-red text-indicator-red bg-surface font-medium text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
   overflow: hidden;
@@ -422,7 +422,7 @@ textarea {
   content: '';
   position: absolute;
   inset: 0;
-  background-color: var(--color-indicator-orange);
+  background-color: var(--color-indicator-red);
   opacity: 0;
   transition: opacity 200ms ease-in-out;
   z-index: -1;
@@ -441,7 +441,7 @@ textarea {
 }
 
 .btn-danger:disabled:hover {
-  @apply text-indicator-orange;
+  @apply text-indicator-red;
 }
 
 .btn-danger:active::before {

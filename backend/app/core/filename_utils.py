@@ -53,27 +53,44 @@ def safe_content_disposition(filename: str, disposition: str = "attachment") -> 
 
 
 async def deduplicate_filename(
-    db: AsyncSession, initiative_id: UUID, filename: str
+    db: AsyncSession,
+    initiative_id: UUID | None,
+    filename: str,
+    *,
+    workspace_id: UUID | None = None,
 ) -> str:
-    """Return a unique filename within the initiative, appending (1), (2), ... if needed.
+    """Return a unique filename within the file scope, appending (1), (2), ... if needed.
 
-    Checks both evidence_docs and project_materials tables to avoid collisions
-    across all uploaded files in a project.
+    Project scopes check both evidence_docs and project_materials. Workspace
+    scopes check workspace-level evidence docs only.
     """
-    ev_result = await db.execute(
-        select(EvidenceDoc.filename).where(
+    if initiative_id is None and workspace_id is None:
+        raise ValueError("initiative_id or workspace_id is required")
+
+    if initiative_id is not None:
+        ev_stmt = select(EvidenceDoc.filename).where(
             EvidenceDoc.initiative_id == initiative_id,
             EvidenceDoc.filename.isnot(None),
         )
-    )
-    mat_result = await db.execute(
-        select(ProjectMaterial.filename).where(
+        mat_stmt = select(ProjectMaterial.filename).where(
             ProjectMaterial.initiative_id == initiative_id,
         )
-    )
+        ev_result = await db.execute(ev_stmt)
+        mat_result = await db.execute(mat_stmt)
+        material_names = mat_result.scalars().all()
+    else:
+        ev_result = await db.execute(
+            select(EvidenceDoc.filename).where(
+                EvidenceDoc.workspace_id == workspace_id,
+                EvidenceDoc.initiative_id.is_(None),
+                EvidenceDoc.filename.isnot(None),
+            )
+        )
+        material_names = []
+
     existing = {
         (n or "").lower()
-        for n in (*ev_result.scalars().all(), *mat_result.scalars().all())
+        for n in (*ev_result.scalars().all(), *material_names)
     }
 
     if filename.lower() not in existing:

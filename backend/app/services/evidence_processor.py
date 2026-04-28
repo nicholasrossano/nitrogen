@@ -136,10 +136,12 @@ async def process_evidence_doc(
             )
             return
 
-        initiative = await _load_initiative(db, doc.initiative_id)
-        if initiative is None:
-            await _mark_failed(db, doc, "Initiative not found")
-            return
+        initiative = None
+        if doc.initiative_id is not None:
+            initiative = await _load_initiative(db, doc.initiative_id)
+            if initiative is None:
+                await _mark_failed(db, doc, "Initiative not found")
+                return
 
         doc.processing_status = EvidenceDocStatus.PROCESSING.value
         doc.processing_attempts = (doc.processing_attempts or 0) + 1
@@ -179,7 +181,11 @@ async def process_evidence_doc(
                 file_bytes,
                 file_type,
                 storage=storage,
-                preview_folder=f"{initiative.id}/previews",
+                preview_folder=(
+                    f"{initiative.id}/previews"
+                    if initiative is not None
+                    else f"workspaces/{doc.workspace_id}/previews"
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             logger.error(
@@ -214,8 +220,9 @@ async def process_evidence_doc(
             doc.processing_error = None
 
             # Keep legacy flag in sync: "at least one doc is fully indexed".
-            initiative.evidence_ready = True
-            initiative.touch()
+            if initiative is not None:
+                initiative.evidence_ready = True
+                initiative.touch()
             await db.commit()
         except Exception as exc:  # noqa: BLE001
             logger.error(

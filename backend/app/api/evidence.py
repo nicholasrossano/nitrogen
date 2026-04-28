@@ -18,6 +18,7 @@ from app.schemas.evidence import (
 )
 from app.services.evidence_processing import create_uploaded_doc
 from app.services.evidence_processor import schedule_processing
+from app.services.workspaces import require_workspace_member
 from app.core.rate_limit import limiter
 
 router = APIRouter()
@@ -31,6 +32,20 @@ _ALLOWED_UPLOAD_TYPES = {
 }
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+async def _require_evidence_viewer(db: AsyncSession, evidence_doc: EvidenceDoc, user: AuthUser) -> None:
+    if evidence_doc.initiative_id is not None:
+        await require_viewer(db, evidence_doc.initiative_id, user)
+        return
+    await require_workspace_member(db, evidence_doc.workspace_id, user.uid)
+
+
+async def _require_evidence_editor(db: AsyncSession, evidence_doc: EvidenceDoc, user: AuthUser) -> None:
+    if evidence_doc.initiative_id is not None:
+        await require_editor(db, evidence_doc.initiative_id, user)
+        return
+    await require_workspace_member(db, evidence_doc.workspace_id, user.uid)
 
 
 @router.post("/initiatives/{initiative_id}/evidence", response_model=EvidenceUploadResponse)
@@ -135,6 +150,7 @@ async def upload_evidence(
 
     evidence_doc = EvidenceDoc(
         initiative_id=initiative.id,
+        workspace_id=initiative.workspace_id,
         filename=filename,
         file_type=file_type,
         storage_path=None,
@@ -208,6 +224,108 @@ async def paste_evidence_text(
     )
 
 
+@router.post("/workspaces/{workspace_id}/evidence", response_model=EvidenceUploadResponse)
+@limiter.limit("120/minute")
+async def upload_workspace_evidence(
+    request: Request,
+    workspace_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Upload a file as workspace-level guidance/context."""
+    await require_workspace_member(db, workspace_id, user.uid)
+
+    file_type = _ALLOWED_UPLOAD_TYPES.get(file.content_type or "")
+    if not file_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be PDF, DOCX, or Excel (XLSX/XLS)",
+        )
+
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit",
+        )
+    if not validate_file_magic(content, file.content_type or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content does not match declared type",
+        )
+
+    storage = get_uploads_storage()
+    storage_path = await storage.save(
+        content,
+        file.filename,
+        folder=f"workspaces/{workspace_id}",
+    )
+    evidence_doc = await create_uploaded_doc(
+        db,
+        workspace_id=workspace_id,
+        filename=file.filename or "Untitled",
+        file_type=file_type,
+        storage_path=storage_path,
+        file_size=len(content),
+    )
+    schedule_processing(evidence_doc.id, user_id=user.uid)
+
+    return EvidenceUploadResponse(
+        success=True,
+        document=EvidenceDocResponse(
+            id=evidence_doc.id,
+            filename=evidence_doc.filename,
+            file_type=evidence_doc.file_type,
+            file_size=evidence_doc.file_size,
+            created_at=evidence_doc.created_at,
+            chunk_count=0,
+            processing_status=evidence_doc.processing_status,
+            processing_error=None,
+        ),
+        message="Upload received — processing in background",
+        stage="workspace",
+        evidence_ready=True,
+    )
+
+
+@router.get("/workspaces/{workspace_id}/evidence", response_model=list[EvidenceDocResponse])
+async def list_workspace_evidence(
+    workspace_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """List workspace-level evidence documents."""
+    await require_workspace_member(db, workspace_id, user.uid)
+    stmt = (
+        select(
+            EvidenceDoc,
+            func.count(EvidenceChunk.id).label("chunk_count"),
+        )
+        .outerjoin(EvidenceChunk, EvidenceChunk.evidence_doc_id == EvidenceDoc.id)
+        .where(
+            EvidenceDoc.workspace_id == workspace_id,
+            EvidenceDoc.initiative_id.is_(None),
+        )
+        .group_by(EvidenceDoc.id)
+        .order_by(EvidenceDoc.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        EvidenceDocResponse(
+            id=doc.id,
+            filename=doc.filename,
+            file_type=doc.file_type,
+            file_size=doc.file_size,
+            created_at=doc.created_at,
+            chunk_count=chunk_count,
+            processing_status=doc.processing_status,
+            processing_error=doc.processing_error,
+        )
+        for doc, chunk_count in rows
+    ]
+
+
 @router.get("/initiatives/{initiative_id}/evidence", response_model=list[EvidenceDocResponse])
 async def list_evidence(
     initiative_id: str,
@@ -263,7 +381,7 @@ async def get_evidence_content(
             detail="Evidence document not found",
         )
 
-    await require_viewer(db, evidence_doc.initiative_id, user)
+    await _require_evidence_viewer(db, evidence_doc, user)
 
     # Get only the columns we need (exclude embedding vectors)
     chunks_result = await db.execute(
@@ -304,7 +422,7 @@ async def get_evidence_chunks(
             detail="Evidence document not found",
         )
 
-    await require_viewer(db, evidence_doc.initiative_id, user)
+    await _require_evidence_viewer(db, evidence_doc, user)
 
     chunks_result = await db.execute(
         select(
@@ -367,7 +485,7 @@ async def get_evidence_chunk(
             detail="Evidence document not found",
         )
 
-    await require_viewer(db, evidence_doc.initiative_id, user)
+    await _require_evidence_viewer(db, evidence_doc, user)
 
     chunk_result = await db.execute(
         select(
@@ -437,7 +555,7 @@ async def download_evidence_chunk_preview(
         )
 
     evidence_doc, chunk = row
-    await require_viewer(db, evidence_doc.initiative_id, user)
+    await _require_evidence_viewer(db, evidence_doc, user)
 
     if not chunk.preview_image_path:
         raise HTTPException(
@@ -486,7 +604,7 @@ async def download_evidence(
             detail="Evidence document not found",
         )
 
-    await require_viewer(db, evidence_doc.initiative_id, user)
+    await _require_evidence_viewer(db, evidence_doc, user)
 
     if not evidence_doc.storage_path:
         raise HTTPException(
@@ -535,7 +653,7 @@ async def delete_evidence(
             detail="Evidence document not found",
         )
     
-    await require_editor(db, evidence_doc.initiative_id, user)
+    await _require_evidence_editor(db, evidence_doc, user)
 
     storage = get_uploads_storage()
     if evidence_doc.storage_path:
