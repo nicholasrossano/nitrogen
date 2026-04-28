@@ -2,14 +2,13 @@
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
-import { CoverLetterProposedValueWidget } from '@/components/widgets/CoverLetterProposedValueWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
 import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidget';
 import { PlanSummaryWidget } from '@/components/widgets/PlanSummaryWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
-import { ProposedValueWidget } from '@/components/widgets/ProposedValueWidget';
+import { ProposedValueWidget, type ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { TemplateProposedValueWidget } from '@/components/widgets/TemplateProposedValueWidget';
 
 export const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
@@ -22,6 +21,7 @@ interface ChatWidgetRendererProps {
   isActive?: boolean;
   onSendMessage?: (content: string) => void | Promise<void>;
   onDocumentRequestMessage?: (content: string) => void | Promise<void>;
+  onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
 }
 
 export function ChatWidgetRenderer({
@@ -32,6 +32,7 @@ export function ChatWidgetRenderer({
   isActive = true,
   onSendMessage,
   onDocumentRequestMessage,
+  onApplyProposedValue,
 }: ChatWidgetRendererProps) {
   switch (type) {
     case 'confirmation':
@@ -80,22 +81,21 @@ export function ChatWidgetRenderer({
           <PlanSummaryWidget data={data as any} />
         </ErrorBoundary>
       );
-    case 'gs_proposed_field':
-      return (
-        <ErrorBoundary>
-          <CoverLetterProposedValueWidget data={data as any} messageId={messageId} />
-        </ErrorBoundary>
-      );
     case 'proposed_value':
       return (
         <ErrorBoundary>
-          <ProposedValueWidget data={data as any} messageId={messageId} />
+          <ProposedValueWidget
+            data={data as any}
+            initiativeId={initiativeId}
+            messageId={messageId}
+            onApplyValue={onApplyProposedValue}
+          />
         </ErrorBoundary>
       );
     case 'template_proposed_value':
       return (
         <ErrorBoundary>
-          <TemplateProposedValueWidget data={data as any} messageId={messageId} />
+          <TemplateProposedValueWidget data={data as any} initiativeId={initiativeId} messageId={messageId} />
         </ErrorBoundary>
       );
     case ABOVE_INPUT_WIDGET_TYPE:

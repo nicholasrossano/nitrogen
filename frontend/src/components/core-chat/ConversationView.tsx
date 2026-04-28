@@ -20,6 +20,7 @@ import { ThinkingLogs } from './ThinkingLogs';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
 import { ABOVE_INPUT_WIDGET_TYPE, ChatWidgetRenderer } from '@/components/chat/ChatWidgetRenderer';
+import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { sanitizeHref } from '@/lib/sanitizeHref';
@@ -60,6 +61,8 @@ export interface ConversationViewProps {
   topContent?: React.ReactNode;
   /** How top content should be laid out when present */
   topContentMode?: 'inline' | 'panel';
+  /** Apply a proposed model value to its backing module workflow. */
+  onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
 }
 
 function preprocessMath(content: string): string {
@@ -107,6 +110,7 @@ export function ConversationView({
   inputChips,
   topContent,
   topContentMode = 'inline',
+  onApplyProposedValue,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -419,6 +423,7 @@ export function ConversationView({
                 groupContent={groupContent}
                 onOpenDocument={onOpenDocument}
                 onSendMessage={(content) => onSendMessage(content)}
+                onApplyProposedValue={onApplyProposedValue}
               />
             );
           })}
@@ -472,6 +477,7 @@ export function ConversationView({
               messageId={latestMessage.id}
               isActive={true}
               onDocumentRequestMessage={(content) => onSendMessage(content)}
+              onApplyProposedValue={onApplyProposedValue}
             />
           </div>
         </div>
@@ -857,6 +863,7 @@ function MessageBubble({
   groupContent,
   onOpenDocument,
   onSendMessage,
+  onApplyProposedValue,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -871,6 +878,7 @@ function MessageBubble({
   groupContent?: string;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onSendMessage: (content: string) => void | Promise<void>;
+  onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -1025,6 +1033,7 @@ function MessageBubble({
               initiativeId={initiativeId}
               isActive={isLatest}
               onSendMessage={(content) => onSendMessage(content)}
+              onApplyProposedValue={onApplyProposedValue}
             />
           </div>
         )}
@@ -1041,6 +1050,7 @@ function ChatWidget({
   initiativeId,
   isActive,
   onSendMessage,
+  onApplyProposedValue,
 }: {
   type: string;
   data: Record<string, any>;
@@ -1048,6 +1058,7 @@ function ChatWidget({
   initiativeId?: string;
   isActive?: boolean;
   onSendMessage?: (content: string) => void | Promise<void>;
+  onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
 }) {
   return (
     <ChatWidgetRenderer
@@ -1057,6 +1068,7 @@ function ChatWidget({
       initiativeId={initiativeId}
       isActive={isActive}
       onSendMessage={onSendMessage}
+      onApplyProposedValue={onApplyProposedValue}
     />
   );
 }

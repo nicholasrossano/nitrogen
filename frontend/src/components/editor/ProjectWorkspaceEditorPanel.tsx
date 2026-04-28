@@ -206,7 +206,6 @@ export function ProjectWorkspaceEditorPanel({
               <button
                 onClick={() => {
                   setLocalWorkspaceLaunchMode('open');
-                  onActiveTabChange(null);
                 }}
                 aria-pressed={openModeActive}
                 className={[

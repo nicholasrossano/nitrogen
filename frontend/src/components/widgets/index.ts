@@ -13,6 +13,4 @@ export { CarbonOutputWidget } from './CarbonOutputWidget';
 export { LCOEModelWidget } from './LCOEModelWidget';
 export { CarbonModelWidget } from './CarbonModelWidget';
 export { ProposedValueWidget } from './ProposedValueWidget';
-export { CoverLetterEditor } from './CoverLetterEditor';
-export { CoverLetterProposedValueWidget } from './CoverLetterProposedValueWidget';
 export { SolarEstimateWidget } from './SolarEstimateWidget';

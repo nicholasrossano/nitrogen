@@ -312,6 +312,17 @@ export function ModuleWorkspace({
     }
   }, [instanceId]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { instanceId?: string } | undefined;
+      if (detail?.instanceId !== instanceId) return;
+      void fetchState();
+    };
+
+    window.addEventListener('nitrogen:module-workflow-updated', handler);
+    return () => window.removeEventListener('nitrogen:module-workflow-updated', handler);
+  }, [fetchState, instanceId]);
+
   // One-time init: fetch state, auto-populate if the module is brand-new.
   // Uses a cancelled flag so React Strict Mode double-invoke doesn't cause
   // a stale GET response to overwrite the populated state.

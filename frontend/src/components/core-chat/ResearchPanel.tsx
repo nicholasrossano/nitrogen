@@ -724,7 +724,7 @@ export function SnippetCard({
           onClick={onOpenFull}
           className="flex items-center justify-end gap-1 px-3 py-2 w-full text-xs text-text-tertiary enabled:hover:text-accent border-t border-stroke-subtle transition-colors"
         >
-          <span>View full document</span>
+          <span>View file</span>
           <ChevronRight className="w-3 h-3" />
         </button>
       )}

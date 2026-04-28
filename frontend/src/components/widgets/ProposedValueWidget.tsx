@@ -2,6 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { CheckCircle2, Sparkles, AlertTriangle } from 'lucide-react';
+import { persistChatWidgetUpdate } from '@/lib/chatWidgetUpdates';
+
+export interface ProposedValueApplyRequest {
+  fieldName: string;
+  value: number;
+  modelType: 'lcoe' | 'carbon' | 'solar';
+}
 
 interface ProposedValueWidgetProps {
   data: {
@@ -15,7 +22,9 @@ interface ProposedValueWidgetProps {
     confirmed?: boolean;
     dismissed?: boolean;
   };
+  initiativeId?: string;
   messageId?: string;
+  onApplyValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
   onConfirmed?: (fieldName: string, value: number, modelType: string) => void;
 }
 
@@ -45,41 +54,62 @@ function formatValue(value: number, unit?: string): string {
   return `${formatted} ${normalizedUnit}`;
 }
 
-export function ProposedValueWidget({ data, messageId, onConfirmed }: ProposedValueWidgetProps) {
+export function ProposedValueWidget({
+  data,
+  initiativeId,
+  messageId,
+  onApplyValue,
+  onConfirmed,
+}: ProposedValueWidgetProps) {
   const initialStatus = data.confirmed ? 'confirmed' : data.dismissed ? 'dismissed' : 'pending';
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'dismissed'>(initialStatus);
   const confStyle = CONFIDENCE_STYLES[data.confidence] || CONFIDENCE_STYLES.moderate;
   const displayLabel = data.label || data.field_name.replace(/_/g, ' ');
 
-  const handleConfirm = useCallback(() => {
-    setStatus('confirmed');
-    const newData = { ...data, confirmed: true, dismissed: false };
-    if (messageId) {
-      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
-        detail: { messageId, widgetData: newData },
-      }));
-    }
-    window.dispatchEvent(new CustomEvent('nitrogen:input-confirmed', {
-      detail: {
-        field_name: data.field_name,
+  const handleConfirm = useCallback(async () => {
+    if (onApplyValue) {
+      const applied = await onApplyValue({
+        fieldName: data.field_name,
         value: data.proposed_value,
-        model_type: data.model_type,
-      },
-    }));
-    onConfirmed?.(data.field_name, data.proposed_value, data.model_type);
-  }, [data, messageId, onConfirmed]);
+        modelType: data.model_type,
+      });
+      if (!applied) return;
+    }
 
-  const handleDismiss = useCallback(() => {
-    setStatus('dismissed');
-    if (messageId) {
-      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+    const newData = { ...data, confirmed: true, dismissed: false };
+    const persisted = await persistChatWidgetUpdate({
+      initiativeId,
+      messageId,
+      widgetData: newData,
+      source: 'ProposedValueWidget',
+    });
+    if (!persisted) return;
+
+    setStatus('confirmed');
+    if (!onApplyValue) {
+      window.dispatchEvent(new CustomEvent('nitrogen:input-confirmed', {
         detail: {
-          messageId,
-          widgetData: { ...data, dismissed: true, confirmed: false },
+          field_name: data.field_name,
+          value: data.proposed_value,
+          model_type: data.model_type,
         },
       }));
     }
-  }, [data, messageId]);
+    onConfirmed?.(data.field_name, data.proposed_value, data.model_type);
+  }, [data, initiativeId, messageId, onApplyValue, onConfirmed]);
+
+  const handleDismiss = useCallback(async () => {
+    const newData = { ...data, dismissed: true, confirmed: false };
+    const persisted = await persistChatWidgetUpdate({
+      initiativeId,
+      messageId,
+      widgetData: newData,
+      source: 'ProposedValueWidget',
+    });
+    if (!persisted) return;
+
+    setStatus('dismissed');
+  }, [data, initiativeId, messageId]);
 
   if (status === 'dismissed') {
     return (

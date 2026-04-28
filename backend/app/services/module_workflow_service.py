@@ -496,6 +496,21 @@ async def _execute_population_step(
             return accumulated_data
 
     if step_type == "enrich_selected_item_with_ai":
+        if config.get("bulk") and stage_def.component == "record":
+            source_stage_id = accumulated_data.get("source_stage_id")
+            if not source_stage_id:
+                return accumulated_data
+            prior_state = confirmed_stages.get(source_stage_id) or {}
+            source_items = (prior_state.get("data") or {}).get("items", [])
+            existing_records = accumulated_data.get("records", {})
+            bulk_enricher = getattr(module, "enrich_records_for_stage", None)
+            if callable(bulk_enricher):
+                records = await bulk_enricher(stage_def.id, source_items, existing_records, context)
+                return {
+                    **accumulated_data,
+                    "records": records,
+                }
+
         # Enrichment is on-demand per-record, not bulk. This step during
         # population just ensures the record structure is initialized from
         # read_confirmed_prior_stage (which must have run first). No-op here.

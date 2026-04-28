@@ -14,8 +14,10 @@ import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
-import type { CoreChatMessage, ChatSummary } from '@/stores/chatStore';
+import type { CoreChatMessage, ChatSummary } from '@/types/chat';
+import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { debugChatFlow } from '@/lib/chatDebug';
+import type { ReadinessProgressData } from '@/components/ui/ReadinessProgressBar';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
@@ -35,7 +37,7 @@ const MODEL_TYPE_TO_MODULE_ID: Record<string, string> = {
   solar: 'solar_estimate',
 };
 
-interface ProjectStandaloneChatViewProps {
+interface ProjectChatSurfaceProps {
   initiativeId: string;
   showLanding?: boolean;
   /** When true, hides the module tile grid on the landing page (Research mode) */
@@ -94,6 +96,8 @@ interface ProjectStandaloneChatViewProps {
   projectContext?: string | null;
   /** Called before sending a message from the composer */
   onBeforeSendMessage?: () => void;
+  /** Optional readiness progress header shown in overview mode */
+  readinessProgress?: ReadinessProgressData | null;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -122,7 +126,11 @@ function resolveFieldContextModuleId(fieldContext?: FieldContext | null): string
   return MODEL_TYPE_TO_MODULE_ID[fieldContext.model_type] ?? null;
 }
 
-export function ProjectStandaloneChatView({
+function normalizeProposalKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+export function ProjectChatSurface({
   initiativeId,
   showLanding = false,
   hideTiles = false,
@@ -152,7 +160,8 @@ export function ProjectStandaloneChatView({
   topContentMode = 'inline',
   projectContext = null,
   onBeforeSendMessage,
-}: ProjectStandaloneChatViewProps) {
+  readinessProgress = null,
+}: ProjectChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
@@ -337,6 +346,104 @@ export function ProjectStandaloneChatView({
 
     onEditorWidgetsChange(raw);
   }, [localMessages, onEditorWidgetsChange]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { messageId?: string; widgetData?: Record<string, any> }
+        | undefined;
+      if (!detail?.messageId || !detail.widgetData) return;
+      setLocalMessages((prev) => prev.map((message) => (
+        message.id === detail.messageId
+          ? { ...message, widget_data: detail.widgetData ?? null }
+          : message
+      )));
+    };
+
+    window.addEventListener('nitrogen:chat-widget-updated', handler);
+    return () => window.removeEventListener('nitrogen:chat-widget-updated', handler);
+  }, []);
+
+  const handleApplyProposedValue = useCallback(
+    async ({ fieldName, value, modelType }: ProposedValueApplyRequest): Promise<boolean> => {
+      const moduleId = MODEL_TYPE_TO_MODULE_ID[modelType];
+      if (!moduleId) {
+        setError(`I couldn't find a module type for ${modelType}.`);
+        return false;
+      }
+
+      const candidates = [
+        ...(activeModuleContext?.moduleId === moduleId
+          ? [{
+              instance_id: activeModuleContext.instanceId,
+              module_id: activeModuleContext.moduleId,
+              title: activeModuleContext.title ?? null,
+              status: 'started',
+              started_at: null,
+            }]
+          : []),
+        ...chatModules.filter((module) => module.module_id === moduleId),
+      ].filter(
+        (module, index, collection) =>
+          collection.findIndex((candidate) => candidate.instance_id === module.instance_id) === index,
+      );
+
+      const target = candidates[0];
+      if (!target) {
+        setError('Open or associate the matching module before accepting this proposed value.');
+        return false;
+      }
+
+      try {
+        const workflow = await api.getStagedModuleWorkflowState(target.instance_id);
+        const inputsStage = workflow.workflow_state.stages.inputs;
+        const items = inputsStage?.data?.items ?? [];
+        const normalizedFieldName = normalizeProposalKey(fieldName);
+        const row = items.find((item) => {
+          const content = item.content ?? {};
+          const explicitFieldName = typeof content.field_name === 'string' ? content.field_name : '';
+          const variable = typeof content.variable === 'string' ? content.variable : '';
+          return explicitFieldName === fieldName
+            || normalizeProposalKey(explicitFieldName) === normalizedFieldName
+            || normalizeProposalKey(variable) === normalizedFieldName;
+        });
+
+        if (!row) {
+          setError(`I couldn't find ${fieldName.replace(/_/g, ' ')} in the ${target.title || moduleId} inputs.`);
+          return false;
+        }
+
+        await api.editStageItem(
+          target.instance_id,
+          'inputs',
+          row.id,
+          {
+            ...row.content,
+            value,
+            status: 'confirmed',
+            source: 'user',
+          },
+          workflow.workflow_version,
+        );
+
+        window.dispatchEvent(new CustomEvent('nitrogen:module-workflow-updated', {
+          detail: {
+            instanceId: target.instance_id,
+            moduleId,
+            stageId: 'inputs',
+            itemId: row.id,
+          },
+        }));
+        setError(null);
+        return true;
+      } catch (err) {
+        console.error('Failed to apply proposed value:', err);
+        setError(err instanceof Error ? err.message : 'Failed to apply the proposed value.');
+        return false;
+      }
+    },
+    [activeModuleContext, chatModules],
+  );
 
   const displayMessages = useMemo(
     () => localMessages.map(toCoreMessage),
@@ -782,6 +889,7 @@ export function ProjectStandaloneChatView({
                 initiative={initiative}
                 filesUploaded={filesUploaded}
                 modulesCreated={modulesCreated}
+                readinessProgress={readinessProgress}
                 isGenerating={overviewGenerating}
                 errorMessage={overviewError}
                 canRefresh={canRefreshOverview}
@@ -832,6 +940,12 @@ export function ProjectStandaloneChatView({
       inputChips={inputChips}
       topContent={topContent}
       topContentMode={topContentMode}
+      onApplyProposedValue={handleApplyProposedValue}
     />
   );
 }
+
+/**
+ * @deprecated Use ProjectChatSurface instead.
+ */
+export const ProjectStandaloneChatView = ProjectChatSurface;
