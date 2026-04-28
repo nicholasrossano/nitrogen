@@ -11,6 +11,7 @@ from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.models.evidence import EvidenceDoc
+from app.models.google_drive import DriveLinkedFile
 from app.models.memo import MemoVersion
 from app.models.project_material import ProjectMaterial
 from app.schemas.project_material import (
@@ -37,6 +38,43 @@ ALLOWED_CONTENT_TYPES = {
     "image/png": "png",
     "image/jpeg": "jpg",
 }
+
+
+async def _repair_project_file_workspace_ids(db: AsyncSession, initiative_id, workspace_id) -> None:
+    """Keep project-scoped files aligned after a project moves workspaces."""
+    repaired = False
+    material_result = await db.execute(
+        select(ProjectMaterial).where(
+            ProjectMaterial.initiative_id == initiative_id,
+            ProjectMaterial.workspace_id != workspace_id,
+        )
+    )
+    for material in material_result.scalars().all():
+        material.workspace_id = workspace_id
+        repaired = True
+
+    evidence_result = await db.execute(
+        select(EvidenceDoc).where(
+            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.workspace_id != workspace_id,
+        )
+    )
+    for evidence_doc in evidence_result.scalars().all():
+        evidence_doc.workspace_id = workspace_id
+        repaired = True
+
+    drive_result = await db.execute(
+        select(DriveLinkedFile).where(
+            DriveLinkedFile.initiative_id == initiative_id,
+            DriveLinkedFile.workspace_id != workspace_id,
+        )
+    )
+    for linked_file in drive_result.scalars().all():
+        linked_file.workspace_id = workspace_id
+        repaired = True
+
+    if repaired:
+        await db.commit()
 
 
 @router.post(
@@ -134,12 +172,12 @@ async def list_materials(
 ):
     """List all uploaded files for an initiative — materials and evidence docs combined."""
     initiative = await require_viewer(db, initiative_id, user)
+    await _repair_project_file_workspace_ids(db, initiative.id, initiative.workspace_id)
 
     mat_result = await db.execute(
         select(ProjectMaterial)
         .where(
             ProjectMaterial.initiative_id == initiative.id,
-            ProjectMaterial.workspace_id == initiative.workspace_id,
         )
         .order_by(ProjectMaterial.created_at.desc())
     )
@@ -147,7 +185,6 @@ async def list_materials(
         select(EvidenceDoc)
         .where(
             EvidenceDoc.initiative_id == initiative.id,
-            EvidenceDoc.workspace_id == initiative.workspace_id,
             EvidenceDoc.storage_path.isnot(None),  # exclude text-paste entries
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -232,13 +269,13 @@ async def list_project_files(
 ):
     """List all project files: uploaded materials + generated outputs."""
     initiative = await require_viewer(db, initiative_id, user)
+    await _repair_project_file_workspace_ids(db, initiative.id, initiative.workspace_id)
 
     # Uploaded materials (project_materials + evidence_docs with files)
     mat_result = await db.execute(
         select(ProjectMaterial)
         .where(
             ProjectMaterial.initiative_id == initiative.id,
-            ProjectMaterial.workspace_id == initiative.workspace_id,
         )
         .order_by(ProjectMaterial.created_at.desc())
     )
@@ -246,7 +283,6 @@ async def list_project_files(
         select(EvidenceDoc)
         .where(
             EvidenceDoc.initiative_id == initiative.id,
-            EvidenceDoc.workspace_id == initiative.workspace_id,
             EvidenceDoc.storage_path.isnot(None),
         )
         .order_by(EvidenceDoc.created_at.desc())
