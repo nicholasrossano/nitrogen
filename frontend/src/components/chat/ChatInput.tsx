@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useInitiativeStore } from '@/stores/initiativeStore';
 import type { FieldContext } from '@/lib/api';
 import { ArrowUp, X, Paperclip } from 'lucide-react';
 import { debugChatFlow } from '@/lib/chatDebug';
@@ -28,7 +27,6 @@ export function ChatInput({
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { sendMessage } = useInitiativeStore();
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -102,7 +100,9 @@ export function ChatInput({
       });
       onSend(message, draftFieldContext, draftModelInputsContext);
     } else if (initiativeId) {
-      await sendMessage(initiativeId, message, undefined, draftFieldContext);
+      // Legacy fallback path intentionally removed: all active chat surfaces
+      // should provide an explicit onSend callback bound to the current tab state.
+      console.warn('[ChatInput] Ignoring submit without onSend callback');
     }
   };
 

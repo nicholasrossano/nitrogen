@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
-import type { ChatSession } from '@/stores/chatStore';
+import type { ChatSession } from '@/types/chat';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { useSettingsStore } from '@/stores/settingsStore';
 

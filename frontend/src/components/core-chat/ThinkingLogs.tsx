@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, Check, Loader2 } from 'lucide-react';
-import { CompletionMeta } from '@/stores/chatStore';
+import type { CompletionMeta } from '@/types/chat';
 import type { ResearchStep } from '@/lib/api';
 import { track } from '@/lib/analytics';
 

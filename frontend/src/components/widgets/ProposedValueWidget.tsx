@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { CheckCircle2, Sparkles, AlertTriangle } from 'lucide-react';
-import { useChatStore } from '@/stores/chatStore';
 
 interface ProposedValueWidgetProps {
   data: {
@@ -56,7 +55,9 @@ export function ProposedValueWidget({ data, messageId, onConfirmed }: ProposedVa
     setStatus('confirmed');
     const newData = { ...data, confirmed: true, dismissed: false };
     if (messageId) {
-      useChatStore.getState().updateMessageWidgetData(messageId, newData);
+      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+        detail: { messageId, widgetData: newData },
+      }));
     }
     window.dispatchEvent(new CustomEvent('nitrogen:input-confirmed', {
       detail: {
@@ -71,7 +72,12 @@ export function ProposedValueWidget({ data, messageId, onConfirmed }: ProposedVa
   const handleDismiss = useCallback(() => {
     setStatus('dismissed');
     if (messageId) {
-      useChatStore.getState().updateMessageWidgetData(messageId, { ...data, dismissed: true, confirmed: false });
+      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+        detail: {
+          messageId,
+          widgetData: { ...data, dismissed: true, confirmed: false },
+        },
+      }));
     }
   }, [data, messageId]);
 
