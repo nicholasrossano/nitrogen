@@ -336,17 +336,19 @@ export function FrameworkPlanView({
               {groupedPhases.map((phase) => (
                 <section
                   key={phase.id}
-                  className="rounded-2xl border border-divider/70 bg-white/70 p-4 shadow-[0_2px_12px_-8px_rgba(15,23,42,0.22)]"
+                  className="rounded-2xl border border-stroke-subtle bg-white/70 p-4"
                 >
-                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-divider/70 pb-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                      {phase.name}
-                    </p>
-                    <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-text-tertiary">
-                      {phase.modules.length}
-                      {' '}
-                      {phase.modules.length === 1 ? 'module' : 'modules'}
-                    </span>
+                  <div className="mb-4 -mx-4 border-b border-stroke-subtle px-4 pb-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        {phase.name}
+                      </p>
+                      <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-text-tertiary">
+                        {phase.modules.length}
+                        {' '}
+                        {phase.modules.length === 1 ? 'module' : 'modules'}
+                      </span>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {phase.modules.map((moduleId) => {
@@ -374,8 +376,8 @@ export function FrameworkPlanView({
                           className={[
                             'group relative card-interactive overflow-visible',
                             isModuleComplete
-                              ? 'border border-accent/35 bg-accent-wash/35 shadow-[0_2px_10px_-6px_rgba(0,94,114,0.3)]'
-                              : 'border border-black/[0.04]',
+                              ? 'border border-stroke-subtle bg-accent-wash/35'
+                              : 'border border-stroke-subtle',
                             instancePickerOpen ? 'z-40' : 'z-0',
                           ].join(' ')}
                         >

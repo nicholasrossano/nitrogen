@@ -454,11 +454,17 @@ Use only for irreversible destructive actions: Delete, Remove, Revoke.
 <button className="btn-danger">Delete project</button>
 ```
 
+**Appearance**: red destructive treatment (`indicator-red`) with red border/text at rest and red fill on hover.
+
 ### Rules
 - **Never** create custom button styles with raw Tailwind when one of the three classes fits.
 - **Disabled hover**: always add `:disabled:hover::before { opacity: 0 }` suppression — already included in the global classes.
 - Size overrides use Tailwind `!important` modifiers: `!px-4 !py-1.5` to make a smaller button, `!px-6 !py-3` for a larger one.
 - `w-full` makes any button full-width inside its container.
+- **Corner model by context**:
+  - **Floating/standalone CTA** buttons keep the default capsule shape (`rounded-[20px]`).
+  - **Embedded flow buttons** (inline with inputs, table rows, modal form actions — e.g. Share/Create buttons) should override to lightly rounded corners (`!rounded-lg` or `!rounded-md`).
+  - In any given button row, peer buttons must use the same radius tier.
 
 ### Module workspace header (aligned with stage toggle)
 Actions in the module workspace top bar that sit **next to the stage stepper** (Decision log, Approve, module Export, and the same pattern elsewhere) must match the **stage segment** typography, not the default global button size:
@@ -718,6 +724,29 @@ import { ModalShell } from '@/components/ui/ModalShell';
 - Width by intent: `max-w-sm` for lightweight settings, `max-w-2xl`–`max-w-3xl` for content-rich pickers
 - Add `flex flex-col max-h-[80vh]` via `className` when the body needs to scroll independently
 - Body scrollable pattern: `flex-1 min-h-0 overflow-y-auto`
+
+---
+
+### Dropdown / Popover Layering
+
+Menus must render above neighboring panels and never be clipped by parent containers.
+
+**Rules**
+- For any dropdown/popover trigger wrapper, use `className="relative"` and menu `className="absolute ... z-50"` (or higher when required by local stacking context).
+- Never place dropdown menus inside ancestors with `overflow-hidden` (or `overflow-y-auto` clipping the axis you need); use `overflow-visible` on the nearest container that wraps the menu.
+- If a menu can extend beyond a scroll container or modal section, render it in a non-clipping ancestor (or portal) rather than raising `z-index` alone.
+- In shell/interstitial controls (workspace selectors, settings pickers), use the custom dropdown pattern (button + popover menu). Avoid native `<select>` for these surfaces.
+
+---
+
+### Tooltips
+
+Use the shared tooltip component (`@/components/ui/Tooltip`) for explanatory hover text. It follows cursor position and renders in a portal, which avoids clipping and keeps behavior consistent across the app.
+
+**Rules**
+- Do not hand-roll custom absolute-position tooltip bubbles for new UI.
+- For disabled controls that need explanation, wrap the trigger in `Tooltip` instead of using `title` or local hover bubbles.
+- Prefer `fitContent` for short guidance copy and leave fixed width for longer explanatory text.
 
 ---
 
