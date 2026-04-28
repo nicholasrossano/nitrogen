@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, MessageSquare, Plus } from 'lucide-react';
 
 import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
-import { Tooltip } from '@/components/ui/Tooltip';
+import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
 
 import { PlanInspectorPanel } from './PlanInspectorPanel';
 import { PlanItemNode } from './PlanItemNode';
@@ -272,41 +272,7 @@ export function PlanWorkspaceView({
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {progress && progress.total > 0 && (
-          <div className="flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-divider bg-surface-header">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-text-tertiary">
-                <span className="font-medium text-text-secondary">{progress.completed}</span>
-                {' '}of {progress.total} complete
-              </span>
-              <span className="text-[11px] font-medium text-text-secondary tabular-nums">
-                {progress.percentage}%
-              </span>
-            </div>
-            <div className="h-1.5 rounded-full overflow-hidden bg-surface-subtle w-full">
-              <div className="h-full w-full flex">
-                {progress.segments.map((segment, idx) => {
-                  const widthPct = progress.total > 0 ? (segment.completed / progress.total) * 100 : 0;
-                  const hasLaterFilledSegment = progress.segments.slice(idx + 1).some((next) => next.completed > 0);
-                  return (
-                    <Tooltip
-                      key={segment.id}
-                      content={`${segment.label}: ${segment.completed} / ${segment.total}`}
-                      className="contents"
-                    >
-                      <div
-                        className="h-full transition-[width] duration-300 ease-out flex-shrink-0"
-                        style={{
-                          width: `${widthPct}%`,
-                          backgroundColor: widthPct > 0 ? segment.color : 'transparent',
-                          borderRadius: !hasLaterFilledSegment ? '0 9999px 9999px 0' : undefined,
-                        }}
-                      />
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+          <ReadinessProgressBar progress={progress} showSegmentTooltips={true} />
         )}
 
         <div ref={outerContainerRef} className="flex-1 flex min-h-0 min-w-0 overflow-hidden">

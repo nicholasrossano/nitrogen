@@ -12,8 +12,9 @@ import type { EditorWidget, WorkspacePanelTab } from '@/components/editor';
 import { ProjectWorkspaceEditorPanel } from '@/components/editor/ProjectWorkspaceEditorPanel';
 import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
-import { ProjectStandaloneChatView } from '@/components/core-chat/ProjectStandaloneChatView';
+import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
+import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
@@ -46,10 +47,6 @@ function viewFromSearchParam(viewParam: string | null): InitiativeView {
 
 function makeDocumentTabId(citation: ResearchPanelCitation): string {
   return `document-${citation.evidence_doc_id}`;
-}
-
-function isDocumentTab(tab: WorkspacePanelTab | null): tab is Extract<WorkspacePanelTab, { kind: 'document' }> {
-  return tab?.kind === 'document';
 }
 
 interface PendingDeepDiveRequest {
@@ -295,15 +292,14 @@ function InitiativePageContent() {
     return null;
   }, [activeWorkspaceTab]);
   const visibleWorkspaceTabs = useMemo(
-    () => (activeView === 'modules' ? workspaceTabs : workspaceTabs.filter((tab) => tab.kind === 'document')),
+    () => (activeView === 'modules' ? workspaceTabs : []),
     [activeView, workspaceTabs],
   );
   const visibleWorkspaceActiveTabId = useMemo(
     () => (visibleWorkspaceTabs.some((tab) => tab.id === activeWorkspaceTabId) ? activeWorkspaceTabId : null),
     [visibleWorkspaceTabs, activeWorkspaceTabId],
   );
-  const showTabbedWorkspace =
-    activeView === 'modules' || (activeView === 'framework' && isDocumentTab(activeWorkspaceTab));
+  const showTabbedWorkspace = activeView === 'modules';
   const overviewWorkspaceOpen = activeView === 'overview' && panelVisibility.overview.workspace;
   const overviewChatOpen = activeView === 'overview' && panelVisibility.overview.chat;
   const modulesWorkspaceOpen = activeView === 'modules' && panelVisibility.modules.workspace;
@@ -691,13 +687,18 @@ function InitiativePageContent() {
   );
 
   const openWorkspaceDocument = useCallback((citation: ResearchPanelCitation) => {
+    setWorkspaceLaunchMode('idle');
+    setPanelOpen('modules', 'workspace', true);
+    setPanelOpen('modules', 'chat', true);
+    setActiveView('modules');
+    router.replace(`/initiatives/${initiativeId}?view=modules`);
     openWorkspaceTab({
       id: makeDocumentTabId(citation),
       kind: 'document',
       title: citation.source_title || 'Document',
       citation,
     });
-  }, [openWorkspaceTab]);
+  }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
 
   const openDecisionLogTab = useCallback(
     (context: { instanceId: string; moduleId: string; title: string }) => {
@@ -891,12 +892,13 @@ function InitiativePageContent() {
     if (activeView === 'overview') {
       if (isOnboarding && initiative) {
         return (
-          <ProjectStandaloneChatView
+          <ProjectChatSurface
             initiativeId={initiativeId}
             hideTiles={true}
             allowInitialProjectOnboarding={true}
             restoreLatestChatOnMount={true}
             useLandingWhenEmpty={true}
+            readinessProgress={frameworkProgress}
             landingLayoutMode="overview"
             landingHeaderContent={(
               <ProjectOnboardingHeader
@@ -912,12 +914,13 @@ function InitiativePageContent() {
       }
 
       return (
-        <ProjectStandaloneChatView
+        <ProjectChatSurface
           key={researchLandingResetSignal}
           initiativeId={initiativeId}
           hideTiles={true}
           allowInitialProjectOnboarding={false}
           useLandingWhenEmpty={true}
+          readinessProgress={frameworkProgress}
           showLanding={overviewChatOpen}
           landingLayoutMode="overview"
           hideLandingComposer={overviewChatOpen}
@@ -961,40 +964,7 @@ function InitiativePageContent() {
       return (
         <div className="relative h-full flex flex-col bg-surface overflow-hidden">
           {frameworkProgress && frameworkProgress.total > 0 && (
-            <div className="flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-divider bg-surface-header">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] text-text-tertiary">
-                  <span className="font-medium text-text-secondary">{frameworkProgress.completed}</span>
-                  {' '}of {frameworkProgress.total} complete
-                </span>
-                <span className="text-[11px] font-medium text-text-secondary tabular-nums">
-                  {frameworkProgress.percentage}%
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden bg-surface-subtle w-full">
-                <div className="h-full w-full flex">
-                  {frameworkProgress.segments.map((segment, idx) => {
-                    const widthPct = frameworkProgress.total > 0
-                      ? (segment.completed / frameworkProgress.total) * 100
-                      : 0;
-                    const hasLaterFilledSegment = frameworkProgress.segments
-                      .slice(idx + 1)
-                      .some((next) => next.completed > 0);
-                    return (
-                      <div
-                        key={segment.id}
-                        className="h-full transition-[width] duration-300 ease-out flex-shrink-0"
-                        style={{
-                          width: `${widthPct}%`,
-                          backgroundColor: widthPct > 0 ? segment.color : 'transparent',
-                          borderRadius: !hasLaterFilledSegment ? '0 9999px 9999px 0' : undefined,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <ReadinessProgressBar progress={frameworkProgress} />
           )}
           <div className="flex-1 min-h-0 overflow-hidden">
             <FrameworkPlanView

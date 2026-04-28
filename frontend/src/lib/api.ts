@@ -795,24 +795,28 @@ export const api = {
       }
     ),
 
-  updateMessageWidget: async (initiativeId: string, messageId: string, widgetData: Record<string, any>) => {
-    try {
-      return await fetchApi<{ message_id: string; updated: boolean }>(
-        `/api/v1/initiatives/${initiativeId}/chat/${messageId}/widget`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ widget_data: widgetData }),
-        },
-      );
-    } catch {
-      return fetchApi<{ message_id: string; updated: boolean }>(
-        `/api/v1/chat/messages/${messageId}/widget`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ widget_data: widgetData }),
-        },
-      );
+  updateMessageWidget: async (initiativeId: string | undefined, messageId: string, widgetData: Record<string, any>) => {
+    if (initiativeId) {
+      try {
+        return await fetchApi<{ message_id: string; updated: boolean }>(
+          `/api/v1/initiatives/${initiativeId}/chat/${messageId}/widget`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ widget_data: widgetData }),
+          },
+        );
+      } catch {
+        // Project chats use the core chat table; fall back to that endpoint.
+      }
     }
+
+    return fetchApi<{ message_id: string; updated: boolean }>(
+      `/api/v1/chat/messages/${messageId}/widget`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ widget_data: widgetData }),
+      },
+    );
   },
 
   truncateChatFrom: (initiativeId: string, fromMessageId: string) =>
