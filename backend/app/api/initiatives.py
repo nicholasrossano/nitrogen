@@ -35,6 +35,7 @@ from app.schemas.module_instance import ModuleInstanceResponse
 from app.modules.registry import get_module_registry
 from app.services import module_service
 from app.services.initiative_overview import generate_initiative_overview
+from app.services.workspaces import resolve_workspace_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +49,12 @@ def _slugify(text: str) -> str:
     return text[:80].strip('-') or 'project'
 
 
-async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | None) -> str:
-    """Return a slug unique within the user's namespace."""
+async def _generate_unique_slug(db: AsyncSession, workspace_id, title: str | None) -> str:
+    """Return a slug unique within the workspace namespace."""
     base = _slugify(title) if title else 'project'
     result = await db.execute(
         select(Initiative.slug).where(
-            Initiative.user_id == user_id,
+            Initiative.workspace_id == workspace_id,
             Initiative.slug.like(f"{base}%"),
         )
     )
@@ -242,9 +243,11 @@ async def create_initiative(
 ):
     """Create a new initiative and start the intake process"""
     await ensure_user_exists(db, user)
-    slug = await _generate_unique_slug(db, user.uid, data.title)
+    workspace, _membership = await resolve_workspace_for_user(db, user.uid, data.workspace_id)
+    slug = await _generate_unique_slug(db, workspace.id, data.title)
     initiative = Initiative(
         user_id=user.uid,
+        workspace_id=workspace.id,
         title=data.title,
         slug=slug,
     )
@@ -329,26 +332,28 @@ async def list_initiatives(
     limit: int = 20,
     offset: int = 0,
     archived: bool = False,
+    workspace_id: str | None = None,
 ):
-    """List owned + shared initiatives for the current user."""
+    """List initiatives for the selected workspace."""
     await ensure_user_exists(db, user)
+    workspace, _membership = await resolve_workspace_for_user(db, user.uid, workspace_id)
 
-    # Owned initiatives
-    owned = await db.execute(
+    workspace_projects = await db.execute(
         select(Initiative)
         .where(
-            Initiative.user_id == user.uid,
+            Initiative.workspace_id == workspace.id,
             Initiative.archived == archived,
         )
         .order_by(Initiative.updated_at.desc(), Initiative.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
-    owned_initiatives = owned.scalars().all()
+    initiatives = workspace_projects.scalars().all()
 
-    # Shared initiatives (only non-archived, and only when not viewing trash)
+    # Legacy project shares stay visible from the personal workspace so existing
+    # collaboration links do not disappear while workspaces become the default.
     shared_initiatives: list[tuple[Initiative, str, str | None]] = []
-    if not archived:
+    if not archived and workspace.workspace_type == "personal":
         shared_result = await db.execute(
             select(ProjectShare, Initiative, User)
             .join(Initiative, ProjectShare.initiative_id == Initiative.id)
@@ -356,6 +361,7 @@ async def list_initiatives(
             .where(
                 ProjectShare.user_id == user.uid,
                 Initiative.archived == False,  # noqa: E712
+                Initiative.workspace_id != workspace.id,
             )
             .order_by(Initiative.updated_at.desc())
             .limit(limit)
@@ -366,7 +372,7 @@ async def list_initiatives(
         ]
 
     results = []
-    for init in owned_initiatives:
+    for init in initiatives:
         _safe_append_list_item(results, init, owner_email=user.email)
 
     for init, role, owner_email in shared_initiatives:
@@ -388,7 +394,7 @@ async def update_initiative(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Update an initiative (title, icon). Owner or editor."""
+    """Update an initiative (title, icon, workspace). Owner or editor."""
     await ensure_user_exists(db, user)
     initiative, role = await get_initiative_with_role(db, initiative_id, user)
     if role == "viewer":
@@ -401,6 +407,14 @@ async def update_initiative(
         initiative.title = data.title
     if data.icon is not None:
         initiative.icon = data.icon
+    if data.workspace_id is not None:
+        if role != "owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only project owners can move a project between workspaces",
+            )
+        workspace, _membership = await resolve_workspace_for_user(db, user.uid, data.workspace_id)
+        initiative.workspace_id = workspace.id
 
     await db.commit()
     await db.refresh(initiative)

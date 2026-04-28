@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, Boolean, ARRAY, DateTime, func
+from sqlalchemy import String, Text, Boolean, ARRAY, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import enum
@@ -30,6 +30,12 @@ class Initiative(Base):
         default=uuid.uuid4
     )
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     
     # Project description (free-form from initial conversation)
     project_description: Mapped[str | None] = mapped_column(Text)
@@ -107,6 +113,7 @@ class Initiative(Base):
         lazy="selectin",
         order_by="ModuleInstance.started_at.desc()",
     )
+    workspace: Mapped["Workspace"] = relationship(back_populates="initiatives")
     
     # New workflow methods
     def has_project_description(self) -> bool:

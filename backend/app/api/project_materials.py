@@ -97,6 +97,7 @@ async def upload_material(
 
     material = ProjectMaterial(
         initiative_id=initiative.id,
+        workspace_id=initiative.workspace_id,
         filename=unique_filename,
         file_type=file_type,
         storage_path=storage_path,
@@ -136,13 +137,17 @@ async def list_materials(
 
     mat_result = await db.execute(
         select(ProjectMaterial)
-        .where(ProjectMaterial.initiative_id == initiative.id)
+        .where(
+            ProjectMaterial.initiative_id == initiative.id,
+            ProjectMaterial.workspace_id == initiative.workspace_id,
+        )
         .order_by(ProjectMaterial.created_at.desc())
     )
     ev_result = await db.execute(
         select(EvidenceDoc)
         .where(
             EvidenceDoc.initiative_id == initiative.id,
+            EvidenceDoc.workspace_id == initiative.workspace_id,
             EvidenceDoc.storage_path.isnot(None),  # exclude text-paste entries
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -231,13 +236,17 @@ async def list_project_files(
     # Uploaded materials (project_materials + evidence_docs with files)
     mat_result = await db.execute(
         select(ProjectMaterial)
-        .where(ProjectMaterial.initiative_id == initiative.id)
+        .where(
+            ProjectMaterial.initiative_id == initiative.id,
+            ProjectMaterial.workspace_id == initiative.workspace_id,
+        )
         .order_by(ProjectMaterial.created_at.desc())
     )
     ev_result = await db.execute(
         select(EvidenceDoc)
         .where(
             EvidenceDoc.initiative_id == initiative.id,
+            EvidenceDoc.workspace_id == initiative.workspace_id,
             EvidenceDoc.storage_path.isnot(None),
         )
         .order_by(EvidenceDoc.created_at.desc())

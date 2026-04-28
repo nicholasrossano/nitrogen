@@ -26,6 +26,7 @@ export interface Initiative {
   id: string;
   slug: string;
   user_id: string;
+  workspace_id: string;
   title: string | null;
   icon: string | null;
   sector: string;
@@ -93,6 +94,31 @@ export interface ProjectShare {
   user_display_name: string | null;
   role: 'editor' | 'viewer';
   created_at: string;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  user_email: string | null;
+  user_display_name: string | null;
+  role: 'owner' | 'member';
+  created_at: string;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  icon: string;
+  description: string | null;
+  workspace_type: 'personal' | 'team';
+  current_user_role: 'owner' | 'member';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceDetail extends Workspace {
+  members: WorkspaceMember[];
 }
 
 export interface UserSearchResult {
@@ -642,13 +668,54 @@ function workflowVersionHeaders(workflowVersion?: number): Record<string, string
 
 export const api = {
   // Initiatives
-  listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false) =>
-    fetchApi<Initiative[]>(`/api/v1/initiatives?limit=${limit}&offset=${offset}&archived=${archived}`),
+  listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false, workspaceId?: string | null) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      archived: String(archived),
+    });
+    if (workspaceId) params.set('workspace_id', workspaceId);
+    return fetchApi<Initiative[]>(`/api/v1/initiatives?${params.toString()}`);
+  },
 
-  createInitiative: (title?: string) =>
+  createInitiative: (title?: string, workspaceId?: string | null) =>
     fetchApi<Initiative>('/api/v1/initiatives', {
       method: 'POST',
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, workspace_id: workspaceId ?? undefined }),
+    }),
+
+  listWorkspaces: () =>
+    fetchApi<Workspace[]>('/api/v1/workspaces'),
+
+  createWorkspace: (name: string, description?: string | null) =>
+    fetchApi<WorkspaceDetail>('/api/v1/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name, description }),
+    }),
+
+  getWorkspace: (workspaceId: string) =>
+    fetchApi<WorkspaceDetail>(`/api/v1/workspaces/${workspaceId}`),
+
+  updateWorkspace: (workspaceId: string, data: { name?: string; icon?: string; description?: string | null }) =>
+    fetchApi<WorkspaceDetail>(`/api/v1/workspaces/${workspaceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  addWorkspaceMember: (workspaceId: string, email: string) =>
+    fetchApi<WorkspaceMember>(`/api/v1/workspaces/${workspaceId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  removeWorkspaceMember: (workspaceId: string, membershipId: string) =>
+    fetchApi<{ success: boolean }>(`/api/v1/workspaces/${workspaceId}/members/${membershipId}`, {
+      method: 'DELETE',
+    }),
+
+  deleteWorkspace: (workspaceId: string) =>
+    fetchApi<void>(`/api/v1/workspaces/${workspaceId}`, {
+      method: 'DELETE',
     }),
 
   getInitiative: (id: string) =>
@@ -684,7 +751,7 @@ export const api = {
       method: 'DELETE',
     }),
 
-  updateInitiative: (id: string, data: { title?: string; icon?: string }) =>
+  updateInitiative: (id: string, data: { title?: string; icon?: string; workspace_id?: string }) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -871,6 +938,29 @@ export const api = {
     }
   },
 
+  uploadWorkspaceEvidence: async (workspaceId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(
+      `${API_URL}/api/v1/workspaces/${workspaceId}/evidence`,
+      {
+        method: 'POST',
+        headers,
+        body: formData,
+      }
+    );
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail ?? `Upload failed (${response.status})`);
+    }
+    return response.json() as Promise<{ success: boolean; document: EvidenceDoc; stage: string }>;
+  },
+
   pasteEvidence: (initiativeId: string, content: string, title?: string) =>
     fetchApi<{ success: boolean; document: EvidenceDoc; stage: string }>(
       `/api/v1/initiatives/${initiativeId}/evidence/text`,
@@ -936,6 +1026,9 @@ export const api = {
 
   getEvidence: (initiativeId: string) =>
     fetchApi<EvidenceDoc[]>(`/api/v1/initiatives/${initiativeId}/evidence`),
+
+  getWorkspaceEvidence: (workspaceId: string) =>
+    fetchApi<EvidenceDoc[]>(`/api/v1/workspaces/${workspaceId}/evidence`),
 
   getEvidenceContent: (evidenceId: string) =>
     fetchApi<{
@@ -1944,6 +2037,12 @@ export const api = {
   importFromDrive: (initiativeId: string, fileIds: string[]) =>
     fetchApi<DriveImportResult>(
       `/api/v1/initiatives/${initiativeId}/drive/import`,
+      { method: 'POST', body: JSON.stringify({ file_ids: fileIds }) }
+    ),
+
+  importWorkspaceFromDrive: (workspaceId: string, fileIds: string[]) =>
+    fetchApi<DriveImportResult>(
+      `/api/v1/workspaces/${workspaceId}/drive/import`,
       { method: 'POST', body: JSON.stringify({ file_ids: fileIds }) }
     ),
 

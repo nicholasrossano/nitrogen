@@ -101,6 +101,16 @@ Follow `docs/style-guide.md` as the source of truth.
 - Draft add rows should be neutral grey (not confirmed color), collect only the primary label by default, and be launched from a centered green add-dot affordance.
 - Preserve node rhythm/alignment: draft rows use the same vertical spacing as active nodes, and title text stays vertically centered when no subtitle is present.
 
+**Dropdown/popover layering:**
+- Dropdown menus must never be clipped by parent containers: avoid `overflow-hidden` on menu ancestors, and use `relative` trigger wrappers with `absolute z-50+` menus (or portal when crossing scroll/modal boundaries).
+- For settings/interstitial workspace pickers, use the custom dropdown (button + menu) rather than native `<select>` so behavior and styling match existing controls.
+
+**Tooltip convention:**
+- Use the shared `@/components/ui/Tooltip` for hover help (especially disabled controls) instead of custom absolute bubbles or ad-hoc `title` text when explanatory copy is needed.
+
+**Shared control reuse:**
+- When a control pattern already exists (e.g. role dropdowns in sharing flows), reuse the same shared component across surfaces instead of re-implementing per modal/page.
+
 ## Loading Art Authoring
 
 - For new loading-art shapes, prefer deterministic math generators over ad-hoc hand-tuned rejection fields: **IFS** for fractal leaves/ferns, **L-system recursion** for branching trees, and **polar/parametric curves** for radial flowers.

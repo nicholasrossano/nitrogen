@@ -20,6 +20,12 @@ class ProjectMaterial(Base):
         ForeignKey("initiatives.id", ondelete="CASCADE"),
         index=True,
     )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
 
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -33,6 +39,8 @@ class ProjectMaterial(Base):
     )
 
     initiative: Mapped["Initiative"] = relationship(back_populates="project_materials")
+    workspace: Mapped["Workspace"] = relationship()
 
 
 from app.models.initiative import Initiative  # noqa: E402
+from app.models.workspace import Workspace  # noqa: E402

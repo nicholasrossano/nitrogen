@@ -32,7 +32,10 @@ import {
 } from '@/lib/fileUtils';
 
 interface ProjectFilesViewProps {
-  initiativeId: string;
+  initiativeId?: string;
+  scope?: 'project' | 'workspace';
+  title?: string;
+  description?: string;
   materials: ProjectMaterial[];
   onDeleteMaterial?: (materialId: string) => Promise<void>;
   onUploadFile?: (file: File) => Promise<void>;
@@ -80,6 +83,9 @@ function formatDate(dateStr: string | null): string {
 
 export function ProjectFilesView({
   initiativeId,
+  scope = 'project',
+  title,
+  description,
   materials,
   onDeleteMaterial,
   onUploadFile,
@@ -111,6 +117,11 @@ export function ProjectFilesView({
   const PAGE_SIZE = 20;
 
   const loadFiles = useCallback(async () => {
+    if (scope === 'workspace' || !initiativeId) {
+      setGeneratedFiles([]);
+      setLoading(false);
+      return;
+    }
     try {
       const response: ProjectFilesResponse = await api.getProjectFiles(initiativeId);
       setGeneratedFiles(response.generated);
@@ -119,7 +130,7 @@ export function ProjectFilesView({
     } finally {
       setLoading(false);
     }
-  }, [initiativeId]);
+  }, [initiativeId, scope]);
 
   useEffect(() => {
     loadFiles();
@@ -144,7 +155,7 @@ export function ProjectFilesView({
     `${title.replace(/[^a-z0-9_\-. ]/gi, '_').replace(/\s+/g, '_')}.${ext}`;
 
   const handleDownloadGenerated = async (file: GeneratedFile) => {
-    if (!file.exportable) return;
+    if (!file.exportable || !initiativeId) return;
     setDownloadingId(file.id);
     try {
       const ext = file.export_format ?? 'docx';
@@ -160,6 +171,7 @@ export function ProjectFilesView({
   };
 
   const handleDeleteGenerated = async (file: GeneratedFile) => {
+    if (!initiativeId) return;
     setDeletingId(file.id);
     // Optimistic removal
     setGeneratedFiles((prev) => prev.filter((f) => f.id !== file.id));
@@ -239,6 +251,8 @@ export function ProjectFilesView({
     setDriveImporting(true);
     try {
       await onImportFromDrive();
+    } catch (err) {
+      console.error('Drive import failed:', err);
     } finally {
       setDriveImporting(false);
     }
@@ -246,6 +260,8 @@ export function ProjectFilesView({
 
   const hasUploaded = materials.length > 0;
   const hasGenerated = generatedFiles.length > 0;
+  const showGeneratedTab = scope === 'project';
+  const actionButtonClass = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
 
   const uploadedTotalPages = Math.max(1, Math.ceil(materials.length / PAGE_SIZE));
   const generatedTotalPages = Math.max(1, Math.ceil(generatedFiles.length / PAGE_SIZE));
@@ -261,9 +277,13 @@ export function ProjectFilesView({
         {/* Header + Toggle */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-text-primary">Files</h1>
+            <h1 className="text-lg font-semibold text-text-primary">{title ?? (scope === 'workspace' ? 'Workspace files' : 'Project files')}</h1>
             <p className="text-sm text-text-tertiary mt-1">
-              Uploaded project materials and generated outputs.
+              {description ?? (
+                scope === 'workspace'
+                  ? 'Shared guidance and reusable context for this workspace.'
+                  : 'Uploaded project materials and generated outputs.'
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -279,6 +299,7 @@ export function ProjectFilesView({
                 </button>
               </Tooltip>
             )}
+            {showGeneratedTab && (
             <div className="flex items-center bg-black/[0.04] rounded-lg p-0.5 ring-1 ring-inset ring-black/[0.08]">
               {(['uploaded', 'generated'] as TabType[]).map((tab) => (
                 <button
@@ -294,6 +315,7 @@ export function ProjectFilesView({
                 </button>
               ))}
             </div>
+            )}
           </div>
         </div>
 
@@ -322,12 +344,9 @@ export function ProjectFilesView({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Upload className="w-4 h-4 text-text-tertiary" />
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Uploaded</h2>
-                {hasUploaded && (
-                  <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
-                    {materials.length}
-                  </span>
-                )}
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                  {scope === 'workspace' ? 'Workspace files' : 'Uploaded'}
+                </h2>
               </div>
               {(onUploadFile || onImportFromDrive) && (
                 <div className="flex items-center gap-1.5">
@@ -336,7 +355,7 @@ export function ProjectFilesView({
                       <button
                         onClick={() => setUploadMenuOpen((o) => !o)}
                         disabled={uploading}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className={actionButtonClass}
                       >
                         {uploading ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -370,7 +389,7 @@ export function ProjectFilesView({
                     <button
                       onClick={handleDriveImport}
                       disabled={driveImporting}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-text-secondary bg-surface-subtle ring-1 ring-inset ring-black/[0.08] enabled:hover:bg-black/[0.07] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className={actionButtonClass}
                     >
                       {driveImporting ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -425,6 +444,9 @@ export function ProjectFilesView({
                           )}
                           <span className="text-text-primary truncate min-w-0" title={mat.filename}>
                             {mat.filename}
+                          </span>
+                          <span className="text-[9px] font-medium text-text-tertiary bg-black/[0.04] rounded px-1 py-0.5 flex-shrink-0">
+                            {scope === 'workspace' ? 'Workspace' : 'Project'}
                           </span>
                           {isDrive && (
                             <span className="text-[9px] font-medium text-[#4285F4] bg-[#4285F4]/10 rounded px-1 py-0.5 flex-shrink-0">
@@ -527,7 +549,9 @@ export function ProjectFilesView({
               <FolderOpen className="w-10 h-10 text-text-tertiary/50 mb-3" />
               <p className="text-sm text-text-secondary font-medium">No uploaded files yet</p>
               <p className="text-xs text-text-tertiary mt-1 max-w-xs">
-                Use the sidebar to upload project materials.
+                {scope === 'workspace'
+                  ? 'Upload shared guidance documents for this workspace.'
+                  : 'Use the sidebar to upload project materials.'}
               </p>
             </div>
             )}
@@ -537,11 +561,6 @@ export function ProjectFilesView({
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-text-tertiary" />
               <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Generated</h2>
-              {hasGenerated && (
-                <span className="text-[10px] text-text-tertiary bg-black/[0.04] rounded-full px-1.5 py-0.5">
-                  {generatedFiles.length}
-                </span>
-              )}
             </div>
             {hasGenerated ? (
             <>

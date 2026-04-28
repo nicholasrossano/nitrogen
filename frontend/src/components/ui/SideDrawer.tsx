@@ -12,7 +12,9 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAuth } from '@/lib/auth';
+import { api, type EvidenceDoc, type ProjectMaterial } from '@/lib/api';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
@@ -88,7 +90,7 @@ export function SideDrawer() {
   }, [pathname]);
 
   const activeItem: NavItem = useMemo(() => {
-    if (!initiativeId) return 'home';
+    if (!initiativeId) return searchParams.get('view') === 'files' ? 'files' : 'home';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
     if (view === 'plan' || view === 'framework') return 'plan';
@@ -106,8 +108,14 @@ export function SideDrawer() {
   );
   const isOnboarding = Boolean(hasProject && initiative && !hasFrameworkSelection && !isViewer);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+  const {
+    activeWorkspace,
+    loadWorkspaces,
+  } = useWorkspaceStore();
 
   const showMaterials = hasProject && !isViewer;
+  const fileScope = hasProject ? 'project' : 'workspace';
+  const fileScopeLabel = fileScope === 'workspace' ? 'Workspace files' : 'Project files';
 
   const projectItems: NavRenderConfig[] = (
     isViewer
@@ -141,8 +149,19 @@ export function SideDrawer() {
 
   const handleNav = useCallback((item: NavItem) => {
     if (navHandlerRef.current?.(item)) return;
-    if (item === 'home') { router.push('/'); return; }
-  }, [navHandlerRef, router]);
+    if (item === 'files' && !hasProject) {
+      router.push('/?view=files');
+      return;
+    }
+    if (item === 'files' && hasProject && initiativeId) {
+      router.replace(`/initiatives/${initiativeId}?view=files`);
+      return;
+    }
+    if (item === 'home') {
+      router.push('/');
+      return;
+    }
+  }, [hasProject, initiativeId, navHandlerRef, router]);
 
   const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
     <button
@@ -183,6 +202,7 @@ export function SideDrawer() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
+  const [workspaceMaterials, setWorkspaceMaterials] = useState<ProjectMaterial[]>([]);
   const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
 
   const driveConnected = useGoogleDriveStore((s) => s.connected);
@@ -195,6 +215,29 @@ export function SideDrawer() {
 
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportError, setDriveImportError] = useState<string | null>(null);
+
+  const evidenceToMaterial = useCallback((doc: EvidenceDoc): ProjectMaterial => ({
+    id: doc.id,
+    filename: doc.filename ?? 'Untitled',
+    file_type: doc.file_type ?? 'unknown',
+    file_size: doc.file_size ?? null,
+    created_at: doc.created_at,
+    source: 'evidence',
+    processing_status: doc.processing_status,
+    processing_error: doc.processing_error,
+  }), []);
+
+  const loadWorkspaceFiles = useCallback(async () => {
+    if (!activeWorkspace) return;
+    const docs = await api.getWorkspaceEvidence(activeWorkspace.id);
+    setWorkspaceMaterials(docs.map(evidenceToMaterial));
+  }, [activeWorkspace, evidenceToMaterial]);
+
+  useEffect(() => {
+    if (!activeWorkspace) {
+      loadWorkspaces();
+    }
+  }, [activeWorkspace, loadWorkspaces]);
 
   useEffect(() => {
     if (showMaterials && !driveStatusChecked) {
@@ -285,7 +328,8 @@ export function SideDrawer() {
   const uploading = toastItems.some((i) => i.status === 'uploading');
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
-    if (!initiativeId) return;
+    if (fileScope === 'project' && !initiativeId) return;
+    if (fileScope === 'workspace' && !activeWorkspace) return;
 
     const initial: UploadItem[] = filesToUpload.map((f) => ({
       id: `${f.name}-${Date.now()}-${Math.random()}`,
@@ -299,7 +343,12 @@ export function SideDrawer() {
       const file = filesToUpload[i];
       const item = initial[i];
       try {
-        await uploadMaterial(initiativeId, file);
+        if (fileScope === 'workspace' && activeWorkspace) {
+          const response = await api.uploadWorkspaceEvidence(activeWorkspace.id, file);
+          setWorkspaceMaterials((prev) => [evidenceToMaterial(response.document), ...prev]);
+        } else if (initiativeId) {
+          await uploadMaterial(initiativeId, file);
+        }
         setToastItems((prev) =>
           prev.map((t) => t.id === item.id ? { ...t, status: 'done' } : t)
         );
@@ -313,12 +362,19 @@ export function SideDrawer() {
         );
       }
     }
-  }, [initiativeId, uploadMaterial]);
+    if (fileScope === 'workspace') {
+      setTimeout(() => {
+        loadWorkspaceFiles().catch(() => {});
+      }, 1500);
+    }
+  }, [activeWorkspace, evidenceToMaterial, fileScope, initiativeId, loadWorkspaceFiles, uploadMaterial]);
 
   const handleUpload = useCallback(async (files: FileList | File[]) => {
-    if (!initiativeId) return;
+    if (fileScope === 'project' && !initiativeId) return;
+    if (fileScope === 'workspace' && !activeWorkspace) return;
     const fileArray = Array.from(files);
-    const existingNames = projectMaterials.map((m) => m.filename);
+    const existingNames = (fileScope === 'workspace' ? workspaceMaterials : projectMaterials)
+      .map((m) => m.filename);
     const results = checkDuplicates(fileArray, existingNames);
 
     const duplicates = results.filter((r) => r.isDuplicate);
@@ -337,7 +393,7 @@ export function SideDrawer() {
     } else {
       doUpload(fileArray);
     }
-  }, [initiativeId, projectMaterials, doUpload]);
+  }, [activeWorkspace, doUpload, fileScope, initiativeId, projectMaterials, workspaceMaterials]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -467,7 +523,9 @@ export function SideDrawer() {
           <div
             className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:pointer-events-auto group-data-[open]:pointer-events-auto group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150"
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">Upload Files</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">
+              {fileScopeLabel}
+            </span>
 
             <UploadDropzone
               isDragging={isDragging}
@@ -477,8 +535,8 @@ export function SideDrawer() {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               onClick={handleFileSelect}
-              dragLabel="Drop files or folder"
-              idleLabel="Upload files"
+              dragLabel={`Drop ${fileScope} files or folder`}
+              idleLabel={`Upload ${fileScope} files`}
               className="min-h-[140px] px-2"
             />
             <UploadActionButton
@@ -488,7 +546,7 @@ export function SideDrawer() {
               label="Select folder"
             />
 
-            {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+            {fileScope === 'project' && process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">
                   Google Drive
@@ -541,7 +599,7 @@ export function SideDrawer() {
       )}
 
       {/* Files button — collapses with project items */}
-      <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
+      <div className={`${gridCollapse} ${(hasProject || activeWorkspace) ? gridOpen : gridClosed}`}>
         <div className="overflow-hidden">
           <button
             onClick={() => {
