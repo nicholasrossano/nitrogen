@@ -336,7 +336,7 @@ export function FrameworkPlanView({
               {groupedPhases.map((phase) => (
                 <section
                   key={phase.id}
-                  className="rounded-2xl border border-divider/70 bg-white/70 p-4 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.35)]"
+                  className="rounded-2xl border border-divider/70 bg-white/70 p-4 shadow-[0_2px_12px_-8px_rgba(15,23,42,0.22)]"
                 >
                   <div className="mb-4 flex items-center justify-between gap-3 border-b border-divider/70 pb-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
@@ -374,7 +374,7 @@ export function FrameworkPlanView({
                           className={[
                             'group relative card-interactive overflow-visible',
                             isModuleComplete
-                              ? 'border border-accent/35 bg-accent-wash/35 shadow-[0_12px_28px_-18px_rgba(0,94,114,0.55)]'
+                              ? 'border border-accent/35 bg-accent-wash/35 shadow-[0_2px_10px_-6px_rgba(0,94,114,0.3)]'
                               : 'border border-black/[0.04]',
                             instancePickerOpen ? 'z-40' : 'z-0',
                           ].join(' ')}

@@ -156,7 +156,7 @@ class RiskAssessmentModule(BaseModule):
                 ],
                 population=[
                     PopulationStep("read_confirmed_prior_stage", {"stage_id": "risks"}),
-                    PopulationStep("enrich_selected_item_with_ai", {"require_citation": True}),
+                    PopulationStep("enrich_selected_item_with_ai", {"require_citation": True, "bulk": True}),
                     PopulationStep("await_user_confirmation"),
                 ],
             ),
@@ -197,6 +197,17 @@ class RiskAssessmentModule(BaseModule):
         if stage_id != "mitigations":
             raise ValueError(f"enrich_record called for unexpected stage '{stage_id}'")
         return await self._enrich_mitigation(item_content, existing_record, context)
+
+    async def enrich_records_for_stage(
+        self,
+        stage_id: str,
+        source_items: list[dict[str, Any]],
+        existing_records: dict[str, dict[str, Any]],
+        context: dict,
+    ) -> dict[str, dict[str, Any]]:
+        if stage_id != "mitigations":
+            raise ValueError(f"enrich_records_for_stage called for unexpected stage '{stage_id}'")
+        return await self._enrich_mitigations_bulk(source_items, existing_records, context)
 
     async def compute_stage(
         self,
@@ -307,23 +318,26 @@ class RiskAssessmentModule(BaseModule):
             for c in categories
         )
         project_signals = _project_signals(context)
+        category_labels = ", ".join(
+            str(c.get("label", "")).strip()
+            for c in categories
+            if str(c.get("label", "")).strip()
+        )
         queries = [
             (
                 f"{context.get('geography', '')} {context.get('project_type', '')} "
-                f"{project_signals} {c.get('label')} project preparation risks development finance"
-            ).strip()
-            for c in categories
-        ] + [
+                f"{project_signals} project preparation risks development finance categories {category_labels}"
+            ).strip(),
             (
                 f"{context.get('geography', '')} {context.get('project_type', '')} "
                 f"{project_signals} implementation risks public sector approvals beneficiaries delivery model"
             ).strip(),
             (
                 f"{context.get('geography', '')} {context.get('project_type', '')} "
-                f"{project_signals} precedents donor project risk mitigation"
+                f"{project_signals} precedent donor project risks evidence"
             ).strip(),
         ]
-        evidence_block = await _evidence_block(queries, context, max_facts=30)
+        evidence_block = await _evidence_block(queries, context, max_facts=18)
         data = await llm_json(
             system=_risk_generation_system_prompt(),
             user_msg=(
@@ -390,6 +404,73 @@ class RiskAssessmentModule(BaseModule):
             "remaining_issue": data.get("remaining_issue", existing_record.get("remaining_issue", "")),
             "status": data.get("status", existing_record.get("status", "Needs validation")),
         }
+
+    async def _enrich_mitigations_bulk(
+        self,
+        source_items: list[dict[str, Any]],
+        existing_records: dict[str, dict[str, Any]],
+        context: dict,
+    ) -> dict[str, dict[str, Any]]:
+        risk_payload = [
+            {
+                "source_item_id": item.get("id", ""),
+                "title": item.get("content", {}).get("title", ""),
+                "category": item.get("content", {}).get("category", ""),
+                "affected_components": item.get("content", {}).get("affected_components", ""),
+                "why_it_matters": item.get("content", {}).get("why_it_matters", item.get("content", {}).get("description", "")),
+                "evidence_basis": item.get("content", {}).get("evidence_basis", item.get("content", {}).get("basis", "")),
+                "missing_information": item.get("content", {}).get("missing_information", ""),
+            }
+            for item in source_items
+        ]
+        queries = [
+            (
+                f"{context.get('geography', '')} {context.get('project_type', '')} "
+                f"{_project_signals(context)} risk mitigation project preparation implementation controls"
+            ).strip(),
+            (
+                f"{context.get('geography', '')} {context.get('project_type', '')} "
+                "development finance risk mitigation procurement institutional data verification safeguards"
+            ).strip(),
+        ]
+        evidence_block = await _evidence_block(queries, context, max_facts=12)
+        data = await llm_json(
+            system=(
+                "You are a practical development-finance project-preparation specialist. "
+                "For each risk, propose a specific mitigation that addresses the stated cause and consequence. "
+                "Avoid vague statements like 'monitor closely' or 'strengthen coordination' unless you specify "
+                "the concrete mechanism, owner, and timing. Do not invent unsupported institutional facts. "
+                "Return JSON only with key mitigations: objects with source_item_id, mitigation, owner, timing, "
+                "remaining_issue, status. Status must be Adequate, Insufficient, or Needs validation."
+            ),
+            user_msg=(
+                f"{_project_context_text(context)}\n\n"
+                f"Risks needing mitigation:\n{_jsonish(risk_payload)}"
+                f"{evidence_block}"
+            ),
+            model=settings.openai_orchestration_model,
+        )
+        by_id = {
+            str(item.get("source_item_id", "")): item
+            for item in data.get("mitigations", [])
+            if isinstance(item, dict)
+        }
+
+        records: dict[str, dict[str, Any]] = {}
+        for item in source_items:
+            item_id = str(item.get("id", ""))
+            existing = existing_records.get(item_id, {})
+            llm_record = by_id.get(item_id, {})
+            content = item.get("content", {})
+            fallback = _default_mitigation(content, context)
+            records[item_id] = {
+                "mitigation": llm_record.get("mitigation") or existing.get("mitigation") or fallback["mitigation"],
+                "owner": llm_record.get("owner") or existing.get("owner") or fallback["owner"],
+                "timing": llm_record.get("timing") or existing.get("timing") or fallback["timing"],
+                "remaining_issue": llm_record.get("remaining_issue") or existing.get("remaining_issue") or fallback["remaining_issue"],
+                "status": llm_record.get("status") or existing.get("status") or fallback["status"],
+            }
+        return records
 
     async def _rate_register(
         self,
@@ -868,6 +949,67 @@ def _default_risks(categories: list[dict[str, Any]], context: dict[str, Any]) ->
             ])
             continue
     return risks
+
+
+def _default_mitigation(risk: dict[str, Any], context: dict[str, Any]) -> dict[str, str]:
+    title = str(risk.get("title", "")).lower()
+    category = str(risk.get("category", "")).lower()
+    affected = str(risk.get("affected_components", "affected workstream")).strip() or "affected workstream"
+    project_team = "Project team / implementing agency"
+    if "data" in title or "verification" in title or "mrv" in category:
+        return {
+            "mitigation": (
+                "Define a single data dictionary, source-of-truth owner, and QA process before using "
+                f"{affected} data for targeting, implementation planning, or results reporting."
+            ),
+            "owner": project_team,
+            "timing": "Preparation / before baseline lock",
+            "remaining_issue": "Underlying data availability and cross-agency access rights still need confirmation.",
+            "status": "Needs validation",
+        }
+    if "permit" in title or "approval" in title or "policy" in category or "regulatory" in category:
+        return {
+            "mitigation": (
+                "Map required approvals, assign each approval to a named owner, and build approval lead times "
+                "into the procurement and rollout schedule."
+            ),
+            "owner": project_team,
+            "timing": "Preparation / before procurement launch",
+            "remaining_issue": "Current approval requirements and agency decision timelines need evidence.",
+            "status": "Needs validation",
+        }
+    if "procurement" in title or "contract" in title or "fiduciary" in category:
+        return {
+            "mitigation": (
+                "Prepare a procurement plan with bid-package sequencing, evaluation criteria, contract KPIs, "
+                "and escalation steps for delayed awards."
+            ),
+            "owner": "Procurement lead / implementing agency",
+            "timing": "Preparation through contract award",
+            "remaining_issue": "Supplier market depth and procurement authority capacity need validation.",
+            "status": "Needs validation",
+        }
+    if "capacity" in title or "institutional" in category:
+        return {
+            "mitigation": (
+                "Assign delivery roles across agencies and partners, define decision rights, and resource a PMO "
+                "or coordination unit to track milestones and unblock dependencies."
+            ),
+            "owner": project_team,
+            "timing": "Preparation / early implementation",
+            "remaining_issue": "Partner staffing, budget, and mandate clarity need confirmation.",
+            "status": "Needs validation",
+        }
+    return {
+        "mitigation": (
+            f"Create an owner-assigned action plan for {affected}, with evidence needed, decision owner, "
+            "target date, and escalation trigger before the risk can affect implementation."
+        ),
+        "owner": project_team,
+        "timing": "Preparation",
+        "remaining_issue": "Specific validation evidence and accountable owner need confirmation.",
+        "status": "Needs validation",
+    }
 
 
 def _ensure_category_risk_depth(

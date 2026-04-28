@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { CheckCircle2, Sparkles, AlertTriangle, ExternalLink } from 'lucide-react';
+import { persistChatWidgetUpdate } from '@/lib/chatWidgetUpdates';
 
 interface TemplateProposedValueWidgetProps {
   data: {
@@ -14,6 +15,7 @@ interface TemplateProposedValueWidgetProps {
     confirmed?: boolean;
     dismissed?: boolean;
   };
+  initiativeId?: string;
   messageId?: string;
 }
 
@@ -29,39 +31,43 @@ function ConfidenceIcon({ confidence, className }: { confidence: string; classNa
   return <Sparkles className={className} />;
 }
 
-export function TemplateProposedValueWidget({ data, messageId }: TemplateProposedValueWidgetProps) {
+export function TemplateProposedValueWidget({ data, initiativeId, messageId }: TemplateProposedValueWidgetProps) {
   const initialStatus = data.confirmed ? 'confirmed' : data.dismissed ? 'dismissed' : 'pending';
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'dismissed'>(initialStatus);
   const confStyle = CONFIDENCE_STYLES[data.confidence] || CONFIDENCE_STYLES.moderate;
   const hasProposal = data.can_be_determined && data.proposed_value;
 
-  const handleConfirm = useCallback(() => {
-    setStatus('confirmed');
+  const handleConfirm = useCallback(async () => {
     const newData = { ...data, confirmed: true, dismissed: false };
-    if (messageId) {
-      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
-        detail: { messageId, widgetData: newData },
-      }));
-    }
+    const persisted = await persistChatWidgetUpdate({
+      initiativeId,
+      messageId,
+      widgetData: newData,
+      source: 'TemplateProposedValueWidget',
+    });
+    if (!persisted) return;
+
+    setStatus('confirmed');
     window.dispatchEvent(new CustomEvent('nitrogen:template-field-confirmed', {
       detail: {
         requirement_label: data.requirement_label,
         value: data.proposed_value,
       },
     }));
-  }, [data, messageId]);
+  }, [data, initiativeId, messageId]);
 
-  const handleDismiss = useCallback(() => {
+  const handleDismiss = useCallback(async () => {
+    const newData = { ...data, dismissed: true, confirmed: false };
+    const persisted = await persistChatWidgetUpdate({
+      initiativeId,
+      messageId,
+      widgetData: newData,
+      source: 'TemplateProposedValueWidget',
+    });
+    if (!persisted) return;
+
     setStatus('dismissed');
-    if (messageId) {
-      window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
-        detail: {
-          messageId,
-          widgetData: { ...data, dismissed: true, confirmed: false },
-        },
-      }));
-    }
-  }, [data, messageId]);
+  }, [data, initiativeId, messageId]);
 
   if (status === 'dismissed') {
     return (
@@ -111,7 +117,7 @@ export function TemplateProposedValueWidget({ data, messageId }: TemplatePropose
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-              {isConfirmed ? 'Value Applied' : 'Proposed Value'}
+              {isConfirmed ? 'Value Accepted' : 'Proposed Value'}
             </span>
             {!isConfirmed && (
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${confStyle.bg} ${confStyle.text}`}>
@@ -127,7 +133,7 @@ export function TemplateProposedValueWidget({ data, messageId }: TemplatePropose
             <p className="text-xs text-text-secondary leading-relaxed mt-1">{data.explanation}</p>
           )}
           {isConfirmed && (
-            <p className="text-xs text-green-600 mt-1">Value applied to template.</p>
+            <p className="text-xs text-green-600 mt-1">Value accepted in this chat.</p>
           )}
         </div>
       </div>
@@ -144,7 +150,7 @@ export function TemplateProposedValueWidget({ data, messageId }: TemplatePropose
             onClick={handleConfirm}
             className="px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent-anchor rounded transition-colors"
           >
-            Accept & Apply
+            Accept
           </button>
         </div>
       )}

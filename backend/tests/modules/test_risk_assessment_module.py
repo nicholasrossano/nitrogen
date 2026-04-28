@@ -143,6 +143,49 @@ def test_export_xlsx_includes_register_sheets():
 
 
 @pytest.mark.asyncio
+async def test_bulk_mitigation_generation_populates_each_risk(monkeypatch):
+    module = RiskAssessmentModule()
+    risk_item = make_build_item({
+        "title": "Fragmented beneficiary and site data could weaken targeting and implementation planning.",
+        "category": "Data Quality and Results Verification",
+        "affected_components": "Beneficiary targeting; site prioritization",
+        "why_it_matters": "The project depends on credible data to choose sites and beneficiaries.",
+        "evidence_basis": "Project context references geospatial analysis and site planning.",
+        "missing_information": "Data owners and QA process are not documented.",
+    })
+
+    async def fake_llm_json(*args, **kwargs):
+        return {
+            "mitigations": [{
+                "source_item_id": risk_item["id"],
+                "mitigation": "Define a data dictionary and QA workflow before site prioritization is finalized.",
+                "owner": "Project data lead",
+                "timing": "Preparation",
+                "remaining_issue": "Data-sharing authority is still unconfirmed.",
+                "status": "Needs validation",
+            }]
+        }
+
+    monkeypatch.setattr("app.modules.risk_assessment.llm_json", fake_llm_json)
+
+    records = await module.enrich_records_for_stage(
+        "mitigations",
+        [risk_item],
+        {},
+        {
+            "project_title": "Malawi Energy Access Project",
+            "project_type": "energy_access",
+            "geography": "Malawi",
+            "project_description": "Uses geospatial analysis for energy access site prioritization.",
+        },
+    )
+
+    assert risk_item["id"] in records
+    assert records[risk_item["id"]]["mitigation"].startswith("Define a data dictionary")
+    assert records[risk_item["id"]]["owner"] == "Project data lead"
+
+
+@pytest.mark.asyncio
 async def test_generate_risks_falls_back_to_concrete_category_specific_rows(monkeypatch):
     module = RiskAssessmentModule()
     categories = [

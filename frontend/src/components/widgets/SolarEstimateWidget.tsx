@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useMemo, useEffect, lazy, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Sun,
@@ -24,8 +24,6 @@ import {
 import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
-import { useInitiativeStore } from '@/stores/initiativeStore';
-import { useChatStore } from '@/stores/chatStore';
 import { ConfirmButton } from '@/components/ui';
 import { PanelHeader } from '@/components/ui/PanelHeader';
 
@@ -46,8 +44,9 @@ async function persistWidgetToDb(
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
-    useInitiativeStore.getState().updateMessageWidgetData(messageId, widgetData);
-    useChatStore.getState().updateMessageWidgetData(messageId, widgetData);
+    window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
+      detail: { messageId, widgetData },
+    }));
     return true;
   } catch (err) {
     console.error('[SolarEstimateWidget] persist failed:', err);
@@ -177,8 +176,24 @@ export function SolarEstimateWidget({
   const [hoveredRowInp, setHoveredRowInp] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [overInteractive, setOverInteractive] = useState(false);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+  const [chartReady, setChartReady] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    const node = chartContainerRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      setChartReady(true);
+      return;
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setChartReady(width > 0 && height > 0);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [activeTab, isActive]);
 
   // Listen for proposed value confirmations from chat
   useEffect(() => {
@@ -623,8 +638,8 @@ export function SolarEstimateWidget({
               <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2 px-1">
                 Monthly AC Energy (kWh)
               </div>
-              <div className="h-[200px]">
-                {isActive ? (
+              <div ref={chartContainerRef} className="h-[200px] min-w-0">
+                {isActive && chartReady ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-stroke-subtle, #e5e7eb)" vertical={false} />
