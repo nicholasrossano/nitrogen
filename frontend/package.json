@@ -33,7 +33,7 @@
     "katex": "^0.16.40",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.8.0",
-    "next": "^14.2.35",
+    "next": "^16.2.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",
