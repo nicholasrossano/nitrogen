@@ -32,7 +32,7 @@
     "firebase": "^12.12.0",
     "katex": "^0.16.40",
     "leaflet": "^1.9.4",
-    "lucide-react": "^0.323.0",
+    "lucide-react": "^1.8.0",
     "next": "^14.2.35",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
