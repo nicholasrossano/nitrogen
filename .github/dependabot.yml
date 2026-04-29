@@ -4,10 +4,38 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "America/New_York"
     open-pull-requests-limit: 5
+    groups:
+      frontend-patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+      frontend-minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - minor
 
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
+      day: monday
+      time: "06:30"
+      timezone: "America/New_York"
     open-pull-requests-limit: 5
+    groups:
+      backend-patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+      backend-minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - minor
