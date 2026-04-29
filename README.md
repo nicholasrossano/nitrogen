@@ -113,7 +113,7 @@ npm run dev
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Check the [open issues](../../issues) for things to work on; issues tagged `good first issue` are a great starting point.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Contributions require a signed [Contributor License Agreement](CLA.md) before merge. Check the [open issues](../../issues) for things to work on; issues tagged `good first issue` are a great starting point.
 
 ## Security Checks
 
@@ -132,3 +132,5 @@ For a deeper scan that also checks commit history:
 ## License
 
 [GNU Affero General Public License v3.0](LICENSE): any modifications must be open-sourced under the same license, including when deployed as a hosted service.
+
+Organizations that need terms outside the AGPLv3 may contact Nitrogen about a separate [commercial license](COMMERCIAL-LICENSE.md). Use of Nitrogen names, logos, and branding is covered by the [trademark guidelines](TRADEMARKS.md).
