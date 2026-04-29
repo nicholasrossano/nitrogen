@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Text, Boolean, ARRAY, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import enum
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.workspace import Workspace
 
 
 class InitiativeStage(str, enum.Enum):
