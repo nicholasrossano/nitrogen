@@ -4,4 +4,4 @@ Nitrogen AI is open source under the [GNU Affero General Public License v3.0](LI
 
 Some organizations need terms outside the AGPLv3. Examples may include proprietary redistribution, white-labeling, embedding Nitrogen AI into another product or service, managed client deployments, or deployments where AGPLv3 obligations are not compatible with the organization's requirements.
 
-For those cases, contact hello@the-nitrogen.ai to discuss a separate commercial license.
+For those cases, contact nicholas.rossano@gmail.com to discuss a separate commercial license.
