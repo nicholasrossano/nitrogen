@@ -118,7 +118,7 @@ function HomePageContent() {
     file_size: doc.file_size ?? null,
     created_at: doc.created_at,
     source: 'evidence',
-    processing_status: doc.processing_status ?? null,
+    processing_status: doc.processing_status ?? undefined,
     processing_error: doc.processing_error ?? null,
   }), []);
 
