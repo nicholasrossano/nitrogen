@@ -32,88 +32,65 @@ The goal is not to replace domain expertise, but to make it easier to apply, ada
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Database**: PostgreSQL with pgvector for vector search and RAG embeddings
 - **Auth**: Firebase Authentication
-- **Deployment**:
-  - Frontend: Vercel
-  - Backend: Railway
-  - Database: Neon (serverless Postgres)
 
-## Quick Start
+## Quick Start (Local Development)
 
 ### Prerequisites
 
-- Docker & Docker Compose
+- Python 3.12+
+- Node.js 22+
+- PostgreSQL with pgvector (or a Neon database)
 - OpenAI API key
 
-### Setup
+### 1) Clone and configure environment
 
-1. Clone and configure:
 ```bash
 git clone https://github.com/nicholasrossano/nitrogen.git
 cd nitrogen
 cp .env.example .env
-# Edit .env with your OPENAI_API_KEY
 ```
 
-2. Start all services:
-```bash
-docker-compose up -d
-```
+Set at least `DATABASE_URL` and `OPENAI_API_KEY` in `.env`, and replace any placeholder values with your own credentials.
 
-3. Run database migrations:
-```bash
-docker-compose exec backend alembic upgrade head
-```
+`backend/.env` and `frontend/.env.local` are symlinked to the root `.env` in this repo.
 
-4. Seed the corpus (optional but recommended):
-```bash
-docker-compose exec backend python scripts/seed_corpus.py
-```
+### 2) Start backend
 
-5. Access the app:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
-### Local Development (without Docker)
-
-**Prerequisites:**
-- Python 3.12+ 
-- Node.js 22+
-- PostgreSQL with pgvector (or use Neon cloud database)
-
-**Backend:**
 ```bash
 cd backend
 pip install -r requirements.txt
-
-# Set up environment (copy from .env.example or use existing .env)
-# Required: DATABASE_URL, OPENAI_API_KEY
-
-# Run migrations
-alembic upgrade head
-
-# Start server on port 8000
-python -m uvicorn app.main:app --reload --port 8000
+python3 -m alembic upgrade head
+python3 -m uvicorn app.main:app --reload --port 8000
 ```
 
-**Frontend:**
+### 3) Start frontend
+
 ```bash
 cd frontend
 npm install
-
-# Start server on port 3000
 npm run dev
 ```
 
-**Important:** 
-- Frontend runs on `http://localhost:3000`
-- Backend runs on `http://localhost:8000`
-- CORS is configured to allow localhost:3000 and localhost:3001
-- If you get CORS errors, check that backend/.env has the correct CORS_ORIGINS
+### 4) Open the app
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+
+## Docker (Optional)
+
+If you prefer Docker-based local setup:
+
+```bash
+docker compose up -d
+docker compose exec backend alembic upgrade head
+```
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the PR process. Contributions require a signed [Contributor License Agreement](CLA.md) before merge. Check the [open issues](../../issues) for things to work on; issues tagged `good first issue` are a great starting point.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details. Contributions require a signed [Contributor License Agreement](CLA.md) before merge.
+
+Browse [open issues](https://github.com/nicholasrossano/nitrogen/issues) to get started.
 
 ## Security Checks
 
