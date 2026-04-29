@@ -2,6 +2,10 @@
 
 Thanks for your interest in contributing! This guide will help you get started.
 
+Nitrogen is open source under the [GNU Affero General Public License v3.0](LICENSE). Contributions are welcome, and contributors retain copyright in their work, but contributions require a signed [Contributor License Agreement](CLA.md) before they can be merged. The CLA lets Nitrogen keep the public project available under the AGPLv3 while also offering separate [commercial licenses](COMMERCIAL-LICENSE.md) for organizations that need terms outside the AGPLv3.
+
+Only submit code, documentation, data, designs, or other assets that you have the right to contribute. The AGPLv3 covers the software license; Nitrogen names, logos, and branding are covered separately by the [trademark guidelines](TRADEMARKS.md).
+
 ## Getting Started
 
 ### Prerequisites
@@ -14,12 +18,11 @@ Thanks for your interest in contributing! This guide will help you get started.
 ### Local Setup
 
 1. Fork and clone the repo
-2. Copy environment files:
+2. Copy the environment template:
    ```bash
    cp .env.example .env
-   cp frontend/.env.local.example frontend/.env.local
    ```
-3. Fill in your API keys and database URL in the `.env` files
+3. Fill in your API keys and database URL in `.env`
 4. Start the backend:
    ```bash
    cd backend
@@ -82,4 +85,4 @@ Please report security issues privately. See [SECURITY.md](SECURITY.md) for deta
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [AGPL-3.0](LICENSE).
+By contributing, you agree that your contributions may be distributed under the [AGPLv3](LICENSE) and under the additional terms described in the [Contributor License Agreement](CLA.md).
