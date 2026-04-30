@@ -418,7 +418,7 @@ All structural dividers use warm neutral tones, not blue.
 
 ## K) Buttons
 
-Three button classes are defined in `globals.css`. Always use these — never roll your own button styles.
+Global button/action classes are defined in `globals.css`. Always use these — never roll your own button styles.
 
 ### `btn-primary` — Primary action (accent fill on hover)
 Use for the main confirming action in any panel or widget: Export, Confirm, Generate, Submit.
@@ -447,6 +447,16 @@ Use for secondary actions: Cancel, Re-draft, Settings, less critical triggers.
 
 **Appearance**: `border border-stroke-subtle text-text-primary bg-surface`.
 
+### `btn-compact-neutral` — Compact card/header action
+Use for small always-visible actions inside cards or overview/header panels, especially refresh-style controls and short CTAs such as `View All`.
+
+```tsx
+<button className="btn-compact-neutral">Refresh</button>
+<button className="btn-compact-neutral">View All</button>
+```
+
+**Appearance**: fixed compact height (`h-7`), lightly rounded (`rounded-lg`), neutral border, white fill, `text-xs font-medium`, and accent border/text on hover. This is the standard shape for refresh-style card/header actions.
+
 ### `btn-danger` — Destructive
 Use only for irreversible destructive actions: Delete, Remove, Revoke.
 
@@ -457,10 +467,11 @@ Use only for irreversible destructive actions: Delete, Remove, Revoke.
 **Appearance**: red destructive treatment (`indicator-red`) with red border/text at rest and red fill on hover.
 
 ### Rules
-- **Never** create custom button styles with raw Tailwind when one of the three classes fits.
+- **Never** create custom button styles with raw Tailwind when one of the global classes fits.
 - **Disabled hover**: always add `:disabled:hover::before { opacity: 0 }` suppression — already included in the global classes.
 - Size overrides use Tailwind `!important` modifiers: `!px-4 !py-1.5` to make a smaller button, `!px-6 !py-3` for a larger one.
 - `w-full` makes any button full-width inside its container.
+- Compact card/header actions use `btn-compact-neutral` without additional size/radius overrides.
 - **Corner model by context**:
   - **Floating/standalone CTA** buttons keep the default capsule shape (`rounded-[20px]`).
   - **Embedded flow buttons** (inline with inputs, table rows, modal form actions — e.g. Share/Create buttons) should override to lightly rounded corners (`!rounded-lg` or `!rounded-md`).
