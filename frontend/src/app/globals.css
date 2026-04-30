@@ -310,8 +310,17 @@ body {
 /* Input field base style */
 .input-field {
   @apply w-full px-4 py-3 bg-surface border border-stroke-subtle rounded text-text-primary placeholder:text-text-tertiary;
-  @apply focus:border-text-tertiary focus:ring-1 focus:ring-text-tertiary/15 focus:outline-none;
+  @apply focus:border-accent focus:ring-0 focus:outline-none;
   @apply transition-colors duration-150;
+}
+
+/* Shared focus treatment for form fields (replaces browser default orange ring) */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-tint) 65%, transparent);
 }
 
 /* Hide scrollbar for textarea */
