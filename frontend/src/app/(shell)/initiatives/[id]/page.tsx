@@ -720,6 +720,19 @@ function InitiativePageContent() {
     });
   }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
 
+  const openAssumptionsTab = useCallback(() => {
+    setWorkspaceLaunchMode('idle');
+    setPanelOpen('modules', 'workspace', true);
+    setPanelOpen('modules', 'chat', false);
+    setActiveView('modules');
+    router.replace(`/initiatives/${initiativeId}?view=modules`);
+    openWorkspaceTab({
+      id: 'assumptions',
+      kind: 'assumptions',
+      title: 'Assumptions',
+    });
+  }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
+
   const openDecisionLogTab = useCallback(
     (context: { instanceId: string; moduleId: string; title: string }) => {
       setActiveView('modules');
@@ -929,6 +942,7 @@ function InitiativePageContent() {
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceModule={handleOpenWorkspaceModule}
+            onOpenAssumptions={openAssumptionsTab}
           />
         );
       }
@@ -955,6 +969,7 @@ function InitiativePageContent() {
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onOpenAssumptions={openAssumptionsTab}
         />
       );
     }
