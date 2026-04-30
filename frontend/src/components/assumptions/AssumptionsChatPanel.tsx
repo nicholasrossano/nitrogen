@@ -49,15 +49,9 @@ export function AssumptionsChatPanel({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void api.listAssumptions(initiativeId)
-      .then((allAssumptions) => {
+    void api.getAssumption(focusAssumptionId)
+      .then((assumption) => {
         if (cancelled) return;
-        const assumption = allAssumptions.find((row) => row.id === focusAssumptionId);
-        if (!assumption) {
-          setError('Selected assumption no longer exists');
-          setSelected(null);
-          return;
-        }
         setSelected(assumption);
         setDraftValue(formatValue(assumption.value, null));
         setDraftUnit(assumption.unit ?? '');
