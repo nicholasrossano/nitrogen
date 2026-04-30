@@ -185,7 +185,7 @@ export function InitiativeOverviewHeader({
               type="button"
               onClick={onRefresh}
               disabled={!canRefresh || isGenerating}
-              className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-stroke-subtle bg-white text-text-secondary transition-colors enabled:hover:border-accent enabled:hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-compact-neutral"
             >
               {isGenerating ? (
                 <>
@@ -226,14 +226,14 @@ export function InitiativeOverviewHeader({
               Reusable project values and claims used across modules and research.
             </p>
           </div>
-          <button type="button" className="btn-secondary !px-3 !py-1.5 text-xs" onClick={onViewAssumptions}>
-            View all assumptions
+          <button type="button" className="btn-compact-neutral" onClick={onViewAssumptions}>
+            View All
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-3 gap-3">
           <div>
-            <p className="text-xs text-text-tertiary">Tracked</p>
+            <p className="text-xs text-text-tertiary">Total</p>
             <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
               {assumptionsSummary?.total ?? '—'}
             </p>
@@ -242,12 +242,6 @@ export function InitiativeOverviewHeader({
             <p className="text-xs text-text-tertiary">Confirmed</p>
             <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
               {assumptionsSummary?.confirmed ?? '—'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-text-tertiary">Needs Review</p>
-            <p className="mt-1 text-xl font-semibold text-amber-700 tabular-nums">
-              {assumptionsSummary?.needs_review ?? '—'}
             </p>
           </div>
           <div>

@@ -408,6 +408,25 @@ textarea {
   transition: transform 100ms ease-out;
 }
 
+.btn-compact-neutral {
+  @apply inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-lg;
+  @apply whitespace-nowrap border border-stroke-subtle bg-white text-text-secondary;
+  @apply text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60;
+  transition: border-color 150ms ease-in-out, color 150ms ease-in-out, transform 100ms ease-out;
+}
+
+.btn-compact-neutral:hover {
+  @apply border-accent text-accent;
+}
+
+.btn-compact-neutral:disabled:hover {
+  @apply border-stroke-subtle text-text-secondary;
+}
+
+.btn-compact-neutral:active {
+  transform: scale(0.98);
+}
+
 .btn-danger {
   @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
   @apply border border-indicator-red text-indicator-red bg-surface font-medium text-sm;
