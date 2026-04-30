@@ -342,7 +342,7 @@ export interface ModuleDecisionLogReport {
   history_rows: DecisionLogHistoryRow[];
 }
 
-export type AssumptionStatus = 'confirmed' | 'needs_review' | 'missing' | 'rejected';
+export type AssumptionStatus = 'confirmed' | 'inferred' | 'assumed' | 'missing';
 export type AssumptionSourceType =
   | 'extraction'
   | 'user_input'
@@ -373,7 +373,8 @@ export interface Assumption {
 export interface AssumptionSummary {
   total: number;
   confirmed: number;
-  needs_review: number;
+  inferred: number;
+  assumed: number;
   missing: number;
   top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_modules'>>;
 }

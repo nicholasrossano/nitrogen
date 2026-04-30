@@ -26,8 +26,8 @@ from app.models.project_material import ProjectMaterial
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-ATTENTION_STATUSES = {"missing", "needs_review"}
-ACTIVE_STATUSES = {"confirmed", "needs_review", "missing"}
+ATTENTION_STATUSES = {"missing", "inferred", "assumed"}
+ACTIVE_STATUSES = {"confirmed", "inferred", "assumed", "missing"}
 SYSTEM_ACTOR = "system"
 MAX_PROMPT_ASSUMPTIONS = 12
 MAX_EXTRACTION_CHARS = 14000
@@ -89,6 +89,32 @@ def _actor_user_id(actor: AssumptionActor | None) -> str | None:
     return actor.user_id if actor and actor.user_id else None
 
 
+def normalize_assumption_status(status: str | None, *, default: str = "assumed") -> str:
+    normalized = (status or "").strip().lower()
+    mapping = {
+        "validated": "confirmed",
+        "confirmed": "confirmed",
+        "inferred": "inferred",
+        "assumed": "assumed",
+        "missing": "missing",
+        "needs_review": "inferred",
+        "rejected": "rejected",
+    }
+    return mapping.get(normalized, default)
+
+
+def infer_assumption_value_type(value: Any) -> str:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if value is None:
+        return "string"
+    if isinstance(value, (dict, list)):
+        return "text"
+    return "string"
+
+
 async def list_assumptions(
     db: AsyncSession,
     initiative_id: UUID,
@@ -97,7 +123,10 @@ async def list_assumptions(
     source_type: str | None = None,
     module: str | None = None,
 ) -> list[Assumption]:
-    stmt = select(Assumption).where(Assumption.initiative_id == initiative_id)
+    stmt = select(Assumption).where(
+        Assumption.initiative_id == initiative_id,
+        Assumption.status != "rejected",
+    )
     if status:
         stmt = stmt.where(Assumption.status == status)
     if source_type:
@@ -111,7 +140,10 @@ async def list_assumptions(
 
 
 async def get_assumption(db: AsyncSession, assumption_id: UUID) -> Assumption | None:
-    return await db.get(Assumption, assumption_id)
+    assumption = await db.get(Assumption, assumption_id)
+    if assumption is None or normalize_assumption_status(assumption.status) == "rejected":
+        return None
+    return assumption
 
 
 async def list_assumption_comments(
@@ -157,7 +189,7 @@ async def upsert_assumption(
     value_type: str | None = None,
     source_type: str,
     source_reference: dict[str, Any] | None = None,
-    status: str = "needs_review",
+    status: str = "assumed",
     used_in_modules: list[str] | None = None,
     actor: AssumptionActor | None = None,
     notes: str | None = None,
@@ -190,7 +222,7 @@ async def upsert_assumption(
         existing.value_type = value_type or existing.value_type or (definition.value_type if definition else "string")
         existing.source_type = source_type
         existing.source_reference = source_reference
-        existing.status = status
+        existing.status = normalize_assumption_status(status)
         existing.used_in_modules = sorted(set(existing.used_in_modules or []) | set(modules))
         existing.notes = notes if notes is not None else existing.notes
         existing.last_updated_by_user_id = _actor_user_id(actor)
@@ -207,7 +239,7 @@ async def upsert_assumption(
         value_type=value_type or (definition.value_type if definition else "string"),
         source_type=source_type,
         source_reference=source_reference,
-        status=status,
+        status=normalize_assumption_status(status),
         used_in_modules=modules,
         created_by_user_id=_actor_user_id(actor),
         created_by_email=_actor_email(actor),
@@ -291,10 +323,10 @@ def apply_assumptions_to_items(
     by_key = {
         normalize_assumption_key(a.get("key", "")): a
         for a in assumptions
-        if a.get("status") in {"confirmed", "needs_review"}
+        if normalize_assumption_status(a.get("status")) in {"confirmed", "inferred", "assumed"}
     }
     for assumption in assumptions:
-        if assumption.get("status") not in {"confirmed", "needs_review"}:
+        if normalize_assumption_status(assumption.get("status")) not in {"confirmed", "inferred", "assumed"}:
             continue
         definition = _definition_for_key(str(assumption.get("key") or ""))
         if definition is None:
@@ -318,7 +350,8 @@ def apply_assumptions_to_items(
         content["value"] = assumption.get("value")
         if assumption.get("unit") and not content.get("unit"):
             content["unit"] = assumption.get("unit")
-        content["status"] = "confirmed" if assumption.get("status") == "confirmed" else "needs_review"
+        normalized_status = normalize_assumption_status(assumption.get("status"))
+        content["status"] = normalized_status if normalized_status in {"confirmed", "inferred", "assumed"} else "assumed"
         content["source"] = "assumption"
         content["assumption_id"] = assumption.get("id")
         content["source_reference"] = assumption.get("source_reference")
@@ -334,7 +367,7 @@ async def sync_stage_assumptions(
     stage_id: str,
     stage_data: dict[str, Any] | None,
     actor: AssumptionActor,
-    status: str = "confirmed",
+    status: str = "assumed",
 ) -> list[Assumption]:
     if not stage_data:
         return []
@@ -346,21 +379,31 @@ async def sync_stage_assumptions(
         content = item.get("content") if isinstance(item, dict) else None
         if not isinstance(content, dict):
             continue
-        field_key = normalize_assumption_key(str(content.get("field_name") or ""))
+        field_key = normalize_assumption_key(str(content.get("field_name") or content.get("name") or ""))
+        if not field_key:
+            continue
         definition = _definition_for_module_field(field_key, module_id)
-        if definition is None or module_id not in definition.used_in_modules:
-            continue
         value = content.get("value")
-        if value in (None, ""):
-            continue
+        value_is_missing = value in (None, "")
+        effective_status = normalize_assumption_status(
+            content.get("status"),
+            default=("missing" if value_is_missing else status),
+        )
+        label = (
+            definition.label
+            if definition is not None
+            else str(content.get("variable") or content.get("label") or content.get("name") or field_key.replace("_", " ").title())
+        )
+        key = definition.key if definition is not None else field_key
+        value_type = definition.value_type if definition is not None else infer_assumption_value_type(value)
         assumption, _created = await upsert_assumption(
             db,
             initiative_id=initiative_id,
-            key=definition.key,
+            key=key,
             value=value,
-            label=definition.label,
-            unit=content.get("unit") or definition.unit,
-            value_type=definition.value_type,
+            label=label,
+            unit=content.get("unit") or (definition.unit if definition else None),
+            value_type=value_type,
             source_type="module",
             source_reference={
                 "module_id": module_id,
@@ -368,7 +411,7 @@ async def sync_stage_assumptions(
                 "field_name": field_key,
                 "variable": content.get("variable"),
             },
-            status=status,
+            status=effective_status,
             used_in_modules=[module_id],
             actor=actor,
             replace_confirmed=True,
@@ -394,12 +437,22 @@ async def sync_widget_assumptions(
             value = raw.get("value")
             unit = raw.get("unit")
             variable = raw.get("label") or key
+            item_status = raw.get("status")
         else:
             value = raw
             unit = None
             variable = key
+            item_status = None
         stage_data["items"].append(
-            {"content": {"field_name": key, "variable": variable, "value": value, "unit": unit}}
+            {
+                "content": {
+                    "field_name": key,
+                    "variable": variable,
+                    "value": value,
+                    "unit": unit,
+                    "status": item_status,
+                }
+            }
         )
     return await sync_stage_assumptions(
         db,
@@ -414,23 +467,29 @@ async def sync_widget_assumptions(
 
 async def build_summary(db: AsyncSession, initiative_id: UUID) -> dict[str, Any]:
     rows = await list_assumptions(db, initiative_id)
-    active_rows = [row for row in rows if row.status != "rejected"]
+    active_rows = [row for row in rows if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
+    status_counts = {"confirmed": 0, "inferred": 0, "assumed": 0, "missing": 0}
+    for row in active_rows:
+        normalized = normalize_assumption_status(row.status, default="assumed")
+        if normalized in status_counts:
+            status_counts[normalized] += 1
     top_attention = [
         row
         for row in active_rows
-        if row.status in ATTENTION_STATUSES
+        if normalize_assumption_status(row.status) in ATTENTION_STATUSES
     ][:5]
     return {
         "total": len(active_rows),
-        "confirmed": sum(1 for row in active_rows if row.status == "confirmed"),
-        "needs_review": sum(1 for row in active_rows if row.status == "needs_review"),
-        "missing": sum(1 for row in active_rows if row.status == "missing"),
+        "confirmed": status_counts["confirmed"],
+        "inferred": status_counts["inferred"],
+        "assumed": status_counts["assumed"],
+        "missing": status_counts["missing"],
         "top_attention": [
             {
                 "id": row.id,
                 "key": row.key,
                 "label": row.label,
-                "status": row.status,
+                "status": normalize_assumption_status(row.status, default="assumed"),
                 "used_in_modules": row.used_in_modules or [],
             }
             for row in top_attention
@@ -439,15 +498,16 @@ async def build_summary(db: AsyncSession, initiative_id: UUID) -> dict[str, Any]
 
 
 def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
-    active = [row for row in assumptions if row.status in ACTIVE_STATUSES]
+    active = [row for row in assumptions if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
     if not active:
         return ""
-    buckets: dict[str, list[str]] = {"confirmed": [], "needs_review": [], "missing": []}
+    buckets: dict[str, list[str]] = {"confirmed": [], "inferred": [], "assumed": [], "missing": []}
     for row in active[:MAX_PROMPT_ASSUMPTIONS]:
-        value = "missing" if row.status == "missing" else row.value
+        normalized_status = normalize_assumption_status(row.status, default="assumed")
+        value = "missing" if normalized_status == "missing" else row.value
         unit = f" {row.unit}" if row.unit else ""
         modules = f" ({', '.join(row.used_in_modules or [])})" if row.used_in_modules else ""
-        buckets[row.status].append(f"- {row.label}: {value}{unit}{modules}")
+        buckets[normalized_status].append(f"- {row.label}: {value}{unit}{modules}")
     parts = ["Project assumptions:"]
     for status, lines in buckets.items():
         if lines:
@@ -472,11 +532,11 @@ async def assumptions_as_context(db: AsyncSession, initiative_id: UUID) -> list[
             "value_type": row.value_type,
             "source_type": row.source_type,
             "source_reference": row.source_reference,
-            "status": row.status,
+            "status": normalize_assumption_status(row.status, default="assumed"),
             "used_in_modules": row.used_in_modules or [],
         }
         for row in rows
-        if row.status != "rejected"
+        if normalize_assumption_status(row.status) in ACTIVE_STATUSES
     ]
 
 
@@ -553,7 +613,7 @@ async def extract_assumptions_from_sources(
         "Extract only explicit reusable project assumptions from project materials. "
         "Be conservative. Return JSON with an 'assumptions' array. "
         "Each item must have key, value, optional unit, source_quote, and status. "
-        "Use status 'needs_review' unless the text is unquestionably direct."
+        "Use status 'inferred' unless the text is unquestionably direct."
     )
     user_prompt = (
         "Expected assumption config:\n"
@@ -608,7 +668,7 @@ async def extract_assumptions_from_sources(
                 "quote": raw.get("source_quote"),
                 "extracted_at": datetime.now(timezone.utc).isoformat(),
             },
-            status="needs_review",
+            status="inferred",
             used_in_modules=definition.used_in_modules,
             actor=actor if actor.email else AssumptionActor.system(),
         )
