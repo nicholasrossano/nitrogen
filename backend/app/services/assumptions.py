@@ -21,7 +21,6 @@ from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.assumption import Assumption
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance
 from app.models.project_material import ProjectMaterial
 
 logger = logging.getLogger(__name__)
