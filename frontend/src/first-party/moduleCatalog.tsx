@@ -1,4 +1,4 @@
-import { BarChart2, Calculator, Leaf, Map, Network, ShieldAlert, ShieldCheck, Sun, Users } from 'lucide-react';
+import { Calculator, Leaf, Map, Network, ShieldAlert, Sun, Users } from 'lucide-react';
 
 export interface ModuleOption {
   id: string;
@@ -47,24 +47,10 @@ export const ALL_MODULES: ModuleOption[] = [
     icon: <Network className="w-3.5 h-3.5" />,
   },
   {
-    id: 'esmp',
-    name: 'Environmental & Social Management Plan',
-    description: 'Draft an IFC-aligned ESMP for DFI submission',
-    icon: <ShieldCheck className="w-3.5 h-3.5" />,
-    beta: true,
-  },
-  {
     id: 'risk_assessment',
     name: 'Risk Assessment',
     description: 'Build a project risk register with mitigations and ratings',
     icon: <ShieldAlert className="w-3.5 h-3.5" />,
-  },
-  {
-    id: 'mel_plan',
-    name: 'Monitoring, Evaluation & Learning Plan',
-    description: 'Build a results framework and data collection plan',
-    icon: <BarChart2 className="w-3.5 h-3.5" />,
-    beta: true,
   },
 ];
 
@@ -86,6 +72,6 @@ export const MODULE_CATEGORIES: ModuleCategory[] = [
   { id: 'definition', name: 'Project Definition', moduleIds: ['stakeholder_assessment', 'implementation_plan'] },
   { id: 'feasibility', name: 'Feasibility & Option Analysis', moduleIds: ['lcoe_model', 'solar_estimate'] },
   { id: 'impact', name: 'Impact Assessment', moduleIds: ['carbon_model'] },
-  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['esmp', 'risk_assessment', 'mel_plan'] },
+  { id: 'compliance', name: 'Compliance & Delivery Readiness', moduleIds: ['risk_assessment'] },
 ];
 
