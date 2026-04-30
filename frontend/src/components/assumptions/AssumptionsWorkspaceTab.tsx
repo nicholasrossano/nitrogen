@@ -4,15 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
+import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import {
   api,
   type Assumption,
   type AssumptionSourceType,
   type AssumptionStatus,
 } from '@/lib/api';
+import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
 interface AssumptionsWorkspaceTabProps {
   initiativeId: string;
+  embedded?: boolean;
+  showDetailPanel?: boolean;
+  focusAssumptionId?: string | null;
+  onAssumptionSelectInChat?: (assumption: Assumption) => void;
 }
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
@@ -50,7 +56,13 @@ function statusClass(status: AssumptionStatus): string {
   return 'border-amber-200 bg-amber-50 text-amber-800';
 }
 
-export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTabProps) {
+export function AssumptionsWorkspaceTab({
+  initiativeId,
+  embedded = false,
+  showDetailPanel = true,
+  focusAssumptionId = null,
+  onAssumptionSelectInChat,
+}: AssumptionsWorkspaceTabProps) {
   const [rows, setRows] = useState<Assumption[]>([]);
   const [selected, setSelected] = useState<Assumption | null>(null);
   const [status, setStatus] = useState<'' | AssumptionStatus>('');
@@ -58,11 +70,9 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
   const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftValue, setDraftValue] = useState('');
   const [draftUnit, setDraftUnit] = useState('');
-  const [draftNotes, setDraftNotes] = useState('');
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -89,14 +99,42 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
   useEffect(() => {
     setDraftValue(selected ? formatValue(selected.value, null) : '');
     setDraftUnit(selected?.unit ?? '');
-    setDraftNotes(selected?.notes ?? '');
   }, [selected]);
+
+  useEffect(() => {
+    if (!focusAssumptionId) return;
+    const match = rows.find((row) => row.id === focusAssumptionId);
+    if (!match) return;
+    setSelected((current) => (current?.id === match.id ? current : match));
+  }, [focusAssumptionId, rows]);
 
   const moduleOptions = useMemo(() => {
     const modules = new Set<string>();
     rows.forEach((row) => row.used_in_modules.forEach((module) => modules.add(module)));
     return Array.from(modules).sort();
   }, [rows]);
+  const moduleFilterOptions = useMemo(
+    () => [
+      { value: '', label: 'All modules' },
+      ...moduleOptions.map((module) => ({ value: module, label: module.replace(/_/g, ' ') })),
+    ],
+    [moduleOptions],
+  );
+
+  const selectedValueText = selected ? formatValue(selected.value, null) : '';
+  const hasDraftChanges = Boolean(
+    selected && (
+      draftValue !== selectedValueText ||
+      draftUnit !== (selected.unit ?? '')
+    ),
+  );
+  const hasDraftValue = draftValue.trim() !== '' && draftValue.trim() !== '—';
+  const canConfirm = Boolean(
+    selected &&
+    hasDraftValue &&
+    (selected.status !== 'confirmed' || hasDraftChanges) &&
+    !saving,
+  );
 
   const columns: ReadOnlyDataTableColumn<Assumption>[] = [
     {
@@ -107,7 +145,13 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
         <button
           type="button"
           className="text-left font-medium text-text-primary enabled:hover:text-accent"
-          onClick={() => setSelected(row)}
+          onClick={() => {
+            if (onAssumptionSelectInChat) {
+              onAssumptionSelectInChat(row);
+              return;
+            }
+            setSelected(row);
+          }}
         >
           {row.label}
         </button>
@@ -144,7 +188,7 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
     }
   }, [selected]);
 
-  const handleSave = useCallback(async () => {
+  const handleConfirm = useCallback(async () => {
     if (!selected) return;
     let parsedValue: any = draftValue;
     if (selected.value_type === 'number' || selected.value_type === 'percent' || selected.value_type === 'currency') {
@@ -154,55 +198,59 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
     await updateSelected({
       value: parsedValue,
       unit: draftUnit || null,
-      notes: draftNotes || null,
-      status: selected.status === 'missing' ? 'needs_review' : selected.status,
+      status: 'confirmed',
     });
-  }, [draftNotes, draftUnit, draftValue, selected, updateSelected]);
+  }, [draftUnit, draftValue, selected, updateSelected]);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setError(null);
-    try {
-      await api.refreshAssumptions(initiativeId);
-      await loadRows();
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to refresh assumptions');
-    } finally {
-      setRefreshing(false);
-    }
-  }, [initiativeId, loadRows]);
+  const handleCancel = useCallback(() => {
+    if (!selected) return;
+    setDraftValue(formatValue(selected.value, null));
+    setDraftUnit(selected.unit ?? '');
+  }, [selected]);
 
   if (loading) return <WorkspaceTabLoader />;
 
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className={`h-full overflow-y-auto ${embedded ? 'p-0' : 'p-6'}`}>
+      <div className={`mx-auto grid max-w-7xl gap-6 ${showDetailPanel ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
         <div className="space-y-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
-              <p className="mt-1 text-sm text-text-tertiary">
-                Project-wide values and claims used by modules, forecasts, and outputs.
-              </p>
+          {!embedded ? (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
+                <p className="mt-1 text-sm text-text-tertiary">
+                  Project-wide values and claims used by modules, forecasts, and outputs.
+                </p>
+                {!showDetailPanel ? (
+                  <p className="mt-1 text-xs text-text-tertiary">
+                    Select an assumption to open it in chat.
+                  </p>
+                ) : null}
+              </div>
             </div>
-            <button type="button" className="btn-secondary !px-3 !py-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
-              {refreshing ? 'Refreshing...' : 'Refresh extraction'}
-            </button>
-          </div>
+          ) : null}
 
           {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
 
           <div className="flex flex-wrap gap-2">
-            <select className="rounded-lg border border-stroke-subtle bg-white px-3 py-2 text-sm text-text-secondary" value={status} onChange={(event) => setStatus(event.target.value as '' | AssumptionStatus)}>
-              {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <select className="rounded-lg border border-stroke-subtle bg-white px-3 py-2 text-sm text-text-secondary" value={sourceType} onChange={(event) => setSourceType(event.target.value as '' | AssumptionSourceType)}>
-              {SOURCE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <select className="rounded-lg border border-stroke-subtle bg-white px-3 py-2 text-sm text-text-secondary" value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)}>
-              <option value="">All modules</option>
-              {moduleOptions.map((module) => <option key={module} value={module}>{module.replace(/_/g, ' ')}</option>)}
-            </select>
+            <CustomDropdown
+              value={status}
+              onChange={(value) => setStatus(value as '' | AssumptionStatus)}
+              options={STATUS_OPTIONS}
+              ariaLabel="Filter assumptions by status"
+            />
+            <CustomDropdown
+              value={sourceType}
+              onChange={(value) => setSourceType(value as '' | AssumptionSourceType)}
+              options={SOURCE_OPTIONS}
+              ariaLabel="Filter assumptions by source type"
+            />
+            <CustomDropdown
+              value={moduleFilter}
+              onChange={setModuleFilter}
+              options={moduleFilterOptions}
+              ariaLabel="Filter assumptions by module"
+            />
           </div>
 
           <ReadOnlyDataTable
@@ -220,7 +268,7 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
           />
         </div>
 
-        <aside className="rounded-xl border border-divider bg-white p-4">
+        {showDetailPanel ? <aside className="rounded-xl border border-divider bg-white p-4">
           {selected ? (
             <div className="space-y-4">
               <div>
@@ -239,28 +287,26 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
                 <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
               </label>
 
-              <label className="block">
-                <span className="text-xs font-medium text-text-tertiary">Notes</span>
-                <textarea className="mt-1 min-h-[90px] w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftNotes} onChange={(event) => setDraftNotes(event.target.value)} />
-              </label>
-
-              <div className="space-y-2 text-xs text-text-tertiary">
-                <p>Source: {selected.source_type.replace('_', ' ')}</p>
-                <p>Updated by: {selected.last_updated_by_email || selected.created_by_email || 'system'}</p>
-                <p>Modules: {selected.used_in_modules.join(', ') || '—'}</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn-primary !px-3 !py-1.5 text-xs" onClick={handleSave} disabled={saving}>
-                  Save
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+                  onClick={handleCancel}
+                  disabled={saving || !hasDraftChanges}
+                >
+                  Cancel
                 </button>
-                <button type="button" className="btn-secondary !px-3 !py-1.5 text-xs" onClick={() => updateSelected({ status: 'confirmed' })} disabled={saving}>
+                <button
+                  type="button"
+                  className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+                  onClick={handleConfirm}
+                  disabled={!canConfirm}
+                >
                   Confirm
                 </button>
-                <button type="button" className="btn-danger !px-3 !py-1.5 text-xs" onClick={() => updateSelected({ status: 'rejected' })} disabled={saving}>
-                  Reject
-                </button>
               </div>
+
+              <AssumptionCommentsThread assumptionId={selected.id} />
             </div>
           ) : (
             <div className="flex h-full min-h-[260px] items-center justify-center text-center">
@@ -270,7 +316,7 @@ export function AssumptionsWorkspaceTab({ initiativeId }: AssumptionsWorkspaceTa
               </div>
             </div>
           )}
-        </aside>
+        </aside> : null}
       </div>
     </div>
   );
