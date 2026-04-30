@@ -13,6 +13,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.module_instance import ModuleInstance, ModuleInstanceStatus
+from app.models.initiative import Initiative
+from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_widget_assumptions
 
 
 # ── Instance resolution ────────────────────────────────────────────
@@ -95,10 +97,19 @@ async def get_or_create_instance(
     chat_id: uuid.UUID | None = None,
 ) -> ModuleInstance:
     """Ensure a module instance exists for this (initiative, tool, chat)."""
-    return await _resolve_instance(
+    inst = await _resolve_instance(
         db, initiative_id, tool_id,
         chat_id=chat_id, user_id=user_id,
     )
+    initiative = await db.get(Initiative, initiative_id)
+    if initiative is not None:
+        await ensure_expected_assumptions(
+            db,
+            initiative,
+            module_ids=[tool_id],
+            actor=AssumptionActor(user_id=user_id, email=user_id),
+        )
+    return inst
 
 
 async def save_deliverable(
@@ -127,6 +138,14 @@ async def save_deliverable(
     inst.title = title
     inst.status = ModuleInstanceStatus.READY
     inst.updated_at = datetime.now(timezone.utc)
+    if isinstance(content, dict):
+        await sync_widget_assumptions(
+            db,
+            initiative_id=initiative_id,
+            module_id=tool_id,
+            widget_data=content,
+            actor=AssumptionActor(user_id=user_id, email=user_id),
+        )
     await db.flush()
     return inst
 

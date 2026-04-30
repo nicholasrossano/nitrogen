@@ -18,7 +18,7 @@ from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.log_sanitizer import sanitize_text, sanitize_exception  # noqa: E402
 import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import initiatives, onboarding, evidence, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow, workspaces  # noqa: E402
+from app.api import initiatives, onboarding, evidence, exports, corpus, module_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, module_workflow, workspaces, assumptions  # noqa: E402
 from app.mcp import get_mcp_http_app  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
@@ -178,6 +178,7 @@ app.include_router(exports.router, prefix="/api/v1", tags=["exports"])
 app.include_router(corpus.router, prefix="/api/v1", tags=["corpus"])
 app.include_router(module_catalog.router, prefix="/api/v1", tags=["modules"])
 app.include_router(module_workflow.router, prefix="/api/v1", tags=["module-workflow"])
+app.include_router(assumptions.router, prefix="/api/v1", tags=["assumptions"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(project_plan.router, prefix="/api/v1", tags=["project-plan"])
 app.include_router(lcoe.router, prefix="/api/v1", tags=["lcoe"])

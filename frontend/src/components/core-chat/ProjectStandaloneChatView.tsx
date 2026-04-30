@@ -98,6 +98,8 @@ interface ProjectChatSurfaceProps {
   onBeforeSendMessage?: () => void;
   /** Optional readiness progress header shown in overview mode */
   readinessProgress?: ReadinessProgressData | null;
+  /** Open the project assumptions workspace tab from overview. */
+  onOpenAssumptions?: () => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -161,6 +163,7 @@ export function ProjectChatSurface({
   projectContext = null,
   onBeforeSendMessage,
   readinessProgress = null,
+  onOpenAssumptions,
 }: ProjectChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -894,6 +897,7 @@ export function ProjectChatSurface({
                 errorMessage={overviewError}
                 canRefresh={canRefreshOverview}
                 onRefresh={handleGenerateOverview}
+                onViewAssumptions={onOpenAssumptions}
               />
             ) : null
           ) : undefined)}

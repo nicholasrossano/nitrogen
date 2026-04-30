@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
+import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { EditorSidePanel } from './EditorSidePanel';
@@ -17,6 +18,7 @@ export type WorkspacePanelTab =
   | { id: 'chat-artifacts'; kind: 'artifacts'; title: 'Chat Outputs' }
   | { id: string; kind: 'module'; title: string; instanceId: string; moduleId: string }
   | { id: string; kind: 'decision-log'; title: string; moduleInstanceId: string; moduleId?: string }
+  | { id: string; kind: 'assumptions'; title: string }
   | { id: string; kind: 'document'; title: string; citation: ResearchPanelCitation };
 
 export interface FrameworkPlanModuleOption {
@@ -139,6 +141,10 @@ export function ProjectWorkspaceEditorPanel({
 
     if (tab.kind === 'decision-log') {
       return <DecisionLogWorkspaceTab moduleInstanceId={tab.moduleInstanceId} />;
+    }
+
+    if (tab.kind === 'assumptions') {
+      return <AssumptionsWorkspaceTab initiativeId={initiativeId} />;
     }
 
     if (tab.kind === 'document') {

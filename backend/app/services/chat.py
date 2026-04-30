@@ -21,6 +21,7 @@ from app.services.tiered_retrieval import (
     SourceType,
     TieredRetrievalService,
 )
+from app.services.assumptions import format_assumptions_for_initiative_prompt
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -330,7 +331,7 @@ class ChatService:
                 await on_research_step(step_id, label, status)
 
         # Step 1: corpus search (if enabled) + tool planning run in parallel (independent)
-        search_query = await self._build_search_query(user_message, history)
+        search_query = await self._build_search_query(user_message, history, project_context=project_context)
         external_search_query = await self._build_external_search_query(
             user_message,
             history,
@@ -1249,9 +1250,12 @@ class ChatService:
         self,
         user_message: str,
         history: list[dict[str, str]],
+        project_context: str | None = None,
     ) -> str:
         """Distill the user message + recent history into a focused corpus search query."""
         if len(history) <= 2:
+            if project_context and "Project assumptions:" in project_context:
+                return f"{user_message}\n{project_context[:1200]}"
             return user_message
         try:
             recent = history[-6:] if len(history) > 6 else history
@@ -1265,12 +1269,17 @@ class ChatService:
                         "content": (
                             "Rewrite the user's latest message as a concise search query "
                             "that captures full intent given the conversation context. "
-                            "Return ONLY the query, nothing else. Max 30 words."
+                            "Use confirmed project assumptions as authoritative context, "
+                            "and include missing/needs-review assumption labels only when they "
+                            "are directly relevant. Return ONLY the query, nothing else. Max 40 words."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": f"Conversation:\n{context}\n\nLatest message: {user_message}",
+                        "content": (
+                            f"Project context:\n{project_context or 'None'}\n\n"
+                            f"Conversation:\n{context}\n\nLatest message: {user_message}"
+                        ),
                     },
                 ],
                 temperature=0,
@@ -2301,6 +2310,13 @@ class ChatService:
         if initiative.goal:
             parts.append(f"- Goal: {initiative.goal}")
         return "\n".join(parts) if parts else ""
+
+    async def build_project_context_with_assumptions(self, initiative) -> str:
+        base = self._build_project_context(initiative)
+        assumptions_text = await format_assumptions_for_initiative_prompt(self.db, initiative.id)
+        if not assumptions_text:
+            return base
+        return f"{base}\n{assumptions_text}" if base else assumptions_text
 
     @staticmethod
     def _chat_history_to_dicts(chat_history: list | None) -> list[dict[str, str]]:

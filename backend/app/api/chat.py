@@ -20,6 +20,7 @@ from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
 from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
+from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services import module_service
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
@@ -40,7 +41,7 @@ def _log_chat_stream_debug(event: str, **fields) -> None:
     logger.info("[chat-stream-debug] %s %s", event, serialized)
 
 
-def _build_project_context(initiative: Initiative) -> str:
+def _build_project_context(initiative: Initiative, assumptions_text: str | None = None) -> str:
     """Build a project context string to inject into the research assistant."""
     parts = []
     if initiative.title:
@@ -55,6 +56,8 @@ def _build_project_context(initiative: Initiative) -> str:
         parts.append(f"- Selected tools/frameworks: {', '.join(initiative.selected_tools)}")
     if initiative.goal:
         parts.append(f"- Goal: {initiative.goal}")
+    if assumptions_text:
+        parts.append(assumptions_text)
     return "\n".join(parts) if parts else ""
 
 
@@ -561,9 +564,10 @@ async def chat_stream(
                 for cid in data.compare_initiative_ids:
                     try:
                         initiative, _role = await get_initiative_with_role(db, cid, user)
+                        assumptions_text = await format_assumptions_for_initiative_prompt(db, initiative.id)
                         compare_contexts.append({
                             "initiative_id": str(initiative.id),
-                            "project_context": _build_project_context(initiative),
+                            "project_context": _build_project_context(initiative, assumptions_text),
                             "title": initiative.title or "Untitled Project",
                         })
                     except (HTTPException, Exception) as e:
@@ -598,7 +602,8 @@ async def chat_stream(
                         verified_initiative, _role = await get_initiative_with_role(
                             db, data.initiative_id, user
                         )
-                        project_context = _build_project_context(verified_initiative)
+                        assumptions_text = await format_assumptions_for_initiative_prompt(db, verified_initiative.id)
+                        project_context = _build_project_context(verified_initiative, assumptions_text)
                     except HTTPException:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
                         return
@@ -658,7 +663,8 @@ async def chat_stream(
                             extracted,
                         )
                         if updated:
-                            project_context = _build_project_context(verified_initiative)
+                            assumptions_text = await format_assumptions_for_initiative_prompt(db, verified_initiative.id)
+                            project_context = _build_project_context(verified_initiative, assumptions_text)
 
             supplemental_project_context = (data.project_context or "").strip()
             if supplemental_project_context:

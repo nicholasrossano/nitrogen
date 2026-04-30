@@ -342,6 +342,67 @@ export interface ModuleDecisionLogReport {
   history_rows: DecisionLogHistoryRow[];
 }
 
+export type AssumptionStatus = 'confirmed' | 'needs_review' | 'missing' | 'rejected';
+export type AssumptionSourceType =
+  | 'extraction'
+  | 'user_input'
+  | 'module'
+  | 'default'
+  | 'missing_placeholder'
+  | 'model_candidate';
+
+export interface Assumption {
+  id: string;
+  initiative_id: string;
+  key: string;
+  label: string;
+  value: any;
+  unit: string | null;
+  value_type: 'number' | 'string' | 'boolean' | 'percent' | 'currency' | 'text';
+  source_type: AssumptionSourceType;
+  source_reference: Record<string, any> | null;
+  status: AssumptionStatus;
+  used_in_modules: string[];
+  notes: string | null;
+  created_by_email: string | null;
+  last_updated_by_email: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssumptionSummary {
+  total: number;
+  confirmed: number;
+  needs_review: number;
+  missing: number;
+  top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_modules'>>;
+}
+
+export interface AssumptionCreateInput {
+  key: string;
+  label?: string | null;
+  value?: any;
+  unit?: string | null;
+  value_type?: Assumption['value_type'] | null;
+  source_type?: AssumptionSourceType;
+  source_reference?: Record<string, any> | null;
+  status?: AssumptionStatus;
+  used_in_modules?: string[];
+  notes?: string | null;
+}
+
+export interface AssumptionUpdateInput {
+  label?: string;
+  value?: any;
+  unit?: string | null;
+  value_type?: Assumption['value_type'];
+  source_type?: AssumptionSourceType;
+  source_reference?: Record<string, any> | null;
+  status?: AssumptionStatus;
+  used_in_modules?: string[];
+  notes?: string | null;
+}
+
 export interface SourceCitation {
   source_type: 'corpus' | 'evidence' | 'openalex' | 'web' | 'llm_estimate';
   source_title: string;
@@ -1520,6 +1581,41 @@ export const api = {
   getModuleDecisionLog: (instanceId: string) => {
     return fetchApi<ModuleDecisionLogReport>(`/api/v1/module-workflow/${instanceId}/decision-log`);
   },
+
+  getAssumptionsSummary: (initiativeId: string) =>
+    fetchApi<AssumptionSummary>(`/api/v1/initiatives/${initiativeId}/assumptions/summary`),
+
+  listAssumptions: (
+    initiativeId: string,
+    filters?: { status?: AssumptionStatus | ''; source_type?: AssumptionSourceType | ''; module?: string },
+  ) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.source_type) params.set('source_type', filters.source_type);
+    if (filters?.module) params.set('module', filters.module);
+    const query = params.toString();
+    return fetchApi<Assumption[]>(
+      `/api/v1/initiatives/${initiativeId}/assumptions${query ? `?${query}` : ''}`,
+    );
+  },
+
+  createAssumption: (initiativeId: string, data: AssumptionCreateInput) =>
+    fetchApi<Assumption>(`/api/v1/initiatives/${initiativeId}/assumptions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateAssumption: (assumptionId: string, data: AssumptionUpdateInput) =>
+    fetchApi<Assumption>(`/api/v1/assumptions/${assumptionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  refreshAssumptions: (initiativeId: string) =>
+    fetchApi<{ created: number; updated: number; assumptions: Assumption[] }>(
+      `/api/v1/initiatives/${initiativeId}/assumptions/refresh`,
+      { method: 'POST' },
+    ),
 
   exportModuleDecisionLogXlsx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();

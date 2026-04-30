@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Files, Layers3, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
-import { api, type Initiative } from '@/lib/api';
+import { Files, Layers3, ListChecks, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
+import { api, type AssumptionSummary, type Initiative } from '@/lib/api';
 import type { ReadinessProgressData } from '@/components/ui/ReadinessProgressBar';
 import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
 
@@ -18,6 +18,7 @@ interface InitiativeOverviewHeaderProps {
   errorMessage: string | null;
   canRefresh: boolean;
   onRefresh: () => void;
+  onViewAssumptions?: () => void;
 }
 
 function formatProjectType(value: string | null): string | null {
@@ -59,6 +60,7 @@ export function InitiativeOverviewHeader({
   errorMessage,
   canRefresh,
   onRefresh,
+  onViewAssumptions,
 }: InitiativeOverviewHeaderProps) {
   const title = initiative.title || 'Untitled initiative';
   const projectType = formatProjectType(initiative.project_type);
@@ -67,6 +69,7 @@ export function InitiativeOverviewHeader({
   const [collaboratorsCount, setCollaboratorsCount] = useState<number | null>(
     () => collaboratorsCountCache.get(initiative.id) ?? null,
   );
+  const [assumptionsSummary, setAssumptionsSummary] = useState<AssumptionSummary | null>(null);
 
   useEffect(() => {
     const cachedCount = collaboratorsCountCache.get(initiative.id);
@@ -101,6 +104,20 @@ export function InitiativeOverviewHeader({
       cancelled = true;
     };
   }, [initiative.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getAssumptionsSummary(initiative.id)
+      .then((summary) => {
+        if (!cancelled) setAssumptionsSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setAssumptionsSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initiative.id, initiative.updated_at]);
 
   return (
     <div className="w-full">
@@ -196,6 +213,66 @@ export function InitiativeOverviewHeader({
         <FootprintBox label="Collaborators" value={collaboratorsCount} Icon={Users} />
         <FootprintBox label="Modules Created" value={modulesCreated} Icon={Layers3} />
         <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
+      </div>
+
+      <div className="mt-4 rounded-xl border border-black/[0.05] bg-white px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <ListChecks className="w-3.5 h-3.5" />
+              Assumptions
+            </div>
+            <p className="mt-1 text-sm text-text-tertiary">
+              Reusable project values and claims used across modules and research.
+            </p>
+          </div>
+          <button type="button" className="btn-secondary !px-3 !py-1.5 text-xs" onClick={onViewAssumptions}>
+            View all assumptions
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-text-tertiary">Tracked</p>
+            <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
+              {assumptionsSummary?.total ?? '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-text-tertiary">Confirmed</p>
+            <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
+              {assumptionsSummary?.confirmed ?? '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-text-tertiary">Needs Review</p>
+            <p className="mt-1 text-xl font-semibold text-amber-700 tabular-nums">
+              {assumptionsSummary?.needs_review ?? '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-text-tertiary">Missing</p>
+            <p className="mt-1 text-xl font-semibold text-red-500 tabular-nums">
+              {assumptionsSummary?.missing ?? '—'}
+            </p>
+          </div>
+        </div>
+
+        {assumptionsSummary?.top_attention?.length ? (
+          <div className="mt-3 border-t border-divider pt-3">
+            <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Needs attention</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {assumptionsSummary.top_attention.map((item) => (
+                <span
+                  key={item.id}
+                  className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
+                >
+                  {item.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
