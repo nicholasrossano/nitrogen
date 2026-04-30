@@ -53,12 +53,12 @@ def _slugify(text: str) -> str:
     return text[:80].strip('-') or 'project'
 
 
-async def _generate_unique_slug(db: AsyncSession, workspace_id, title: str | None) -> str:
-    """Return a slug unique within the workspace namespace."""
+async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | None) -> str:
+    """Return a slug unique for the owner, matching the current DB constraint."""
     base = _slugify(title) if title else 'project'
     result = await db.execute(
         select(Initiative.slug).where(
-            Initiative.workspace_id == workspace_id,
+            Initiative.user_id == user_id,
             Initiative.slug.like(f"{base}%"),
         )
     )
@@ -248,7 +248,7 @@ async def create_initiative(
     """Create a new initiative and start the intake process"""
     await ensure_user_exists(db, user)
     workspace, _membership = await resolve_workspace_for_user(db, user.uid, data.workspace_id)
-    slug = await _generate_unique_slug(db, workspace.id, data.title)
+    slug = await _generate_unique_slug(db, user.uid, data.title)
     initiative = Initiative(
         user_id=user.uid,
         workspace_id=workspace.id,
