@@ -63,6 +63,8 @@ export interface ConversationViewProps {
   topContentMode?: 'inline' | 'panel';
   /** Apply a proposed model value to its backing module workflow. */
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
+  /** Show file attachment controls in the composer */
+  showAttachments?: boolean;
 }
 
 function preprocessMath(content: string): string {
@@ -111,6 +113,7 @@ export function ConversationView({
   topContent,
   topContentMode = 'inline',
   onApplyProposedValue,
+  showAttachments = true,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -269,7 +272,7 @@ export function ConversationView({
           <div
             className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
           >
-            {(draftTag || inputChips || attachedFiles.length > 0) && (
+            {(draftTag || inputChips || (showAttachments && attachedFiles.length > 0)) && (
               <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
                 {draftTag && (
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
@@ -290,7 +293,7 @@ export function ConversationView({
                   </span>
                 )}
                 {inputChips}
-                {attachedFiles.map((file, i) => (
+                {showAttachments && attachedFiles.map((file, i) => (
                   <span
                     key={i}
                     className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
@@ -330,23 +333,27 @@ export function ConversationView({
                 {extraInputActions}
               </div>
               <div className="flex items-center gap-1.5">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileChange}
-                  aria-label="Attach files"
-                />
-                <button
-                  type="button"
-                  disabled={sending}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                  aria-label="Attach files"
-                >
-                  <Paperclip className="w-[13px] h-[13px]" />
-                </button>
+                {showAttachments && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                      aria-label="Attach files"
+                    />
+                    <button
+                      type="button"
+                      disabled={sending}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                      aria-label="Attach files"
+                    >
+                      <Paperclip className="w-[13px] h-[13px]" />
+                    </button>
+                  </>
+                )}
                 <button
                   type="submit"
                   disabled={sending || uploading || !input.trim()}

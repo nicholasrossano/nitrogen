@@ -52,3 +52,36 @@ class Assumption(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+class AssumptionComment(Base):
+    """User comment attached to a project assumption."""
+
+    __tablename__ = "assumption_comments"
+
+    __table_args__ = (
+        Index("ix_assumption_comments_assumption_created", "assumption_id", "created_at"),
+        Index("ix_assumption_comments_initiative_created", "initiative_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    assumption_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assumptions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    initiative_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(255))
+    created_by_email: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

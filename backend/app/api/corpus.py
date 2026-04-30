@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, MockUser
 from app.core.storage import get_uploads_storage
 from app.core.filename_utils import safe_content_disposition, validate_file_magic
+from app.core.upload_types import content_type_for_file_type, resolve_document_file_type
 from app.models.corpus import CorpusDocument, CorpusChunk
 from app.schemas.corpus import (
     CorpusDocumentResponse,
@@ -16,7 +17,9 @@ from app.schemas.corpus import (
     CorpusTextInput,
 )
 from app.services.document_parser import DocumentParserService
+from app.services.document_conversion import DocumentConversionError, prepare_uploaded_document
 from app.services.embeddings import EmbeddingsService
+from app.services.evidence_processing import parse_file_to_chunks
 from app.core.rate_limit import limiter
 
 router = APIRouter()
@@ -91,12 +94,11 @@ async def add_corpus_document(
     if not title:
         title = file.filename or "Untitled"
     
-    # Validate file type
-    allowed_types = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
-    if file.content_type not in allowed_types:
+    file_type = resolve_document_file_type(file.content_type, file.filename)
+    if not file_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be PDF or DOCX",
+            detail="File must be PDF, DOCX, PPTX, Excel, Pages, or Keynote",
         )
     
     parser = DocumentParserService()
@@ -109,24 +111,25 @@ async def add_corpus_document(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File size exceeds 50 MB limit",
         )
-    if not validate_file_magic(content, file.content_type or ""):
+    validation_content_type = file.content_type or content_type_for_file_type(file_type) or ""
+    if not validate_file_magic(content, validation_content_type):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File content does not match declared type",
         )
-    storage_path = await storage.save(content, file.filename, folder="corpus")
-    
+
+    try:
+        prepared = prepare_uploaded_document(content, file.filename, file_type)
+    except DocumentConversionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    storage_path = await storage.save(prepared.content, prepared.filename, folder="corpus")
+
     # Parse document and build chunk tuples: (plain, html_or_none, page_or_none)
-    if file.content_type == "application/pdf":
-        file_type = "pdf"
-        pages = parser.parse_pdf_pages(content)
-        page_chunks = parser.chunk_pdf_pages(pages)
-        chunk_tuples = [(c, None, pg) for c, pg in page_chunks]
-    else:
-        file_type = "docx"
-        html = parser.parse_docx_html(content)
-        html_chunks = parser.chunk_html(html)
-        chunk_tuples = [(plain, h, None) for plain, h in html_chunks]
+    chunk_tuples = parse_file_to_chunks(parser, prepared.content, prepared.file_type)
     
     # Parse metadata if provided
     import json
@@ -141,7 +144,7 @@ async def add_corpus_document(
     corpus_doc = CorpusDocument(
         title=title,
         source=source,
-        file_type=file_type,
+        file_type=prepared.file_type,
         storage_path=storage_path,
         doc_metadata=metadata,
     )
@@ -268,6 +271,7 @@ CORPUS_CONTENT_TYPE_MAP = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "xls": "application/vnd.ms-excel",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
 

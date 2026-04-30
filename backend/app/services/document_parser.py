@@ -68,6 +68,34 @@ class DocumentParserService:
 
         return "\n\n".join(sheet_parts)
 
+    def parse_pptx(self, content: bytes) -> str:
+        """Parse PPTX presentation content to plain text."""
+        from pptx import Presentation
+
+        presentation = Presentation(io.BytesIO(content))
+        slide_parts: list[str] = []
+
+        for idx, slide in enumerate(presentation.slides, start=1):
+            text_parts: list[str] = []
+            for shape in slide.shapes:
+                text = getattr(shape, "text", "")
+                if text and text.strip():
+                    text_parts.append(text.strip())
+
+                if getattr(shape, "has_table", False):
+                    rows = []
+                    for row in shape.table.rows:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        if any(cells):
+                            rows.append("\t".join(cells))
+                    if rows:
+                        text_parts.append("\n".join(rows))
+
+            if text_parts:
+                slide_parts.append(f"[Slide {idx}]\n" + "\n\n".join(text_parts))
+
+        return "\n\n".join(slide_parts)
+
     # ------------------------------------------------------------------
     # Rich (HTML) extraction – for content_html column
     # ------------------------------------------------------------------
@@ -105,6 +133,42 @@ class DocumentParserService:
                 table_html += f"<tr>{cells}</tr>\n"
             table_html += "</table>"
             html_parts.append(table_html)
+
+        return "\n".join(html_parts)
+
+    def parse_pptx_html(self, content: bytes) -> str:
+        """Convert PPTX slide text to simple HTML sections."""
+        from pptx import Presentation
+
+        presentation = Presentation(io.BytesIO(content))
+        html_parts: list[str] = []
+
+        for idx, slide in enumerate(presentation.slides, start=1):
+            slide_fragments = [f"<h3>Slide {idx}</h3>"]
+            for shape in slide.shapes:
+                text = getattr(shape, "text", "")
+                if text and text.strip():
+                    paragraphs = [
+                        f"<p>{_esc(line.strip())}</p>"
+                        for line in text.splitlines()
+                        if line.strip()
+                    ]
+                    slide_fragments.extend(paragraphs)
+
+                if getattr(shape, "has_table", False):
+                    table_html = "<table>\n"
+                    for row_idx, row in enumerate(shape.table.rows):
+                        tag = "th" if row_idx == 0 else "td"
+                        cells = "".join(
+                            f"<{tag}>{_esc(cell.text.strip())}</{tag}>"
+                            for cell in row.cells
+                        )
+                        table_html += f"<tr>{cells}</tr>\n"
+                    table_html += "</table>"
+                    slide_fragments.append(table_html)
+
+            if len(slide_fragments) > 1:
+                html_parts.append("\n".join(slide_fragments))
 
         return "\n".join(html_parts)
 

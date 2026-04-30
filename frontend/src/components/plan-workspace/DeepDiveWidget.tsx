@@ -1,7 +1,8 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, X, Zap } from 'lucide-react';
+import { AlertCircle, Zap } from 'lucide-react';
+import { ChatPanelWidgetShell } from '@/components/core-chat/ChatPanelWidgetShell';
 import { PageLoader } from '@/components/ui/PageLoader';
 
 import { DeepDiveSourcesMenu } from './DeepDiveSourcesMenu';
@@ -82,64 +83,23 @@ export function DeepDiveWidget({
   const isPanelLayout = layoutMode === 'panel' && !collapsed;
 
   return (
-    <div
-      className={
-        isPanelLayout
-          ? 'flex h-full min-h-0 flex-col bg-surface-subtle/40'
-          : 'border-b border-divider bg-surface-subtle/40'
+    <ChatPanelWidgetShell
+      icon={<Zap className="h-3 w-3 text-accent" />}
+      eyebrow={groupName}
+      title={item.title}
+      collapsed={collapsed}
+      layoutMode={layoutMode}
+      onCollapsedChange={(nextCollapsed) => setCollapsed(nextCollapsed)}
+      onClose={onClose}
+      headerActions={result && citationSources.length > 0 ? (
+        <DeepDiveSourcesMenu sources={citationSources} onOpenDocument={onOpenDocument} />
+      ) : null}
+      bodyClassName={
+        loading && isPanelLayout
+          ? 'flex-1 min-h-0 flex items-start justify-center px-4 pt-[33%]'
+          : undefined
       }
     >
-      {/* Header */}
-      <div
-        className={
-          isPanelLayout
-            ? 'flex items-center gap-2.5 border-b border-divider px-4 py-2.5'
-            : 'flex items-center gap-2.5 px-4 py-2.5'
-        }
-      >
-        <div className="w-6 h-6 flex-shrink-0 bg-accent/10 rounded flex items-center justify-center">
-          <Zap className="w-3 h-3 text-accent" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-[10px] text-text-tertiary font-medium uppercase tracking-wide leading-none">
-            {groupName}
-          </span>
-          <p className="text-xs font-semibold text-text-primary leading-snug truncate">
-            {item.title}
-          </p>
-        </div>
-        {result && citationSources.length > 0 && (
-          <DeepDiveSourcesMenu sources={citationSources} onOpenDocument={onOpenDocument} />
-        )}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-surface-hover transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
-          aria-label={collapsed ? 'Expand' : 'Collapse'}
-        >
-          {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-        </button>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-surface-hover transition-colors text-text-tertiary hover:text-text-secondary flex-shrink-0"
-            aria-label="Close"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* Body */}
-      {!collapsed && (
-        <div
-          className={
-            loading && isPanelLayout
-              ? 'flex-1 min-h-0 flex items-start justify-center px-4 pt-[33%]'
-              : isPanelLayout
-                ? 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-36 pt-3'
-                : 'max-h-64 overflow-y-auto overflow-x-hidden px-4 pb-3'
-          }
-        >
           {!result && !loading && !error && (
             <p className="text-xs text-text-tertiary italic py-1">
               This item was added manually. Research details are only available for generated items.
@@ -235,8 +195,6 @@ export function DeepDiveWidget({
               )}
             </div>
           )}
-        </div>
-      )}
-    </div>
+    </ChatPanelWidgetShell>
   );
 }
