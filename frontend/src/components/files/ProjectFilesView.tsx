@@ -51,6 +51,7 @@ const FILE_TYPE_LABELS: Record<string, string> = {
   csv: 'CSV',
   xlsx: 'XLSX',
   xls: 'XLS',
+  pptx: 'PPTX',
   png: 'PNG',
   jpg: 'JPG',
   template_docx: 'Template',
@@ -60,6 +61,7 @@ const FILE_TYPE_LABELS: Record<string, string> = {
 const EXPORT_FORMAT_LABELS: Record<string, string> = {
   docx: 'DOCX',
   xlsx: 'XLSX',
+  pptx: 'PPTX',
   pdf: 'PDF',
   csv: 'CSV',
 };

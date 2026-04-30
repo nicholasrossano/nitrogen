@@ -93,3 +93,19 @@ class AssumptionRefreshResponse(BaseModel):
     created: int = Field(description="Number of assumptions created.")
     updated: int = Field(description="Number of assumptions updated.")
     assumptions: list[AssumptionResponse] = Field(description="Assumptions touched by refresh.")
+
+
+class AssumptionCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000, description="Comment body.")
+
+
+class AssumptionCommentResponse(BaseModel):
+    id: UUID = Field(description="Assumption comment id.")
+    assumption_id: UUID = Field(description="Assumption this comment belongs to.")
+    initiative_id: UUID = Field(description="Project this comment belongs to.")
+    body: str = Field(description="Comment body.")
+    created_by_email: str | None = Field(default=None, description="Readable author email.")
+    created_at: datetime = Field(description="Comment creation timestamp.")
+
+    class Config:
+        from_attributes = True

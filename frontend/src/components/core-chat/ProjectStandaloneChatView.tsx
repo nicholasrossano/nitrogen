@@ -911,6 +911,7 @@ export function ProjectChatSurface({
           topComposerContent={associatedModulesTray}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
+          showAttachments={!allowInitialProjectOnboarding}
         />
       </>
     );
@@ -945,6 +946,7 @@ export function ProjectChatSurface({
       topContent={topContent}
       topContentMode={topContentMode}
       onApplyProposedValue={handleApplyProposedValue}
+      showAttachments={!allowInitialProjectOnboarding}
     />
   );
 }

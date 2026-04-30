@@ -1,4 +1,9 @@
-from app.services.document_parser import _clean_pdf_pages
+import io
+from unittest.mock import patch
+
+from app.core.upload_types import resolve_document_file_type
+from app.services.document_conversion import prepare_uploaded_document
+from app.services.document_parser import DocumentParserService, _clean_pdf_pages
 
 
 def test_clean_pdf_pages_removes_repeated_margin_boilerplate():
@@ -85,3 +90,53 @@ def test_clean_pdf_pages_preserves_repeated_body_labels():
         ("Expected outputs\nTarget: 20 companies", 2),
         ("Expected outputs\nTarget: 30 companies", 3),
     ]
+
+
+def test_resolve_document_file_type_accepts_pptx_and_iwork_extensions():
+    assert resolve_document_file_type("", "deck.pptx") == "pptx"
+    assert resolve_document_file_type("", "brief.pages") == "pages"
+    assert resolve_document_file_type("", "slides.keynote") == "keynote"
+    assert resolve_document_file_type("", "model.dwg") is None
+
+
+def test_prepare_uploaded_document_converts_pages_to_docx_filename():
+    with patch(
+        "app.services.document_conversion._convert_with_libreoffice",
+        return_value=b"converted",
+    ):
+        prepared = prepare_uploaded_document(b"raw", "Brief.pages", "pages")
+
+    assert prepared.content == b"converted"
+    assert prepared.filename == "Brief.docx"
+    assert prepared.file_type == "docx"
+
+
+def test_prepare_uploaded_document_converts_keynote_to_pptx_filename():
+    with patch(
+        "app.services.document_conversion._convert_with_libreoffice",
+        return_value=b"converted",
+    ):
+        prepared = prepare_uploaded_document(b"raw", "Deck.key", "keynote")
+
+    assert prepared.content == b"converted"
+    assert prepared.filename == "Deck.pptx"
+    assert prepared.file_type == "pptx"
+
+
+def test_parse_pptx_extracts_slide_text():
+    from pptx import Presentation
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "Project Overview"
+    textbox = slide.shapes.add_textbox(0, 0, 1000000, 1000000)
+    textbox.text = "Revenue case\nBase case"
+
+    buf = io.BytesIO()
+    presentation.save(buf)
+
+    text = DocumentParserService().parse_pptx(buf.getvalue())
+
+    assert "[Slide 1]" in text
+    assert "Project Overview" in text
+    assert "Revenue case" in text

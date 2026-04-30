@@ -12,12 +12,20 @@ DRIVE_MIME_TO_FILE_TYPE: dict[str, str] = {
     "application/msword": "docx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
     "application/vnd.ms-excel": "xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.apple.pages": "pages",
+    "application/x-iwork-pages-sffpages": "pages",
+    "application/vnd.apple.iwork.pages.sffpages": "pages",
+    "application/vnd.apple.keynote": "keynote",
+    "application/x-iwork-keynote-sffkey": "keynote",
+    "application/vnd.apple.iwork.keynote.sffkey": "keynote",
     "text/plain": "text",
     "text/csv": "text",
     "application/rtf": "text",
     # Google native types — exported on download
     "application/vnd.google-apps.document": "docx",
     "application/vnd.google-apps.spreadsheet": "xlsx",
+    "application/vnd.google-apps.presentation": "pptx",
 }
 
 # Google native files must be exported rather than downloaded directly
@@ -27,6 +35,9 @@ GOOGLE_NATIVE_EXPORT_MIME: dict[str, str] = {
     ),
     "application/vnd.google-apps.spreadsheet": (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ),
+    "application/vnd.google-apps.presentation": (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ),
 }
 

@@ -403,6 +403,15 @@ export interface AssumptionUpdateInput {
   notes?: string | null;
 }
 
+export interface AssumptionComment {
+  id: string;
+  assumption_id: string;
+  initiative_id: string;
+  body: string;
+  created_by_email: string | null;
+  created_at: string;
+}
+
 export interface SourceCitation {
   source_type: 'corpus' | 'evidence' | 'openalex' | 'web' | 'llm_estimate';
   source_title: string;
@@ -1605,10 +1614,22 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getAssumption: (assumptionId: string) =>
+    fetchApi<Assumption>(`/api/v1/assumptions/${assumptionId}`),
+
   updateAssumption: (assumptionId: string, data: AssumptionUpdateInput) =>
     fetchApi<Assumption>(`/api/v1/assumptions/${assumptionId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    }),
+
+  listAssumptionComments: (assumptionId: string) =>
+    fetchApi<AssumptionComment[]>(`/api/v1/assumptions/${assumptionId}/comments`),
+
+  createAssumptionComment: (assumptionId: string, body: string) =>
+    fetchApi<AssumptionComment>(`/api/v1/assumptions/${assumptionId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
     }),
 
   refreshAssumptions: (initiativeId: string) =>

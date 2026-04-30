@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import { ProjectChatSurface } from './ProjectChatSurface';
 import { DeepDiveWidget } from '@/components/plan-workspace/DeepDiveWidget';
+import { AssumptionsChatPanel } from '@/components/assumptions/AssumptionsChatPanel';
 import type {
   PlanWorkspaceInspectorDocumentSource,
   PlanWorkspaceInspectorState,
@@ -30,6 +31,13 @@ interface PendingDeepDiveContext {
   onOpenDocument?: (source: PlanWorkspaceInspectorDocumentSource) => void;
 }
 
+interface PendingAssumptionsContext {
+  requestId: string;
+  focusAssumptionId?: string | null;
+  title?: string | null;
+  collapsed?: boolean;
+}
+
 interface ProjectChatTabsPanelProps {
   initiativeId: string;
   researchMode?: boolean;
@@ -49,6 +57,9 @@ interface ProjectChatTabsPanelProps {
   /** Creates or updates a chat tab with a pinned deep-dive widget */
   pendingDeepDive?: PendingDeepDiveContext | null;
   onPendingDeepDiveHandled?: () => void;
+  /** Creates or updates a chat tab with a pinned assumptions panel */
+  pendingAssumptions?: PendingAssumptionsContext | null;
+  onPendingAssumptionsHandled?: () => void;
 }
 
 interface PendingAutoSendRequest {
@@ -70,6 +81,7 @@ function makeTab(title = 'New Chat', isLanding = false, isFallback = false): Pro
 interface StoredProjectChatTabsState {
   tabs: ProjectChatTab[];
   activeTabId: string | null;
+  assumptionsByTabId?: Record<string, { focusAssumptionId?: string | null; collapsed?: boolean }>;
 }
 
 function normalizeProjectChatTabsState(
@@ -113,6 +125,26 @@ function readStoredProjectChatTabsState(storageKey: string): StoredProjectChatTa
         typeof parsed.activeTabId === 'string' && tabs.some((tab) => tab.id === parsed.activeTabId)
           ? parsed.activeTabId
           : tabs[0].id,
+      assumptionsByTabId:
+        parsed.assumptionsByTabId && typeof parsed.assumptionsByTabId === 'object'
+          ? Object.fromEntries(
+              Object.entries(parsed.assumptionsByTabId)
+                .filter(([tabId]) => tabs.some((tab) => tab.id === tabId))
+                .map(([tabId, value]) => {
+                  const source = (value ?? {}) as { focusAssumptionId?: unknown; collapsed?: unknown };
+                  return [
+                    tabId,
+                    {
+                      focusAssumptionId:
+                        typeof source.focusAssumptionId === 'string' || source.focusAssumptionId === null
+                          ? source.focusAssumptionId
+                          : null,
+                      collapsed: typeof source.collapsed === 'boolean' ? source.collapsed : false,
+                    },
+                  ];
+                }),
+            )
+          : {},
     };
   } catch {
     return null;
@@ -234,6 +266,8 @@ export function ProjectChatTabsPanel({
   topContent,
   pendingDeepDive = null,
   onPendingDeepDiveHandled,
+  pendingAssumptions = null,
+  onPendingAssumptionsHandled,
 }: ProjectChatTabsPanelProps) {
   const initialStateRef = useRef<StoredProjectChatTabsState | null>(null);
   if (!initialStateRef.current) {
@@ -254,15 +288,32 @@ export function ProjectChatTabsPanel({
   const [activeTabId, setActiveTabId] = useState<string>(() => initialStateRef.current!.activeTabId ?? initialStateRef.current!.tabs[0].id);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [deepDiveByTabId, setDeepDiveByTabId] = useState<Record<string, PendingDeepDiveContext>>({});
+  const [assumptionsByTabId, setAssumptionsByTabId] = useState<Record<string, PendingAssumptionsContext>>(
+    () => {
+      const stored = initialStateRef.current?.assumptionsByTabId ?? {};
+      return Object.fromEntries(
+        Object.entries(stored).map(([tabId, value]) => [
+          tabId,
+          {
+            requestId: `stored-assumption-${tabId}`,
+            focusAssumptionId: value.focusAssumptionId ?? null,
+            collapsed: value.collapsed ?? false,
+          },
+        ]),
+      );
+    },
+  );
   const [showHistory, setShowHistory] = useState(false);
   const [pendingAutoSendByTabId, setPendingAutoSendByTabId] = useState<Record<string, PendingAutoSendRequest>>({});
   const historyRef = useRef<HTMLDivElement>(null);
   const tabStripRef = useRef<HTMLDivElement>(null);
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
+  const assumptionsByTabIdRef = useRef<Record<string, PendingAssumptionsContext>>({});
   const tabsRef = useRef<ProjectChatTab[]>([]);
   const activeTabIdRef = useRef<string | null>(null);
   const handledDeepDiveRequestIdsRef = useRef<Set<string>>(new Set());
+  const handledAssumptionsRequestIdsRef = useRef<Set<string>>(new Set());
   const handledAutoSendRequestIdsRef = useRef<Set<string>>(new Set());
 
   const resolvedActiveTabId = useMemo(
@@ -281,12 +332,25 @@ export function ProjectChatTabsPanel({
     writeStoredProjectChatTabsState(sessionStorageKey, {
       tabs,
       activeTabId: resolvedActiveTabId,
+      assumptionsByTabId: Object.fromEntries(
+        Object.entries(assumptionsByTabId).map(([tabId, value]) => [
+          tabId,
+          {
+            focusAssumptionId: value.focusAssumptionId ?? null,
+            collapsed: value.collapsed ?? false,
+          },
+        ]),
+      ),
     });
-  }, [sessionStorageKey, tabs, resolvedActiveTabId]);
+  }, [sessionStorageKey, tabs, resolvedActiveTabId, assumptionsByTabId]);
 
   useEffect(() => {
     deepDiveByTabIdRef.current = deepDiveByTabId;
   }, [deepDiveByTabId]);
+
+  useEffect(() => {
+    assumptionsByTabIdRef.current = assumptionsByTabId;
+  }, [assumptionsByTabId]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -370,6 +434,113 @@ export function ProjectChatTabsPanel({
     onPendingDeepDiveHandled?.();
   }, [onPendingDeepDiveHandled, pendingDeepDive, resolvedActiveTabId, tabs]);
 
+  useEffect(() => {
+    if (!pendingAssumptions) return;
+    if (handledAssumptionsRequestIdsRef.current.has(pendingAssumptions.requestId)) return;
+    const nextAssumptionTitle = pendingAssumptions.title?.trim() || 'Assumptions';
+
+    const existingAssumptionsTabId =
+      Object.keys(assumptionsByTabIdRef.current).find((tabId) => tabId === resolvedActiveTabId) ??
+      Object.keys(assumptionsByTabIdRef.current)[0];
+
+    if (existingAssumptionsTabId) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === existingAssumptionsTabId
+            ? { ...tab, title: nextAssumptionTitle, isLanding: false, isFallback: false }
+            : tab,
+        ),
+      );
+      setAssumptionsByTabId((prev) => ({
+        ...prev,
+        [existingAssumptionsTabId]: {
+          ...pendingAssumptions,
+          collapsed: pendingAssumptions.collapsed ?? prev[existingAssumptionsTabId]?.collapsed ?? false,
+        },
+      }));
+      setActiveTabId(existingAssumptionsTabId);
+      handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
+      onPendingAssumptionsHandled?.();
+      return;
+    }
+
+    const existingTabEntry = Object.entries(assumptionsByTabIdRef.current).find(
+      ([, value]) => value.requestId === pendingAssumptions.requestId,
+    );
+
+    if (existingTabEntry) {
+      const [tabId] = existingTabEntry;
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === tabId
+            ? { ...tab, title: nextAssumptionTitle, isLanding: false, isFallback: false }
+            : tab,
+        ),
+      );
+      setAssumptionsByTabId((prev) => ({
+        ...prev,
+        [tabId]: {
+          ...pendingAssumptions,
+          collapsed: pendingAssumptions.collapsed ?? prev[tabId]?.collapsed ?? false,
+        },
+      }));
+      setActiveTabId(tabId);
+      handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
+      onPendingAssumptionsHandled?.();
+      return;
+    }
+
+    const reusablePlaceholderTab =
+      tabs.find((tab) =>
+        tab.id === resolvedActiveTabId &&
+        !tab.chatId &&
+        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      ) ??
+      tabs.find((tab) =>
+        !tab.chatId &&
+        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      );
+
+    if (reusablePlaceholderTab) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === reusablePlaceholderTab.id
+            ? {
+                ...tab,
+                title: nextAssumptionTitle,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActiveTabId(reusablePlaceholderTab.id);
+      setAssumptionsByTabId((prev) => ({
+        ...prev,
+        [reusablePlaceholderTab.id]: {
+          ...pendingAssumptions,
+          collapsed: pendingAssumptions.collapsed ?? prev[reusablePlaceholderTab.id]?.collapsed ?? false,
+        },
+      }));
+      handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
+      onPendingAssumptionsHandled?.();
+      return;
+    }
+
+    const tab = makeTab(nextAssumptionTitle, false, false);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setAssumptionsByTabId((prev) => ({
+      ...prev,
+      [tab.id]: {
+        ...pendingAssumptions,
+        collapsed: pendingAssumptions.collapsed ?? false,
+      },
+    }));
+    handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
+    onPendingAssumptionsHandled?.();
+  }, [onPendingAssumptionsHandled, pendingAssumptions, resolvedActiveTabId, tabs]);
+
   const handleDeepDiveCollapsedChange = useCallback((tabId: string, collapsed: boolean) => {
     setDeepDiveByTabId((prev) => {
       const current = prev[tabId];
@@ -387,6 +558,33 @@ export function ProjectChatTabsPanel({
   const handleDeepDiveMessageSent = useCallback((tabId: string) => {
     handleDeepDiveCollapsedChange(tabId, true);
   }, [handleDeepDiveCollapsedChange]);
+
+  const handleAssumptionsCollapsedChange = useCallback((tabId: string, collapsed: boolean) => {
+    setAssumptionsByTabId((prev) => {
+      const current = prev[tabId];
+      if (!current || current.collapsed === collapsed) return prev;
+      return {
+        ...prev,
+        [tabId]: {
+          ...current,
+          collapsed,
+        },
+      };
+    });
+  }, []);
+
+  const handleAssumptionsClose = useCallback((tabId: string) => {
+    setAssumptionsByTabId((prev) => {
+      if (!prev[tabId]) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+  }, []);
+
+  const handleAssumptionsMessageSent = useCallback((tabId: string) => {
+    handleAssumptionsCollapsedChange(tabId, true);
+  }, [handleAssumptionsCollapsedChange]);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -442,6 +640,12 @@ export function ProjectChatTabsPanel({
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     setTabs(nextTabs);
     setDeepDiveByTabId((prev) => {
+      if (!(tabId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+    setAssumptionsByTabId((prev) => {
       if (!(tabId in prev)) return prev;
       const next = { ...prev };
       delete next[tabId];
@@ -581,6 +785,7 @@ export function ProjectChatTabsPanel({
     setTabs([resetTab]);
     setActiveTabId(resetTab.id);
     setDeepDiveByTabId({});
+    setAssumptionsByTabId({});
     setShowHistory(false);
   }, [researchMode, resetToLandingSignal]);
 
@@ -632,6 +837,15 @@ export function ProjectChatTabsPanel({
     const nextTabs = currentTabs.filter((tab) => !removedTabIds.has(tab.id));
 
     setDeepDiveByTabId((prev) => {
+      if (removedTabIds.size === 0) return prev;
+
+      const next = { ...prev };
+      removedTabIds.forEach((tabId) => {
+        delete next[tabId];
+      });
+      return next;
+    });
+    setAssumptionsByTabId((prev) => {
       if (removedTabIds.size === 0) return prev;
 
       const next = { ...prev };
@@ -825,7 +1039,9 @@ export function ProjectChatTabsPanel({
         {tabs.map((tab) => {
           const isActive = tab.id === resolvedActiveTabId;
           const deepDive = deepDiveByTabId[tab.id];
+          const assumptions = assumptionsByTabId[tab.id];
           const showExpandedDeepDive = Boolean(deepDive && !deepDive.collapsed);
+          const showExpandedAssumptions = Boolean(assumptions && !assumptions.collapsed);
           const tabPendingAutoSend = pendingAutoSendByTabId[tab.id] ?? null;
           return (
             <div
@@ -854,9 +1070,15 @@ export function ProjectChatTabsPanel({
                     ? () => handleTabAutoSendHandled(tab.id, tabPendingAutoSend.requestId)
                     : undefined
                 }
-                onBeforeSendMessage={isActive && deepDive ? () => handleDeepDiveMessageSent(tab.id) : undefined}
+                onBeforeSendMessage={
+                  isActive && deepDive
+                    ? () => handleDeepDiveMessageSent(tab.id)
+                    : isActive && assumptions
+                      ? () => handleAssumptionsMessageSent(tab.id)
+                      : undefined
+                }
                 projectContext={deepDive ? formatDeepDiveProjectContext(deepDive.state) : null}
-                topContentMode={isActive && showExpandedDeepDive ? 'panel' : 'inline'}
+                topContentMode={isActive && (showExpandedDeepDive || showExpandedAssumptions) ? 'panel' : 'inline'}
                 topContent={isActive ? (
                   deepDive ? (
                     <DeepDiveWidget
@@ -865,6 +1087,15 @@ export function ProjectChatTabsPanel({
                       layoutMode={showExpandedDeepDive ? 'panel' : 'inline'}
                       onCollapsedChange={(collapsed) => handleDeepDiveCollapsedChange(tab.id, collapsed)}
                       onOpenDocument={deepDive.onOpenDocument}
+                    />
+                  ) : assumptions ? (
+                    <AssumptionsChatPanel
+                      initiativeId={initiativeId}
+                      focusAssumptionId={assumptions.focusAssumptionId ?? null}
+                      collapsed={assumptions.collapsed ?? false}
+                      layoutMode={showExpandedAssumptions ? 'panel' : 'inline'}
+                      onCollapsedChange={(collapsed) => handleAssumptionsCollapsedChange(tab.id, collapsed)}
+                      onClose={() => handleAssumptionsClose(tab.id)}
                     />
                   ) : topContent
                 ) : undefined}
