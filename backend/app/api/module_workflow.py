@@ -592,7 +592,7 @@ async def edit_item(
         stage_id=stage_id,
         stage_data={"items": [items[item_idx]]},
         actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
-        status="confirmed" if value_is_present else "needs_review",
+        status="confirmed" if value_is_present else "missing",
     )
     clear_final_approval(state)
     save_workflow_state(inst, state, increment_version=True)

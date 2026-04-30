@@ -1,7 +1,11 @@
 from types import SimpleNamespace
 
 from app.assumptions.config import expected_assumptions_for_modules
-from app.services.assumptions import apply_assumptions_to_items, format_assumptions_for_prompt
+from app.services.assumptions import (
+    apply_assumptions_to_items,
+    format_assumptions_for_prompt,
+    normalize_assumption_status,
+)
 
 
 def test_expected_assumptions_include_common_and_module_required_keys():
@@ -104,6 +108,13 @@ def test_format_assumptions_for_prompt_buckets_statuses():
             unit=None,
             used_in_modules=[],
         ),
+        SimpleNamespace(
+            status="needs_review",
+            label="Fuel savings",
+            value=0.2,
+            unit="%",
+            used_in_modules=["carbon"],
+        ),
     ]
 
     formatted = format_assumptions_for_prompt(assumptions)
@@ -112,4 +123,12 @@ def test_format_assumptions_for_prompt_buckets_statuses():
     assert "System size: 50 kW" in formatted
     assert "Missing:" in formatted
     assert "Total CAPEX: missing USD" in formatted
+    assert "Inferred:" in formatted
+    assert "Fuel savings: 0.2 %" in formatted
     assert "Rejected" not in formatted
+
+
+def test_normalize_assumption_status_maps_legacy_values():
+    assert normalize_assumption_status("validated") == "confirmed"
+    assert normalize_assumption_status("needs_review") == "inferred"
+    assert normalize_assumption_status("assumed") == "assumed"
