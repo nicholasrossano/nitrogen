@@ -9,6 +9,8 @@ from app.core.auth import AuthUser, get_current_user
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.schemas.assumption import (
+    AssumptionCommentCreate,
+    AssumptionCommentResponse,
     AssumptionCreate,
     AssumptionRefreshResponse,
     AssumptionResponse,
@@ -18,8 +20,10 @@ from app.schemas.assumption import (
 from app.services.assumptions import (
     AssumptionActor,
     build_summary,
+    create_assumption_comment,
     extract_assumptions_from_sources,
     get_assumption,
+    list_assumption_comments,
     list_assumptions,
     update_assumption,
     upsert_assumption,
@@ -159,3 +163,50 @@ async def patch_assumption(
     await db.commit()
     await db.refresh(updated)
     return updated
+
+
+@router.get(
+    "/assumptions/{assumption_id}/comments",
+    response_model=list[AssumptionCommentResponse],
+)
+async def get_assumption_comments(
+    assumption_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """List comments for one project assumption."""
+    assumption = await get_assumption(db, assumption_id)
+    if assumption is None:
+        raise HTTPException(status_code=404, detail="Assumption not found")
+    await require_viewer(db, assumption.initiative_id, user)
+    return await list_assumption_comments(db, assumption.id)
+
+
+@router.post(
+    "/assumptions/{assumption_id}/comments",
+    response_model=AssumptionCommentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_assumption_comment(
+    assumption_id: UUID,
+    data: AssumptionCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Add a comment to one project assumption."""
+    assumption = await get_assumption(db, assumption_id)
+    if assumption is None:
+        raise HTTPException(status_code=404, detail="Assumption not found")
+    if not data.body.strip():
+        raise HTTPException(status_code=400, detail="Comment body is required")
+    initiative = await require_editor(db, assumption.initiative_id, user)
+    comment = await create_assumption_comment(
+        db,
+        assumption,
+        body=data.body,
+        actor=_actor_from_user(user),
+    )
+    initiative.touch()
+    await db.commit()
+    await db.refresh(comment)
+    return comment

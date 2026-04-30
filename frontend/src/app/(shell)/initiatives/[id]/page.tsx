@@ -24,7 +24,7 @@ import { ShellPageHeader } from '@/components/ui';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { api, type ModuleInstance } from '@/lib/api';
+import { api, type Assumption, type ModuleInstance } from '@/lib/api';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
@@ -52,6 +52,12 @@ function makeDocumentTabId(citation: ResearchPanelCitation): string {
 interface PendingDeepDiveRequest {
   requestId: string;
   state: PlanWorkspaceInspectorState;
+}
+
+interface PendingAssumptionsRequest {
+  requestId: string;
+  focusAssumptionId?: string | null;
+  title?: string | null;
 }
 
 interface StoredInitiativeWorkspaceUiState {
@@ -157,6 +163,7 @@ function InitiativePageContent() {
   const [showOverlay, setShowOverlay] = useState(true);
   const [chromeReady, setChromeReady] = useState(false);
   const [modulesDeepDiveRequest, setModulesDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
+  const [pendingAssumptionsRequest, setPendingAssumptionsRequest] = useState<PendingAssumptionsRequest | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [pendingChatToOpen, setPendingChatToOpen] = useState<{ chatId: string; title?: string | null } | null>(null);
@@ -733,6 +740,18 @@ function InitiativePageContent() {
     });
   }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
 
+  const handleOpenAssumptionInChat = useCallback((assumption: Assumption) => {
+    setWorkspaceLaunchMode('idle');
+    setPanelOpen('modules', 'chat', true);
+    setActiveView('modules');
+    router.replace(`/initiatives/${initiativeId}?view=modules`);
+    setPendingAssumptionsRequest({
+      requestId: `assumption-${assumption.id}-${Date.now()}`,
+      focusAssumptionId: assumption.id,
+      title: assumption.label,
+    });
+  }, [initiativeId, router, setPanelOpen]);
+
   const openDecisionLogTab = useCallback(
     (context: { instanceId: string; moduleId: string; title: string }) => {
       setActiveView('modules');
@@ -918,6 +937,7 @@ function InitiativePageContent() {
           onExportDecisionLog={exportDecisionLog}
           onModuleInspectorStateChange={handleModuleInspectorStateChange}
           onModuleApprovalChange={() => loadFrameworkModuleInstances(initiativeId, { force: true })}
+          onOpenAssumptionInChat={handleOpenAssumptionInChat}
         />
       );
     }
@@ -984,6 +1004,8 @@ function InitiativePageContent() {
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          pendingAssumptions={pendingAssumptionsRequest}
+          onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
           />
         );
       }
@@ -1038,6 +1060,8 @@ function InitiativePageContent() {
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
+          pendingAssumptions={pendingAssumptionsRequest}
+          onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />
       </div>
     </div>
@@ -1060,6 +1084,8 @@ function InitiativePageContent() {
             state: modulesDeepDiveRequest.state,
           } : null}
           onPendingDeepDiveHandled={() => setModulesDeepDiveRequest(null)}
+          pendingAssumptions={pendingAssumptionsRequest}
+          onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />
       </div>
     </div>
@@ -1077,6 +1103,8 @@ function InitiativePageContent() {
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
           onSendRef={chatSendRef}
+          pendingAssumptions={pendingAssumptionsRequest}
+          onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />
       </div>
     </div>

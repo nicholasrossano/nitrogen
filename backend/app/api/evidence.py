@@ -11,6 +11,11 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
+from app.core.upload_types import (
+    DOCUMENT_CONTENT_TYPES,
+    content_type_for_file_type,
+    resolve_document_file_type,
+)
 from app.models.evidence import EvidenceDoc, EvidenceChunk, EvidenceDocStatus
 from app.schemas.evidence import (
     EvidenceTextInput,
@@ -19,6 +24,10 @@ from app.schemas.evidence import (
 )
 from app.services.evidence_processing import create_uploaded_doc
 from app.services.evidence_processor import schedule_processing
+from app.services.document_conversion import (
+    DocumentConversionError,
+    prepare_uploaded_document,
+)
 from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
 from app.services.workspaces import require_workspace_member
 from app.core.rate_limit import limiter
@@ -27,14 +36,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-_ALLOWED_UPLOAD_TYPES = {
-    "application/pdf": "pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-    "application/vnd.ms-excel": "xls",
-}
+_ALLOWED_UPLOAD_TYPES = DOCUMENT_CONTENT_TYPES
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+_UPLOAD_TYPE_LABEL = "PDF, DOCX, PPTX, Excel (XLSX/XLS), Pages, or Keynote"
 
 
 async def _require_evidence_viewer(db: AsyncSession, evidence_doc: EvidenceDoc, user: AuthUser) -> None:
@@ -82,11 +87,11 @@ async def upload_evidence(
     storage = get_uploads_storage()
 
     if file:
-        file_type = _ALLOWED_UPLOAD_TYPES.get(file.content_type or "")
+        file_type = resolve_document_file_type(file.content_type, file.filename)
         if not file_type:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be PDF, DOCX, or Excel (XLSX/XLS)",
+                detail=f"File must be {_UPLOAD_TYPE_LABEL}",
             )
 
         content = await file.read()
@@ -95,23 +100,32 @@ async def upload_evidence(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail="File size exceeds 50 MB limit",
             )
-        if not validate_file_magic(content, file.content_type or ""):
+        validation_content_type = file.content_type or content_type_for_file_type(file_type) or ""
+        if not validate_file_magic(content, validation_content_type):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File content does not match declared type",
             )
 
+        try:
+            prepared = prepare_uploaded_document(content, file.filename, file_type)
+        except DocumentConversionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
         storage_path = await storage.save(
-            content, file.filename, folder=str(initiative.id)
+            prepared.content, prepared.filename, folder=str(initiative.id)
         )
 
         evidence_doc = await create_uploaded_doc(
             db,
             initiative=initiative,
-            filename=file.filename or "Untitled",
-            file_type=file_type,
+            filename=prepared.filename,
+            file_type=prepared.file_type,
             storage_path=storage_path,
-            file_size=len(content),
+            file_size=len(prepared.content),
         )
 
         # Kick off the parse/embed pipeline in the background; the response
@@ -248,11 +262,11 @@ async def upload_workspace_evidence(
     """Upload a file as workspace-level guidance/context."""
     await require_workspace_member(db, workspace_id, user.uid)
 
-    file_type = _ALLOWED_UPLOAD_TYPES.get(file.content_type or "")
+    file_type = resolve_document_file_type(file.content_type, file.filename)
     if not file_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be PDF, DOCX, or Excel (XLSX/XLS)",
+            detail=f"File must be {_UPLOAD_TYPE_LABEL}",
         )
 
     content = await file.read()
@@ -261,25 +275,34 @@ async def upload_workspace_evidence(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File size exceeds 50 MB limit",
         )
-    if not validate_file_magic(content, file.content_type or ""):
+    validation_content_type = file.content_type or content_type_for_file_type(file_type) or ""
+    if not validate_file_magic(content, validation_content_type):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File content does not match declared type",
         )
 
+    try:
+        prepared = prepare_uploaded_document(content, file.filename, file_type)
+    except DocumentConversionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
     storage = get_uploads_storage()
     storage_path = await storage.save(
-        content,
-        file.filename,
+        prepared.content,
+        prepared.filename,
         folder=f"workspaces/{workspace_id}",
     )
     evidence_doc = await create_uploaded_doc(
         db,
         workspace_id=workspace_id,
-        filename=file.filename or "Untitled",
-        file_type=file_type,
+        filename=prepared.filename,
+        file_type=prepared.file_type,
         storage_path=storage_path,
-        file_size=len(content),
+        file_size=len(prepared.content),
     )
     schedule_processing(evidence_doc.id, user_id=user.uid)
 
@@ -595,6 +618,7 @@ EVIDENCE_CONTENT_TYPE_MAP = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "xls": "application/vnd.ms-excel",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
 

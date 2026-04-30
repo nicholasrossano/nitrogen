@@ -88,6 +88,7 @@ Follow `docs/style-guide.md` as the source of truth.
   - `btn-secondary` — secondary / cancel actions. Neutral border, subtle hover.
   - `btn-danger` — destructive actions only (Delete, Remove).
   - `btn-compact-neutral` — small refresh-style actions in cards/headers (Refresh, View All). Neutral border, white fill, accent border/text on hover.
+- In embedded panel action rows (e.g. Cancel + Confirm), right-align both buttons and use the squared-off Share tier: `!py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5`.
 - Full-width buttons: add `w-full` + size override `!px-4 !py-2` (or `!py-1.5` for compact panels).
 - With icon: put the Lucide icon inside the button alongside the label — the class already provides `gap-2`.
 - See `docs/style-guide.md § K) Buttons` for the full spec and examples.
@@ -104,13 +105,15 @@ Follow `docs/style-guide.md` as the source of truth.
 
 **Dropdown/popover layering:**
 - Dropdown menus must never be clipped by parent containers: avoid `overflow-hidden` on menu ancestors, and use `relative` trigger wrappers with `absolute z-50+` menus (or portal when crossing scroll/modal boundaries).
-- For settings/interstitial workspace pickers, use the custom dropdown (button + menu) rather than native `<select>` so behavior and styling match existing controls.
+- Use the shared custom dropdown (button + menu) for product dropdown fields; do not use native `<select>` in app UI unless a documented accessibility exception requires it.
 
 **Tooltip convention:**
 - Use the shared `@/components/ui/Tooltip` for hover help (especially disabled controls) instead of custom absolute bubbles or ad-hoc `title` text when explanatory copy is needed.
 
 **Shared control reuse:**
 - When a control pattern already exists (e.g. role dropdowns in sharing flows), reuse the same shared component across surfaces instead of re-implementing per modal/page.
+- Chat-attached widgets must use the shared `ChatPanelWidgetShell` for header/collapse/close behavior; widget components should only provide body content and optional header actions.
+- When a table row opens a chat-attached widget, the chat panel should show only that selected row's detail content, not the whole table/filter UI.
 
 ## Loading Art Authoring
 

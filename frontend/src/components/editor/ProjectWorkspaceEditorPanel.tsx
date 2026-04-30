@@ -9,7 +9,7 @@ import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget'
 import { Tooltip } from '@/components/ui/Tooltip';
 import { EditorSidePanel } from './EditorSidePanel';
 import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
-import { type ModuleInstance } from '@/lib/api';
+import { type Assumption, type ModuleInstance } from '@/lib/api';
 import type { EditorWidget } from './EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
@@ -46,6 +46,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
   onModuleInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onModuleApprovalChange?: () => void;
+  onOpenAssumptionInChat?: (assumption: Assumption) => void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -67,6 +68,7 @@ export function ProjectWorkspaceEditorPanel({
   onExportDecisionLog,
   onModuleInspectorStateChange,
   onModuleApprovalChange,
+  onOpenAssumptionInChat,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [showNewModuleDropdown, setShowNewModuleDropdown] = useState(false);
@@ -144,7 +146,13 @@ export function ProjectWorkspaceEditorPanel({
     }
 
     if (tab.kind === 'assumptions') {
-      return <AssumptionsWorkspaceTab initiativeId={initiativeId} />;
+      return (
+        <AssumptionsWorkspaceTab
+          initiativeId={initiativeId}
+          showDetailPanel={false}
+          onAssumptionSelectInChat={onOpenAssumptionInChat}
+        />
+      );
     }
 
     if (tab.kind === 'document') {

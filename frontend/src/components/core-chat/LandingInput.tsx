@@ -30,6 +30,8 @@ interface LandingInputProps {
   layoutMode?: 'default' | 'overview';
   /** Hide composer input area (used when side chat is active) */
   hideComposer?: boolean;
+  /** Show file attachment controls in the composer */
+  showAttachments?: boolean;
 }
 
 function relativeTime(ts: number): string {
@@ -59,6 +61,7 @@ export function LandingInput({
   topComposerContent,
   layoutMode = 'default',
   hideComposer = false,
+  showAttachments = true,
 }: LandingInputProps) {
   const devMode = useSettingsStore((s) => s.devMode);
   const [input, setInput] = useState('');
@@ -154,10 +157,10 @@ export function LandingInput({
         <div
           className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
         >
-          {(inputChips || attachedFiles.length > 0) && (
+          {(inputChips || (showAttachments && attachedFiles.length > 0)) && (
             <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
               {inputChips}
-              {attachedFiles.map((file, i) => (
+              {showAttachments && attachedFiles.map((file, i) => (
                 <span
                   key={i}
                   className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
@@ -200,23 +203,27 @@ export function LandingInput({
               </div>
             )}
             <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileChange}
-                aria-label="Attach files"
-              />
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                aria-label="Attach files"
-              >
-                <Paperclip className="w-[13px] h-[13px]" />
-              </button>
+              {showAttachments && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileChange}
+                    aria-label="Attach files"
+                  />
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                    aria-label="Attach files"
+                  >
+                    <Paperclip className="w-[13px] h-[13px]" />
+                  </button>
+                </>
+              )}
               <button
                 type="submit"
                 disabled={disabled || uploading || !input.trim()}

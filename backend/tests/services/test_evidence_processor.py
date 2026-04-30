@@ -55,9 +55,18 @@ def test_evidence_doc_status_properties(status, expected_light, expected_indexed
 
 
 class _StubParser:
-    def __init__(self, *, pdf_pages=None, docx_text=None, xlsx_text=None, raise_for=None):
+    def __init__(
+        self,
+        *,
+        pdf_pages=None,
+        docx_text=None,
+        pptx_text=None,
+        xlsx_text=None,
+        raise_for=None,
+    ):
         self._pdf_pages = pdf_pages
         self._docx_text = docx_text
+        self._pptx_text = pptx_text
         self._xlsx_text = xlsx_text
         self._raise_for = raise_for or set()
 
@@ -70,6 +79,11 @@ class _StubParser:
         if "docx" in self._raise_for:
             raise RuntimeError("boom")
         return self._docx_text or ""
+
+    def parse_pptx(self, _bytes):
+        if "pptx" in self._raise_for:
+            raise RuntimeError("boom")
+        return self._pptx_text or ""
 
     def parse_xlsx(self, _bytes):
         if "xlsx" in self._raise_for:
@@ -86,6 +100,11 @@ def test_extract_preview_pdf_returns_truncated_first_page():
 def test_extract_preview_docx_strips_whitespace():
     parser = _StubParser(docx_text="   hello world   ")
     assert evidence_processor._extract_preview(parser, b"", "docx") == "hello world"
+
+
+def test_extract_preview_pptx_strips_whitespace():
+    parser = _StubParser(pptx_text="   slide text   ")
+    assert evidence_processor._extract_preview(parser, b"", "pptx") == "slide text"
 
 
 def test_extract_preview_respects_char_limit():

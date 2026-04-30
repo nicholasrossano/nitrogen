@@ -35,7 +35,7 @@ def parse_file_to_chunks(
 ) -> list[tuple[str, str | None, int | None]]:
     """
     Parse file bytes into (plain_text, html_or_none, page_number_or_none) tuples.
-    Supports: pdf, docx, xlsx/xls, text (txt/csv/rtf).
+    Supports: pdf, docx, pptx, xlsx/xls, text (txt/csv/rtf).
     """
     if file_type == "pdf":
         pages = parser.parse_pdf_pages(file_bytes)
@@ -47,6 +47,10 @@ def parse_file_to_chunks(
         return [(plain, h, None) for plain, h in html_chunks]
     elif file_type in ("xlsx", "xls"):
         html = parser.parse_xlsx_html(file_bytes)
+        html_chunks = parser.chunk_html(html)
+        return [(plain, h, None) for plain, h in html_chunks]
+    elif file_type == "pptx":
+        html = parser.parse_pptx_html(file_bytes)
         html_chunks = parser.chunk_html(html)
         return [(plain, h, None) for plain, h in html_chunks]
     elif file_type == "text":
