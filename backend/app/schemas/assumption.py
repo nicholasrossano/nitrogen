@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-AssumptionStatus = Literal["confirmed", "needs_review", "missing", "rejected"]
+AssumptionStatus = Literal["confirmed", "inferred", "assumed", "missing"]
 AssumptionSourceType = Literal[
     "extraction",
     "user_input",
@@ -79,13 +79,14 @@ class AssumptionSummaryItem(BaseModel):
 
 
 class AssumptionSummary(BaseModel):
-    total: int = Field(description="Total tracked assumptions excluding rejected assumptions.")
+    total: int = Field(description="Total tracked active assumptions.")
     confirmed: int = Field(description="Confirmed assumption count.")
-    needs_review: int = Field(description="Needs-review assumption count.")
+    inferred: int = Field(description="Inferred assumption count.")
+    assumed: int = Field(description="Assumed assumption count.")
     missing: int = Field(description="Missing assumption count.")
     top_attention: list[AssumptionSummaryItem] = Field(
         default_factory=list,
-        description="Top missing or needs-review assumptions.",
+        description="Top non-confirmed assumptions needing attention.",
     )
 
 
