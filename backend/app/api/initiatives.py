@@ -37,6 +37,7 @@ from app.schemas.initiative import (
 from app.schemas.module_instance import ModuleInstanceResponse
 from app.modules.registry import get_module_registry
 from app.services import module_service
+from app.services.assumptions import AssumptionActor, ensure_expected_assumptions
 from app.services.initiative_overview import generate_initiative_overview
 from app.services.workspaces import resolve_workspace_for_user
 
@@ -620,6 +621,12 @@ async def create_module_instance(
     inst = await module_service.get_or_create_instance(
         db, initiative.id, body.module_id, user.uid
         # no chat_id → always creates a fresh instance
+    )
+    await ensure_expected_assumptions(
+        db,
+        initiative,
+        module_ids=[body.module_id],
+        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
     )
     await db.commit()
     await db.refresh(inst)
