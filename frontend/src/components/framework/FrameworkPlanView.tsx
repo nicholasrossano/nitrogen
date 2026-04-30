@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, Check, ChevronDown, Search, Trash2 } from 'lucide-react';
+import { BookOpen, Check, Search, Trash2 } from 'lucide-react';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { PageLoader, UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { type ModuleInstance } from '@/lib/api';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { ModuleInstanceOpenDropdown } from './ModuleInstanceOpenDropdown';
 
 interface FrameworkPlanViewProps {
   plannedModuleIds: string[];
@@ -79,10 +80,7 @@ export function FrameworkPlanView({
   const [creatingModuleId, setCreatingModuleId] = useState<string | null>(null);
   const [removingPlannedModuleId, setRemovingPlannedModuleId] = useState<string | null>(null);
   const [creatingWorkspaceModuleId, setCreatingWorkspaceModuleId] = useState<string | null>(null);
-  const [openInstancePickerModuleId, setOpenInstancePickerModuleId] = useState<string | null>(null);
-  const [openingExistingInstanceId, setOpeningExistingInstanceId] = useState<string | null>(null);
   const libraryRef = useRef<HTMLDivElement>(null);
-  const instancePickerRef = useRef<HTMLDivElement>(null);
 
   const phases = useMemo(() => getFrameworkPhases(), []);
 
@@ -134,17 +132,6 @@ export function FrameworkPlanView({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [libraryOpen]);
-
-  useEffect(() => {
-    if (!openInstancePickerModuleId) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!instancePickerRef.current?.contains(event.target as Node)) {
-        setOpenInstancePickerModuleId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openInstancePickerModuleId]);
 
   const groupedPhases = useMemo(() => {
     const buckets = new Map(phases.map((phase) => [phase.id, [] as string[]]));
@@ -225,18 +212,13 @@ export function FrameworkPlanView({
   }, [creatingWorkspaceModuleId, onCreateModuleInstanceInModulesView]);
 
   const handleOpenExistingInstance = useCallback(async (instance: ModuleInstance) => {
-    if (openingExistingInstanceId) return;
-    setOpeningExistingInstanceId(instance.id);
     setError(null);
     try {
       await onOpenExistingModuleInstanceInModulesView(instance);
-      setOpenInstancePickerModuleId(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to open module instance.');
-    } finally {
-      setOpeningExistingInstanceId(null);
     }
-  }, [onOpenExistingModuleInstanceInModulesView, openingExistingInstanceId]);
+  }, [onOpenExistingModuleInstanceInModulesView]);
 
   return (
     <div className="h-full flex flex-col bg-surface overflow-hidden">
@@ -368,8 +350,6 @@ export function FrameworkPlanView({
                       const directOpenInstance = shouldOpenInstancePicker
                         ? null
                         : completedInstance ?? moduleInstancesForType[0] ?? null;
-                      const instancePickerOpen = openInstancePickerModuleId === moduleId;
-
                       return (
                         <div
                           key={moduleId}
@@ -378,7 +358,7 @@ export function FrameworkPlanView({
                             isModuleComplete
                               ? 'border border-stroke-subtle bg-accent-wash/35'
                               : 'border border-stroke-subtle',
-                            instancePickerOpen ? 'z-40' : 'z-0',
+                            'z-0',
                           ].join(' ')}
                         >
                           <button
@@ -389,12 +369,7 @@ export function FrameworkPlanView({
                                 return;
                               }
 
-                              if (shouldOpenInstancePicker) {
-                                setOpenInstancePickerModuleId((prev) => (
-                                  prev === moduleId ? null : moduleId
-                                ));
-                                return;
-                              }
+                              if (shouldOpenInstancePicker) return;
 
                               if (directOpenInstance) onOpenModule(directOpenInstance);
                             }}
@@ -435,53 +410,15 @@ export function FrameworkPlanView({
                           {(moduleInstancesForType.length > 0 || !readOnly) && (
                             <div className="px-4 pb-3 flex justify-end gap-2">
                               {moduleInstancesForType.length > 0 && (
-                                <div ref={instancePickerOpen ? instancePickerRef : null} className="relative">
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setOpenInstancePickerModuleId((prev) => (
-                                        prev === moduleId ? null : moduleId
-                                      ));
-                                    }}
-                                    className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-stroke-subtle bg-white text-text-secondary transition-colors enabled:hover:border-stroke-muted enabled:hover:text-text-primary"
-                                  >
-                                    Open
-                                    <ChevronDown className="w-3 h-3" />
-                                  </button>
-                                  {instancePickerOpen && (
-                                    <div className="absolute right-0 top-full mt-1 z-50 min-w-[220px] max-h-64 overflow-y-auto rounded-lg border border-divider bg-white py-1 shadow-lg">
-                                      {moduleInstancesForType.map((moduleInstance) => {
-                                        const openingThisInstance = openingExistingInstanceId === moduleInstance.id;
-                                        const isApprovedInstance = moduleInstance.is_plan_complete === true;
-                                        const label = moduleInstance.display_name
-                                          || moduleInstance.title
-                                          || moduleName;
-                                        return (
-                                          <button
-                                            key={moduleInstance.id}
-                                            type="button"
-                                            disabled={openingThisInstance || Boolean(openingExistingInstanceId)}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              void handleOpenExistingInstance(moduleInstance);
-                                            }}
-                                            className="w-full px-3 py-2 text-left text-xs text-text-secondary transition-colors enabled:hover:bg-surface-subtle enabled:hover:text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                                          >
-                                            <span className="flex items-center gap-2">
-                                              <span className="min-w-0 flex-1 truncate">
-                                                {openingThisInstance ? 'Opening…' : label}
-                                              </span>
-                                              {isApprovedInstance && (
-                                                <Check className="w-3.5 h-3.5 flex-shrink-0 text-accent" strokeWidth={2.4} />
-                                              )}
-                                            </span>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
+                                <ModuleInstanceOpenDropdown
+                                  instances={moduleInstancesForType}
+                                  onOpenInstance={handleOpenExistingInstance}
+                                  getInstanceLabel={(moduleInstance) => (
+                                    moduleInstance.display_name
+                                    || moduleInstance.title
+                                    || moduleName
                                   )}
-                                </div>
+                                />
                               )}
                               {!readOnly && (
                                 <button
