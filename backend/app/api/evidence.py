@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sql_delete
 from uuid import UUID
 from typing import Optional
+import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
@@ -18,10 +19,12 @@ from app.schemas.evidence import (
 )
 from app.services.evidence_processing import create_uploaded_doc
 from app.services.evidence_processor import schedule_processing
+from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
 from app.services.workspaces import require_workspace_member
 from app.core.rate_limit import limiter
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 _ALLOWED_UPLOAD_TYPES = {
@@ -183,6 +186,15 @@ async def upload_evidence(
     evidence_doc.preview_text = (text or "").strip()[:800] or None
     initiative.evidence_ready = True
     initiative.touch()
+    await db.flush()
+    try:
+        await extract_assumptions_from_sources(
+            db,
+            initiative,
+            actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        )
+    except Exception:
+        logger.warning("Could not refresh assumptions after evidence text upload", exc_info=True)
     await db.commit()
 
     return EvidenceUploadResponse(

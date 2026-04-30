@@ -22,6 +22,7 @@ from app.schemas.project_material import (
 )
 from app.services.document_parser import DocumentParserService
 from app.services import module_service
+from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
 from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -145,6 +146,15 @@ async def upload_material(
     db.add(material)
 
     initiative.touch()
+    await db.flush()
+    try:
+        await extract_assumptions_from_sources(
+            db,
+            initiative,
+            actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        )
+    except Exception:
+        logger.warning("Could not refresh assumptions after material upload", exc_info=True)
     await db.commit()
     await db.refresh(material)
 

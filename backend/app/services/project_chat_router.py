@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.core.llm_client import record_usage_from_response
 from app.first_party.catalog import format_module_selection_context, get_tool_hint_action
 from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT, ProjectChatAction
+from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact
 
 if TYPE_CHECKING:
@@ -83,6 +84,12 @@ class ProjectChatRouter:
             sources_used.extend(result.facts)
 
         model_inputs_context = self.chat_service._format_model_inputs_from_messages(messages, field_context)
+        assumptions_context = ""
+        if getattr(initiative, "id", None):
+            assumptions_context = await format_assumptions_for_initiative_prompt(
+                self.chat_service.db,
+                initiative.id,
+            )
         system_prompt = ORCHESTRATION_SYSTEM_PROMPT.format(
             retrieved_context=context_str if context_str else "No additional context available.",
             title=initiative.title or "Not set",
@@ -95,6 +102,7 @@ class ProjectChatRouter:
             clarifying_asked=clarifying_asked,
             user_message_count=user_message_count,
             model_inputs_context=model_inputs_context or "No model has been run yet.",
+            assumptions_context=assumptions_context or "No project assumptions tracked yet.",
         )
         system_prompt = f"{system_prompt}\n\n{format_module_selection_context()}"
         if not onboarding_mode:

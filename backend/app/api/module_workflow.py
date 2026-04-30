@@ -50,6 +50,7 @@ from app.services.decision_log_service import (
     build_module_decision_history_report,
     build_module_decision_log_xlsx,
 )
+from app.services.assumptions import AssumptionActor, sync_stage_assumptions, sync_widget_assumptions
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -584,6 +585,15 @@ async def edit_item(
     items[item_idx]["provenance"]["derivation"] = "user_edited"
     stage_data["items"] = items
     stage_state["data"] = stage_data
+    await sync_stage_assumptions(
+        db,
+        initiative_id=inst.initiative_id,
+        module_id=module.definition.id,
+        stage_id=stage_id,
+        stage_data={"items": [items[item_idx]]},
+        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        status="confirmed" if value_is_present else "needs_review",
+    )
     clear_final_approval(state)
     save_workflow_state(inst, state, increment_version=True)
     await append_decision_event(
@@ -637,6 +647,15 @@ async def add_item(
     new_item = make_build_item(content=data.content, derivation="provided")
     stage_data.setdefault("items", []).append(new_item)
     stage_state["data"] = stage_data
+    await sync_stage_assumptions(
+        db,
+        initiative_id=inst.initiative_id,
+        module_id=module.definition.id,
+        stage_id=stage_id,
+        stage_data={"items": [new_item]},
+        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        status="confirmed",
+    )
     if stage_state.get("status") == "pending":
         stage_state["status"] = "draft"
 
@@ -1107,6 +1126,13 @@ async def persist_widget_state(
     stage_data = stage_state.get("data") or {}
     stage_data["widget_data"] = data.widget_data
     stage_state["data"] = stage_data
+    await sync_widget_assumptions(
+        db,
+        initiative_id=inst.initiative_id,
+        module_id=module.definition.id,
+        widget_data=data.widget_data,
+        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+    )
     if stage_state.get("status") == "pending":
         stage_state["status"] = "draft"
 
