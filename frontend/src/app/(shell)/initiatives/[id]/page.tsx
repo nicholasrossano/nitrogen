@@ -310,8 +310,28 @@ function InitiativePageContent() {
   const workspaceOpen = overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen;
   const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
   const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
-  const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${initiativeId}`;
+  const sideChatMode: 'overview' | 'modules' | 'framework' | null =
+    activeView === 'overview'
+      ? 'overview'
+      : activeView === 'modules'
+        ? 'modules'
+        : activeView === 'framework' && hasFrameworkSelection
+          ? 'framework'
+          : null;
   const showPrimaryPanel = activeView === 'files' || workspaceOpen;
+  const hasSideChatShell = Boolean(sideChatMode);
+  const sideChatWidthPercent = !hasSideChatShell
+    ? 0
+    : !sideChatOpen
+      ? 0
+      : !showPrimaryPanel
+        ? 100
+        : chatPanelWidthPercent;
+  const primaryPanelWidthPercent = hasSideChatShell
+    ? (showPrimaryPanel ? Math.max(0, 100 - sideChatWidthPercent) : 0)
+    : (showPrimaryPanel ? 100 : 0);
+  const showChatResizeHandle = hasSideChatShell && showPrimaryPanel && sideChatOpen;
+  const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${initiativeId}`;
   const isChatPrimaryMode = activeView === 'framework' && !hasFrameworkSelection;
   const workspaceToggleEnabled = !isViewer && (
     activeView === 'overview' || activeView === 'framework' || activeView === 'modules'
@@ -988,7 +1008,7 @@ function InitiativePageContent() {
     return <div className="h-full" />;
   })();
 
-  const sideChatContent = overviewChatOpen ? (
+  const sideChatContent = sideChatMode === 'overview' ? (
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
@@ -1006,7 +1026,7 @@ function InitiativePageContent() {
         />
       </div>
     </div>
-  ) : modulesChatOpen ? (
+  ) : sideChatMode === 'modules' ? (
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
@@ -1028,7 +1048,7 @@ function InitiativePageContent() {
         />
       </div>
     </div>
-  ) : frameworkChatOpen ? (
+  ) : sideChatMode === 'framework' ? (
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
@@ -1091,31 +1111,49 @@ function InitiativePageContent() {
             )
           ) : (
             <main ref={workspaceContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
-              {showPrimaryPanel && (
-                <div className="flex-1 min-w-0 overflow-hidden">{primaryWorkspaceContent}</div>
+              {(showPrimaryPanel || hasSideChatShell) && (
+                <div
+                  className={`overflow-hidden transition-[width,opacity,transform] duration-300 ease-in-out ${showPrimaryPanel ? 'translate-x-0 opacity-100' : '-translate-x-6 opacity-0 pointer-events-none'}`}
+                  style={{ width: `${primaryPanelWidthPercent}%` }}
+                >
+                  <div
+                    className={`h-full min-w-0 transition-opacity duration-200 ease-out ${showPrimaryPanel ? 'opacity-100' : 'opacity-0'}`}
+                  >
+                    {primaryWorkspaceContent}
+                  </div>
+                </div>
               )}
 
-              {showPrimaryPanel && sideChatOpen && (
+              {hasSideChatShell && (
                 <>
                   <div
                     onMouseDown={(event) => {
+                      if (!showChatResizeHandle) return;
                       event.preventDefault();
                       setIsResizingChat(true);
                     }}
-                    className={`w-2 flex-shrink-0 cursor-col-resize relative group ${isResizingChat ? 'bg-accent/10' : ''}`}
+                    className={`w-2 flex-shrink-0 relative group transition-all duration-300 ease-in-out ${showChatResizeHandle ? 'cursor-col-resize opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'} ${isResizingChat ? 'bg-accent/10' : ''}`}
                   >
                     <div className={`absolute left-1/2 top-0 h-full -translate-x-1/2 w-px transition-colors ${isResizingChat ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`} />
                   </div>
 
-                  <div className="flex-shrink-0 overflow-hidden" style={{ width: `${chatPanelWidthPercent}%` }}>
-                    {sideChatContent}
+                  <div
+                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+                    style={{ width: `${sideChatWidthPercent}%` }}
+                  >
+                    <div
+                      className={`h-full w-full transition-all duration-300 ease-in-out ${sideChatOpen ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0 pointer-events-none'}`}
+                    >
+                      <div
+                        className={`h-full transition-opacity duration-200 ease-out ${sideChatOpen ? 'opacity-100' : 'opacity-0'}`}
+                      >
+                        {sideChatContent}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
 
-              {!showPrimaryPanel && sideChatOpen && (
-                <div className="flex-1 min-w-0 overflow-hidden">{sideChatContent}</div>
-              )}
             </main>
           )}
         </div>
