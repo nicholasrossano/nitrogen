@@ -33,6 +33,7 @@ from app.schemas.provenance import (
     source_attribution_from_retrieved_fact,
 )
 from app.services.rag import RAGService
+from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
 
 settings = get_settings()
@@ -391,6 +392,9 @@ class DeepDiveService:
             context_lines.append(
                 f"Description: {initiative.project_description[:600]}"
             )
+        assumptions_context = await format_assumptions_for_initiative_prompt(self.db, initiative.id)
+        if assumptions_context:
+            context_lines.append(assumptions_context)
         project_context = "\n".join(context_lines) if context_lines else "Not specified"
 
         # Step 1: Generate precision search queries via fast LLM call

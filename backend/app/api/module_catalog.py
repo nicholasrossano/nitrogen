@@ -10,6 +10,7 @@ from app.core.permissions import require_editor, require_viewer
 from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.modules import get_module_registry
+from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_stage_assumptions
 from app.services.sdg_classifier import classify_sdg
 
 
@@ -211,6 +212,12 @@ async def select_tools(
         tool_inputs.setdefault("project_goal", initiative.goal)
     initiative.tool_inputs = tool_inputs
     initiative.touch()  # Update the initiative's updated_at timestamp
+    await ensure_expected_assumptions(
+        db,
+        initiative,
+        module_ids=valid_tools,
+        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+    )
     
     await db.commit()
     await db.refresh(initiative)
@@ -341,6 +348,22 @@ async def update_tool_inputs(
         initiative.budget_range = inputs["budget_range"]
     if "timeline" in inputs:
         initiative.timeline = inputs["timeline"]
+    stage_data = {
+        "items": [
+            {"content": {"field_name": key, "value": value}}
+            for key, value in inputs.items()
+        ]
+    }
+    for tool_id in initiative.selected_tools or []:
+        await sync_stage_assumptions(
+            db,
+            initiative_id=initiative.id,
+            module_id=tool_id,
+            stage_id="tool_inputs",
+            stage_data=stage_data,
+            actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+            status="confirmed",
+        )
     
     await db.commit()
     

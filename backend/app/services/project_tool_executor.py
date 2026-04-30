@@ -40,7 +40,7 @@ class ProjectToolExecutor:
         logger.info("Executing action: %s", action)
 
         if action == "send_message":
-            project_context = self.chat_service._build_project_context(initiative)
+            project_context = await self.chat_service.build_project_context_with_assumptions(initiative)
             history_dicts = self.chat_service._chat_history_to_dicts(chat_history)
             user_message = self.chat_service._extract_last_user_message(chat_history, params)
 
@@ -236,7 +236,7 @@ class ProjectToolExecutor:
                 )
 
         elif action == "propose_input_value":
-            project_context = self.chat_service._build_project_context(initiative)
+            project_context = await self.chat_service.build_project_context_with_assumptions(initiative)
             history_dicts = self.chat_service._chat_history_to_dicts(chat_history)
             user_message = self.chat_service._extract_last_user_message(chat_history, params)
             active_field_context = field_context or {
