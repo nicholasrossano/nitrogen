@@ -83,10 +83,11 @@ Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about
 Follow `docs/style-guide.md` as the source of truth.
 
 **Buttons (non-negotiable):**
-- ALWAYS use one of the three global button classes. NEVER build a custom button with raw Tailwind.
+- ALWAYS use one of the global button/action classes. NEVER build a custom button with raw Tailwind.
   - `btn-primary` — primary / confirming actions (Export, Confirm, Generate, Submit). Accent border, fills with accent on hover.
   - `btn-secondary` — secondary / cancel actions. Neutral border, subtle hover.
   - `btn-danger` — destructive actions only (Delete, Remove).
+  - `btn-compact-neutral` — small refresh-style actions in cards/headers (Refresh, View All). Neutral border, white fill, accent border/text on hover.
 - Full-width buttons: add `w-full` + size override `!px-4 !py-2` (or `!py-1.5` for compact panels).
 - With icon: put the Lucide icon inside the button alongside the label — the class already provides `gap-2`.
 - See `docs/style-guide.md § K) Buttons` for the full spec and examples.
