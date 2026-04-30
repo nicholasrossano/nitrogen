@@ -10,6 +10,11 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
 from app.core.storage import get_uploads_storage
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
+from app.core.upload_types import (
+    DOCUMENT_CONTENT_TYPES,
+    content_type_for_file_type,
+    resolve_document_file_type,
+)
 from app.models.evidence import EvidenceDoc
 from app.models.google_drive import DriveLinkedFile
 from app.models.memo import MemoVersion
@@ -21,6 +26,10 @@ from app.schemas.project_material import (
     ProjectFilesResponse,
 )
 from app.services.document_parser import DocumentParserService
+from app.services.document_conversion import (
+    DocumentConversionError,
+    prepare_uploaded_document,
+)
 from app.services import module_service
 from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
 from app.core.rate_limit import limiter
@@ -30,15 +39,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_CONTENT_TYPES = {
-    "application/pdf": "pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    **DOCUMENT_CONTENT_TYPES,
     "text/plain": "txt",
     "text/csv": "csv",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-    "application/vnd.ms-excel": "xls",
     "image/png": "png",
     "image/jpeg": "jpg",
 }
+
+_PROJECT_UPLOAD_TYPE_LABEL = "PDF, DOCX, PPTX, TXT, CSV, Excel, Pages, Keynote, PNG, or JPG"
+
+
+def _resolve_material_file_type(content_type: str | None, filename: str | None) -> str | None:
+    if content_type in {"text/plain", "text/csv", "image/png", "image/jpeg"}:
+        return ALLOWED_CONTENT_TYPES[content_type]
+    return resolve_document_file_type(content_type, filename)
 
 
 async def _repair_project_file_workspace_ids(db: AsyncSession, initiative_id, workspace_id) -> None:
@@ -93,11 +107,11 @@ async def upload_material(
     """Upload a file as project-level context material."""
     initiative = await require_editor(db, initiative_id, user)
 
-    file_type = ALLOWED_CONTENT_TYPES.get(file.content_type or "")
+    file_type = _resolve_material_file_type(file.content_type, file.filename)
     if not file_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file type: {file.content_type}. Allowed: PDF, DOCX, TXT, CSV, XLSX, PNG, JPG",
+            detail=f"Unsupported file type: {file.content_type}. Allowed: {_PROJECT_UPLOAD_TYPE_LABEL}",
         )
 
     content = await file.read()
@@ -106,41 +120,53 @@ async def upload_material(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File size exceeds 50 MB limit",
         )
-    if not validate_file_magic(content, file.content_type or ""):
+    validation_content_type = file.content_type or content_type_for_file_type(file_type) or ""
+    if not validate_file_magic(content, validation_content_type):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File content does not match declared type",
         )
+
+    try:
+        prepared = prepare_uploaded_document(content, file.filename, file_type)
+    except DocumentConversionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
     storage = get_uploads_storage()
     storage_path = await storage.save(
-        content, file.filename or "file", folder=f"{initiative.id}/materials"
+        prepared.content, prepared.filename, folder=f"{initiative.id}/materials"
     )
 
     content_text = None
     parser = DocumentParserService()
     try:
-        if file_type == "pdf":
-            content_text = parser.parse_pdf(content)
-        elif file_type == "docx":
-            content_text = parser.parse_docx(content)
-        elif file_type in ("txt", "csv"):
-            content_text = content.decode("utf-8", errors="replace")
-        elif file_type in ("xlsx", "xls"):
-            content_text = parser.parse_xlsx(content)
+        if prepared.file_type == "pdf":
+            content_text = parser.parse_pdf(prepared.content)
+        elif prepared.file_type == "docx":
+            content_text = parser.parse_docx(prepared.content)
+        elif prepared.file_type == "pptx":
+            content_text = parser.parse_pptx(prepared.content)
+        elif prepared.file_type in ("txt", "csv"):
+            content_text = prepared.content.decode("utf-8", errors="replace")
+        elif prepared.file_type in ("xlsx", "xls"):
+            content_text = parser.parse_xlsx(prepared.content)
     except Exception:
         logger.warning("Could not extract text from %s", file.filename, exc_info=True)
 
     unique_filename = await deduplicate_filename(
-        db, initiative.id, file.filename or "Untitled"
+        db, initiative.id, prepared.filename
     )
 
     material = ProjectMaterial(
         initiative_id=initiative.id,
         workspace_id=initiative.workspace_id,
         filename=unique_filename,
-        file_type=file_type,
+        file_type=prepared.file_type,
         storage_path=storage_path,
-        file_size=len(content),
+        file_size=len(prepared.content),
         content_text=content_text,
     )
     db.add(material)
@@ -456,6 +482,7 @@ async def download_material(
         "csv": "text/csv",
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "xls": "application/vnd.ms-excel",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "png": "image/png",
         "jpg": "image/jpeg",
     }

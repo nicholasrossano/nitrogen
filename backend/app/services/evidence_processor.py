@@ -72,6 +72,9 @@ def _extract_preview(
         if file_type == "docx":
             text = parser.parse_docx(file_bytes)
             return (text or "").strip()[:PREVIEW_CHAR_LIMIT] or None
+        if file_type == "pptx":
+            text = parser.parse_pptx(file_bytes)
+            return (text or "").strip()[:PREVIEW_CHAR_LIMIT] or None
         if file_type in ("xlsx", "xls"):
             text = parser.parse_xlsx(file_bytes)
             return (text or "").strip()[:PREVIEW_CHAR_LIMIT] or None
