@@ -86,8 +86,6 @@ Current examples:
 
 - `stakeholder_assessment`
 - `landscape_mapping`
-- `esmp`
-- `mel_plan`
 
 Implementation contract:
 

@@ -36,11 +36,9 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
     import cycles with concrete module implementations.
     """
     from app.modules.carbon_module import CarbonTool
-    from app.modules.esmp import ESMPModule
     from app.modules.implementation_plan import ImplementationPlanModule
     from app.modules.landscape_mapping import LandscapeMappingModule
     from app.modules.lcoe_module import LCOETool
-    from app.modules.mel_plan import MELPlanModule
     from app.modules.pvwatts_module import PVWattsTool
     from app.modules.risk_assessment import RiskAssessmentModule
     from app.modules.stakeholder_assessment import StakeholderAssessmentModule
@@ -114,18 +112,6 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             selection_triggers=("implementation", "roadmap", "workplan", "execution"),
             domain_tags=("planning", "delivery"),
         ),
-        "esmp": ModuleSelectionMetadata(
-            module_id="esmp",
-            selection_description="Drafts an environmental and social management plan.",
-            selection_triggers=("ESMP", "safeguards", "IFC", "environmental management"),
-            domain_tags=("safeguards", "compliance"),
-        ),
-        "mel_plan": ModuleSelectionMetadata(
-            module_id="mel_plan",
-            selection_description="Builds a monitoring, evaluation, and learning plan.",
-            selection_triggers=("MEL", "monitoring", "evaluation", "indicators", "logframe"),
-            domain_tags=("measurement", "reporting"),
-        ),
         "risk_assessment": ModuleSelectionMetadata(
             module_id="risk_assessment",
             selection_description="Builds a structured project risk register with mitigations and ratings.",
@@ -149,8 +135,6 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             PVWattsTool,
             StakeholderAssessmentModule,
             LandscapeMappingModule,
-            ESMPModule,
-            MELPlanModule,
             RiskAssessmentModule,
             ImplementationPlanModule,
         ),
@@ -163,26 +147,6 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             "residual risk": ("risk_assessment",),
             "project risk": ("risk_assessment",),
             "risk mitigation": ("risk_assessment",),
-            "esmp": ("esmp",),
-            "environmental": ("esmp",),
-            "safeguards": ("esmp",),
-            "e&s": ("esmp",),
-            "ifc": ("esmp",),
-            "social impact": ("esmp",),
-            "mitigation": ("esmp",),
-            "resettlement": ("esmp",),
-            "biodiversity": ("esmp",),
-            "esia": ("esmp",),
-            "mel": ("mel_plan",),
-            "monitoring": ("mel_plan",),
-            "evaluation": ("mel_plan",),
-            "results framework": ("mel_plan",),
-            "logframe": ("mel_plan",),
-            "indicators": ("mel_plan",),
-            "impact measurement": ("mel_plan",),
-            "theory of change": ("mel_plan",),
-            "iris": ("mel_plan",),
-            "reporting": ("mel_plan",),
             "implementation plan": ("implementation_plan",),
             "implementation": ("implementation_plan",),
             "workplan": ("implementation_plan",),
