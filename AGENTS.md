@@ -21,9 +21,6 @@
 - For phased architecture migrations, add tests in-phase: contract tests immediately, targeted parity/regression tests at each wiring step (do not wait until the final phase).
 - For new test suites added during migration phases, include them in the default backend CI pytest path (or document why they are intentionally excluded).
 
-**Disabled button hover states:**
-- Whenever a button has both `hover:X` effects and `disabled:opacity-*`, replace `hover:X` with `enabled:hover:X` so hover animations are suppressed when disabled while the `disabled:cursor-not-allowed` cursor still shows. For `btn-primary/secondary/danger` classes in `globals.css`, add `:disabled:hover::before { opacity: 0 }` CSS overrides to suppress the pseudo-element fill animation.
-
 **Post-edit checks (always run):**
 - After every substantive edit, call `ReadLints` on the edited file(s) before finalizing.
 - Fix any linter errors introduced by the change before responding.
@@ -80,40 +77,11 @@ There are **two distinct chat/UI surfaces**. Assume the user is always referring
 Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about the generate flow tiles in `LandingInput.tsx`.
 
 ## UI/Design
-Follow `docs/style-guide.md` as the source of truth.
+`docs/style-guide.md` is the UI source of truth for design patterns and visual rules.
 
-**Buttons (non-negotiable):**
-- ALWAYS use one of the global button/action classes. NEVER build a custom button with raw Tailwind.
-  - `btn-primary` — primary / confirming actions (Export, Confirm, Generate, Submit). Accent border, fills with accent on hover.
-  - `btn-secondary` — secondary / cancel actions. Neutral border, subtle hover.
-  - `btn-danger` — destructive actions only (Delete, Remove).
-  - `btn-compact-neutral` — small refresh-style actions in cards/headers (Refresh, View All). Neutral border, white fill, accent border/text on hover.
-- In embedded panel action rows (e.g. Cancel + Confirm), right-align both buttons and use the squared-off Share tier: `!py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5`.
-- Full-width buttons: add `w-full` + size override `!px-4 !py-2` (or `!py-1.5` for compact panels).
-- With icon: put the Lucide icon inside the button alongside the label — the class already provides `gap-2`.
-- See `docs/style-guide.md § K) Buttons` for the full spec and examples.
-
-**Page layout chrome (non-negotiable):**
-- Every top-level page must use the three-part shell: `<div h-screen flex flex-col>` → `<header shrink-0 h-14>` → `<div flex flex-1 min-h-0>` (sidebar + workspace).
-- The `<header className="shrink-0 h-14">` must always be present — even if empty — on every page state/branch. What changes is only the content inside it, never its presence. Never omit the header on any conditional render branch (e.g. a selection screen vs. an active workspace screen on the same route).
-
-**Pillar/node UI reuse (non-negotiable):**
-- For category/entity tree UIs, reuse shared pillar/node components (`PlanStructureColumn`, `PlanItemNode`) with prop-based variants; do not build lookalike duplicates.
-- Keep diagram mode clean (no right-side edit chrome); only show drag/delete controls in explicit editor mode.
-- Draft add rows should be neutral grey (not confirmed color), collect only the primary label by default, and be launched from a centered green add-dot affordance.
-- Preserve node rhythm/alignment: draft rows use the same vertical spacing as active nodes, and title text stays vertically centered when no subtitle is present.
-
-**Dropdown/popover layering:**
-- Dropdown menus must never be clipped by parent containers: avoid `overflow-hidden` on menu ancestors, and use `relative` trigger wrappers with `absolute z-50+` menus (or portal when crossing scroll/modal boundaries).
-- Use the shared custom dropdown (button + menu) for product dropdown fields; do not use native `<select>` in app UI unless a documented accessibility exception requires it.
-
-**Tooltip convention:**
-- Use the shared `@/components/ui/Tooltip` for hover help (especially disabled controls) instead of custom absolute bubbles or ad-hoc `title` text when explanatory copy is needed.
-
-**Shared control reuse:**
-- When a control pattern already exists (e.g. role dropdowns in sharing flows), reuse the same shared component across surfaces instead of re-implementing per modal/page.
-- Chat-attached widgets must use the shared `ChatPanelWidgetShell` for header/collapse/close behavior; widget components should only provide body content and optional header actions.
-- When a table row opens a chat-attached widget, the chat panel should show only that selected row's detail content, not the whole table/filter UI.
+- Do not duplicate design guidance here.
+- Follow the style guide for all UI decisions (buttons, layout chrome, pillars/nodes, dropdown layering, tooltips, and shared control reuse).
+- When a reusable design rule changes, update `docs/style-guide.md` in the same change.
 
 ## Loading Art Authoring
 
