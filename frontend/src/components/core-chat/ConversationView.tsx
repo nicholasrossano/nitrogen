@@ -324,7 +324,7 @@ export function ConversationView({
               placeholder="Ask anything"
               disabled={sending}
               rows={1}
-              className="w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+              className="no-global-focus-style w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
             />
 
