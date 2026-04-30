@@ -938,6 +938,8 @@ function InitiativePageContent() {
           onModuleInspectorStateChange={handleModuleInspectorStateChange}
           onModuleApprovalChange={() => loadFrameworkModuleInstances(initiativeId, { force: true })}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
+          moduleInstances={frameworkModuleInstances}
+          onOpenModuleInstance={handleOpenExistingModuleInstanceInModulesView}
         />
       );
     }

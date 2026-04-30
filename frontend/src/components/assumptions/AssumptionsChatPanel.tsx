@@ -31,9 +31,19 @@ export function AssumptionsChatPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const formatValue = useCallback((value: any, unit?: string | null): string => {
+  const formatValue = useCallback((value: any, unit?: string | null, valueType?: Assumption['value_type']): string => {
     if (value === null || value === undefined || value === '') return '—';
-    const formatted = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    const formatted = typeof value === 'number'
+      ? (
+          valueType === 'currency'
+            ? value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+            : Number.isInteger(value)
+              ? value.toLocaleString()
+              : value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+        )
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value);
     return unit ? `${formatted} ${unit}` : formatted;
   }, []);
 
@@ -53,7 +63,7 @@ export function AssumptionsChatPanel({
       .then((assumption) => {
         if (cancelled) return;
         setSelected(assumption);
-        setDraftValue(formatValue(assumption.value, null));
+        setDraftValue(formatValue(assumption.value, null, assumption.value_type));
         setDraftUnit(assumption.unit ?? '');
       })
       .catch((e: any) => {
@@ -69,7 +79,7 @@ export function AssumptionsChatPanel({
     };
   }, [focusAssumptionId, formatValue, initiativeId]);
 
-  const selectedValueText = selected ? formatValue(selected.value, null) : '';
+  const selectedValueText = selected ? formatValue(selected.value, null, selected.value_type) : '';
   const hasDraftChanges = useMemo(() => Boolean(
     selected && (
       draftValue !== selectedValueText ||
@@ -86,7 +96,7 @@ export function AssumptionsChatPanel({
 
   const handleCancel = useCallback(() => {
     if (!selected) return;
-    setDraftValue(formatValue(selected.value, null));
+    setDraftValue(formatValue(selected.value, null, selected.value_type));
     setDraftUnit(selected.unit ?? '');
   }, [formatValue, selected]);
 
@@ -106,7 +116,7 @@ export function AssumptionsChatPanel({
         status: 'confirmed',
       });
       setSelected(updated);
-      setDraftValue(formatValue(updated.value, null));
+      setDraftValue(formatValue(updated.value, null, updated.value_type));
       setDraftUnit(updated.unit ?? '');
     } catch (e: any) {
       setError(e?.message ?? 'Failed to update assumption');

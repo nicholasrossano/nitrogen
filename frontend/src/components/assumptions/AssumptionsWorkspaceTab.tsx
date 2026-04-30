@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { ModuleInstanceOpenDropdown } from '@/components/framework/ModuleInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import {
   api,
   type Assumption,
+  type ModuleInstance,
   type AssumptionSourceType,
   type AssumptionStatus,
 } from '@/lib/api';
@@ -19,14 +21,16 @@ interface AssumptionsWorkspaceTabProps {
   showDetailPanel?: boolean;
   focusAssumptionId?: string | null;
   onAssumptionSelectInChat?: (assumption: Assumption) => void;
+  moduleInstances?: ModuleInstance[];
+  onOpenModuleInstance?: (instance: ModuleInstance) => Promise<void> | void;
 }
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
   { value: '', label: 'All statuses' },
   { value: 'confirmed', label: 'Confirmed' },
-  { value: 'needs_review', label: 'Needs review' },
+  { value: 'inferred', label: 'Inferred' },
+  { value: 'assumed', label: 'Assumed' },
   { value: 'missing', label: 'Missing' },
-  { value: 'rejected', label: 'Rejected' },
 ];
 
 const SOURCE_OPTIONS: Array<{ value: '' | AssumptionSourceType; label: string }> = [
@@ -39,9 +43,24 @@ const SOURCE_OPTIONS: Array<{ value: '' | AssumptionSourceType; label: string }>
   { value: 'model_candidate', label: 'Model candidate' },
 ];
 
-function formatValue(value: any, unit?: string | null): string {
+function formatNumeric(value: number, valueType?: Assumption['value_type']): string {
+  if (!Number.isFinite(value)) return String(value);
+  if (valueType === 'currency') {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  if (Number.isInteger(value)) {
+    return value.toLocaleString();
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function formatValue(value: any, unit?: string | null, valueType?: Assumption['value_type']): string {
   if (value === null || value === undefined || value === '') return '—';
-  const formatted = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  const formatted = typeof value === 'number'
+    ? formatNumeric(value, valueType)
+    : typeof value === 'object'
+      ? JSON.stringify(value)
+      : String(value);
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
@@ -51,9 +70,10 @@ function formatStatus(status: AssumptionStatus): string {
 
 function statusClass(status: AssumptionStatus): string {
   if (status === 'confirmed') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'inferred') return 'border-blue-200 bg-blue-50 text-blue-700';
+  if (status === 'assumed') return 'border-amber-200 bg-amber-50 text-amber-800';
   if (status === 'missing') return 'border-red-200 bg-red-50 text-red-600';
-  if (status === 'rejected') return 'border-stroke-subtle bg-surface-subtle text-text-tertiary';
-  return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-stroke-subtle bg-surface-subtle text-text-tertiary';
 }
 
 export function AssumptionsWorkspaceTab({
@@ -62,6 +82,8 @@ export function AssumptionsWorkspaceTab({
   showDetailPanel = true,
   focusAssumptionId = null,
   onAssumptionSelectInChat,
+  moduleInstances = [],
+  onOpenModuleInstance,
 }: AssumptionsWorkspaceTabProps) {
   const [rows, setRows] = useState<Assumption[]>([]);
   const [selected, setSelected] = useState<Assumption | null>(null);
@@ -97,7 +119,7 @@ export function AssumptionsWorkspaceTab({
   }, [loadRows]);
 
   useEffect(() => {
-    setDraftValue(selected ? formatValue(selected.value, null) : '');
+    setDraftValue(selected ? formatValue(selected.value, null, selected.value_type) : '');
     setDraftUnit(selected?.unit ?? '');
   }, [selected]);
 
@@ -120,8 +142,7 @@ export function AssumptionsWorkspaceTab({
     ],
     [moduleOptions],
   );
-
-  const selectedValueText = selected ? formatValue(selected.value, null) : '';
+  const selectedValueText = selected ? formatValue(selected.value, null, selected.value_type) : '';
   const hasDraftChanges = Boolean(
     selected && (
       draftValue !== selectedValueText ||
@@ -157,7 +178,7 @@ export function AssumptionsWorkspaceTab({
         </button>
       ),
     },
-    { key: 'value', header: 'Value', className: 'min-w-[160px]', render: (row) => formatValue(row.value, row.unit) },
+    { key: 'value', header: 'Value', className: 'min-w-[160px]', render: (row) => formatValue(row.value, row.unit, row.value_type) },
     {
       key: 'status',
       header: 'Status',
@@ -169,8 +190,24 @@ export function AssumptionsWorkspaceTab({
       ),
     },
     { key: 'source_type', header: 'Source', className: 'whitespace-nowrap min-w-[140px]', render: (row) => row.source_type.replace('_', ' ') },
-    { key: 'used_in_modules', header: 'Modules', className: 'min-w-[180px]', render: (row) => row.used_in_modules.join(', ') || '—' },
     { key: 'last_updated_by_email', header: 'Updated By', className: 'whitespace-nowrap min-w-[150px]', render: (row) => row.last_updated_by_email || row.created_by_email || 'system' },
+    {
+      key: 'used_in_modules',
+      header: 'Modules',
+      className: 'min-w-[180px]',
+      render: (row) => {
+        const relevantInstances = moduleInstances.filter((instance) => row.used_in_modules.includes(instance.module_id));
+        if (relevantInstances.length === 0) return '—';
+        if (!onOpenModuleInstance) return `${relevantInstances.length} linked`;
+        return (
+          <ModuleInstanceOpenDropdown
+            instances={relevantInstances}
+            onOpenInstance={onOpenModuleInstance}
+            getInstanceLabel={(instance) => instance.display_name || instance.title || instance.module_id.replace(/_/g, ' ')}
+          />
+        );
+      },
+    },
   ];
 
   const updateSelected = useCallback(async (updates: Partial<Assumption>) => {
@@ -204,7 +241,7 @@ export function AssumptionsWorkspaceTab({
 
   const handleCancel = useCallback(() => {
     if (!selected) return;
-    setDraftValue(formatValue(selected.value, null));
+    setDraftValue(formatValue(selected.value, null, selected.value_type));
     setDraftUnit(selected.unit ?? '');
   }, [selected]);
 

@@ -47,6 +47,8 @@ interface ProjectWorkspaceEditorPanelProps {
   onModuleInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onModuleApprovalChange?: () => void;
   onOpenAssumptionInChat?: (assumption: Assumption) => void;
+  moduleInstances?: ModuleInstance[];
+  onOpenModuleInstance?: (instance: ModuleInstance) => Promise<void> | void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -69,6 +71,8 @@ export function ProjectWorkspaceEditorPanel({
   onModuleInspectorStateChange,
   onModuleApprovalChange,
   onOpenAssumptionInChat,
+  moduleInstances = [],
+  onOpenModuleInstance,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [showNewModuleDropdown, setShowNewModuleDropdown] = useState(false);
@@ -151,6 +155,8 @@ export function ProjectWorkspaceEditorPanel({
           initiativeId={initiativeId}
           showDetailPanel={false}
           onAssumptionSelectInChat={onOpenAssumptionInChat}
+          moduleInstances={moduleInstances}
+          onOpenModuleInstance={onOpenModuleInstance}
         />
       );
     }
