@@ -48,6 +48,12 @@ from app.models.initiative import Initiative
 from app.models.module_instance import ModuleInstance
 from app.modules.base import BaseModule, StageDef
 from app.modules.utils import make_build_item
+from app.services.assumptions import (
+    AssumptionActor,
+    apply_assumptions_to_items,
+    assumptions_as_context,
+    sync_stage_assumptions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +123,7 @@ async def get_initiative_context(db: AsyncSession, initiative_id: Any) -> dict[s
         "project_type": initiative.project_type or "",
         "project_plan": initiative.project_plan or {},
         "tool_inputs": dict(initiative.tool_inputs or {}),
+        "assumptions": await assumptions_as_context(db, initiative.id),
     }
 
 
@@ -430,6 +437,11 @@ async def _execute_population_step(
             make_build_item(content=row, derivation="template")
             for row in rows
         ]
+        items = apply_assumptions_to_items(
+            items,
+            context.get("assumptions") or [],
+            module_id=module.definition.id,
+        )
         existing = accumulated_data.get("items", [])
         return {"items": existing + items}
 
@@ -552,6 +564,16 @@ async def confirm_stage(
     stage_state["confirmed_at"] = datetime.now(timezone.utc).isoformat()
     stage_state["confirmed_by"] = confirmed_by
     stage_state["confirmed_by_email"] = confirmed_by_email
+
+    await sync_stage_assumptions(
+        db,
+        initiative_id=inst.initiative_id,
+        module_id=module.definition.id,
+        stage_id=stage_id,
+        stage_data=stage_state.get("data") or {},
+        actor=AssumptionActor(user_id=confirmed_by, email=confirmed_by_email or confirmed_by),
+        status="confirmed",
+    )
 
     _invalidate_downstream(state, module, stage_id)
 
