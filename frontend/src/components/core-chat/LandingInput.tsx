@@ -194,7 +194,7 @@ export function LandingInput({
               placeholder={placeholder}
               disabled={disabled}
               rows={1}
-              className="w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+              className="no-global-focus-style w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             />
             {extraInputActions && (
