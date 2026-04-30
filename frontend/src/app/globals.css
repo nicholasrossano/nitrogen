@@ -315,9 +315,9 @@ body {
 }
 
 /* Shared focus treatment for form fields (replaces browser default orange ring) */
-input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
-textarea:focus,
-select:focus {
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus:not(.no-global-focus-style),
+textarea:focus:not(.no-global-focus-style),
+select:focus:not(.no-global-focus-style) {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-tint) 65%, transparent);
