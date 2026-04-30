@@ -1043,6 +1043,24 @@ export function ProjectChatTabsPanel({
           const showExpandedDeepDive = Boolean(deepDive && !deepDive.collapsed);
           const showExpandedAssumptions = Boolean(assumptions && !assumptions.collapsed);
           const tabPendingAutoSend = pendingAutoSendByTabId[tab.id] ?? null;
+          const tabTopContent = deepDive ? (
+            <DeepDiveWidget
+              state={deepDive.state}
+              collapsed={deepDive.collapsed}
+              layoutMode={showExpandedDeepDive ? 'panel' : 'inline'}
+              onCollapsedChange={(collapsed) => handleDeepDiveCollapsedChange(tab.id, collapsed)}
+              onOpenDocument={deepDive.onOpenDocument}
+            />
+          ) : assumptions ? (
+            <AssumptionsChatPanel
+              initiativeId={initiativeId}
+              focusAssumptionId={assumptions.focusAssumptionId ?? null}
+              collapsed={assumptions.collapsed ?? false}
+              layoutMode={showExpandedAssumptions ? 'panel' : 'inline'}
+              onCollapsedChange={(collapsed) => handleAssumptionsCollapsedChange(tab.id, collapsed)}
+              onClose={() => handleAssumptionsClose(tab.id)}
+            />
+          ) : isActive ? topContent : undefined;
           return (
             <div
               key={tab.id}
@@ -1078,27 +1096,8 @@ export function ProjectChatTabsPanel({
                       : undefined
                 }
                 projectContext={deepDive ? formatDeepDiveProjectContext(deepDive.state) : null}
-                topContentMode={isActive && (showExpandedDeepDive || showExpandedAssumptions) ? 'panel' : 'inline'}
-                topContent={isActive ? (
-                  deepDive ? (
-                    <DeepDiveWidget
-                      state={deepDive.state}
-                      collapsed={deepDive.collapsed}
-                      layoutMode={showExpandedDeepDive ? 'panel' : 'inline'}
-                      onCollapsedChange={(collapsed) => handleDeepDiveCollapsedChange(tab.id, collapsed)}
-                      onOpenDocument={deepDive.onOpenDocument}
-                    />
-                  ) : assumptions ? (
-                    <AssumptionsChatPanel
-                      initiativeId={initiativeId}
-                      focusAssumptionId={assumptions.focusAssumptionId ?? null}
-                      collapsed={assumptions.collapsed ?? false}
-                      layoutMode={showExpandedAssumptions ? 'panel' : 'inline'}
-                      onCollapsedChange={(collapsed) => handleAssumptionsCollapsedChange(tab.id, collapsed)}
-                      onClose={() => handleAssumptionsClose(tab.id)}
-                    />
-                  ) : topContent
-                ) : undefined}
+                topContentMode={showExpandedDeepDive || showExpandedAssumptions ? 'panel' : 'inline'}
+                topContent={tabTopContent}
               />
             </div>
           );
