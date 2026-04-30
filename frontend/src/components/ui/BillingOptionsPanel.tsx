@@ -84,9 +84,9 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
         <PlanCard
           icon={<Sparkles className="w-4 h-4" />}
           name="Starter"
-          price="$20"
+          price="$1"
           period="/mo"
-          description="Perfect for getting started"
+          description="For getting started"
           buttonLabel="Subscribe"
           loading={checkoutLoading === STARTER_PRICE_ID}
           disabled={!!checkoutLoading}
@@ -96,7 +96,7 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
         <PlanCard
           icon={<Zap className="w-4 h-4" />}
           name="Pro"
-          price="$60"
+          price="$2"
           period="/mo"
           description="For power users"
           buttonLabel="Subscribe"
