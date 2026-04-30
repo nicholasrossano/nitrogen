@@ -476,6 +476,7 @@ Use only for irreversible destructive actions: Delete, Remove, Revoke.
   - **Floating/standalone CTA** buttons keep the default capsule shape (`rounded-[20px]`).
   - **Embedded flow buttons** (inline with inputs, table rows, modal form actions — e.g. Share/Create buttons) should override to lightly rounded corners (`!rounded-lg` or `!rounded-md`).
   - In any given button row, peer buttons must use the same radius tier.
+- **Embedded action pairs** (e.g. Cancel + Confirm in side panels) should be right-aligned and use the Share-button compact tier: `!py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5`.
 
 ### Module workspace header (aligned with stage toggle)
 Actions in the module workspace top bar that sit **next to the stage stepper** (Decision log, Approve, module Export, and the same pattern elsewhere) must match the **stage segment** typography, not the default global button size:
@@ -746,7 +747,7 @@ Menus must render above neighboring panels and never be clipped by parent contai
 - For any dropdown/popover trigger wrapper, use `className="relative"` and menu `className="absolute ... z-50"` (or higher when required by local stacking context).
 - Never place dropdown menus inside ancestors with `overflow-hidden` (or `overflow-y-auto` clipping the axis you need); use `overflow-visible` on the nearest container that wraps the menu.
 - If a menu can extend beyond a scroll container or modal section, render it in a non-clipping ancestor (or portal) rather than raising `z-index` alone.
-- In shell/interstitial controls (workspace selectors, settings pickers), use the custom dropdown pattern (button + popover menu). Avoid native `<select>` for these surfaces.
+- Use the shared custom dropdown pattern (button + popover menu) for product dropdown fields. Avoid native `<select>` in app UI unless there is a documented accessibility exception.
 
 ---
 
@@ -905,6 +906,23 @@ In `ProjectHeader.tsx`, `leftToggle` renders a `PanelLeft` icon button:
 **When to use**
 - Any view where a persistent chat thread should be available alongside a primary content panel (plan view, document editor, etc.)
 - The onboarding/setup phase should use a **full-width** `ChatPanel` instead (no split, no toggle button) — only switch to the split layout after the primary content (e.g. project plan) has been generated
+
+---
+
+### Chat-Attached Widget Panels
+
+Use when a chat thread is anchored to supporting context shown above the composer, such as Deep Dive research details or a selected project assumption.
+
+**Rules**
+- Use the shared chat widget shell (`ChatPanelWidgetShell`) for header, icon, eyebrow, title, collapse, close, body sizing, and inline-vs-panel layout behavior.
+- Do not reimplement header/collapse/close behavior inside each widget. Widget components should only supply their specific body content and optional header actions.
+- Avoid nested card chrome inside the shell. The shell is the container; selected-item content should render directly inside it unless a nested card is semantically necessary.
+- When a user sends a message in a thread anchored to a widget panel, collapse the panel so the conversation gets focus.
+- If a workspace table row opens a chat-attached widget, the chat panel should show only the selected row's detail/edit content, not the whole table or filters.
+
+**Examples**
+- Deep Dive: shared shell + sources action + deep-dive result content.
+- Assumption detail: shared shell + selected assumption form content.
 
 ---
 

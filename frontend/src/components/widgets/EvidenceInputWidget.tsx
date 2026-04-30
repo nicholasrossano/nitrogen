@@ -10,6 +10,7 @@ import {
   filterSupportedFiles,
   checkDuplicates,
   SUPPORTED_EXTENSIONS,
+  SUPPORTED_FILE_LABEL,
   runWithConcurrency,
   DEFAULT_UPLOAD_CONCURRENCY,
 } from '@/lib/fileUtils';
@@ -51,7 +52,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
   const handleFiles = async (files: File[]) => {
     const { accepted, rejected } = filterSupportedFiles(files);
     if (rejected.length > 0) {
-      alert(`Skipped unsupported files:\n${rejected.join('\n')}\n\nAccepted: PDF, DOCX, XLSX, XLS`);
+      alert(`Skipped unsupported files:\n${rejected.join('\n')}\n\nAccepted: ${SUPPORTED_FILE_LABEL}`);
     }
     if (accepted.length === 0) return;
 
@@ -167,7 +168,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
                   Drop files or a folder, or click to browse
                 </p>
                 <p className="text-sm text-text-tertiary">
-                  PDF, DOCX, or Excel · multiple files supported
+                  {SUPPORTED_FILE_LABEL} · multiple files supported
                 </p>
               </div>
             )}

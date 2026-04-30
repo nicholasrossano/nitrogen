@@ -57,7 +57,14 @@ export const SUPPORTED_MIME_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/vnd.ms-excel',
+  'application/vnd.apple.pages',
+  'application/x-iwork-pages-sffpages',
+  'application/vnd.apple.iwork.pages.sffpages',
+  'application/vnd.apple.keynote',
+  'application/x-iwork-keynote-sffkey',
+  'application/vnd.apple.iwork.keynote.sffkey',
 ]);
 
 const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
@@ -65,6 +72,10 @@ const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.xls': 'application/vnd.ms-excel',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.pages': 'application/vnd.apple.pages',
+  '.key': 'application/vnd.apple.keynote',
+  '.keynote': 'application/vnd.apple.keynote',
 };
 
 export const SUPPORTED_FILE_EXTENSIONS = new Set([
@@ -72,9 +83,14 @@ export const SUPPORTED_FILE_EXTENSIONS = new Set([
   '.docx',
   '.xlsx',
   '.xls',
+  '.pptx',
+  '.pages',
+  '.key',
+  '.keynote',
 ]);
 
-export const SUPPORTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls';
+export const SUPPORTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.pages,.key,.keynote';
+export const SUPPORTED_FILE_LABEL = 'PDF, DOCX, PPTX, Excel, Pages, or Keynote';
 
 function hasSupportedExtension(filename: string): boolean {
   const lower = filename.toLowerCase();

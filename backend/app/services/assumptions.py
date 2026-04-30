@@ -18,7 +18,7 @@ from app.assumptions.config import (
 )
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.models.assumption import Assumption
+from app.models.assumption import Assumption, AssumptionComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
@@ -112,6 +112,38 @@ async def list_assumptions(
 
 async def get_assumption(db: AsyncSession, assumption_id: UUID) -> Assumption | None:
     return await db.get(Assumption, assumption_id)
+
+
+async def list_assumption_comments(
+    db: AsyncSession,
+    assumption_id: UUID,
+) -> list[AssumptionComment]:
+    result = await db.execute(
+        select(AssumptionComment)
+        .where(AssumptionComment.assumption_id == assumption_id)
+        .order_by(AssumptionComment.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def create_assumption_comment(
+    db: AsyncSession,
+    assumption: Assumption,
+    *,
+    body: str,
+    actor: AssumptionActor,
+) -> AssumptionComment:
+    comment = AssumptionComment(
+        assumption_id=assumption.id,
+        initiative_id=assumption.initiative_id,
+        body=body.strip(),
+        created_by_user_id=actor.user_id,
+        created_by_email=actor.email,
+    )
+    db.add(comment)
+    assumption.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return comment
 
 
 async def upsert_assumption(

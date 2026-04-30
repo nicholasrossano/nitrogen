@@ -26,6 +26,7 @@ from app.services.evidence_processing import (
 from app.services.evidence_processor import schedule_processing
 from app.services.google_drive import GoogleDriveService
 from app.services.document_parser import DocumentParserService
+from app.services.document_conversion import DocumentConversionError, prepare_uploaded_document
 from app.services.embeddings import EmbeddingsService
 from app.services.workspaces import require_workspace_member
 
@@ -34,7 +35,7 @@ settings = get_settings()
 
 router = APIRouter()
 
-_EXT_MAP = {"pdf": ".pdf", "docx": ".docx", "xlsx": ".xlsx", "text": ".txt"}
+_EXT_MAP = {"pdf": ".pdf", "docx": ".docx", "xlsx": ".xlsx", "pptx": ".pptx", "text": ".txt"}
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -297,20 +298,26 @@ async def import_from_drive(
                 continue
 
             file_type = drive.get_file_type(mime_type)
-            ext = _EXT_MAP.get(file_type or "", "")
-            storage_filename = filename if "." in filename else f"{filename}{ext}"
+            try:
+                prepared = prepare_uploaded_document(file_bytes, filename, file_type or "unknown")
+            except DocumentConversionError as exc:
+                errors.append({"file_id": file_id, "error": str(exc)})
+                continue
+
+            ext = _EXT_MAP.get(prepared.file_type, "")
+            storage_filename = prepared.filename if "." in prepared.filename else f"{prepared.filename}{ext}"
             storage_path = await storage.save(
-                file_bytes, storage_filename, folder=str(initiative.id)
+                prepared.content, storage_filename, folder=str(initiative.id)
             )
 
             evidence_doc, chunk_count = await store_evidence_doc(
                 db=db,
                 initiative=initiative,
-                file_bytes=file_bytes,
-                filename=filename,
-                file_type=file_type,
+                file_bytes=prepared.content,
+                filename=prepared.filename,
+                file_type=prepared.file_type,
                 storage_path=storage_path,
-                file_size=len(file_bytes),
+                file_size=len(prepared.content),
             )
 
             modified_time = (
@@ -423,19 +430,25 @@ async def import_workspace_from_drive(
                 continue
 
             file_type = drive.get_file_type(mime_type)
-            ext = _EXT_MAP.get(file_type or "", "")
-            storage_filename = filename if "." in filename else f"{filename}{ext}"
+            try:
+                prepared = prepare_uploaded_document(file_bytes, filename, file_type or "unknown")
+            except DocumentConversionError as exc:
+                errors.append({"file_id": file_id, "error": str(exc)})
+                continue
+
+            ext = _EXT_MAP.get(prepared.file_type, "")
+            storage_filename = prepared.filename if "." in prepared.filename else f"{prepared.filename}{ext}"
             storage_path = await storage.save(
-                file_bytes, storage_filename, folder=f"workspaces/{workspace_id}"
+                prepared.content, storage_filename, folder=f"workspaces/{workspace_id}"
             )
 
             evidence_doc = await create_uploaded_doc(
                 db=db,
                 workspace_id=workspace_id,
-                filename=filename,
-                file_type=file_type or "unknown",
+                filename=prepared.filename,
+                file_type=prepared.file_type,
                 storage_path=storage_path,
-                file_size=len(file_bytes),
+                file_size=len(prepared.content),
             )
             schedule_processing(evidence_doc.id, user_id=user.uid)
 
@@ -566,6 +579,13 @@ async def sync_drive_files(
                 continue
 
             file_type = drive.get_file_type(mime_type)
+            try:
+                prepared = prepare_uploaded_document(
+                    file_bytes, link.drive_file_name, file_type or "unknown"
+                )
+            except DocumentConversionError as exc:
+                errors.append({"file_id": link.drive_file_id, "error": str(exc)})
+                continue
 
             if link.evidence_doc_id:
                 await delete_evidence_doc_chunks(db, link.evidence_doc_id)
@@ -582,24 +602,28 @@ async def sync_drive_files(
                             await storage.delete(doc.storage_path)
                         except Exception:
                             pass
-                    ext = _EXT_MAP.get(file_type or "", "")
+                    ext = _EXT_MAP.get(prepared.file_type, "")
                     storage_filename = (
-                        link.drive_file_name
-                        if "." in link.drive_file_name
-                        else f"{link.drive_file_name}{ext}"
+                        prepared.filename
+                        if "." in prepared.filename
+                        else f"{prepared.filename}{ext}"
                     )
                     new_storage_path = await storage.save(
-                        file_bytes, storage_filename, folder=str(initiative.id)
+                        prepared.content, storage_filename, folder=str(initiative.id)
                     )
                     doc.storage_path = new_storage_path
-                    doc.file_size = len(file_bytes)
+                    doc.filename = prepared.filename
+                    doc.file_type = prepared.file_type
+                    doc.file_size = len(prepared.content)
                     await db.commit()
                     await db.refresh(doc)
 
                     # Re-embed
                     parser = DocumentParserService()
                     embeddings_service = EmbeddingsService(user_id=user.uid, db=db)
-                    chunk_tuples = parse_file_to_chunks(parser, file_bytes, file_type)
+                    chunk_tuples = parse_file_to_chunks(
+                        parser, prepared.content, prepared.file_type
+                    )
                     plain_texts = [t[0] for t in chunk_tuples]
                     embeddings = await embeddings_service.embed_texts(plain_texts)
 

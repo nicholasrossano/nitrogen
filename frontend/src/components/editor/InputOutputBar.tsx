@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Plus, FileText, Upload, Loader2, Trash2, Map } from 'lucide-react';
 import { EvidenceDoc, Initiative } from '@/lib/api';
+import { SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface InputOutputBarProps {
   initiative: Initiative;
@@ -180,7 +181,7 @@ export function InputOutputBar({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.docx,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        accept={SUPPORTED_EXTENSIONS}
         onChange={handleFileChange}
         className="hidden"
       />
