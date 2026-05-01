@@ -11,13 +11,13 @@ import { ShellNavContext } from './ShellContext';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useBillingStore } from '@/stores/billingStore';
-import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAuth } from '@/lib/auth';
 import { api, type EvidenceDoc, type ProjectMaterial } from '@/lib/api';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'workspace';
 
@@ -45,9 +45,9 @@ const PROJECT_ITEMS: NavItemConfig[] = [
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
 
 function UsagePill() {
-  const devMode = useSettingsStore((s) => s.devMode);
+  const showBillingFeatures = useFeatureFlag('billing_features');
   const { tier, usagePercent, trialMessagesRemaining, loaded } = useBillingStore();
-  if (!devMode || !loaded || tier === 'unlimited' || tier === 'byok' || tier === 'none' || !tier) return null;
+  if (!showBillingFeatures || !loaded || tier === 'unlimited' || tier === 'byok' || tier === 'none' || !tier) return null;
 
   const barColor = usagePercent >= 90 ? 'bg-red-500' : usagePercent >= 75 ? 'bg-amber-500' : 'bg-accent';
 
