@@ -3,23 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Check, Search, Trash2 } from 'lucide-react';
 
-import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
+import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { PageLoader, UniversalLoadingIcon } from '@/components/ui/PageLoader';
-import { type ModuleInstance } from '@/lib/api';
-import { filterVisibleModules } from '@/lib/featureFlags';
+import { type AssessmentInstance } from '@/lib/api';
+import { filterVisibleAssessments } from '@/lib/featureFlags';
 import { useFeatureFlag, useFeatureFlagContext } from '@/hooks/useFeatureFlag';
-import { ModuleInstanceOpenDropdown } from './ModuleInstanceOpenDropdown';
+import { AssessmentInstanceOpenDropdown } from './AssessmentInstanceOpenDropdown';
 
 interface FrameworkPlanViewProps {
-  plannedModuleIds: string[];
-  moduleInstances: ModuleInstance[];
+  plannedAssessmentIds: string[];
+  assessmentInstances: AssessmentInstance[];
   loading: boolean;
-  onAddModuleToFrameworkPlan: (moduleId: string) => Promise<void>;
-  onRemoveModuleFromFrameworkPlan: (moduleId: string) => Promise<void>;
-  onCreateModuleInstanceInModulesView: (moduleId: string, moduleName: string) => Promise<void>;
-  onOpenExistingModuleInstanceInModulesView: (instance: ModuleInstance) => Promise<void>;
+  onAddAssessmentToFrameworkPlan: (assessmentId: string) => Promise<void>;
+  onRemoveAssessmentFromFrameworkPlan: (assessmentId: string) => Promise<void>;
+  onCreateAssessmentInstanceInAssessmentsView: (assessmentId: string, assessmentName: string) => Promise<void>;
+  onOpenExistingAssessmentInstanceInAssessmentsView: (instance: AssessmentInstance) => Promise<void>;
   readOnly?: boolean;
-  onOpenModule: (module: ModuleInstance) => void;
+  onOpenAssessment: (assessment: AssessmentInstance) => void;
 }
 
 interface FrameworkPhase {
@@ -46,8 +46,8 @@ function getFrameworkPhases(): FrameworkPhase[] {
   }));
 }
 
-function resolvePhaseIdForModule(moduleId: string, phases: FrameworkPhase[]): string {
-  const category = MODULE_CATEGORIES.find((candidate) => candidate.moduleIds.includes(moduleId));
+function resolvePhaseIdForAssessment(assessmentId: string, phases: FrameworkPhase[]): string {
+  const category = MODULE_CATEGORIES.find((candidate) => candidate.assessmentIds.includes(assessmentId));
   if (!category) return phases[0]?.id ?? 'unassigned';
 
   const exactPhase = phases.find((phase) => normalizeLabel(phase.name) === normalizeLabel(category.name));
@@ -64,65 +64,65 @@ function resolvePhaseIdForModule(moduleId: string, phases: FrameworkPhase[]): st
 }
 
 export function FrameworkPlanView({
-  plannedModuleIds,
-  moduleInstances,
+  plannedAssessmentIds,
+  assessmentInstances,
   loading,
-  onAddModuleToFrameworkPlan,
-  onRemoveModuleFromFrameworkPlan,
-  onCreateModuleInstanceInModulesView,
-  onOpenExistingModuleInstanceInModulesView,
+  onAddAssessmentToFrameworkPlan,
+  onRemoveAssessmentFromFrameworkPlan,
+  onCreateAssessmentInstanceInAssessmentsView,
+  onOpenExistingAssessmentInstanceInAssessmentsView,
   readOnly = false,
-  onOpenModule,
+  onOpenAssessment,
 }: FrameworkPlanViewProps) {
-  const showBetaModules = useFeatureFlag('beta_modules');
+  const showBetaAssessments = useFeatureFlag('beta_assessments');
   const featureFlagContext = useFeatureFlagContext();
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [moduleSearchQuery, setModuleSearchQuery] = useState('');
-  const [creatingModuleId, setCreatingModuleId] = useState<string | null>(null);
-  const [removingPlannedModuleId, setRemovingPlannedModuleId] = useState<string | null>(null);
-  const [creatingWorkspaceModuleId, setCreatingWorkspaceModuleId] = useState<string | null>(null);
+  const [assessmentSearchQuery, setAssessmentSearchQuery] = useState('');
+  const [creatingAssessmentId, setCreatingAssessmentId] = useState<string | null>(null);
+  const [removingPlannedAssessmentId, setRemovingPlannedAssessmentId] = useState<string | null>(null);
+  const [creatingWorkspaceAssessmentId, setCreatingWorkspaceAssessmentId] = useState<string | null>(null);
   const libraryRef = useRef<HTMLDivElement>(null);
 
   const phases = useMemo(() => getFrameworkPhases(), []);
 
-  const moduleMetaById = useMemo(
-    () => new Map(ALL_MODULES.map((module) => [module.id, module])),
+  const assessmentMetaById = useMemo(
+    () => new Map(ALL_MODULES.map((assessment) => [assessment.id, assessment])),
     [],
   );
 
   const visibleCategories = useMemo(
     () => MODULE_CATEGORIES.map((category) => ({
       ...category,
-      modules: filterVisibleModules(
-        category.moduleIds
-          .map((moduleId) => moduleMetaById.get(moduleId))
+      assessments: filterVisibleAssessments(
+        category.assessmentIds
+          .map((assessmentId) => assessmentMetaById.get(assessmentId))
           .filter(
             (
-              module,
-            ): module is NonNullable<(typeof ALL_MODULES)[number]> => Boolean(module),
+              assessment,
+            ): assessment is NonNullable<(typeof ALL_MODULES)[number]> => Boolean(assessment),
           ),
         featureFlagContext,
       ),
-    })).filter((category) => showBetaModules || category.modules.length > 0),
-    [showBetaModules, moduleMetaById, featureFlagContext],
+    })).filter((category) => showBetaAssessments || category.assessments.length > 0),
+    [showBetaAssessments, assessmentMetaById, featureFlagContext],
   );
 
   const filteredCategories = useMemo(() => {
-    const query = moduleSearchQuery.trim().toLowerCase();
+    const query = assessmentSearchQuery.trim().toLowerCase();
     if (!query) return visibleCategories;
 
     return visibleCategories
       .map((category) => ({
         ...category,
-        modules: category.modules.filter((module) => (
-          module.name.toLowerCase().includes(query)
-          || module.description.toLowerCase().includes(query)
+        assessments: category.assessments.filter((assessment) => (
+          assessment.name.toLowerCase().includes(query)
+          || assessment.description.toLowerCase().includes(query)
           || category.name.toLowerCase().includes(query)
         )),
       }))
-      .filter((category) => category.modules.length > 0);
-  }, [moduleSearchQuery, visibleCategories]);
+      .filter((category) => category.assessments.length > 0);
+  }, [assessmentSearchQuery, visibleCategories]);
 
   useEffect(() => {
     if (!libraryOpen) return;
@@ -141,88 +141,88 @@ export function FrameworkPlanView({
     const buckets = new Map(phases.map((phase) => [phase.id, [] as string[]]));
     const unmatched: string[] = [];
 
-    plannedModuleIds.forEach((moduleId) => {
-      const phaseId = resolvePhaseIdForModule(moduleId, phases);
+    plannedAssessmentIds.forEach((assessmentId) => {
+      const phaseId = resolvePhaseIdForAssessment(assessmentId, phases);
       const bucket = buckets.get(phaseId);
       if (bucket) {
-        bucket.push(moduleId);
+        bucket.push(assessmentId);
       } else {
-        unmatched.push(moduleId);
+        unmatched.push(assessmentId);
       }
     });
 
     const result = phases.map((phase) => ({
       ...phase,
-      modules: buckets.get(phase.id) ?? [],
-    })).filter((phase) => phase.modules.length > 0);
+      assessments: buckets.get(phase.id) ?? [],
+    })).filter((phase) => phase.assessments.length > 0);
 
     if (unmatched.length > 0) {
       result.push({
         id: 'unassigned',
-        name: 'Other Modules',
-        modules: unmatched,
+        name: 'Other Assessments',
+        assessments: unmatched,
       });
     }
 
     return result;
-  }, [plannedModuleIds, phases]);
+  }, [plannedAssessmentIds, phases]);
 
-  const existingModuleIds = useMemo(
-    () => new Set(plannedModuleIds),
-    [plannedModuleIds],
+  const existingAssessmentIds = useMemo(
+    () => new Set(plannedAssessmentIds),
+    [plannedAssessmentIds],
   );
 
-  const handleCreateModule = useCallback(async (moduleId: string) => {
-    if (existingModuleIds.has(moduleId)) {
-      setError('That module is already in this framework plan.');
+  const handleCreateAssessment = useCallback(async (assessmentId: string) => {
+    if (existingAssessmentIds.has(assessmentId)) {
+      setError('That assessment is already in this framework plan.');
       return;
     }
-    setCreatingModuleId(moduleId);
+    setCreatingAssessmentId(assessmentId);
     setError(null);
     try {
-      await onAddModuleToFrameworkPlan(moduleId);
+      await onAddAssessmentToFrameworkPlan(assessmentId);
       setLibraryOpen(false);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to create module.');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to create assessment.');
     } finally {
-      setCreatingModuleId(null);
+      setCreatingAssessmentId(null);
     }
-  }, [existingModuleIds, onAddModuleToFrameworkPlan]);
+  }, [existingAssessmentIds, onAddAssessmentToFrameworkPlan]);
 
-  const handleRemoveModuleFromPlan = useCallback(async (moduleId: string) => {
-    if (removingPlannedModuleId) return;
-    setRemovingPlannedModuleId(moduleId);
+  const handleRemoveAssessmentFromPlan = useCallback(async (assessmentId: string) => {
+    if (removingPlannedAssessmentId) return;
+    setRemovingPlannedAssessmentId(assessmentId);
     setError(null);
     try {
-      await onRemoveModuleFromFrameworkPlan(moduleId);
+      await onRemoveAssessmentFromFrameworkPlan(assessmentId);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to remove module from plan.');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to remove assessment from plan.');
     } finally {
-      setRemovingPlannedModuleId(null);
+      setRemovingPlannedAssessmentId(null);
     }
-  }, [onRemoveModuleFromFrameworkPlan, removingPlannedModuleId]);
+  }, [onRemoveAssessmentFromFrameworkPlan, removingPlannedAssessmentId]);
 
-  const handleCreateModuleInModulesView = useCallback(async (moduleId: string, moduleName: string) => {
-    if (creatingWorkspaceModuleId) return;
-    setCreatingWorkspaceModuleId(moduleId);
+  const handleCreateAssessmentInAssessmentsView = useCallback(async (assessmentId: string, assessmentName: string) => {
+    if (creatingWorkspaceAssessmentId) return;
+    setCreatingWorkspaceAssessmentId(assessmentId);
     setError(null);
     try {
-      await onCreateModuleInstanceInModulesView(moduleId, moduleName);
+      await onCreateAssessmentInstanceInAssessmentsView(assessmentId, assessmentName);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to create module instance.');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to create assessment instance.');
     } finally {
-      setCreatingWorkspaceModuleId(null);
+      setCreatingWorkspaceAssessmentId(null);
     }
-  }, [creatingWorkspaceModuleId, onCreateModuleInstanceInModulesView]);
+  }, [creatingWorkspaceAssessmentId, onCreateAssessmentInstanceInAssessmentsView]);
 
-  const handleOpenExistingInstance = useCallback(async (instance: ModuleInstance) => {
+  const handleOpenExistingInstance = useCallback(async (instance: AssessmentInstance) => {
     setError(null);
     try {
-      await onOpenExistingModuleInstanceInModulesView(instance);
+      await onOpenExistingAssessmentInstanceInAssessmentsView(instance);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to open module instance.');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to open assessment instance.');
     }
-  }, [onOpenExistingModuleInstanceInModulesView]);
+  }, [onOpenExistingAssessmentInstanceInAssessmentsView]);
 
   return (
     <div className="h-full flex flex-col bg-surface overflow-hidden">
@@ -236,23 +236,23 @@ export function FrameworkPlanView({
                 className="btn-secondary !px-3 !py-1.5 !text-xs"
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                Module Library
+                Assessment Library
               </button>
 
               {libraryOpen && (
                 <div className="absolute right-0 top-full z-30 mt-2 w-[360px] max-h-[420px] overflow-y-auto rounded-xl border border-divider bg-white shadow-lg">
                   <div className="sticky top-0 z-10 bg-white px-4 pt-3 pb-2 border-b border-divider">
-                    <label htmlFor="module-library-search" className="sr-only">
-                      Search modules
+                    <label htmlFor="assessment-library-search" className="sr-only">
+                      Search assessments
                     </label>
                     <div className="flex items-center gap-2 rounded-lg border border-divider bg-surface-subtle px-3 py-2">
                       <Search className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
                       <input
-                        id="module-library-search"
+                        id="assessment-library-search"
                         type="search"
-                        value={moduleSearchQuery}
-                        onChange={(event) => setModuleSearchQuery(event.target.value)}
-                        placeholder="Search modules..."
+                        value={assessmentSearchQuery}
+                        onChange={(event) => setAssessmentSearchQuery(event.target.value)}
+                        placeholder="Search assessments..."
                         className="w-full bg-transparent text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none"
                       />
                     </div>
@@ -261,7 +261,7 @@ export function FrameworkPlanView({
                   <div className="p-2">
                     {filteredCategories.length === 0 ? (
                       <p className="px-2 py-6 text-center text-xs text-text-tertiary">
-                        No modules match your search.
+                        No assessments match your search.
                       </p>
                     ) : filteredCategories.map((category) => (
                       <div key={category.id} className="mb-2 last:mb-0">
@@ -269,27 +269,27 @@ export function FrameworkPlanView({
                           {category.name}
                         </p>
                         <div className="space-y-1">
-                          {category.modules.map((module) => {
-                            const isCreating = creatingModuleId === module.id;
-                            const alreadyAdded = existingModuleIds.has(module.id);
+                          {category.assessments.map((assessment) => {
+                            const isCreating = creatingAssessmentId === assessment.id;
+                            const alreadyAdded = existingAssessmentIds.has(assessment.id);
                             return (
                               <button
-                                key={module.id}
+                                key={assessment.id}
                                 type="button"
                                 disabled={isCreating || alreadyAdded}
-                                onClick={() => handleCreateModule(module.id)}
+                                onClick={() => handleCreateAssessment(assessment.id)}
                                 className="w-full rounded-lg px-3 py-2 text-left transition-colors enabled:hover:bg-surface-subtle disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 <div className="flex items-center gap-2.5">
                                   <span className="text-accent">
-                                    {isCreating ? <UniversalLoadingIcon size={16} /> : module.icon}
+                                    {isCreating ? <UniversalLoadingIcon size={16} /> : assessment.icon}
                                   </span>
                                   <span className="min-w-0 flex-1">
                                     <span className="block text-xs font-medium text-text-primary">
-                                      {module.name}
+                                      {assessment.name}
                                     </span>
                                     <span className="mt-0.5 block text-[11px] leading-snug text-text-tertiary">
-                                      {alreadyAdded ? 'Already in this framework plan' : module.description}
+                                      {alreadyAdded ? 'Already in this framework plan' : assessment.description}
                                     </span>
                                   </span>
                                 </div>
@@ -330,36 +330,36 @@ export function FrameworkPlanView({
                         {phase.name}
                       </p>
                       <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-text-tertiary">
-                        {phase.modules.length}
+                        {phase.assessments.length}
                         {' '}
-                        {phase.modules.length === 1 ? 'module' : 'modules'}
+                        {phase.assessments.length === 1 ? 'assessment' : 'assessments'}
                       </span>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {phase.modules.map((moduleId) => {
-                      const moduleMeta = moduleMetaById.get(moduleId);
-                      const moduleName = moduleMeta?.name || moduleId.replace(/_/g, ' ');
-                      const isRemoving = removingPlannedModuleId === moduleId;
-                      const isCreatingWorkspace = creatingWorkspaceModuleId === moduleId;
-                      const moduleInstancesForType = moduleInstances
-                        .filter((candidate) => candidate.module_id === moduleId)
+                    {phase.assessments.map((assessmentId) => {
+                      const assessmentMeta = assessmentMetaById.get(assessmentId);
+                      const assessmentName = assessmentMeta?.name || assessmentId.replace(/_/g, ' ');
+                      const isRemoving = removingPlannedAssessmentId === assessmentId;
+                      const isCreatingWorkspace = creatingWorkspaceAssessmentId === assessmentId;
+                      const assessmentInstancesForType = assessmentInstances
+                        .filter((candidate) => candidate.assessment_id === assessmentId)
                         .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-                      const completedInstances = moduleInstancesForType.filter(
+                      const completedInstances = assessmentInstancesForType.filter(
                         (candidate) => candidate.is_plan_complete === true,
                       );
                       const completedInstance = completedInstances[0] ?? null;
-                      const isModuleComplete = Boolean(completedInstance);
-                      const shouldOpenInstancePicker = moduleInstancesForType.length > 1 || completedInstances.length > 1;
+                      const isAssessmentComplete = Boolean(completedInstance);
+                      const shouldOpenInstancePicker = assessmentInstancesForType.length > 1 || completedInstances.length > 1;
                       const directOpenInstance = shouldOpenInstancePicker
                         ? null
-                        : completedInstance ?? moduleInstancesForType[0] ?? null;
+                        : completedInstance ?? assessmentInstancesForType[0] ?? null;
                       return (
                         <div
-                          key={moduleId}
+                          key={assessmentId}
                           className={[
                             'group relative card-interactive overflow-visible',
-                            isModuleComplete
+                            isAssessmentComplete
                               ? 'border border-stroke-subtle bg-accent-wash/35'
                               : 'border border-stroke-subtle',
                             'z-0',
@@ -368,59 +368,59 @@ export function FrameworkPlanView({
                           <button
                             type="button"
                             onClick={() => {
-                              if (moduleInstancesForType.length === 0) {
-                                if (!readOnly) void handleCreateModuleInModulesView(moduleId, moduleName);
+                              if (assessmentInstancesForType.length === 0) {
+                                if (!readOnly) void handleCreateAssessmentInAssessmentsView(assessmentId, assessmentName);
                                 return;
                               }
 
                               if (shouldOpenInstancePicker) return;
 
-                              if (directOpenInstance) onOpenModule(directOpenInstance);
+                              if (directOpenInstance) onOpenAssessment(directOpenInstance);
                             }}
-                            disabled={readOnly && moduleInstancesForType.length === 0}
+                            disabled={readOnly && assessmentInstancesForType.length === 0}
                             className="relative flex w-full items-center gap-3 px-4 py-3.5 text-left"
                           >
                             <div
                               className={[
                                 'w-10 h-10 flex-shrink-0 rounded flex items-center justify-center',
-                                isModuleComplete ? 'bg-accent text-white shadow-sm' : 'bg-accent-wash',
+                                isAssessmentComplete ? 'bg-accent text-white shadow-sm' : 'bg-accent-wash',
                               ].join(' ')}
                             >
                               <span
                                 className={[
                                   '[&>svg]:w-5 [&>svg]:h-5',
-                                  isModuleComplete ? 'text-white' : 'text-accent',
+                                  isAssessmentComplete ? 'text-white' : 'text-accent',
                                 ].join(' ')}
                               >
-                                {isModuleComplete ? <Check className="w-5 h-5" strokeWidth={2.4} /> : moduleMeta?.icon}
+                                {isAssessmentComplete ? <Check className="w-5 h-5" strokeWidth={2.4} /> : assessmentMeta?.icon}
                               </span>
                             </div>
                             <span className="min-w-0 flex-1">
                               <span
                                 className={[
                                   'block text-xs font-medium leading-snug text-left',
-                                  isModuleComplete ? 'text-accent' : 'text-text-secondary',
+                                  isAssessmentComplete ? 'text-accent' : 'text-text-secondary',
                                 ].join(' ')}
                               >
-                                {moduleName}
+                                {assessmentName}
                               </span>
-                              {isModuleComplete && (
+                              {isAssessmentComplete && (
                                 <span className="mt-1 inline-flex items-center rounded-full border border-accent/20 bg-white/75 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
                                   Completed
                                 </span>
                               )}
                             </span>
                           </button>
-                          {(moduleInstancesForType.length > 0 || !readOnly) && (
+                          {(assessmentInstancesForType.length > 0 || !readOnly) && (
                             <div className="px-4 pb-3 flex justify-end gap-2">
-                              {moduleInstancesForType.length > 0 && (
-                                <ModuleInstanceOpenDropdown
-                                  instances={moduleInstancesForType}
+                              {assessmentInstancesForType.length > 0 && (
+                                <AssessmentInstanceOpenDropdown
+                                  instances={assessmentInstancesForType}
                                   onOpenInstance={handleOpenExistingInstance}
-                                  getInstanceLabel={(moduleInstance) => (
-                                    moduleInstance.display_name
-                                    || moduleInstance.title
-                                    || moduleName
+                                  getInstanceLabel={(assessmentInstance) => (
+                                    assessmentInstance.display_name
+                                    || assessmentInstance.title
+                                    || assessmentName
                                   )}
                                 />
                               )}
@@ -430,7 +430,7 @@ export function FrameworkPlanView({
                                   disabled={isCreatingWorkspace}
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    void handleCreateModuleInModulesView(moduleId, moduleName);
+                                    void handleCreateAssessmentInAssessmentsView(assessmentId, assessmentName);
                                   }}
                                   className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors enabled:hover:bg-accent-hover enabled:hover:border-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
@@ -452,9 +452,9 @@ export function FrameworkPlanView({
                               disabled={isRemoving}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                void handleRemoveModuleFromPlan(moduleId);
+                                void handleRemoveAssessmentFromPlan(assessmentId);
                               }}
-                              title="Remove module from framework plan"
+                              title="Remove assessment from framework plan"
                               className="project-action-btn project-action-btn-danger absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 text-text-tertiary enabled:hover:text-indicator-orange transition-opacity z-10 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {isRemoving ? (

@@ -26,6 +26,8 @@ import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import type { WorkspaceWidgetFooterState } from '@/lib/widgetRegistry';
 import { ConfirmButton } from '@/components/ui';
 import { PanelHeader } from '@/components/ui/PanelHeader';
+import { CustomDropdown } from '@/components/ui/CustomDropdown';
+import { ModelInputsTable } from './shared/ModelInputsTable';
 
 const SolarLocationMap = lazy(() => import('./solar/SolarLocationMap'));
 
@@ -40,7 +42,7 @@ async function persistWidgetToDb(
 ): Promise<boolean> {
   try {
     if (instanceId) {
-      await api.persistModuleWorkflowWidget(instanceId, widgetData, workflowVersion);
+      await api.persistAssessmentWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
     await api.updateMessageWidget(initiativeId, messageId, widgetData);
@@ -72,13 +74,6 @@ interface SolarEstimateWidgetProps {
   outputFooterState?: WorkspaceWidgetFooterState;
 }
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
-  assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
-  missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
-};
-
 const QUALITY_STYLES: Record<string, { bg: string; text: string; icon: typeof CheckCircle2 }> = {
   high: { bg: 'bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
   moderate: { bg: 'bg-yellow-50', text: 'text-yellow-700', icon: AlertTriangle },
@@ -103,7 +98,7 @@ const ARRAY_TYPE_LABELS: Record<number, string> = {
 };
 
 const DROPDOWN_OPTIONS: Record<string, Array<{ value: number; label: string }>> = {
-  module_type: [
+  assessment_type: [
     { value: 0, label: 'Standard' },
     { value: 1, label: 'Premium' },
     { value: 2, label: 'Thin Film' },
@@ -129,11 +124,9 @@ const NUMERIC_CONSTRAINTS: Record<string, { min?: number; max?: number; step?: n
   lon: { min: -180, max: 180, step: 0.0001 },
 };
 
-const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
-
 function formatValue(fieldName: string, value: any): string {
   if (value === null || value === undefined) return '—';
-  if (fieldName === 'module_type') return MODULE_TYPE_LABELS[Number(value)] ?? String(value);
+  if (fieldName === 'assessment_type') return MODULE_TYPE_LABELS[Number(value)] ?? String(value);
   if (fieldName === 'array_type') return ARRAY_TYPE_LABELS[Number(value)] ?? String(value);
   if (typeof value === 'number') {
     if (fieldName === 'lat' || fieldName === 'lon') return value.toFixed(4);
@@ -216,16 +209,17 @@ export function SolarEstimateWidget({
   const forceInputsView = workspaceView === 'build';
   const error = data.error;
 
-  const groupedInputs = useMemo(() => {
-    const groups: Record<string, Array<[string, any]>> = {};
-    for (const cat of CATEGORY_ORDER) groups[cat] = [];
-    for (const [key, inp] of Object.entries(inputs)) {
-      const cat = inp.category || 'performance';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push([key, inp]);
-    }
-    return groups;
-  }, [inputs]);
+  const groupedInputs = useMemo(
+    () =>
+      CATEGORY_ORDER.map((cat) => ({
+        category: cat,
+        label: CATEGORY_LABELS[cat] || cat,
+        inputs: Object.entries(inputs)
+          .filter(([, inp]: any) => (inp.category || 'performance') === cat)
+          .map(([field_name, inp]: any) => ({ ...inp, field_name })),
+      })).filter((group) => group.inputs.length > 0),
+    [inputs],
+  );
 
   const assumptionCount = useMemo(
     () => Object.values(inputs).filter((i: any) => i.status === 'assumed').length,
@@ -356,138 +350,92 @@ export function SolarEstimateWidget({
 
   const maxKwh = useMemo(() => Math.max(...chartData.map((d: any) => d.kWh), 1), [chartData]);
 
-  // --------------- Render helpers ---------------
+  const renderInputsTable = () => (
+    <ModelInputsTable
+      groups={groupedInputs}
+      hoveredFieldName={hoveredRowInp}
+      editingField={editingField}
+      isActive={isActive}
+      onRowMouseEnter={(event, row) => {
+        const isInteractive = !!(event.target as HTMLElement).closest('button, input, select, a');
+        setOverInteractive(isInteractive);
+        setMousePos({ x: event.clientX, y: event.clientY });
+        setHoveredRowInp(row.field_name);
+      }}
+      onRowMouseLeave={() => {
+        setHoveredRowInp(null);
+        setOverInteractive(false);
+      }}
+      onRowClick={(event, row) => {
+        if ((event.target as HTMLElement).closest('button, input, select, a')) return;
+        if (!editingField && !overInteractive) {
+          handleInvestigate(row.field_name, row.label, row.status);
+        }
+      }}
+      renderValueCell={(row, isEditing) => {
+        const fieldName = row.field_name;
+        const dropdownOpts = DROPDOWN_OPTIONS[fieldName];
+        const numericConstraints = NUMERIC_CONSTRAINTS[fieldName];
+        const isLocationField = fieldName === 'lat' || fieldName === 'lon' || fieldName === 'address';
 
-  const renderStatusBadge = (status: string) => {
-    const s = STATUS_STYLES[status] || STATUS_STYLES.missing;
-    return (
-      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${s.bg} ${s.text}`}>
-        {s.label}
-      </span>
-    );
-  };
+        if (dropdownOpts) {
+          return (
+            <div className="flex justify-end" onMouseEnter={() => setOverInteractive(true)} onMouseLeave={() => setOverInteractive(false)}>
+              <CustomDropdown
+                value={String(row.value ?? 0)}
+                onChange={(value) => handleFieldUpdate(fieldName, Number(value))}
+                options={dropdownOpts.map((opt) => ({ value: String(opt.value), label: opt.label }))}
+                ariaLabel={`Select ${row.label}`}
+                className="h-7 w-36 inline-flex items-center justify-between gap-2 rounded border border-stroke-subtle bg-white px-2 text-xs text-text-primary hover:border-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+                menuClassName="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-stroke-subtle bg-white p-1 shadow-lg"
+                itemClassName="flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs transition-colors"
+              />
+            </div>
+          );
+        }
 
-  const renderInputRow = (fieldName: string, inp: any) => {
-    const isEditing = editingField === fieldName;
-    const isHovered = hoveredRowInp === fieldName;
-    const isLocationField = fieldName === 'lat' || fieldName === 'lon' || fieldName === 'address';
-    const dropdownOpts = DROPDOWN_OPTIONS[fieldName];
-    const numericConstraints = NUMERIC_CONSTRAINTS[fieldName];
-
-    const renderValueCell = () => {
-      // Dropdown fields (module_type, array_type)
-      if (dropdownOpts) {
-        return (
-          <select
-            value={inp.value ?? 0}
-            onChange={(e) => handleFieldUpdate(fieldName, Number(e.target.value))}
-            className="w-full px-1 py-0.5 text-[11px] bg-transparent border border-transparent rounded hover:border-stroke-subtle focus:border-accent outline-none cursor-pointer"
-            onMouseEnter={() => setOverInteractive(true)}
-            onMouseLeave={() => setOverInteractive(false)}
-          >
-            {dropdownOpts.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        );
-      }
-
-      // Editing state for numeric/text fields
-      if (isEditing) {
-        return (
-          <input
-            autoFocus
-            type={numericConstraints ? 'number' : 'text'}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={commitEdit}
-            onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') { setEditingField(null); setEditValue(''); } }}
-            min={numericConstraints?.min}
-            max={numericConstraints?.max}
-            step={numericConstraints?.step}
-            className="w-full px-1 py-0.5 text-[11px] font-mono border border-accent rounded bg-white outline-none"
-            onMouseEnter={() => setOverInteractive(true)}
-            onMouseLeave={() => setOverInteractive(false)}
-          />
-        );
-      }
-
-      // Display value (clickable to edit)
-      return (
-        <button
-          type="button"
-          onClick={() => !isLocationField && startEdit(fieldName, inp.value)}
-          className="text-left hover:text-accent transition-colors"
-          onMouseEnter={() => setOverInteractive(true)}
-          onMouseLeave={() => setOverInteractive(false)}
-          title={isLocationField ? 'Edit via map' : 'Click to edit'}
-        >
-          {formatValue(fieldName, inp.value)}
-        </button>
-      );
-    };
-
-    return (
-      <tr
-        key={fieldName}
-        className="group border-b border-stroke-subtle/50 last:border-b-0 transition-colors hover:bg-surface-subtle/50"
-        style={{ cursor: !isEditing && !dropdownOpts && !overInteractive ? INVESTIGATE_CURSOR : undefined }}
-        onMouseMove={(e) => {
-          const isInteractive = !!(e.target as HTMLElement).closest('button, input, select, a');
-          setOverInteractive(isInteractive);
-          setMousePos({ x: e.clientX, y: e.clientY });
-          setHoveredRowInp(fieldName);
-        }}
-        onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest('button, input, select, a')) return;
-          handleInvestigate(fieldName, inp.label, inp.status);
-        }}
-      >
-        <td className="py-1.5 px-2 text-[11px] text-text-secondary w-[140px]">
-          {inp.label}
-        </td>
-        <td className="py-1.5 px-2 text-[11px] font-mono text-text-primary">
-          {renderValueCell()}
-        </td>
-        <td className="py-1.5 px-1 text-[10px] text-text-tertiary w-[40px]">{inp.unit}</td>
-        <td className="py-1.5 px-1 w-[70px]">{renderStatusBadge(inp.status)}</td>
-        <td className="py-1.5 px-1 w-[24px]">
-          {isHovered && !isEditing && !isLocationField && !dropdownOpts && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); startEdit(fieldName, inp.value); }}
-              className="text-text-tertiary hover:text-accent"
+        if (isEditing) {
+          return (
+            <input
+              autoFocus
+              type={numericConstraints ? 'number' : 'text'}
+              value={editValue}
+              onChange={(event) => setEditValue(event.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commitEdit();
+                if (event.key === 'Escape') {
+                  setEditingField(null);
+                  setEditValue('');
+                }
+              }}
+              min={numericConstraints?.min}
+              max={numericConstraints?.max}
+              step={numericConstraints?.step}
+              className="w-full px-1 py-0.5 text-[11px] font-mono border border-accent rounded bg-white outline-none"
               onMouseEnter={() => setOverInteractive(true)}
               onMouseLeave={() => setOverInteractive(false)}
-            >
-              <Pencil className="w-3 h-3" />
-            </button>
-          )}
-        </td>
-      </tr>
-    );
-  };
+            />
+          );
+        }
 
-  const renderInputsTable = () => (
-    <div className="space-y-3">
-      {CATEGORY_ORDER.map((cat) => {
-        const fields = groupedInputs[cat];
-        if (!fields || fields.length === 0) return null;
         return (
-          <div key={cat}>
-            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-              {CATEGORY_LABELS[cat] || cat}
-            </div>
-            <table className="w-full">
-              <tbody>
-                {fields.map(([key, inp]) => renderInputRow(key, inp))}
-              </tbody>
-            </table>
-          </div>
+          <button
+            type="button"
+            onClick={() => !isLocationField && startEdit(fieldName, row.value)}
+            className="group inline-flex items-center justify-end gap-1 text-right hover:text-accent transition-colors"
+            onMouseEnter={() => setOverInteractive(true)}
+            onMouseLeave={() => setOverInteractive(false)}
+            title={isLocationField ? 'Edit via map' : 'Click to edit'}
+          >
+            <span>{formatValue(fieldName, row.value)}</span>
+            {!isLocationField && (
+              <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+            )}
+          </button>
         );
-      })}
-    </div>
+      }}
+    />
   );
 
   // Investigate tooltip (pointer-events-none dark pill — same pattern as LCOE widget)
@@ -513,10 +461,10 @@ export function SolarEstimateWidget({
           title="Solar Production Estimate"
         />
 
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+        <div className="flex-1 overflow-y-auto py-3 space-y-3">
           {/* Missing essentials banner */}
           {missingEssentials.length > 0 && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+            <div className="mx-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
               <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
               <div className="text-[11px] text-amber-800">
                 <span className="font-medium">Missing required inputs: </span>
@@ -526,22 +474,24 @@ export function SolarEstimateWidget({
           )}
 
           {displayError && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
+            <div className="mx-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
               <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
               <div className="text-[11px] text-red-800">{displayError}</div>
             </div>
           )}
 
           {/* Map */}
-          <Suspense fallback={<div className="h-[180px] bg-surface-subtle rounded-lg animate-pulse" />}>
-            <SolarLocationMap
-              lat={inputs.lat?.value ?? null}
-              lon={inputs.lon?.value ?? null}
-              address={inputs.address?.value}
-              onLocationChange={handleLocationChange}
-              disabled={isRecalculating}
-            />
-          </Suspense>
+          <div className="px-3">
+            <Suspense fallback={<div className="h-[180px] bg-surface-subtle rounded-lg animate-pulse" />}>
+              <SolarLocationMap
+                lat={inputs.lat?.value ?? null}
+                lon={inputs.lon?.value ?? null}
+                address={inputs.address?.value}
+                onLocationChange={handleLocationChange}
+                disabled={isRecalculating}
+              />
+            </Suspense>
+          </div>
 
           {/* Inputs table */}
           {renderInputsTable()}
@@ -674,16 +624,18 @@ export function SolarEstimateWidget({
         )}
 
         {activeTab === 'inputs' && (
-          <div className="px-3 py-3 space-y-3">
-            <Suspense fallback={<div className="h-[180px] bg-surface-subtle rounded-lg animate-pulse" />}>
-              <SolarLocationMap
-                lat={inputs.lat?.value ?? null}
-                lon={inputs.lon?.value ?? null}
-                address={inputs.address?.value}
-                onLocationChange={handleLocationChange}
-                disabled={isRecalculating}
-              />
-            </Suspense>
+          <div className="py-3 space-y-3">
+            <div className="px-3">
+              <Suspense fallback={<div className="h-[180px] bg-surface-subtle rounded-lg animate-pulse" />}>
+                <SolarLocationMap
+                  lat={inputs.lat?.value ?? null}
+                  lon={inputs.lon?.value ?? null}
+                  address={inputs.address?.value}
+                  onLocationChange={handleLocationChange}
+                  disabled={isRecalculating}
+                />
+              </Suspense>
+            </div>
             {renderInputsTable()}
           </div>
         )}

@@ -1,4 +1,4 @@
-"""Backfill implementation_plan module instances from legacy initiative.project_plan.
+"""Backfill implementation_plan assessment instances from legacy initiative.project_plan.
 
 Usage:
   # Dry run (default)
@@ -24,9 +24,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.core.database import AsyncSessionLocal  # noqa: E402
 from app.models.initiative import Initiative  # noqa: E402
-from app.models.module_instance import ModuleInstance  # noqa: E402
-from app.modules.implementation_plan import ImplementationPlanModule  # noqa: E402
-from app.modules.utils import infer_category_icon, make_build_item  # noqa: E402
+from app.models.assessment_instance import AssessmentInstance  # noqa: E402
+from app.assessments.implementation_plan import ImplementationPlanAssessment  # noqa: E402
+from app.assessments.utils import infer_category_icon, make_build_item  # noqa: E402
 
 
 MIGRATION_ACTOR = "migration:backfill_implementation_plan"
@@ -138,7 +138,7 @@ def _activities_from_plan(project_plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def _build_plan_widget_data(
-    module: ImplementationPlanModule,
+    assessment: ImplementationPlanAssessment,
     phase_items: list[dict[str, Any]],
     activity_items: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -146,7 +146,7 @@ async def _build_plan_widget_data(
         "phases": {"data": {"items": phase_items}},
         "activities": {"data": {"items": activity_items}},
     }
-    return await module.compute_stage("plan", confirmed_stages, context={})
+    return await assessment.compute_stage("plan", confirmed_stages, context={})
 
 
 def _build_workflow_state(
@@ -156,7 +156,7 @@ def _build_workflow_state(
 ) -> dict[str, Any]:
     confirmed_at = _now_iso()
     return {
-        "module_type": IMPLEMENTATION_MODULE_ID,
+        "assessment_type": IMPLEMENTATION_MODULE_ID,
         "current_stage_id": "plan",
         "stages": {
             "phases": {
@@ -192,7 +192,7 @@ def _build_workflow_state(
 
 async def run_backfill(*, apply: bool) -> BackfillStats:
     stats = BackfillStats()
-    module = ImplementationPlanModule()
+    assessment = ImplementationPlanAssessment()
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Initiative))
@@ -212,10 +212,10 @@ async def run_backfill(*, apply: bool) -> BackfillStats:
                     continue
 
                 existing_result = await db.execute(
-                    select(ModuleInstance).where(
-                        ModuleInstance.initiative_id == initiative.id,
-                        ModuleInstance.module_id == IMPLEMENTATION_MODULE_ID,
-                        ModuleInstance.archived.is_(False),
+                    select(AssessmentInstance).where(
+                        AssessmentInstance.initiative_id == initiative.id,
+                        AssessmentInstance.assessment_id == IMPLEMENTATION_MODULE_ID,
+                        AssessmentInstance.archived.is_(False),
                     )
                 )
                 existing = existing_result.scalars().first()
@@ -229,15 +229,15 @@ async def run_backfill(*, apply: bool) -> BackfillStats:
                     stats.malformed_plan_skipped += 1
                     continue
 
-                plan_widget_data = await _build_plan_widget_data(module, phase_items, activity_items)
+                plan_widget_data = await _build_plan_widget_data(assessment, phase_items, activity_items)
                 workflow_state = _build_workflow_state(phase_items, activity_items, plan_widget_data)
                 stats.to_create += 1
 
                 title = (initiative.title or "").strip() or "Implementation Plan"
                 if apply:
-                    inst = ModuleInstance(
+                    inst = AssessmentInstance(
                         initiative_id=initiative.id,
-                        module_id=IMPLEMENTATION_MODULE_ID,
+                        assessment_id=IMPLEMENTATION_MODULE_ID,
                         instance_number=1,
                         status="ready",
                         title=title,
@@ -277,7 +277,7 @@ def print_stats(stats: BackfillStats) -> None:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Backfill implementation_plan module instances from initiative.project_plan"
+        description="Backfill implementation_plan assessment instances from initiative.project_plan"
     )
     parser.add_argument(
         "--apply",

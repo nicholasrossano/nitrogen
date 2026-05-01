@@ -716,7 +716,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     try {
       const response = await api.selectTools(id, toolIds);
 
-      // Keep confirmation fast: selecting modules should not block on a full
+      // Keep confirmation fast: selecting assessments should not block on a full
       // initiative + chat-history reload before we can navigate into the
       // framework view. We update the local initiative shape optimistically and
       // let the project plan request refresh the rest of the view afterward.

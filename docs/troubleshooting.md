@@ -34,7 +34,7 @@ ERROR:app.api.exports:Export failed for initiative {id}: {error message}
 Common errors:
 - `FileNotFoundError`: Exports directory doesn't exist
 - `PermissionError`: Can't write to exports directory  
-- `ModuleNotFoundError`: Missing Python dependency
+- `AssessmentNotFoundError`: Missing Python dependency
 - `ValidationError`: Invalid memo content structure
 - `KeyError`: Missing field in memo content
 
@@ -351,7 +351,7 @@ Based on what the logs show:
 - Check Dockerfile creates `/app/exports`
 - Check Railway environment has write permissions
 
-**If "ModuleNotFoundError":**
+**If "AssessmentNotFoundError":**
 - Check `requirements.txt` has all dependencies
 - Check Railway build logs for installation errors
 

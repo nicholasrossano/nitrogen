@@ -12,7 +12,7 @@ def register_all(registry: CapabilityRegistry) -> None:
     """Called once when the singleton registry is created."""
     _register_orchestration_tools(registry)
     _register_standalone_tools(registry)
-    _register_modules(registry)
+    _register_assessments(registry)
     _register_prompts(registry)
     _register_adapters(registry)
     _register_resources(registry)
@@ -599,19 +599,19 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Module entries (from ModuleRegistry)
+# Assessment entries (from AssessmentRegistry)
 # ---------------------------------------------------------------------------
 
-def _register_modules(registry: CapabilityRegistry) -> None:
-    """Register each BaseModule from the ModuleRegistry as a MODULE capability."""
+def _register_assessments(registry: CapabilityRegistry) -> None:
+    """Register each BaseAssessment from the AssessmentRegistry as a MODULE capability."""
     try:
-        from app.modules.registry import get_module_registry
+        from app.assessments.registry import get_assessment_registry
 
-        mod_registry = get_module_registry()
-        for module in mod_registry.get_all_modules():
-            defn = module.definition
+        mod_registry = get_assessment_registry()
+        for assessment in mod_registry.get_all_assessments():
+            defn = assessment.definition
             registry.register(CapabilityEntry(
-                id=f"module:{defn.id}",
+                id=f"assessment:{defn.id}",
                 kind=CapabilityKind.MODULE,
                 name=defn.name,
                 description=defn.description,

@@ -111,11 +111,11 @@ class Initiative(Base):
         back_populates="initiative",
         cascade="all, delete-orphan",
     )
-    module_instances: Mapped[list["ModuleInstance"]] = relationship(
+    assessment_instances: Mapped[list["AssessmentInstance"]] = relationship(
         back_populates="initiative",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="ModuleInstance.started_at.desc()",
+        order_by="AssessmentInstance.started_at.desc()",
     )
     workspace: Mapped["Workspace"] = relationship(back_populates="initiatives")
     
@@ -130,10 +130,10 @@ class Initiative(Base):
     
     def get_missing_tool_inputs(self) -> dict[str, list[str]]:
         """Get missing required inputs for selected tools."""
-        from app.modules import get_module_registry
+        from app.assessments import get_assessment_registry
         
         missing = {}
-        registry = get_module_registry()
+        registry = get_assessment_registry()
         
         if not self.selected_tools:
             return missing
@@ -141,7 +141,7 @@ class Initiative(Base):
         tool_inputs = self.tool_inputs or {}
         
         for tool_id in self.selected_tools:
-            tool = registry.get_module(tool_id)
+            tool = registry.get_assessment(tool_id)
             if tool:
                 tool_missing = []
                 for inp in tool.required_inputs:
@@ -160,39 +160,39 @@ class Initiative(Base):
             len(self.get_missing_tool_inputs()) == 0
         )
     
-    # ── Computed views from module_instances (replaces JSONB reads) ──
+    # ── Computed views from assessment_instances (replaces JSONB reads) ──
 
     def get_deliverables_dict(self) -> dict:
-        """Build a backward-compatible deliverables dict from module_instances.
+        """Build a backward-compatible deliverables dict from assessment_instances.
 
         Returns the latest approved instance's deliverable per tool_id.
         """
         result: dict[str, dict] = {}
-        for inst in self.module_instances:
+        for inst in self.assessment_instances:
             if inst.deliverable and inst.is_plan_complete:
-                existing = result.get(inst.module_id)
+                existing = result.get(inst.assessment_id)
                 if existing is None or inst.updated_at > existing.get("_updated_at", inst.updated_at):
                     d = dict(inst.deliverable)
                     d["_updated_at"] = inst.updated_at
                     d["_instance_id"] = str(inst.id)
-                    result[inst.module_id] = d
+                    result[inst.assessment_id] = d
         for v in result.values():
             v.pop("_updated_at", None)
         return result
 
     def get_tool_alignments_dict(self) -> dict:
-        """Build a backward-compatible tool_alignments dict from module_instances.
+        """Build a backward-compatible tool_alignments dict from assessment_instances.
 
         Returns the latest instance's alignment per tool_id.
         """
         result: dict[str, dict] = {}
         latest_ts: dict[str, datetime] = {}
-        for inst in self.module_instances:
+        for inst in self.assessment_instances:
             if inst.alignment:
-                prev = latest_ts.get(inst.module_id)
+                prev = latest_ts.get(inst.assessment_id)
                 if prev is None or inst.updated_at > prev:
-                    result[inst.module_id] = dict(inst.alignment)
-                    latest_ts[inst.module_id] = inst.updated_at
+                    result[inst.assessment_id] = dict(inst.alignment)
+                    latest_ts[inst.assessment_id] = inst.updated_at
         return result
 
     def touch(self):
@@ -244,4 +244,4 @@ from app.models.onboarding import ChatMessage  # noqa: E402
 from app.models.evidence import EvidenceDoc  # noqa: E402
 from app.models.memo import MemoVersion  # noqa: E402
 from app.models.project_material import ProjectMaterial  # noqa: E402
-from app.models.module_instance import ModuleInstance  # noqa: E402
+from app.models.assessment_instance import AssessmentInstance  # noqa: E402

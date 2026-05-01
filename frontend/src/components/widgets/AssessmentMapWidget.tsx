@@ -3,7 +3,7 @@
 /**
  * AssessmentMapWidget
  *
- * Renders the "Map" stage for Landscape Mapping and Stakeholder Assessment modules
+ * Renders the "Map" stage for Landscape Mapping and Stakeholder Assessment assessments
  * using the shared PlanWorkspaceView and PlanInspectorPanel behavior.
  */
 
@@ -47,7 +47,7 @@ interface AssessmentGroup {
 
 interface AssessmentMapData {
   groups: AssessmentGroup[];
-  module_id?: string;
+  assessment_id?: string;
 }
 
 interface CachedDetailState {
@@ -150,13 +150,13 @@ function toInspectorResult(
   item: AssessmentItem,
   group: AssessmentGroup,
   latencyMs: number,
-  isStakeholderModule: boolean,
+  isStakeholderAssessment: boolean,
 ): PlanWorkspaceInspectorResult {
   const summary: string[] = [];
   if (item.description) summary.push(item.description);
   if (!item.description && item.role_in_project) summary.push(item.role_in_project);
 
-  const schema = isStakeholderModule ? STAKEHOLDER_DEEP_DIVE_SCHEMA : LANDSCAPE_DEEP_DIVE_SCHEMA;
+  const schema = isStakeholderAssessment ? STAKEHOLDER_DEEP_DIVE_SCHEMA : LANDSCAPE_DEEP_DIVE_SCHEMA;
   const detailFields = [
     { label: 'Category', value: group.label },
     ...schema
@@ -180,13 +180,13 @@ function toInspectorResult(
     requirements: [],
     dependencies: [],
     detailFields,
-    detailFieldsTitle: isStakeholderModule ? 'Stakeholder profile' : 'Item details',
+    detailFieldsTitle: isStakeholderAssessment ? 'Stakeholder profile' : 'Item details',
     documentSources: [],
     documentSourcesTitle: 'Project documents',
     linkSources,
     linkSourcesTitle: 'Citations',
     loadingLabel: 'Researching stakeholder details...',
-    emptySourcesMessage: isStakeholderModule
+    emptySourcesMessage: isStakeholderAssessment
       ? 'No external citations are attached to this stakeholder yet.'
       : 'No external citations are attached to this item yet.',
     latencyMs,
@@ -202,7 +202,7 @@ export function AssessmentMapWidget({
 }: WorkspaceWidgetProps) {
   const mapData = data as AssessmentMapData;
   const incomingGroups = useMemo<AssessmentGroup[]>(() => mapData?.groups ?? [], [mapData]);
-  const isStakeholderModule = mapData?.module_id === 'stakeholder_assessment';
+  const isStakeholderAssessment = mapData?.assessment_id === 'stakeholder_assessment';
 
   const [groups, setGroups] = useState<AssessmentGroup[]>(incomingGroups);
   const [detailCache, setDetailCache] = useState<Record<string, CachedDetailState>>({});
@@ -231,7 +231,7 @@ export function AssessmentMapWidget({
     group: AssessmentGroup,
     showLoading: boolean,
   ) => {
-    if (!instanceId || !isStakeholderModule) return;
+    if (!instanceId || !isStakeholderAssessment) return;
     const requestId = ++deepDiveRequestRef.current;
     const startedAt = Date.now();
     if (showLoading) {
@@ -284,7 +284,7 @@ export function AssessmentMapWidget({
         });
       }
     }
-  }, [instanceId, isStakeholderModule, onWorkflowUpdated, workflowVersion]);
+  }, [instanceId, isStakeholderAssessment, onWorkflowUpdated, workflowVersion]);
 
   const workspaceGroups = useMemo<PlanWorkspaceGroup[]>(
     () => groups.map((group) => ({
@@ -315,11 +315,11 @@ export function AssessmentMapWidget({
     return {
       item: mapAssessmentItemToWorkspaceItem(inspector.item, inspector.group),
       groupName: inspector.group.label,
-      result: toInspectorResult(inspector.item, inspector.group, inspector.latencyMs, isStakeholderModule),
+      result: toInspectorResult(inspector.item, inspector.group, inspector.latencyMs, isStakeholderAssessment),
       loading: inspector.loading,
       error: inspector.error,
     };
-  }, [inspector, isStakeholderModule]);
+  }, [inspector, isStakeholderAssessment]);
 
   useEffect(() => {
     onInspectorStateChange?.(inspectorState);
@@ -337,23 +337,23 @@ export function AssessmentMapWidget({
         groupId: group.id,
         item: cached?.item ?? item,
         group,
-        loading: isStakeholderModule && !cached,
+        loading: isStakeholderAssessment && !cached,
         error: null,
         latencyMs: cached?.latencyMs ?? 1,
       });
       if (!onInspectorStateChange) setLocalInspectorOpen(true);
 
-      if (isStakeholderModule) {
+      if (isStakeholderAssessment) {
         void hydrateStakeholder(item, group, !cached);
       }
     },
-    [detailCache, groups, hydrateStakeholder, isStakeholderModule, onInspectorStateChange],
+    [detailCache, groups, hydrateStakeholder, isStakeholderAssessment, onInspectorStateChange],
   );
 
   const handleRetryInspector = useCallback(() => {
-    if (!inspector || !isStakeholderModule) return;
+    if (!inspector || !isStakeholderAssessment) return;
     void hydrateStakeholder(inspector.item, inspector.group, true);
-  }, [hydrateStakeholder, inspector, isStakeholderModule]);
+  }, [hydrateStakeholder, inspector, isStakeholderAssessment]);
 
   const noopToggleComplete = useCallback((_itemId: string) => {}, []);
   const noopDeleteItem = useCallback((_itemId: string) => {}, []);

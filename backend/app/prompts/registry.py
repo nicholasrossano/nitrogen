@@ -31,10 +31,10 @@ class PromptRegistry:
     # ------------------------------------------------------------------
 
     def _load_prompts(self) -> None:
-        """Lazily import prompt constants from service modules and register them.
+        """Lazily import prompt constants from service assessments and register them.
 
-        Imports are deferred to avoid circular-import issues at module load time,
-        mirroring the pattern used by ModuleRegistry._load_modules().
+        Imports are deferred to avoid circular-import issues at assessment load time,
+        mirroring the pattern used by AssessmentRegistry._load_assessments().
         """
         if self._loaded:
             return

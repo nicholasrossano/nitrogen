@@ -14,7 +14,7 @@ from app.core.execution_context import ExecutionContext
 from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.memo import MemoVersion
-from app.models.module_instance import ModuleInstance
+from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
 
 ReadHandler = Callable[[str, AsyncSession, ExecutionContext], Awaitable[dict]]
@@ -97,11 +97,11 @@ class ResourceRegistry:
 
         instances = (
             await db.execute(
-                select(ModuleInstance.id).where(ModuleInstance.initiative_id == initiative_id)
+                select(AssessmentInstance.id).where(AssessmentInstance.initiative_id == initiative_id)
             )
         ).scalars().all()
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/modules/{instance_id}"
+            f"nitrogen://initiatives/{initiative_id}/assessments/{instance_id}"
             for instance_id in instances
         )
         uris.extend(

@@ -66,7 +66,7 @@ export function ReadOnlyDataTable<Row extends Record<string, any>>({
             <tbody className={dataTableBodyClass}>
               {pagedRows.map((row, rowIndex) => (
                 <tr
-                  key={`${rowIndex}-${String(row.id ?? row.entity_id ?? row.module_instance_id ?? 'row')}`}
+                  key={`${rowIndex}-${String(row.id ?? row.entity_id ?? row.assessment_instance_id ?? 'row')}`}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={onRowClick ? 'cursor-pointer hover:bg-black/[0.02]' : undefined}
                 >

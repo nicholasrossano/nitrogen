@@ -30,7 +30,7 @@ from app.services.document_conversion import (
     DocumentConversionError,
     prepare_uploaded_document,
 )
-from app.services import module_service
+from app.services import assessment_service
 from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
 from app.core.rate_limit import limiter
 
@@ -282,13 +282,13 @@ async def delete_material(
 
 
 def _resolve_tool(tool_id: str, output_type: str):
-    """Look up the BaseModule for a deliverable, matching on tool_id first, then output_type."""
-    from app.modules.registry import get_module_registry
-    registry = get_module_registry()
-    tool = registry.get_module(tool_id)
+    """Look up the BaseAssessment for a deliverable, matching on tool_id first, then output_type."""
+    from app.assessments.registry import get_assessment_registry
+    registry = get_assessment_registry()
+    tool = registry.get_assessment(tool_id)
     if tool:
         return tool
-    for t in registry.get_all_modules():
+    for t in registry.get_all_assessments():
         if t.definition.output_type == output_type:
             return t
     return None
@@ -346,7 +346,7 @@ async def list_project_files(
         ))
     uploaded.sort(key=lambda r: r.created_at, reverse=True)
 
-    # Generated outputs from module instances (single source of truth)
+    # Generated outputs from assessment instances (single source of truth)
     generated: list[GeneratedFileResponse] = []
     deliverables = initiative.get_deliverables_dict()
 
@@ -416,7 +416,7 @@ async def delete_deliverable(
     """Remove a generated deliverable from the project."""
     initiative = await require_editor(db, initiative_id, user)
 
-    removed = await module_service.remove_instance_by_tool(db, initiative.id, tool_id)
+    removed = await assessment_service.remove_instance_by_tool(db, initiative.id, tool_id)
     if removed:
         await db.commit()
     else:

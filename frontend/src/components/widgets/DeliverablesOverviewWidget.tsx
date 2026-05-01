@@ -161,7 +161,7 @@ export function DeliverablesOverviewWidget({
               {modifying ? (
                 <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
               ) : null}
-              <span className="text-center leading-tight">Change Modules</span>
+              <span className="text-center leading-tight">Change Assessments</span>
             </button>
             <button
               onClick={handleGenerate}

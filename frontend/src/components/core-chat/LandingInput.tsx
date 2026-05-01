@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/types/chat';
-import { ALL_MODULES } from '@/components/chat/ModulePicker';
-import { useVisibleModules } from '@/hooks/useFeatureFlag';
+import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
+import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 
 
 interface LandingInputProps {
@@ -63,7 +63,7 @@ export function LandingInput({
   hideComposer = false,
   showAttachments = true,
 }: LandingInputProps) {
-  const visibleModules = useVisibleModules(ALL_MODULES);
+  const visibleAssessments = useVisibleAssessments(ALL_MODULES);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -291,19 +291,19 @@ export function LandingInput({
         {headerContent}
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-3 mb-12">
-          {visibleModules.map((module) => {
+          {visibleAssessments.map((assessment) => {
             return (
               <button
-                key={module.id}
+                key={assessment.id}
                 type="button"
                 disabled={disabled}
-                onClick={() => onSend(`Generate ${module.name}`, module.id)}
+                onClick={() => onSend(`Generate ${assessment.name}`, assessment.id)}
                 className="relative flex items-center gap-3 px-4 py-3.5 card-interactive border border-black/[0.04] disabled:opacity-40 disabled:cursor-default"
               >
                 <div className="w-10 h-10 flex-shrink-0 rounded flex items-center justify-center bg-accent-wash">
-                  <span className="[&>svg]:w-5 [&>svg]:h-5 text-accent">{module.icon}</span>
+                  <span className="[&>svg]:w-5 [&>svg]:h-5 text-accent">{assessment.icon}</span>
                 </div>
-                <span className="text-xs font-medium text-text-secondary leading-snug text-left">{module.name}</span>
+                <span className="text-xs font-medium text-text-secondary leading-snug text-left">{assessment.name}</span>
               </button>
             );
           })}

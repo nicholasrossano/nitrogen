@@ -38,7 +38,7 @@ class MemoGenerationAdapter(BaseAdapter):
                 },
             },
             initiative_scope_required=True,
-            visibility="module_bound",
+            visibility="assessment_bound",
             capabilities=["async"],
         )
 

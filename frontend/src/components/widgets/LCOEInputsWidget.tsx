@@ -3,9 +3,6 @@
 import { useState, useCallback, useRef } from 'react';
 import {
   AlertCircle,
-  CheckCircle2,
-  MessageSquare,
-  Sparkles,
   Pencil,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -13,6 +10,7 @@ import { PanelHeader } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { FieldContext } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
+import { ModelInputsTable } from './shared/ModelInputsTable';
 
 interface LCOEInput {
   field_name: string;
@@ -36,13 +34,6 @@ interface LCOEInputsWidgetProps {
   onSendMessage?: (content: string) => void;
 }
 
-
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
-  assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
-  missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
-};
 
 const CATEGORY_ORDER = ['project', 'energy', 'costs', 'finance', 'timing', 'general'];
 const CATEGORY_LABELS: Record<string, string> = {
@@ -95,7 +86,7 @@ export function LCOEInputsWidget({
       current_value: typeof input?.value === 'number' ? input.value : null,
       unit: input?.unit || null,
       model_type: 'lcoe' as const,
-      module_id: 'lcoe_model',
+      assessment_id: 'lcoe_model',
       status: status || null,
     } : null;
     if (fieldName && fieldContext) {
@@ -115,14 +106,14 @@ export function LCOEInputsWidget({
             label,
             value: input?.value ?? null,
             unit: input?.unit ?? null,
-            source_type: 'module',
+            source_type: 'assessment',
             source_reference: {
-              module_id: 'lcoe_model',
+              assessment_id: 'lcoe_model',
               stage_id: 'widget_state',
               field_name: fieldName,
             },
             status: input?.value === null || input?.value === undefined || input?.value === '' ? 'missing' : 'assumed',
-            used_in_modules: ['lcoe_model'],
+            used_in_assessments: ['lcoe_model'],
           });
           assumptionId = created.id;
         }
@@ -272,116 +263,48 @@ export function LCOEInputsWidget({
           </div>
         )}
 
-        {/* Input table grouped by category */}
-        <div className="divide-y divide-divider">
-          {groupedInputs.map((group) => (
-            <div key={group.category}>
-              <div className="px-5 py-2 bg-surface-subtle">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {group.label}
-                </span>
-              </div>
-
-              <div className="divide-y divide-stroke-subtle">
-                {group.inputs.map((inp) => {
-                  const isMissing = inp.status === 'missing';
-                  const isEditing = editingField === inp.field_name;
-                  const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
-
-                  return (
-                    <div
-                      key={inp.field_name}
-                      onMouseEnter={(e) => handleRowHover(e, inp)}
-                      className={`px-5 py-2.5 flex items-center gap-3 ${
-                        isMissing ? 'bg-red-50/40' : 'bg-white'
-                      } ${hoveredRow?.field_name === inp.field_name ? 'bg-gray-50/60' : ''}`}
-                    >
-                      {/* Label */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-text-primary truncate">
-                            {inp.label}
-                          </span>
-                          {inp.unit && (
-                            <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
-                          )}
-                        </div>
-                        {inp.rationale && inp.status === 'assumed' && (
-                          <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
-                            {inp.rationale}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Value (editable) */}
-                      <div className="w-28 text-right">
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            onBlur={commitEdit}
-                            autoFocus
-                            className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
-                          />
-                        ) : (
-                          <button
-                            onClick={() => isActive && startEdit(inp.field_name, inp.value)}
-                            disabled={!isActive}
-                            className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isMissing ? (
-                              <span className="text-red-500 italic">—</span>
-                            ) : (
-                              <span>
-                                {typeof inp.value === 'number'
-                                  ? inp.value.toLocaleString(undefined, {
-                                      maximumFractionDigits: 6,
-                                    })
-                                  : inp.value}
-                              </span>
-                            )}
-                            {isActive && (
-                              <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
-                            )}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Status badge */}
-                      <div className="w-16 flex justify-end">
-                        <span
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                        >
-                          {inp.status === 'validated' && <CheckCircle2 className="w-2.5 h-2.5" />}
-                          {inp.status === 'extracted' && <MessageSquare className="w-2.5 h-2.5" />}
-                          {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
-                          {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
-                          {statusStyle.label}
-                        </span>
-                      </div>
-
-                      {/* Confirm checkbox */}
-                      <div className="w-5 flex justify-center">
-                        {isActive && !hasOutputWidget && (
-                          <input
-                            type="checkbox"
-                            checked={inp.status === 'validated'}
-                            disabled={isMissing || confirmingFields.has(inp.field_name)}
-                            onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                            title={inp.status === 'validated' ? 'Mark as extracted' : 'Mark as validated'}
-                            className="w-3 h-3 rounded-full accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ModelInputsTable
+          groups={groupedInputs}
+          hoveredFieldName={hoveredRow?.field_name ?? null}
+          editingField={editingField}
+          isActive={isActive}
+          confirmingFields={confirmingFields}
+          showConfirmCheckbox={!hasOutputWidget}
+          onToggleConfirm={(row) => toggleConfirm(row.field_name, row.status, row.value)}
+          onRowMouseEnter={(event, row) => handleRowHover(event, row)}
+          renderValueCell={(row, isEditing) => (
+            isEditing ? (
+              <input
+                type="text"
+                value={editValue}
+                onChange={(event) => setEditValue(event.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={commitEdit}
+                autoFocus
+                className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
+              />
+            ) : (
+              <button
+                onClick={() => isActive && startEdit(row.field_name, row.value)}
+                disabled={!isActive}
+                className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {row.status === 'missing' ? (
+                  <span className="text-red-500 italic">—</span>
+                ) : (
+                  <span>
+                    {typeof row.value === 'number'
+                      ? row.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                      : row.value}
+                  </span>
+                )}
+                {isActive && (
+                  <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                )}
+              </button>
+            )
+          )}
+        />
 
         {/* Footer */}
         {isRecalculating && (

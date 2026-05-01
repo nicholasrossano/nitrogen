@@ -35,11 +35,11 @@ def upgrade() -> None:
             sa.ForeignKey("assumptions.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("module_id", sa.String(length=160), nullable=False),
+        sa.Column("assessment_id", sa.String(length=160), nullable=False),
         sa.Column(
-            "module_instance_id",
+            "assessment_instance_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("module_instances.id", ondelete="SET NULL"),
+            sa.ForeignKey("assessment_instances.id", ondelete="SET NULL"),
             nullable=True,
         ),
         sa.Column("stage_id", sa.String(length=120), nullable=True),
@@ -52,9 +52,9 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
     op.create_index(
-        "ix_assumption_bindings_initiative_module_field",
+        "ix_assumption_bindings_initiative_assessment_field",
         "assumption_bindings",
-        ["initiative_id", "module_id", "field_name"],
+        ["initiative_id", "assessment_id", "field_name"],
     )
     op.create_index(
         "ix_assumption_bindings_assumption",
@@ -62,9 +62,9 @@ def upgrade() -> None:
         ["assumption_id"],
     )
     op.create_index(
-        "ix_assumption_bindings_module_instance",
+        "ix_assumption_bindings_assessment_instance",
         "assumption_bindings",
-        ["module_instance_id"],
+        ["assessment_instance_id"],
     )
 
     op.add_column("core_chats", sa.Column("assumption_id", postgresql.UUID(as_uuid=True), nullable=True))
@@ -84,7 +84,7 @@ def downgrade() -> None:
     op.drop_constraint("fk_core_chats_assumption_id", "core_chats", type_="foreignkey")
     op.drop_column("core_chats", "assumption_id")
 
-    op.drop_index("ix_assumption_bindings_module_instance", table_name="assumption_bindings")
+    op.drop_index("ix_assumption_bindings_assessment_instance", table_name="assumption_bindings")
     op.drop_index("ix_assumption_bindings_assumption", table_name="assumption_bindings")
-    op.drop_index("ix_assumption_bindings_initiative_module_field", table_name="assumption_bindings")
+    op.drop_index("ix_assumption_bindings_initiative_assessment_field", table_name="assumption_bindings")
     op.drop_table("assumption_bindings")

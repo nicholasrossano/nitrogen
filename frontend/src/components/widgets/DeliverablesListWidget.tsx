@@ -6,8 +6,8 @@ import { FileText } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 
 interface DeliverableItem {
-  module_id: string;
-  module_name: string;
+  assessment_id: string;
+  assessment_name: string;
   widget_type: string;
   content: any;
 }
@@ -37,7 +37,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           return (
             <MemoViewerWidget
               key={idx}
-              data={{ content: deliverable.content, memo_id: deliverable.module_id }}
+              data={{ content: deliverable.content, memo_id: deliverable.assessment_id }}
               initiativeId={initiativeId}
               isActive={isActive}
             />
@@ -46,7 +46,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           return (
             <ChecklistViewerWidget
               key={idx}
-              data={{ content: deliverable.content, module_name: deliverable.module_name }}
+              data={{ content: deliverable.content, assessment_name: deliverable.assessment_name }}
               initiativeId={initiativeId}
               isActive={isActive}
             />
@@ -55,7 +55,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
           // Generic document viewer fallback
           return (
             <div key={idx} className="card-elevated overflow-hidden">
-              <PanelHeader icon={FileText} title={deliverable.module_name} />
+              <PanelHeader icon={FileText} title={deliverable.assessment_name} />
               <div className="p-5 bg-white">
                 <pre className="text-sm text-text-secondary whitespace-pre-wrap">
                   {JSON.stringify(deliverable.content, null, 2)}

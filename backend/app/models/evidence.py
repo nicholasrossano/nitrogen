@@ -15,7 +15,7 @@ class EvidenceDocStatus(str, enum.Enum):
     `uploaded` means the file is safely stored and visible to the user but has
     not yet been touched by the background processor.  `lightweight_ready` means
     we have enough signal (filename, type, optional preview) to drive onboarding
-    decisions such as module recommendation — but full chunking/embeddings are
+    decisions such as assessment recommendation — but full chunking/embeddings are
     not done yet.  `indexed` means the document is fully chunked and embedded
     and is available for retrieval.  `failed` marks a document that the worker
     could not process after any retries; the upload itself still succeeded.

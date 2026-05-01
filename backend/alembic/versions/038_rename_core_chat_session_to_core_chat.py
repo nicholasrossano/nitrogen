@@ -18,7 +18,7 @@ def upgrade() -> None:
     op.rename_table("core_chat_sessions", "core_chats")
 
     op.alter_column("core_chat_messages", "session_id", new_column_name="chat_id")
-    op.alter_column("module_instances", "session_id", new_column_name="chat_id")
+    op.alter_column("assessment_instances", "session_id", new_column_name="chat_id")
     op.alter_column("provenance_traces", "session_id", new_column_name="chat_id")
 
     op.execute(
@@ -62,7 +62,7 @@ def downgrade() -> None:
     )
 
     op.alter_column("provenance_traces", "chat_id", new_column_name="session_id")
-    op.alter_column("module_instances", "chat_id", new_column_name="session_id")
+    op.alter_column("assessment_instances", "chat_id", new_column_name="session_id")
     op.alter_column("core_chat_messages", "chat_id", new_column_name="session_id")
 
     op.rename_table("core_chats", "core_chat_sessions")

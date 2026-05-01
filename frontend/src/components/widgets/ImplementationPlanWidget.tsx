@@ -3,7 +3,7 @@
 /**
  * ImplementationPlanWidget
  *
- * Renders the computed "Plan" stage for the implementation_plan module.
+ * Renders the computed "Plan" stage for the implementation_plan assessment.
  * Uses the shared PlanWorkspaceView and inspector behavior.
  */
 
@@ -53,7 +53,7 @@ interface ImplementationPlanGroup {
 
 interface ImplementationPlanData {
   groups: ImplementationPlanGroup[];
-  module_id?: string;
+  assessment_id?: string;
 }
 
 interface PlanInspectorSelection {
@@ -300,7 +300,7 @@ export function ImplementationPlanWidget({
     const nextWidgetData: ImplementationPlanData = {
       ...previousWidgetData,
       groups: nextGroups,
-      module_id: previousWidgetData?.module_id ?? 'implementation_plan',
+      assessment_id: previousWidgetData?.assessment_id ?? 'implementation_plan',
     };
     setPendingToggleIds((prev) => {
       const next = new Set(prev);
@@ -309,7 +309,7 @@ export function ImplementationPlanWidget({
     });
     setWidgetData(nextWidgetData);
     try {
-      await api.persistModuleWorkflowWidget(
+      await api.persistAssessmentWorkflowWidget(
         instanceId,
         nextWidgetData,
         workflowVersion,

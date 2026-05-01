@@ -320,7 +320,7 @@ class DocumentParserService:
 
 
 # ======================================================================
-# Module-level helpers
+# Assessment-level helpers
 # ======================================================================
 
 _TAG_RE = re.compile(r"<[^>]+>")

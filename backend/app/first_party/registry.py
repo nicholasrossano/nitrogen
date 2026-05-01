@@ -5,9 +5,9 @@ from __future__ import annotations
 from app.first_party.catalog import get_first_party_catalog
 
 
-def register_modules(registry) -> None:
-    """Register shipped modules with the platform module registry."""
-    for factory in get_first_party_catalog().module_factories:
+def register_assessments(registry) -> None:
+    """Register shipped assessments with the platform assessment registry."""
+    for factory in get_first_party_catalog().assessment_factories:
         registry.register(factory())
 
 

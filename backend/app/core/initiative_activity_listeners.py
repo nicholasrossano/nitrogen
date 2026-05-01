@@ -26,19 +26,19 @@ def _bump_initiative_ts(connection, initiative_id: uuid.UUID | None) -> None:
 
 
 def _register_child_listeners() -> None:
-    from app.models.module_instance import ModuleInstance
+    from app.models.assessment_instance import AssessmentInstance
     from app.models.onboarding import ChatMessage
     from app.models.chat import CoreChat, CoreChatMessage
     from app.models.evidence import EvidenceDoc, EvidenceChunk
     from app.models.project_material import ProjectMaterial
     from app.models.memo import MemoVersion
 
-    def bump_from_module(mapper, connection, target):
+    def bump_from_assessment(mapper, connection, target):
         _bump_initiative_ts(connection, target.initiative_id)
 
-    event.listen(ModuleInstance, "after_insert", bump_from_module, propagate=True)
-    event.listen(ModuleInstance, "after_update", bump_from_module, propagate=True)
-    event.listen(ModuleInstance, "after_delete", bump_from_module, propagate=True)
+    event.listen(AssessmentInstance, "after_insert", bump_from_assessment, propagate=True)
+    event.listen(AssessmentInstance, "after_update", bump_from_assessment, propagate=True)
+    event.listen(AssessmentInstance, "after_delete", bump_from_assessment, propagate=True)
 
     def bump_from_onboarding_msg(mapper, connection, target):
         _bump_initiative_ts(connection, target.initiative_id)

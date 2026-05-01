@@ -4,12 +4,12 @@ import { useMemo } from 'react';
 
 import {
   buildFeatureFlagContext,
-  filterVisibleModules,
+  filterVisibleAssessments,
   isFeatureFlagEnabled,
   type FeatureFlagContext,
   type FeatureFlagKey,
 } from '@/lib/featureFlags';
-import { type ModuleOption } from '@/first-party/moduleCatalog';
+import { type AssessmentOption } from '@/first-party/assessmentCatalog';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 export function useFeatureFlagContext(): FeatureFlagContext {
@@ -22,7 +22,7 @@ export function useFeatureFlag(flag: FeatureFlagKey): boolean {
   return useMemo(() => isFeatureFlagEnabled(flag, context), [flag, context]);
 }
 
-export function useVisibleModules<T extends ModuleOption>(modules: readonly T[]): T[] {
+export function useVisibleAssessments<T extends AssessmentOption>(assessments: readonly T[]): T[] {
   const context = useFeatureFlagContext();
-  return useMemo(() => filterVisibleModules(modules, context), [modules, context]);
+  return useMemo(() => filterVisibleAssessments(assessments, context), [assessments, context]);
 }

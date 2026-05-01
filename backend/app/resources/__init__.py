@@ -16,7 +16,7 @@ from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.initiative import Initiative
 from app.models.memo import MemoVersion
-from app.models.module_instance import ModuleInstance
+from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
 from app.resources.registry import ResourceDefinition, ResourceRegistry, get_resource_registry
 
@@ -183,27 +183,27 @@ async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) 
     }
 
 
-async def _read_module_instance(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
+async def _read_assessment_instance(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
     initiative_id = _initiative_id_from_uri(uri)
     instance_id = UUID(uri.rsplit("/", 1)[-1])
     await _ensure_initiative_access(db, ctx, initiative_id)
     instance = (
         await db.execute(
-            select(ModuleInstance).where(
-                ModuleInstance.id == instance_id,
-                ModuleInstance.initiative_id == initiative_id,
+            select(AssessmentInstance).where(
+                AssessmentInstance.id == instance_id,
+                AssessmentInstance.initiative_id == initiative_id,
             )
         )
     ).scalar_one_or_none()
     if instance is None:
-        raise ValueError("ModuleInstance not found.")
+        raise ValueError("AssessmentInstance not found.")
     return {
         "uri": uri,
-        "resource_type": "module_instance",
+        "resource_type": "assessment_instance",
         "data": {
             "id": str(instance.id),
             "initiative_id": str(instance.initiative_id),
-            "module_id": instance.module_id,
+            "assessment_id": instance.assessment_id,
             "status": instance.status,
             "alignment": instance.alignment,
             "deliverable": instance.deliverable,
@@ -214,14 +214,14 @@ async def _read_module_instance(uri: str, db: AsyncSession, ctx: ExecutionContex
 
 
 async def _read_artifact(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    instance_data = await _read_module_instance(uri.replace("/artifacts/", "/modules/"), db, ctx)
+    instance_data = await _read_assessment_instance(uri.replace("/artifacts/", "/assessments/"), db, ctx)
     deliverable = (instance_data.get("data") or {}).get("deliverable") or {}
     return {
         "uri": uri,
         "resource_type": "artifact",
         "data": {
             "artifact_id": instance_data["data"]["id"],
-            "module_id": instance_data["data"]["module_id"],
+            "assessment_id": instance_data["data"]["assessment_id"],
             "title": deliverable.get("title"),
             "output_type": deliverable.get("output_type"),
             "content": deliverable.get("content"),
@@ -305,14 +305,14 @@ def register_all(registry: ResourceRegistry) -> None:
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/modules/{instance_id}",
-            resource_type="module_instance",
-            name="Module Instance",
-            description="Saved module instance state and output data.",
+            uri_pattern="nitrogen://initiatives/{id}/assessments/{instance_id}",
+            resource_type="assessment_instance",
+            name="Assessment Instance",
+            description="Saved assessment instance state and output data.",
             mime_type="application/json",
             initiative_scoped=True,
-            read_handler=_read_module_instance,
-            visibility=resource_visibility("module_instance"),
+            read_handler=_read_assessment_instance,
+            visibility=resource_visibility("assessment_instance"),
         )
     )
     registry.register(
@@ -320,7 +320,7 @@ def register_all(registry: ResourceRegistry) -> None:
             uri_pattern="nitrogen://initiatives/{id}/artifacts/{artifact_id}",
             resource_type="artifact",
             name="Artifact",
-            description="Generated artifact data from a module instance deliverable.",
+            description="Generated artifact data from a assessment instance deliverable.",
             mime_type="application/json",
             initiative_scoped=True,
             read_handler=_read_artifact,

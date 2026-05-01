@@ -8,7 +8,7 @@ import io
 import logging
 
 from app.core.auth import get_current_user, MockUser
-from app.modules.lcoe_module import LCOETool
+from app.assessments.lcoe_assessment import LCOETool
 from app.services.lcoe_engine import LCOEEngine, LCOEInput
 
 router = APIRouter()
@@ -39,6 +39,17 @@ def _normalize_input_status(status: str) -> str:
     return status
 
 
+def _normalize_input_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    lowered = value.strip().lower()
+    if lowered in {"", "—", "-", "–", "n/a", "na", "none", "null", "missing", "unknown"} or lowered.startswith("unknown "):
+        return None
+    return value.strip()
+
+
 @router.post("/lcoe/recalculate")
 async def recalculate_lcoe(
     data: RecalculateRequest,
@@ -60,16 +71,17 @@ async def update_input_and_recalculate(
 ):
     """Update a single input field and recalculate."""
     inputs = data.inputs
-    normalized_status = _normalize_input_status(data.status)
+    normalized_value = _normalize_input_value(data.value)
+    normalized_status = "missing" if normalized_value is None else _normalize_input_status(data.status)
     if data.field_name in inputs:
-        inputs[data.field_name]["value"] = data.value
+        inputs[data.field_name]["value"] = normalized_value
         inputs[data.field_name]["source"] = data.source
         inputs[data.field_name]["status"] = normalized_status
     else:
         inputs[data.field_name] = {
             "field_name": data.field_name,
             "label": data.field_name,
-            "value": data.value,
+            "value": normalized_value,
             "unit": "",
             "source": data.source,
             "status": normalized_status,
