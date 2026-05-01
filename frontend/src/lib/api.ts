@@ -1,4 +1,5 @@
 import { debugChatFlow } from '@/lib/chatDebug';
+import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -342,7 +343,7 @@ export interface ModuleDecisionLogReport {
   history_rows: DecisionLogHistoryRow[];
 }
 
-export type AssumptionStatus = 'confirmed' | 'inferred' | 'assumed' | 'missing';
+export type AssumptionStatus = 'confirmed' | 'extracted' | 'assumed' | 'missing';
 export type AssumptionSourceType =
   | 'extraction'
   | 'user_input'
@@ -373,7 +374,7 @@ export interface Assumption {
 export interface AssumptionSummary {
   total: number;
   confirmed: number;
-  inferred: number;
+  extracted: number;
   assumed: number;
   missing: number;
   top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_modules'>>;
@@ -468,6 +469,7 @@ export interface FieldContext {
   model_type?: 'lcoe' | 'carbon' | 'solar' | null;
   module_id?: string | null;
   status?: string | null;
+  assumption_id?: string | null;
 }
 
 export interface StageStatus {
@@ -680,18 +682,6 @@ export interface DeepDiveResult {
   latency_ms: number;
 }
 
-function isDevMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const raw = localStorage.getItem('nitrogen-settings');
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    return parsed?.state?.devMode === true;
-  } catch {
-    return false;
-  }
-}
-
 async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -700,7 +690,7 @@ async function fetchApi<T>(
   
   // Get auth token
   const token = await getAuthToken();
-  const devMode = isDevMode();
+  const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -710,7 +700,7 @@ async function fetchApi<T>(
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  if (devMode) {
+  if (useBillingTestHeaders) {
     headers['X-Billing-Test'] = 'true';
   }
   
@@ -1609,6 +1599,22 @@ export const api = {
     );
   },
 
+  resolveAssumption: (
+    initiativeId: string,
+    moduleId: string,
+    fieldName: string,
+    moduleInstanceId?: string | null,
+  ) => {
+    const params = new URLSearchParams({
+      module_id: moduleId,
+      field_name: fieldName,
+    });
+    if (moduleInstanceId) params.set('module_instance_id', moduleInstanceId);
+    return fetchApi<{ found: boolean; assumption: Assumption | null }>(
+      `/api/v1/initiatives/${initiativeId}/assumptions/resolve?${params.toString()}`,
+    );
+  },
+
   createAssumption: (initiativeId: string, data: AssumptionCreateInput) =>
     fetchApi<Assumption>(`/api/v1/initiatives/${initiativeId}/assumptions`, {
       method: 'POST',
@@ -1731,6 +1737,7 @@ export const api = {
         message_count: number;
         compare_initiative_ids: string[] | null;
         initiative_id: string | null;
+        assumption_id: string | null;
       }[];
     }>(
       initiativeId
@@ -1742,6 +1749,7 @@ export const api = {
     fetchApi<{
       chat_id: string;
       title: string | null;
+      assumption_id: string | null;
       messages: ChatMessage[];
     }>(`/api/v1/chats/${chatId}/messages`),
 
@@ -1817,17 +1825,18 @@ export const api = {
     modelInputsContext?: string | null,
     moduleContext?: { instance_id: string; module_id: string; title?: string | null } | null,
     initiativeId?: string | null,
+    assumptionId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
     compareInitiativeIds?: string[] | null,
     allowInitialProjectOnboarding?: boolean,
   ) => {
     const token = await getAuthToken();
-    const devMode = isDevMode();
+    const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    if (devMode) {
+    if (useBillingTestHeaders) {
       headers['X-Billing-Test'] = 'true';
     }
 
@@ -1840,6 +1849,7 @@ export const api = {
       has_model_inputs_context: Boolean(modelInputsContext),
       has_module_context: Boolean(moduleContext),
       initiative_id: initiativeId ?? null,
+      assumption_id: assumptionId ?? null,
       compare_mode: Boolean(compareInitiativeIds?.length),
       allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
     });
@@ -1857,6 +1867,7 @@ export const api = {
         model_inputs_context: modelInputsContext ?? null,
         module_context: moduleContext ?? null,
         initiative_id: initiativeId ?? null,
+        assumption_id: assumptionId ?? null,
         compare_initiative_ids: compareInitiativeIds ?? null,
         allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
       }),
