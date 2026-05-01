@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
 
 import { ModuleInstanceOpenDropdown } from '@/components/framework/ModuleInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
@@ -15,6 +16,8 @@ import {
 } from '@/lib/api';
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
+const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
+
 interface AssumptionsWorkspaceTabProps {
   initiativeId: string;
   embedded?: boolean;
@@ -27,8 +30,8 @@ interface AssumptionsWorkspaceTabProps {
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
   { value: '', label: 'All statuses' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'inferred', label: 'Inferred' },
+  { value: 'validated', label: 'Validated' },
+  { value: 'extracted', label: 'Extracted' },
   { value: 'assumed', label: 'Assumed' },
   { value: 'missing', label: 'Missing' },
 ];
@@ -64,17 +67,12 @@ function formatValue(value: any, unit?: string | null, valueType?: Assumption['v
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
-function formatStatus(status: AssumptionStatus): string {
-  return status.replace('_', ' ');
-}
-
-function statusClass(status: AssumptionStatus): string {
-  if (status === 'confirmed') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (status === 'inferred') return 'border-blue-200 bg-blue-50 text-blue-700';
-  if (status === 'assumed') return 'border-amber-200 bg-amber-50 text-amber-800';
-  if (status === 'missing') return 'border-red-200 bg-red-50 text-red-600';
-  return 'border-stroke-subtle bg-surface-subtle text-text-tertiary';
-}
+const STATUS_STYLES: Record<AssumptionStatus, { bg: string; text: string; label: string }> = {
+  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
+  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
+  assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
+  missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
+};
 
 export function AssumptionsWorkspaceTab({
   initiativeId,
@@ -130,6 +128,24 @@ export function AssumptionsWorkspaceTab({
     setSelected((current) => (current?.id === match.id ? current : match));
   }, [focusAssumptionId, rows]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAssumptionUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<Assumption>;
+      const updated = customEvent.detail;
+      if (!updated || updated.initiative_id !== initiativeId) return;
+
+      setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      setSelected((current) => (current?.id === updated.id ? updated : current));
+    };
+
+    window.addEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
+    return () => {
+      window.removeEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
+    };
+  }, [initiativeId]);
+
   const moduleOptions = useMemo(() => {
     const modules = new Set<string>();
     rows.forEach((row) => row.used_in_modules.forEach((module) => modules.add(module)));
@@ -153,9 +169,16 @@ export function AssumptionsWorkspaceTab({
   const canConfirm = Boolean(
     selected &&
     hasDraftValue &&
-    (selected.status !== 'confirmed' || hasDraftChanges) &&
+    (selected.status !== 'validated' || hasDraftChanges) &&
     !saving,
   );
+  const handleAssumptionOpen = useCallback((row: Assumption) => {
+    if (onAssumptionSelectInChat) {
+      onAssumptionSelectInChat(row);
+      return;
+    }
+    setSelected(row);
+  }, [onAssumptionSelectInChat]);
 
   const columns: ReadOnlyDataTableColumn<Assumption>[] = [
     {
@@ -166,12 +189,9 @@ export function AssumptionsWorkspaceTab({
         <button
           type="button"
           className="text-left font-medium text-text-primary enabled:hover:text-accent"
-          onClick={() => {
-            if (onAssumptionSelectInChat) {
-              onAssumptionSelectInChat(row);
-              return;
-            }
-            setSelected(row);
+          onClick={(event) => {
+            event.stopPropagation();
+            handleAssumptionOpen(row);
           }}
         >
           {row.label}
@@ -184,8 +204,16 @@ export function AssumptionsWorkspaceTab({
       header: 'Status',
       className: 'whitespace-nowrap min-w-[120px]',
       render: (row) => (
-        <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusClass(row.status)}`}>
-          {formatStatus(row.status)}
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+            STATUS_STYLES[row.status].bg
+          } ${STATUS_STYLES[row.status].text}`}
+        >
+          {row.status === 'validated' && <CheckCircle2 className="w-2.5 h-2.5" />}
+          {row.status === 'extracted' && <MessageSquare className="w-2.5 h-2.5" />}
+          {row.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
+          {row.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
+          {STATUS_STYLES[row.status].label}
         </span>
       ),
     },
@@ -218,6 +246,11 @@ export function AssumptionsWorkspaceTab({
       const updated = await api.updateAssumption(selected.id, updates);
       setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
       setSelected(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: updated }),
+        );
+      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to update assumption');
     } finally {
@@ -235,7 +268,7 @@ export function AssumptionsWorkspaceTab({
     await updateSelected({
       value: parsedValue,
       unit: draftUnit || null,
-      status: 'confirmed',
+      status: 'validated',
     });
   }, [draftUnit, draftValue, selected, updateSelected]);
 
@@ -294,6 +327,7 @@ export function AssumptionsWorkspaceTab({
             columns={columns}
             rows={rows}
             pageSize={25}
+            onRowClick={handleAssumptionOpen}
             emptyState={
               <div className="py-20 text-center">
                 <p className="text-sm font-medium text-text-secondary">No assumptions yet</p>

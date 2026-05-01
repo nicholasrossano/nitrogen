@@ -13,6 +13,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { api } from '@/lib/api';
+import type { FieldContext } from '@/lib/api';
 import type { ChatSession } from '@/types/chat';
 
 interface ProjectChatTab {
@@ -36,6 +37,8 @@ interface PendingAssumptionsContext {
   focusAssumptionId?: string | null;
   title?: string | null;
   collapsed?: boolean;
+  forceNewTab?: boolean;
+  autoSend?: PendingAutoSendRequest | null;
 }
 
 interface ProjectChatTabsPanelProps {
@@ -66,6 +69,9 @@ interface PendingAutoSendRequest {
   requestId: string;
   content: string;
   toolHint?: string;
+  fieldContext?: FieldContext | null;
+  modelInputsContext?: string | null;
+  assumptionId?: string | null;
 }
 
 function makeTab(title = 'New Chat', isLanding = false, isFallback = false): ProjectChatTab {
@@ -438,10 +444,20 @@ export function ProjectChatTabsPanel({
     if (!pendingAssumptions) return;
     if (handledAssumptionsRequestIdsRef.current.has(pendingAssumptions.requestId)) return;
     const nextAssumptionTitle = pendingAssumptions.title?.trim() || 'Assumptions';
+    const queueAutoSend = (tabId: string) => {
+      if (!pendingAssumptions.autoSend) return;
+      setPendingAutoSendByTabId((prev) => ({
+        ...prev,
+        [tabId]: pendingAssumptions.autoSend as PendingAutoSendRequest,
+      }));
+    };
 
-    const existingAssumptionsTabId =
-      Object.keys(assumptionsByTabIdRef.current).find((tabId) => tabId === resolvedActiveTabId) ??
-      Object.keys(assumptionsByTabIdRef.current)[0];
+    const existingAssumptionsTabId = pendingAssumptions.forceNewTab
+      ? undefined
+      : (
+        Object.keys(assumptionsByTabIdRef.current).find((tabId) => tabId === resolvedActiveTabId) ??
+        Object.keys(assumptionsByTabIdRef.current)[0]
+      );
 
     if (existingAssumptionsTabId) {
       setTabs((prev) =>
@@ -458,6 +474,7 @@ export function ProjectChatTabsPanel({
           collapsed: pendingAssumptions.collapsed ?? prev[existingAssumptionsTabId]?.collapsed ?? false,
         },
       }));
+      queueAutoSend(existingAssumptionsTabId);
       setActiveTabId(existingAssumptionsTabId);
       handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
       onPendingAssumptionsHandled?.();
@@ -484,21 +501,25 @@ export function ProjectChatTabsPanel({
           collapsed: pendingAssumptions.collapsed ?? prev[tabId]?.collapsed ?? false,
         },
       }));
+      queueAutoSend(tabId);
       setActiveTabId(tabId);
       handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
       onPendingAssumptionsHandled?.();
       return;
     }
 
-    const reusablePlaceholderTab =
-      tabs.find((tab) =>
-        tab.id === resolvedActiveTabId &&
-        !tab.chatId &&
-        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
-      ) ??
-      tabs.find((tab) =>
-        !tab.chatId &&
-        (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+    const reusablePlaceholderTab = pendingAssumptions.forceNewTab
+      ? undefined
+      : (
+        tabs.find((tab) =>
+          tab.id === resolvedActiveTabId &&
+          !tab.chatId &&
+          (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+        ) ??
+        tabs.find((tab) =>
+          !tab.chatId &&
+          (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+        )
       );
 
     if (reusablePlaceholderTab) {
@@ -522,6 +543,7 @@ export function ProjectChatTabsPanel({
           collapsed: pendingAssumptions.collapsed ?? prev[reusablePlaceholderTab.id]?.collapsed ?? false,
         },
       }));
+      queueAutoSend(reusablePlaceholderTab.id);
       handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
       onPendingAssumptionsHandled?.();
       return;
@@ -537,6 +559,7 @@ export function ProjectChatTabsPanel({
         collapsed: pendingAssumptions.collapsed ?? false,
       },
     }));
+    queueAutoSend(tab.id);
     handledAssumptionsRequestIdsRef.current.add(pendingAssumptions.requestId);
     onPendingAssumptionsHandled?.();
   }, [onPendingAssumptionsHandled, pendingAssumptions, resolvedActiveTabId, tabs]);
@@ -573,15 +596,6 @@ export function ProjectChatTabsPanel({
     });
   }, []);
 
-  const handleAssumptionsClose = useCallback((tabId: string) => {
-    setAssumptionsByTabId((prev) => {
-      if (!prev[tabId]) return prev;
-      const next = { ...prev };
-      delete next[tabId];
-      return next;
-    });
-  }, []);
-
   const handleAssumptionsMessageSent = useCallback((tabId: string) => {
     handleAssumptionsCollapsedChange(tabId, true);
   }, [handleAssumptionsCollapsedChange]);
@@ -595,6 +609,7 @@ export function ProjectChatTabsPanel({
           title: session.title || 'Untitled',
           createdAt: session.created_at ? new Date(session.created_at).getTime() : Date.now(),
           messages: [],
+          assumptionId: session.assumption_id,
         })),
       );
     } catch (err) {
@@ -1058,7 +1073,6 @@ export function ProjectChatTabsPanel({
               collapsed={assumptions.collapsed ?? false}
               layoutMode={showExpandedAssumptions ? 'panel' : 'inline'}
               onCollapsedChange={(collapsed) => handleAssumptionsCollapsedChange(tab.id, collapsed)}
-              onClose={() => handleAssumptionsClose(tab.id)}
             />
           ) : isActive ? topContent : undefined;
           return (
@@ -1074,6 +1088,7 @@ export function ProjectChatTabsPanel({
                 initialTitle={tab.title}
                 sessions={sessions}
                 activeModuleContext={activeModuleContext}
+                focusedAssumptionId={assumptions?.focusAssumptionId ?? null}
                 onDeleteChat={handleDeleteSession}
                 onChatListDirty={loadSessions}
                 onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}

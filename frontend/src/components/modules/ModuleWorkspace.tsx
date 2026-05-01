@@ -682,6 +682,7 @@ export function ModuleWorkspace({
     if (component === 'table' && widget === 'editable_table') {
       return (
         <EditableTableStage
+          initiativeId={initiativeId}
           instanceId={instanceId}
           moduleId={moduleId}
           stageId={stageId}

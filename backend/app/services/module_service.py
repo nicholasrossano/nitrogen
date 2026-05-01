@@ -143,6 +143,7 @@ async def save_deliverable(
             db,
             initiative_id=initiative_id,
             module_id=tool_id,
+            module_instance_id=inst.id,
             widget_data=content,
             actor=AssumptionActor(user_id=user_id, email=user_id),
         )
