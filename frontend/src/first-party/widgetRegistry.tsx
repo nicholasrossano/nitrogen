@@ -4,7 +4,7 @@ import type { WorkspaceWidgetProps } from '@/lib/widgetRegistry';
 type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
 
 export const FIRST_PARTY_WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }>> = {
-  // Legacy widget keys (preserved for existing module_instances during migration)
+  // Legacy widget keys (preserved for existing assessment_instances during migration)
   lcoe_inputs: () =>
     import('@/components/widgets/LCOEModelWidget').then((m) => ({ default: m.LCOEModelWidget as unknown as WidgetComponent })),
   lcoe_output: () =>
@@ -26,7 +26,7 @@ export const FIRST_PARTY_WIDGET_REGISTRY: Record<string, () => Promise<{ default
   solar_yield_results: () =>
     import('@/components/widgets/SolarEstimateWidget').then((m) => ({ default: m.SolarEstimateWidget as unknown as WidgetComponent })),
 
-  // Assessment module map view (landscape mapping, stakeholder assessment)
+  // Assessment assessment map view (landscape mapping, stakeholder assessment)
   assessment_map: () =>
     import('@/components/widgets/AssessmentMapWidget').then((m) => ({ default: m.AssessmentMapWidget as unknown as WidgetComponent })),
 

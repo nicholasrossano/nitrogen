@@ -83,7 +83,7 @@ class ProjectToolExecutor:
                 widget_type = plan_handler.definition.structure_widget_type
                 widget_data = plan_handler.build_structure_widget_data(structure)
                 assistant_response = (
-                    "I've outlined the modules that look most relevant for this project. "
+                    "I've outlined the assessments that look most relevant for this project. "
                     "Review them below and confirm the framework plan you want to start with."
                 )
             except Exception as exc:
@@ -116,8 +116,8 @@ class ProjectToolExecutor:
                 assistant_response = "I wasn't able to update the project plan right now. Please try again."
 
         elif action == "run_lcoe":
-            from app.modules.lcoe_module import LCOETool
-            from app.services import module_service
+            from app.assessments.lcoe_assessment import LCOETool
+            from app.services import assessment_service
 
             lcoe_tool = LCOETool()
             try:
@@ -144,7 +144,7 @@ class ProjectToolExecutor:
                         f"{quality} confidence). "
                         "Review the inputs below — you can edit any value and I'll recalculate instantly."
                     )
-                    await module_service.save_deliverable(
+                    await assessment_service.save_deliverable(
                         self.chat_service.db,
                         initiative.id,
                         "lcoe_model",
@@ -177,8 +177,8 @@ class ProjectToolExecutor:
                 )
 
         elif action == "run_carbon":
-            from app.modules.carbon_module import CarbonTool
-            from app.services import module_service
+            from app.assessments.carbon_assessment import CarbonTool
+            from app.services import assessment_service
 
             carbon_tool = CarbonTool()
             try:
@@ -204,7 +204,7 @@ class ProjectToolExecutor:
                         f"{quality} confidence). "
                         "Review the inputs below — you can edit any value and I'll recalculate instantly."
                     )
-                    await module_service.save_deliverable(
+                    await assessment_service.save_deliverable(
                         self.chat_service.db,
                         initiative.id,
                         "carbon_model",
@@ -245,7 +245,7 @@ class ProjectToolExecutor:
                 "current_value": params.get("current_value"),
                 "unit": params.get("unit"),
                 "model_type": params.get("model_type"),
-                "module_id": params.get("module_id"),
+                "assessment_id": params.get("assessment_id"),
                 "status": params.get("status"),
             }
             _log_proposal_debug(
@@ -315,19 +315,19 @@ class ProjectToolExecutor:
             and widget_data
             and isinstance(widget_data, dict)
         ):
-            from app.modules.registry import get_module_registry
-            from app.services import module_service
+            from app.assessments.registry import get_assessment_registry
+            from app.services import assessment_service
 
-            registry = get_module_registry()
+            registry = get_assessment_registry()
             tool_id = widget_type_to_tool_id.get(widget_type, "")
-            tool = registry.get_module(tool_id)
+            tool = registry.get_assessment(tool_id)
             if tool and tool.is_exportable(widget_data):
                 title = tool.definition.name
                 if widget_type == "solar_output":
                     annual = (widget_data.get("result") or {}).get("annual_kwh")
                     if annual:
                         title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
-                await module_service.save_deliverable(
+                await assessment_service.save_deliverable(
                     self.chat_service.db,
                     initiative.id,
                     tool_id,

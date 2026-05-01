@@ -18,17 +18,17 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column(
-        "module_instances",
+        "assessment_instances",
         sa.Column("workflow_version", sa.Integer(), nullable=False, server_default="1"),
     )
-    op.alter_column("module_instances", "workflow_version", server_default=None)
+    op.alter_column("assessment_instances", "workflow_version", server_default=None)
 
     op.create_table(
         "decision_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("initiative_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("module_instance_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("module_id", sa.String(length=100), nullable=False),
+        sa.Column("assessment_instance_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("assessment_id", sa.String(length=100), nullable=False),
         sa.Column("stage_id", sa.String(length=100), nullable=True),
         sa.Column("entity_type", sa.String(length=50), nullable=False),
         sa.Column("entity_id", sa.String(length=255), nullable=True),
@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("payload_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["initiative_id"], ["initiatives.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["module_instance_id"], ["module_instances.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["assessment_instance_id"], ["assessment_instances.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -51,7 +51,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_decision_events_instance_created",
         "decision_events",
-        ["module_instance_id", "created_at"],
+        ["assessment_instance_id", "created_at"],
         unique=False,
     )
     op.create_index(
@@ -67,4 +67,4 @@ def downgrade() -> None:
     op.drop_index("ix_decision_events_instance_created", table_name="decision_events")
     op.drop_index("ix_decision_events_initiative_created", table_name="decision_events")
     op.drop_table("decision_events")
-    op.drop_column("module_instances", "workflow_version")
+    op.drop_column("assessment_instances", "workflow_version")

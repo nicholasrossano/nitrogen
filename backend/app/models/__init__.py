@@ -10,7 +10,7 @@ from app.models.user import User
 from app.models.project_share import ProjectShare
 from app.models.google_drive import UserGoogleConnection, DriveLinkedFile
 from app.models.subscription import Subscription, UsageRecord, UserApiKey
-from app.models.module_instance import ModuleInstance
+from app.models.assessment_instance import AssessmentInstance
 from app.models.decision_event import DecisionEvent
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
@@ -36,7 +36,7 @@ __all__ = [
     "Subscription",
     "UsageRecord",
     "UserApiKey",
-    "ModuleInstance",
+    "AssessmentInstance",
     "DecisionEvent",
     "Workspace",
     "WorkspaceMembership",

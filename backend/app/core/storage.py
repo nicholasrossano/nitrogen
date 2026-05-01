@@ -83,7 +83,7 @@ class FirebaseStorage(StorageBackend):
         try:
             firebase_admin.get_app()
         except ValueError:
-            # Firebase not yet initialised — delegate to the auth module's initialiser
+            # Firebase not yet initialised — delegate to the auth assessment's initialiser
             # so credentials are shared and we avoid double-init.
             from app.core.auth import _init_firebase  # noqa: E402
             _init_firebase()

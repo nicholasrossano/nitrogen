@@ -28,7 +28,7 @@ def upgrade() -> None:
 
     op.execute(
         """
-        UPDATE module_instances
+        UPDATE assessment_instances
         SET workflow_state = REPLACE(workflow_state::text, '"inferred"', '"extracted"')::jsonb
         WHERE workflow_state::text LIKE '%"inferred"%';
         """
@@ -55,7 +55,7 @@ def downgrade() -> None:
 
     op.execute(
         """
-        UPDATE module_instances
+        UPDATE assessment_instances
         SET workflow_state = REPLACE(workflow_state::text, '"extracted"', '"inferred"')::jsonb
         WHERE workflow_state::text LIKE '%"extracted"%';
         """

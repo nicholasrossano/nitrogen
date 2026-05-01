@@ -21,7 +21,7 @@ class AdapterDefinition:
     input_schema: dict
     output_schema: dict
     initiative_scope_required: bool
-    visibility: Literal["internal", "module_bound", "exposed"]
+    visibility: Literal["internal", "assessment_bound", "exposed"]
     capabilities: list[str] = field(default_factory=list)
 
 

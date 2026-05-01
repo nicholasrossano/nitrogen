@@ -53,14 +53,14 @@ def _ctx() -> ExecutionContext:
             "MemoVersion not found.",
         ),
         (
-            "_read_module_instance",
-            f"nitrogen://initiatives/{uuid4()}/modules/{uuid4()}",
-            "ModuleInstance not found.",
+            "_read_assessment_instance",
+            f"nitrogen://initiatives/{uuid4()}/assessments/{uuid4()}",
+            "AssessmentInstance not found.",
         ),
         (
             "_read_artifact",
             f"nitrogen://initiatives/{uuid4()}/artifacts/{uuid4()}",
-            "ModuleInstance not found.",
+            "AssessmentInstance not found.",
         ),
     ],
 )

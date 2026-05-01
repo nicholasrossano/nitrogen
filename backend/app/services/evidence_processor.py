@@ -2,7 +2,7 @@
 
 Decouples the (expensive) parse → chunk → embed pipeline from the HTTP upload
 handler.  Uploads now return immediately once the bytes are safely stored on
-disk; this module advances the :class:`EvidenceDoc` through a small state
+disk; this assessment advances the :class:`EvidenceDoc` through a small state
 machine:
 
     uploaded → processing → lightweight_ready → indexed
@@ -41,7 +41,7 @@ MAX_PROCESSING_ATTEMPTS = 3
 PREVIEW_CHAR_LIMIT = 800
 STALE_JOB_THRESHOLD = timedelta(minutes=10)
 
-# Onboarding module-proposal gating: how long we wait for at least one uploaded
+# Onboarding assessment-proposal gating: how long we wait for at least one uploaded
 # doc to reach the lightweight milestone before falling through to proposal
 # anyway.  30 s covers typical parse times for mid-sized PDFs/DOCX without
 # stalling the user flow if something is stuck.

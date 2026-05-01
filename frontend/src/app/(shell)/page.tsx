@@ -28,7 +28,7 @@ function withRequestTimeout<T>(promise: Promise<T>, message: string, timeoutMs =
   });
 }
 
-function HomePageContent() {
+function PortfolioView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [projects, setProjects] = useState<Initiative[]>([]);
@@ -188,7 +188,7 @@ function HomePageContent() {
       router.replace('/?view=files');
       return true;
     }
-    if (item === 'home') {
+    if (item === 'portfolio') {
       router.replace('/');
       return true;
     }
@@ -274,7 +274,7 @@ function HomePageContent() {
 
   const pageTitle = isFilesView
     ? 'Workspace files'
-    : (isTrashView ? 'Trash' : activeWorkspace?.name ?? 'All Projects');
+    : (isTrashView ? 'Trash' : activeWorkspace?.name ?? 'Portfolio');
 
   const filteredProjects = useMemo(() => projects.filter((p: Initiative) => {
     if (!searchQuery.trim()) return true;
@@ -536,7 +536,7 @@ function HomePageContent() {
 export default function HomePage() {
   return (
     <ProtectedRoute>
-      <HomePageContent />
+      <PortfolioView />
     </ProtectedRoute>
   );
 }

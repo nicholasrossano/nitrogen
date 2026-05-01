@@ -5,7 +5,7 @@ import { ConfirmationWidget } from '@/components/widgets/ConfirmationWidget';
 import { DeliverablesOverviewWidget } from '@/components/widgets/DeliverablesOverviewWidget';
 import { DocumentRequestWidget } from '@/components/widgets/DocumentRequestWidget';
 import { EvidenceInputWidget } from '@/components/widgets/EvidenceInputWidget';
-import { ModuleChecklistWidget } from '@/components/widgets/ModuleChecklistWidget';
+import { AssessmentChecklistWidget } from '@/components/widgets/AssessmentChecklistWidget';
 import { PlanSummaryWidget } from '@/components/widgets/PlanSummaryWidget';
 import { ProjectPlanWidget } from '@/components/widgets/ProjectPlanWidget';
 import { ProposedValueWidget, type ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
@@ -55,7 +55,7 @@ export function ChatWidgetRenderer({
     case 'tool_checklist':
       return initiativeId ? (
         <ErrorBoundary>
-          <ModuleChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <AssessmentChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />
         </ErrorBoundary>
       ) : null;
     case 'deliverables_overview':

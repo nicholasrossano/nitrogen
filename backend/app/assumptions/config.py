@@ -15,9 +15,9 @@ class AssumptionDefinition:
     unit: str | None = None
     aliases: list[str] = field(default_factory=list)
     examples: list[str] = field(default_factory=list)
-    used_in_modules: list[str] = field(default_factory=list)
-    required_for_modules: list[str] = field(default_factory=list)
-    module_field_keys: dict[str, list[str]] = field(default_factory=dict)
+    used_in_assessments: list[str] = field(default_factory=list)
+    required_for_assessments: list[str] = field(default_factory=list)
+    assessment_field_keys: dict[str, list[str]] = field(default_factory=dict)
     common: bool = False
 
 
@@ -37,9 +37,9 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         unit="kW",
         aliases=["system size", "installed capacity", "project capacity", "capacity"],
         examples=["System size = 50 kW", "Installed capacity: 120 kW"],
-        used_in_modules=["solar_estimate", "lcoe_model", "carbon_model"],
-        required_for_modules=["solar_estimate", "lcoe_model"],
-        module_field_keys={
+        used_in_assessments=["solar_estimate", "lcoe_model", "carbon_model"],
+        required_for_assessments=["solar_estimate", "lcoe_model"],
+        assessment_field_keys={
             "solar_estimate": ["system_capacity"],
             "lcoe_model": ["net_capacity_kw"],
             "carbon_model": ["installed_capacity_kw", "system_capacity_wp"],
@@ -52,9 +52,9 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="string",
         aliases=["baseline source", "baseline fuel", "baseline energy", "current fuel"],
         examples=["Baseline energy source = diesel generator"],
-        used_in_modules=["carbon_model", "lcoe_model"],
-        required_for_modules=["carbon_model"],
-        module_field_keys={"carbon_model": ["baseline_fuel_type"], "lcoe_model": ["annual_fuel_cost"]},
+        used_in_assessments=["carbon_model", "lcoe_model"],
+        required_for_assessments=["carbon_model"],
+        assessment_field_keys={"carbon_model": ["baseline_fuel_type"], "lcoe_model": ["annual_fuel_cost"]},
         common=True,
     ),
     AssumptionDefinition(
@@ -63,7 +63,7 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="string",
         aliases=["operator", "ownership model", "operating model", "management model"],
         examples=["Operator model = community cooperative"],
-        used_in_modules=["stakeholder_assessment", "implementation_plan"],
+        used_in_assessments=["stakeholder_assessment", "implementation_plan"],
         common=True,
     ),
     AssumptionDefinition(
@@ -73,7 +73,7 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         unit="%",
         aliases=["collection rate", "payment collection", "revenue collection"],
         examples=["Collection rate = 85%"],
-        used_in_modules=["lcoe_model"],
+        used_in_assessments=["lcoe_model"],
         common=True,
     ),
 ]
@@ -86,9 +86,9 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="currency",
         aliases=["capex", "capital cost", "capital expenditure", "total capital cost"],
         examples=["CAPEX = $180,000", "Total capital expenditure: USD 250,000"],
-        used_in_modules=["lcoe_model"],
-        required_for_modules=["lcoe_model"],
-        module_field_keys={"lcoe_model": ["total_capex"]},
+        used_in_assessments=["lcoe_model"],
+        required_for_assessments=["lcoe_model"],
+        assessment_field_keys={"lcoe_model": ["total_capex"]},
     ),
     AssumptionDefinition(
         key="annual_opex",
@@ -96,9 +96,9 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="currency",
         aliases=["opex", "annual o&m", "operations cost", "maintenance cost"],
         examples=["Annual OPEX = $12,000"],
-        used_in_modules=["lcoe_model"],
-        required_for_modules=["lcoe_model"],
-        module_field_keys={"lcoe_model": ["annual_opex"]},
+        used_in_assessments=["lcoe_model"],
+        required_for_assessments=["lcoe_model"],
+        assessment_field_keys={"lcoe_model": ["annual_opex"]},
     ),
     AssumptionDefinition(
         key="capacity_factor",
@@ -106,8 +106,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="percent",
         aliases=["capacity factor", "plant factor", "utilization factor"],
         examples=["Capacity factor = 22%"],
-        used_in_modules=["lcoe_model", "carbon_model"],
-        module_field_keys={"lcoe_model": ["capacity_factor"], "carbon_model": ["capacity_factor"]},
+        used_in_assessments=["lcoe_model", "carbon_model"],
+        assessment_field_keys={"lcoe_model": ["capacity_factor"], "carbon_model": ["capacity_factor"]},
     ),
     AssumptionDefinition(
         key="discount_rate",
@@ -115,8 +115,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="percent",
         aliases=["discount rate", "wacc", "cost of capital"],
         examples=["Discount rate = 8%"],
-        used_in_modules=["lcoe_model"],
-        module_field_keys={"lcoe_model": ["discount_rate"]},
+        used_in_assessments=["lcoe_model"],
+        assessment_field_keys={"lcoe_model": ["discount_rate"]},
     ),
     AssumptionDefinition(
         key="project_life_years",
@@ -125,8 +125,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         unit="years",
         aliases=["project life", "lifetime", "operational life", "asset life"],
         examples=["Project lifetime = 20 years"],
-        used_in_modules=["lcoe_model"],
-        module_field_keys={"lcoe_model": ["project_life_years"]},
+        used_in_assessments=["lcoe_model"],
+        assessment_field_keys={"lcoe_model": ["project_life_years"]},
     ),
     AssumptionDefinition(
         key="devices_households",
@@ -134,9 +134,9 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="number",
         aliases=["households", "devices", "stoves", "systems distributed"],
         examples=["Devices/households = 10,000"],
-        used_in_modules=["carbon_model"],
-        required_for_modules=["carbon_model"],
-        module_field_keys={"carbon_model": ["devices_households"]},
+        used_in_assessments=["carbon_model"],
+        required_for_assessments=["carbon_model"],
+        assessment_field_keys={"carbon_model": ["devices_households"]},
     ),
     AssumptionDefinition(
         key="baseline_fuel_consumption_kg_yr",
@@ -145,9 +145,9 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         unit="kg/year",
         aliases=["baseline fuel consumption", "annual fuel use", "firewood consumption"],
         examples=["Baseline fuel consumption = 1,200 kg/year"],
-        used_in_modules=["carbon_model"],
-        required_for_modules=["carbon_model"],
-        module_field_keys={"carbon_model": ["baseline_fuel_consumption_kg_yr"]},
+        used_in_assessments=["carbon_model"],
+        required_for_assessments=["carbon_model"],
+        assessment_field_keys={"carbon_model": ["baseline_fuel_consumption_kg_yr"]},
     ),
     AssumptionDefinition(
         key="usage_rate",
@@ -155,8 +155,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="percent",
         aliases=["usage rate", "continued use", "utilization rate"],
         examples=["Usage rate = 75%"],
-        used_in_modules=["carbon_model"],
-        module_field_keys={"carbon_model": ["usage_rate"]},
+        used_in_assessments=["carbon_model"],
+        assessment_field_keys={"carbon_model": ["usage_rate"]},
     ),
     AssumptionDefinition(
         key="adoption_rate",
@@ -164,8 +164,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="percent",
         aliases=["adoption rate", "uptake rate"],
         examples=["Adoption rate = 85%"],
-        used_in_modules=["carbon_model"],
-        module_field_keys={"carbon_model": ["adoption_rate"]},
+        used_in_assessments=["carbon_model"],
+        assessment_field_keys={"carbon_model": ["adoption_rate"]},
     ),
     AssumptionDefinition(
         key="lat",
@@ -173,8 +173,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="number",
         aliases=["latitude", "lat"],
         examples=["Latitude = -1.2921"],
-        used_in_modules=["solar_estimate"],
-        module_field_keys={"solar_estimate": ["lat"]},
+        used_in_assessments=["solar_estimate"],
+        assessment_field_keys={"solar_estimate": ["lat"]},
     ),
     AssumptionDefinition(
         key="lon",
@@ -182,8 +182,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         value_type="number",
         aliases=["longitude", "lon", "lng"],
         examples=["Longitude = 36.8219"],
-        used_in_modules=["solar_estimate"],
-        module_field_keys={"solar_estimate": ["lon"]},
+        used_in_assessments=["solar_estimate"],
+        assessment_field_keys={"solar_estimate": ["lon"]},
     ),
     AssumptionDefinition(
         key="tilt",
@@ -192,8 +192,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         unit="degrees",
         aliases=["tilt", "panel tilt", "array tilt"],
         examples=["Tilt = 20 degrees"],
-        used_in_modules=["solar_estimate"],
-        module_field_keys={"solar_estimate": ["tilt"]},
+        used_in_assessments=["solar_estimate"],
+        assessment_field_keys={"solar_estimate": ["tilt"]},
     ),
 ]
 
@@ -202,14 +202,14 @@ ALL_ASSUMPTIONS = COMMON_ASSUMPTIONS + MODULE_ASSUMPTIONS
 ASSUMPTION_BY_KEY = {definition.key: definition for definition in ALL_ASSUMPTIONS}
 
 
-def expected_assumptions_for_modules(module_ids: list[str] | None) -> list[AssumptionDefinition]:
-    modules = set(module_ids or [])
-    if not modules:
+def expected_assumptions_for_assessments(assessment_ids: list[str] | None) -> list[AssumptionDefinition]:
+    assessments = set(assessment_ids or [])
+    if not assessments:
         return list(COMMON_ASSUMPTIONS)
     return [
         definition
         for definition in ALL_ASSUMPTIONS
         if definition.common
-        or bool(modules.intersection(definition.used_in_modules))
-        or bool(modules.intersection(definition.required_for_modules))
+        or bool(assessments.intersection(definition.used_in_assessments))
+        or bool(assessments.intersection(definition.required_for_assessments))
     ]

@@ -57,6 +57,6 @@ def test_project_plan_handler_attaches_metadata_and_widget_shapes() -> None:
         {"id": "authorization", "name": "Authorization", "summary": "Permits", "icon": "Shield"},
         {"id": "capital", "name": "Capital", "summary": "Financing", "icon": "Banknote"},
     ])
-    assert structure_data["title"] == "Recommended Framework Modules"
-    assert structure_data["confirmLabel"] == "Confirm Framework Modules"
+    assert structure_data["title"] == "Recommended Framework Assessments"
+    assert structure_data["confirmLabel"] == "Confirm Framework Assessments"
     assert structure_data["recommendations"][0]["id"] == "authorization"

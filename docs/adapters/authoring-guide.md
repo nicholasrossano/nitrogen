@@ -1,6 +1,6 @@
 # Adapter Authoring Guide
 
-Adapters encapsulate execution engines. Modules declare product behavior; adapters do the actual external or compute work.
+Adapters encapsulate execution engines. Assessments declare product behavior; adapters do the actual external or compute work.
 
 ## When To Create An Adapter
 
@@ -41,16 +41,16 @@ Adapters should:
 - accept plain structured inputs
 - return structured `AdapterResult`
 - keep side effects explicit
-- avoid reaching into module state directly
+- avoid reaching into assessment state directly
 - avoid UI-specific response shapes
 
-Modules are responsible for turning adapter output into widget/output state.
+Assessments are responsible for turning adapter output into widget/output state.
 
 ## Registration
 
 Register adapters in `backend/app/adapters/__init__.py`.
 
-If a module manifest references an adapter that is not registered, the module registry will fail fast in test and development.
+If a assessment manifest references an adapter that is not registered, the assessment registry will fail fast in test and development.
 
 ## Testing Expectations
 
@@ -58,6 +58,6 @@ Add focused tests when you change:
 
 - adapter registration
 - adapter schemas
-- adapter output shape expected by a launch module
+- adapter output shape expected by a launch assessment
 
-When adding a new adapter binding for a module, update module manifest contract coverage in the same change.
+When adding a new adapter binding for a assessment, update assessment manifest contract coverage in the same change.
