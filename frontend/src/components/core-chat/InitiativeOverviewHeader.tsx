@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Files, Layers3, ListChecks, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
+import { Calculator, Files, ListChecks, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
 import { api, type AssumptionSummary, type Initiative } from '@/lib/api';
 import type { ReadinessProgressData } from '@/components/ui/ReadinessProgressBar';
 import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
@@ -12,7 +12,7 @@ const collaboratorsCountCache = new Map<string, number>();
 interface InitiativeOverviewHeaderProps {
   initiative: Initiative;
   filesUploaded: number;
-  modulesCreated: number | null;
+  assessmentsCreated: number | null;
   readinessProgress?: ReadinessProgressData | null;
   isGenerating: boolean;
   errorMessage: string | null;
@@ -54,7 +54,7 @@ function FootprintBox({
 export function InitiativeOverviewHeader({
   initiative,
   filesUploaded,
-  modulesCreated,
+  assessmentsCreated,
   readinessProgress,
   isGenerating,
   errorMessage,
@@ -211,7 +211,7 @@ export function InitiativeOverviewHeader({
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <FootprintBox label="Collaborators" value={collaboratorsCount} Icon={Users} />
-        <FootprintBox label="Modules Created" value={modulesCreated} Icon={Layers3} />
+        <FootprintBox label="Assessments Created" value={assessmentsCreated} Icon={Calculator} />
         <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
       </div>
 
@@ -223,7 +223,7 @@ export function InitiativeOverviewHeader({
               Assumptions
             </div>
             <p className="mt-1 text-sm text-text-tertiary">
-              Reusable project values and claims used across modules and research.
+              Reusable project values and claims used across assessments and research.
             </p>
           </div>
           <button type="button" className="btn-compact-neutral" onClick={onViewAssumptions}>
