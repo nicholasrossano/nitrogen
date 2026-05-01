@@ -28,7 +28,7 @@ from app.services.assumptions import (
     list_assumptions,
     update_assumption,
     upsert_assumption,
-    resolve_assumption_for_module_field,
+    resolve_assumption_for_assessment_field,
 )
 
 router = APIRouter()
@@ -60,7 +60,7 @@ async def get_assumptions(
     initiative_id: str,
     status_filter: str | None = Query(default=None, alias="status"),
     source_type: str | None = None,
-    module: str | None = None,
+    assessment: str | None = None,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -71,7 +71,7 @@ async def get_assumptions(
         initiative.id,
         status=status_filter,
         source_type=source_type,
-        module=module,
+        assessment=assessment,
     )
 
 
@@ -81,20 +81,20 @@ async def get_assumptions(
 )
 async def resolve_assumption(
     initiative_id: str,
-    module_id: str = Query(..., description="Module id for lookup context."),
+    assessment_id: str = Query(..., description="Assessment id for lookup context."),
     field_name: str = Query(..., description="Variable field_name from input rows."),
-    module_instance_id: UUID | None = Query(default=None, description="Optional module instance scope."),
+    assessment_instance_id: UUID | None = Query(default=None, description="Optional assessment instance scope."),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Resolve the project assumption currently backing one module variable."""
+    """Resolve the project assumption currently backing one assessment variable."""
     initiative = await require_viewer(db, initiative_id, user)
-    assumption = await resolve_assumption_for_module_field(
+    assumption = await resolve_assumption_for_assessment_field(
         db,
         initiative_id=initiative.id,
-        module_id=module_id,
+        assessment_id=assessment_id,
         field_name=field_name,
-        module_instance_id=module_instance_id,
+        assessment_instance_id=assessment_instance_id,
     )
     return {"found": assumption is not None, "assumption": assumption}
 
@@ -123,7 +123,7 @@ async def create_assumption(
         source_type=data.source_type,
         source_reference=data.source_reference,
         status=data.status,
-        used_in_modules=data.used_in_modules,
+        used_in_assessments=data.used_in_assessments,
         actor=_actor_from_user(user),
         notes=data.notes,
         replace_validated=True,

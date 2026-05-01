@@ -49,7 +49,7 @@ def test_mcp_resource_discovery_only_returns_exposed_resource_types() -> None:
         assert definition.uri_pattern in template_uris
         assert str(definition.uri_pattern).replace("{", "%7B").replace("}", "%7D") in resource_uris
 
-    assert all("/modules/" not in uri for uri in template_uris | resource_uris)
+    assert all("/assessments/" not in uri for uri in template_uris | resource_uris)
     assert all("/artifacts/" not in uri for uri in template_uris | resource_uris)
 
 

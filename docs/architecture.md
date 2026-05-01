@@ -1,16 +1,16 @@
 # Nitrogen Architecture
 
-Nitrogen now exposes one canonical staged module workflow driven by `StageDef[]`.
+Nitrogen now exposes one canonical staged assessment workflow driven by `StageDef[]`.
 
-Every workspace module is an ordered set of confirmable stages stored on `module_instances.workflow_state`. The difference between module families is not a separate lifecycle; it is only which stage components and population steps they declare.
+Every workspace assessment is an ordered set of confirmable stages stored on `assessment_instances.workflow_state`. The difference between assessment families is not a separate lifecycle; it is only which stage components and population steps they declare.
 
 ## `workflow_state` Shape
 
-All modules share one canonical `workflow_state` JSON structure:
+All assessments share one canonical `workflow_state` JSON structure:
 
 ```json
 {
-  "module_type": "stakeholder_assessment",
+  "assessment_type": "stakeholder_assessment",
   "current_stage_id": "categories",
   "stages": {
     "categories": {
@@ -41,22 +41,22 @@ Stage data shapes are component-driven:
 - `record`: `data.source_stage_id` + `data.records`
 - `computed_results`: `data.widget_data`
 
-Modules that export artifacts also require a shared `final_approval` step before export is enabled.
+Assessments that export artifacts also require a shared `final_approval` step before export is enabled.
 
 ## Decision Log
 
-Decision-log reporting is now shared infrastructure, not per-module custom UI:
+Decision-log reporting is now shared infrastructure, not per-assessment custom UI:
 
-- live editable truth remains `module_instances.workflow_state`
+- live editable truth remains `assessment_instances.workflow_state`
 - append-only audit history is stored in `decision_events`
 - project-wide current-state and history views are derived from those two sources
 - the primary export is `XLSX` with `Current State` and `History` sheets
 
-## Module Families
+## Assessment Families
 
-### Widget-backed modules
+### Widget-backed assessments
 
-Widget-backed modules use a single interactive build surface. They:
+Widget-backed assessments use a single interactive build surface. They:
 
 - collect a few setup fields
 - open a calculator-style input widget in `build`
@@ -71,16 +71,16 @@ Current examples:
 
 Implementation contract:
 
-- subclass `BaseModule`
-- provide a `ModuleManifest`
+- subclass `BaseAssessment`
+- provide a `AssessmentManifest`
 - expose `workspace_setup_fields`
 - implement `build_workspace_widget_data()` — returns initial `widget_data` for `build.stages[0]`
 - optionally implement `recalculate()` for fast edit loops
 - implement `export()` to produce the export artifact
 
-### Layered assessment modules
+### Layered assessment assessments
 
-Assessment modules still use the same `setup -> build -> output` lifecycle, but their `build.stages` array contains one entry per ordered layer, each holding an `items` list instead of a calculator widget.
+Assessment assessments still use the same `setup -> build -> output` lifecycle, but their `build.stages` array contains one entry per ordered layer, each holding an `items` list instead of a calculator widget.
 
 Current examples:
 
@@ -89,30 +89,30 @@ Current examples:
 
 Implementation contract:
 
-- subclass `BaseAssessmentModule`
-- define `AssessmentModuleDef`
+- subclass `BaseAssessmentAssessment`
+- define `AssessmentAssessmentDef`
 - define `setup_fields`
 - define ordered `build_layers` (converted to `build.stages` entries at init)
 - implement `generate_setup_defaults()`
 - implement `generate_layer()`
 - implement `generate_output()`
 
-## Chat ↔ Module Interaction Model
+## Chat ↔ Assessment Interaction Model
 
-Modules render exclusively in the editor workspace. The chat assistant does **not** render full module widgets.
+Assessments render exclusively in the editor workspace. The chat assistant does **not** render full assessment widgets.
 
 Chat interactions are limited to lightweight `proposed_value` / `template_proposed_value` widgets:
-1. User investigates a module value in chat.
+1. User investigates a assessment value in chat.
 2. Chat proposes a new value via `proposed_value` widget.
-3. User clicks "Accept" — the value is patched into the module's `widget_data` in the editor.
+3. User clicks "Accept" — the value is patched into the assessment's `widget_data` in the editor.
 
 No calculator results are computed or stored in chat messages.
 
 ## Runtime Responsibilities
 
-### Module class
+### Assessment class
 
-The module owns:
+The assessment owns:
 
 - user-facing metadata
 - setup field definitions
@@ -122,15 +122,15 @@ The module owns:
 
 ### Workflow service
 
-`module_workflow_service.py` owns generic lifecycle orchestration only:
+`assessment_workflow_service.py` owns generic lifecycle orchestration only:
 
 - initialize workflow state
 - merge initiative context into setup fields
 - persist stage transitions
 - persist widget state and deliverables
-- route layered vs widget-backed modules using shared hooks
+- route layered vs widget-backed assessments using shared hooks
 
-The workflow service should not branch on specific launch calculator `module_id` values.
+The workflow service should not branch on specific launch calculator `assessment_id` values.
 
 For staged table stages (`component: "table"` with `widget: "editable_table"`), row extensibility is schema-driven via `StageDef.allow_add_rows`:
 
@@ -139,9 +139,9 @@ For staged table stages (`component: "table"` with `widget: "editable_table"`), 
 
 ## Manifest Contract
 
-`ModuleManifest` is the canonical exposure contract for launch modules. It drives registry validation, API exposure, docs, and UI discovery.
+`AssessmentManifest` is the canonical exposure contract for launch assessments. It drives registry validation, API exposure, docs, and UI discovery.
 
-Every module must define:
+Every assessment must define:
 
 - `goal`
 - `primary_ui_object`
@@ -159,9 +159,9 @@ Every module must define:
 
 ## Adapter Contract
 
-Modules declare adapter dependencies in `manifest.adapter_bindings`. Adapters are registered separately and validated by the module registry at load time.
+Assessments declare adapter dependencies in `manifest.adapter_bindings`. Adapters are registered separately and validated by the assessment registry at load time.
 
-This lets module authoring stay focused on product behavior while adapters encapsulate external engines, APIs, or MCP-backed capability.
+This lets assessment authoring stay focused on product behavior while adapters encapsulate external engines, APIs, or MCP-backed capability.
 
 ## Decision-Log Attribution Contract
 
@@ -171,11 +171,11 @@ The shared builder uses this manifest metadata to decide whether to include:
 
 - adapter binding citations
 - provenance/reference citations already present in stage data
-- LLM model names when modules persist them in widget or provenance metadata
+- LLM model names when assessments persist them in widget or provenance metadata
 - selected widget metadata fields (for example a method pack) labeled via manifest config
 
-For third-party or open-source modules, prefer declaring user-facing adapter labels in `decision_log_attribution.adapter_labels` instead of adding service-level `module_id` branches.
+For third-party or open-source assessments, prefer declaring user-facing adapter labels in `decision_log_attribution.adapter_labels` instead of adding service-level `assessment_id` branches.
 
 ## Launch Scope
 
-Launch scope is the unified workflow path above. Legacy memo and due diligence demo flows are not part of the active module architecture.
+Launch scope is the unified workflow path above. Legacy memo and due diligence demo flows are not part of the active assessment architecture.

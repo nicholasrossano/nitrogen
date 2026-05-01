@@ -6,7 +6,7 @@ from typing import Literal
 
 from app.first_party.mcp import EXPOSED_ADAPTER_IDS, EXPOSED_RESOURCE_TYPES
 
-AdapterVisibility = Literal["internal", "module_bound", "exposed"]
+AdapterVisibility = Literal["internal", "assessment_bound", "exposed"]
 ResourceVisibility = Literal["internal", "exposed"]
 
 

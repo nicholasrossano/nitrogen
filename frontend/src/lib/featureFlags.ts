@@ -1,4 +1,4 @@
-import type { ModuleOption } from '@/first-party/moduleCatalog';
+import type { AssessmentOption } from '@/first-party/assessmentCatalog';
 
 export interface FeatureFlagContext {
   devMode: boolean;
@@ -13,8 +13,8 @@ const FEATURE_FLAG_DEFINITIONS = {
     description: 'Access to the loading art lab page.',
     isEnabled: (context: FeatureFlagContext) => context.devMode,
   },
-  beta_modules: {
-    description: 'Visibility for beta modules in module surfaces.',
+  beta_assessments: {
+    description: 'Visibility for beta assessments in assessment surfaces.',
     isEnabled: (context: FeatureFlagContext) => context.devMode,
   },
   billing_features: {
@@ -64,14 +64,14 @@ export function isStoredFeatureFlagEnabled(flag: FeatureFlagKey): boolean {
   return isFeatureFlagEnabled(flag, getStoredFeatureFlagContext());
 }
 
-export function isModuleVisible(module: ModuleOption, context: FeatureFlagContext): boolean {
-  if (!module.beta) return true;
-  return isFeatureFlagEnabled('beta_modules', context);
+export function isAssessmentVisible(assessment: AssessmentOption, context: FeatureFlagContext): boolean {
+  if (!assessment.beta) return true;
+  return isFeatureFlagEnabled('beta_assessments', context);
 }
 
-export function filterVisibleModules<T extends ModuleOption>(
-  modules: readonly T[],
+export function filterVisibleAssessments<T extends AssessmentOption>(
+  assessments: readonly T[],
   context: FeatureFlagContext,
 ): T[] {
-  return modules.filter((module) => isModuleVisible(module, context));
+  return assessments.filter((assessment) => isAssessmentVisible(assessment, context));
 }

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.config import get_settings
 from app.core.llm_client import record_usage_from_response
-from app.first_party.catalog import format_module_selection_context, get_tool_hint_action
+from app.first_party.catalog import format_assessment_selection_context, get_tool_hint_action
 from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT, ProjectChatAction
 from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact
@@ -62,7 +62,7 @@ class ProjectChatRouter:
                     "current_value": field_context.get("current_value"),
                     "unit": field_context.get("unit"),
                     "model_type": field_context.get("model_type", "lcoe"),
-                    "module_id": field_context.get("module_id"),
+                    "assessment_id": field_context.get("assessment_id"),
                     "status": field_context.get("status"),
                 },
                 sources_used=[],
@@ -104,7 +104,7 @@ class ProjectChatRouter:
             model_inputs_context=model_inputs_context or "No model has been run yet.",
             assumptions_context=assumptions_context or "No project assumptions tracked yet.",
         )
-        system_prompt = f"{system_prompt}\n\n{format_module_selection_context()}"
+        system_prompt = f"{system_prompt}\n\n{format_assessment_selection_context()}"
         if not onboarding_mode:
             system_prompt = self.PROJECT_CHAT_DIRECTIVE + system_prompt
 

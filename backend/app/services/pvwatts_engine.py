@@ -73,8 +73,6 @@ class PVWattsInput:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PVWattsInput:
         payload = {k: d[k] for k in cls.__dataclass_fields__ if k in d}
-        if payload.get("status") == "confirmed":
-            payload["status"] = "validated"
         if payload.get("status") == "inferred":
             payload["status"] = "extracted"
         return cls(**payload)
@@ -119,7 +117,7 @@ INPUT_FIELD_DEFS: list[dict[str, Any]] = [
     {"field_name": "lat", "label": "Latitude", "unit": "°", "category": "location", "default": None},
     {"field_name": "lon", "label": "Longitude", "unit": "°", "category": "location", "default": None},
     {"field_name": "system_capacity", "label": "System Capacity", "unit": "kW DC", "category": "system", "default": None},
-    {"field_name": "module_type", "label": "Module Type", "unit": "", "category": "system", "default": 0},
+    {"field_name": "assessment_type", "label": "Assessment Type", "unit": "", "category": "system", "default": 0},
     {"field_name": "array_type", "label": "Array Type", "unit": "", "category": "system", "default": 0},
     {"field_name": "tilt", "label": "Tilt Angle", "unit": "°", "category": "orientation", "default": None},
     {"field_name": "azimuth", "label": "Azimuth", "unit": "°", "category": "orientation", "default": None},
@@ -151,7 +149,6 @@ class PVWattsEngine:
         """Recompute tilt and azimuth from the current latitude whenever they are not
         user-validated.  Rules:
         - status == "validated"  → user explicitly set this value; never touch it.
-        - status == "confirmed"  → legacy alias for validated; never touch it.
         - status == "extracted" | "assumed" | "missing" → recompute from lat.
         This must be called after any lat/lon change (initial build AND recalculate).
         """
@@ -279,7 +276,7 @@ class PVWattsEngine:
             "lat": _val("lat"),
             "lon": _val("lon"),
             "system_capacity": _val("system_capacity"),
-            "module_type": _int_val("module_type", 0),
+            "assessment_type": _int_val("assessment_type", 0),
             "array_type": _int_val("array_type", 0),
             "tilt": _val("tilt"),
             "azimuth": _val("azimuth", 180),

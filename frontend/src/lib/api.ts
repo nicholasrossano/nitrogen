@@ -52,18 +52,18 @@ export interface Initiative {
   tool_inputs: Record<string, any> | null;
   deliverables: Record<string, any> | null;
   project_plan: ProjectPlan | null;
-  module_instances: ModuleInstance[] | null;
-  module_instances_count?: number;
-  /** Non-archived module instances with status complete + deliverable (grid tile). */
-  generated_modules_count?: number;
+  assessment_instances: AssessmentInstance[] | null;
+  assessment_instances_count?: number;
+  /** Non-archived assessment instances with status complete + deliverable (grid tile). */
+  generated_assessments_count?: number;
   // Sharing fields
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
 }
 
-export interface ModuleInstance {
+export interface AssessmentInstance {
   id: string;
-  module_id: string;
+  assessment_id: string;
   status: 'draft' | 'started' | 'generating' | 'ready' | 'complete' | 'completed' | 'error';
   title: string | null;
   instance_number?: number | null;
@@ -79,9 +79,9 @@ export interface ModuleInstance {
   is_plan_complete?: boolean;
 }
 
-export interface ChatModuleSummary {
+export interface ChatAssessmentSummary {
   instance_id: string;
-  module_id: string;
+  assessment_id: string;
   title: string | null;
   status: string;
   started_at: string | null;
@@ -129,7 +129,7 @@ export interface UserSearchResult {
 }
 
 
-export interface ModuleDefinition {
+export interface AssessmentDefinition {
   id: string;
   name: string;
   description: string;
@@ -201,7 +201,7 @@ export interface WorkflowOutput {
 }
 
 export interface WorkflowState {
-  module_type: string;
+  assessment_type: string;
   current_stage: 'setup' | 'build' | 'output';
   setup: WorkflowSetup;
   build: WorkflowBuild;
@@ -227,19 +227,19 @@ export interface BuildLayerDef {
   removable: boolean;
 }
 
-export interface WorkflowModuleDefinition extends ModuleDefinition {
+export interface WorkflowAssessmentDefinition extends AssessmentDefinition {
   workspace_build_widget?: string | null;
   workspace_output_widget?: string | null;
   setup_fields?: SetupFieldDef[];
   build_layers?: BuildLayerDef[];
 }
 
-export interface ModuleWorkflowState {
+export interface AssessmentWorkflowState {
   instance_id: string;
-  module_id: string;
+  assessment_id: string;
   status: string;
   workflow_state: WorkflowState;
-  module_definition: WorkflowModuleDefinition;
+  assessment_definition: WorkflowAssessmentDefinition;
 }
 
 // ── Unified Staged Workflow Types (new architecture) ──────────────────────
@@ -292,31 +292,31 @@ export interface FinalApprovalState {
 }
 
 export interface StagedWorkflowState {
-  module_type: string;
+  assessment_type: string;
   current_stage_id: string | null;
   stages: Record<string, StageState>;
   final_approval: FinalApprovalState;
 }
 
-export interface StagedModuleDefinition extends ModuleDefinition {
+export interface StagedAssessmentDefinition extends AssessmentDefinition {
   export_format: string | null;
   requires_final_approval: boolean;
   stage_defs: StageDef[];
 }
 
-export interface StagedModuleWorkflowState {
+export interface StagedAssessmentWorkflowState {
   instance_id: string;
-  module_id: string;
+  assessment_id: string;
   status: string;
   workflow_version: number;
   workflow_state: StagedWorkflowState;
-  module_definition: StagedModuleDefinition;
+  assessment_definition: StagedAssessmentDefinition;
 }
 
 export interface DecisionLogHistoryRow {
-  module: string;
-  module_id: string;
-  module_instance_id: string;
+  assessment: string;
+  assessment_id: string;
+  assessment_instance_id: string;
   stage: string;
   stage_id: string;
   entity_type: string;
@@ -332,11 +332,11 @@ export interface DecisionLogHistoryRow {
   final_approved_at: string;
 }
 
-export interface ModuleDecisionLogReport {
+export interface AssessmentDecisionLogReport {
   metadata: {
-    module_id: string;
-    module_name: string;
-    module_instance_id: string;
+    assessment_id: string;
+    assessment_name: string;
+    assessment_instance_id: string;
     generated_at: string;
     history_row_count: number;
   };
@@ -347,7 +347,7 @@ export type AssumptionStatus = 'validated' | 'extracted' | 'assumed' | 'missing'
 export type AssumptionSourceType =
   | 'extraction'
   | 'user_input'
-  | 'module'
+  | 'assessment'
   | 'default'
   | 'missing_placeholder'
   | 'model_candidate';
@@ -363,7 +363,7 @@ export interface Assumption {
   source_type: AssumptionSourceType;
   source_reference: Record<string, any> | null;
   status: AssumptionStatus;
-  used_in_modules: string[];
+  used_in_assessments: string[];
   notes: string | null;
   created_by_email: string | null;
   last_updated_by_email: string | null;
@@ -377,7 +377,7 @@ export interface AssumptionSummary {
   extracted: number;
   assumed: number;
   missing: number;
-  top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_modules'>>;
+  top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_assessments'>>;
 }
 
 export interface AssumptionCreateInput {
@@ -389,7 +389,7 @@ export interface AssumptionCreateInput {
   source_type?: AssumptionSourceType;
   source_reference?: Record<string, any> | null;
   status?: AssumptionStatus;
-  used_in_modules?: string[];
+  used_in_assessments?: string[];
   notes?: string | null;
 }
 
@@ -401,7 +401,7 @@ export interface AssumptionUpdateInput {
   source_type?: AssumptionSourceType;
   source_reference?: Record<string, any> | null;
   status?: AssumptionStatus;
-  used_in_modules?: string[];
+  used_in_assessments?: string[];
   notes?: string | null;
 }
 
@@ -467,7 +467,7 @@ export interface FieldContext {
   current_value?: number | null;
   unit?: string | null;
   model_type?: 'lcoe' | 'carbon' | 'solar' | null;
-  module_id?: string | null;
+  assessment_id?: string | null;
   status?: string | null;
   assumption_id?: string | null;
 }
@@ -782,33 +782,33 @@ export const api = {
   getInitiative: (id: string) =>
     fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
 
-  listModuleInstances: (initiativeId: string, options?: { archived?: boolean }) => {
+  listAssessmentInstances: (initiativeId: string, options?: { archived?: boolean }) => {
     const params = new URLSearchParams();
     if (options?.archived) params.set('archived', 'true');
     const query = params.toString();
-    return fetchApi<ModuleInstance[]>(
-      `/api/v1/initiatives/${initiativeId}/modules${query ? `?${query}` : ''}`
+    return fetchApi<AssessmentInstance[]>(
+      `/api/v1/initiatives/${initiativeId}/assessments${query ? `?${query}` : ''}`
     );
   },
 
-  createModuleInstance: (initiativeId: string, moduleId: string) =>
-    fetchApi<ModuleInstance>(`/api/v1/initiatives/${initiativeId}/modules`, {
+  createAssessmentInstance: (initiativeId: string, assessmentId: string) =>
+    fetchApi<AssessmentInstance>(`/api/v1/initiatives/${initiativeId}/assessments`, {
       method: 'POST',
-      body: JSON.stringify({ module_id: moduleId }),
+      body: JSON.stringify({ assessment_id: assessmentId }),
     }),
 
-  deleteModuleInstance: (initiativeId: string, instanceId: string) =>
-    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/modules/${instanceId}`, {
+  deleteAssessmentInstance: (initiativeId: string, instanceId: string) =>
+    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/assessments/${instanceId}`, {
       method: 'DELETE',
     }),
 
-  restoreModuleInstance: (initiativeId: string, instanceId: string) =>
-    fetchApi<ModuleInstance>(`/api/v1/initiatives/${initiativeId}/modules/${instanceId}/restore`, {
+  restoreAssessmentInstance: (initiativeId: string, instanceId: string) =>
+    fetchApi<AssessmentInstance>(`/api/v1/initiatives/${initiativeId}/assessments/${instanceId}/restore`, {
       method: 'POST',
     }),
 
-  permanentlyDeleteModuleInstance: (initiativeId: string, instanceId: string) =>
-    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/modules/${instanceId}/permanent`, {
+  permanentlyDeleteAssessmentInstance: (initiativeId: string, instanceId: string) =>
+    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/assessments/${instanceId}/permanent`, {
       method: 'DELETE',
     }),
 
@@ -1308,11 +1308,11 @@ export const api = {
 
   // Tools
   getTools: () =>
-    fetchApi<ModuleDefinition[]>('/api/v1/tools'),
+    fetchApi<AssessmentDefinition[]>('/api/v1/tools'),
 
   getRecommendedTools: (initiativeId: string) =>
     fetchApi<{
-      recommendations: { tool: ModuleDefinition; confidence: number; recommended: boolean }[];
+      recommendations: { tool: AssessmentDefinition; confidence: number; recommended: boolean }[];
       project_type: string | null;
     }>(`/api/v1/initiatives/${initiativeId}/recommended-tools`),
 
@@ -1342,18 +1342,18 @@ export const api = {
 
   // ── Assessment Workflow ──────────────────────────────────────────
 
-  getModuleWorkflowState: (instanceId: string) =>
-    fetchApi<ModuleWorkflowState>(`/api/v1/module-workflow/${instanceId}/state`),
+  getAssessmentWorkflowState: (instanceId: string) =>
+    fetchApi<AssessmentWorkflowState>(`/api/v1/assessment-workflow/${instanceId}/state`),
 
   generateSetupDefaults: (instanceId: string) =>
     fetchApi<{ fields: Record<string, string> }>(
-      `/api/v1/module-workflow/${instanceId}/setup/generate`,
+      `/api/v1/assessment-workflow/${instanceId}/setup/generate`,
       { method: 'POST' }
     ),
 
   confirmWorkflowSetup: (instanceId: string, fields: Record<string, any>) =>
     fetchApi<{ ok: boolean; current_stage: string }>(
-      `/api/v1/module-workflow/${instanceId}/setup/confirm`,
+      `/api/v1/assessment-workflow/${instanceId}/setup/confirm`,
       {
         method: 'POST',
         body: JSON.stringify({ fields }),
@@ -1362,13 +1362,13 @@ export const api = {
 
   generateBuildLayer: (instanceId: string, layerId: string) =>
     fetchApi<{ items: BuildItem[]; layer_status: string }>(
-      `/api/v1/module-workflow/${instanceId}/build/${layerId}/generate`,
+      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/generate`,
       { method: 'POST' }
     ),
 
   editBuildItem: (instanceId: string, layerId: string, itemId: string, content: Record<string, any>) =>
     fetchApi<{ item: BuildItem }>(
-      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
+      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
       {
         method: 'PATCH',
         body: JSON.stringify({ content }),
@@ -1377,19 +1377,19 @@ export const api = {
 
   confirmBuildItem: (instanceId: string, layerId: string, itemId: string) =>
     fetchApi<{ item: BuildItem; layer_status: string }>(
-      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items/${itemId}/confirm`,
+      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items/${itemId}/confirm`,
       { method: 'POST' }
     ),
 
   deleteBuildItem: (instanceId: string, layerId: string, itemId: string) =>
     fetchApi<{ ok: boolean; remaining_count: number }>(
-      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
+      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
       { method: 'DELETE' }
     ),
 
   addBuildItem: (instanceId: string, layerId: string, content: Record<string, any>) =>
     fetchApi<{ item: BuildItem }>(
-      `/api/v1/module-workflow/${instanceId}/build/${layerId}/items`,
+      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items`,
       {
         method: 'POST',
         body: JSON.stringify({ content }),
@@ -1398,7 +1398,7 @@ export const api = {
 
   reorderBuildItems: (instanceId: string, layerId: string, itemIds: string[]) =>
     fetchApi<{ ok: boolean }>(
-      `/api/v1/module-workflow/${instanceId}/build/${layerId}/reorder`,
+      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/reorder`,
       {
         method: 'POST',
         body: JSON.stringify({ item_ids: itemIds }),
@@ -1407,13 +1407,13 @@ export const api = {
 
   generateWorkflowOutput: (instanceId: string) =>
     fetchApi<{ output: Record<string, any>; status: string }>(
-      `/api/v1/module-workflow/${instanceId}/output/generate`,
+      `/api/v1/assessment-workflow/${instanceId}/output/generate`,
       { method: 'POST' }
     ),
 
-  persistModuleWorkflowWidget: (instanceId: string, widgetData: Record<string, any>, workflowVersion?: number) =>
+  persistAssessmentWorkflowWidget: (instanceId: string, widgetData: Record<string, any>, workflowVersion?: number) =>
     fetchApi<{ instance_id: string; status: string; workflow_state: StagedWorkflowState; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/widget-state`,
+      `/api/v1/assessment-workflow/${instanceId}/widget-state`,
       {
         method: 'POST',
         headers: workflowVersionHeaders(workflowVersion),
@@ -1421,12 +1421,12 @@ export const api = {
       }
     ),
 
-  exportModuleOutputDocx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+  exportAssessmentOutputDocx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/module-workflow/${instanceId}/output/export`,
+      `${API_URL}/api/v1/assessment-workflow/${instanceId}/output/export`,
       { headers }
     );
     if (!res.ok) throw new Error('Export failed');
@@ -1439,54 +1439,54 @@ export const api = {
 
   // ── Staged workflow endpoints ──────────────────────────────────────
 
-  getStagedModuleWorkflowState: (instanceId: string) =>
-    fetchApi<StagedModuleWorkflowState>(`/api/v1/module-workflow/${instanceId}/state`),
+  getStagedAssessmentWorkflowState: (instanceId: string) =>
+    fetchApi<StagedAssessmentWorkflowState>(`/api/v1/assessment-workflow/${instanceId}/state`),
 
   populateStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
     fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/populate`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/populate`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
   confirmStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
     fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/confirm`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/confirm`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
   addStageItem: (instanceId: string, stageId: string, content: Record<string, any>, workflowVersion?: number) =>
     fetchApi<{ item: BuildItem; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/items`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ content }) }
     ),
 
   editStageItem: (instanceId: string, stageId: string, itemId: string, content: Record<string, any>, workflowVersion?: number) =>
     fetchApi<{ item: BuildItem; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
       { method: 'PATCH', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ content }) }
     ),
 
   deleteStageItem: (instanceId: string, stageId: string, itemId: string, workflowVersion?: number) =>
     fetchApi<{ ok: boolean; remaining_count: number; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/items/${itemId}`,
       { method: 'DELETE', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
   reorderStageItems: (instanceId: string, stageId: string, itemIds: string[], workflowVersion?: number) =>
     fetchApi<{ ok: boolean; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/reorder`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/reorder`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ item_ids: itemIds }) }
     ),
 
   enrichRecord: (instanceId: string, stageId: string, itemId: string, workflowVersion?: number) =>
     fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}/enrich`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/records/${itemId}/enrich`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
   enrichStakeholderFromMap: (instanceId: string, itemId: string, workflowVersion?: number) =>
     fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stakeholders/${itemId}/enrich`,
+      `/api/v1/assessment-workflow/${instanceId}/stakeholders/${itemId}/enrich`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
@@ -1502,34 +1502,34 @@ export const api = {
     workflowVersion?: number,
   ) =>
     fetchApi<DeepDiveResult>(
-      `/api/v1/module-workflow/${instanceId}/implementation/${itemId}/deep-dive`,
+      `/api/v1/assessment-workflow/${instanceId}/implementation/${itemId}/deep-dive`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify(body) }
     ),
 
   updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>, workflowVersion?: number) =>
     fetchApi<{ item_id: string; record: Record<string, any>; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
+      `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/records/${itemId}`,
       { method: 'PATCH', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify({ fields }) }
     ),
 
-  approveFinalModuleOutput: (instanceId: string, workflowVersion?: number) =>
+  approveFinalAssessmentOutput: (instanceId: string, workflowVersion?: number) =>
     fetchApi<{ workflow_state: StagedWorkflowState; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/final-approval`,
+      `/api/v1/assessment-workflow/${instanceId}/final-approval`,
       { method: 'POST', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
-  revokeFinalModuleApproval: (instanceId: string, workflowVersion?: number) =>
+  revokeFinalAssessmentApproval: (instanceId: string, workflowVersion?: number) =>
     fetchApi<{ workflow_state: StagedWorkflowState; workflow_version: number }>(
-      `/api/v1/module-workflow/${instanceId}/final-approval`,
+      `/api/v1/assessment-workflow/${instanceId}/final-approval`,
       { method: 'DELETE', headers: workflowVersionHeaders(workflowVersion) }
     ),
 
-  exportStagedModule: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+  exportStagedAssessment: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/module-workflow/${instanceId}/export`,
+      `${API_URL}/api/v1/assessment-workflow/${instanceId}/export`,
       { headers }
     );
     if (!res.ok) throw new Error('Export failed');
@@ -1545,7 +1545,7 @@ export const api = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/module-workflow/${instanceId}/export/writeup`,
+      `${API_URL}/api/v1/assessment-workflow/${instanceId}/export/writeup`,
       { headers }
     );
     if (!res.ok) {
@@ -1564,7 +1564,7 @@ export const api = {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/module-workflow/${instanceId}/decision-log/export.xlsx`,
+      `${API_URL}/api/v1/assessment-workflow/${instanceId}/decision-log/export.xlsx`,
       { headers }
     );
     if (!res.ok) {
@@ -1578,8 +1578,8 @@ export const api = {
     return { blob, filename };
   },
 
-  getModuleDecisionLog: (instanceId: string) => {
-    return fetchApi<ModuleDecisionLogReport>(`/api/v1/module-workflow/${instanceId}/decision-log`);
+  getAssessmentDecisionLog: (instanceId: string) => {
+    return fetchApi<AssessmentDecisionLogReport>(`/api/v1/assessment-workflow/${instanceId}/decision-log`);
   },
 
   getAssumptionsSummary: (initiativeId: string) =>
@@ -1587,12 +1587,12 @@ export const api = {
 
   listAssumptions: (
     initiativeId: string,
-    filters?: { status?: AssumptionStatus | ''; source_type?: AssumptionSourceType | ''; module?: string },
+    filters?: { status?: AssumptionStatus | ''; source_type?: AssumptionSourceType | ''; assessment?: string },
   ) => {
     const params = new URLSearchParams();
     if (filters?.status) params.set('status', filters.status);
     if (filters?.source_type) params.set('source_type', filters.source_type);
-    if (filters?.module) params.set('module', filters.module);
+    if (filters?.assessment) params.set('assessment', filters.assessment);
     const query = params.toString();
     return fetchApi<Assumption[]>(
       `/api/v1/initiatives/${initiativeId}/assumptions${query ? `?${query}` : ''}`,
@@ -1601,15 +1601,15 @@ export const api = {
 
   resolveAssumption: (
     initiativeId: string,
-    moduleId: string,
+    assessmentId: string,
     fieldName: string,
-    moduleInstanceId?: string | null,
+    assessmentInstanceId?: string | null,
   ) => {
     const params = new URLSearchParams({
-      module_id: moduleId,
+      assessment_id: assessmentId,
       field_name: fieldName,
     });
-    if (moduleInstanceId) params.set('module_instance_id', moduleInstanceId);
+    if (assessmentInstanceId) params.set('assessment_instance_id', assessmentInstanceId);
     return fetchApi<{ found: boolean; assumption: Assumption | null }>(
       `/api/v1/initiatives/${initiativeId}/assumptions/resolve?${params.toString()}`,
     );
@@ -1645,12 +1645,12 @@ export const api = {
       { method: 'POST' },
     ),
 
-  exportModuleDecisionLogXlsx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
+  exportAssessmentDecisionLogXlsx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_URL}/api/v1/module-workflow/${instanceId}/decision-log/export.xlsx`,
+      `${API_URL}/api/v1/assessment-workflow/${instanceId}/decision-log/export.xlsx`,
       { headers }
     );
     if (!res.ok) throw new Error('Decision log export failed');
@@ -1753,12 +1753,12 @@ export const api = {
       messages: ChatMessage[];
     }>(`/api/v1/chats/${chatId}/messages`),
 
-  getChatModules: (chatId: string) =>
-    fetchApi<{ modules: ChatModuleSummary[] }>(`/api/v1/chats/${chatId}/modules`),
+  getChatAssessments: (chatId: string) =>
+    fetchApi<{ assessments: ChatAssessmentSummary[] }>(`/api/v1/chats/${chatId}/assessments`),
 
-  associateChatModule: (chatId: string, instanceId: string) =>
-    fetchApi<{ instance_id: string; chat_id: string; module_id: string }>(
-      `/api/v1/chats/${chatId}/modules/${instanceId}`,
+  associateChatAssessment: (chatId: string, instanceId: string) =>
+    fetchApi<{ instance_id: string; chat_id: string; assessment_id: string }>(
+      `/api/v1/chats/${chatId}/assessments/${instanceId}`,
       { method: 'POST' },
     ),
 
@@ -1823,7 +1823,7 @@ export const api = {
     projectContext?: string | null,
     fieldContext?: FieldContext | null,
     modelInputsContext?: string | null,
-    moduleContext?: { instance_id: string; module_id: string; title?: string | null } | null,
+    assessmentContext?: { instance_id: string; assessment_id: string; title?: string | null } | null,
     initiativeId?: string | null,
     assumptionId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
@@ -1847,7 +1847,7 @@ export const api = {
       field_name: fieldContext?.field_name ?? null,
       model_type: fieldContext?.model_type ?? null,
       has_model_inputs_context: Boolean(modelInputsContext),
-      has_module_context: Boolean(moduleContext),
+      has_assessment_context: Boolean(assessmentContext),
       initiative_id: initiativeId ?? null,
       assumption_id: assumptionId ?? null,
       compare_mode: Boolean(compareInitiativeIds?.length),
@@ -1865,7 +1865,7 @@ export const api = {
         project_context: projectContext ?? null,
         field_context: fieldContext ?? null,
         model_inputs_context: modelInputsContext ?? null,
-        module_context: moduleContext ?? null,
+        assessment_context: assessmentContext ?? null,
         initiative_id: initiativeId ?? null,
         assumption_id: assumptionId ?? null,
         compare_initiative_ids: compareInitiativeIds ?? null,

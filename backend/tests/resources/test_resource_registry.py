@@ -16,7 +16,7 @@ def test_resource_registry_contains_required_baseline_resource_types() -> None:
         "corpus_doc",
         "project_material",
         "memo_version",
-        "module_instance",
+        "assessment_instance",
         "artifact",
     }.issubset(resource_types)
     assert len(resource_types) >= 8
@@ -31,7 +31,7 @@ def test_resource_registry_contains_required_baseline_resource_types() -> None:
         (f"nitrogen://corpus/{uuid4()}", "corpus_doc"),
         (f"nitrogen://initiatives/{uuid4()}/materials/{uuid4()}", "project_material"),
         (f"nitrogen://initiatives/{uuid4()}/memos/{uuid4()}", "memo_version"),
-        (f"nitrogen://initiatives/{uuid4()}/modules/{uuid4()}", "module_instance"),
+        (f"nitrogen://initiatives/{uuid4()}/assessments/{uuid4()}", "assessment_instance"),
         (f"nitrogen://initiatives/{uuid4()}/artifacts/{uuid4()}", "artifact"),
     ],
 )

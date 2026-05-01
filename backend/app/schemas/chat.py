@@ -6,15 +6,15 @@ from uuid import UUID
 
 class FieldContext(BaseModel):
     """Explicit context for a field-level investigate request."""
-    field_name: str = Field(..., description="Exact field_name from the module input row.")
+    field_name: str = Field(..., description="Exact field_name from the assessment input row.")
     label: str = Field(..., description="Human-readable label for the field.")
-    current_value: Optional[float] = Field(None, description="Current numeric value shown in the module input row.")
+    current_value: Optional[float] = Field(None, description="Current numeric value shown in the assessment input row.")
     unit: Optional[str] = Field(None, description="Display unit for the current value.")
     model_type: Optional[Literal["lcoe", "carbon", "solar"]] = Field(
         None,
         description="Model family used by the proposed_value widget confirm flow.",
     )
-    module_id: Optional[str] = Field(None, description="Module registry id for module-specific investigate hints.")
+    assessment_id: Optional[str] = Field(None, description="Assessment registry id for assessment-specific investigate hints.")
     status: Optional[str] = Field(None, description="Current row status such as assumed, extracted, or validated.")
     assumption_id: Optional[UUID] = Field(
         None,

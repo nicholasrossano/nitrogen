@@ -88,7 +88,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
         status="assumed",
         value=0.3,
         unit="%",
-        used_in_modules=["lcoe_model"],
+        used_in_assessments=["lcoe_model"],
     )
 
     async def override_db():
