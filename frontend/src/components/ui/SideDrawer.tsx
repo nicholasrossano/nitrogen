@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Home, Layers3, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Home, Calculator, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -39,7 +39,7 @@ const GLOBAL_ITEMS: NavItemConfig[] = [
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'research', label: 'Overview', Icon: Home },
   { key: 'plan', label: 'Framework', Icon: Map },
-  { key: 'workspace', label: 'Modules', Icon: Layers3 },
+  { key: 'workspace', label: 'Assessments', Icon: Calculator },
   { key: 'assumptions', label: 'Assumptions', Icon: ListChecks },
 ];
 
@@ -96,7 +96,7 @@ export function SideDrawer() {
     if (view === 'research' || view === 'explore') return 'research';
     if (view === 'plan' || view === 'framework') return 'plan';
     if (view === 'assumptions') return 'assumptions';
-    if (view === 'workspace' || view === 'modules') return 'workspace';
+    if (view === 'workspace' || view === 'assessments') return 'workspace';
     if (view === 'files') return 'files';
     return 'research';
   }, [initiativeId, searchParams]);
