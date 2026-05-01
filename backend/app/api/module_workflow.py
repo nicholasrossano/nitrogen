@@ -573,9 +573,9 @@ async def edit_item(
     value_is_present = new_value is not None and str(new_value).strip() != ""
     value_changed = new_value != previous_content.get("value")
     if value_changed and value_is_present:
-        # Any explicit user-supplied value should become confirmed to avoid
+        # Any explicit user-supplied value should become validated to avoid
         # stale "missing" badges after manual edits or chat-applied updates.
-        updated_content["status"] = "confirmed"
+        updated_content["status"] = "validated"
         updated_content["source"] = "user"
 
     items[item_idx]["content"] = updated_content
@@ -589,10 +589,11 @@ async def edit_item(
         db,
         initiative_id=inst.initiative_id,
         module_id=module.definition.id,
+        module_instance_id=inst.id,
         stage_id=stage_id,
         stage_data={"items": [items[item_idx]]},
         actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
-        status="confirmed" if value_is_present else "missing",
+        status="validated" if value_is_present else "missing",
     )
     clear_final_approval(state)
     save_workflow_state(inst, state, increment_version=True)
@@ -651,10 +652,11 @@ async def add_item(
         db,
         initiative_id=inst.initiative_id,
         module_id=module.definition.id,
+        module_instance_id=inst.id,
         stage_id=stage_id,
         stage_data={"items": [new_item]},
         actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
-        status="confirmed",
+        status="validated",
     )
     if stage_state.get("status") == "pending":
         stage_state["status"] = "draft"
@@ -1130,6 +1132,7 @@ async def persist_widget_state(
         db,
         initiative_id=inst.initiative_id,
         module_id=module.definition.id,
+        module_instance_id=inst.id,
         widget_data=data.widget_data,
         actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
     )

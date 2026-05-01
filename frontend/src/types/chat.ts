@@ -24,6 +24,7 @@ export interface ChatSummary {
   title: string;
   createdAt: number;
   messages: CoreChatMessage[];
+  assumptionId?: string | null;
 }
 
 export type ChatSession = ChatSummary;

@@ -24,6 +24,12 @@ class CoreChat(Base):
         nullable=True,
         index=True,
     )
+    assumption_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assumptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Compare mode: pair of initiative UUIDs (as strings), null for regular sessions
     compare_initiative_ids: Mapped[list | None] = mapped_column(JSONB)

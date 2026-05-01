@@ -15,7 +15,11 @@ class FieldContext(BaseModel):
         description="Model family used by the proposed_value widget confirm flow.",
     )
     module_id: Optional[str] = Field(None, description="Module registry id for module-specific investigate hints.")
-    status: Optional[str] = Field(None, description="Current row status such as assumed, inferred, or confirmed.")
+    status: Optional[str] = Field(None, description="Current row status such as assumed, extracted, or validated.")
+    assumption_id: Optional[UUID] = Field(
+        None,
+        description="Resolved project assumption id tied to this variable investigate flow.",
+    )
 
 
 class ChatMessageCreate(BaseModel):

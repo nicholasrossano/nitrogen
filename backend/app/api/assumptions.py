@@ -13,6 +13,7 @@ from app.schemas.assumption import (
     AssumptionCommentResponse,
     AssumptionCreate,
     AssumptionRefreshResponse,
+    AssumptionResolveResponse,
     AssumptionResponse,
     AssumptionSummary,
     AssumptionUpdate,
@@ -27,6 +28,7 @@ from app.services.assumptions import (
     list_assumptions,
     update_assumption,
     upsert_assumption,
+    resolve_assumption_for_module_field,
 )
 
 router = APIRouter()
@@ -73,6 +75,30 @@ async def get_assumptions(
     )
 
 
+@router.get(
+    "/initiatives/{initiative_id}/assumptions/resolve",
+    response_model=AssumptionResolveResponse,
+)
+async def resolve_assumption(
+    initiative_id: str,
+    module_id: str = Query(..., description="Module id for lookup context."),
+    field_name: str = Query(..., description="Variable field_name from input rows."),
+    module_instance_id: UUID | None = Query(default=None, description="Optional module instance scope."),
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Resolve the project assumption currently backing one module variable."""
+    initiative = await require_viewer(db, initiative_id, user)
+    assumption = await resolve_assumption_for_module_field(
+        db,
+        initiative_id=initiative.id,
+        module_id=module_id,
+        field_name=field_name,
+        module_instance_id=module_instance_id,
+    )
+    return {"found": assumption is not None, "assumption": assumption}
+
+
 @router.post(
     "/initiatives/{initiative_id}/assumptions",
     response_model=AssumptionResponse,
@@ -100,7 +126,7 @@ async def create_assumption(
         used_in_modules=data.used_in_modules,
         actor=_actor_from_user(user),
         notes=data.notes,
-        replace_confirmed=True,
+        replace_validated=True,
     )
     initiative.touch()
     await db.commit()

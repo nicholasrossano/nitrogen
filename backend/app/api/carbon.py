@@ -38,7 +38,9 @@ class UpdateInputRequest(BaseModel):
 
 
 def _normalize_input_status(status: str) -> str:
-    return "validated" if status == "confirmed" else status
+    if status == "inferred":
+        return "extracted"
+    return status
 
 
 class SwitchMethodPackRequest(BaseModel):
@@ -65,7 +67,7 @@ async def switch_method_pack(
         for field_name, inp in data.current_inputs.items():
             if field_name == "method_pack":
                 continue
-            if inp.get("source") in ("chat", "user") or inp.get("status") in ("validated", "confirmed"):
+            if inp.get("source") in ("chat", "user") or inp.get("status") == "validated":
                 preserved[field_name] = inp.get("value")
 
     engine_inputs = CarbonEngine.build_default_inputs(

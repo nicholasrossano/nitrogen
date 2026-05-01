@@ -239,9 +239,9 @@ export function InitiativeOverviewHeader({
             </p>
           </div>
           <div>
-            <p className="text-xs text-text-tertiary">Confirmed</p>
+            <p className="text-xs text-text-tertiary">Validated</p>
             <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
-              {assumptionsSummary?.confirmed ?? '—'}
+              {assumptionsSummary?.validated ?? '—'}
             </p>
           </div>
           <div>

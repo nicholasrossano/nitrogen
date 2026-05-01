@@ -1484,7 +1484,7 @@ class ChatService:
             return True
         status = str((field_context or {}).get("status") or "").lower()
         investigate_verbs = ["propose", "investigate", "research", "estimate", "suggest"]
-        return status in {"assumed", "inferred"} and any(verb in lower for verb in investigate_verbs)
+        return status in {"assumed", "extracted"} and any(verb in lower for verb in investigate_verbs)
 
     @staticmethod
     def _values_match(lhs: Any, rhs: Any) -> bool:

@@ -85,3 +85,56 @@ class AssumptionComment(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class AssumptionBinding(Base):
+    """Structured mapping between a module variable and a project assumption."""
+
+    __tablename__ = "assumption_bindings"
+
+    __table_args__ = (
+        Index(
+            "ix_assumption_bindings_initiative_module_field",
+            "initiative_id",
+            "module_id",
+            "field_name",
+        ),
+        Index("ix_assumption_bindings_assumption", "assumption_id"),
+        Index("ix_assumption_bindings_module_instance", "module_instance_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    initiative_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assumption_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assumptions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    module_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    module_instance_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("module_instances.id", ondelete="SET NULL"),
+    )
+    stage_id: Mapped[str | None] = mapped_column(String(120))
+    field_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    field_label: Mapped[str | None] = mapped_column(String(255))
+    unit: Mapped[str | None] = mapped_column(String(80))
+    value_type: Mapped[str | None] = mapped_column(String(40))
+    binding_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )

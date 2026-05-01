@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from app.assumptions.config import expected_assumptions_for_modules
 from app.services.assumptions import (
+    _module_ids_from_initiative,
     apply_assumptions_to_items,
     format_assumptions_for_prompt,
     normalize_assumption_status,
@@ -37,7 +38,7 @@ def test_apply_assumptions_to_items_prefills_matching_module_input():
             "label": "Total CAPEX",
             "value": 180000,
             "unit": "USD",
-            "status": "confirmed",
+            "status": "validated",
             "used_in_modules": ["lcoe_model"],
             "source_reference": {"source_type": "material"},
         }
@@ -48,7 +49,7 @@ def test_apply_assumptions_to_items_prefills_matching_module_input():
     content = result[0]["content"]
     assert content["value"] == 180000
     assert content["unit"] == "USD"
-    assert content["status"] == "confirmed"
+    assert content["status"] == "validated"
     assert content["source"] == "assumption"
     assert content["assumption_id"] == "assumption-1"
 
@@ -73,7 +74,7 @@ def test_apply_assumptions_to_items_uses_configured_module_field_aliases():
             "label": "System size",
             "value": 50,
             "unit": "kW",
-            "status": "confirmed",
+            "status": "validated",
             "used_in_modules": ["lcoe_model"],
             "source_reference": None,
         }
@@ -88,7 +89,7 @@ def test_apply_assumptions_to_items_uses_configured_module_field_aliases():
 def test_format_assumptions_for_prompt_buckets_statuses():
     assumptions = [
         SimpleNamespace(
-            status="confirmed",
+            status="validated",
             label="System size",
             value=50,
             unit="kW",
@@ -119,16 +120,28 @@ def test_format_assumptions_for_prompt_buckets_statuses():
 
     formatted = format_assumptions_for_prompt(assumptions)
 
-    assert "Confirmed:" in formatted
+    assert "Validated:" in formatted
     assert "System size: 50 kW" in formatted
     assert "Missing:" in formatted
     assert "Total CAPEX: missing USD" in formatted
-    assert "Inferred:" in formatted
+    assert "Extracted:" in formatted
     assert "Fuel savings: 0.2 %" in formatted
     assert "Rejected" not in formatted
 
 
 def test_normalize_assumption_status_maps_legacy_values():
-    assert normalize_assumption_status("validated") == "confirmed"
-    assert normalize_assumption_status("needs_review") == "inferred"
+    assert normalize_assumption_status("validated") == "validated"
+    assert normalize_assumption_status("needs_review") == "extracted"
     assert normalize_assumption_status("assumed") == "assumed"
+
+
+def test_module_ids_from_initiative_uses_active_instances_only():
+    initiative = SimpleNamespace(
+        selected_tools=["lcoe_model", "carbon_model"],
+        module_instances=[
+            SimpleNamespace(module_id="carbon_model", archived=False),
+            SimpleNamespace(module_id="solar_estimate", archived=True),
+        ],
+    )
+
+    assert _module_ids_from_initiative(initiative) == ["carbon_model"]
