@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Home, Layers3, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Home, Layers3, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
@@ -19,7 +19,7 @@ import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
-export type NavItem = 'home' | 'trash' | 'plan' | 'files' | 'chat' | 'research' | 'workspace';
+export type NavItem = 'portfolio' | 'trash' | 'plan' | 'assumptions' | 'files' | 'chat' | 'research' | 'workspace';
 
 interface NavItemConfig {
   key: NavItem;
@@ -33,13 +33,14 @@ interface NavRenderConfig extends NavItemConfig {
 }
 
 const GLOBAL_ITEMS: NavItemConfig[] = [
-  { key: 'home', label: 'All Projects', Icon: LayoutGrid },
+  { key: 'portfolio', label: 'Portfolio', Icon: LayoutGrid },
 ];
 
 const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'research', label: 'Overview', Icon: Home },
   { key: 'plan', label: 'Framework', Icon: Map },
   { key: 'workspace', label: 'Modules', Icon: Layers3 },
+  { key: 'assumptions', label: 'Assumptions', Icon: ListChecks },
 ];
 
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
@@ -90,10 +91,11 @@ export function SideDrawer() {
   }, [pathname]);
 
   const activeItem: NavItem = useMemo(() => {
-    if (!initiativeId) return searchParams.get('view') === 'files' ? 'files' : 'home';
+    if (!initiativeId) return searchParams.get('view') === 'files' ? 'files' : 'portfolio';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
     if (view === 'plan' || view === 'framework') return 'plan';
+    if (view === 'assumptions') return 'assumptions';
     if (view === 'workspace' || view === 'modules') return 'workspace';
     if (view === 'files') return 'files';
     return 'research';
@@ -119,7 +121,7 @@ export function SideDrawer() {
 
   const projectItems: NavRenderConfig[] = (
     isViewer
-      ? PROJECT_ITEMS.filter(i => !(['research', 'workspace'] as NavItem[]).includes(i.key))
+      ? PROJECT_ITEMS.filter(i => !(['research', 'assumptions', 'workspace'] as NavItem[]).includes(i.key))
       : PROJECT_ITEMS
   ).map((item) => {
     const lockedDuringOnboarding = isOnboarding && item.key !== 'research';
@@ -157,7 +159,7 @@ export function SideDrawer() {
       router.replace(`/initiatives/${initiativeId}?view=files`);
       return;
     }
-    if (item === 'home') {
+    if (item === 'portfolio') {
       router.push('/');
       return;
     }
