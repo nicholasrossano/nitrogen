@@ -14,6 +14,7 @@ import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
+import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -37,12 +38,13 @@ const MIN_CHAT_PANEL_PERCENT = 20;
 const MAX_CHAT_PANEL_PERCENT = 60;
 const DEFAULT_CHAT_PANEL_PERCENT = 30;
 
-type InitiativeView = 'overview' | 'modules' | 'framework' | 'files';
+type InitiativeView = 'overview' | 'modules' | 'framework' | 'assumptions' | 'files';
 
 function viewFromSearchParam(viewParam: string | null): InitiativeView {
   if (viewParam === 'overview' || viewParam === 'research' || viewParam === 'explore') return 'overview';
   if (viewParam === 'framework' || viewParam === 'plan') return 'framework';
   if (viewParam === 'workspace' || viewParam === 'modules') return 'modules';
+  if (viewParam === 'assumptions') return 'assumptions';
   if (viewParam === 'files') return 'files';
   return 'overview';
 }
@@ -76,6 +78,7 @@ interface StoredInitiativeWorkspaceUiState {
     overview: { workspace: boolean; chat: boolean };
     modules: { workspace: boolean; chat: boolean };
     framework: { workspace: boolean; chat: boolean };
+    assumptions: { workspace: boolean; chat: boolean };
   };
   chatPanelWidthPercent: number;
   workspaceTabs: WorkspacePanelTab[];
@@ -86,6 +89,7 @@ const DEFAULT_PANEL_VISIBILITY: StoredInitiativeWorkspaceUiState['panelVisibilit
   overview: { workspace: true, chat: false },
   modules: { workspace: true, chat: false },
   framework: { workspace: true, chat: false },
+  assumptions: { workspace: true, chat: false },
 };
 
 function readStoredWorkspaceUiState(storageKey: string): StoredInitiativeWorkspaceUiState | null {
@@ -118,9 +122,16 @@ function readStoredWorkspaceUiState(storageKey: string): StoredInitiativeWorkspa
       tabs.some((tab) => tab.id === parsed.activeWorkspaceTabId)
         ? parsed.activeWorkspaceTabId
         : null;
+    const rawPanelVisibility = parsed.panelVisibility as Partial<StoredInitiativeWorkspaceUiState['panelVisibility']>;
+    const panelVisibility: StoredInitiativeWorkspaceUiState['panelVisibility'] = {
+      overview: rawPanelVisibility?.overview ?? DEFAULT_PANEL_VISIBILITY.overview,
+      modules: rawPanelVisibility?.modules ?? DEFAULT_PANEL_VISIBILITY.modules,
+      framework: rawPanelVisibility?.framework ?? DEFAULT_PANEL_VISIBILITY.framework,
+      assumptions: rawPanelVisibility?.assumptions ?? DEFAULT_PANEL_VISIBILITY.assumptions,
+    };
 
     return {
-      panelVisibility: parsed.panelVisibility,
+      panelVisibility,
       chatPanelWidthPercent: clampedWidth,
       workspaceTabs: tabs,
       activeWorkspaceTabId,
@@ -264,7 +275,7 @@ function InitiativePageContent() {
       const approvedModuleIds = new Set(
         frameworkModuleInstances
           .filter((instance) => instance.is_plan_complete === true)
-          .map((instance) => instance.module_id),
+          .map((instance) => instance.assessment_id),
       );
 
       const segments = MODULE_CATEGORIES.map((category) => {
@@ -337,17 +348,22 @@ function InitiativePageContent() {
   const frameworkWorkspaceOpen =
     activeView === 'framework' && (!hasFrameworkSelection || panelVisibility.framework.workspace);
   const frameworkChatOpen = activeView === 'framework' && hasFrameworkSelection && panelVisibility.framework.chat;
-  const workspaceOpen = overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen;
-  const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
-  const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen;
-  const sideChatMode: 'overview' | 'modules' | 'framework' | null =
+  const assumptionsWorkspaceOpen = activeView === 'assumptions' && panelVisibility.assumptions.workspace;
+  const assumptionsChatOpen = activeView === 'assumptions' && panelVisibility.assumptions.chat;
+  const workspaceOpen =
+    overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen || assumptionsWorkspaceOpen;
+  const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen || assumptionsChatOpen;
+  const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen || assumptionsChatOpen;
+  const sideChatMode: 'overview' | 'modules' | 'framework' | 'assumptions' | null =
     activeView === 'overview'
       ? 'overview'
       : activeView === 'modules'
         ? 'modules'
         : activeView === 'framework' && hasFrameworkSelection
           ? 'framework'
-          : null;
+          : activeView === 'assumptions'
+            ? 'assumptions'
+            : null;
   const showPrimaryPanel = activeView === 'files' || workspaceOpen;
   const hasSideChatShell = Boolean(sideChatMode);
   const sideChatWidthPercent = !hasSideChatShell
@@ -364,17 +380,23 @@ function InitiativePageContent() {
   const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${initiativeId}`;
   const isChatPrimaryMode = activeView === 'framework' && !hasFrameworkSelection;
   const workspaceToggleEnabled = !isViewer && (
-    activeView === 'overview' || activeView === 'framework' || activeView === 'modules'
+    activeView === 'overview'
+    || activeView === 'framework'
+    || activeView === 'modules'
+    || activeView === 'assumptions'
   );
   const chatToggleEnabled =
-    activeView === 'modules' || activeView === 'overview' || activeView === 'framework';
+    activeView === 'modules'
+    || activeView === 'overview'
+    || activeView === 'framework'
+    || activeView === 'assumptions';
   const workspaceToggleActive = isChatPrimaryMode ? false : workspaceOpen;
   const chatToggleActive = isChatPrimaryMode ? true : chatOpen;
   const workspaceToggleLocked = workspaceToggleActive && !chatToggleActive;
   const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
 
   const setPanelOpen = useCallback(
-    (view: 'overview' | 'modules' | 'framework', panel: 'workspace' | 'chat', open: boolean) => {
+    (view: 'overview' | 'modules' | 'framework' | 'assumptions', panel: 'workspace' | 'chat', open: boolean) => {
       setPanelVisibility((prev) => {
         const current = prev[view];
         const next = { ...current, [panel]: open };
@@ -405,6 +427,10 @@ function InitiativePageContent() {
       }
       if (activeView === 'framework' && hasFrameworkSelection) {
         setPanelOpen('framework', 'workspace', !panelVisibility.framework.workspace);
+        return;
+      }
+      if (activeView === 'assumptions') {
+        setPanelOpen('assumptions', 'workspace', !panelVisibility.assumptions.workspace);
       }
     },
     title: !workspaceToggleEnabled
@@ -432,6 +458,10 @@ function InitiativePageContent() {
       }
       if (activeView === 'framework' && hasFrameworkSelection) {
         setPanelOpen('framework', 'chat', !panelVisibility.framework.chat);
+        return;
+      }
+      if (activeView === 'assumptions') {
+        setPanelOpen('assumptions', 'chat', !panelVisibility.assumptions.chat);
       }
     },
     title: !chatToggleEnabled
@@ -487,9 +517,10 @@ function InitiativePageContent() {
       if (!detail?.assumptionId) return;
       const requestId = `assumption-investigate-${detail.assumptionId}-${Date.now()}`;
       setWorkspaceLaunchMode('idle');
-      setPanelOpen('modules', 'chat', true);
-      setActiveView('modules');
-      router.replace(`/initiatives/${initiativeId}?view=modules`);
+      setPanelOpen('assumptions', 'workspace', true);
+      setPanelOpen('assumptions', 'chat', true);
+      setActiveView('assumptions');
+      router.replace(`/initiatives/${initiativeId}?view=assumptions`);
       setPendingAssumptionsRequest({
         requestId,
         focusAssumptionId: detail.assumptionId,
@@ -555,7 +586,7 @@ function InitiativePageContent() {
   }, []);
 
   useShellNav(useCallback((item: NavItem): boolean => {
-    if (item === 'home') {
+    if (item === 'portfolio') {
       router.push('/');
       return true;
     }
@@ -577,6 +608,13 @@ function InitiativePageContent() {
       router.replace(`/initiatives/${initiativeId}?view=modules`);
       return true;
     }
+    if (item === 'assumptions') {
+      setWorkspaceLaunchMode('idle');
+      setPanelOpen('assumptions', 'workspace', true);
+      setActiveView('assumptions');
+      router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+      return true;
+    }
     if (item === 'files') {
       setActiveView('files');
       router.replace(`/initiatives/${initiativeId}?view=files`);
@@ -591,7 +629,7 @@ function InitiativePageContent() {
   }, [router, initiativeId, activeView, setPanelOpen]));
 
   useEffect(() => {
-    if (isViewer && (activeView === 'overview' || activeView === 'modules')) {
+    if (isViewer && (activeView === 'overview' || activeView === 'modules' || activeView === 'assumptions')) {
       setActiveView('framework');
       router.replace(`/initiatives/${initiativeId}?view=framework`);
     }
@@ -673,7 +711,7 @@ function InitiativePageContent() {
     if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) return;
     if (frameworkPlannedModuleIds.length > 0) return;
     if (frameworkModuleInstances.length === 0) return;
-    const inferred = Array.from(new Set(frameworkModuleInstances.map((instance) => instance.module_id)));
+    const inferred = Array.from(new Set(frameworkModuleInstances.map((instance) => instance.assessment_id)));
     setFrameworkPlannedModuleIds(inferred);
   }, [initiative, frameworkModuleInstances, frameworkPlannedModuleIds.length]);
 
@@ -788,24 +826,20 @@ function InitiativePageContent() {
     });
   }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
 
-  const openAssumptionsTab = useCallback(() => {
+  const openAssumptionsView = useCallback(() => {
     setWorkspaceLaunchMode('idle');
-    setPanelOpen('modules', 'workspace', true);
-    setPanelOpen('modules', 'chat', false);
-    setActiveView('modules');
-    router.replace(`/initiatives/${initiativeId}?view=modules`);
-    openWorkspaceTab({
-      id: 'assumptions',
-      kind: 'assumptions',
-      title: 'Assumptions',
-    });
-  }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
+    setPanelOpen('assumptions', 'workspace', true);
+    setPanelOpen('assumptions', 'chat', false);
+    setActiveView('assumptions');
+    router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+  }, [initiativeId, router, setPanelOpen]);
 
   const handleOpenAssumptionInChat = useCallback((assumption: Assumption) => {
     setWorkspaceLaunchMode('idle');
-    setPanelOpen('modules', 'chat', true);
-    setActiveView('modules');
-    router.replace(`/initiatives/${initiativeId}?view=modules`);
+    setPanelOpen('assumptions', 'workspace', true);
+    setPanelOpen('assumptions', 'chat', true);
+    setActiveView('assumptions');
+    router.replace(`/initiatives/${initiativeId}?view=assumptions`);
     setPendingAssumptionsRequest({
       requestId: `assumption-${assumption.id}-${Date.now()}`,
       focusAssumptionId: assumption.id,
@@ -854,7 +888,7 @@ function InitiativePageContent() {
     });
     handleOpenWorkspaceModule({
       instanceId: instance.id,
-      moduleId: instance.module_id,
+      moduleId: instance.assessment_id,
       title: instance.display_name || moduleName,
       openChatPanel: false,
     });
@@ -865,8 +899,8 @@ function InitiativePageContent() {
   ) => {
     handleOpenWorkspaceModule({
       instanceId: instance.id,
-      moduleId: instance.module_id,
-      title: instance.display_name || instance.title || instance.module_id.replace(/_/g, ' '),
+      moduleId: instance.assessment_id,
+      title: instance.display_name || instance.title || instance.assessment_id.replace(/_/g, ' '),
       openChatPanel: false,
     });
   }, [handleOpenWorkspaceModule]);
@@ -1026,7 +1060,7 @@ function InitiativePageContent() {
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceModule={handleOpenWorkspaceModule}
-            onOpenAssumptions={openAssumptionsTab}
+            onOpenAssumptions={openAssumptionsView}
           />
         );
       }
@@ -1053,7 +1087,19 @@ function InitiativePageContent() {
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceModule={handleOpenWorkspaceModule}
-          onOpenAssumptions={openAssumptionsTab}
+          onOpenAssumptions={openAssumptionsView}
+        />
+      );
+    }
+
+    if (activeView === 'assumptions') {
+      return (
+        <AssumptionsWorkspaceTab
+          initiativeId={initiativeId}
+          showDetailPanel={false}
+          onAssumptionSelectInChat={handleOpenAssumptionInChat}
+          moduleInstances={frameworkModuleInstances}
+          onOpenModuleInstance={handleOpenExistingModuleInstanceInModulesView}
         />
       );
     }
@@ -1154,6 +1200,25 @@ function InitiativePageContent() {
       </div>
     </div>
   ) : sideChatMode === 'framework' ? (
+    <div className="h-full flex overflow-hidden">
+      <div className="flex-1 min-w-0">
+        <ProjectChatTabsPanel
+          initiativeId={initiativeId}
+          researchMode={false}
+          sessionStorageKey={sideChatTabsStorageKey}
+          pendingChatToOpen={pendingChatToOpen}
+          activeModuleContext={null}
+          onPendingSessionHandled={() => setPendingChatToOpen(null)}
+          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onOpenDocument={openWorkspaceDocument}
+          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onSendRef={chatSendRef}
+          pendingAssumptions={pendingAssumptionsRequest}
+          onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
+        />
+      </div>
+    </div>
+  ) : sideChatMode === 'assumptions' ? (
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
