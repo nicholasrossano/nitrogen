@@ -26,7 +26,7 @@ MONTH_LABELS = [
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ]
 
-InputStatus = Literal["validated", "inferred", "assumed", "missing"]
+InputStatus = Literal["validated", "extracted", "assumed", "missing"]
 InputSource = Literal["chat", "doc", "user", "assumption"]
 
 MODULE_TYPE_LABELS = {0: "Standard", 1: "Premium", 2: "Thin Film"}
@@ -75,6 +75,8 @@ class PVWattsInput:
         payload = {k: d[k] for k in cls.__dataclass_fields__ if k in d}
         if payload.get("status") == "confirmed":
             payload["status"] = "validated"
+        if payload.get("status") == "inferred":
+            payload["status"] = "extracted"
         return cls(**payload)
 
 
@@ -150,7 +152,7 @@ class PVWattsEngine:
         user-validated.  Rules:
         - status == "validated"  → user explicitly set this value; never touch it.
         - status == "confirmed"  → legacy alias for validated; never touch it.
-        - status == "inferred" | "assumed" | "missing" → recompute from lat.
+        - status == "extracted" | "assumed" | "missing" → recompute from lat.
         This must be called after any lat/lon change (initial build AND recalculate).
         """
         lat_inp = inputs.get("lat")
@@ -160,7 +162,7 @@ class PVWattsEngine:
         lat_num = float(lat_inp.value)
 
         tilt_inp = inputs.get("tilt")
-        if tilt_inp is not None and tilt_inp.status not in ("validated", "confirmed"):
+        if tilt_inp is not None and tilt_inp.status != "validated":
             # Round to nearest whole degree — sub-degree precision is meaningless for a rule-of-thumb default
             tilt_val = round(abs(lat_num))
             inputs["tilt"] = PVWattsInput(
@@ -175,7 +177,7 @@ class PVWattsEngine:
             )
 
         azimuth_inp = inputs.get("azimuth")
-        if azimuth_inp is not None and azimuth_inp.status not in ("validated", "confirmed"):
+        if azimuth_inp is not None and azimuth_inp.status != "validated":
             az_val = 180.0 if lat_num >= 0 else 0.0
             direction = "south-facing (equator)" if lat_num >= 0 else "north-facing (equator)"
             inputs["azimuth"] = PVWattsInput(
@@ -212,7 +214,7 @@ class PVWattsEngine:
                     value=val,
                     unit=defn["unit"],
                     source=src,
-                    status="inferred" if src in ("chat", "doc") else "validated",
+                    status="extracted" if src in ("chat", "doc") else "validated",
                     notes=known_values.get(f"_notes_{fname}", ""),
                     category=defn["category"],
                 )

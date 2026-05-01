@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 import { api } from '@/lib/api';
+import type { FieldContext } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
 
 interface LCOEInput {
@@ -19,7 +20,7 @@ interface LCOEInput {
   value: number | string | null;
   unit: string;
   source: 'chat' | 'doc' | 'user' | 'assumption';
-  status: 'validated' | 'inferred' | 'assumed' | 'missing';
+  status: 'validated' | 'extracted' | 'assumed' | 'missing';
   notes: string;
   rationale: string;
   category: string;
@@ -38,8 +39,7 @@ interface LCOEInputsWidgetProps {
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
+  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
   assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
 };
@@ -82,21 +82,68 @@ export function LCOEInputsWidget({
   const [confirmingFields, setConfirmingFields] = useState<Set<string>>(new Set());
   const [preConfirmStatuses, setPreConfirmStatuses] = useState<Record<string, string>>({});
 
-  const investigate = useCallback((label: string, status: string, fieldName?: string) => {
+  const investigate = useCallback(async (label: string, status: string, fieldName?: string) => {
     const text =
-      status === 'inferred' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
+      status === 'extracted' ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
       status === 'assumed'  ? `Can you research and propose a better value for ${label} based on available data for this project?` :
       status === 'validated'? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;
     const input = fieldName ? localInputs[fieldName] : undefined;
-    const fieldContext = fieldName ? {
+    const fieldContext: FieldContext | null = fieldName ? {
       field_name: fieldName,
       label,
       current_value: typeof input?.value === 'number' ? input.value : null,
       unit: input?.unit || null,
       model_type: 'lcoe' as const,
+      module_id: 'lcoe_model',
       status: status || null,
     } : null;
+    if (fieldName && fieldContext) {
+      const localAssumptionId =
+        typeof input?.assumption_id === 'string' && input.assumption_id.trim().length > 0
+          ? input.assumption_id
+          : null;
+      try {
+        let assumptionId = localAssumptionId;
+        if (!assumptionId) {
+          const resolved = await api.resolveAssumption(initiativeId, 'lcoe_model', fieldName);
+          assumptionId = resolved.found ? resolved.assumption?.id ?? null : null;
+        }
+        if (!assumptionId) {
+          const created = await api.createAssumption(initiativeId, {
+            key: fieldName,
+            label,
+            value: input?.value ?? null,
+            unit: input?.unit ?? null,
+            source_type: 'module',
+            source_reference: {
+              module_id: 'lcoe_model',
+              stage_id: 'widget_state',
+              field_name: fieldName,
+            },
+            status: input?.value === null || input?.value === undefined || input?.value === '' ? 'missing' : 'assumed',
+            used_in_modules: ['lcoe_model'],
+          });
+          assumptionId = created.id;
+        }
+        if (assumptionId) {
+          fieldContext.assumption_id = assumptionId;
+          window.dispatchEvent(new CustomEvent('nitrogen:open-assumption-chat', {
+            detail: {
+              assumptionId,
+              title: label,
+              text,
+              toolHint: 'lcoe_model',
+              fieldContext,
+              modelInputsContext: buildModelInputsContext('LCOE Model', localInputs, fieldContext),
+            },
+          }));
+          return;
+        }
+      } catch {
+        // Fall through to draft-only behavior.
+      }
+    }
 
     window.dispatchEvent(new CustomEvent('nitrogen:draft', {
       detail: {
@@ -107,7 +154,7 @@ export function LCOEInputsWidget({
         modelInputsContext: buildModelInputsContext('LCOE Model', localInputs, fieldContext),
       },
     }));
-  }, [localInputs]);
+  }, [initiativeId, localInputs]);
 
   const groupedInputs = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -157,7 +204,7 @@ export function LCOEInputsWidget({
 
   const toggleConfirm = useCallback(async (fieldName: string, currentStatus: string, currentValue: any) => {
     const isConfirmed = currentStatus === 'validated';
-    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'inferred') : 'validated';
+    const newStatus = isConfirmed ? (preConfirmStatuses[fieldName] || 'extracted') : 'validated';
 
     if (!isConfirmed) {
       setPreConfirmStatuses(prev => ({ ...prev, [fieldName]: currentStatus }));
@@ -308,7 +355,7 @@ export function LCOEInputsWidget({
                           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
                         >
                           {inp.status === 'validated' && <CheckCircle2 className="w-2.5 h-2.5" />}
-                          {inp.status === 'inferred' && <MessageSquare className="w-2.5 h-2.5" />}
+                          {inp.status === 'extracted' && <MessageSquare className="w-2.5 h-2.5" />}
                           {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
                           {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
                           {statusStyle.label}
@@ -323,7 +370,7 @@ export function LCOEInputsWidget({
                             checked={inp.status === 'validated'}
                             disabled={isMissing || confirmingFields.has(inp.field_name)}
                             onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                            title={inp.status === 'validated' ? 'Mark as inferred' : 'Mark as validated'}
+                            title={inp.status === 'validated' ? 'Mark as extracted' : 'Mark as validated'}
                             className="w-3 h-3 rounded-full accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                           />
                         )}

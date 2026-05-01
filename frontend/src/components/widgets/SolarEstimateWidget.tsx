@@ -74,8 +74,7 @@ interface SolarEstimateWidgetProps {
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  confirmed: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  inferred: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Inferred' },
+  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
   assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
   missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
 };
@@ -321,7 +320,7 @@ export function SolarEstimateWidget({
 
   const handleInvestigate = useCallback((fieldName: string, label: string, status: string) => {
     const text =
-      status === 'inferred'  ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
+      status === 'extracted'  ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?` :
       status === 'assumed'   ? `Can you research and propose a better value for ${label} based on available data for this project?` :
       status === 'validated' ? `Can you validate the value for ${label} and propose alternatives if there are better estimates?` :
       `Can you investigate and propose a value for ${label}?`;

@@ -13,7 +13,7 @@ from app.models.subscription import Subscription, UsageRecord, UserApiKey
 from app.models.module_instance import ModuleInstance
 from app.models.decision_event import DecisionEvent
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
-from app.models.assumption import Assumption, AssumptionComment
+from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 
 __all__ = [
     "Initiative",
@@ -43,5 +43,6 @@ __all__ = [
     "WorkspaceRole",
     "WorkspaceType",
     "Assumption",
+    "AssumptionBinding",
     "AssumptionComment",
 ]
