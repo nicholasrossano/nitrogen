@@ -1,4 +1,4 @@
-"""Rename module_instances.tool_id → module_id and add workflow_state JSONB column
+"""Rename assessment_instances.tool_id → assessment_id and add workflow_state JSONB column
 
 Revision ID: 032
 Revises: 031
@@ -17,26 +17,26 @@ depends_on = None
 
 def upgrade():
     # Drop old index on (initiative_id, tool_id)
-    op.drop_index('ix_mi_initiative_tool', table_name='module_instances')
+    op.drop_index('ix_mi_initiative_tool', table_name='assessment_instances')
 
     # Rename column
-    op.alter_column('module_instances', 'tool_id', new_column_name='module_id')
+    op.alter_column('assessment_instances', 'tool_id', new_column_name='assessment_id')
 
-    # Re-create index on (initiative_id, module_id)
-    op.create_index('ix_mi_initiative_module', 'module_instances',
-                    ['initiative_id', 'module_id'])
+    # Re-create index on (initiative_id, assessment_id)
+    op.create_index('ix_mi_initiative_assessment', 'assessment_instances',
+                    ['initiative_id', 'assessment_id'])
 
     # Add workflow_state JSONB column (nullable)
     op.add_column(
-        'module_instances',
+        'assessment_instances',
         sa.Column('workflow_state', postgresql.JSONB, nullable=True),
     )
 
 
 def downgrade():
-    op.drop_column('module_instances', 'workflow_state')
+    op.drop_column('assessment_instances', 'workflow_state')
 
-    op.drop_index('ix_mi_initiative_module', table_name='module_instances')
-    op.alter_column('module_instances', 'module_id', new_column_name='tool_id')
-    op.create_index('ix_mi_initiative_tool', 'module_instances',
+    op.drop_index('ix_mi_initiative_assessment', table_name='assessment_instances')
+    op.alter_column('assessment_instances', 'assessment_id', new_column_name='tool_id')
+    op.create_index('ix_mi_initiative_tool', 'assessment_instances',
                     ['initiative_id', 'tool_id'])

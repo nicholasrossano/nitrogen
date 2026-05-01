@@ -149,7 +149,7 @@ class DocxExporterService:
         content: dict,
         initiative_title: str,
     ) -> bytes:
-        """Generate a DOCX for a module assessment output (landscape / stakeholder etc.).
+        """Generate a DOCX for a assessment assessment output (landscape / stakeholder etc.).
 
         Expects content with keys:
           title, executive_summary, sections[{theme|category, body}],

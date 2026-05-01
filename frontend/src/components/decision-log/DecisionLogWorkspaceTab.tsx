@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type {
   DecisionLogHistoryRow,
-  ModuleDecisionLogReport,
+  AssessmentDecisionLogReport,
 } from '@/lib/api';
 import { api } from '@/lib/api';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { ExportButton, WorkspaceTabLoader } from '@/components/ui';
 
 interface DecisionLogWorkspaceTabProps {
-  moduleInstanceId: string;
+  assessmentInstanceId: string;
 }
 
 const historyColumns: ReadOnlyDataTableColumn<DecisionLogHistoryRow>[] = [
@@ -25,9 +25,9 @@ const historyColumns: ReadOnlyDataTableColumn<DecisionLogHistoryRow>[] = [
 ];
 
 export function DecisionLogWorkspaceTab({
-  moduleInstanceId,
+  assessmentInstanceId,
 }: DecisionLogWorkspaceTabProps) {
-  const [report, setReport] = useState<ModuleDecisionLogReport | null>(null);
+  const [report, setReport] = useState<AssessmentDecisionLogReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -36,26 +36,26 @@ export function DecisionLogWorkspaceTab({
     setLoading(true);
     setError(null);
     try {
-      const next = await api.getModuleDecisionLog(moduleInstanceId);
+      const next = await api.getAssessmentDecisionLog(assessmentInstanceId);
       setReport(next);
     } catch (e: any) {
       setError(e.message ?? 'Failed to load decision log');
     } finally {
       setLoading(false);
     }
-  }, [moduleInstanceId]);
+  }, [assessmentInstanceId]);
 
   useEffect(() => {
     loadReport();
   }, [loadReport]);
 
   const historyRows = report?.history_rows ?? [];
-  const subtitle = 'Value-level history for this module, including provenance and confirmation metadata.';
+  const subtitle = 'Value-level history for this assessment, including provenance and confirmation metadata.';
 
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      const { blob, filename } = await api.exportModuleDecisionLogXlsx(moduleInstanceId);
+      const { blob, filename } = await api.exportAssessmentDecisionLogXlsx(assessmentInstanceId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -67,7 +67,7 @@ export function DecisionLogWorkspaceTab({
     } finally {
       setExporting(false);
     }
-  }, [moduleInstanceId]);
+  }, [assessmentInstanceId]);
 
   if (loading) {
     return <WorkspaceTabLoader />;
@@ -99,7 +99,7 @@ export function DecisionLogWorkspaceTab({
             <div className="py-20 text-center">
               <p className="text-sm font-medium text-text-secondary">No history yet</p>
               <p className="mt-1 text-xs text-text-tertiary">
-                Value-level entries will appear as this module is generated, edited, and confirmed.
+                Value-level entries will appear as this assessment is generated, edited, and confirmed.
               </p>
             </div>
           }

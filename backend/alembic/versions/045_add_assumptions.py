@@ -37,7 +37,7 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(length=80), nullable=False),
         sa.Column("source_reference", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("status", sa.String(length=40), nullable=False, server_default="needs_review"),
-        sa.Column("used_in_modules", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default="[]"),
+        sa.Column("used_in_assessments", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default="[]"),
         sa.Column("created_by_user_id", sa.String(length=255), nullable=True),
         sa.Column("created_by_email", sa.String(length=255), nullable=True),
         sa.Column("last_updated_by_user_id", sa.String(length=255), nullable=True),

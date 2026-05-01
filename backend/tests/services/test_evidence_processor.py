@@ -2,7 +2,7 @@
 
 These cover the parts we can exercise without a real Postgres + pgvector
 setup: state-property logic on ``EvidenceDoc``, the lightweight preview
-extractor's best-effort error handling, and the module-gating readiness
+extractor's best-effort error handling, and the assessment-gating readiness
 helper's no-docs short-circuit and polling-to-ready transition.
 """
 
@@ -134,7 +134,7 @@ def test_extract_preview_text_file_type():
 
 
 # ---------------------------------------------------------------------------
-# await_lightweight_readiness — core module-gating behaviour
+# await_lightweight_readiness — core assessment-gating behaviour
 # ---------------------------------------------------------------------------
 
 

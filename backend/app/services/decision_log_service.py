@@ -1,4 +1,4 @@
-"""Decision log builders for module-level and initiative-level reporting."""
+"""Decision log builders for assessment-level and initiative-level reporting."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.decision_event import DecisionEvent
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance
-from app.modules.base import DecisionLogAttribution
-from app.modules.registry import get_module_registry
-from app.services.module_workflow_service import build_workflow_state
+from app.models.assessment_instance import AssessmentInstance
+from app.assessments.base import DecisionLogAttribution
+from app.assessments.registry import get_assessment_registry
+from app.services.assessment_workflow_service import build_workflow_state
 
 
 def build_decision_log(
@@ -24,17 +24,17 @@ def build_decision_log(
     project_context: dict[str, Any] | None = None,
     current_user_email: str | None = None,
     *,
-    module_id: str = "",
-    module_name: str = "",
-    module_instance_id: str = "",
+    assessment_id: str = "",
+    assessment_name: str = "",
+    assessment_instance_id: str = "",
 ) -> dict[str, Any]:
-    """Build current-state rows for a single module workflow."""
+    """Build current-state rows for a single assessment workflow."""
     decisions = build_current_state_rows(
         workflow_state=workflow_state,
         stage_defs=stage_defs,
-        module_id=module_id,
-        module_name=module_name,
-        module_instance_id=module_instance_id,
+        assessment_id=assessment_id,
+        assessment_name=assessment_name,
+        assessment_instance_id=assessment_instance_id,
     )
     return {
         "metadata": {
@@ -51,14 +51,14 @@ def build_current_state_rows(
     *,
     workflow_state: dict[str, Any],
     stage_defs: list,
-    module_id: str,
-    module_name: str,
-    module_instance_id: str,
+    assessment_id: str,
+    assessment_name: str,
+    assessment_instance_id: str,
 ) -> list[dict[str, Any]]:
     stage_id_to_title = {s.id: s.title for s in stage_defs}
     rows_with_sort_key: list[tuple[str, dict[str, Any]]] = []
     final_approval = workflow_state.get("final_approval") or {}
-    attribution = _decision_log_attribution_for_module(module_id)
+    attribution = _decision_log_attribution_for_assessment(assessment_id)
 
     for stage_id, stage_state in workflow_state.get("stages", {}).items():
         if stage_state.get("status") not in ("confirmed", "draft"):
@@ -77,9 +77,9 @@ def build_current_state_rows(
         for item in stage_data.get("items", []):
             item_rows = _build_item_rows(
                 item=item,
-                module_id=module_id,
-                module_name=module_name,
-                module_instance_id=module_instance_id,
+                assessment_id=assessment_id,
+                assessment_name=assessment_name,
+                assessment_instance_id=assessment_instance_id,
                 stage_id=stage_id,
                 stage_title=stage_title,
                 status=status,
@@ -94,9 +94,9 @@ def build_current_state_rows(
             record_rows = _build_record_rows(
                 record=record,
                 item_id=item_id,
-                module_id=module_id,
-                module_name=module_name,
-                module_instance_id=module_instance_id,
+                assessment_id=assessment_id,
+                assessment_name=assessment_name,
+                assessment_instance_id=assessment_instance_id,
                 stage_id=stage_id,
                 stage_title=stage_title,
                 status=status,
@@ -111,9 +111,9 @@ def build_current_state_rows(
         if isinstance(widget_data, dict):
             widget_rows = _build_widget_rows(
                 widget_data=widget_data,
-                module_id=module_id,
-                module_name=module_name,
-                module_instance_id=module_instance_id,
+                assessment_id=assessment_id,
+                assessment_name=assessment_name,
+                assessment_instance_id=assessment_instance_id,
                 stage_id=stage_id,
                 stage_title=stage_title,
                 status=status,
@@ -129,31 +129,31 @@ def build_current_state_rows(
     return [row for _, row in rows_with_sort_key]
 
 
-def build_module_decision_history_report(
+def build_assessment_decision_history_report(
     *,
     workflow_state: dict[str, Any],
     stage_defs: list,
-    module_id: str,
-    module_name: str,
-    module_instance_id: str,
+    assessment_id: str,
+    assessment_name: str,
+    assessment_instance_id: str,
 ) -> dict[str, Any]:
-    """Build a module-scoped, value-level decision history report.
+    """Build a assessment-scoped, value-level decision history report.
 
     History rows are value-centric entries (field/value/source/provenance)
-    for the module workflow, including confirmation/final-approval metadata.
+    for the assessment workflow, including confirmation/final-approval metadata.
     """
     history_rows = build_current_state_rows(
         workflow_state=workflow_state,
         stage_defs=stage_defs,
-        module_id=module_id,
-        module_name=module_name,
-        module_instance_id=module_instance_id,
+        assessment_id=assessment_id,
+        assessment_name=assessment_name,
+        assessment_instance_id=assessment_instance_id,
     )
     return {
         "metadata": {
-            "module_id": module_id,
-            "module_name": module_name,
-            "module_instance_id": module_instance_id,
+            "assessment_id": assessment_id,
+            "assessment_name": assessment_name,
+            "assessment_instance_id": assessment_instance_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "history_row_count": len(history_rows),
         },
@@ -165,44 +165,44 @@ async def build_initiative_decision_log(
     db: AsyncSession,
     *,
     initiative_id: UUID,
-    module_instance_id: UUID | None = None,
-    module_id: str | None = None,
+    assessment_instance_id: UUID | None = None,
+    assessment_id: str | None = None,
 ) -> dict[str, Any]:
     initiative = await db.get(Initiative, initiative_id)
-    stmt = select(ModuleInstance).where(
-        ModuleInstance.initiative_id == initiative_id,
-        ModuleInstance.archived.is_(False),
+    stmt = select(AssessmentInstance).where(
+        AssessmentInstance.initiative_id == initiative_id,
+        AssessmentInstance.archived.is_(False),
     )
-    if module_instance_id is not None:
-        stmt = stmt.where(ModuleInstance.id == module_instance_id)
-    if module_id:
-        stmt = stmt.where(ModuleInstance.module_id == module_id)
-    stmt = stmt.order_by(ModuleInstance.updated_at.desc())
+    if assessment_instance_id is not None:
+        stmt = stmt.where(AssessmentInstance.id == assessment_instance_id)
+    if assessment_id:
+        stmt = stmt.where(AssessmentInstance.assessment_id == assessment_id)
+    stmt = stmt.order_by(AssessmentInstance.updated_at.desc())
     instances = list((await db.execute(stmt)).scalars().all())
 
-    registry = get_module_registry()
+    registry = get_assessment_registry()
     current_rows: list[dict[str, Any]] = []
     instance_ids = [inst.id for inst in instances]
 
     for inst in instances:
-        module = registry.get_module(inst.module_id)
-        if module is None:
+        assessment = registry.get_assessment(inst.assessment_id)
+        if assessment is None:
             continue
-        state = await build_workflow_state(db, inst, module)
+        state = await build_workflow_state(db, inst, assessment)
         current_rows.extend(
             build_current_state_rows(
                 workflow_state=state,
-                stage_defs=module.stage_defs,
-                module_id=inst.module_id,
-                module_name=module.definition.name,
-                module_instance_id=str(inst.id),
+                stage_defs=assessment.stage_defs,
+                assessment_id=inst.assessment_id,
+                assessment_name=assessment.definition.name,
+                assessment_instance_id=str(inst.id),
             )
         )
 
     history_rows: list[dict[str, Any]] = []
     if instance_ids:
         event_stmt = select(DecisionEvent).where(
-            DecisionEvent.module_instance_id.in_(instance_ids)
+            DecisionEvent.assessment_instance_id.in_(instance_ids)
         ).order_by(DecisionEvent.created_at.desc(), DecisionEvent.sequence_number.desc())
         events = list((await db.execute(event_stmt)).scalars().all())
         history_rows = [_event_to_history_row(event) for event in events]
@@ -257,8 +257,8 @@ def build_decision_log_xlsx(report: dict[str, Any]) -> bytes:
     return buf.getvalue()
 
 
-def build_module_decision_log_xlsx(report: dict[str, Any]) -> bytes:
-    """Build a module-scoped decision history workbook (single History sheet)."""
+def build_assessment_decision_log_xlsx(report: dict[str, Any]) -> bytes:
+    """Build a assessment-scoped decision history workbook (single History sheet)."""
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
@@ -292,7 +292,7 @@ def build_decision_log_docx(
     project_context: dict[str, Any] | None = None,
     current_user_email: str | None = None,
 ) -> bytes:
-    """Build a module-scoped DOCX summary from current decision rows."""
+    """Build a assessment-scoped DOCX summary from current decision rows."""
     log = build_decision_log(workflow_state, stage_defs, project_context, current_user_email)
     return _render_docx(log)
 
@@ -300,9 +300,9 @@ def build_decision_log_docx(
 def _build_item_rows(
     *,
     item: dict[str, Any],
-    module_id: str,
-    module_name: str,
-    module_instance_id: str,
+    assessment_id: str,
+    assessment_name: str,
+    assessment_instance_id: str,
     stage_id: str,
     stage_title: str,
     status: str,
@@ -318,9 +318,9 @@ def _build_item_rows(
     current_value = _item_value(content)
     return [
         _base_row(
-            module_id=module_id,
-            module_name=module_name,
-            module_instance_id=module_instance_id,
+            assessment_id=assessment_id,
+            assessment_name=assessment_name,
+            assessment_instance_id=assessment_instance_id,
             stage_id=stage_id,
             stage_title=stage_title,
             entity_type="item",
@@ -342,9 +342,9 @@ def _build_record_rows(
     *,
     record: dict[str, Any],
     item_id: str,
-    module_id: str,
-    module_name: str,
-    module_instance_id: str,
+    assessment_id: str,
+    assessment_name: str,
+    assessment_instance_id: str,
     stage_id: str,
     stage_title: str,
     status: str,
@@ -358,9 +358,9 @@ def _build_record_rows(
     for field_name, value in _flatten_scalars(record):
         rows.append(
             _base_row(
-                module_id=module_id,
-                module_name=module_name,
-                module_instance_id=module_instance_id,
+                assessment_id=assessment_id,
+                assessment_name=assessment_name,
+                assessment_instance_id=assessment_instance_id,
                 stage_id=stage_id,
                 stage_title=stage_title,
                 entity_type="record",
@@ -382,9 +382,9 @@ def _build_record_rows(
 def _build_widget_rows(
     *,
     widget_data: dict[str, Any],
-    module_id: str,
-    module_name: str,
-    module_instance_id: str,
+    assessment_id: str,
+    assessment_name: str,
+    assessment_instance_id: str,
     stage_id: str,
     stage_title: str,
     status: str,
@@ -394,14 +394,14 @@ def _build_widget_rows(
     attribution: DecisionLogAttribution,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    metrics = _computed_overview_metrics(module_id, widget_data)
-    integration_citation = _computed_integration_citation(module_id, widget_data, attribution)
+    metrics = _computed_overview_metrics(assessment_id, widget_data)
+    integration_citation = _computed_integration_citation(assessment_id, widget_data, attribution)
     for metric_label, metric_value in metrics:
         rows.append(
             _base_row(
-                module_id=module_id,
-                module_name=module_name,
-                module_instance_id=module_instance_id,
+                assessment_id=assessment_id,
+                assessment_name=assessment_name,
+                assessment_instance_id=assessment_instance_id,
                 stage_id=stage_id,
                 stage_title=stage_title,
                 entity_type="computed_result",
@@ -420,7 +420,7 @@ def _build_widget_rows(
     return rows
 
 
-def _computed_overview_metrics(module_id: str, widget_data: dict[str, Any]) -> list[tuple[str, Any]]:
+def _computed_overview_metrics(assessment_id: str, widget_data: dict[str, Any]) -> list[tuple[str, Any]]:
     result = widget_data.get("result") if isinstance(widget_data.get("result"), dict) else {}
     if not result:
         # Safe fallback: only top-level scalar outputs, never nested input payloads.
@@ -431,7 +431,7 @@ def _computed_overview_metrics(module_id: str, widget_data: dict[str, Any]) -> l
             and _has_scalar_value(value)
         ]
 
-    if module_id == "lcoe_model":
+    if assessment_id == "lcoe_model":
         currency = result.get("currency") or "USD"
         raw_lcoe = result.get("lcoe")
         try:
@@ -448,7 +448,7 @@ def _computed_overview_metrics(module_id: str, widget_data: dict[str, Any]) -> l
         ]
         return [(label, value) for label, value in metrics if _has_scalar_value(value)]
 
-    if module_id == "carbon_model":
+    if assessment_id == "carbon_model":
         metrics = [
             ("Net ERs", _fmt_number_with_unit(result.get("net_er_tco2e"), "tCO2e/yr")),
             ("Baseline Emissions", _fmt_number_with_unit(result.get("baseline_emissions_tco2e"), "tCO2e/yr")),
@@ -460,7 +460,7 @@ def _computed_overview_metrics(module_id: str, widget_data: dict[str, Any]) -> l
         ]
         return [(label, value) for label, value in metrics if _has_scalar_value(value)]
 
-    if module_id == "solar_estimate":
+    if assessment_id == "solar_estimate":
         metrics = [
             ("Annual AC Energy", _fmt_number_with_unit(result.get("ac_annual"), "kWh/yr")),
             ("Capacity Factor", _fmt_number_with_unit(result.get("capacity_factor"), "%")),
@@ -479,15 +479,15 @@ def _computed_overview_metrics(module_id: str, widget_data: dict[str, Any]) -> l
 
 
 def _computed_integration_citation(
-    module_id: str,
+    assessment_id: str,
     widget_data: dict[str, Any],
     attribution: DecisionLogAttribution,
 ) -> str:
     citations: list[str] = []
 
-    registry = get_module_registry()
-    module = registry.get_module(module_id)
-    manifest = module.manifest if module is not None else None
+    registry = get_assessment_registry()
+    assessment = registry.get_assessment(assessment_id)
+    manifest = assessment.manifest if assessment is not None else None
     adapter_bindings = manifest.adapter_bindings if manifest is not None else {}
     adapter_labels = attribution.adapter_labels
     widget_detail_labels = attribution.widget_detail_labels
@@ -526,12 +526,12 @@ def _adapter_citation(adapter_id: str, role: str, adapter_labels: dict[str, str]
     return f"Adapter ({role}): {adapter_id}"
 
 
-def _decision_log_attribution_for_module(module_id: str) -> DecisionLogAttribution:
-    registry = get_module_registry()
-    module = registry.get_module(module_id)
-    if module is None:
+def _decision_log_attribution_for_assessment(assessment_id: str) -> DecisionLogAttribution:
+    registry = get_assessment_registry()
+    assessment = registry.get_assessment(assessment_id)
+    if assessment is None:
         return DecisionLogAttribution()
-    return module.manifest.decision_log_attribution
+    return assessment.manifest.decision_log_attribution
 
 
 def _classify_record_source(
@@ -602,9 +602,9 @@ def _fmt_number_with_unit(value: Any, unit: str) -> str | None:
 
 def _base_row(
     *,
-    module_id: str,
-    module_name: str,
-    module_instance_id: str,
+    assessment_id: str,
+    assessment_name: str,
+    assessment_instance_id: str,
     stage_id: str,
     stage_title: str,
     entity_type: str,
@@ -620,9 +620,9 @@ def _base_row(
     final_approval: dict[str, Any],
 ) -> dict[str, Any]:
     return {
-        "module": module_name or module_id,
-        "module_id": module_id,
-        "module_instance_id": module_instance_id,
+        "assessment": assessment_name or assessment_id,
+        "assessment_id": assessment_id,
+        "assessment_instance_id": assessment_instance_id,
         "stage": stage_title,
         "stage_id": stage_id,
         "entity_type": entity_type,
@@ -738,7 +738,7 @@ def _classify_item_source(
     if "user" in derivation or "provided" in derivation:
         return ("User Input", "—")
     if "template" in derivation:
-        return ("Prior Module Output", _detail("—"))
+        return ("Prior Assessment Output", _detail("—"))
     if any(_is_external_source(source) for source in sources):
         return ("External Research", _detail(references or "—"))
     if any(_is_internal_source(source) for source in sources):
@@ -784,8 +784,8 @@ def _source_references(sources: list[Any]) -> str:
 def _event_to_history_row(event: DecisionEvent) -> dict[str, Any]:
     payload = event.payload_json or {}
     return {
-        "module_id": event.module_id,
-        "module_instance_id": str(event.module_instance_id),
+        "assessment_id": event.assessment_id,
+        "assessment_instance_id": str(event.assessment_instance_id),
         "stage_id": event.stage_id or "",
         "event": event.event_type.replace("_", " ").title(),
         "entity_type": event.entity_type.replace("_", " ").title(),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules import get_module_registry
+from app.assessments import get_assessment_registry
 from app.plans.base import BasePlanHandler, PlanDefinition
 from app.services.project_plan import ProjectPlanService
 
@@ -35,16 +35,16 @@ class ProjectPlanHandler(BasePlanHandler):
         initiative,
         chat_history: list | None = None,
     ) -> list[dict]:
-        registry = get_module_registry()
+        registry = get_assessment_registry()
 
         if initiative.selected_tools:
             selected = []
-            for module_id in initiative.selected_tools:
-                module = registry.get_module(module_id)
-                if module:
+            for assessment_id in initiative.selected_tools:
+                assessment = registry.get_assessment(assessment_id)
+                if assessment:
                     selected.append(
                         {
-                            "tool": module.definition.to_dict(),
+                            "tool": assessment.definition.to_dict(),
                             "confidence": 1.0,
                             "recommended": True,
                         }
@@ -61,18 +61,18 @@ class ProjectPlanHandler(BasePlanHandler):
 
         await await_lightweight_readiness(initiative.id)
 
-        recommendations = registry.recommend_modules(
+        recommendations = registry.recommend_assessments(
             project_description=initiative.project_description or initiative.title or "",
             project_type=initiative.project_type,
         )
 
         return [
             {
-                "tool": module.definition.to_dict(),
+                "tool": assessment.definition.to_dict(),
                 "confidence": confidence,
                 "recommended": confidence >= 0.35,
             }
-            for module, confidence in recommendations
+            for assessment, confidence in recommendations
         ]
 
     async def generate_plan(
@@ -94,18 +94,18 @@ class ProjectPlanHandler(BasePlanHandler):
     def build_structure_widget_data(self, structure: list[dict]) -> dict:
         recommended_count = len([item for item in structure if item.get("recommended")])
         return {
-            "title": "Recommended Framework Modules",
+            "title": "Recommended Framework Assessments",
             "subtitle": (
-                "I've mapped the modules that look most relevant for this project. Remove any "
+                "I've mapped the assessments that look most relevant for this project. Remove any "
                 "that do not fit, then confirm to set up the framework plan."
             ),
             "pendingTitle": "Building your framework...",
             "pendingSubtitle": (
-                f"Setting up {recommended_count or len(structure)} recommended module"
+                f"Setting up {recommended_count or len(structure)} recommended assessment"
                 f"{'' if (recommended_count or len(structure)) == 1 else 's'}"
             ),
             "successMessage": "Framework generated. View it in the Framework tab.",
-            "footerHint": "Remove modules above or request changes in chat",
-            "confirmLabel": "Confirm Framework Modules",
+            "footerHint": "Remove assessments above or request changes in chat",
+            "confirmLabel": "Confirm Framework Assessments",
             "recommendations": structure,
         }

@@ -42,9 +42,9 @@ function formatRelativeTime(dateString: string): string {
   });
 }
 
-function getGeneratedModuleCount(project: Initiative): number {
-  if (typeof project.generated_modules_count === 'number') {
-    return project.generated_modules_count;
+function getGeneratedAssessmentCount(project: Initiative): number {
+  if (typeof project.generated_assessments_count === 'number') {
+    return project.generated_assessments_count;
   }
   if (!project.deliverables) return 0;
   return Object.keys(project.deliverables).length;
@@ -63,7 +63,7 @@ export function ProjectCard({
   const [currentIcon, setCurrentIcon] = useState(project.icon);
 
   const title = project.title || 'New Project';
-  const generatedModuleCount = getGeneratedModuleCount(project);
+  const generatedAssessmentCount = getGeneratedAssessmentCount(project);
   const lastModified = formatRelativeTime(project.updated_at || project.created_at);
   const isShared = !!project.shared_role;
   const canDelete = !isShared;
@@ -214,10 +214,10 @@ export function ProjectCard({
         {/* Stats row */}
         <div className="-mx-5 px-5 flex items-center justify-between text-xs text-text-tertiary pt-4 mt-1">
           <div className="flex items-center gap-3">
-            {generatedModuleCount > 0 && (
+            {generatedAssessmentCount > 0 && (
               <span className="flex items-center gap-1">
                 <Layers className="w-3.5 h-3.5" />
-                {generatedModuleCount} module{generatedModuleCount !== 1 ? 's' : ''}
+                {generatedAssessmentCount} assessment{generatedAssessmentCount !== 1 ? 's' : ''}
               </span>
             )}
           </div>

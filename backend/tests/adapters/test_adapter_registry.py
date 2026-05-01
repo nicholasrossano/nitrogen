@@ -42,7 +42,7 @@ def test_adapter_definitions_have_required_metadata() -> None:
         assert definition.description
         assert isinstance(definition.input_schema, dict)
         assert isinstance(definition.output_schema, dict)
-        assert definition.visibility in {"internal", "module_bound", "exposed"}
+        assert definition.visibility in {"internal", "assessment_bound", "exposed"}
 
 
 @pytest.mark.asyncio

@@ -58,9 +58,9 @@ For general research questions that go BEYOND the project's own documents (e.g. 
 
 For straightforward factual lookups like geographic coordinates, city/country names, dates, or unit conversions, prefer search_web_sources only. Scholarly literature is usually unnecessary.
 
-Calculator modules (LCOE, Carbon, Solar) now live in the editor workspace panel. When the user asks to model project economics or emissions, encourage them to open the relevant module from the workspace — do NOT attempt to run the model inline.
+Calculator assessments (LCOE, Carbon, Solar) now live in the editor workspace panel. When the user asks to model project economics or emissions, encourage them to open the relevant assessment from the workspace — do NOT attempt to run the model inline.
 
-Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia", "change tilt to 20°"). Combine with search tools (scholarly + web) to ground the proposal in evidence. This supports the editor module's investigate → propose → confirm flow. When the user asks for a better, alternative, or different value, the proposal MUST differ from the current value shown in the model inputs.
+Call propose_input_value when the user asks to investigate, estimate, research, or help determine a value for a SPECIFIC model input field (e.g. "what should net capacity be?", "investigate Total CAPEX", "estimate capacity factor for solar PV in Cambodia", "change tilt to 20°"). Combine with search tools (scholarly + web) to ground the proposal in evidence. This supports the editor assessment's investigate → propose → confirm flow. When the user asks for a better, alternative, or different value, the proposal MUST differ from the current value shown in the model inputs.
 
 Call propose_template_value when the user message contains a [TEMPLATE_CONTEXT] block — this means they are investigating a template/form requirement. ALWAYS combine with search_scholarly_literature AND search_web_sources to ground the answer in evidence. Extract the requirement label, field type, and category from the context block.
 
@@ -71,7 +71,7 @@ Call NEITHER search tool only when:
 When in doubt, call both search tools. More context is better than less.
 
 {model_inputs_context}
-{module_context}
+{assessment_context}
 {project_context}
 
 Do not produce any text — only make tool calls (or no calls)."""
@@ -245,7 +245,7 @@ class ChatService:
         onboarding_mode: bool = False,
         orchestration_mode: bool = False,
         field_context: dict[str, Any] | None = None,
-        module_context: dict[str, Any] | None = None,
+        assessment_context: dict[str, Any] | None = None,
     ):
         from app.capabilities.registry import CapabilityRoute, CapabilityToolContext
 
@@ -261,7 +261,7 @@ class ChatService:
             initiative_id=initiative_id,
             onboarding_mode=onboarding_mode,
             has_field_context=bool(field_context),
-            has_module_context=bool(module_context),
+            has_assessment_context=bool(assessment_context),
         )
 
     def _get_tool_list(
@@ -271,7 +271,7 @@ class ChatService:
         onboarding_mode: bool = False,
         orchestration_mode: bool = False,
         field_context: dict[str, Any] | None = None,
-        module_context: dict[str, Any] | None = None,
+        assessment_context: dict[str, Any] | None = None,
     ) -> list[dict]:
         """Return OpenAI tool definitions for the current chat turn context."""
         from app.capabilities.registry import get_capability_registry
@@ -282,7 +282,7 @@ class ChatService:
                 onboarding_mode=onboarding_mode,
                 orchestration_mode=orchestration_mode,
                 field_context=field_context,
-                module_context=module_context,
+                assessment_context=assessment_context,
             )
         )
 
@@ -295,7 +295,7 @@ class ChatService:
         project_context: str | None = None,
         tool_hint: str | None = None,
         model_inputs_context: str | None = None,
-        module_context: dict[str, Any] | None = None,
+        assessment_context: dict[str, Any] | None = None,
         field_context: dict[str, Any] | None = None,
         on_research_step: ResearchStepCallback | None = None,
         initiative_id: str | None = None,
@@ -317,7 +317,7 @@ class ChatService:
             field_name=(field_context or {}).get("field_name"),
             has_field_context=bool(field_context),
             has_model_inputs_context=bool(model_inputs_context),
-            has_module_context=bool(module_context),
+            has_assessment_context=bool(assessment_context),
             tool_hint=tool_hint,
             initiative_id=initiative_id,
         )
@@ -369,7 +369,7 @@ class ChatService:
                 user_message,
                 history,
                 model_inputs_context=model_inputs_context,
-                module_context=module_context,
+                assessment_context=assessment_context,
                 project_context=project_context,
                 initiative_id=initiative_id,
             )
@@ -528,7 +528,7 @@ class ChatService:
         requires_distinct_proposal = self._requires_distinct_proposal(user_message, field_context)
         planner_candidate_widget_data: dict[str, Any] | None = None
 
-        # Modules (LCOE / carbon / solar) live in the editor workspace — not chat.
+        # Assessments (LCOE / carbon / solar) live in the editor workspace — not chat.
         # If the planner calls a model tool, acknowledge it but do not execute inline.
         for fn_name, args in parsed_calls:
             if fn_name in ("run_lcoe", "run_carbon", "run_solar"):
@@ -666,14 +666,14 @@ class ChatService:
             else:
                 count_label = 0
             if count_label > 0:
-                module_label = "module" if count_label == 1 else "modules"
+                assessment_label = "assessment" if count_label == 1 else "assessments"
                 content = (
-                    f"I've mapped the {count_label} {module_label} that look most relevant for this "
+                    f"I've mapped the {count_label} {assessment_label} that look most relevant for this "
                     "project. Review them below and confirm the framework plan you want to start with."
                 )
             else:
                 content = (
-                    "I've mapped the framework modules that look most relevant for this project. "
+                    "I've mapped the framework assessments that look most relevant for this project. "
                     "Review them below and confirm the framework plan you want to start with."
                 )
         elif is_propose_request:
@@ -688,17 +688,17 @@ class ChatService:
             )
         else:
             combined_context = project_context or ""
-            if module_context:
-                module_id = module_context.get("module_id") or module_context.get("moduleId") or "unknown"
-                module_title = module_context.get("title") or ""
-                module_instance = module_context.get("instance_id") or module_context.get("instanceId") or ""
-                module_lines = [f"- module_id: {module_id}"]
-                if module_title:
-                    module_lines.append(f"- title: {module_title}")
-                if module_instance:
-                    module_lines.append(f"- instance_id: {module_instance}")
-                module_block = "## Active Module Workspace\n" + "\n".join(module_lines)
-                combined_context = f"{combined_context}\n\n{module_block}" if combined_context else module_block
+            if assessment_context:
+                assessment_id = assessment_context.get("assessment_id") or assessment_context.get("assessmentId") or "unknown"
+                assessment_title = assessment_context.get("title") or ""
+                assessment_instance = assessment_context.get("instance_id") or assessment_context.get("instanceId") or ""
+                assessment_lines = [f"- assessment_id: {assessment_id}"]
+                if assessment_title:
+                    assessment_lines.append(f"- title: {assessment_title}")
+                if assessment_instance:
+                    assessment_lines.append(f"- instance_id: {assessment_instance}")
+                assessment_block = "## Active Assessment Workspace\n" + "\n".join(assessment_lines)
+                combined_context = f"{combined_context}\n\n{assessment_block}" if combined_context else assessment_block
             if model_inputs_context:
                 combined_context = f"{combined_context}\n\n## Current Model Inputs\n{model_inputs_context}" if combined_context else f"## Current Model Inputs\n{model_inputs_context}"
             content = await self._generate_answer(
@@ -1183,7 +1183,7 @@ class ChatService:
         user_message: str,
         history: list[dict[str, str]],
         model_inputs_context: str | None = None,
-        module_context: dict[str, Any] | None = None,
+        assessment_context: dict[str, Any] | None = None,
         project_context: str | None = None,
         initiative_id: str | None = None,
     ) -> list:
@@ -1195,17 +1195,17 @@ class ChatService:
         if model_inputs_context:
             inputs_block = f"\nCurrent model inputs state:\n{model_inputs_context}\n"
 
-        module_block = ""
-        if module_context:
-            module_id = module_context.get("module_id") or module_context.get("moduleId") or "unknown"
-            module_title = module_context.get("title") or ""
-            module_instance = module_context.get("instance_id") or module_context.get("instanceId") or ""
-            details = [f"- module_id: {module_id}"]
-            if module_title:
-                details.append(f"- title: {module_title}")
-            if module_instance:
-                details.append(f"- instance_id: {module_instance}")
-            module_block = "\nActive module workspace context:\n" + "\n".join(details) + "\n"
+        assessment_block = ""
+        if assessment_context:
+            assessment_id = assessment_context.get("assessment_id") or assessment_context.get("assessmentId") or "unknown"
+            assessment_title = assessment_context.get("title") or ""
+            assessment_instance = assessment_context.get("instance_id") or assessment_context.get("instanceId") or ""
+            details = [f"- assessment_id: {assessment_id}"]
+            if assessment_title:
+                details.append(f"- title: {assessment_title}")
+            if assessment_instance:
+                details.append(f"- instance_id: {assessment_instance}")
+            assessment_block = "\nActive assessment workspace context:\n" + "\n".join(details) + "\n"
 
         project_block = ""
         if project_context:
@@ -1213,7 +1213,7 @@ class ChatService:
 
         planning_prompt = PLANNING_SYSTEM_PROMPT.format(
             model_inputs_context=inputs_block,
-            module_context=module_block,
+            assessment_context=assessment_block,
             project_context=project_block,
         )
         messages: list[dict] = [{"role": "system", "content": planning_prompt}]
@@ -1228,7 +1228,7 @@ class ChatService:
                 messages=messages,
                 tools=self._get_tool_list(
                     initiative_id=initiative_id,
-                    module_context=module_context,
+                    assessment_context=assessment_context,
                 ),
                 tool_choice="auto",
                 temperature=0,
@@ -1269,7 +1269,7 @@ class ChatService:
                         "content": (
                             "Rewrite the user's latest message as a concise search query "
                             "that captures full intent given the conversation context. "
-                            "Use confirmed project assumptions as authoritative context, "
+                            "Use validated project assumptions as authoritative context, "
                             "and include missing/needs-review assumption labels only when they "
                             "are directly relevant. Return ONLY the query, nothing else. Max 40 words."
                         ),
@@ -1564,25 +1564,25 @@ class ChatService:
     def _resolve_investigate_hint(self, field_context: dict[str, Any] | None) -> str:
         if not field_context:
             return ""
-        module_id = field_context.get("module_id")
-        if not module_id:
+        assessment_id = field_context.get("assessment_id")
+        if not assessment_id:
             model_type = field_context.get("model_type")
-            module_id = {
+            assessment_id = {
                 "lcoe": "lcoe_model",
                 "carbon": "carbon_model",
                 "solar": "solar_estimate",
             }.get(model_type)
-        if not module_id:
+        if not assessment_id:
             return ""
         try:
-            from app.modules import get_module_registry
+            from app.assessments import get_assessment_registry
 
-            module = get_module_registry().get_module(module_id)
+            assessment = get_assessment_registry().get_assessment(assessment_id)
         except Exception:
             return ""
-        if not module:
+        if not assessment:
             return ""
-        return getattr(module.manifest, "investigate_hint", "") or ""
+        return getattr(assessment.manifest, "investigate_hint", "") or ""
 
     @staticmethod
     def _format_fact_blocks(facts: list[RetrievedFact], *, max_facts: int = 6) -> str:
@@ -1858,7 +1858,7 @@ class ChatService:
         investigate_hint = self._resolve_investigate_hint(field_context)
         investigate_hint_block = ""
         if investigate_hint:
-            investigate_hint_block = f"## Module Investigate Hint\n{investigate_hint}\n\n"
+            investigate_hint_block = f"## Assessment Investigate Hint\n{investigate_hint}\n\n"
 
         distinct_instruction = ""
         current_value = self._resolve_current_value(field_context, model_inputs_context)

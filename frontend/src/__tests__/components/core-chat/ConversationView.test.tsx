@@ -3,11 +3,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ConversationView } from '@/components/core-chat/ConversationView';
 
 jest.mock('react-markdown', () => ({
-  __esModule: true,
+  __esAssessment: true,
   default: ({ children }: { children: unknown }) => <div>{children as any}</div>,
 }));
-jest.mock('remark-math', () => ({ __esModule: true, default: jest.fn() }));
-jest.mock('rehype-katex', () => ({ __esModule: true, default: jest.fn() }));
+jest.mock('remark-math', () => ({ __esAssessment: true, default: jest.fn() }));
+jest.mock('rehype-katex', () => ({ __esAssessment: true, default: jest.fn() }));
 
 describe('ConversationView', () => {
   it('forwards draft field context and model inputs context on send', () => {

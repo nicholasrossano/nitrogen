@@ -1,11 +1,11 @@
-"""Capability registry for chat, modules, adapters, and resources."""
+"""Capability registry for chat, assessments, adapters, and resources."""
 
 from dataclasses import dataclass, field
 from enum import Enum
 
 
 class CapabilityKind(str, Enum):
-    MODULE = "module"
+    MODULE = "assessment"
     ADAPTER = "adapter"
     RESOURCE = "resource"
     PROMPT = "prompt"
@@ -26,7 +26,7 @@ class CapabilityToolContext:
     initiative_id: str | None = None
     onboarding_mode: bool = False
     has_field_context: bool = False
-    has_module_context: bool = False
+    has_assessment_context: bool = False
 
 
 @dataclass
@@ -43,8 +43,8 @@ class CapabilityEntry:
     requires_initiative: bool = False
     onboarding_only: bool = False
     requires_field_context: bool = False
-    requires_module_context: bool = False
-    visibility: str = "public"  # "public" | "module_bound" | "internal"
+    requires_assessment_context: bool = False
+    visibility: str = "public"  # "public" | "assessment_bound" | "internal"
     openai_tool_def: dict | None = None
 
 
@@ -77,7 +77,7 @@ class CapabilityRegistry:
             if (not e.requires_initiative or context.initiative_id is not None)
             and (not e.onboarding_only or context.onboarding_mode)
             and (not e.requires_field_context or context.has_field_context)
-            and (not e.requires_module_context or context.has_module_context)
+            and (not e.requires_assessment_context or context.has_assessment_context)
             if e.openai_tool_def is not None
         ]
 

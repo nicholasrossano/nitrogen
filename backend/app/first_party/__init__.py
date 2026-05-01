@@ -1,2 +1,2 @@
-"""First-party Nitrogen module, adapter, and catalog registrations."""
+"""First-party Nitrogen assessment, adapter, and catalog registrations."""
 
