@@ -29,6 +29,7 @@ class _FakeExecuteResult:
 class _FakeDbSession:
     def __init__(self):
         self.added = []
+        self.assumptions: dict[uuid.UUID, SimpleNamespace] = {}
 
     def add(self, obj):
         if getattr(obj, "id", None) is None:
@@ -55,6 +56,11 @@ class _FakeDbSession:
     async def refresh(self, _obj):
         return None
 
+    async def get(self, model, obj_id):
+        if getattr(model, "__name__", "") == "Assumption":
+            return self.assumptions.get(obj_id)
+        return None
+
 
 def _collect_events(response):
     return [
@@ -73,6 +79,17 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
     fake_db = _FakeDbSession()
     initiative_id = uuid.uuid4()
     chat_id = uuid.uuid4()
+    assumption_id = uuid.uuid4()
+    fake_db.assumptions[assumption_id] = SimpleNamespace(
+        id=assumption_id,
+        initiative_id=initiative_id,
+        label="Capacity factor",
+        key="capacity_factor",
+        status="assumed",
+        value=0.3,
+        unit="%",
+        used_in_modules=["lcoe_model"],
+    )
 
     async def override_db():
         yield fake_db
@@ -80,11 +97,13 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
+        assert assumption_id is not None
         return SimpleNamespace(
             id=chat_id,
             initiative_id=initiative_id,
             compare_initiative_ids=None,
+            assumption_id=assumption_id,
         )
 
     async def fake_get_initiative_with_role(_db, _initiative_id, _user):
@@ -152,7 +171,9 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
                         "unit": "%",
                         "model_type": "lcoe",
                         "status": "assumed",
+                        "assumption_id": str(assumption_id),
                     },
+                    "assumption_id": str(assumption_id),
                     "model_inputs_context": "### LCOE Model Inputs\n- Capacity factor (field_name=capacity_factor): 0.3 % [assumed]",
                 },
             )
@@ -180,11 +201,12 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
         return SimpleNamespace(
             id=chat_id,
             initiative_id=initiative_id,
             compare_initiative_ids=None,
+            assumption_id=None,
         )
 
     async def fake_get_initiative_with_role(_db, _initiative_id, _user):
@@ -270,11 +292,12 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
         return SimpleNamespace(
             id=chat_id,
             initiative_id=initiative_id,
             compare_initiative_ids=None,
+            assumption_id=None,
         )
 
     async def fake_get_initiative_with_role(_db, _initiative_id, _user):

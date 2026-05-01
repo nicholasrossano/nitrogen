@@ -22,6 +22,7 @@ from app.config import get_settings
 from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
 from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services import module_service
+from app.models.assumption import Assumption
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
@@ -59,6 +60,28 @@ def _build_project_context(initiative: Initiative, assumptions_text: str | None 
     if assumptions_text:
         parts.append(assumptions_text)
     return "\n".join(parts) if parts else ""
+
+
+def _build_focused_assumption_context(assumption: Assumption | None) -> str:
+    if assumption is None:
+        return ""
+    status = (assumption.status or "assumed").strip().lower()
+    value = assumption.value
+    value_text = "missing" if status == "missing" else str(value)
+    unit = f" {assumption.unit}" if assumption.unit else ""
+    modules = ", ".join(assumption.used_in_modules or [])
+    lines = [
+        "## Focused Assumption",
+        "- This chat is scoped to one project assumption. Keep responses focused on it unless the user changes topic.",
+        f"- Assumption id: {assumption.id}",
+        f"- Label: {assumption.label}",
+        f"- Key: {assumption.key}",
+        f"- Status: {status}",
+        f"- Current value: {value_text}{unit}",
+    ]
+    if modules:
+        lines.append(f"- Used in modules: {modules}")
+    return "\n".join(lines)
 
 
 def _to_title_case(text: str) -> str:
@@ -200,6 +223,7 @@ class ChatStreamRequest(BaseModel):
     initiative_id: Optional[str] = None
     compare_initiative_ids: Optional[list[str]] = None
     allow_initial_project_onboarding: bool = False
+    assumption_id: Optional[str] = None
 
 
 class TitleRequest(BaseModel):
@@ -215,6 +239,7 @@ async def _get_or_create_chat(
     user_id: str,
     chat_id: Optional[str],
     initiative_id: Optional[uuid.UUID] = None,
+    assumption_id: Optional[uuid.UUID] = None,
 ) -> CoreChat:
     """Return an existing chat or create a new one."""
     if chat_id:
@@ -233,10 +258,18 @@ async def _get_or_create_chat(
             raise HTTPException(status_code=404, detail="Chat not found")
         if initiative_id and not chat.initiative_id:
             chat.initiative_id = initiative_id
-            await db.flush()
+        if assumption_id:
+            if chat.assumption_id and chat.assumption_id != assumption_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This chat is already scoped to a different assumption.",
+                )
+            if chat.assumption_id is None:
+                chat.assumption_id = assumption_id
+        await db.flush()
         return chat
 
-    chat = CoreChat(user_id=user_id, initiative_id=initiative_id)
+    chat = CoreChat(user_id=user_id, initiative_id=initiative_id, assumption_id=assumption_id)
     db.add(chat)
     await db.flush()
     return chat
@@ -263,6 +296,7 @@ async def list_chats(
             CoreChat.updated_at,
             CoreChat.compare_initiative_ids,
             CoreChat.initiative_id,
+            CoreChat.assumption_id,
             func.count(CoreChatMessage.id).label("message_count"),
         )
         .outerjoin(CoreChatMessage, CoreChatMessage.chat_id == CoreChat.id)
@@ -292,6 +326,7 @@ async def list_chats(
                 "message_count": r.message_count,
                 "compare_initiative_ids": r.compare_initiative_ids,
                 "initiative_id": str(r.initiative_id) if r.initiative_id else None,
+                "assumption_id": str(r.assumption_id) if r.assumption_id else None,
             }
             for r in rows
             if r.message_count > 0
@@ -331,6 +366,7 @@ async def get_chat_messages(
     return {
         "chat_id": str(chat.id),
         "title": chat.title,
+        "assumption_id": str(chat.assumption_id) if chat.assumption_id else None,
         "messages": [
             {
                 "id": str(m.id),
@@ -492,6 +528,8 @@ async def chat_stream(
         try:
             # Resolve initiative_id for chat scoping.
             resolved_initiative_id: uuid.UUID | None = None
+            requested_assumption_id: uuid.UUID | None = None
+            focused_assumption: Assumption | None = None
             if data.initiative_id:
                 try:
                     resolved_initiative, _ = await get_initiative_with_role(
@@ -501,11 +539,42 @@ async def chat_stream(
                 except HTTPException:
                     # Keep session unscoped; access is enforced below where needed.
                     pass
+            raw_assumption_id = data.assumption_id
+            if raw_assumption_id is None and data.field_context and data.field_context.assumption_id:
+                raw_assumption_id = str(data.field_context.assumption_id)
+            if raw_assumption_id:
+                try:
+                    requested_assumption_id = uuid.UUID(raw_assumption_id)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="Invalid assumption_id format") from exc
+                focused_assumption = await db.get(Assumption, requested_assumption_id)
+                if focused_assumption is None:
+                    raise HTTPException(status_code=404, detail="Assumption not found")
+                if resolved_initiative_id and focused_assumption.initiative_id != resolved_initiative_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Assumption does not belong to the selected initiative.",
+                    )
 
             # Persist chat + user message upfront
             chat = await _get_or_create_chat(
-                db, user.uid, data.chat_id, initiative_id=resolved_initiative_id,
+                db,
+                user.uid,
+                data.chat_id,
+                initiative_id=resolved_initiative_id,
+                assumption_id=requested_assumption_id,
             )
+            if chat.assumption_id and focused_assumption is None:
+                focused_assumption = await db.get(Assumption, chat.assumption_id)
+            if (
+                focused_assumption is not None
+                and chat.initiative_id is not None
+                and focused_assumption.initiative_id != chat.initiative_id
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Focused assumption does not belong to this chat initiative.",
+                )
 
             user_msg = CoreChatMessage(
                 chat_id=chat.id,
@@ -555,6 +624,7 @@ async def chat_stream(
                 has_model_inputs_context=bool(data.model_inputs_context),
                 has_module_context=bool(data.module_context),
                 allow_initial_project_onboarding=data.allow_initial_project_onboarding,
+                has_assumption_context=bool(focused_assumption),
             )
 
             # --- Compare mode ---
@@ -667,6 +737,13 @@ async def chat_stream(
                             project_context = _build_project_context(verified_initiative, assumptions_text)
 
             supplemental_project_context = (data.project_context or "").strip()
+            focused_assumption_context = _build_focused_assumption_context(focused_assumption)
+            if focused_assumption_context:
+                project_context = (
+                    f"{project_context}\n\n{focused_assumption_context}"
+                    if project_context
+                    else focused_assumption_context
+                )
             if supplemental_project_context:
                 project_context = (
                     f"{project_context}\n\n## Active Deep Dive Context\n{supplemental_project_context}"

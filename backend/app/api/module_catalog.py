@@ -362,7 +362,7 @@ async def update_tool_inputs(
             stage_id="tool_inputs",
             stage_data=stage_data,
             actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
-            status="confirmed",
+            status="validated",
         )
     
     await db.commit()

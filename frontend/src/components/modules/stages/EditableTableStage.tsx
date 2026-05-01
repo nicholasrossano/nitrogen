@@ -16,6 +16,7 @@ import {
 } from '@/first-party/modelInputs';
 
 interface Props {
+  initiativeId?: string;
   instanceId: string;
   moduleId: string;
   stageId: string;
@@ -147,7 +148,7 @@ function TableRow({
 
   const name = String(item.content[nameField?.name ?? 'variable'] ?? '');
   const unit = unitField ? String(item.content[unitField.name] ?? '') : '';
-  const status: string = item.content.status ?? (item.origin === 'inferred' ? 'inferred' : '');
+  const status: string = item.content.status ?? (item.origin === 'inferred' ? 'extracted' : '');
   const explicitFieldName = String(item.content.field_name ?? '');
   const normalizedFieldName = explicitFieldName || normalizeKey(name);
   const rowFieldType = String(item.content.field_type ?? (valueField?.field_type ?? 'text'));
@@ -159,8 +160,7 @@ function TableRow({
 
   const STATUS_STYLES: Record<string, string> = {
     validated: 'bg-green-50 text-green-700',
-    confirmed: 'bg-green-50 text-green-700',
-    inferred: 'bg-blue-50 text-blue-700',
+    extracted: 'bg-blue-50 text-blue-700',
     assumed: 'bg-amber-50 text-amber-700',
     missing: 'bg-red-50 text-red-600',
   };
@@ -307,6 +307,7 @@ function AddRowForm({
 // ── Main component ────────────────────────────────────────────────────────
 
 export function EditableTableStage({
+  initiativeId,
   instanceId,
   moduleId,
   stageId,
@@ -522,7 +523,7 @@ export function EditableTableStage({
       const incomingValue = detail.value;
       const currentValue = row.content?.value;
       const isSameValue = String(currentValue ?? '') === String(incomingValue ?? '');
-      const isAlreadyConfirmed = row.content?.status === 'validated' || row.content?.status === 'confirmed';
+      const isAlreadyConfirmed = row.content?.status === 'validated';
       if (isSameValue && isAlreadyConfirmed) return;
 
       const nextContent = {
@@ -557,15 +558,16 @@ export function EditableTableStage({
   }, [instanceId, stageId, effectiveItems, onChanged, proposalModelType, readOnly, workflowVersion]);
 
   const investigate = useCallback(
-    (
+    async (
       label: string,
       status: string,
       fieldName: string,
       currentValue: unknown,
       unit: string,
+      rowAssumptionId?: unknown,
     ) => {
     const text =
-      status === 'inferred'
+      status === 'extracted'
         ? `Can you investigate the value for ${label} and propose a specific alternative with supporting evidence?`
         : status === 'assumed'
           ? `Can you research and propose a better value for ${label} based on available data for this project?`
@@ -583,6 +585,55 @@ export function EditableTableStage({
         status: status || null,
       };
 
+      let resolvedAssumptionId =
+        typeof rowAssumptionId === 'string' && rowAssumptionId.trim().length > 0
+          ? rowAssumptionId
+          : null;
+      if (!resolvedAssumptionId && initiativeId) {
+        try {
+          const resolved = await api.resolveAssumption(initiativeId, moduleId, fieldName, instanceId);
+          resolvedAssumptionId = resolved.found ? resolved.assumption?.id ?? null : null;
+        } catch {
+          resolvedAssumptionId = null;
+        }
+      }
+      if (!resolvedAssumptionId && initiativeId) {
+        try {
+          const created = await api.createAssumption(initiativeId, {
+            key: fieldName,
+            label,
+            value: currentValue ?? null,
+            unit: unit || null,
+            source_type: 'module',
+            source_reference: {
+              module_id: moduleId,
+              module_instance_id: instanceId,
+              stage_id: stageId,
+              field_name: fieldName,
+            },
+            status: currentValue === null || currentValue === undefined || currentValue === '' ? 'missing' : 'assumed',
+            used_in_modules: [moduleId],
+          });
+          resolvedAssumptionId = created.id;
+        } catch {
+          resolvedAssumptionId = null;
+        }
+      }
+      if (resolvedAssumptionId) {
+        fieldContext.assumption_id = resolvedAssumptionId;
+        window.dispatchEvent(new CustomEvent('nitrogen:open-assumption-chat', {
+          detail: {
+            assumptionId: resolvedAssumptionId,
+            title: label,
+            text,
+            toolHint: moduleId,
+            fieldContext,
+            modelInputsContext: buildModelInputsContext('Module', modelInputs, fieldContext),
+          },
+        }));
+        return;
+      }
+
       window.dispatchEvent(new CustomEvent('nitrogen:draft', {
         detail: {
           text,
@@ -593,7 +644,7 @@ export function EditableTableStage({
         },
       }));
     },
-    [modelInputs, moduleId, proposalModelType],
+    [initiativeId, instanceId, modelInputs, moduleId, proposalModelType],
   );
 
   const handleDelete = useCallback(
@@ -788,7 +839,14 @@ export function EditableTableStage({
                       setHoveredInvestigateRow(null);
                       setOverInteractive(false);
                     }}
-                    onInvestigate={() => investigate(variableLabel || fieldName, status, fieldName, currentValue, unit)}
+                    onInvestigate={() => investigate(
+                      variableLabel || fieldName,
+                      status,
+                      fieldName,
+                      currentValue,
+                      unit,
+                      item.content?.assumption_id,
+                    )}
                   />
                 );
               })()

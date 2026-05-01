@@ -569,10 +569,11 @@ async def confirm_stage(
         db,
         initiative_id=inst.initiative_id,
         module_id=module.definition.id,
+        module_instance_id=inst.id,
         stage_id=stage_id,
         stage_data=stage_state.get("data") or {},
         actor=AssumptionActor(user_id=confirmed_by, email=confirmed_by_email or confirmed_by),
-        status="confirmed",
+        status="validated",
     )
 
     _invalidate_downstream(state, module, stage_id)

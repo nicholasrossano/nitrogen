@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-AssumptionStatus = Literal["confirmed", "inferred", "assumed", "missing"]
+AssumptionStatus = Literal["validated", "extracted", "assumed", "missing"]
 AssumptionSourceType = Literal[
     "extraction",
     "user_input",
@@ -41,7 +41,7 @@ class AssumptionCreate(BaseModel):
     value_type: AssumptionValueType | None = Field(default=None, description="Value type override.")
     source_type: AssumptionSourceType = Field(default="user_input", description="Creation source.")
     source_reference: dict[str, Any] | None = Field(default=None, description="Creation provenance.")
-    status: AssumptionStatus = Field(default="confirmed", description="Initial status.")
+    status: AssumptionStatus = Field(default="validated", description="Initial status.")
     used_in_modules: list[str] = Field(default_factory=list, description="Modules using the assumption.")
     notes: str | None = Field(default=None, description="Optional notes.")
 
@@ -80,13 +80,13 @@ class AssumptionSummaryItem(BaseModel):
 
 class AssumptionSummary(BaseModel):
     total: int = Field(description="Total tracked active assumptions.")
-    confirmed: int = Field(description="Confirmed assumption count.")
-    inferred: int = Field(description="Inferred assumption count.")
+    validated: int = Field(description="Validated assumption count.")
+    extracted: int = Field(description="Extracted assumption count.")
     assumed: int = Field(description="Assumed assumption count.")
     missing: int = Field(description="Missing assumption count.")
     top_attention: list[AssumptionSummaryItem] = Field(
         default_factory=list,
-        description="Top non-confirmed assumptions needing attention.",
+        description="Top non-validated assumptions needing attention.",
     )
 
 
@@ -94,6 +94,14 @@ class AssumptionRefreshResponse(BaseModel):
     created: int = Field(description="Number of assumptions created.")
     updated: int = Field(description="Number of assumptions updated.")
     assumptions: list[AssumptionResponse] = Field(description="Assumptions touched by refresh.")
+
+
+class AssumptionResolveResponse(BaseModel):
+    found: bool = Field(description="Whether a matching assumption was resolved.")
+    assumption: AssumptionResponse | None = Field(
+        default=None,
+        description="Resolved assumption when one exists for the module field.",
+    )
 
 
 class AssumptionCommentCreate(BaseModel):

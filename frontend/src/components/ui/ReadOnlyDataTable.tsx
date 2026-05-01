@@ -24,6 +24,7 @@ interface ReadOnlyDataTableProps<Row extends Record<string, any>> {
   rows: Row[];
   pageSize?: number;
   emptyState: ReactNode;
+  onRowClick?: (row: Row) => void;
 }
 
 export function ReadOnlyDataTable<Row extends Record<string, any>>({
@@ -31,6 +32,7 @@ export function ReadOnlyDataTable<Row extends Record<string, any>>({
   rows,
   pageSize = 20,
   emptyState,
+  onRowClick,
 }: ReadOnlyDataTableProps<Row>) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -63,7 +65,11 @@ export function ReadOnlyDataTable<Row extends Record<string, any>>({
             </thead>
             <tbody className={dataTableBodyClass}>
               {pagedRows.map((row, rowIndex) => (
-                <tr key={`${rowIndex}-${String(row.id ?? row.entity_id ?? row.module_instance_id ?? 'row')}`}>
+                <tr
+                  key={`${rowIndex}-${String(row.id ?? row.entity_id ?? row.module_instance_id ?? 'row')}`}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={onRowClick ? 'cursor-pointer hover:bg-black/[0.02]' : undefined}
+                >
                   {columns.map((column) => (
                     <td
                       key={String(column.key)}

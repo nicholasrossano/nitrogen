@@ -34,7 +34,9 @@ class UpdateInputRequest(BaseModel):
 
 
 def _normalize_input_status(status: str) -> str:
-    return "validated" if status == "confirmed" else status
+    if status == "inferred":
+        return "extracted"
+    return status
 
 
 @router.post("/lcoe/recalculate")
