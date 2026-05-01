@@ -18,7 +18,7 @@ from app.assumptions.config import (
 )
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.models.assumption import Assumption, AssumptionComment
+from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
@@ -26,8 +26,8 @@ from app.models.project_material import ProjectMaterial
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-ATTENTION_STATUSES = {"missing", "inferred", "assumed"}
-ACTIVE_STATUSES = {"confirmed", "inferred", "assumed", "missing"}
+ATTENTION_STATUSES = {"missing", "extracted", "assumed"}
+ACTIVE_STATUSES = {"validated", "extracted", "assumed", "missing"}
 SYSTEM_ACTOR = "system"
 MAX_PROMPT_ASSUMPTIONS = 12
 MAX_EXTRACTION_CHARS = 14000
@@ -67,7 +67,9 @@ def _definition_for_module_field(field_key: str, module_id: str) -> AssumptionDe
 
 
 def _module_ids_from_initiative(initiative: Initiative) -> list[str]:
-    modules: set[str] = set(initiative.selected_tools or [])
+    # Drive assumption requirements from active module instances, not planned tools.
+    # This prevents static required placeholders from appearing before a module exists.
+    modules: set[str] = set()
     for inst in initiative.module_instances or []:
         if not getattr(inst, "archived", False):
             modules.add(inst.module_id)
@@ -92,12 +94,12 @@ def _actor_user_id(actor: AssumptionActor | None) -> str | None:
 def normalize_assumption_status(status: str | None, *, default: str = "assumed") -> str:
     normalized = (status or "").strip().lower()
     mapping = {
-        "validated": "confirmed",
-        "confirmed": "confirmed",
-        "inferred": "inferred",
+        "validated": "validated",
+        "inferred": "extracted",
+        "extracted": "extracted",
         "assumed": "assumed",
         "missing": "missing",
-        "needs_review": "inferred",
+        "needs_review": "extracted",
         "rejected": "rejected",
     }
     return mapping.get(normalized, default)
@@ -123,17 +125,23 @@ async def list_assumptions(
     source_type: str | None = None,
     module: str | None = None,
 ) -> list[Assumption]:
+    normalized_status_filter = normalize_assumption_status(status, default="")
     stmt = select(Assumption).where(
         Assumption.initiative_id == initiative_id,
         Assumption.status != "rejected",
     )
-    if status:
-        stmt = stmt.where(Assumption.status == status)
+    if normalized_status_filter:
+        if normalized_status_filter == "extracted":
+            stmt = stmt.where(Assumption.status.in_(["extracted", "inferred", "needs_review"]))
+        else:
+            stmt = stmt.where(Assumption.status == normalized_status_filter)
     if source_type:
         stmt = stmt.where(Assumption.source_type == source_type)
     stmt = stmt.order_by(Assumption.updated_at.desc(), Assumption.created_at.desc())
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
+    for row in rows:
+        row.status = normalize_assumption_status(row.status, default="assumed")
     if module:
         rows = [row for row in rows if module in (row.used_in_modules or [])]
     return rows
@@ -143,6 +151,7 @@ async def get_assumption(db: AsyncSession, assumption_id: UUID) -> Assumption | 
     assumption = await db.get(Assumption, assumption_id)
     if assumption is None or normalize_assumption_status(assumption.status) == "rejected":
         return None
+    assumption.status = normalize_assumption_status(assumption.status, default="assumed")
     return assumption
 
 
@@ -193,7 +202,7 @@ async def upsert_assumption(
     used_in_modules: list[str] | None = None,
     actor: AssumptionActor | None = None,
     notes: str | None = None,
-    replace_confirmed: bool = False,
+    replace_validated: bool = False,
 ) -> tuple[Assumption, bool]:
     normalized_key = normalize_assumption_key(key)
     definition = _definition_for_key(normalized_key)
@@ -212,7 +221,7 @@ async def upsert_assumption(
     now = datetime.now(timezone.utc)
 
     if existing:
-        if existing.status == "confirmed" and not replace_confirmed and source_type in {"extraction", "model_candidate"}:
+        if existing.status == "validated" and not replace_validated and source_type in {"extraction", "model_candidate"}:
             existing.used_in_modules = sorted(set(existing.used_in_modules or []) | set(modules))
             existing.updated_at = now
             return existing, False
@@ -323,10 +332,10 @@ def apply_assumptions_to_items(
     by_key = {
         normalize_assumption_key(a.get("key", "")): a
         for a in assumptions
-        if normalize_assumption_status(a.get("status")) in {"confirmed", "inferred", "assumed"}
+        if normalize_assumption_status(a.get("status")) in {"validated", "extracted", "assumed"}
     }
     for assumption in assumptions:
-        if normalize_assumption_status(assumption.get("status")) not in {"confirmed", "inferred", "assumed"}:
+        if normalize_assumption_status(assumption.get("status")) not in {"validated", "extracted", "assumed"}:
             continue
         definition = _definition_for_key(str(assumption.get("key") or ""))
         if definition is None:
@@ -351,7 +360,7 @@ def apply_assumptions_to_items(
         if assumption.get("unit") and not content.get("unit"):
             content["unit"] = assumption.get("unit")
         normalized_status = normalize_assumption_status(assumption.get("status"))
-        content["status"] = normalized_status if normalized_status in {"confirmed", "inferred", "assumed"} else "assumed"
+        content["status"] = normalized_status if normalized_status in {"validated", "extracted", "assumed"} else "assumed"
         content["source"] = "assumption"
         content["assumption_id"] = assumption.get("id")
         content["source_reference"] = assumption.get("source_reference")
@@ -364,17 +373,19 @@ async def sync_stage_assumptions(
     *,
     initiative_id: UUID,
     module_id: str,
+    module_instance_id: UUID | None = None,
     stage_id: str,
     stage_data: dict[str, Any] | None,
     actor: AssumptionActor,
     status: str = "assumed",
-) -> list[Assumption]:
+) -> tuple[list[Assumption], dict[str, str]]:
     if not stage_data:
-        return []
+        return [], {}
     items = stage_data.get("items") if isinstance(stage_data, dict) else None
     if not isinstance(items, list):
-        return []
+        return [], {}
     touched: list[Assumption] = []
+    item_assumption_map: dict[str, str] = {}
     for item in items:
         content = item.get("content") if isinstance(item, dict) else None
         if not isinstance(content, dict):
@@ -414,10 +425,27 @@ async def sync_stage_assumptions(
             status=effective_status,
             used_in_modules=[module_id],
             actor=actor,
-            replace_confirmed=True,
+            replace_validated=True,
         )
+        binding = await upsert_assumption_binding(
+            db,
+            initiative_id=initiative_id,
+            assumption_id=assumption.id,
+            module_id=module_id,
+            module_instance_id=module_instance_id,
+            stage_id=stage_id,
+            field_name=field_key,
+            field_label=label,
+            unit=content.get("unit") or (definition.unit if definition else None),
+            value_type=value_type,
+            metadata={"variable": content.get("variable")},
+        )
+        content["assumption_id"] = str(assumption.id)
+        item_id = str(item.get("id") or "")
+        if item_id:
+            item_assumption_map[item_id] = str(binding.assumption_id)
         touched.append(assumption)
-    return touched
+    return touched, item_assumption_map
 
 
 async def sync_widget_assumptions(
@@ -425,9 +453,10 @@ async def sync_widget_assumptions(
     *,
     initiative_id: UUID,
     module_id: str,
+    module_instance_id: UUID | None = None,
     widget_data: dict[str, Any],
     actor: AssumptionActor,
-) -> list[Assumption]:
+) -> tuple[list[Assumption], dict[str, str]]:
     inputs = widget_data.get("inputs") if isinstance(widget_data, dict) else None
     if not isinstance(inputs, dict):
         return []
@@ -458,17 +487,122 @@ async def sync_widget_assumptions(
         db,
         initiative_id=initiative_id,
         module_id=module_id,
+        module_instance_id=module_instance_id,
         stage_id="widget_state",
         stage_data=stage_data,
         actor=actor,
-        status="confirmed",
+        status="validated",
     )
+
+
+async def upsert_assumption_binding(
+    db: AsyncSession,
+    *,
+    initiative_id: UUID,
+    assumption_id: UUID,
+    module_id: str,
+    module_instance_id: UUID | None,
+    stage_id: str | None,
+    field_name: str,
+    field_label: str | None = None,
+    unit: str | None = None,
+    value_type: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> AssumptionBinding:
+    stmt = select(AssumptionBinding).where(
+        AssumptionBinding.initiative_id == initiative_id,
+        AssumptionBinding.module_id == module_id,
+        AssumptionBinding.field_name == normalize_assumption_key(field_name),
+        AssumptionBinding.stage_id == stage_id,
+        AssumptionBinding.module_instance_id == module_instance_id,
+    )
+    existing = (await db.execute(stmt)).scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if existing:
+        existing.assumption_id = assumption_id
+        existing.field_label = field_label
+        existing.unit = unit
+        existing.value_type = value_type
+        existing.binding_metadata = metadata
+        existing.updated_at = now
+        return existing
+
+    binding = AssumptionBinding(
+        initiative_id=initiative_id,
+        assumption_id=assumption_id,
+        module_id=module_id,
+        module_instance_id=module_instance_id,
+        stage_id=stage_id,
+        field_name=normalize_assumption_key(field_name),
+        field_label=field_label,
+        unit=unit,
+        value_type=value_type,
+        binding_metadata=metadata,
+    )
+    db.add(binding)
+    await db.flush()
+    return binding
+
+
+async def resolve_assumption_for_module_field(
+    db: AsyncSession,
+    *,
+    initiative_id: UUID,
+    module_id: str,
+    field_name: str,
+    module_instance_id: UUID | None = None,
+) -> Assumption | None:
+    normalized_field = normalize_assumption_key(field_name)
+    if not normalized_field:
+        return None
+
+    binding_stmt = (
+        select(AssumptionBinding)
+        .where(
+            AssumptionBinding.initiative_id == initiative_id,
+            AssumptionBinding.module_id == module_id,
+            AssumptionBinding.field_name == normalized_field,
+        )
+        .order_by(AssumptionBinding.updated_at.desc(), AssumptionBinding.created_at.desc())
+    )
+    bindings = list((await db.execute(binding_stmt)).scalars().all())
+    if module_instance_id:
+        preferred = next(
+            (binding for binding in bindings if binding.module_instance_id == module_instance_id),
+            None,
+        )
+        if preferred is not None:
+            assumption = await get_assumption(db, preferred.assumption_id)
+            if assumption and assumption.initiative_id == initiative_id:
+                return assumption
+    if bindings:
+        assumption = await get_assumption(db, bindings[0].assumption_id)
+        if assumption and assumption.initiative_id == initiative_id:
+            return assumption
+
+    definition = _definition_for_module_field(normalized_field, module_id)
+    assumption_key = definition.key if definition else normalized_field
+    stmt = (
+        select(Assumption)
+        .where(
+            Assumption.initiative_id == initiative_id,
+            Assumption.key == assumption_key,
+            Assumption.status != "rejected",
+        )
+        .order_by(Assumption.updated_at.desc())
+        .limit(1)
+    )
+    assumption = (await db.execute(stmt)).scalar_one_or_none()
+    if assumption is not None:
+        assumption.status = normalize_assumption_status(assumption.status, default="assumed")
+    return assumption
 
 
 async def build_summary(db: AsyncSession, initiative_id: UUID) -> dict[str, Any]:
     rows = await list_assumptions(db, initiative_id)
     active_rows = [row for row in rows if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
-    status_counts = {"confirmed": 0, "inferred": 0, "assumed": 0, "missing": 0}
+    status_counts = {"validated": 0, "extracted": 0, "assumed": 0, "missing": 0}
     for row in active_rows:
         normalized = normalize_assumption_status(row.status, default="assumed")
         if normalized in status_counts:
@@ -480,8 +614,8 @@ async def build_summary(db: AsyncSession, initiative_id: UUID) -> dict[str, Any]
     ][:5]
     return {
         "total": len(active_rows),
-        "confirmed": status_counts["confirmed"],
-        "inferred": status_counts["inferred"],
+        "validated": status_counts["validated"],
+        "extracted": status_counts["extracted"],
         "assumed": status_counts["assumed"],
         "missing": status_counts["missing"],
         "top_attention": [
@@ -501,7 +635,7 @@ def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
     active = [row for row in assumptions if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
     if not active:
         return ""
-    buckets: dict[str, list[str]] = {"confirmed": [], "inferred": [], "assumed": [], "missing": []}
+    buckets: dict[str, list[str]] = {"validated": [], "extracted": [], "assumed": [], "missing": []}
     for row in active[:MAX_PROMPT_ASSUMPTIONS]:
         normalized_status = normalize_assumption_status(row.status, default="assumed")
         value = "missing" if normalized_status == "missing" else row.value
@@ -613,7 +747,7 @@ async def extract_assumptions_from_sources(
         "Extract only explicit reusable project assumptions from project materials. "
         "Be conservative. Return JSON with an 'assumptions' array. "
         "Each item must have key, value, optional unit, source_quote, and status. "
-        "Use status 'inferred' unless the text is unquestionably direct."
+        "Use status 'extracted' unless the text is unquestionably direct."
     )
     user_prompt = (
         "Expected assumption config:\n"
@@ -668,7 +802,7 @@ async def extract_assumptions_from_sources(
                 "quote": raw.get("source_quote"),
                 "extracted_at": datetime.now(timezone.utc).isoformat(),
             },
-            status="inferred",
+            status="extracted",
             used_in_modules=definition.used_in_modules,
             actor=actor if actor.email else AssumptionActor.system(),
         )

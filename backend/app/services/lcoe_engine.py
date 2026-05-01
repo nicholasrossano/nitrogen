@@ -22,7 +22,7 @@ from app.schemas.provenance import Derivation, ItemProvenance, ValidationStatus
 # Data structures
 # ---------------------------------------------------------------------------
 
-InputStatus = Literal["validated", "inferred", "assumed", "missing"]
+InputStatus = Literal["validated", "extracted", "assumed", "missing"]
 InputSource = Literal["chat", "doc", "user", "assumption"]
 
 
@@ -66,8 +66,8 @@ class LCOEInput:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "LCOEInput":
         payload = {k: d[k] for k in cls.__dataclass_fields__ if k in d}
-        if payload.get("status") == "confirmed":
-            payload["status"] = "validated"
+        if payload.get("status") == "inferred":
+            payload["status"] = "extracted"
         return cls(**payload)
 
 
@@ -460,7 +460,7 @@ class LCOEEngine:
                     value=known[field_name],
                     unit=unit,
                     source="chat",
-                    status="inferred",
+                    status="extracted",
                     category=category,
                     field_type=field_type,
                     options=options,

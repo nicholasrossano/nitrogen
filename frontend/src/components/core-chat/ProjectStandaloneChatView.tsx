@@ -81,8 +81,17 @@ interface ProjectChatSurfaceProps {
   sessions?: ChatSummary[];
   /** Active module context from the workspace panel */
   activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
+  /** Assumption pinned to this chat tab (if any). */
+  focusedAssumptionId?: string | null;
   /** Automatically send a message into this chat view when it becomes active */
-  pendingAutoSend?: { requestId: string; content: string; toolHint?: string } | null;
+  pendingAutoSend?: {
+    requestId: string;
+    content: string;
+    toolHint?: string;
+    fieldContext?: FieldContext | null;
+    modelInputsContext?: string | null;
+    assumptionId?: string | null;
+  } | null;
   onPendingAutoSendHandled?: () => void;
   /** Delete a chat from shared history */
   onDeleteChat?: (chatId: string) => void;
@@ -154,6 +163,7 @@ export function ProjectChatSurface({
   onSendRef,
   sessions = [],
   activeModuleContext = null,
+  focusedAssumptionId = null,
   pendingAutoSend = null,
   onPendingAutoSendHandled,
   onDeleteChat,
@@ -423,7 +433,7 @@ export function ProjectChatSurface({
           {
             ...row.content,
             value,
-            status: 'confirmed',
+            status: 'validated',
             source: 'user',
           },
           workflow.workflow_version,
@@ -462,6 +472,7 @@ export function ProjectChatSurface({
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
       associatedModule?: { instanceId: string; moduleId: string; title?: string | null } | null,
+      assumptionId?: string | null,
     ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
         role: m.role,
@@ -566,6 +577,7 @@ export function ProjectChatSurface({
           }
           : null,
         initiativeId,
+        assumptionId ?? null,
         (step) => {
           setResearchSteps((prev) => {
             const idx = prev.findIndex((s) => s.id === step.id);
@@ -606,6 +618,7 @@ export function ProjectChatSurface({
       toolHint?: string,
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
+      assumptionIdOverride?: string | null,
     ) => {
       onBeforeSendMessage?.();
       onMessageSent?.();
@@ -635,6 +648,11 @@ export function ProjectChatSurface({
       setSending(true);
 
       const matchedFieldContextModuleId = resolveFieldContextModuleId(fieldContext);
+      const effectiveAssumptionId =
+        assumptionIdOverride
+        ?? fieldContext?.assumption_id
+        ?? focusedAssumptionId
+        ?? null;
       const associatedModule =
         activeModuleContext &&
         (
@@ -653,6 +671,7 @@ export function ProjectChatSurface({
           fieldContext,
           modelInputsContext,
           associatedModule,
+          effectiveAssumptionId,
         );
       } catch {
         setLocalMessages((prev) =>
@@ -661,14 +680,28 @@ export function ProjectChatSurface({
         setSending(false);
       }
     },
-    [activeModuleContext, localMessages, onBeforeSendMessage, onMessageSent, projectContext, sendViaStream],
+    [
+      activeModuleContext,
+      focusedAssumptionId,
+      localMessages,
+      onBeforeSendMessage,
+      onMessageSent,
+      projectContext,
+      sendViaStream,
+    ],
   );
 
   useEffect(() => {
     if (!pendingAutoSend?.requestId) return;
     if (lastAutoSendRequestIdRef.current === pendingAutoSend.requestId) return;
     lastAutoSendRequestIdRef.current = pendingAutoSend.requestId;
-    void handleSend(pendingAutoSend.content, pendingAutoSend.toolHint);
+    void handleSend(
+      pendingAutoSend.content,
+      pendingAutoSend.toolHint,
+      pendingAutoSend.fieldContext ?? null,
+      pendingAutoSend.modelInputsContext ?? null,
+      pendingAutoSend.assumptionId ?? null,
+    );
     onPendingAutoSendHandled?.();
   }, [handleSend, onPendingAutoSendHandled, pendingAutoSend]);
 
@@ -693,13 +726,22 @@ export function ProjectChatSurface({
       setSending(true);
 
       try {
-        await sendViaStream(newContent, updatedMessages, undefined, projectContext);
+        await sendViaStream(
+          newContent,
+          updatedMessages,
+          undefined,
+          projectContext,
+          undefined,
+          undefined,
+          null,
+          focusedAssumptionId,
+        );
       } catch {
         setLocalMessages(truncated);
         setSending(false);
       }
     },
-    [localMessages, projectContext, sendViaStream],
+    [focusedAssumptionId, localMessages, projectContext, sendViaStream],
   );
 
   const handleRetryMessage = useCallback(
@@ -725,13 +767,22 @@ export function ProjectChatSurface({
       setSending(true);
 
       try {
-        await sendViaStream(lastUserMsg.content, updatedMessages, undefined, projectContext);
+        await sendViaStream(
+          lastUserMsg.content,
+          updatedMessages,
+          undefined,
+          projectContext,
+          undefined,
+          undefined,
+          null,
+          focusedAssumptionId,
+        );
       } catch {
         setLocalMessages(preceding);
         setSending(false);
       }
     },
-    [localMessages, projectContext, sendViaStream],
+    [focusedAssumptionId, localMessages, projectContext, sendViaStream],
   );
 
   const handleSetFeedback = useCallback(
