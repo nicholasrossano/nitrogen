@@ -27,6 +27,8 @@ import { PageLoader } from '@/components/ui/PageLoader';
 import { api, type Assumption, type ModuleInstance } from '@/lib/api';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
+import { filterVisibleModules } from '@/lib/featureFlags';
+import { useFeatureFlagContext } from '@/hooks/useFeatureFlag';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
@@ -58,6 +60,15 @@ interface PendingAssumptionsRequest {
   requestId: string;
   focusAssumptionId?: string | null;
   title?: string | null;
+  forceNewTab?: boolean;
+  autoSend?: {
+    requestId: string;
+    content: string;
+    toolHint?: string;
+    fieldContext?: import('@/lib/api').FieldContext | null;
+    modelInputsContext?: string | null;
+    assumptionId?: string | null;
+  } | null;
 }
 
 interface StoredInitiativeWorkspaceUiState {
@@ -219,12 +230,24 @@ function InitiativePageContent() {
   const getDriveAccessToken = useGoogleDriveStore((s) => s.getAccessToken);
   const driveConnected = useGoogleDriveStore((s) => s.connected);
   const connectDrive = useGoogleDriveStore((s) => s.connect);
+  const featureFlagContext = useFeatureFlagContext();
+
+  const visibleModuleMetaById = useMemo(
+    () => new Map(
+      filterVisibleModules(ALL_MODULES, featureFlagContext)
+        .map((module) => [module.id, module]),
+    ),
+    [featureFlagContext],
+  );
+  const visibleFrameworkPlannedModuleIds = useMemo(
+    () => frameworkPlannedModuleIds.filter((moduleId) => visibleModuleMetaById.has(moduleId)),
+    [frameworkPlannedModuleIds, visibleModuleMetaById],
+  );
 
   const hasProjectPlan = Boolean(projectPlan);
   const hasFrameworkSelection = Boolean(
     hasProjectPlan ||
-    frameworkPlannedModuleIds.length > 0 ||
-    (initiative?.selected_tools?.length ?? 0) > 0,
+    visibleFrameworkPlannedModuleIds.length > 0,
   );
   const isOnboarding = Boolean(
     initiative &&
@@ -245,7 +268,7 @@ function InitiativePageContent() {
       );
 
       const segments = MODULE_CATEGORIES.map((category) => {
-        const plannedInCategory = frameworkPlannedModuleIds.filter(
+        const plannedInCategory = visibleFrameworkPlannedModuleIds.filter(
           (moduleId) => categoryForModuleId.get(moduleId) === category.id,
         );
         const approvedCount = plannedInCategory.filter((moduleId) => approvedModuleIds.has(moduleId)).length;
@@ -269,13 +292,13 @@ function InitiativePageContent() {
         segments,
       };
     },
-    [frameworkModuleInstances, frameworkPlannedModuleIds],
+    [frameworkModuleInstances, visibleFrameworkPlannedModuleIds],
   );
   const frameworkPlanModuleOptions = useMemo(
-    () => frameworkPlannedModuleIds
-      .map((id) => ALL_MODULES.find((m) => m.id === id))
+    () => visibleFrameworkPlannedModuleIds
+      .map((id) => visibleModuleMetaById.get(id))
       .filter((m): m is (typeof ALL_MODULES)[number] => Boolean(m)),
-    [frameworkPlannedModuleIds],
+    [visibleFrameworkPlannedModuleIds, visibleModuleMetaById],
   );
   const activeWorkspaceTab = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
@@ -450,6 +473,44 @@ function InitiativePageContent() {
     window.addEventListener('nitrogen:draft', handler);
     return () => window.removeEventListener('nitrogen:draft', handler);
   }, [activeView, panelVisibility.modules.chat, setPanelOpen]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        assumptionId?: string | null;
+        title?: string | null;
+        text?: string | null;
+        toolHint?: string | null;
+        fieldContext?: import('@/lib/api').FieldContext | null;
+        modelInputsContext?: string | null;
+      } | null;
+      if (!detail?.assumptionId) return;
+      const requestId = `assumption-investigate-${detail.assumptionId}-${Date.now()}`;
+      setWorkspaceLaunchMode('idle');
+      setPanelOpen('modules', 'chat', true);
+      setActiveView('modules');
+      router.replace(`/initiatives/${initiativeId}?view=modules`);
+      setPendingAssumptionsRequest({
+        requestId,
+        focusAssumptionId: detail.assumptionId,
+        title: detail.title ?? 'Assumption investigation',
+        forceNewTab: true,
+        autoSend: detail.text
+          ? {
+              requestId: `autosend-${requestId}`,
+              content: detail.text,
+              toolHint: detail.toolHint ?? undefined,
+              fieldContext: detail.fieldContext ?? null,
+              modelInputsContext: detail.modelInputsContext ?? null,
+              assumptionId: detail.assumptionId,
+            }
+          : null,
+      });
+    };
+
+    window.addEventListener('nitrogen:open-assumption-chat', handler);
+    return () => window.removeEventListener('nitrogen:open-assumption-chat', handler);
+  }, [initiativeId, router, setPanelOpen]);
 
   const handleFilesViewDriveImport = useCallback(async () => {
     await importFromDriveViaPicker({
@@ -749,6 +810,7 @@ function InitiativePageContent() {
       requestId: `assumption-${assumption.id}-${Date.now()}`,
       focusAssumptionId: assumption.id,
       title: assumption.label,
+      forceNewTab: false,
     });
   }, [initiativeId, router, setPanelOpen]);
 
@@ -1027,7 +1089,7 @@ function InitiativePageContent() {
           )}
           <div className="flex-1 min-h-0 overflow-hidden">
             <FrameworkPlanView
-              plannedModuleIds={frameworkPlannedModuleIds}
+              plannedModuleIds={visibleFrameworkPlannedModuleIds}
               moduleInstances={frameworkModuleInstances}
               loading={frameworkModulesLoading}
               onAddModuleToFrameworkPlan={handleAddModuleToFrameworkPlan}
