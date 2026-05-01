@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 export type AssociatedChatModule = {
   instance_id: string;
@@ -27,7 +28,13 @@ export function AssociatedModulesTray({
   modules,
   onOpenWorkspaceModule,
 }: AssociatedModulesTrayProps) {
+  const showBetaModules = useFeatureFlag('beta_modules');
   const [collapsed, setCollapsed] = useState(false);
+  const visibleModules = modules.filter((module) => {
+    const moduleOption = ALL_MODULES.find((candidate) => candidate.id === module.module_id);
+    if (!moduleOption) return false;
+    return showBetaModules || !moduleOption.beta;
+  });
 
   return (
     <div className="overflow-hidden rounded-t-xl rounded-b-none border border-stroke-subtle bg-white shadow-[0_-1px_0_rgba(0,0,0,0.02)]">
@@ -39,11 +46,11 @@ export function AssociatedModulesTray({
         aria-label={collapsed ? 'Expand associated modules' : 'Collapse associated modules'}
       >
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        <span>{modules.length} Module{modules.length === 1 ? '' : 's'}</span>
+        <span>{visibleModules.length} Module{visibleModules.length === 1 ? '' : 's'}</span>
       </button>
       {!collapsed ? (
         <div className="border-t border-stroke-subtle bg-white">
-          {modules.map((module, index) => {
+          {visibleModules.map((module, index) => {
             const moduleOption = ALL_MODULES.find((candidate) => candidate.id === module.module_id);
             if (!moduleOption) return null;
 

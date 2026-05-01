@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { ConfirmButton } from '@/components/ui';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
 interface ModuleRecommendation {
@@ -35,7 +35,7 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
       .filter((recommendation) => recommendation?.tool?.id),
     [data],
   );
-  const devMode = useSettingsStore((s) => s.devMode);
+  const showBetaModules = useFeatureFlag('beta_modules');
   const initiative = useInitiativeStore((s) => s.initiative);
   const selectTools = useInitiativeStore((s) => s.selectTools);
   const [confirmedLocal, setConfirmedLocal] = useState(false);
@@ -50,9 +50,9 @@ export function ModuleChecklistWidget({ data, initiativeId, isActive = true }: M
   const visibleRecommendations = useMemo(() => (
     recommendations.filter((recommendation) => {
       const moduleMeta = moduleMetaById.get(recommendation.tool.id);
-      return devMode || !moduleMeta?.beta;
+      return showBetaModules || !moduleMeta?.beta;
     })
-  ), [devMode, moduleMetaById, recommendations]);
+  ), [showBetaModules, moduleMetaById, recommendations]);
 
   const initialSelectedIds = useMemo(() => {
     const explicit = visibleRecommendations

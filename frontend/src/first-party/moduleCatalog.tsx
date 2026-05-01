@@ -51,6 +51,7 @@ export const ALL_MODULES: ModuleOption[] = [
     name: 'Risk Assessment',
     description: 'Build a project risk register with mitigations and ratings',
     icon: <ShieldAlert className="w-3.5 h-3.5" />,
+    beta: true,
   },
 ];
 

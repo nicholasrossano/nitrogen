@@ -4,7 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { PaywallModal } from '@/components/ui/PaywallModal';
 import { useBillingStore } from '@/stores/billingStore';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -12,22 +12,22 @@ interface ProvidersProps {
 
 function BillingSync() {
   const { user, loading } = useAuth();
-  const devMode = useSettingsStore((s) => s.devMode);
+  const showBillingFeatures = useFeatureFlag('billing_features');
   const fetchBillingStatus = useBillingStore((s) => s.fetchBillingStatus);
 
   useEffect(() => {
-    if (!loading && user && devMode) {
+    if (!loading && user && showBillingFeatures) {
       fetchBillingStatus();
     }
-  }, [user, loading, devMode, fetchBillingStatus]);
+  }, [user, loading, showBillingFeatures, fetchBillingStatus]);
 
   return null;
 }
 
 function DevModePaywall() {
-  const devMode = useSettingsStore((s) => s.devMode);
+  const showPaywallModal = useFeatureFlag('paywall_modal');
 
-  if (!devMode) return null;
+  if (!showPaywallModal) return null;
   return <PaywallModal />;
 }
 
