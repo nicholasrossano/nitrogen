@@ -11,6 +11,7 @@ import {
   type ModuleCategory,
   type ModuleOption,
 } from '@/first-party/moduleCatalog';
+import { useVisibleModules } from '@/hooks/useFeatureFlag';
 
 export { ALL_MODULES, MODULE_CATEGORIES, STANDALONE_MODULE_IDS };
 export type { ModuleCategory, ModuleOption };
@@ -34,7 +35,7 @@ export function ModulePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const modules = mode === 'standalone' ? ANALYSIS_MODULES : ALL_MODULES;
+  const modules = useVisibleModules(mode === 'standalone' ? ANALYSIS_MODULES : ALL_MODULES);
 
   // Position the portal dropdown above the trigger button
   const updatePosition = () => {

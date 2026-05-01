@@ -7,11 +7,11 @@ import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ShellPageHeader } from '@/components/ui';
 import { LoadingArtHost, getLoadingArtById, loadingArtRegistry } from '@/components/ui/loading-art';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 function LoadingArtLabContent() {
   const router = useRouter();
-  const devMode = useSettingsStore((s) => s.devMode);
+  const showArtLab = useFeatureFlag('art_lab');
   const [selectedArtId, setSelectedArtId] = useState<string>(loadingArtRegistry[0]?.id ?? '');
 
   const selectedArt = useMemo(
@@ -42,7 +42,7 @@ function LoadingArtLabContent() {
 
       <div className="flex-1 p-2 pt-0 pl-1 min-h-0">
         <main className="h-full bg-surface rounded-lg shadow-workspace min-h-0 overflow-hidden">
-          {!devMode ? (
+          {!showArtLab ? (
             <div className="h-full flex items-center justify-center px-6">
               <div className="max-w-md text-center space-y-4">
                 <div className="space-y-2">

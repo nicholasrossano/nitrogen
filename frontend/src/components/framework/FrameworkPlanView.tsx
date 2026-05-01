@@ -6,7 +6,8 @@ import { BookOpen, Check, Search, Trash2 } from 'lucide-react';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
 import { PageLoader, UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { type ModuleInstance } from '@/lib/api';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { filterVisibleModules } from '@/lib/featureFlags';
+import { useFeatureFlag, useFeatureFlagContext } from '@/hooks/useFeatureFlag';
 import { ModuleInstanceOpenDropdown } from './ModuleInstanceOpenDropdown';
 
 interface FrameworkPlanViewProps {
@@ -73,7 +74,8 @@ export function FrameworkPlanView({
   readOnly = false,
   onOpenModule,
 }: FrameworkPlanViewProps) {
-  const devMode = useSettingsStore((s) => s.devMode);
+  const showBetaModules = useFeatureFlag('beta_modules');
+  const featureFlagContext = useFeatureFlagContext();
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [moduleSearchQuery, setModuleSearchQuery] = useState('');
@@ -92,16 +94,18 @@ export function FrameworkPlanView({
   const visibleCategories = useMemo(
     () => MODULE_CATEGORIES.map((category) => ({
       ...category,
-      modules: category.moduleIds
-        .map((moduleId) => moduleMetaById.get(moduleId))
-        .filter(
-          (
-            module,
-          ): module is NonNullable<(typeof ALL_MODULES)[number]> => Boolean(module),
-        )
-        .filter((module) => devMode || !module.beta),
-    })).filter((category) => devMode || category.modules.length > 0),
-    [devMode, moduleMetaById],
+      modules: filterVisibleModules(
+        category.moduleIds
+          .map((moduleId) => moduleMetaById.get(moduleId))
+          .filter(
+            (
+              module,
+            ): module is NonNullable<(typeof ALL_MODULES)[number]> => Boolean(module),
+          ),
+        featureFlagContext,
+      ),
+    })).filter((category) => showBetaModules || category.modules.length > 0),
+    [showBetaModules, moduleMetaById, featureFlagContext],
   );
 
   const filteredCategories = useMemo(() => {

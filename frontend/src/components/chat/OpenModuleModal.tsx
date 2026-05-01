@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Clock, User, Trash2, Undo2, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
 import { api, type ModuleInstance } from '@/lib/api';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((m) => [m.id, m]));
 
@@ -56,6 +57,7 @@ function enrich(instances: ModuleInstance[]): EnrichedInstance[] {
 }
 
 export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserProps) {
+  const showBetaModules = useFeatureFlag('beta_modules');
   const [instances, setInstances] = useState<ModuleInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [isTrashView, setIsTrashView] = useState(false);
@@ -101,7 +103,16 @@ export function OpenModuleBrowser({ initiativeId, onSelect }: OpenModuleBrowserP
     setConfirmDeleteId(null);
   }, [initiativeId]);
 
-  const enriched = enrich(instances);
+  const visibleInstances = useMemo(
+    () => instances.filter((instance) => {
+      const moduleOption = MODULE_MAP.get(instance.module_id);
+      if (!moduleOption) return true;
+      return showBetaModules || !moduleOption.beta;
+    }),
+    [showBetaModules, instances],
+  );
+
+  const enriched = enrich(visibleInstances);
 
   return (
     <div className="w-full">

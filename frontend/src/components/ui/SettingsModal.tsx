@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { api, ProjectShare } from '@/lib/api';
 import { ModalShell } from '@/components/ui/ModalShell';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -170,6 +171,7 @@ function PlanBillingSection() {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const pathname = usePathname();
   const { devMode, setDevMode } = useSettingsStore();
+  const showBillingFeatures = useFeatureFlag('billing_features');
   const {
     workspaces,
     activeWorkspace,
@@ -265,10 +267,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   }, [activeSettingsTab, isInProjectContext]);
 
   useEffect(() => {
-    if (!devMode && activeSettingsTab === 'billing') {
+    if (!showBillingFeatures && activeSettingsTab === 'billing') {
       setActiveSettingsTab('workspace');
     }
-  }, [devMode, activeSettingsTab]);
+  }, [showBillingFeatures, activeSettingsTab]);
 
   useEffect(() => {
     if (activeSettingsTab !== 'project' || !initiativeId) return;
@@ -495,7 +497,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               disabled: !isInProjectContext,
               disabledReason: 'Navigate to a specific project to manage its settings.',
             },
-            ...(devMode ? [{ id: 'billing' as const, label: 'Billing', disabled: false, disabledReason: '' }] : []),
+            ...(showBillingFeatures ? [{ id: 'billing' as const, label: 'Billing', disabled: false, disabledReason: '' }] : []),
             { id: 'developer' as const, label: 'Developer', disabled: false, disabledReason: '' },
           ]).map((item) => {
             const button = (
@@ -886,7 +888,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </>
             ) : activeSettingsTab === 'billing' ? (
               <>
-                {devMode && <PlanBillingSection />}
+                {showBillingFeatures && <PlanBillingSection />}
               </>
             ) : (
               <>

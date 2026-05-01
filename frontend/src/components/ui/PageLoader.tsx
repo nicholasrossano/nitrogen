@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sprout, TreeDeciduous } from 'lucide-react';
 
 import { LoadingArtHost } from './loading-art';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 interface UniversalLoadingIconProps {
   size?: number;
@@ -77,8 +77,8 @@ export function PageLoader({
   size,
   className = '',
 }: PageLoaderProps) {
-  const devMode = useSettingsStore((s) => s.devMode);
-  const useArtVariant = variant === 'art' && devMode;
+  const useLoadingArtVariant = useFeatureFlag('loading_art_variant');
+  const useArtVariant = variant === 'art' && useLoadingArtVariant;
   const iconSize = variant === 'icon' ? (size ?? 40) : 40;
 
   if (useArtVariant) {
