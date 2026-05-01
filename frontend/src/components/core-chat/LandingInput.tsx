@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/types/chat';
 import { ALL_MODULES } from '@/components/chat/ModulePicker';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useVisibleModules } from '@/hooks/useFeatureFlag';
 
 
 interface LandingInputProps {
@@ -63,7 +63,7 @@ export function LandingInput({
   hideComposer = false,
   showAttachments = true,
 }: LandingInputProps) {
-  const devMode = useSettingsStore((s) => s.devMode);
+  const visibleModules = useVisibleModules(ALL_MODULES);
   const [input, setInput] = useState('');
   const [focused, setFocused] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -291,7 +291,7 @@ export function LandingInput({
         {headerContent}
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-3 mb-12">
-          {ALL_MODULES.filter((module) => devMode || !module.beta).map((module) => {
+          {visibleModules.map((module) => {
             return (
               <button
                 key={module.id}
