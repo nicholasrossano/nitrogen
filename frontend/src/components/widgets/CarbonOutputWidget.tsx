@@ -7,13 +7,11 @@ import {
   Download,
   AlertTriangle,
   CheckCircle2,
-  Sparkles,
   Pencil,
-  AlertCircle,
-  MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
+import { ModelInputsTable } from './shared/ModelInputsTable';
 
 interface CarbonOutputWidgetProps {
   data: Record<string, any>;
@@ -21,14 +19,6 @@ interface CarbonOutputWidgetProps {
   isActive?: boolean;
   messageId?: string;
 }
-
-
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
-  extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
-  assumed: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: 'Assumed' },
-  missing: { bg: 'bg-red-50', text: 'text-red-700', label: 'Missing' },
-};
 
 
 const QUALITY_STYLES: Record<string, { bg: string; text: string; icon: typeof CheckCircle2 }> = {
@@ -321,119 +311,58 @@ export function CarbonOutputWidget({
       )}
 
       {activeTab === 'inputs' && (
-        <div className="divide-y divide-divider">
-          {groupedInputs.map((group) => (
-            <div key={group.category}>
-              <div className="px-5 py-2 bg-surface-subtle">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {group.label}
-                </span>
-              </div>
-              <div className="divide-y divide-stroke-subtle">
-                {group.inputs.map((inp: any) => {
-                  const isMissing = inp.status === 'missing';
-                  const isEditing = editingField === inp.field_name;
-                  const statusStyle = STATUS_STYLES[inp.status] || STATUS_STYLES.missing;
-
-                  return (
-                    <div
-                      key={inp.field_name}
-                      onMouseMove={(e) => {
-                        const isInteractive = !!(e.target as HTMLElement).closest('button, input, a');
-                        setOverInteractive(isInteractive);
-                        setMousePos({ x: e.clientX, y: e.clientY });
-                        setHoveredRowInp(inp);
-                      }}
-                      onMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
-                      onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('button, input, a')) return;
-                        investigate(inp.label, inp.status, inp.field_name);
-                      }}
-                      style={{ cursor: hoveredRowInp?.field_name === inp.field_name && !overInteractive ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto` : undefined }}
-                      className={`px-5 py-2.5 flex items-center gap-3 ${
-                        isMissing ? 'bg-red-50/40' : 'bg-white'
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-text-primary truncate">
-                            {inp.label}
-                          </span>
-                          {inp.unit && (
-                            <span className="text-[10px] text-text-tertiary">({inp.unit})</span>
-                          )}
-                        </div>
-                        {inp.rationale && inp.status === 'assumed' && (
-                          <p className="text-[10px] text-yellow-600 mt-0.5 truncate">
-                            {inp.rationale}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="w-28 text-right">
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            onBlur={commitEdit}
-                            autoFocus
-                            className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
-                          />
-                        ) : (
-                          <button
-                            onClick={() => isActive && startEdit(inp.field_name, inp.value)}
-                            disabled={!isActive}
-                            className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isMissing ? (
-                              <span className="text-red-500 italic">—</span>
-                            ) : (
-                              <span>
-                                {typeof inp.value === 'number'
-                                  ? inp.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
-                                  : inp.value}
-                              </span>
-                            )}
-                            {isActive && (
-                              <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
-                            )}
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="w-16 flex justify-end">
-                        <span
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                        >
-                          {inp.status === 'validated' && <CheckCircle2 className="w-2.5 h-2.5" />}
-                          {inp.status === 'extracted' && <MessageSquare className="w-2.5 h-2.5" />}
-                          {inp.status === 'assumed' && <Sparkles className="w-2.5 h-2.5" />}
-                          {inp.status === 'missing' && <AlertCircle className="w-2.5 h-2.5" />}
-                          {statusStyle.label}
-                        </span>
-                      </div>
-
-                      <div className="w-5 flex justify-center">
-                        {isActive && (
-                          <input
-                            type="checkbox"
-                            checked={inp.status === 'validated'}
-                            disabled={isMissing || confirmingFields.has(inp.field_name)}
-                            onChange={() => toggleConfirm(inp.field_name, inp.status, inp.value)}
-                            title={inp.status === 'validated' ? 'Mark as extracted' : 'Mark as validated'}
-                            className="w-3 h-3 rounded accent-green-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ModelInputsTable
+          groups={groupedInputs as any}
+          hoveredFieldName={hoveredRowInp?.field_name ?? null}
+          editingField={editingField}
+          isActive={isActive}
+          confirmingFields={confirmingFields}
+          showConfirmCheckbox
+          onToggleConfirm={(row: any) => toggleConfirm(row.field_name, row.status, row.value)}
+          onRowMouseEnter={(event, row: any) => {
+            const isInteractive = !!(event.target as HTMLElement).closest('button, input, a');
+            setOverInteractive(isInteractive);
+            setMousePos({ x: event.clientX, y: event.clientY });
+            setHoveredRowInp(row);
+          }}
+          onRowMouseLeave={() => { setHoveredRowInp(null); setOverInteractive(false); }}
+          onRowClick={(event, row: any) => {
+            if ((event.target as HTMLElement).closest('button, input, a')) return;
+            investigate(row.label, row.status, row.field_name);
+          }}
+          renderValueCell={(row: any, isEditing) => (
+            isEditing ? (
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={commitEdit}
+                autoFocus
+                className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
+              />
+            ) : (
+              <button
+                onClick={() => isActive && startEdit(row.field_name, row.value)}
+                disabled={!isActive}
+                className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {row.status === 'missing' ? (
+                  <span className="text-red-500 italic">—</span>
+                ) : (
+                  <span>
+                    {typeof row.value === 'number'
+                      ? row.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                      : row.value}
+                  </span>
+                )}
+                {isActive && (
+                  <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                )}
+              </button>
+            )
+          )}
+        />
       )}
 
       {activeTab === 'sensitivity' && sensitivity.length > 0 && (

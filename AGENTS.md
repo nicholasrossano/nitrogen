@@ -26,11 +26,11 @@
 - Fix any linter errors introduced by the change before responding.
 - After adding or changing a backend Alembic migration or ORM column, run `cd backend && python3 -m alembic upgrade head` against the local dev DB before finalizing.
 - For JSX in particular: watch for ternary branches with multiple sibling elements — they must be wrapped in a fragment (`<>...</>`).
-- After substantial frontend/App Router shell changes, if Next dev shows missing `vendor-chunks/*` or `Cannot find module './*.js'` under `.next/server`, treat it as cache corruption first: clear `frontend/.next` and restart with `npm run dev:clean` before debugging code.
+- After substantial frontend/App Router shell changes, if Next dev shows missing `vendor-chunks/*` or `Cannot find assessment './*.js'` under `.next/server`, treat it as cache corruption first: clear `frontend/.next` and restart with `npm run dev:clean` before debugging code.
 - Never run `next build` into the same output dir as an active `next dev` server; keep build output isolated (for this repo, `npm run build` must use `.next-build`) so verification does not corrupt dev chunks.
 
 **Import integrity after deletions (non-trivial changes):**
-- After deleting any backend Python file, immediately `grep` the entire backend for imports of the deleted module before finalizing. Key aggregator files to check: `models/__init__.py`, `alembic/env.py`, `app/main.py`, and any API/service file that might lazy-import it.
+- After deleting any backend Python file, immediately `grep` the entire backend for imports of the deleted assessment before finalizing. Key aggregator files to check: `models/__init__.py`, `alembic/env.py`, `app/main.py`, and any API/service file that might lazy-import it.
 - After deleting any frontend file, check its barrel exports (`index.ts`) and any files that import it by name.
 - If the local servers are running (`localhost:8000`, `localhost:3000`), do a quick `curl http://localhost:8000/health` after backend edits to confirm the reload succeeded cleanly.
 
@@ -96,14 +96,14 @@ Never touch `ToolPicker.tsx` (the `+` button dropdown) when the request is about
 Nitrogen docs live in `docs/` and are automatically rendered on the public docs site (Mintlify) on every push to `main`. Keep them current by following these rules — the goal is docs that update alongside code, not after.
 
 **When to update docs (update in the same PR, not after):**
-- Changing how `adapter_bindings`, `ModuleManifest`, `AdapterDefinition`, or `ExecutionContext` work → update `docs/architecture.md` and the relevant authoring guide
-- Changing the module authoring pattern (base classes, registration, manifest fields) → update `docs/modules/authoring-guide.md`
+- Changing how `adapter_bindings`, `AssessmentManifest`, `AdapterDefinition`, or `ExecutionContext` work → update `docs/architecture.md` and the relevant authoring guide
+- Changing the assessment authoring pattern (base classes, registration, manifest fields) → update `docs/assessments/authoring-guide.md`
 - Changing the adapter contract or adding a new adapter type → update `docs/adapters/authoring-guide.md`
 - Changing the MCP exposure model, transport, or auth → update `docs/mcp/integration-guide.md`
 - Changing setup steps, env vars, or dev commands → update `docs/setup.md`
 
 **When NOT to update docs:**
-- Adding a new concrete module (e.g. a new `DemandAssessmentModule`) — the live `GET /api/v1/capabilities` endpoint reflects this automatically; no doc edit needed unless the authoring *pattern* changed
+- Adding a new concrete assessment (e.g. a new `DemandAssessmentAssessment`) — the live `GET /api/v1/capabilities` endpoint reflects this automatically; no doc edit needed unless the authoring *pattern* changed
 - Adding a new adapter instance — same as above; the capabilities endpoint is the live catalog
 - Routine bug fixes, UI tweaks, or refactors that don't change contracts
 
@@ -114,7 +114,7 @@ Nitrogen docs live in `docs/` and are automatically rendered on the public docs 
 
 **Capabilities endpoint (always live — no maintenance needed):**
 - `GET /api/v1/capabilities` is generated from the registries at request time
-- Never write a static list of modules, adapters, or resources in docs — always link to this endpoint instead
+- Never write a static list of assessments, adapters, or resources in docs — always link to this endpoint instead
 
 ## Pull Requests
 When creating a PR with `gh pr create`, always fill in the `.github/PULL_REQUEST_TEMPLATE.md` fields — never leave placeholder comment text in the final body. The template has two sections:
@@ -178,7 +178,7 @@ When starting the "local emulator" or running the app locally, follow `.cursor/r
 ### Running services
 - **Database**: PostgreSQL with pgvector runs in a Docker container named `nitrogen-db`. Start with `sudo docker start nitrogen-db`. Verify with `sudo docker exec nitrogen-db pg_isready -U postgres`.
 - **Backend**: See `.cursor/rules/dev-setup.mdc` for standard commands. Ensure `PATH` includes `/home/ubuntu/.local/bin` (pip install location).
-- **Frontend**: See `.cursor/rules/dev-setup.mdc`. If you see module errors (`Cannot find module './vendor-chunks/...'`), clear the Next.js cache: `cd frontend && rm -rf .next && npm run dev`.
+- **Frontend**: See `.cursor/rules/dev-setup.mdc`. If you see assessment errors (`Cannot find assessment './vendor-chunks/...'`), clear the Next.js cache: `cd frontend && rm -rf .next && npm run dev`.
 
 ### Auth in dev mode
 - Firebase is **not configured** in the Cloud VM. The backend automatically falls back to a "shared-user" mock auth when `FIREBASE_PROJECT_ID` is unset.

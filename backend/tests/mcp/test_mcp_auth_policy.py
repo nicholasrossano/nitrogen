@@ -48,7 +48,7 @@ async def test_initiative_scoped_tools_require_initiative_id() -> None:
 
 @pytest.mark.asyncio
 async def test_internal_resources_are_hidden_from_mcp() -> None:
-    uri = f"nitrogen://initiatives/{uuid4()}/modules/{uuid4()}"
+    uri = f"nitrogen://initiatives/{uuid4()}/assessments/{uuid4()}"
     with pytest.raises(ValueError, match="not exposed"):
         await mcp_server.read_exposed_resource(uri)
 
@@ -107,6 +107,6 @@ def test_exposure_policy_keeps_workflow_resources_internal() -> None:
         definition.resource_type: definition.visibility
         for definition in get_resource_registry().list_definitions()
     }
-    assert resource_types["module_instance"] == "internal"
+    assert resource_types["assessment_instance"] == "internal"
     assert resource_types["artifact"] == "internal"
 

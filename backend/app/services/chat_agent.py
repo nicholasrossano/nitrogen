@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.initiative import Initiative
 from app.models.onboarding import ChatMessage
-from app.modules import get_module_registry
+from app.assessments import get_assessment_registry
 
 settings = get_settings()
 
@@ -23,7 +23,7 @@ class ChatAgentService:
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
         self.model = settings.openai_model
-        self.registry = get_module_registry()
+        self.registry = get_assessment_registry()
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -39,13 +39,13 @@ class ChatAgentService:
 
 The user described their project. Write a brief, proactive response that:
 1. Acknowledges what they're working on (1 short phrase)
-2. Notes that you've outlined the modules that are most relevant to complete first
-3. Invites them to review the recommended modules below
+2. Notes that you've outlined the assessments that are most relevant to complete first
+3. Invites them to review the recommended assessments below
 
 RULES:
 - 2-3 sentences maximum
 - Be proactive and knowledgeable
-- Refer to modules or framework steps, not generic deliverables
+- Refer to assessments or framework steps, not generic deliverables
 - Be professional, not casual
 - Do NOT explain the project's impact or benefits
 - Do NOT write more than 50 words"""
@@ -106,7 +106,7 @@ If tools are selected and you notice missing required inputs, gently ask about t
         if initiative.selected_tools:
             tool_names = []
             for tool_id in initiative.selected_tools:
-                tool = self.registry.get_module(tool_id)
+                tool = self.registry.get_assessment(tool_id)
                 if tool:
                     tool_names.append(tool.definition.name)
             if tool_names:
@@ -116,7 +116,7 @@ If tools are selected and you notice missing required inputs, gently ask about t
         if initiative.evidence_ready:
             parts.append("Evidence documents: Uploaded")
         
-        # Check for deliverables (computed from module instances)
+        # Check for deliverables (computed from assessment instances)
         deliverables = initiative.get_deliverables_dict()
         if deliverables:
             deliverable_names = list(deliverables.keys())
@@ -410,7 +410,7 @@ Do NOT return null/empty for title or geography if the user mentioned them."""
         # Get input definitions for selected tools
         input_schema = {}
         for tool_id in tool_ids:
-            tool = self.registry.get_module(tool_id)
+            tool = self.registry.get_assessment(tool_id)
             if tool:
                 for inp in tool.all_inputs:
                     if inp.name not in input_schema:

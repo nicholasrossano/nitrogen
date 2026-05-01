@@ -167,7 +167,7 @@ export function RiskRegisterResultsWidget({
     if (!instanceId) return;
     setSaving(true);
     try {
-      await api.persistModuleWorkflowWidget(instanceId, nextData, workflowVersion);
+      await api.persistAssessmentWorkflowWidget(instanceId, nextData, workflowVersion);
       onWorkflowUpdated?.();
     } finally {
       setSaving(false);
@@ -210,7 +210,7 @@ export function RiskRegisterResultsWidget({
               {data.project_title || 'Project Risk Assessment'}
             </h3>
             <p className="mt-1 max-w-2xl text-xs text-text-secondary">
-              Review the generated ratings and register rows. Edits are saved back into the module output before export.
+              Review the generated ratings and register rows. Edits are saved back into the assessment output before export.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

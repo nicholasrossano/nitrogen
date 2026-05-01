@@ -16,7 +16,7 @@ import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
-import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/ModulePicker';
+import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -25,10 +25,10 @@ import { ShellPageHeader } from '@/components/ui';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { api, type Assumption, type ModuleInstance } from '@/lib/api';
+import { api, type Assumption, type AssessmentInstance } from '@/lib/api';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
-import { filterVisibleModules } from '@/lib/featureFlags';
+import { filterVisibleAssessments } from '@/lib/featureFlags';
 import { useFeatureFlagContext } from '@/hooks/useFeatureFlag';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -38,12 +38,12 @@ const MIN_CHAT_PANEL_PERCENT = 20;
 const MAX_CHAT_PANEL_PERCENT = 60;
 const DEFAULT_CHAT_PANEL_PERCENT = 30;
 
-type InitiativeView = 'overview' | 'modules' | 'framework' | 'assumptions' | 'files';
+type InitiativeView = 'overview' | 'assessments' | 'framework' | 'assumptions' | 'files';
 
 function viewFromSearchParam(viewParam: string | null): InitiativeView {
   if (viewParam === 'overview' || viewParam === 'research' || viewParam === 'explore') return 'overview';
   if (viewParam === 'framework' || viewParam === 'plan') return 'framework';
-  if (viewParam === 'workspace' || viewParam === 'modules') return 'modules';
+  if (viewParam === 'workspace' || viewParam === 'assessments') return 'assessments';
   if (viewParam === 'assumptions') return 'assumptions';
   if (viewParam === 'files') return 'files';
   return 'overview';
@@ -76,7 +76,7 @@ interface PendingAssumptionsRequest {
 interface StoredInitiativeWorkspaceUiState {
   panelVisibility: {
     overview: { workspace: boolean; chat: boolean };
-    modules: { workspace: boolean; chat: boolean };
+    assessments: { workspace: boolean; chat: boolean };
     framework: { workspace: boolean; chat: boolean };
     assumptions: { workspace: boolean; chat: boolean };
   };
@@ -87,7 +87,7 @@ interface StoredInitiativeWorkspaceUiState {
 
 const DEFAULT_PANEL_VISIBILITY: StoredInitiativeWorkspaceUiState['panelVisibility'] = {
   overview: { workspace: true, chat: false },
-  modules: { workspace: true, chat: false },
+  assessments: { workspace: true, chat: false },
   framework: { workspace: true, chat: false },
   assumptions: { workspace: true, chat: false },
 };
@@ -125,7 +125,7 @@ function readStoredWorkspaceUiState(storageKey: string): StoredInitiativeWorkspa
     const rawPanelVisibility = parsed.panelVisibility as Partial<StoredInitiativeWorkspaceUiState['panelVisibility']>;
     const panelVisibility: StoredInitiativeWorkspaceUiState['panelVisibility'] = {
       overview: rawPanelVisibility?.overview ?? DEFAULT_PANEL_VISIBILITY.overview,
-      modules: rawPanelVisibility?.modules ?? DEFAULT_PANEL_VISIBILITY.modules,
+      assessments: rawPanelVisibility?.assessments ?? DEFAULT_PANEL_VISIBILITY.assessments,
       framework: rawPanelVisibility?.framework ?? DEFAULT_PANEL_VISIBILITY.framework,
       assumptions: rawPanelVisibility?.assumptions ?? DEFAULT_PANEL_VISIBILITY.assumptions,
     };
@@ -184,7 +184,7 @@ function InitiativePageContent() {
   const [pageReady, setPageReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [chromeReady, setChromeReady] = useState(false);
-  const [modulesDeepDiveRequest, setModulesDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
+  const [assessmentsDeepDiveRequest, setAssessmentsDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [pendingAssumptionsRequest, setPendingAssumptionsRequest] = useState<PendingAssumptionsRequest | null>(null);
   const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
@@ -202,13 +202,13 @@ function InitiativePageContent() {
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(
     initialWorkspaceUiRef.current?.activeWorkspaceTabId ?? null,
   );
-  const [frameworkModuleInstances, setFrameworkModuleInstances] = useState<ModuleInstance[]>([]);
-  const [frameworkPlannedModuleIds, setFrameworkPlannedModuleIds] = useState<string[]>([]);
-  const [frameworkModulesLoading, setFrameworkModulesLoading] = useState(false);
+  const [frameworkAssessmentInstances, setFrameworkAssessmentInstances] = useState<AssessmentInstance[]>([]);
+  const [frameworkPlannedAssessmentIds, setFrameworkPlannedAssessmentIds] = useState<string[]>([]);
+  const [frameworkAssessmentsLoading, setFrameworkAssessmentsLoading] = useState(false);
   const onboardingSeenRef = useRef(false);
-  const modulesDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
-  const frameworkModulesCacheRef = useRef<Map<string, ModuleInstance[]>>(new Map());
-  const frameworkModulesRequestRef = useRef<Map<string, Promise<ModuleInstance[]>>>(new Map());
+  const assessmentsDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
+  const frameworkAssessmentsCacheRef = useRef<Map<string, AssessmentInstance[]>>(new Map());
+  const frameworkAssessmentsRequestRef = useRef<Map<string, Promise<AssessmentInstance[]>>>(new Map());
 
   const {
     initiative,
@@ -243,22 +243,22 @@ function InitiativePageContent() {
   const connectDrive = useGoogleDriveStore((s) => s.connect);
   const featureFlagContext = useFeatureFlagContext();
 
-  const visibleModuleMetaById = useMemo(
+  const visibleAssessmentMetaById = useMemo(
     () => new Map(
-      filterVisibleModules(ALL_MODULES, featureFlagContext)
-        .map((module) => [module.id, module]),
+      filterVisibleAssessments(ALL_MODULES, featureFlagContext)
+        .map((assessment) => [assessment.id, assessment]),
     ),
     [featureFlagContext],
   );
-  const visibleFrameworkPlannedModuleIds = useMemo(
-    () => frameworkPlannedModuleIds.filter((moduleId) => visibleModuleMetaById.has(moduleId)),
-    [frameworkPlannedModuleIds, visibleModuleMetaById],
+  const visibleFrameworkPlannedAssessmentIds = useMemo(
+    () => frameworkPlannedAssessmentIds.filter((assessmentId) => visibleAssessmentMetaById.has(assessmentId)),
+    [frameworkPlannedAssessmentIds, visibleAssessmentMetaById],
   );
 
   const hasProjectPlan = Boolean(projectPlan);
   const hasFrameworkSelection = Boolean(
     hasProjectPlan ||
-    visibleFrameworkPlannedModuleIds.length > 0,
+    visibleFrameworkPlannedAssessmentIds.length > 0,
   );
   const isOnboarding = Boolean(
     initiative &&
@@ -267,22 +267,22 @@ function InitiativePageContent() {
   );
   const frameworkProgress = useMemo(
     () => {
-      const categoryForModuleId = new Map<string, string>();
+      const categoryForAssessmentId = new Map<string, string>();
       MODULE_CATEGORIES.forEach((category) => {
-        category.moduleIds.forEach((moduleId) => categoryForModuleId.set(moduleId, category.id));
+        category.assessmentIds.forEach((assessmentId) => categoryForAssessmentId.set(assessmentId, category.id));
       });
 
-      const approvedModuleIds = new Set(
-        frameworkModuleInstances
+      const approvedAssessmentIds = new Set(
+        frameworkAssessmentInstances
           .filter((instance) => instance.is_plan_complete === true)
           .map((instance) => instance.assessment_id),
       );
 
       const segments = MODULE_CATEGORIES.map((category) => {
-        const plannedInCategory = visibleFrameworkPlannedModuleIds.filter(
-          (moduleId) => categoryForModuleId.get(moduleId) === category.id,
+        const plannedInCategory = visibleFrameworkPlannedAssessmentIds.filter(
+          (assessmentId) => categoryForAssessmentId.get(assessmentId) === category.id,
         );
-        const approvedCount = plannedInCategory.filter((moduleId) => approvedModuleIds.has(moduleId)).length;
+        const approvedCount = plannedInCategory.filter((assessmentId) => approvedAssessmentIds.has(assessmentId)).length;
         return {
           id: category.id,
           label: category.name,
@@ -303,62 +303,62 @@ function InitiativePageContent() {
         segments,
       };
     },
-    [frameworkModuleInstances, visibleFrameworkPlannedModuleIds],
+    [frameworkAssessmentInstances, visibleFrameworkPlannedAssessmentIds],
   );
-  const frameworkPlanModuleOptions = useMemo(
-    () => visibleFrameworkPlannedModuleIds
-      .map((id) => visibleModuleMetaById.get(id))
+  const frameworkPlanAssessmentOptions = useMemo(
+    () => visibleFrameworkPlannedAssessmentIds
+      .map((id) => visibleAssessmentMetaById.get(id))
       .filter((m): m is (typeof ALL_MODULES)[number] => Boolean(m)),
-    [visibleFrameworkPlannedModuleIds, visibleModuleMetaById],
+    [visibleFrameworkPlannedAssessmentIds, visibleAssessmentMetaById],
   );
   const activeWorkspaceTab = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null,
     [workspaceTabs, activeWorkspaceTabId],
   );
-  const activeModuleContext = useMemo(() => {
-    if (activeWorkspaceTab?.kind === 'module') {
+  const activeAssessmentContext = useMemo(() => {
+    if (activeWorkspaceTab?.kind === 'assessment') {
       return {
         instanceId: activeWorkspaceTab.instanceId,
-        moduleId: activeWorkspaceTab.moduleId,
+        assessmentId: activeWorkspaceTab.assessmentId,
         title: activeWorkspaceTab.title,
       };
     }
-    if (activeWorkspaceTab?.kind === 'decision-log' && activeWorkspaceTab.moduleId) {
+    if (activeWorkspaceTab?.kind === 'decision-log' && activeWorkspaceTab.assessmentId) {
       return {
-        instanceId: activeWorkspaceTab.moduleInstanceId,
-        moduleId: activeWorkspaceTab.moduleId,
+        instanceId: activeWorkspaceTab.assessmentInstanceId,
+        assessmentId: activeWorkspaceTab.assessmentId,
         title: activeWorkspaceTab.title,
       };
     }
     return null;
   }, [activeWorkspaceTab]);
   const visibleWorkspaceTabs = useMemo(
-    () => (activeView === 'modules' ? workspaceTabs : []),
+    () => (activeView === 'assessments' ? workspaceTabs : []),
     [activeView, workspaceTabs],
   );
   const visibleWorkspaceActiveTabId = useMemo(
     () => (visibleWorkspaceTabs.some((tab) => tab.id === activeWorkspaceTabId) ? activeWorkspaceTabId : null),
     [visibleWorkspaceTabs, activeWorkspaceTabId],
   );
-  const showTabbedWorkspace = activeView === 'modules';
+  const showTabbedWorkspace = activeView === 'assessments';
   const overviewWorkspaceOpen = activeView === 'overview' && panelVisibility.overview.workspace;
   const overviewChatOpen = activeView === 'overview' && panelVisibility.overview.chat;
-  const modulesWorkspaceOpen = activeView === 'modules' && panelVisibility.modules.workspace;
-  const modulesChatOpen = activeView === 'modules' && panelVisibility.modules.chat;
+  const assessmentsWorkspaceOpen = activeView === 'assessments' && panelVisibility.assessments.workspace;
+  const assessmentsChatOpen = activeView === 'assessments' && panelVisibility.assessments.chat;
   const frameworkWorkspaceOpen =
     activeView === 'framework' && (!hasFrameworkSelection || panelVisibility.framework.workspace);
   const frameworkChatOpen = activeView === 'framework' && hasFrameworkSelection && panelVisibility.framework.chat;
   const assumptionsWorkspaceOpen = activeView === 'assumptions' && panelVisibility.assumptions.workspace;
   const assumptionsChatOpen = activeView === 'assumptions' && panelVisibility.assumptions.chat;
   const workspaceOpen =
-    overviewWorkspaceOpen || modulesWorkspaceOpen || frameworkWorkspaceOpen || assumptionsWorkspaceOpen;
-  const chatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen || assumptionsChatOpen;
-  const sideChatOpen = overviewChatOpen || modulesChatOpen || frameworkChatOpen || assumptionsChatOpen;
-  const sideChatMode: 'overview' | 'modules' | 'framework' | 'assumptions' | null =
+    overviewWorkspaceOpen || assessmentsWorkspaceOpen || frameworkWorkspaceOpen || assumptionsWorkspaceOpen;
+  const chatOpen = overviewChatOpen || assessmentsChatOpen || frameworkChatOpen || assumptionsChatOpen;
+  const sideChatOpen = overviewChatOpen || assessmentsChatOpen || frameworkChatOpen || assumptionsChatOpen;
+  const sideChatMode: 'overview' | 'assessments' | 'framework' | 'assumptions' | null =
     activeView === 'overview'
       ? 'overview'
-      : activeView === 'modules'
-        ? 'modules'
+      : activeView === 'assessments'
+        ? 'assessments'
         : activeView === 'framework' && hasFrameworkSelection
           ? 'framework'
           : activeView === 'assumptions'
@@ -382,11 +382,11 @@ function InitiativePageContent() {
   const workspaceToggleEnabled = !isViewer && (
     activeView === 'overview'
     || activeView === 'framework'
-    || activeView === 'modules'
+    || activeView === 'assessments'
     || activeView === 'assumptions'
   );
   const chatToggleEnabled =
-    activeView === 'modules'
+    activeView === 'assessments'
     || activeView === 'overview'
     || activeView === 'framework'
     || activeView === 'assumptions';
@@ -396,7 +396,7 @@ function InitiativePageContent() {
   const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
 
   const setPanelOpen = useCallback(
-    (view: 'overview' | 'modules' | 'framework' | 'assumptions', panel: 'workspace' | 'chat', open: boolean) => {
+    (view: 'overview' | 'assessments' | 'framework' | 'assumptions', panel: 'workspace' | 'chat', open: boolean) => {
       setPanelVisibility((prev) => {
         const current = prev[view];
         const next = { ...current, [panel]: open };
@@ -417,8 +417,8 @@ function InitiativePageContent() {
     disabled: !workspaceToggleEnabled || workspaceToggleLocked,
     onClick: () => {
       if (!workspaceToggleEnabled || workspaceToggleLocked) return;
-      if (activeView === 'modules') {
-        setPanelOpen('modules', 'workspace', !panelVisibility.modules.workspace);
+      if (activeView === 'assessments') {
+        setPanelOpen('assessments', 'workspace', !panelVisibility.assessments.workspace);
         return;
       }
       if (activeView === 'overview') {
@@ -448,8 +448,8 @@ function InitiativePageContent() {
     disabled: !chatToggleEnabled || chatToggleLocked,
     onClick: () => {
       if (!chatToggleEnabled || chatToggleLocked) return;
-      if (activeView === 'modules') {
-        setPanelOpen('modules', 'chat', !panelVisibility.modules.chat);
+      if (activeView === 'assessments') {
+        setPanelOpen('assessments', 'chat', !panelVisibility.assessments.chat);
         return;
       }
       if (activeView === 'overview') {
@@ -488,9 +488,9 @@ function InitiativePageContent() {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail ?? {};
       if (detail._workspaceForwarded) return;
-      if (activeView !== 'modules' || panelVisibility.modules.chat) return;
+      if (activeView !== 'assessments' || panelVisibility.assessments.chat) return;
 
-      setPanelOpen('modules', 'chat', true);
+      setPanelOpen('assessments', 'chat', true);
       window.setTimeout(() => {
         window.dispatchEvent(
           new CustomEvent('nitrogen:draft', {
@@ -502,7 +502,7 @@ function InitiativePageContent() {
 
     window.addEventListener('nitrogen:draft', handler);
     return () => window.removeEventListener('nitrogen:draft', handler);
-  }, [activeView, panelVisibility.modules.chat, setPanelOpen]);
+  }, [activeView, panelVisibility.assessments.chat, setPanelOpen]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -553,35 +553,35 @@ function InitiativePageContent() {
     });
   }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, initiativeId]);
 
-  const loadFrameworkModuleInstances = useCallback(async (
+  const loadFrameworkAssessmentInstances = useCallback(async (
     targetInitiativeId: string,
     options?: { force?: boolean },
   ) => {
     const force = options?.force === true;
-    const cached = frameworkModulesCacheRef.current.get(targetInitiativeId);
+    const cached = frameworkAssessmentsCacheRef.current.get(targetInitiativeId);
     if (cached && !force) {
-      setFrameworkModuleInstances(cached);
+      setFrameworkAssessmentInstances(cached);
       return;
     }
 
-    let request = frameworkModulesRequestRef.current.get(targetInitiativeId);
+    let request = frameworkAssessmentsRequestRef.current.get(targetInitiativeId);
     if (!request || force) {
-      request = api.listModuleInstances(targetInitiativeId);
-      frameworkModulesRequestRef.current.set(targetInitiativeId, request);
+      request = api.listAssessmentInstances(targetInitiativeId);
+      frameworkAssessmentsRequestRef.current.set(targetInitiativeId, request);
     }
 
-    setFrameworkModulesLoading(true);
+    setFrameworkAssessmentsLoading(true);
     try {
       const instances = await request;
-      frameworkModulesCacheRef.current.set(targetInitiativeId, instances);
-      setFrameworkModuleInstances(instances);
+      frameworkAssessmentsCacheRef.current.set(targetInitiativeId, instances);
+      setFrameworkAssessmentInstances(instances);
     } catch {
-      setFrameworkModuleInstances([]);
+      setFrameworkAssessmentInstances([]);
     } finally {
-      if (frameworkModulesRequestRef.current.get(targetInitiativeId) === request) {
-        frameworkModulesRequestRef.current.delete(targetInitiativeId);
+      if (frameworkAssessmentsRequestRef.current.get(targetInitiativeId) === request) {
+        frameworkAssessmentsRequestRef.current.delete(targetInitiativeId);
       }
-      setFrameworkModulesLoading(false);
+      setFrameworkAssessmentsLoading(false);
     }
   }, []);
 
@@ -600,12 +600,12 @@ function InitiativePageContent() {
       return true;
     }
     if (item === 'workspace') {
-      setPanelOpen('modules', 'workspace', true);
-      // Drawer click should always land on the module hub.
+      setPanelOpen('assessments', 'workspace', true);
+      // Drawer click should always land on the assessment hub.
       setWorkspaceLaunchMode('open');
       setActiveWorkspaceTabId(null);
-      setActiveView('modules');
-      router.replace(`/initiatives/${initiativeId}?view=modules`);
+      setActiveView('assessments');
+      router.replace(`/initiatives/${initiativeId}?view=assessments`);
       return true;
     }
     if (item === 'assumptions') {
@@ -629,7 +629,7 @@ function InitiativePageContent() {
   }, [router, initiativeId, activeView, setPanelOpen]));
 
   useEffect(() => {
-    if (isViewer && (activeView === 'overview' || activeView === 'modules' || activeView === 'assumptions')) {
+    if (isViewer && (activeView === 'overview' || activeView === 'assessments' || activeView === 'assumptions')) {
       setActiveView('framework');
       router.replace(`/initiatives/${initiativeId}?view=framework`);
     }
@@ -663,11 +663,11 @@ function InitiativePageContent() {
     setChatPanelWidthPercent(storedWorkspaceUi?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT);
     setWorkspaceTabs(storedWorkspaceUi?.workspaceTabs ?? []);
     setActiveWorkspaceTabId(storedWorkspaceUi?.activeWorkspaceTabId ?? null);
-    setFrameworkModuleInstances([]);
-    setFrameworkPlannedModuleIds([]);
-    setFrameworkModulesLoading(false);
-    setModulesDeepDiveRequest(null);
-    modulesDeepDiveRef.current = null;
+    setFrameworkAssessmentInstances([]);
+    setFrameworkPlannedAssessmentIds([]);
+    setFrameworkAssessmentsLoading(false);
+    setAssessmentsDeepDiveRequest(null);
+    assessmentsDeepDiveRef.current = null;
     setChatEditorWidgets([]);
     setWorkspaceLaunchMode('idle');
     setPendingChatToOpen(null);
@@ -685,35 +685,35 @@ function InitiativePageContent() {
 
     loadEvidence(initiativeId);
     loadMaterials(initiativeId);
-    loadFrameworkModuleInstances(initiativeId);
+    loadFrameworkAssessmentInstances(initiativeId);
     loadDriveLinkedFiles(initiativeId).then(() => {
       syncDriveFiles(initiativeId).catch(() => {});
     });
-  }, [initiativeId, workspaceUiStorageKey, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkModuleInstances]);
+  }, [initiativeId, workspaceUiStorageKey, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkAssessmentInstances]);
 
   useEffect(() => {
     if (activeView !== 'framework') return;
     if (!initiativeId) return;
-    loadFrameworkModuleInstances(initiativeId);
-  }, [activeView, initiativeId, loadFrameworkModuleInstances]);
+    loadFrameworkAssessmentInstances(initiativeId);
+  }, [activeView, initiativeId, loadFrameworkAssessmentInstances]);
 
   useEffect(() => {
     if (!initiative) return;
     if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) {
-      setFrameworkPlannedModuleIds(Array.from(new Set(initiative.selected_tools)));
+      setFrameworkPlannedAssessmentIds(Array.from(new Set(initiative.selected_tools)));
       return;
     }
-    setFrameworkPlannedModuleIds([]);
+    setFrameworkPlannedAssessmentIds([]);
   }, [initiativeId, initiative?.selected_tools]);
 
   useEffect(() => {
     if (!initiative) return;
     if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) return;
-    if (frameworkPlannedModuleIds.length > 0) return;
-    if (frameworkModuleInstances.length === 0) return;
-    const inferred = Array.from(new Set(frameworkModuleInstances.map((instance) => instance.assessment_id)));
-    setFrameworkPlannedModuleIds(inferred);
-  }, [initiative, frameworkModuleInstances, frameworkPlannedModuleIds.length]);
+    if (frameworkPlannedAssessmentIds.length > 0) return;
+    if (frameworkAssessmentInstances.length === 0) return;
+    const inferred = Array.from(new Set(frameworkAssessmentInstances.map((instance) => instance.assessment_id)));
+    setFrameworkPlannedAssessmentIds(inferred);
+  }, [initiative, frameworkAssessmentInstances, frameworkPlannedAssessmentIds.length]);
 
   useEffect(() => {
     writeStoredWorkspaceUiState(workspaceUiStorageKey, {
@@ -741,7 +741,7 @@ function InitiativePageContent() {
       setWorkspaceTabs((prev) => prev.filter((tab) => tab.id !== 'chat-artifacts'));
       setActiveWorkspaceTabId((current) => {
         if (current !== 'chat-artifacts') return current;
-        if (activeView === 'modules') {
+        if (activeView === 'assessments') {
           const fallbackTabs = workspaceTabs.filter((tab) => tab.id !== 'chat-artifacts');
           return fallbackTabs[0]?.id ?? null;
         }
@@ -760,7 +760,7 @@ function InitiativePageContent() {
   }, [preferArtifactsTab, chatEditorWidgets.length]);
 
   useEffect(() => {
-    if (activeView !== 'modules') return;
+    if (activeView !== 'assessments') return;
     if (activeWorkspaceTabId !== null) return;
     if (workspaceTabs.length === 0) return;
     setActiveWorkspaceTabId(workspaceTabs[0].id);
@@ -779,45 +779,45 @@ function InitiativePageContent() {
     setActiveWorkspaceTabId(tab.id);
   }, []);
 
-  const handleOpenWorkspaceModule = useCallback(
-    (module: {
+  const handleOpenWorkspaceAssessment = useCallback(
+    (assessment: {
       instanceId: string;
-      moduleId: string;
+      assessmentId: string;
       title?: string | null;
       chatId?: string | null;
       chatTitle?: string | null;
       openChatPanel?: boolean;
     }) => {
-      const openChatPanel = module.openChatPanel ?? true;
+      const openChatPanel = assessment.openChatPanel ?? true;
       setWorkspaceLaunchMode('idle');
-      setPanelOpen('modules', 'workspace', true);
-      setPanelOpen('modules', 'chat', openChatPanel);
-      loadFrameworkModuleInstances(initiativeId);
-      if (openChatPanel && module.chatId) {
+      setPanelOpen('assessments', 'workspace', true);
+      setPanelOpen('assessments', 'chat', openChatPanel);
+      loadFrameworkAssessmentInstances(initiativeId);
+      if (openChatPanel && assessment.chatId) {
         setPendingChatToOpen({
-          chatId: module.chatId,
-          title: module.chatTitle || module.title || null,
+          chatId: assessment.chatId,
+          title: assessment.chatTitle || assessment.title || null,
         });
       }
-      setActiveView('modules');
-      router.replace(`/initiatives/${initiativeId}?view=modules`);
+      setActiveView('assessments');
+      router.replace(`/initiatives/${initiativeId}?view=assessments`);
       openWorkspaceTab({
-        id: `module-${module.instanceId}`,
-        kind: 'module',
-        title: module.title || module.moduleId.replace(/_/g, ' '),
-        instanceId: module.instanceId,
-        moduleId: module.moduleId,
+        id: `assessment-${assessment.instanceId}`,
+        kind: 'assessment',
+        title: assessment.title || assessment.assessmentId.replace(/_/g, ' '),
+        instanceId: assessment.instanceId,
+        assessmentId: assessment.assessmentId,
       });
     },
-    [initiativeId, openWorkspaceTab, router, setPanelOpen, loadFrameworkModuleInstances],
+    [initiativeId, openWorkspaceTab, router, setPanelOpen, loadFrameworkAssessmentInstances],
   );
 
   const openWorkspaceDocument = useCallback((citation: ResearchPanelCitation) => {
     setWorkspaceLaunchMode('idle');
-    setPanelOpen('modules', 'workspace', true);
-    setPanelOpen('modules', 'chat', true);
-    setActiveView('modules');
-    router.replace(`/initiatives/${initiativeId}?view=modules`);
+    setPanelOpen('assessments', 'workspace', true);
+    setPanelOpen('assessments', 'chat', true);
+    setActiveView('assessments');
+    router.replace(`/initiatives/${initiativeId}?view=assessments`);
     openWorkspaceTab({
       id: makeDocumentTabId(citation),
       kind: 'document',
@@ -849,23 +849,23 @@ function InitiativePageContent() {
   }, [initiativeId, router, setPanelOpen]);
 
   const openDecisionLogTab = useCallback(
-    (context: { instanceId: string; moduleId: string; title: string }) => {
-      setActiveView('modules');
-      router.replace(`/initiatives/${initiativeId}?view=modules`);
+    (context: { instanceId: string; assessmentId: string; title: string }) => {
+      setActiveView('assessments');
+      router.replace(`/initiatives/${initiativeId}?view=assessments`);
       openWorkspaceTab({
         id: `decision-log-${context.instanceId}`,
         kind: 'decision-log',
         title: `[Log] ${context.title}`,
-        moduleInstanceId: context.instanceId,
-        moduleId: context.moduleId,
+        assessmentInstanceId: context.instanceId,
+        assessmentId: context.assessmentId,
       });
     },
     [initiativeId, openWorkspaceTab, router],
   );
 
   const exportDecisionLog = useCallback(
-    async (context: { instanceId: string; moduleId: string; title: string }) => {
-      const { blob, filename } = await api.exportModuleDecisionLogXlsx(context.instanceId);
+    async (context: { instanceId: string; assessmentId: string; title: string }) => {
+      const { blob, filename } = await api.exportAssessmentDecisionLogXlsx(context.instanceId);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -876,53 +876,53 @@ function InitiativePageContent() {
     [],
   );
 
-  const handleCreateModuleInstanceInModulesView = useCallback(async (
-    moduleId: string,
-    moduleName: string,
+  const handleCreateAssessmentInstanceInAssessmentsView = useCallback(async (
+    assessmentId: string,
+    assessmentName: string,
   ) => {
-    const instance = await api.createModuleInstance(initiativeId, moduleId);
-    setFrameworkModuleInstances((prev) => {
+    const instance = await api.createAssessmentInstance(initiativeId, assessmentId);
+    setFrameworkAssessmentInstances((prev) => {
       const next = [...prev, instance];
-      frameworkModulesCacheRef.current.set(initiativeId, next);
+      frameworkAssessmentsCacheRef.current.set(initiativeId, next);
       return next;
     });
-    handleOpenWorkspaceModule({
+    handleOpenWorkspaceAssessment({
       instanceId: instance.id,
-      moduleId: instance.assessment_id,
-      title: instance.display_name || moduleName,
+      assessmentId: instance.assessment_id,
+      title: instance.display_name || assessmentName,
       openChatPanel: false,
     });
-  }, [initiativeId, handleOpenWorkspaceModule]);
+  }, [initiativeId, handleOpenWorkspaceAssessment]);
 
-  const handleOpenExistingModuleInstanceInModulesView = useCallback(async (
-    instance: ModuleInstance,
+  const handleOpenExistingAssessmentInstanceInAssessmentsView = useCallback(async (
+    instance: AssessmentInstance,
   ) => {
-    handleOpenWorkspaceModule({
+    handleOpenWorkspaceAssessment({
       instanceId: instance.id,
-      moduleId: instance.assessment_id,
+      assessmentId: instance.assessment_id,
       title: instance.display_name || instance.title || instance.assessment_id.replace(/_/g, ' '),
       openChatPanel: false,
     });
-  }, [handleOpenWorkspaceModule]);
+  }, [handleOpenWorkspaceAssessment]);
 
-  const handleAddModuleToFrameworkPlan = useCallback(async (moduleId: string) => {
-    const next = Array.from(new Set([...frameworkPlannedModuleIds, moduleId]));
+  const handleAddAssessmentToFrameworkPlan = useCallback(async (assessmentId: string) => {
+    const next = Array.from(new Set([...frameworkPlannedAssessmentIds, assessmentId]));
     const response = await api.selectTools(initiativeId, next);
-    setFrameworkPlannedModuleIds(response.selected_tools);
-  }, [frameworkPlannedModuleIds, initiativeId]);
+    setFrameworkPlannedAssessmentIds(response.selected_tools);
+  }, [frameworkPlannedAssessmentIds, initiativeId]);
 
-  const handleRemoveModuleFromFrameworkPlan = useCallback(async (moduleId: string) => {
-    const next = frameworkPlannedModuleIds.filter((id) => id !== moduleId);
+  const handleRemoveAssessmentFromFrameworkPlan = useCallback(async (assessmentId: string) => {
+    const next = frameworkPlannedAssessmentIds.filter((id) => id !== assessmentId);
     const response = await api.selectTools(initiativeId, next);
-    setFrameworkPlannedModuleIds(response.selected_tools);
-  }, [frameworkPlannedModuleIds, initiativeId]);
+    setFrameworkPlannedAssessmentIds(response.selected_tools);
+  }, [frameworkPlannedAssessmentIds, initiativeId]);
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
     setWorkspaceTabs((prev) => {
       const nextTabs = prev.filter((tab) => tab.id !== tabId);
       setActiveWorkspaceTabId((current) => {
         if (current !== tabId) return current;
-        if (activeView === 'modules') {
+        if (activeView === 'assessments') {
           return nextTabs[0]?.id ?? null;
         }
         const nextDocument = nextTabs.find((tab) => tab.kind === 'document');
@@ -964,23 +964,23 @@ function InitiativePageContent() {
     };
   }, [isResizingChat, handleChatMouseMove, handleChatMouseUp]);
 
-  const handleModuleInspectorStateChange = useCallback((state: PlanWorkspaceInspectorState | null) => {
+  const handleAssessmentInspectorStateChange = useCallback((state: PlanWorkspaceInspectorState | null) => {
     if (!state) {
-      modulesDeepDiveRef.current = null;
-      setModulesDeepDiveRequest(null);
+      assessmentsDeepDiveRef.current = null;
+      setAssessmentsDeepDiveRequest(null);
       return;
     }
 
     const key = inspectorRequestKey(state);
-    const existing = modulesDeepDiveRef.current;
+    const existing = assessmentsDeepDiveRef.current;
     const requestId = existing?.key === key
       ? existing.requestId
-      : `module-deep-dive-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      : `assessment-deep-dive-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    modulesDeepDiveRef.current = { key, requestId };
-    setModulesDeepDiveRequest({ requestId, state });
+    assessmentsDeepDiveRef.current = { key, requestId };
+    setAssessmentsDeepDiveRequest({ requestId, state });
     if (existing?.key !== key) {
-      setPanelOpen('modules', 'chat', true);
+      setPanelOpen('assessments', 'chat', true);
     }
   }, [setPanelOpen]);
 
@@ -1017,25 +1017,25 @@ function InitiativePageContent() {
           chatWidgets={chatEditorWidgets}
           workspaceLaunchMode={workspaceLaunchMode}
           onWorkspaceLaunchModeHandled={() => setWorkspaceLaunchMode('idle')}
-          showModuleActions={activeView === 'modules'}
-          frameworkPlanModules={activeView === 'modules' ? frameworkPlanModuleOptions : undefined}
-          onNewModule={activeView === 'modules' ? handleCreateModuleInstanceInModulesView : undefined}
+          showAssessmentActions={activeView === 'assessments'}
+          frameworkPlanAssessments={activeView === 'assessments' ? frameworkPlanAssessmentOptions : undefined}
+          onNewAssessment={activeView === 'assessments' ? handleCreateAssessmentInstanceInAssessmentsView : undefined}
           onSendToChat={(content, toolHint) => {
-            setPanelOpen('modules', 'chat', true);
+            setPanelOpen('assessments', 'chat', true);
             chatSendRef.current?.(content, toolHint);
           }}
           onOpenChatSession={(chat) => {
-            setPanelOpen('modules', 'chat', true);
+            setPanelOpen('assessments', 'chat', true);
             setPreferArtifactsTab(true);
             setPendingChatToOpen(chat);
           }}
           onOpenDecisionLog={openDecisionLogTab}
           onExportDecisionLog={exportDecisionLog}
-          onModuleInspectorStateChange={handleModuleInspectorStateChange}
-          onModuleApprovalChange={() => loadFrameworkModuleInstances(initiativeId, { force: true })}
+          onAssessmentInspectorStateChange={handleAssessmentInspectorStateChange}
+          onAssessmentApprovalChange={() => loadFrameworkAssessmentInstances(initiativeId, { force: true })}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
-          moduleInstances={frameworkModuleInstances}
-          onOpenModuleInstance={handleOpenExistingModuleInstanceInModulesView}
+          assessmentInstances={frameworkAssessmentInstances}
+          onOpenAssessmentInstance={handleOpenExistingAssessmentInstanceInAssessmentsView}
         />
       );
     }
@@ -1059,7 +1059,7 @@ function InitiativePageContent() {
             )}
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
-            onOpenWorkspaceModule={handleOpenWorkspaceModule}
+            onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
             onOpenAssumptions={openAssumptionsView}
           />
         );
@@ -1086,7 +1086,7 @@ function InitiativePageContent() {
           }}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
-          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onOpenAssumptions={openAssumptionsView}
         />
       );
@@ -1098,8 +1098,8 @@ function InitiativePageContent() {
           initiativeId={initiativeId}
           showDetailPanel={false}
           onAssumptionSelectInChat={handleOpenAssumptionInChat}
-          moduleInstances={frameworkModuleInstances}
-          onOpenModuleInstance={handleOpenExistingModuleInstanceInModulesView}
+          assessmentInstances={frameworkAssessmentInstances}
+          onOpenAssessmentInstance={handleOpenExistingAssessmentInstanceInAssessmentsView}
         />
       );
     }
@@ -1113,7 +1113,7 @@ function InitiativePageContent() {
             sessionStorageKey={frameworkChatTabsStorageKey}
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
-            onOpenWorkspaceModule={handleOpenWorkspaceModule}
+            onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
           />
@@ -1135,16 +1135,16 @@ function InitiativePageContent() {
           )}
           <div className="flex-1 min-h-0 overflow-hidden">
             <FrameworkPlanView
-              plannedModuleIds={visibleFrameworkPlannedModuleIds}
-              moduleInstances={frameworkModuleInstances}
-              loading={frameworkModulesLoading}
-              onAddModuleToFrameworkPlan={handleAddModuleToFrameworkPlan}
-              onRemoveModuleFromFrameworkPlan={handleRemoveModuleFromFrameworkPlan}
-              onCreateModuleInstanceInModulesView={handleCreateModuleInstanceInModulesView}
-              onOpenExistingModuleInstanceInModulesView={handleOpenExistingModuleInstanceInModulesView}
+              plannedAssessmentIds={visibleFrameworkPlannedAssessmentIds}
+              assessmentInstances={frameworkAssessmentInstances}
+              loading={frameworkAssessmentsLoading}
+              onAddAssessmentToFrameworkPlan={handleAddAssessmentToFrameworkPlan}
+              onRemoveAssessmentFromFrameworkPlan={handleRemoveAssessmentFromFrameworkPlan}
+              onCreateAssessmentInstanceInAssessmentsView={handleCreateAssessmentInstanceInAssessmentsView}
+              onOpenExistingAssessmentInstanceInAssessmentsView={handleOpenExistingAssessmentInstanceInAssessmentsView}
               readOnly={Boolean(isViewer)}
-              onOpenModule={(module) => {
-                void handleOpenExistingModuleInstanceInModulesView(module);
+              onOpenAssessment={(assessment) => {
+                void handleOpenExistingAssessmentInstanceInAssessmentsView(assessment);
               }}
             />
           </div>
@@ -1168,14 +1168,14 @@ function InitiativePageContent() {
           onPendingAutoSendHandled={() => setPendingOverviewAutoSend(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
-          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />
       </div>
     </div>
-  ) : sideChatMode === 'modules' ? (
+  ) : sideChatMode === 'assessments' ? (
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
@@ -1183,17 +1183,17 @@ function InitiativePageContent() {
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
-          activeModuleContext={activeModuleContext}
+          activeAssessmentContext={activeAssessmentContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
-          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
-          pendingDeepDive={modulesDeepDiveRequest ? {
-            requestId: modulesDeepDiveRequest.requestId,
-            state: modulesDeepDiveRequest.state,
+          pendingDeepDive={assessmentsDeepDiveRequest ? {
+            requestId: assessmentsDeepDiveRequest.requestId,
+            state: assessmentsDeepDiveRequest.state,
           } : null}
-          onPendingDeepDiveHandled={() => setModulesDeepDiveRequest(null)}
+          onPendingDeepDiveHandled={() => setAssessmentsDeepDiveRequest(null)}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />
@@ -1207,11 +1207,11 @@ function InitiativePageContent() {
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
-          activeModuleContext={null}
+          activeAssessmentContext={null}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
-          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
@@ -1226,11 +1226,11 @@ function InitiativePageContent() {
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
-          activeModuleContext={null}
+          activeAssessmentContext={null}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
-          onOpenWorkspaceModule={handleOpenWorkspaceModule}
+          onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}

@@ -1,5 +1,5 @@
 /**
- * Minimal analytics module.
+ * Minimal analytics assessment.
  *
  * Logs to console.debug in development.
  * Swap the implementation of `track` for Mixpanel / Segment / PostHog

@@ -9,13 +9,13 @@ from app.core.database import Base
 
 
 class DecisionEvent(Base):
-    """Append-only audit event for module workflow decisions."""
+    """Append-only audit event for assessment workflow decisions."""
 
     __tablename__ = "decision_events"
 
     __table_args__ = (
         Index("ix_decision_events_initiative_created", "initiative_id", "created_at"),
-        Index("ix_decision_events_instance_created", "module_instance_id", "created_at"),
+        Index("ix_decision_events_instance_created", "assessment_instance_id", "created_at"),
         Index("ix_decision_events_event_type", "event_type"),
     )
 
@@ -27,12 +27,12 @@ class DecisionEvent(Base):
         ForeignKey("initiatives.id", ondelete="CASCADE"),
         nullable=False,
     )
-    module_instance_id: Mapped[uuid.UUID] = mapped_column(
+    assessment_instance_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("module_instances.id", ondelete="CASCADE"),
+        ForeignKey("assessment_instances.id", ondelete="CASCADE"),
         nullable=False,
     )
-    module_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    assessment_id: Mapped[str] = mapped_column(String(100), nullable=False)
     stage_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -8,7 +8,7 @@ import io
 import logging
 
 from app.core.auth import get_current_user, MockUser
-from app.modules.pvwatts_module import PVWattsTool
+from app.assessments.pvwatts_assessment import PVWattsTool
 from app.services.pvwatts_engine import PVWattsEngine, MONTH_LABELS, MODULE_TYPE_LABELS, ARRAY_TYPE_LABELS
 
 router = APIRouter()
@@ -28,7 +28,18 @@ class UpdateInputRequest(BaseModel):
 
 
 def _normalize_input_status(status: str) -> str:
-    return "validated" if status == "confirmed" else status
+    return status
+
+
+def _normalize_input_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    lowered = value.strip().lower()
+    if lowered in {"", "—", "-", "–", "n/a", "na", "none", "null", "missing", "unknown"} or lowered.startswith("unknown "):
+        return None
+    return value.strip()
 
 
 class GeocodeRequest(BaseModel):
@@ -59,16 +70,17 @@ async def update_input_and_recalculate(
 ):
     """Update a single input field and recalculate."""
     inputs = data.inputs
-    normalized_status = _normalize_input_status(data.status)
+    normalized_value = _normalize_input_value(data.value)
+    normalized_status = "missing" if normalized_value is None else _normalize_input_status(data.status)
     if data.field_name in inputs:
-        inputs[data.field_name]["value"] = data.value
+        inputs[data.field_name]["value"] = normalized_value
         inputs[data.field_name]["source"] = data.source
         inputs[data.field_name]["status"] = normalized_status
     else:
         inputs[data.field_name] = {
             "field_name": data.field_name,
             "label": data.field_name,
-            "value": data.value,
+            "value": normalized_value,
             "unit": "",
             "source": data.source,
             "status": normalized_status,
@@ -286,7 +298,7 @@ async def export_solar_excel(
         row2 += 1
         for field_name, field in cat_rows:
             val = field.get("value")
-            if field_name == "module_type":
+            if field_name == "assessment_type":
                 val = MODULE_TYPE_LABELS.get(int(val), str(val)) if val is not None else ""
             elif field_name == "array_type":
                 val = ARRAY_TYPE_LABELS.get(int(val), str(val)) if val is not None else ""

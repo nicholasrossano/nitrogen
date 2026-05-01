@@ -2,8 +2,8 @@ from io import BytesIO
 
 import openpyxl
 
-from app.modules.lcoe_module import LCOETool
-from app.modules.stakeholder_assessment import StakeholderAssessmentModule
+from app.assessments.lcoe_assessment import LCOETool
+from app.assessments.stakeholder_assessment import StakeholderAssessment
 from app.services.decision_log_service import (
     build_current_state_rows,
     build_decision_log_xlsx,
@@ -11,9 +11,9 @@ from app.services.decision_log_service import (
 
 
 def test_build_current_state_rows_includes_provenance_and_final_approval():
-    module = StakeholderAssessmentModule()
+    assessment = StakeholderAssessment()
     workflow_state = {
-        "module_type": module.definition.id,
+        "assessment_type": assessment.definition.id,
         "current_stage_id": "stakeholders",
         "final_approval": {
             "status": "approved",
@@ -57,10 +57,10 @@ def test_build_current_state_rows_includes_provenance_and_final_approval():
 
     rows = build_current_state_rows(
         workflow_state=workflow_state,
-        stage_defs=module.stage_defs,
-        module_id=module.definition.id,
-        module_name=module.definition.name,
-        module_instance_id="instance-1",
+        stage_defs=assessment.stage_defs,
+        assessment_id=assessment.definition.id,
+        assessment_name=assessment.definition.name,
+        assessment_instance_id="instance-1",
     )
 
     assert rows
@@ -76,9 +76,9 @@ def test_build_decision_log_xlsx_writes_current_and_history_sheets():
         "metadata": {},
         "current_rows": [
             {
-                "module": "Stakeholder Assessment",
-                "module_id": "stakeholder_assessment",
-                "module_instance_id": "instance-1",
+                "assessment": "Stakeholder Assessment",
+                "assessment_id": "stakeholder_assessment",
+                "assessment_instance_id": "instance-1",
                 "stage": "Categories",
                 "stage_id": "categories",
                 "entity_type": "item",
@@ -97,8 +97,8 @@ def test_build_decision_log_xlsx_writes_current_and_history_sheets():
         ],
         "history_rows": [
             {
-                "module_id": "stakeholder_assessment",
-                "module_instance_id": "instance-1",
+                "assessment_id": "stakeholder_assessment",
+                "assessment_instance_id": "instance-1",
                 "stage_id": "categories",
                 "event": "Stage Confirmed",
                 "entity_type": "Stage",
@@ -119,9 +119,9 @@ def test_build_decision_log_xlsx_writes_current_and_history_sheets():
 
 
 def test_build_current_state_rows_summarizes_computed_widget_to_overview_metrics():
-    module = LCOETool()
+    assessment = LCOETool()
     workflow_state = {
-        "module_type": module.definition.id,
+        "assessment_type": assessment.definition.id,
         "current_stage_id": "results",
         "final_approval": {
             "status": "approved",
@@ -157,10 +157,10 @@ def test_build_current_state_rows_summarizes_computed_widget_to_overview_metrics
 
     rows = build_current_state_rows(
         workflow_state=workflow_state,
-        stage_defs=module.stage_defs,
-        module_id=module.definition.id,
-        module_name=module.definition.name,
-        module_instance_id="instance-1",
+        stage_defs=assessment.stage_defs,
+        assessment_id=assessment.definition.id,
+        assessment_name=assessment.definition.name,
+        assessment_instance_id="instance-1",
     )
 
     assert rows

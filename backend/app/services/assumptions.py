@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assumptions.config import (
     ASSUMPTION_BY_KEY,
     AssumptionDefinition,
-    expected_assumptions_for_modules,
+    expected_assumptions_for_assessments,
 )
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
@@ -51,35 +51,35 @@ def _definition_for_key(key: str) -> AssumptionDefinition | None:
     return ASSUMPTION_BY_KEY.get(normalize_assumption_key(key))
 
 
-def _definition_for_module_field(field_key: str, module_id: str) -> AssumptionDefinition | None:
+def _definition_for_assessment_field(field_key: str, assessment_id: str) -> AssumptionDefinition | None:
     normalized = normalize_assumption_key(field_key)
     exact = _definition_for_key(normalized)
-    if exact and module_id in exact.used_in_modules:
+    if exact and assessment_id in exact.used_in_assessments:
         return exact
     for definition in ASSUMPTION_BY_KEY.values():
         aliases = {
             normalize_assumption_key(alias)
-            for alias in definition.module_field_keys.get(module_id, [])
+            for alias in definition.assessment_field_keys.get(assessment_id, [])
         }
         if normalized in aliases:
             return definition
     return None
 
 
-def _module_ids_from_initiative(initiative: Initiative) -> list[str]:
-    # Drive assumption requirements from active module instances, not planned tools.
-    # This prevents static required placeholders from appearing before a module exists.
-    modules: set[str] = set()
-    for inst in initiative.module_instances or []:
+def _assessment_ids_from_initiative(initiative: Initiative) -> list[str]:
+    # Drive assumption requirements from active assessment instances, not planned tools.
+    # This prevents static required placeholders from appearing before a assessment exists.
+    assessments: set[str] = set()
+    for inst in initiative.assessment_instances or []:
         if not getattr(inst, "archived", False):
-            modules.add(inst.module_id)
-    return sorted(modules)
+            assessments.add(inst.assessment_id)
+    return sorted(assessments)
 
 
-def _coerce_modules(modules: list[str] | None, definition: AssumptionDefinition | None) -> list[str]:
-    values = set(modules or [])
+def _coerce_assessments(assessments: list[str] | None, definition: AssumptionDefinition | None) -> list[str]:
+    values = set(assessments or [])
     if definition:
-        values.update(definition.used_in_modules)
+        values.update(definition.used_in_assessments)
     return sorted(values)
 
 
@@ -105,6 +105,39 @@ def normalize_assumption_status(status: str | None, *, default: str = "assumed")
     return mapping.get(normalized, default)
 
 
+MISSING_VALUE_TOKENS = {
+    "",
+    "—",
+    "-",
+    "–",
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "missing",
+    "tbd",
+    "unknown",
+    "not available",
+    "not provided",
+}
+
+
+def normalize_missing_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    lowered = stripped.lower()
+    if lowered in MISSING_VALUE_TOKENS or lowered.startswith("unknown "):
+        return None
+    return stripped
+
+
+def _value_is_missing(value: Any) -> bool:
+    return normalize_missing_value(value) is None
+
+
 def infer_assumption_value_type(value: Any) -> str:
     if isinstance(value, bool):
         return "boolean"
@@ -123,7 +156,7 @@ async def list_assumptions(
     *,
     status: str | None = None,
     source_type: str | None = None,
-    module: str | None = None,
+    assessment: str | None = None,
 ) -> list[Assumption]:
     normalized_status_filter = normalize_assumption_status(status, default="")
     stmt = select(Assumption).where(
@@ -142,8 +175,8 @@ async def list_assumptions(
     rows = list(result.scalars().all())
     for row in rows:
         row.status = normalize_assumption_status(row.status, default="assumed")
-    if module:
-        rows = [row for row in rows if module in (row.used_in_modules or [])]
+    if assessment:
+        rows = [row for row in rows if assessment in (row.used_in_assessments or [])]
     return rows
 
 
@@ -199,7 +232,7 @@ async def upsert_assumption(
     source_type: str,
     source_reference: dict[str, Any] | None = None,
     status: str = "assumed",
-    used_in_modules: list[str] | None = None,
+    used_in_assessments: list[str] | None = None,
     actor: AssumptionActor | None = None,
     notes: str | None = None,
     replace_validated: bool = False,
@@ -217,22 +250,26 @@ async def upsert_assumption(
         .limit(1)
     )
     existing = result.scalar_one_or_none()
-    modules = _coerce_modules(used_in_modules, definition)
+    assessments = _coerce_assessments(used_in_assessments, definition)
+    normalized_value = normalize_missing_value(value)
+    normalized_status = normalize_assumption_status(status)
+    if normalized_value is None and normalized_status != "missing":
+        normalized_status = "missing"
     now = datetime.now(timezone.utc)
 
     if existing:
         if existing.status == "validated" and not replace_validated and source_type in {"extraction", "model_candidate"}:
-            existing.used_in_modules = sorted(set(existing.used_in_modules or []) | set(modules))
+            existing.used_in_assessments = sorted(set(existing.used_in_assessments or []) | set(assessments))
             existing.updated_at = now
             return existing, False
         existing.label = label or existing.label or (definition.label if definition else normalized_key.replace("_", " ").title())
-        existing.value = value
+        existing.value = normalized_value
         existing.unit = unit if unit is not None else (existing.unit or (definition.unit if definition else None))
         existing.value_type = value_type or existing.value_type or (definition.value_type if definition else "string")
         existing.source_type = source_type
         existing.source_reference = source_reference
-        existing.status = normalize_assumption_status(status)
-        existing.used_in_modules = sorted(set(existing.used_in_modules or []) | set(modules))
+        existing.status = normalized_status
+        existing.used_in_assessments = sorted(set(existing.used_in_assessments or []) | set(assessments))
         existing.notes = notes if notes is not None else existing.notes
         existing.last_updated_by_user_id = _actor_user_id(actor)
         existing.last_updated_by_email = _actor_email(actor)
@@ -243,13 +280,13 @@ async def upsert_assumption(
         initiative_id=initiative_id,
         key=normalized_key,
         label=label or (definition.label if definition else normalized_key.replace("_", " ").title()),
-        value=value,
+        value=normalized_value,
         unit=unit if unit is not None else (definition.unit if definition else None),
         value_type=value_type or (definition.value_type if definition else "string"),
         source_type=source_type,
         source_reference=source_reference,
-        status=normalize_assumption_status(status),
-        used_in_modules=modules,
+        status=normalized_status,
+        used_in_assessments=assessments,
         created_by_user_id=_actor_user_id(actor),
         created_by_email=_actor_email(actor),
         last_updated_by_user_id=_actor_user_id(actor),
@@ -268,6 +305,17 @@ async def update_assumption(
     *,
     actor: AssumptionActor,
 ) -> Assumption:
+    if "value" in updates:
+        updates["value"] = normalize_missing_value(updates.get("value"))
+    if "status" in updates:
+        updates["status"] = normalize_assumption_status(updates.get("status"))
+    if "value" in updates or "status" in updates:
+        effective_value = updates.get("value", assumption.value)
+        if _value_is_missing(effective_value):
+            updates["value"] = None
+            if "status" not in updates or updates.get("status") != "missing":
+                updates["status"] = "missing"
+
     for field in (
         "label",
         "value",
@@ -276,7 +324,7 @@ async def update_assumption(
         "source_type",
         "source_reference",
         "status",
-        "used_in_modules",
+        "used_in_assessments",
         "notes",
     ):
         if field in updates:
@@ -292,15 +340,15 @@ async def ensure_expected_assumptions(
     db: AsyncSession,
     initiative: Initiative,
     *,
-    module_ids: list[str] | None = None,
+    assessment_ids: list[str] | None = None,
     actor: AssumptionActor | None = None,
 ) -> tuple[int, list[Assumption]]:
-    modules = module_ids or _module_ids_from_initiative(initiative)
-    definitions = expected_assumptions_for_modules(modules)
+    assessments = assessment_ids or _assessment_ids_from_initiative(initiative)
+    definitions = expected_assumptions_for_assessments(assessments)
     touched: list[Assumption] = []
     created_count = 0
     for definition in definitions:
-        required = bool(set(modules).intersection(definition.required_for_modules))
+        required = bool(set(assessments).intersection(definition.required_for_assessments))
         if not required:
             continue
         assumption, created = await upsert_assumption(
@@ -312,9 +360,9 @@ async def ensure_expected_assumptions(
             unit=definition.unit,
             value_type=definition.value_type,
             source_type="missing_placeholder",
-            source_reference={"required_for_modules": sorted(set(definition.required_for_modules).intersection(modules))},
+            source_reference={"required_for_assessments": sorted(set(definition.required_for_assessments).intersection(assessments))},
             status="missing",
-            used_in_modules=definition.used_in_modules,
+            used_in_assessments=definition.used_in_assessments,
             actor=actor or AssumptionActor.system(),
         )
         touched.append(assumption)
@@ -327,7 +375,7 @@ def apply_assumptions_to_items(
     items: list[dict[str, Any]],
     assumptions: list[dict[str, Any]],
     *,
-    module_id: str,
+    assessment_id: str,
 ) -> list[dict[str, Any]]:
     by_key = {
         normalize_assumption_key(a.get("key", "")): a
@@ -340,7 +388,7 @@ def apply_assumptions_to_items(
         definition = _definition_for_key(str(assumption.get("key") or ""))
         if definition is None:
             continue
-        for alias in definition.module_field_keys.get(module_id, []):
+        for alias in definition.assessment_field_keys.get(assessment_id, []):
             by_key[normalize_assumption_key(alias)] = assumption
     for item in items:
         content = item.get("content") if isinstance(item, dict) else None
@@ -352,9 +400,9 @@ def apply_assumptions_to_items(
         assumption = by_key.get(field_name)
         if assumption is None:
             continue
-        if module_id not in (assumption.get("used_in_modules") or []):
-            definition = _definition_for_module_field(field_name, module_id)
-            if definition is None or module_id not in definition.used_in_modules:
+        if assessment_id not in (assumption.get("used_in_assessments") or []):
+            definition = _definition_for_assessment_field(field_name, assessment_id)
+            if definition is None or assessment_id not in definition.used_in_assessments:
                 continue
         content["value"] = assumption.get("value")
         if assumption.get("unit") and not content.get("unit"):
@@ -372,8 +420,8 @@ async def sync_stage_assumptions(
     db: AsyncSession,
     *,
     initiative_id: UUID,
-    module_id: str,
-    module_instance_id: UUID | None = None,
+    assessment_id: str,
+    assessment_instance_id: UUID | None = None,
     stage_id: str,
     stage_data: dict[str, Any] | None,
     actor: AssumptionActor,
@@ -393,9 +441,9 @@ async def sync_stage_assumptions(
         field_key = normalize_assumption_key(str(content.get("field_name") or content.get("name") or ""))
         if not field_key:
             continue
-        definition = _definition_for_module_field(field_key, module_id)
-        value = content.get("value")
-        value_is_missing = value in (None, "")
+        definition = _definition_for_assessment_field(field_key, assessment_id)
+        value = normalize_missing_value(content.get("value"))
+        value_is_missing = value is None
         effective_status = normalize_assumption_status(
             content.get("status"),
             default=("missing" if value_is_missing else status),
@@ -415,15 +463,15 @@ async def sync_stage_assumptions(
             label=label,
             unit=content.get("unit") or (definition.unit if definition else None),
             value_type=value_type,
-            source_type="module",
+            source_type="assessment",
             source_reference={
-                "module_id": module_id,
+                "assessment_id": assessment_id,
                 "stage_id": stage_id,
                 "field_name": field_key,
                 "variable": content.get("variable"),
             },
             status=effective_status,
-            used_in_modules=[module_id],
+            used_in_assessments=[assessment_id],
             actor=actor,
             replace_validated=True,
         )
@@ -431,8 +479,8 @@ async def sync_stage_assumptions(
             db,
             initiative_id=initiative_id,
             assumption_id=assumption.id,
-            module_id=module_id,
-            module_instance_id=module_instance_id,
+            assessment_id=assessment_id,
+            assessment_instance_id=assessment_instance_id,
             stage_id=stage_id,
             field_name=field_key,
             field_label=label,
@@ -452,8 +500,8 @@ async def sync_widget_assumptions(
     db: AsyncSession,
     *,
     initiative_id: UUID,
-    module_id: str,
-    module_instance_id: UUID | None = None,
+    assessment_id: str,
+    assessment_instance_id: UUID | None = None,
     widget_data: dict[str, Any],
     actor: AssumptionActor,
 ) -> tuple[list[Assumption], dict[str, str]]:
@@ -486,8 +534,8 @@ async def sync_widget_assumptions(
     return await sync_stage_assumptions(
         db,
         initiative_id=initiative_id,
-        module_id=module_id,
-        module_instance_id=module_instance_id,
+        assessment_id=assessment_id,
+        assessment_instance_id=assessment_instance_id,
         stage_id="widget_state",
         stage_data=stage_data,
         actor=actor,
@@ -500,8 +548,8 @@ async def upsert_assumption_binding(
     *,
     initiative_id: UUID,
     assumption_id: UUID,
-    module_id: str,
-    module_instance_id: UUID | None,
+    assessment_id: str,
+    assessment_instance_id: UUID | None,
     stage_id: str | None,
     field_name: str,
     field_label: str | None = None,
@@ -511,10 +559,10 @@ async def upsert_assumption_binding(
 ) -> AssumptionBinding:
     stmt = select(AssumptionBinding).where(
         AssumptionBinding.initiative_id == initiative_id,
-        AssumptionBinding.module_id == module_id,
+        AssumptionBinding.assessment_id == assessment_id,
         AssumptionBinding.field_name == normalize_assumption_key(field_name),
         AssumptionBinding.stage_id == stage_id,
-        AssumptionBinding.module_instance_id == module_instance_id,
+        AssumptionBinding.assessment_instance_id == assessment_instance_id,
     )
     existing = (await db.execute(stmt)).scalar_one_or_none()
     now = datetime.now(timezone.utc)
@@ -531,8 +579,8 @@ async def upsert_assumption_binding(
     binding = AssumptionBinding(
         initiative_id=initiative_id,
         assumption_id=assumption_id,
-        module_id=module_id,
-        module_instance_id=module_instance_id,
+        assessment_id=assessment_id,
+        assessment_instance_id=assessment_instance_id,
         stage_id=stage_id,
         field_name=normalize_assumption_key(field_name),
         field_label=field_label,
@@ -545,13 +593,13 @@ async def upsert_assumption_binding(
     return binding
 
 
-async def resolve_assumption_for_module_field(
+async def resolve_assumption_for_assessment_field(
     db: AsyncSession,
     *,
     initiative_id: UUID,
-    module_id: str,
+    assessment_id: str,
     field_name: str,
-    module_instance_id: UUID | None = None,
+    assessment_instance_id: UUID | None = None,
 ) -> Assumption | None:
     normalized_field = normalize_assumption_key(field_name)
     if not normalized_field:
@@ -561,15 +609,15 @@ async def resolve_assumption_for_module_field(
         select(AssumptionBinding)
         .where(
             AssumptionBinding.initiative_id == initiative_id,
-            AssumptionBinding.module_id == module_id,
+            AssumptionBinding.assessment_id == assessment_id,
             AssumptionBinding.field_name == normalized_field,
         )
         .order_by(AssumptionBinding.updated_at.desc(), AssumptionBinding.created_at.desc())
     )
     bindings = list((await db.execute(binding_stmt)).scalars().all())
-    if module_instance_id:
+    if assessment_instance_id:
         preferred = next(
-            (binding for binding in bindings if binding.module_instance_id == module_instance_id),
+            (binding for binding in bindings if binding.assessment_instance_id == assessment_instance_id),
             None,
         )
         if preferred is not None:
@@ -581,7 +629,7 @@ async def resolve_assumption_for_module_field(
         if assumption and assumption.initiative_id == initiative_id:
             return assumption
 
-    definition = _definition_for_module_field(normalized_field, module_id)
+    definition = _definition_for_assessment_field(normalized_field, assessment_id)
     assumption_key = definition.key if definition else normalized_field
     stmt = (
         select(Assumption)
@@ -624,7 +672,7 @@ async def build_summary(db: AsyncSession, initiative_id: UUID) -> dict[str, Any]
                 "key": row.key,
                 "label": row.label,
                 "status": normalize_assumption_status(row.status, default="assumed"),
-                "used_in_modules": row.used_in_modules or [],
+                "used_in_assessments": row.used_in_assessments or [],
             }
             for row in top_attention
         ],
@@ -640,8 +688,8 @@ def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
         normalized_status = normalize_assumption_status(row.status, default="assumed")
         value = "missing" if normalized_status == "missing" else row.value
         unit = f" {row.unit}" if row.unit else ""
-        modules = f" ({', '.join(row.used_in_modules or [])})" if row.used_in_modules else ""
-        buckets[normalized_status].append(f"- {row.label}: {value}{unit}{modules}")
+        assessments = f" ({', '.join(row.used_in_assessments or [])})" if row.used_in_assessments else ""
+        buckets[normalized_status].append(f"- {row.label}: {value}{unit}{assessments}")
     parts = ["Project assumptions:"]
     for status, lines in buckets.items():
         if lines:
@@ -667,7 +715,7 @@ async def assumptions_as_context(db: AsyncSession, initiative_id: UUID) -> list[
             "source_type": row.source_type,
             "source_reference": row.source_reference,
             "status": normalize_assumption_status(row.status, default="assumed"),
-            "used_in_modules": row.used_in_modules or [],
+            "used_in_assessments": row.used_in_assessments or [],
         }
         for row in rows
         if normalize_assumption_status(row.status) in ACTIVE_STATUSES
@@ -715,16 +763,16 @@ async def extract_assumptions_from_sources(
     initiative: Initiative,
     *,
     actor: AssumptionActor,
-    module_ids: list[str] | None = None,
+    assessment_ids: list[str] | None = None,
 ) -> tuple[int, int, list[Assumption]]:
-    modules = module_ids or _module_ids_from_initiative(initiative)
-    definitions = expected_assumptions_for_modules(modules)
+    assessments = assessment_ids or _assessment_ids_from_initiative(initiative)
+    definitions = expected_assumptions_for_assessments(assessments)
     text, source_refs = await _load_extraction_text(db, initiative.id)
     touched: list[Assumption] = []
     created_count, placeholders = await ensure_expected_assumptions(
         db,
         initiative,
-        module_ids=modules,
+        assessment_ids=assessments,
         actor=AssumptionActor.system(),
     )
     touched.extend(placeholders)
@@ -803,7 +851,7 @@ async def extract_assumptions_from_sources(
                 "extracted_at": datetime.now(timezone.utc).isoformat(),
             },
             status="extracted",
-            used_in_modules=definition.used_in_modules,
+            used_in_assessments=definition.used_in_assessments,
             actor=actor if actor.email else AssumptionActor.system(),
         )
         touched.append(assumption)

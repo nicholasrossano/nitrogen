@@ -1,12 +1,12 @@
 /**
- * Module widget registry for the workspace panel.
+ * Assessment widget registry for the workspace panel.
  *
- * Maps widget_type strings to their React components. All module widgets
+ * Maps widget_type strings to their React components. All assessment widgets
  * that appear in the workspace are registered here. Chat interaction
  * widgets (proposed_value, template_proposed_value) are NOT registered here —
  * they live in ChatMessage.tsx.
  *
- * To add a new module widget:
+ * To add a new assessment widget:
  *   1. Create your widget component in /components/widgets/
  *   2. Add an entry to WIDGET_REGISTRY below
  */
@@ -43,7 +43,7 @@ export interface WorkspaceWidgetProps {
 export type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
 
 // Lazy imports keep the initial bundle small. Platform widgets stay here;
-// shipped module widgets are registered through first-party catalog config.
+// shipped assessment widgets are registered through first-party catalog config.
 const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }>> = {
   document_viewer: () =>
     import('@/components/widgets/DocumentViewerWidget').then((m) => ({ default: m.DocumentViewerWidget as unknown as WidgetComponent })),

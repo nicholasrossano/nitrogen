@@ -8,7 +8,7 @@ _client: httpx.AsyncClient | None = None
 
 
 def get_http_client() -> httpx.AsyncClient:
-    """Return a module-level shared AsyncClient (lazy-initialised)."""
+    """Return a assessment-level shared AsyncClient (lazy-initialised)."""
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(timeout=30.0)

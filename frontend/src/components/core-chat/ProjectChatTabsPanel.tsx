@@ -48,12 +48,12 @@ interface ProjectChatTabsPanelProps {
   resetToLandingSignal?: number;
   pendingChatToOpen?: { chatId: string; title?: string | null } | null;
   pendingAutoSend?: PendingAutoSendRequest | null;
-  activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
+  activeAssessmentContext?: { instanceId: string; assessmentId: string; title?: string | null } | null;
   onPendingSessionHandled?: () => void;
   onPendingAutoSendHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
-  onOpenWorkspaceModule?: (module: { instanceId: string; moduleId: string; title?: string | null }) => void;
+  onOpenWorkspaceAssessment?: (assessment: { instanceId: string; assessmentId: string; title?: string | null }) => void;
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Fixed content rendered above the messages area in the active chat tab */
   topContent?: React.ReactNode;
@@ -262,12 +262,12 @@ export function ProjectChatTabsPanel({
   resetToLandingSignal = 0,
   pendingChatToOpen = null,
   pendingAutoSend = null,
-  activeModuleContext = null,
+  activeAssessmentContext = null,
   onPendingSessionHandled,
   onPendingAutoSendHandled,
   onEditorWidgetsChange,
   onOpenDocument,
-  onOpenWorkspaceModule,
+  onOpenWorkspaceAssessment,
   onSendRef,
   topContent,
   pendingDeepDive = null,
@@ -1087,7 +1087,7 @@ export function ProjectChatTabsPanel({
                 initialChatId={tab.chatId}
                 initialTitle={tab.title}
                 sessions={sessions}
-                activeModuleContext={activeModuleContext}
+                activeAssessmentContext={activeAssessmentContext}
                 focusedAssumptionId={assumptions?.focusAssumptionId ?? null}
                 onDeleteChat={handleDeleteSession}
                 onChatListDirty={loadSessions}
@@ -1095,7 +1095,7 @@ export function ProjectChatTabsPanel({
                 onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
                 onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
                 onOpenDocument={isActive ? onOpenDocument : undefined}
-                onOpenWorkspaceModule={isActive ? onOpenWorkspaceModule : undefined}
+                onOpenWorkspaceAssessment={isActive ? onOpenWorkspaceAssessment : undefined}
                 onSendRef={isActive ? onSendRef : undefined}
                 pendingAutoSend={tabPendingAutoSend}
                 onPendingAutoSendHandled={

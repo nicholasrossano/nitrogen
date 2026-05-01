@@ -16,7 +16,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-# Add parent directory to path to import app modules
+# Add parent directory to path to import app assessments
 sys.path.insert(0, '.')
 
 from app.models.initiative import Initiative

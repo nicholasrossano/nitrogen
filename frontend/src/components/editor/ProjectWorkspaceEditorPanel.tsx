@@ -2,26 +2,26 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
-import { ModuleWorkspace } from '@/components/modules/ModuleWorkspace';
+import { AssessmentWorkspace } from '@/components/assessments/AssessmentWorkspace';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { EditorSidePanel } from './EditorSidePanel';
 import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
-import { type Assumption, type ModuleInstance } from '@/lib/api';
+import { type Assumption, type AssessmentInstance } from '@/lib/api';
 import type { EditorWidget } from './EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
 export type WorkspacePanelTab =
   | { id: 'chat-artifacts'; kind: 'artifacts'; title: 'Chat Outputs' }
-  | { id: string; kind: 'module'; title: string; instanceId: string; moduleId: string }
-  | { id: string; kind: 'decision-log'; title: string; moduleInstanceId: string; moduleId?: string }
+  | { id: string; kind: 'assessment'; title: string; instanceId: string; assessmentId: string }
+  | { id: string; kind: 'decision-log'; title: string; assessmentInstanceId: string; assessmentId?: string }
   | { id: string; kind: 'assumptions'; title: string }
   | { id: string; kind: 'document'; title: string; citation: ResearchPanelCitation };
 
-export interface FrameworkPlanModuleOption {
+export interface FrameworkPlanAssessmentOption {
   id: string;
   name: string;
   icon: React.ReactNode;
@@ -37,18 +37,18 @@ interface ProjectWorkspaceEditorPanelProps {
   chatWidgets: EditorWidget[];
   workspaceLaunchMode: WorkspaceLaunchMode;
   onWorkspaceLaunchModeHandled: () => void;
-  showModuleActions?: boolean;
-  frameworkPlanModules?: FrameworkPlanModuleOption[];
-  onNewModule?: (moduleId: string, moduleName: string) => void;
+  showAssessmentActions?: boolean;
+  frameworkPlanAssessments?: FrameworkPlanAssessmentOption[];
+  onNewAssessment?: (assessmentId: string, assessmentName: string) => void;
   onSendToChat?: (content: string, toolHint?: string) => void;
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
-  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
-  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
-  onModuleInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
-  onModuleApprovalChange?: () => void;
+  onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
+  onAssessmentInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
+  onAssessmentApprovalChange?: () => void;
   onOpenAssumptionInChat?: (assumption: Assumption) => void;
-  moduleInstances?: ModuleInstance[];
-  onOpenModuleInstance?: (instance: ModuleInstance) => Promise<void> | void;
+  assessmentInstances?: AssessmentInstance[];
+  onOpenAssessmentInstance?: (instance: AssessmentInstance) => Promise<void> | void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -61,33 +61,33 @@ export function ProjectWorkspaceEditorPanel({
   chatWidgets,
   workspaceLaunchMode,
   onWorkspaceLaunchModeHandled,
-  showModuleActions = true,
-  frameworkPlanModules,
-  onNewModule,
+  showAssessmentActions = true,
+  frameworkPlanAssessments,
+  onNewAssessment,
   onSendToChat,
   onOpenChatSession,
   onOpenDecisionLog,
   onExportDecisionLog,
-  onModuleInspectorStateChange,
-  onModuleApprovalChange,
+  onAssessmentInspectorStateChange,
+  onAssessmentApprovalChange,
   onOpenAssumptionInChat,
-  moduleInstances = [],
-  onOpenModuleInstance,
+  assessmentInstances = [],
+  onOpenAssessmentInstance,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
-  const [showNewModuleDropdown, setShowNewModuleDropdown] = useState(false);
-  const newModuleRef = useRef<HTMLDivElement>(null);
+  const [showNewAssessmentDropdown, setShowNewAssessmentDropdown] = useState(false);
+  const newAssessmentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!showNewModuleDropdown) return;
+    if (!showNewAssessmentDropdown) return;
     function handleOutsideClick(e: MouseEvent) {
-      if (newModuleRef.current && !newModuleRef.current.contains(e.target as Node)) {
-        setShowNewModuleDropdown(false);
+      if (newAssessmentRef.current && !newAssessmentRef.current.contains(e.target as Node)) {
+        setShowNewAssessmentDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [showNewModuleDropdown]);
+  }, [showNewAssessmentDropdown]);
   useEffect(() => {
     if (workspaceLaunchMode === 'idle') return;
     // Persist parent-triggered launches (e.g. side drawer click) locally so the
@@ -105,14 +105,14 @@ export function ProjectWorkspaceEditorPanel({
   const showWorkspaceHub = effectiveWorkspaceLaunchMode !== 'idle' || !activeTabId;
   const openModeActive = showWorkspaceHub && effectiveWorkspaceLaunchMode === 'open';
 
-  const openExistingModule = async (instance: ModuleInstance) => {
+  const openExistingAssessment = async (instance: AssessmentInstance) => {
     setLocalWorkspaceLaunchMode('idle');
     onOpenTab({
-      id: `module-${instance.id}`,
-      kind: 'module',
-      title: instance.display_name || instance.title || instance.module_id.replace(/_/g, ' '),
+      id: `assessment-${instance.id}`,
+      kind: 'assessment',
+      title: instance.display_name || instance.title || instance.assessment_id.replace(/_/g, ' '),
       instanceId: instance.id,
-      moduleId: instance.module_id,
+      assessmentId: instance.assessment_id,
     });
   };
 
@@ -128,25 +128,25 @@ export function ProjectWorkspaceEditorPanel({
       );
     }
 
-    if (tab.kind === 'module') {
+    if (tab.kind === 'assessment') {
       return (
-        <ModuleWorkspace
+        <AssessmentWorkspace
           instanceId={tab.instanceId}
-          moduleId={tab.moduleId}
-          moduleTitle={tab.title}
+          assessmentId={tab.assessmentId}
+          assessmentTitle={tab.title}
           isActive={isActive}
           initiativeId={initiativeId}
-          onAddToChat={(text) => onSendToChat?.(text, tab.moduleId)}
+          onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
-          onInspectorStateChange={isActive ? onModuleInspectorStateChange : undefined}
-          onApprovalChange={onModuleApprovalChange}
+          onInspectorStateChange={isActive ? onAssessmentInspectorStateChange : undefined}
+          onApprovalChange={onAssessmentApprovalChange}
         />
       );
     }
 
     if (tab.kind === 'decision-log') {
-      return <DecisionLogWorkspaceTab moduleInstanceId={tab.moduleInstanceId} />;
+      return <DecisionLogWorkspaceTab assessmentInstanceId={tab.assessmentInstanceId} />;
     }
 
     if (tab.kind === 'assumptions') {
@@ -155,8 +155,8 @@ export function ProjectWorkspaceEditorPanel({
           initiativeId={initiativeId}
           showDetailPanel={false}
           onAssumptionSelectInChat={onOpenAssumptionInChat}
-          moduleInstances={moduleInstances}
-          onOpenModuleInstance={onOpenModuleInstance}
+          assessmentInstances={assessmentInstances}
+          onOpenAssessmentInstance={onOpenAssessmentInstance}
         />
       );
     }
@@ -221,7 +221,7 @@ export function ProjectWorkspaceEditorPanel({
             );
           })}
           </div>
-          {showModuleActions && (
+          {showAssessmentActions && (
             <div className="flex-shrink-0 flex items-center gap-0.5 px-1.5 border-l border-divider">
               <button
                 onClick={() => {
@@ -234,39 +234,39 @@ export function ProjectWorkspaceEditorPanel({
                     ? 'bg-white text-text-primary shadow-subtle'
                     : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
                 ].join(' ')}
-                title="Open module"
+                title="Open assessment"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
               </button>
-              {frameworkPlanModules && frameworkPlanModules.length > 0 && onNewModule && (
-                <div className="relative" ref={newModuleRef}>
+              {frameworkPlanAssessments && frameworkPlanAssessments.length > 0 && onNewAssessment && (
+                <div className="relative" ref={newAssessmentRef}>
                   <button
-                    onClick={() => setShowNewModuleDropdown((prev) => !prev)}
+                    onClick={() => setShowNewAssessmentDropdown((prev) => !prev)}
                     className={[
                       'flex items-center justify-center w-7 h-7 rounded transition-colors',
-                      showNewModuleDropdown
+                      showNewAssessmentDropdown
                         ? 'bg-white text-text-primary shadow-subtle'
                         : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-subtle',
                     ].join(' ')}
-                    title="New module"
+                    title="New assessment"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
-                  {showNewModuleDropdown && (
+                  {showNewAssessmentDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-divider rounded-lg shadow-lg z-50 overflow-hidden">
                       <div className="px-3 py-2 border-b border-divider">
                         <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                          Framework Modules
+                          Framework Assessments
                         </h3>
                       </div>
                       <div className="max-h-64 overflow-y-auto">
-                        {frameworkPlanModules.map((mod) => (
+                        {frameworkPlanAssessments.map((mod) => (
                           <button
                             key={mod.id}
                             type="button"
                             onClick={() => {
-                              onNewModule(mod.id, mod.name);
-                              setShowNewModuleDropdown(false);
+                              onNewAssessment(mod.id, mod.name);
+                              setShowNewAssessmentDropdown(false);
                             }}
                             className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-subtle text-left border-b border-divider last:border-b-0 transition-colors"
                           >
@@ -296,7 +296,7 @@ export function ProjectWorkspaceEditorPanel({
               onLaunchModeHandled={() => {
                 onWorkspaceLaunchModeHandled();
               }}
-              onSelectExisting={openExistingModule}
+              onSelectExisting={openExistingAssessment}
             />
           </div>
         )}

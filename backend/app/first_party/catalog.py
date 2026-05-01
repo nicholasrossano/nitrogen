@@ -1,7 +1,7 @@
-"""Catalog metadata for Nitrogen's shipped first-party modules.
+"""Catalog metadata for Nitrogen's shipped first-party assessments.
 
 This keeps current product defaults out of the platform registries while
-preserving the existing module IDs, tool names, and recommendation behavior.
+preserving the existing assessment IDs, tool names, and recommendation behavior.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from typing import Callable
 
 
 @dataclass(frozen=True)
-class ModuleSelectionMetadata:
-    module_id: str
+class AssessmentSelectionMetadata:
+    assessment_id: str
     selection_description: str
     selection_triggers: tuple[str, ...] = ()
     required_context: tuple[str, ...] = ()
@@ -22,30 +22,30 @@ class ModuleSelectionMetadata:
 
 
 @dataclass(frozen=True)
-class FirstPartyModuleCatalog:
-    module_factories: tuple[Callable[[], object], ...]
+class FirstPartyAssessmentCatalog:
+    assessment_factories: tuple[Callable[[], object], ...]
     recommendation_keywords: dict[str, tuple[str, ...]]
     project_type_keywords: dict[str, tuple[str, ...]]
-    selection_metadata: dict[str, ModuleSelectionMetadata] = field(default_factory=dict)
+    selection_metadata: dict[str, AssessmentSelectionMetadata] = field(default_factory=dict)
 
 
-def get_first_party_catalog() -> FirstPartyModuleCatalog:
-    """Return the shipped module catalog.
+def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
+    """Return the shipped assessment catalog.
 
     Imports are intentionally local so registry construction does not create
-    import cycles with concrete module implementations.
+    import cycles with concrete assessment implementations.
     """
-    from app.modules.carbon_module import CarbonTool
-    from app.modules.implementation_plan import ImplementationPlanModule
-    from app.modules.landscape_mapping import LandscapeMappingModule
-    from app.modules.lcoe_module import LCOETool
-    from app.modules.pvwatts_module import PVWattsTool
-    from app.modules.risk_assessment import RiskAssessmentModule
-    from app.modules.stakeholder_assessment import StakeholderAssessmentModule
+    from app.assessments.carbon_assessment import CarbonTool
+    from app.assessments.implementation_plan import ImplementationPlanAssessment
+    from app.assessments.landscape_mapping import LandscapeMappingAssessment
+    from app.assessments.lcoe_assessment import LCOETool
+    from app.assessments.pvwatts_assessment import PVWattsTool
+    from app.assessments.risk_assessment import RiskAssessment
+    from app.assessments.stakeholder_assessment import StakeholderAssessment
 
     selection_metadata = {
-        "lcoe_model": ModuleSelectionMetadata(
-            module_id="lcoe_model",
+        "lcoe_model": AssessmentSelectionMetadata(
+            assessment_id="lcoe_model",
             selection_description="Models project economics and levelized cost of energy.",
             selection_triggers=(
                 "LCOE",
@@ -61,8 +61,8 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             tool_hint_message="Building your LCOE model…",
             domain_tags=("energy", "finance", "calculator"),
         ),
-        "carbon_model": ModuleSelectionMetadata(
-            module_id="carbon_model",
+        "carbon_model": AssessmentSelectionMetadata(
+            assessment_id="carbon_model",
             selection_description="Estimates emissions reductions and carbon-credit potential.",
             selection_triggers=(
                 "carbon credits",
@@ -77,8 +77,8 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             tool_hint_message="Building your carbon emissions model…",
             domain_tags=("carbon", "impact", "calculator"),
         ),
-        "solar_estimate": ModuleSelectionMetadata(
-            module_id="solar_estimate",
+        "solar_estimate": AssessmentSelectionMetadata(
+            assessment_id="solar_estimate",
             selection_description="Estimates solar production from location and system assumptions.",
             selection_triggers=("solar", "PV", "kWh", "irradiance", "production estimate"),
             required_context=("site or coordinates", "system capacity"),
@@ -86,34 +86,34 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
             tool_hint_message="Building your solar production estimate…",
             domain_tags=("energy", "solar", "calculator"),
         ),
-        "generate_project_plan": ModuleSelectionMetadata(
-            module_id="generate_project_plan",
+        "generate_project_plan": AssessmentSelectionMetadata(
+            assessment_id="generate_project_plan",
             selection_description="Generates or updates the project plan.",
             selection_triggers=("project plan", "plan", "requirements", "deliverables"),
             capability_tool_name="generate_project_plan",
             tool_hint_message="Generating your project plan…",
             domain_tags=("planning",),
         ),
-        "stakeholder_assessment": ModuleSelectionMetadata(
-            module_id="stakeholder_assessment",
+        "stakeholder_assessment": AssessmentSelectionMetadata(
+            assessment_id="stakeholder_assessment",
             selection_description="Maps and profiles stakeholders for a project.",
             selection_triggers=("stakeholders", "community", "partners", "engagement"),
             domain_tags=("planning", "engagement"),
         ),
-        "landscape_mapping": ModuleSelectionMetadata(
-            module_id="landscape_mapping",
+        "landscape_mapping": AssessmentSelectionMetadata(
+            assessment_id="landscape_mapping",
             selection_description="Maps the ecosystem of actors, programs, and initiatives.",
             selection_triggers=("landscape", "ecosystem", "market map", "actors"),
             domain_tags=("planning", "research"),
         ),
-        "implementation_plan": ModuleSelectionMetadata(
-            module_id="implementation_plan",
+        "implementation_plan": AssessmentSelectionMetadata(
+            assessment_id="implementation_plan",
             selection_description="Turns the project framework into a phased execution plan.",
             selection_triggers=("implementation", "roadmap", "workplan", "execution"),
             domain_tags=("planning", "delivery"),
         ),
-        "risk_assessment": ModuleSelectionMetadata(
-            module_id="risk_assessment",
+        "risk_assessment": AssessmentSelectionMetadata(
+            assessment_id="risk_assessment",
             selection_description="Builds a structured project risk register with mitigations and ratings.",
             selection_triggers=(
                 "risk",
@@ -128,15 +128,15 @@ def get_first_party_catalog() -> FirstPartyModuleCatalog:
         ),
     }
 
-    return FirstPartyModuleCatalog(
-        module_factories=(
+    return FirstPartyAssessmentCatalog(
+        assessment_factories=(
             LCOETool,
             CarbonTool,
             PVWattsTool,
-            StakeholderAssessmentModule,
-            LandscapeMappingModule,
-            RiskAssessmentModule,
-            ImplementationPlanModule,
+            StakeholderAssessment,
+            LandscapeMappingAssessment,
+            RiskAssessment,
+            ImplementationPlanAssessment,
         ),
         recommendation_keywords={
             "risk": ("risk_assessment",),
@@ -198,20 +198,20 @@ def get_tool_hint_action(tool_hint: str) -> tuple[str, str] | None:
     )
 
 
-def format_module_selection_context() -> str:
-    """Format module metadata for LLM routing prompts."""
+def format_assessment_selection_context() -> str:
+    """Format assessment metadata for LLM routing prompts."""
     lines = [
-        "## Available Modules",
-        "Use these registered modules when the user asks for work that matches their purpose.",
+        "## Available Assessments",
+        "Use these registered assessments when the user asks for work that matches their purpose.",
     ]
     for metadata in get_first_party_catalog().selection_metadata.values():
-        if metadata.module_id == "generate_project_plan":
+        if metadata.assessment_id == "generate_project_plan":
             continue
         triggers = ", ".join(metadata.selection_triggers) or "None listed"
         required = ", ".join(metadata.required_context) or "No special context required"
         tool = metadata.capability_tool_name or "no direct tool"
         lines.append(
-            f"- {metadata.module_id}: {metadata.selection_description} "
+            f"- {metadata.assessment_id}: {metadata.selection_description} "
             f"Triggers: {triggers}. Required context: {required}. Tool: {tool}."
         )
     return "\n".join(lines)

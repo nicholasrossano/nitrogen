@@ -27,8 +27,8 @@ from app.schemas.chat import (
 )
 from app.services.chat import ChatService
 from app.services.chat_agent import ChatAgentService
-from app.services import module_service
-from app.modules import get_module_registry
+from app.services import assessment_service
+from app.assessments import get_assessment_registry
 from app.api.chat_constants import (
     INITIAL_ONBOARDING_DOCUMENT_PROMPT as _INITIAL_ONBOARDING_DOCUMENT_PROMPT,
     SKIP_EXTRACTION_MESSAGES as _SKIP_EXTRACTION_MESSAGES,
@@ -294,8 +294,8 @@ async def get_chat_history(
     messages = messages_result.scalars().all()
     
     # Rehydrate tool_checklist widget_data with current tool definitions
-    registry = get_module_registry()
-    tools_by_id = {t.definition.id: t.definition for t in registry.get_all_modules()}
+    registry = get_assessment_registry()
+    tools_by_id = {t.definition.id: t.definition for t in registry.get_all_assessments()}
     
     def rehydrate_widget_data(widget_data: dict | None) -> dict | None:
         if not widget_data or "recommendations" not in widget_data:
@@ -414,8 +414,8 @@ async def update_message_widget(
     }
     _tool_id_for_widget = _WIDGET_TO_TOOL.get(msg.widget_type or "")
     if _tool_id_for_widget:
-        from app.modules.registry import get_module_registry
-        _tool = get_module_registry().get_module(_tool_id_for_widget)
+        from app.assessments.registry import get_assessment_registry
+        _tool = get_assessment_registry().get_assessment(_tool_id_for_widget)
         content = data.widget_data
         if _tool and _tool.is_exportable(content):
             result = content.get("result") or {}
@@ -431,7 +431,7 @@ async def update_message_widget(
                 title = f"Solar Estimate ({annual:,.0f} kWh/yr)"
             else:
                 title = _tool.definition.name
-            await module_service.save_deliverable(
+            await assessment_service.save_deliverable(
                 db, initiative.id, _tool_id_for_widget,
                 title, _tool.definition.output_type, content,
                 user_id=user.uid,

@@ -6,7 +6,7 @@ import type { ChatMessage, FieldContext, ResearchStep } from '@/lib/api';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
-import { AssociatedModulesTray, type AssociatedChatModule } from './AssociatedModulesTray';
+import { AssociatedAssessmentsTray, type AssociatedChatAssessment } from './AssociatedAssessmentsTray';
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
@@ -21,7 +21,7 @@ import type { ReadinessProgressData } from '@/components/ui/ReadinessProgressBar
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
-  'module_workspace',
+  'assessment_workspace',
   'lcoe_inputs',
   'lcoe_output',
   'carbon_inputs',
@@ -29,7 +29,7 @@ const CHAT_MODULE_WIDGET_TYPES = new Set([
   'solar_inputs',
   'solar_output',
 ]);
-const activeModulesCountCache = new Map<string, number>();
+const activeAssessmentsCountCache = new Map<string, number>();
 
 const MODEL_TYPE_TO_MODULE_ID: Record<string, string> = {
   lcoe: 'lcoe_model',
@@ -40,7 +40,7 @@ const MODEL_TYPE_TO_MODULE_ID: Record<string, string> = {
 interface ProjectChatSurfaceProps {
   initiativeId: string;
   showLanding?: boolean;
-  /** When true, hides the module tile grid on the landing page (Research mode) */
+  /** When true, hides the assessment tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
   /** Custom content rendered above the landing composer */
   landingHeaderContent?: React.ReactNode;
@@ -67,10 +67,10 @@ interface ProjectChatSurfaceProps {
   onChatMetaChange?: (meta: { chatId: string | null; title: string | null }) => void;
   /** Called when this view enters or leaves its landing state */
   onLandingStateChange?: (isOnLanding: boolean) => void;
-  /** Open a module workspace from a chat-associated module chip */
-  onOpenWorkspaceModule?: (module: {
+  /** Open a assessment workspace from a chat-associated assessment chip */
+  onOpenWorkspaceAssessment?: (assessment: {
     instanceId: string;
-    moduleId: string;
+    assessmentId: string;
     title?: string | null;
     chatId?: string | null;
     chatTitle?: string | null;
@@ -79,8 +79,8 @@ interface ProjectChatSurfaceProps {
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
   /** Shared session history (project + user scoped) */
   sessions?: ChatSummary[];
-  /** Active module context from the workspace panel */
-  activeModuleContext?: { instanceId: string; moduleId: string; title?: string | null } | null;
+  /** Active assessment context from the workspace panel */
+  activeAssessmentContext?: { instanceId: string; assessmentId: string; title?: string | null } | null;
   /** Assumption pinned to this chat tab (if any). */
   focusedAssumptionId?: string | null;
   /** Automatically send a message into this chat view when it becomes active */
@@ -130,9 +130,9 @@ function toCoreMessage(m: ChatMessage): CoreChatMessage {
   };
 }
 
-function resolveFieldContextModuleId(fieldContext?: FieldContext | null): string | null {
+function resolveFieldContextAssessmentId(fieldContext?: FieldContext | null): string | null {
   if (!fieldContext) return null;
-  if (fieldContext.module_id) return fieldContext.module_id;
+  if (fieldContext.assessment_id) return fieldContext.assessment_id;
   if (!fieldContext.model_type) return null;
   return MODEL_TYPE_TO_MODULE_ID[fieldContext.model_type] ?? null;
 }
@@ -159,10 +159,10 @@ export function ProjectChatSurface({
   onOpenDocument,
   onChatMetaChange,
   onLandingStateChange,
-  onOpenWorkspaceModule,
+  onOpenWorkspaceAssessment,
   onSendRef,
   sessions = [],
-  activeModuleContext = null,
+  activeAssessmentContext = null,
   focusedAssumptionId = null,
   pendingAutoSend = null,
   onPendingAutoSendHandled,
@@ -179,7 +179,7 @@ export function ProjectChatSurface({
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatModules, setChatModules] = useState<AssociatedChatModule[]>([]);
+  const [chatAssessments, setChatAssessments] = useState<AssociatedChatAssessment[]>([]);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -188,14 +188,14 @@ export function ProjectChatSurface({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const [compareProject, setCompareProject] = useState<CompareProject | null>(null);
-  const [activeModulesCount, setActiveModulesCount] = useState<number | null>(
-    () => activeModulesCountCache.get(initiativeId) ?? null,
+  const [activeAssessmentsCount, setActiveAssessmentsCount] = useState<number | null>(
+    () => activeAssessmentsCountCache.get(initiativeId) ?? null,
   );
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewGenerating, setOverviewGenerating] = useState(false);
   const lastReportedMetaRef = useRef<{ chatId: string | null; title: string | null } | null>(null);
   const autoOverviewAttemptRef = useRef<string | null>(null);
-  const associatedModuleKeysRef = useRef<Set<string>>(new Set());
+  const associatedAssessmentKeysRef = useRef<Set<string>>(new Set());
   const lastLoadedChatIdRef = useRef<string | null>(null);
   const lastAutoSendRequestIdRef = useRef<string | null>(null);
   const hasAttemptedAutoRestoreRef = useRef(false);
@@ -301,7 +301,7 @@ export function ProjectChatSurface({
       setLocalMessages([]);
       setSessionTitle(null);
       setCurrentChatId(null);
-      setChatModules([]);
+      setChatAssessments([]);
       setFeedbackMap({});
       setCompareProject(null);
       lastLoadedChatIdRef.current = null;
@@ -319,22 +319,22 @@ export function ProjectChatSurface({
     if (!currentChatId) titlePersistedRef.current = false;
   }, [sessionTitle, currentChatId]);
 
-  const refreshChatModules = useCallback(async (chatId: string) => {
+  const refreshChatAssessments = useCallback(async (chatId: string) => {
     try {
-      const { modules } = await api.getChatModules(chatId);
-      setChatModules(modules);
+      const { assessments } = await api.getChatAssessments(chatId);
+      setChatAssessments(assessments);
     } catch (err) {
-      console.warn('Failed to load chat modules:', err);
+      console.warn('Failed to load chat assessments:', err);
     }
   }, []);
 
   useEffect(() => {
     if (!currentChatId) {
-      setChatModules([]);
+      setChatAssessments([]);
       return;
     }
-    void refreshChatModules(currentChatId);
-  }, [currentChatId, refreshChatModules]);
+    void refreshChatAssessments(currentChatId);
+  }, [currentChatId, refreshChatAssessments]);
 
   useEffect(() => {
     if (!currentChatId) return;
@@ -342,8 +342,8 @@ export function ProjectChatSurface({
     if (!latestAssistant?.widget_type || !CHAT_MODULE_WIDGET_TYPES.has(latestAssistant.widget_type)) {
       return;
     }
-    void refreshChatModules(currentChatId);
-  }, [currentChatId, localMessages, refreshChatModules]);
+    void refreshChatAssessments(currentChatId);
+  }, [currentChatId, localMessages, refreshChatAssessments]);
 
   // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
@@ -379,36 +379,36 @@ export function ProjectChatSurface({
 
   const handleApplyProposedValue = useCallback(
     async ({ fieldName, value, modelType }: ProposedValueApplyRequest): Promise<boolean> => {
-      const moduleId = MODEL_TYPE_TO_MODULE_ID[modelType];
-      if (!moduleId) {
-        setError(`I couldn't find a module type for ${modelType}.`);
+      const assessmentId = MODEL_TYPE_TO_MODULE_ID[modelType];
+      if (!assessmentId) {
+        setError(`I couldn't find a assessment type for ${modelType}.`);
         return false;
       }
 
       const candidates = [
-        ...(activeModuleContext?.moduleId === moduleId
+        ...(activeAssessmentContext?.assessmentId === assessmentId
           ? [{
-              instance_id: activeModuleContext.instanceId,
-              module_id: activeModuleContext.moduleId,
-              title: activeModuleContext.title ?? null,
+              instance_id: activeAssessmentContext.instanceId,
+              assessment_id: activeAssessmentContext.assessmentId,
+              title: activeAssessmentContext.title ?? null,
               status: 'started',
               started_at: null,
             }]
           : []),
-        ...chatModules.filter((module) => module.module_id === moduleId),
+        ...chatAssessments.filter((assessment) => assessment.assessment_id === assessmentId),
       ].filter(
-        (module, index, collection) =>
-          collection.findIndex((candidate) => candidate.instance_id === module.instance_id) === index,
+        (assessment, index, collection) =>
+          collection.findIndex((candidate) => candidate.instance_id === assessment.instance_id) === index,
       );
 
       const target = candidates[0];
       if (!target) {
-        setError('Open or associate the matching module before accepting this proposed value.');
+        setError('Open or associate the matching assessment before accepting this proposed value.');
         return false;
       }
 
       try {
-        const workflow = await api.getStagedModuleWorkflowState(target.instance_id);
+        const workflow = await api.getStagedAssessmentWorkflowState(target.instance_id);
         const inputsStage = workflow.workflow_state.stages.inputs;
         const items = inputsStage?.data?.items ?? [];
         const normalizedFieldName = normalizeProposalKey(fieldName);
@@ -422,7 +422,7 @@ export function ProjectChatSurface({
         });
 
         if (!row) {
-          setError(`I couldn't find ${fieldName.replace(/_/g, ' ')} in the ${target.title || moduleId} inputs.`);
+          setError(`I couldn't find ${fieldName.replace(/_/g, ' ')} in the ${target.title || assessmentId} inputs.`);
           return false;
         }
 
@@ -439,10 +439,10 @@ export function ProjectChatSurface({
           workflow.workflow_version,
         );
 
-        window.dispatchEvent(new CustomEvent('nitrogen:module-workflow-updated', {
+        window.dispatchEvent(new CustomEvent('nitrogen:assessment-workflow-updated', {
           detail: {
             instanceId: target.instance_id,
-            moduleId,
+            assessmentId,
             stageId: 'inputs',
             itemId: row.id,
           },
@@ -455,7 +455,7 @@ export function ProjectChatSurface({
         return false;
       }
     },
-    [activeModuleContext, chatModules],
+    [activeAssessmentContext, chatAssessments],
   );
 
   const displayMessages = useMemo(
@@ -471,7 +471,7 @@ export function ProjectChatSurface({
       projectContextOverride?: string | null,
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
-      associatedModule?: { instanceId: string; moduleId: string; title?: string | null } | null,
+      associatedAssessment?: { instanceId: string; assessmentId: string; title?: string | null } | null,
       assumptionId?: string | null,
     ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
@@ -519,15 +519,15 @@ export function ProjectChatSurface({
             onChatListDirty?.();
           }
 
-          if (resolvedChatId && associatedModule) {
-            const associationKey = `${resolvedChatId}:${associatedModule.instanceId}`;
-            if (!associatedModuleKeysRef.current.has(associationKey)) {
-              associatedModuleKeysRef.current.add(associationKey);
-              void api.associateChatModule(resolvedChatId, associatedModule.instanceId)
-                .then(() => refreshChatModules(resolvedChatId))
+          if (resolvedChatId && associatedAssessment) {
+            const associationKey = `${resolvedChatId}:${associatedAssessment.instanceId}`;
+            if (!associatedAssessmentKeysRef.current.has(associationKey)) {
+              associatedAssessmentKeysRef.current.add(associationKey);
+              void api.associateChatAssessment(resolvedChatId, associatedAssessment.instanceId)
+                .then(() => refreshChatAssessments(resolvedChatId))
                 .catch((err: unknown) => {
-                  associatedModuleKeysRef.current.delete(associationKey);
-                  console.warn('Failed to associate interacted module with chat:', err);
+                  associatedAssessmentKeysRef.current.delete(associationKey);
+                  console.warn('Failed to associate interacted assessment with chat:', err);
                 });
             }
           }
@@ -569,11 +569,11 @@ export function ProjectChatSurface({
         projectContextOverride ?? null,
         fieldContext ?? null,
         modelInputsContext ?? null,
-        associatedModule
+        associatedAssessment
           ? {
-            instance_id: associatedModule.instanceId,
-            module_id: associatedModule.moduleId,
-            title: associatedModule.title ?? null,
+            instance_id: associatedAssessment.instanceId,
+            assessment_id: associatedAssessment.assessmentId,
+            title: associatedAssessment.title ?? null,
           }
           : null,
         initiativeId,
@@ -598,7 +598,7 @@ export function ProjectChatSurface({
       currentChatId,
       compareProject,
       onChatListDirty,
-      refreshChatModules,
+      refreshChatAssessments,
       allowInitialProjectOnboarding,
     ],
   );
@@ -647,19 +647,19 @@ export function ProjectChatSurface({
       setLocalMessages(updatedMessages);
       setSending(true);
 
-      const matchedFieldContextModuleId = resolveFieldContextModuleId(fieldContext);
+      const matchedFieldContextAssessmentId = resolveFieldContextAssessmentId(fieldContext);
       const effectiveAssumptionId =
         assumptionIdOverride
         ?? fieldContext?.assumption_id
         ?? focusedAssumptionId
         ?? null;
-      const associatedModule =
-        activeModuleContext &&
+      const associatedAssessment =
+        activeAssessmentContext &&
         (
-          (matchedFieldContextModuleId && matchedFieldContextModuleId === activeModuleContext.moduleId) ||
-          (toolHint && toolHint === activeModuleContext.moduleId)
+          (matchedFieldContextAssessmentId && matchedFieldContextAssessmentId === activeAssessmentContext.assessmentId) ||
+          (toolHint && toolHint === activeAssessmentContext.assessmentId)
         )
-          ? activeModuleContext
+          ? activeAssessmentContext
           : null;
 
       try {
@@ -670,7 +670,7 @@ export function ProjectChatSurface({
           projectContext,
           fieldContext,
           modelInputsContext,
-          associatedModule,
+          associatedAssessment,
           effectiveAssumptionId,
         );
       } catch {
@@ -681,7 +681,7 @@ export function ProjectChatSurface({
       }
     },
     [
-      activeModuleContext,
+      activeAssessmentContext,
       focusedAssumptionId,
       localMessages,
       onBeforeSendMessage,
@@ -809,23 +809,23 @@ export function ProjectChatSurface({
 
   const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
 
-  const associatedModules = useMemo(() => {
-    return chatModules
-      .filter((module, index, collection) =>
-        collection.findIndex((candidate) => candidate.instance_id === module.instance_id) === index,
+  const associatedAssessments = useMemo(() => {
+    return chatAssessments
+      .filter((assessment, index, collection) =>
+        collection.findIndex((candidate) => candidate.instance_id === assessment.instance_id) === index,
       );
-  }, [chatModules]);
+  }, [chatAssessments]);
 
-  const associatedModulesTray = useMemo(() => {
-    if (associatedModules.length === 0) return null;
+  const associatedAssessmentsTray = useMemo(() => {
+    if (associatedAssessments.length === 0) return null;
 
     return (
-      <AssociatedModulesTray
-        modules={associatedModules}
-        onOpenWorkspaceModule={
-          onOpenWorkspaceModule
-            ? (module) => onOpenWorkspaceModule({
-              ...module,
+      <AssociatedAssessmentsTray
+        assessments={associatedAssessments}
+        onOpenWorkspaceAssessment={
+          onOpenWorkspaceAssessment
+            ? (assessment) => onOpenWorkspaceAssessment({
+              ...assessment,
               chatId: currentChatId,
               chatTitle: sessionTitle,
             })
@@ -833,7 +833,7 @@ export function ProjectChatSurface({
         }
       />
     );
-  }, [associatedModules, currentChatId, onOpenWorkspaceModule, sessionTitle]);
+  }, [associatedAssessments, currentChatId, onOpenWorkspaceAssessment, sessionTitle]);
 
   const inputChips = useMemo(
     () => (compareProject
@@ -849,27 +849,27 @@ export function ProjectChatSurface({
   useEffect(() => {
     if (!isOverviewLanding || !isOnLanding) return;
 
-    const cachedCount = activeModulesCountCache.get(initiativeId);
+    const cachedCount = activeAssessmentsCountCache.get(initiativeId);
     if (cachedCount !== undefined) {
-      setActiveModulesCount(cachedCount);
+      setActiveAssessmentsCount(cachedCount);
     } else {
-      setActiveModulesCount(null);
+      setActiveAssessmentsCount(null);
     }
 
     const hadCachedCount = cachedCount !== undefined;
 
     let cancelled = false;
-    api.listModuleInstances(initiativeId)
+    api.listAssessmentInstances(initiativeId)
       .then((instances) => {
         if (!cancelled) {
-          activeModulesCountCache.set(initiativeId, instances.length);
-          setActiveModulesCount(instances.length);
+          activeAssessmentsCountCache.set(initiativeId, instances.length);
+          setActiveAssessmentsCount(instances.length);
         }
       })
       .catch(() => {
         if (!cancelled) {
           if (!hadCachedCount) {
-            setActiveModulesCount(null);
+            setActiveAssessmentsCount(null);
           }
         }
       });
@@ -895,7 +895,7 @@ export function ProjectChatSurface({
   useEffect(() => {
     setOverviewError(null);
     setOverviewGenerating(false);
-    setActiveModulesCount(activeModulesCountCache.get(initiativeId) ?? null);
+    setActiveAssessmentsCount(activeAssessmentsCountCache.get(initiativeId) ?? null);
     autoOverviewAttemptRef.current = null;
   }, [initiativeId]);
 
@@ -920,7 +920,7 @@ export function ProjectChatSurface({
 
   if (isOnLanding) {
     const filesUploaded = projectMaterials.length;
-    const modulesCreated = activeModulesCount;
+    const assessmentsCreated = activeAssessmentsCount;
     const canRefreshOverview = Boolean(
       initiative &&
       initiative.shared_role !== 'viewer' &&
@@ -942,7 +942,7 @@ export function ProjectChatSurface({
               <InitiativeOverviewHeader
                 initiative={initiative}
                 filesUploaded={filesUploaded}
-                modulesCreated={modulesCreated}
+                assessmentsCreated={assessmentsCreated}
                 readinessProgress={readinessProgress}
                 isGenerating={overviewGenerating}
                 errorMessage={overviewError}
@@ -959,7 +959,7 @@ export function ProjectChatSurface({
               onSelect={setCompareProject}
             />
           ) : undefined}
-          topComposerContent={associatedModulesTray}
+          topComposerContent={associatedAssessmentsTray}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
           showAttachments={!allowInitialProjectOnboarding}
@@ -992,7 +992,7 @@ export function ProjectChatSurface({
           onSelect={setCompareProject}
         />
       ) : undefined}
-      topComposerContent={associatedModulesTray}
+      topComposerContent={associatedAssessmentsTray}
       inputChips={inputChips}
       topContent={topContent}
       topContentMode={topContentMode}

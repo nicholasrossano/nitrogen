@@ -61,7 +61,7 @@ export interface ConversationViewProps {
   topContent?: React.ReactNode;
   /** How top content should be laid out when present */
   topContentMode?: 'inline' | 'panel';
-  /** Apply a proposed model value to its backing module workflow. */
+  /** Apply a proposed model value to its backing assessment workflow. */
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
   /** Show file attachment controls in the composer */
   showAttachments?: boolean;

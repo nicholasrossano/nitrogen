@@ -10,7 +10,7 @@ const MemoViewerWidget = dynamic(() => import('@/components/widgets/MemoViewerWi
 const ChecklistViewerWidget = dynamic(() => import('@/components/widgets/ChecklistViewerWidget').then(m => ({ default: m.ChecklistViewerWidget })), { ssr: false });
 const DocumentViewerWidget = dynamic(() => import('@/components/widgets/DocumentViewerWidget').then(m => ({ default: m.DocumentViewerWidget })), { ssr: false });
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
-const ModuleWorkspace = dynamic(() => import('@/components/modules/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })), { ssr: false });
+const AssessmentWorkspace = dynamic(() => import('@/components/assessments/AssessmentWorkspace').then(m => ({ default: m.AssessmentWorkspace })), { ssr: false });
 
 export const EDITOR_WIDGET_TYPES = [
   'lcoe_inputs', 'lcoe_output',
@@ -20,7 +20,7 @@ export const EDITOR_WIDGET_TYPES = [
   'checklist_viewer',
   'document_viewer',
   'assessment_workspace',
-  'module_workspace',
+  'assessment_workspace',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -34,7 +34,7 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   checklist_viewer: 'checklist',
   document_viewer: 'document_viewer',
   assessment_workspace: 'assessment',
-  module_workspace: 'module',
+  assessment_workspace: 'assessment',
 };
 
 export interface EditorWidget {
@@ -46,8 +46,8 @@ export interface EditorWidget {
 interface EditorSidePanelProps {
   widgets: EditorWidget[];
   initiativeId?: string;
-  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
-  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
+  onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
 }
 
 const WIDGET_LABELS: Record<string, string> = {
@@ -61,7 +61,7 @@ const WIDGET_LABELS: Record<string, string> = {
   checklist_viewer: 'Due Diligence',
   document_viewer: 'Document',
   assessment_workspace: 'Assessment',
-  module_workspace: 'Module',
+  assessment_workspace: 'Assessment',
 };
 
 export function EditorSidePanel({
@@ -127,8 +127,8 @@ function EditorWidgetRenderer({
   data: Record<string, any>;
   initiativeId: string;
   messageId: string;
-  onOpenDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void;
-  onExportDecisionLog?: (context: { instanceId: string; moduleId: string; title: string }) => void | Promise<void>;
+  onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
+  onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
 }) {
   switch (type) {
     case 'lcoe_inputs':
@@ -147,11 +147,11 @@ function EditorWidgetRenderer({
     case 'document_viewer':
       return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'assessment_workspace':
-    case 'module_workspace':
+    case 'assessment_workspace':
       return (
-        <ModuleWorkspace
+        <AssessmentWorkspace
           instanceId={data.instance_id}
-          moduleId={data.module_id}
+          assessmentId={data.assessment_id}
           initiativeId={initiativeId}
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}

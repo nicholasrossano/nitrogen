@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
 
-import { ModuleInstanceOpenDropdown } from '@/components/framework/ModuleInstanceOpenDropdown';
+import { AssessmentInstanceOpenDropdown } from '@/components/framework/AssessmentInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import {
   api,
   type Assumption,
-  type ModuleInstance,
+  type AssessmentInstance,
   type AssumptionSourceType,
   type AssumptionStatus,
 } from '@/lib/api';
@@ -24,8 +24,8 @@ interface AssumptionsWorkspaceTabProps {
   showDetailPanel?: boolean;
   focusAssumptionId?: string | null;
   onAssumptionSelectInChat?: (assumption: Assumption) => void;
-  moduleInstances?: ModuleInstance[];
-  onOpenModuleInstance?: (instance: ModuleInstance) => Promise<void> | void;
+  assessmentInstances?: AssessmentInstance[];
+  onOpenAssessmentInstance?: (instance: AssessmentInstance) => Promise<void> | void;
 }
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
@@ -40,7 +40,7 @@ const SOURCE_OPTIONS: Array<{ value: '' | AssumptionSourceType; label: string }>
   { value: '', label: 'All sources' },
   { value: 'extraction', label: 'Extraction' },
   { value: 'user_input', label: 'User input' },
-  { value: 'module', label: 'Module' },
+  { value: 'assessment', label: 'Assessment' },
   { value: 'default', label: 'Default' },
   { value: 'missing_placeholder', label: 'Missing placeholder' },
   { value: 'model_candidate', label: 'Model candidate' },
@@ -67,6 +67,26 @@ function formatValue(value: any, unit?: string | null, valueType?: Assumption['v
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
+function normalizeDraftValue(raw: string): string | null {
+  const normalized = raw.trim().toLowerCase();
+  if (
+    normalized === '' ||
+    normalized === '—' ||
+    normalized === '-' ||
+    normalized === '–' ||
+    normalized === 'n/a' ||
+    normalized === 'na' ||
+    normalized === 'none' ||
+    normalized === 'null' ||
+    normalized === 'missing' ||
+    normalized === 'unknown' ||
+    normalized.startsWith('unknown ')
+  ) {
+    return null;
+  }
+  return raw.trim();
+}
+
 const STATUS_STYLES: Record<AssumptionStatus, { bg: string; text: string; label: string }> = {
   validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
   extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
@@ -80,14 +100,14 @@ export function AssumptionsWorkspaceTab({
   showDetailPanel = true,
   focusAssumptionId = null,
   onAssumptionSelectInChat,
-  moduleInstances = [],
-  onOpenModuleInstance,
+  assessmentInstances = [],
+  onOpenAssessmentInstance,
 }: AssumptionsWorkspaceTabProps) {
   const [rows, setRows] = useState<Assumption[]>([]);
   const [selected, setSelected] = useState<Assumption | null>(null);
   const [status, setStatus] = useState<'' | AssumptionStatus>('');
   const [sourceType, setSourceType] = useState<'' | AssumptionSourceType>('');
-  const [moduleFilter, setModuleFilter] = useState('');
+  const [assessmentFilter, setAssessmentFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +121,7 @@ export function AssumptionsWorkspaceTab({
       const next = await api.listAssumptions(initiativeId, {
         status,
         source_type: sourceType,
-        module: moduleFilter.trim(),
+        assessment: assessmentFilter.trim(),
       });
       setRows(next);
       setSelected((current) => next.find((row) => row.id === current?.id) ?? null);
@@ -110,7 +130,7 @@ export function AssumptionsWorkspaceTab({
     } finally {
       setLoading(false);
     }
-  }, [initiativeId, moduleFilter, sourceType, status]);
+  }, [initiativeId, assessmentFilter, sourceType, status]);
 
   useEffect(() => {
     loadRows();
@@ -146,17 +166,17 @@ export function AssumptionsWorkspaceTab({
     };
   }, [initiativeId]);
 
-  const moduleOptions = useMemo(() => {
-    const modules = new Set<string>();
-    rows.forEach((row) => row.used_in_modules.forEach((module) => modules.add(module)));
-    return Array.from(modules).sort();
+  const assessmentOptions = useMemo(() => {
+    const assessments = new Set<string>();
+    rows.forEach((row) => row.used_in_assessments.forEach((assessment) => assessments.add(assessment)));
+    return Array.from(assessments).sort();
   }, [rows]);
-  const moduleFilterOptions = useMemo(
+  const assessmentFilterOptions = useMemo(
     () => [
-      { value: '', label: 'All modules' },
-      ...moduleOptions.map((module) => ({ value: module, label: module.replace(/_/g, ' ') })),
+      { value: '', label: 'All assessments' },
+      ...assessmentOptions.map((assessment) => ({ value: assessment, label: assessment.replace(/_/g, ' ') })),
     ],
-    [moduleOptions],
+    [assessmentOptions],
   );
   const selectedValueText = selected ? formatValue(selected.value, null, selected.value_type) : '';
   const hasDraftChanges = Boolean(
@@ -220,18 +240,18 @@ export function AssumptionsWorkspaceTab({
     { key: 'source_type', header: 'Source', className: 'whitespace-nowrap min-w-[140px]', render: (row) => row.source_type.replace('_', ' ') },
     { key: 'last_updated_by_email', header: 'Updated By', className: 'whitespace-nowrap min-w-[150px]', render: (row) => row.last_updated_by_email || row.created_by_email || 'system' },
     {
-      key: 'used_in_modules',
-      header: 'Modules',
+      key: 'used_in_assessments',
+      header: 'Assessments',
       className: 'min-w-[180px]',
       render: (row) => {
-        const relevantInstances = moduleInstances.filter((instance) => row.used_in_modules.includes(instance.module_id));
+        const relevantInstances = assessmentInstances.filter((instance) => row.used_in_assessments.includes(instance.assessment_id));
         if (relevantInstances.length === 0) return '—';
-        if (!onOpenModuleInstance) return `${relevantInstances.length} linked`;
+        if (!onOpenAssessmentInstance) return `${relevantInstances.length} linked`;
         return (
-          <ModuleInstanceOpenDropdown
+          <AssessmentInstanceOpenDropdown
             instances={relevantInstances}
-            onOpenInstance={onOpenModuleInstance}
-            getInstanceLabel={(instance) => instance.display_name || instance.title || instance.module_id.replace(/_/g, ' ')}
+            onOpenInstance={onOpenAssessmentInstance}
+            getInstanceLabel={(instance) => instance.display_name || instance.title || instance.assessment_id.replace(/_/g, ' ')}
           />
         );
       },
@@ -260,15 +280,16 @@ export function AssumptionsWorkspaceTab({
 
   const handleConfirm = useCallback(async () => {
     if (!selected) return;
-    let parsedValue: any = draftValue;
+    const normalizedDraft = normalizeDraftValue(draftValue);
+    let parsedValue: any = normalizedDraft;
     if (selected.value_type === 'number' || selected.value_type === 'percent' || selected.value_type === 'currency') {
-      const asNumber = Number(draftValue.replace(/,/g, ''));
-      parsedValue = Number.isFinite(asNumber) ? asNumber : draftValue;
+      const asNumber = Number((normalizedDraft ?? '').replace(/,/g, ''));
+      parsedValue = Number.isFinite(asNumber) ? asNumber : null;
     }
     await updateSelected({
       value: parsedValue,
       unit: draftUnit || null,
-      status: 'validated',
+      status: parsedValue === null ? 'missing' : 'validated',
     });
   }, [draftUnit, draftValue, selected, updateSelected]);
 
@@ -289,7 +310,7 @@ export function AssumptionsWorkspaceTab({
               <div>
                 <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
                 <p className="mt-1 text-sm text-text-tertiary">
-                  Project-wide values and claims used by modules, forecasts, and outputs.
+                  Project-wide values and claims used by assessments, forecasts, and outputs.
                 </p>
                 {!showDetailPanel ? (
                   <p className="mt-1 text-xs text-text-tertiary">
@@ -316,10 +337,10 @@ export function AssumptionsWorkspaceTab({
               ariaLabel="Filter assumptions by source type"
             />
             <CustomDropdown
-              value={moduleFilter}
-              onChange={setModuleFilter}
-              options={moduleFilterOptions}
-              ariaLabel="Filter assumptions by module"
+              value={assessmentFilter}
+              onChange={setAssessmentFilter}
+              options={assessmentFilterOptions}
+              ariaLabel="Filter assumptions by assessment"
             />
           </div>
 
@@ -332,7 +353,7 @@ export function AssumptionsWorkspaceTab({
               <div className="py-20 text-center">
                 <p className="text-sm font-medium text-text-secondary">No assumptions yet</p>
                 <p className="mt-1 text-xs text-text-tertiary">
-                  Upload project materials or create modules to start tracking assumptions.
+                  Upload project materials or create assessments to start tracking assumptions.
                 </p>
               </div>
             }

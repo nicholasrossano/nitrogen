@@ -20,7 +20,7 @@ from app.core.permissions import (
 )
 from app.core.storage import get_storage
 from app.models.initiative import Initiative
-from app.models.module_instance import ModuleInstance
+from app.models.assessment_instance import AssessmentInstance
 from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.models.evidence import EvidenceDoc
@@ -34,9 +34,9 @@ from app.schemas.initiative import (
     InitiativeResponse,
     InitiativeConfirmResponse,
 )
-from app.schemas.module_instance import ModuleInstanceResponse
-from app.modules.registry import get_module_registry
-from app.services import module_service
+from app.schemas.assessment_instance import AssessmentInstanceResponse
+from app.assessments.registry import get_assessment_registry
+from app.services import assessment_service
 from app.services.assumptions import AssumptionActor, ensure_expected_assumptions
 from app.services.initiative_overview import generate_initiative_overview
 from app.services.workspaces import resolve_workspace_for_user
@@ -71,7 +71,7 @@ async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | Non
     return f"{base}-{counter}"
 
 
-def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
+def _count_generated_assessment_instances(instances: list[AssessmentInstance]) -> int:
     """Instances marked complete via final approval, excluding trash."""
     return sum(
         1
@@ -80,26 +80,26 @@ def _count_generated_module_instances(instances: list[ModuleInstance]) -> int:
     )
 
 
-def _count_active_module_instances(instances: list[ModuleInstance]) -> int:
-    """Module instances started for this initiative, excluding trash."""
+def _count_active_assessment_instances(instances: list[AssessmentInstance]) -> int:
+    """Assessment instances started for this initiative, excluding trash."""
     return sum(1 for inst in instances if not inst.archived)
 
 
-def _active_module_instances(instances: list[ModuleInstance]) -> list[ModuleInstance]:
-    """Return only non-archived module instances."""
+def _active_assessment_instances(instances: list[AssessmentInstance]) -> list[AssessmentInstance]:
+    """Return only non-archived assessment instances."""
     return [inst for inst in instances if not inst.archived]
 
 
 def _initiative_to_response(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
     """Convert an Initiative ORM object to a response dict with sharing fields.
 
-    Computes ``deliverables`` and ``tool_alignments`` from module_instances
+    Computes ``deliverables`` and ``tool_alignments`` from assessment_instances
     (single source of truth).  The JSONB columns on the initiative are ignored.
     """
     data = InitiativeResponse.model_validate(initiative).model_dump()
 
-    all_instances = initiative.module_instances or []
-    instances = _active_module_instances(all_instances)
+    all_instances = initiative.assessment_instances or []
+    instances = _active_assessment_instances(all_instances)
 
     deliverables: dict = {}
     alignments: dict = {}
@@ -108,22 +108,22 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
 
     for inst in instances:
         if inst.deliverable and inst.is_plan_complete:
-            prev = deliverables_ts.get(inst.module_id)
+            prev = deliverables_ts.get(inst.assessment_id)
             if prev is None or inst.updated_at > prev:
-                deliverables[inst.module_id] = inst.deliverable
-                deliverables_ts[inst.module_id] = inst.updated_at
+                deliverables[inst.assessment_id] = inst.deliverable
+                deliverables_ts[inst.assessment_id] = inst.updated_at
         if inst.alignment:
-            prev = alignments_ts.get(inst.module_id)
+            prev = alignments_ts.get(inst.assessment_id)
             if prev is None or inst.updated_at > prev:
-                alignments[inst.module_id] = inst.alignment
-                alignments_ts[inst.module_id] = inst.updated_at
+                alignments[inst.assessment_id] = inst.alignment
+                alignments_ts[inst.assessment_id] = inst.updated_at
 
     data["deliverables"] = deliverables or None
-    data["module_alignments"] = alignments or None
-    data["module_instances_count"] = _count_active_module_instances(instances)
-    data["generated_modules_count"] = _count_generated_module_instances(instances)
-    data["module_instances"] = [
-        ModuleInstanceResponse.model_validate(i).model_dump()
+    data["assessment_alignments"] = alignments or None
+    data["assessment_instances_count"] = _count_active_assessment_instances(instances)
+    data["generated_assessments_count"] = _count_generated_assessment_instances(instances)
+    data["assessment_instances"] = [
+        AssessmentInstanceResponse.model_validate(i).model_dump()
         for i in instances
     ]
     data["shared_role"] = shared_role
@@ -134,19 +134,19 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
 def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
     """Lightweight version for list endpoints — skips heavy fields."""
     data = InitiativeResponse.model_validate(initiative).model_dump()
-    # Derive a simple deliverable count without iterating module instances
-    instances = _active_module_instances(initiative.module_instances or [])
+    # Derive a simple deliverable count without iterating assessment instances
+    instances = _active_assessment_instances(initiative.assessment_instances or [])
     seen_tools: set[str] = set()
     for inst in instances:
         if inst.deliverable and inst.is_plan_complete:
-            seen_tools.add(inst.module_id)
+            seen_tools.add(inst.assessment_id)
     data["deliverables"] = {t: True for t in seen_tools} if seen_tools else None
-    data["module_instances_count"] = _count_active_module_instances(instances)
-    data["generated_modules_count"] = _count_generated_module_instances(instances)
+    data["assessment_instances_count"] = _count_active_assessment_instances(instances)
+    data["generated_assessments_count"] = _count_generated_assessment_instances(instances)
     data["tool_alignments"] = None
     data["tool_inputs"] = None
     data["project_plan"] = None
-    data["module_instances"] = None
+    data["assessment_instances"] = None
     data["shared_role"] = shared_role
     data["owner_email"] = owner_email
     return data
@@ -174,11 +174,11 @@ def _safe_append_list_item(
         )
 
 
-def _humanize_module_id(module_id: str) -> str:
-    return module_id.replace("_", " ").strip() or "Module"
+def _humanize_assessment_id(assessment_id: str) -> str:
+    return assessment_id.replace("_", " ").strip() or "Assessment"
 
 
-def _creator_handle_from_instance(inst: ModuleInstance, email_map: dict[str, str]) -> str:
+def _creator_handle_from_instance(inst: AssessmentInstance, email_map: dict[str, str]) -> str:
     email = email_map.get(inst.started_by) or ""
     email_local = email.split("@", 1)[0].strip().lower()
     if email_local:
@@ -188,24 +188,24 @@ def _creator_handle_from_instance(inst: ModuleInstance, email_map: dict[str, str
     return fallback or "user"
 
 
-def _resolve_module_name(module_id: str) -> str:
-    module = get_module_registry().get_module(module_id)
-    if module is not None:
-        return module.definition.name
-    return _humanize_module_id(module_id)
+def _resolve_assessment_name(assessment_id: str) -> str:
+    assessment = get_assessment_registry().get_assessment(assessment_id)
+    if assessment is not None:
+        return assessment.definition.name
+    return _humanize_assessment_id(assessment_id)
 
 
-def _serialize_module_instance(
-    inst: ModuleInstance,
+def _serialize_assessment_instance(
+    inst: AssessmentInstance,
     *,
     email_map: dict[str, str],
-    module_names: dict[str, str],
+    assessment_names: dict[str, str],
 ) -> dict:
-    data = ModuleInstanceResponse.model_validate(inst).model_dump()
+    data = AssessmentInstanceResponse.model_validate(inst).model_dump()
     started_by_email = email_map.get(inst.started_by)
     creator_handle = _creator_handle_from_instance(inst, email_map)
-    module_name = module_names.get(inst.module_id) or _humanize_module_id(inst.module_id)
-    display_name = f"{module_name} #{inst.instance_number} · @{creator_handle}"
+    assessment_name = assessment_names.get(inst.assessment_id) or _humanize_assessment_id(inst.assessment_id)
+    display_name = f"{assessment_name} #{inst.instance_number} · @{creator_handle}"
 
     data["started_by_email"] = started_by_email
     data["instance_number"] = inst.instance_number
@@ -214,9 +214,9 @@ def _serialize_module_instance(
     return data
 
 
-async def _serialize_module_instances(
+async def _serialize_assessment_instances(
     db: AsyncSession,
-    instances: list[ModuleInstance],
+    instances: list[AssessmentInstance],
 ) -> list[dict]:
     if not instances:
         return []
@@ -227,13 +227,13 @@ async def _serialize_module_instances(
         rows = await db.execute(select(User.id, User.email).where(User.id.in_(uids)))
         email_map = {row.id: row.email for row in rows if row.email}
 
-    unique_module_ids = {inst.module_id for inst in instances}
-    module_names = {module_id: _resolve_module_name(module_id) for module_id in unique_module_ids}
+    unique_assessment_ids = {inst.assessment_id for inst in instances}
+    assessment_names = {assessment_id: _resolve_assessment_name(assessment_id) for assessment_id in unique_assessment_ids}
     return [
-        _serialize_module_instance(
+        _serialize_assessment_instance(
             inst,
             email_map=email_map,
-            module_names=module_names,
+            assessment_names=assessment_names,
         )
         for inst in instances
     ]
@@ -519,118 +519,118 @@ async def restore_initiative(
 
 
 @router.get(
-    "/initiatives/{initiative_id}/modules",
-    response_model=list[ModuleInstanceResponse],
+    "/initiatives/{initiative_id}/assessments",
+    response_model=list[AssessmentInstanceResponse],
 )
-async def list_module_instances(
+async def list_assessment_instances(
     initiative_id: str,
     archived: bool = False,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List module instances for a project. Pass ?archived=true for the trash view."""
+    """List assessment instances for a project. Pass ?archived=true for the trash view."""
     await ensure_user_exists(db, user)
     initiative, _role = await get_initiative_with_role(db, initiative_id, user)
-    instances = await module_service.list_instances(db, initiative.id, archived=archived)
-    return await _serialize_module_instances(db, instances)
+    instances = await assessment_service.list_instances(db, initiative.id, archived=archived)
+    return await _serialize_assessment_instances(db, instances)
 
 
 @router.delete(
-    "/initiatives/{initiative_id}/modules/{instance_id}",
+    "/initiatives/{initiative_id}/assessments/{instance_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def archive_module_instance(
+async def archive_assessment_instance(
     initiative_id: str,
     instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Soft-delete (trash) a module instance — editor or owner."""
+    """Soft-delete (trash) a assessment instance — editor or owner."""
     await ensure_user_exists(db, user)
     initiative = await require_editor(db, initiative_id, user)
-    inst = await db.get(ModuleInstance, instance_id)
+    inst = await db.get(AssessmentInstance, instance_id)
     if inst is None or inst.initiative_id != initiative.id:
-        raise HTTPException(status_code=404, detail="Module instance not found")
+        raise HTTPException(status_code=404, detail="Assessment instance not found")
     inst.archived = True
     await db.commit()
     return None
 
 
 @router.post(
-    "/initiatives/{initiative_id}/modules/{instance_id}/restore",
-    response_model=ModuleInstanceResponse,
+    "/initiatives/{initiative_id}/assessments/{instance_id}/restore",
+    response_model=AssessmentInstanceResponse,
 )
-async def restore_module_instance(
+async def restore_assessment_instance(
     initiative_id: str,
     instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Restore a trashed module instance."""
+    """Restore a trashed assessment instance."""
     await ensure_user_exists(db, user)
     initiative = await require_editor(db, initiative_id, user)
-    inst = await db.get(ModuleInstance, instance_id)
+    inst = await db.get(AssessmentInstance, instance_id)
     if inst is None or inst.initiative_id != initiative.id:
-        raise HTTPException(status_code=404, detail="Module instance not found")
+        raise HTTPException(status_code=404, detail="Assessment instance not found")
     inst.archived = False
     await db.commit()
     await db.refresh(inst)
-    serialized = await _serialize_module_instances(db, [inst])
+    serialized = await _serialize_assessment_instances(db, [inst])
     return serialized[0]
 
 
 @router.delete(
-    "/initiatives/{initiative_id}/modules/{instance_id}/permanent",
+    "/initiatives/{initiative_id}/assessments/{instance_id}/permanent",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def permanently_delete_module_instance(
+async def permanently_delete_assessment_instance(
     initiative_id: str,
     instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Permanently delete a module instance. Irreversible."""
+    """Permanently delete a assessment instance. Irreversible."""
     await ensure_user_exists(db, user)
     initiative = await require_editor(db, initiative_id, user)
-    inst = await db.get(ModuleInstance, instance_id)
+    inst = await db.get(AssessmentInstance, instance_id)
     if inst is None or inst.initiative_id != initiative.id:
-        raise HTTPException(status_code=404, detail="Module instance not found")
+        raise HTTPException(status_code=404, detail="Assessment instance not found")
     await db.delete(inst)
     await db.commit()
     return None
 
 
-class CreateModuleInstanceBody(BaseModel):
-    module_id: str
+class CreateAssessmentInstanceBody(BaseModel):
+    assessment_id: str
 
 
 @router.post(
-    "/initiatives/{initiative_id}/modules",
-    response_model=ModuleInstanceResponse,
+    "/initiatives/{initiative_id}/assessments",
+    response_model=AssessmentInstanceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_module_instance(
+async def create_assessment_instance(
     initiative_id: str,
-    body: CreateModuleInstanceBody,
+    body: CreateAssessmentInstanceBody,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Create a fresh module instance directly (no chat session required)."""
+    """Create a fresh assessment instance directly (no chat session required)."""
     await ensure_user_exists(db, user)
     initiative = await require_editor(db, initiative_id, user)
-    inst = await module_service.get_or_create_instance(
-        db, initiative.id, body.module_id, user.uid
+    inst = await assessment_service.get_or_create_instance(
+        db, initiative.id, body.assessment_id, user.uid
         # no chat_id → always creates a fresh instance
     )
     await ensure_expected_assumptions(
         db,
         initiative,
-        module_ids=[body.module_id],
+        assessment_ids=[body.assessment_id],
         actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
     )
     await db.commit()
     await db.refresh(inst)
-    serialized = await _serialize_module_instances(db, [inst])
+    serialized = await _serialize_assessment_instances(db, [inst])
     return serialized[0]
 
 

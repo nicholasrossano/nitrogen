@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { OpenModuleBrowser } from '@/components/chat/OpenModuleModal';
-import { type ModuleInstance } from '@/lib/api';
+import { OpenAssessmentBrowser } from '@/components/chat/OpenAssessmentModal';
+import { type AssessmentInstance } from '@/lib/api';
 
 export type WorkspaceLaunchMode = 'idle' | 'open';
 
@@ -10,7 +10,7 @@ interface WorkspaceHubProps {
   initiativeId: string;
   launchMode?: WorkspaceLaunchMode;
   onLaunchModeHandled?: () => void;
-  onSelectExisting: (instance: ModuleInstance) => void;
+  onSelectExisting: (instance: AssessmentInstance) => void;
 }
 
 export function WorkspaceHub({
@@ -29,7 +29,7 @@ export function WorkspaceHub({
     <div className="flex h-full flex-col overflow-hidden bg-white">
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8">
-          <OpenModuleBrowser
+          <OpenAssessmentBrowser
             initiativeId={initiativeId}
             onSelect={onSelectExisting}
           />

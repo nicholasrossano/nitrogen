@@ -2,7 +2,7 @@ export { ConfirmationWidget } from './ConfirmationWidget';
 export { DocumentRequestWidget } from './DocumentRequestWidget';
 export { EvidenceInputWidget } from './EvidenceInputWidget';
 export { MemoViewerWidget } from './MemoViewerWidget';
-export { ModuleChecklistWidget } from './ModuleChecklistWidget';
+export { AssessmentChecklistWidget } from './AssessmentChecklistWidget';
 export { DeliverablesOverviewWidget } from './DeliverablesOverviewWidget';
 export { ChecklistViewerWidget } from './ChecklistViewerWidget';
 export { DeliverablesListWidget } from './DeliverablesListWidget';

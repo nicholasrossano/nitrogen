@@ -35,7 +35,7 @@ class Assumption(Base):
     source_type: Mapped[str] = mapped_column(String(80), nullable=False)
     source_reference: Mapped[dict | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="assumed")
-    used_in_modules: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    used_in_assessments: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     created_by_user_id: Mapped[str | None] = mapped_column(String(255))
     created_by_email: Mapped[str | None] = mapped_column(String(255))
     last_updated_by_user_id: Mapped[str | None] = mapped_column(String(255))
@@ -88,19 +88,19 @@ class AssumptionComment(Base):
 
 
 class AssumptionBinding(Base):
-    """Structured mapping between a module variable and a project assumption."""
+    """Structured mapping between a assessment variable and a project assumption."""
 
     __tablename__ = "assumption_bindings"
 
     __table_args__ = (
         Index(
-            "ix_assumption_bindings_initiative_module_field",
+            "ix_assumption_bindings_initiative_assessment_field",
             "initiative_id",
-            "module_id",
+            "assessment_id",
             "field_name",
         ),
         Index("ix_assumption_bindings_assumption", "assumption_id"),
-        Index("ix_assumption_bindings_module_instance", "module_instance_id"),
+        Index("ix_assumption_bindings_assessment_instance", "assessment_instance_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -116,10 +116,10 @@ class AssumptionBinding(Base):
         ForeignKey("assumptions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    module_id: Mapped[str] = mapped_column(String(160), nullable=False)
-    module_instance_id: Mapped[uuid.UUID | None] = mapped_column(
+    assessment_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    assessment_instance_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("module_instances.id", ondelete="SET NULL"),
+        ForeignKey("assessment_instances.id", ondelete="SET NULL"),
     )
     stage_id: Mapped[str | None] = mapped_column(String(120))
     field_name: Mapped[str] = mapped_column(String(160), nullable=False)

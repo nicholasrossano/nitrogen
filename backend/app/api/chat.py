@@ -21,7 +21,7 @@ from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
 from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
 from app.services.assumptions import format_assumptions_for_initiative_prompt
-from app.services import module_service
+from app.services import assessment_service
 from app.models.assumption import Assumption
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.initiative import Initiative
@@ -69,7 +69,7 @@ def _build_focused_assumption_context(assumption: Assumption | None) -> str:
     value = assumption.value
     value_text = "missing" if status == "missing" else str(value)
     unit = f" {assumption.unit}" if assumption.unit else ""
-    modules = ", ".join(assumption.used_in_modules or [])
+    assessments = ", ".join(assumption.used_in_assessments or [])
     lines = [
         "## Focused Assumption",
         "- This chat is scoped to one project assumption. Keep responses focused on it unless the user changes topic.",
@@ -79,8 +79,8 @@ def _build_focused_assumption_context(assumption: Assumption | None) -> str:
         f"- Status: {status}",
         f"- Current value: {value_text}{unit}",
     ]
-    if modules:
-        lines.append(f"- Used in modules: {modules}")
+    if assessments:
+        lines.append(f"- Used in assessments: {assessments}")
     return "\n".join(lines)
 
 
@@ -219,7 +219,7 @@ class ChatStreamRequest(BaseModel):
     project_context: Optional[str] = Field(default=None, max_length=20000)
     field_context: Optional[FieldContext] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
-    module_context: Optional[dict] = None
+    assessment_context: Optional[dict] = None
     initiative_id: Optional[str] = None
     compare_initiative_ids: Optional[list[str]] = None
     allow_initial_project_onboarding: bool = False
@@ -385,14 +385,14 @@ async def get_chat_messages(
     }
 
 
-@router.get("/chats/{chat_id}/modules")
-async def get_chat_modules(
+@router.get("/chats/{chat_id}/assessments")
+async def get_chat_assessments(
     chat_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Return module instances associated with a core chat."""
-    from app.models.module_instance import ModuleInstance
+    """Return assessment instances associated with a core chat."""
+    from app.models.assessment_instance import AssessmentInstance
 
     try:
         cid = uuid.UUID(chat_id)
@@ -409,36 +409,36 @@ async def get_chat_modules(
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    modules_result = await db.execute(
-        select(ModuleInstance)
-        .where(ModuleInstance.chat_id == cid)
-        .order_by(ModuleInstance.started_at.asc())
+    assessments_result = await db.execute(
+        select(AssessmentInstance)
+        .where(AssessmentInstance.chat_id == cid)
+        .order_by(AssessmentInstance.started_at.asc())
     )
-    modules = modules_result.scalars().all()
+    assessments = assessments_result.scalars().all()
 
     return {
-        "modules": [
+        "assessments": [
             {
-                "instance_id": str(module.id),
-                "module_id": module.module_id,
-                "title": module.title,
-                "status": module.status,
-                "started_at": module.started_at.isoformat() if module.started_at else None,
+                "instance_id": str(assessment.id),
+                "assessment_id": assessment.assessment_id,
+                "title": assessment.title,
+                "status": assessment.status,
+                "started_at": assessment.started_at.isoformat() if assessment.started_at else None,
             }
-            for module in modules
+            for assessment in assessments
         ]
     }
 
 
-@router.post("/chats/{chat_id}/modules/{instance_id}")
-async def associate_chat_module(
+@router.post("/chats/{chat_id}/assessments/{instance_id}")
+async def associate_chat_assessment(
     chat_id: str,
     instance_id: str,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
-    """Associate an existing module instance with a core chat."""
-    from app.models.module_instance import ModuleInstance
+    """Associate an existing assessment instance with a core chat."""
+    from app.models.assessment_instance import AssessmentInstance
 
     try:
         cid = uuid.UUID(chat_id)
@@ -460,14 +460,14 @@ async def associate_chat_module(
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    instance = await db.get(ModuleInstance, iid)
+    instance = await db.get(AssessmentInstance, iid)
     if instance is None:
-        raise HTTPException(status_code=404, detail="Module instance not found")
+        raise HTTPException(status_code=404, detail="Assessment instance not found")
 
     if chat.initiative_id and instance.initiative_id != chat.initiative_id:
         raise HTTPException(
             status_code=400,
-            detail="Module instance belongs to a different initiative",
+            detail="Assessment instance belongs to a different initiative",
         )
 
     instance.chat_id = chat.id
@@ -476,7 +476,7 @@ async def associate_chat_module(
     return {
         "instance_id": str(instance.id),
         "chat_id": str(chat.id),
-        "module_id": instance.module_id,
+        "assessment_id": instance.assessment_id,
     }
 
 
@@ -622,7 +622,7 @@ async def chat_stream(
                 field_name=(field_context or {}).get("field_name"),
                 has_field_context=bool(field_context),
                 has_model_inputs_context=bool(data.model_inputs_context),
-                has_module_context=bool(data.module_context),
+                has_assessment_context=bool(data.assessment_context),
                 allow_initial_project_onboarding=data.allow_initial_project_onboarding,
                 has_assumption_context=bool(focused_assumption),
             )
@@ -754,42 +754,42 @@ async def chat_stream(
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
                 if _tool_hint and data.initiative_id:
-                    from app.modules import get_module_registry as _get_registry
+                    from app.assessments import get_assessment_registry as _get_registry
                     from app.services.chat import ChatResponse
-                    from app.services.module_workflow_service import (
+                    from app.services.assessment_workflow_service import (
                         ensure_workflow_state,
-                        is_assessment_module,
+                        is_structured_assessment,
                         uses_workspace_flow,
                     )
 
                     _registry = _get_registry()
-                    _workflow_module = _registry.get_module(_tool_hint)
+                    _workflow_assessment = _registry.get_assessment(_tool_hint)
                 else:
-                    _workflow_module = None
+                    _workflow_assessment = None
 
-                if _workflow_module and data.initiative_id and uses_workspace_flow(_workflow_module):
+                if _workflow_assessment and data.initiative_id and uses_workspace_flow(_workflow_assessment):
                     if not verified_initiative:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for this module.'})}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for this assessment.'})}\n\n"
                         return
 
                     async def _open_workflow_workspace():
                         if on_thinking:
-                            await on_thinking(f"Opening {_workflow_module.definition.name} workspace...")
-                        inst = await module_service.get_or_create_instance(
+                            await on_thinking(f"Opening {_workflow_assessment.definition.name} workspace...")
+                        inst = await assessment_service.get_or_create_instance(
                             db, verified_initiative.id, _tool_hint, user.uid, chat_id=chat.id,
                         )
-                        await ensure_workflow_state(db, inst, _workflow_module)
+                        await ensure_workflow_state(db, inst, _workflow_assessment)
                         await db.commit()
 
-                        if is_assessment_module(_workflow_module):
+                        if is_structured_assessment(_workflow_assessment):
                             intro = (
-                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                f"Here's your **{_workflow_assessment.definition.name}** workspace. "
                                 "Work through each stage and confirm when you're ready to advance."
                             )
                             tiers_used = ["workspace_setup"]
                         else:
                             intro = (
-                                f"Here's your **{_workflow_module.definition.name}** workspace. "
+                                f"Here's your **{_workflow_assessment.definition.name}** workspace. "
                                 "Review the inputs, confirm them, and the results will auto-compute."
                             )
                             tiers_used = ["workspace_build"]
@@ -797,10 +797,10 @@ async def chat_stream(
                         return ChatResponse(
                             content=intro,
                             sources=[], tiers_used=tiers_used, latency_ms=0,
-                            widget_type="module_workspace",
+                            widget_type="assessment_workspace",
                             widget_data={
                                 "instance_id": str(inst.id),
-                                "module_id": _tool_hint,
+                                "assessment_id": _tool_hint,
                             },
                         )
 
@@ -883,7 +883,7 @@ async def chat_stream(
                         )
 
                         if _is_onboarding_pivot:
-                            async def _direct_module_proposal() -> ServiceChatResponse:
+                            async def _direct_assessment_proposal() -> ServiceChatResponse:
                                 from app.plans.registry import get_plan_registry as _get_plan_registry
 
                                 # The conditional gate (wait for at least one
@@ -905,12 +905,12 @@ async def chat_stream(
                                         r for r in _recs
                                         if isinstance(r, dict) and r.get("recommended")
                                     ]) or len(_recs)
-                                    _label = "module" if _n == 1 else "modules"
+                                    _label = "assessment" if _n == 1 else "assessments"
                                     _msg = (
                                         f"I've mapped the {_n} {_label} that look most relevant for this project. "
                                         "Review them below and confirm the framework plan you want to start with."
                                     ) if _n > 0 else (
-                                        "I've mapped the modules that look most relevant for this project. "
+                                        "I've mapped the assessments that look most relevant for this project. "
                                         "Review them below and confirm the framework plan you want to start with."
                                     )
                                     return ServiceChatResponse(
@@ -923,7 +923,7 @@ async def chat_stream(
                                     )
                                 except Exception as _e:
                                     logger.error(
-                                        "Module proposal failed during onboarding pivot: %s",
+                                        "Assessment proposal failed during onboarding pivot: %s",
                                         _e,
                                         exc_info=True,
                                     )
@@ -937,7 +937,7 @@ async def chat_stream(
                                         latency_ms=0,
                                     )
 
-                            generation_task = asyncio.create_task(_direct_module_proposal())
+                            generation_task = asyncio.create_task(_direct_assessment_proposal())
                         else:
                             model_inputs_context = (
                                 data.model_inputs_context
@@ -951,7 +951,7 @@ async def chat_stream(
                                     tool_hint=data.tool_hint or None,
                                     field_context=field_context,
                                     model_inputs_context=model_inputs_context,
-                                    module_context=data.module_context or None,
+                                    assessment_context=data.assessment_context or None,
                                     project_context=project_context,
                                     on_research_step=on_research_step,
                                     initiative_id=str(verified_initiative.id),
@@ -967,7 +967,7 @@ async def chat_stream(
                                 tool_hint=data.tool_hint or None,
                                 field_context=field_context,
                                 model_inputs_context=data.model_inputs_context or None,
-                                module_context=data.module_context or None,
+                                assessment_context=data.assessment_context or None,
                                 project_context=project_context,
                                 on_research_step=on_research_step,
                                 initiative_id=data.initiative_id if verified_initiative else None,

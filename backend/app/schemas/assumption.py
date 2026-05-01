@@ -9,7 +9,7 @@ AssumptionStatus = Literal["validated", "extracted", "assumed", "missing"]
 AssumptionSourceType = Literal[
     "extraction",
     "user_input",
-    "module",
+    "assessment",
     "default",
     "missing_placeholder",
     "model_candidate",
@@ -26,10 +26,10 @@ class AssumptionBase(BaseModel):
     source_type: AssumptionSourceType = Field(description="How the assumption was created.")
     source_reference: dict[str, Any] | None = Field(
         default=None,
-        description="Structured provenance such as material ids, module/stage fields, or extraction metadata.",
+        description="Structured provenance such as material ids, assessment/stage fields, or extraction metadata.",
     )
     status: AssumptionStatus = Field(description="Review lifecycle status.")
-    used_in_modules: list[str] = Field(default_factory=list, description="Module ids that use this assumption.")
+    used_in_assessments: list[str] = Field(default_factory=list, description="Assessment ids that use this assumption.")
     notes: str | None = Field(default=None, description="Optional user-facing notes.")
 
 
@@ -42,7 +42,7 @@ class AssumptionCreate(BaseModel):
     source_type: AssumptionSourceType = Field(default="user_input", description="Creation source.")
     source_reference: dict[str, Any] | None = Field(default=None, description="Creation provenance.")
     status: AssumptionStatus = Field(default="validated", description="Initial status.")
-    used_in_modules: list[str] = Field(default_factory=list, description="Modules using the assumption.")
+    used_in_assessments: list[str] = Field(default_factory=list, description="Assessments using the assumption.")
     notes: str | None = Field(default=None, description="Optional notes.")
 
 
@@ -54,7 +54,7 @@ class AssumptionUpdate(BaseModel):
     source_type: AssumptionSourceType | None = Field(default=None, description="Updated source type.")
     source_reference: dict[str, Any] | None = Field(default=None, description="Updated provenance.")
     status: AssumptionStatus | None = Field(default=None, description="Updated status.")
-    used_in_modules: list[str] | None = Field(default=None, description="Updated module usage.")
+    used_in_assessments: list[str] | None = Field(default=None, description="Updated assessment usage.")
     notes: str | None = Field(default=None, description="Updated notes.")
 
 
@@ -75,7 +75,7 @@ class AssumptionSummaryItem(BaseModel):
     key: str = Field(description="Assumption key.")
     label: str = Field(description="Assumption label.")
     status: AssumptionStatus = Field(description="Assumption status.")
-    used_in_modules: list[str] = Field(default_factory=list, description="Modules using this assumption.")
+    used_in_assessments: list[str] = Field(default_factory=list, description="Assessments using this assumption.")
 
 
 class AssumptionSummary(BaseModel):
@@ -100,7 +100,7 @@ class AssumptionResolveResponse(BaseModel):
     found: bool = Field(description="Whether a matching assumption was resolved.")
     assumption: AssumptionResponse | None = Field(
         default=None,
-        description="Resolved assumption when one exists for the module field.",
+        description="Resolved assumption when one exists for the assessment field.",
     )
 
 

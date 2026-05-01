@@ -11,9 +11,9 @@ from app.models.memo import MemoVersion
 from app.models.onboarding import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
 from app.services.memo_generator import MemoGeneratorService
-from app.modules import get_module_registry
-from app.modules.base import ModuleAlignment
-from app.services import module_service
+from app.assessments import get_assessment_registry
+from app.assessments.base import AssessmentAlignment
+from app.services import assessment_service
 
 router = APIRouter()
 
@@ -57,7 +57,7 @@ async def generate_memo(
     await db.commit()
     
     initiative.stage = "complete"
-    await module_service.save_deliverable(
+    await assessment_service.save_deliverable(
         db, initiative.id, "memo_document",
         memo_content.title, "memo", memo_content.model_dump(mode="json"),
         user_id=user.uid,
@@ -134,7 +134,7 @@ async def generate_all_deliverables(
         )
     
     # Get tool registry
-    registry = get_module_registry()
+    registry = get_assessment_registry()
     
     # Prepare inputs from initiative
     inputs = initiative.tool_inputs or {}
@@ -156,15 +156,15 @@ async def generate_all_deliverables(
     deliverables: dict = {}
 
     for tool_id in initiative.selected_tools:
-        tool = registry.get_module(tool_id)
+        tool = registry.get_assessment(tool_id)
         if not tool:
             continue
 
         try:
             alignment = None
-            alignment_data = await module_service.get_alignment(db, initiative.id, tool_id)
+            alignment_data = await assessment_service.get_alignment(db, initiative.id, tool_id)
             if alignment_data and alignment_data.get("confirmed"):
-                alignment = ModuleAlignment.from_dict(alignment_data)
+                alignment = AssessmentAlignment.from_dict(alignment_data)
 
             output = await tool.execute(
                 db=db,
@@ -174,7 +174,7 @@ async def generate_all_deliverables(
                 alignment=alignment,
             )
 
-            inst = await module_service.save_deliverable(
+            inst = await assessment_service.save_deliverable(
                 db, initiative.id, tool_id,
                 output.title, output.output_type, output.content,
                 user_id=user.uid,
@@ -196,7 +196,7 @@ async def generate_all_deliverables(
             })
 
         except Exception as e:
-            await module_service.set_instance_error(
+            await assessment_service.set_instance_error(
                 db, initiative.id, tool_id, str(e), user_id=user.uid,
             )
 
