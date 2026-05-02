@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Sparkles } from 'lucide-react';
 
 import { AssessmentInstanceOpenDropdown } from '@/components/framework/AssessmentInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
@@ -65,6 +65,96 @@ function formatValue(value: any, unit?: string | null, valueType?: Assumption['v
       ? JSON.stringify(value)
       : String(value);
   return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function formatSourceType(sourceType: string): string {
+  return sourceType.replace(/_/g, ' ');
+}
+
+function hostnameFromUrl(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+function firstReferenceSource(sourceReference: Record<string, any> | null | undefined): Record<string, any> | null {
+  const sources = sourceReference?.sources;
+  if (!Array.isArray(sources)) return null;
+  return sources.find((source) => source && typeof source === 'object') ?? null;
+}
+
+function sourceCitationFromAssumption(row: Assumption): {
+  title: string;
+  url: string | null;
+  publisher: string | null;
+} | null {
+  const ref = row.source_reference;
+  const nested = firstReferenceSource(ref);
+  const title = (
+    ref?.source_title ??
+    ref?.title ??
+    nested?.source_title ??
+    nested?.title ??
+    nested?.filename ??
+    null
+  );
+  if (!title || typeof title !== 'string') return null;
+  const url = (
+    ref?.source_url ??
+    ref?.url ??
+    nested?.source_url ??
+    nested?.url ??
+    null
+  );
+  const publisher = (
+    ref?.publisher ??
+    nested?.publisher ??
+    (typeof url === 'string' ? hostnameFromUrl(url) : null)
+  );
+  return {
+    title,
+    url: typeof url === 'string' && url.length > 0 ? url : null,
+    publisher: typeof publisher === 'string' && publisher.length > 0 ? publisher : null,
+  };
+}
+
+function SourceCell({ row }: { row: Assumption }) {
+  const citation = sourceCitationFromAssumption(row);
+  if (!citation) {
+    return <span className="text-text-secondary">{formatSourceType(row.source_type)}</span>;
+  }
+
+  const label = citation.publisher || citation.title;
+  const chip = (
+    <span
+      title={citation.title}
+      className="inline-flex max-w-[220px] items-center gap-1 rounded border border-stroke-subtle bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium leading-none text-text-secondary transition-colors hover:border-accent/30 hover:bg-accent/[0.07] hover:text-accent"
+    >
+      {row.source_type === 'model_candidate' ? (
+        <Globe className="h-3 w-3 shrink-0" />
+      ) : (
+        <FileText className="h-3 w-3 shrink-0" />
+      )}
+      <span className="truncate">{label}</span>
+      {citation.url ? <ExternalLink className="h-2.5 w-2.5 shrink-0" /> : null}
+    </span>
+  );
+
+  if (!citation.url) return chip;
+
+  return (
+    <a
+      href={citation.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex no-underline"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {chip}
+    </a>
+  );
 }
 
 function normalizeDraftValue(raw: string): string | null {
@@ -237,7 +327,7 @@ export function AssumptionsWorkspaceTab({
         </span>
       ),
     },
-    { key: 'source_type', header: 'Source', className: 'whitespace-nowrap min-w-[140px]', render: (row) => row.source_type.replace('_', ' ') },
+    { key: 'source_type', header: 'Source', className: 'min-w-[180px] max-w-[240px]', render: (row) => <SourceCell row={row} /> },
     { key: 'last_updated_by_email', header: 'Updated By', className: 'whitespace-nowrap min-w-[150px]', render: (row) => row.last_updated_by_email || row.created_by_email || 'system' },
     {
       key: 'used_in_assessments',
@@ -311,12 +401,8 @@ export function AssumptionsWorkspaceTab({
                 <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
                 <p className="mt-1 text-sm text-text-tertiary">
                   Project-wide values and claims used by assessments, forecasts, and outputs.
+                  {!showDetailPanel ? ' Select an assumption to open it in chat.' : ''}
                 </p>
-                {!showDetailPanel ? (
-                  <p className="mt-1 text-xs text-text-tertiary">
-                    Select an assumption to open it in chat.
-                  </p>
-                ) : null}
               </div>
             </div>
           ) : null}
