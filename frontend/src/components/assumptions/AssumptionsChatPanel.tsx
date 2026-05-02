@@ -15,7 +15,7 @@ function formatAssumptionValue(
   unit?: string | null,
   valueType?: Assumption['value_type'],
 ): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return '';
   const formatted = typeof value === 'number'
     ? (
         valueType === 'currency'
@@ -130,7 +130,7 @@ export function AssumptionsChatPanel({
       draftUnit !== (selected.unit ?? '')
     ),
   ), [draftUnit, draftValue, selected, selectedValueText]);
-  const hasDraftValue = draftValue.trim() !== '' && draftValue.trim() !== '—';
+  const hasDraftValue = draftValue.trim() !== '';
   const canConfirm = Boolean(
     selected &&
     hasDraftValue &&
