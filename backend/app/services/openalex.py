@@ -8,6 +8,8 @@ API docs: https://docs.openalex.org/
 """
 
 import logging
+import asyncio
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -16,6 +18,7 @@ from app.core.http_client import get_http_client
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -35,6 +38,7 @@ class OpenAlexService:
     def __init__(self):
         self.base_url = settings.openalex_base_url.rstrip("/")
         self.email = settings.openalex_email
+        self._cache: dict[str, tuple[float, list[OpenAlexWork]]] = {}
 
     async def search_works(
         self,
@@ -45,6 +49,11 @@ class OpenAlexService:
         Search OpenAlex for scholarly works matching the query.
         Returns an empty list on any error (graceful degradation).
         """
+        cache_key = f"{query.strip().lower()}:{per_page}"
+        cached = self._cache.get(cache_key)
+        if cached and cached[0] > time.time():
+            return cached[1]
+
         params: dict[str, str | int] = {
             "search": query,
             "per_page": per_page,
@@ -54,14 +63,22 @@ class OpenAlexService:
         if self.email:
             params["mailto"] = self.email
 
-        try:
-            client = get_http_client()
-            resp = await client.get(f"{self.base_url}/works", params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            logger.warning(f"OpenAlex request failed: {e}")
-            return []
+        data: dict = {}
+        client = get_http_client()
+        for attempt in range(3):
+            try:
+                resp = await client.get(f"{self.base_url}/works", params=params, timeout=10.0)
+                if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < 2:
+                    await asyncio.sleep(2**attempt)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except Exception as e:
+                if attempt >= 2:
+                    logger.warning(f"OpenAlex request failed: {e}")
+                    return []
+                await asyncio.sleep(2**attempt)
 
         results: list[OpenAlexWork] = []
         for item in data.get("results", []):
@@ -89,6 +106,7 @@ class OpenAlexService:
                 )
             )
 
+        self._cache[cache_key] = (time.time() + 600, results)
         logger.info(f"OpenAlex returned {len(results)} results for: {query[:60]}")
         return results
 
