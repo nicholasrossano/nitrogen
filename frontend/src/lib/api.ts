@@ -415,7 +415,16 @@ export interface AssumptionComment {
 }
 
 export interface SourceCitation {
-  source_type: 'corpus' | 'evidence' | 'openalex' | 'web' | 'llm_estimate';
+  source_type:
+    | 'corpus'
+    | 'evidence'
+    | 'openalex'
+    | 'worldbank_indicator'
+    | 'worldbank_document'
+    | 'worldbank_project'
+    | 'iati_activity'
+    | 'web'
+    | 'llm_estimate';
   source_title: string;
   source_url?: string | null;
   chunk_id?: string | null;

@@ -26,6 +26,12 @@ from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
+from app.services.worldbank import (
+    WorldBankIndicatorService,
+    WorldBankDocumentService,
+    WorldBankProjectService,
+)
+from app.services.iati import IATIService
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
 from app.models.evidence import EvidenceDoc
@@ -39,6 +45,10 @@ class SourceType(str, Enum):
     CORPUS = "corpus"
     EVIDENCE = "evidence"
     OPENALEX = "openalex"
+    WORLDBANK_INDICATOR = "worldbank_indicator"
+    WORLDBANK_DOCUMENT = "worldbank_document"
+    WORLDBANK_PROJECT = "worldbank_project"
+    IATI_ACTIVITY = "iati_activity"
     WEB = "web"
     LLM_ESTIMATE = "llm_estimate"
 
@@ -81,6 +91,14 @@ class RetrievedFact:
             return f"[{prefix}Web: {self.source_title}]"
         elif self.source_type == SourceType.OPENALEX:
             return f"[{prefix}Scholarly: {self.source_title}]"
+        elif self.source_type == SourceType.WORLDBANK_INDICATOR:
+            return f"[{prefix}Country Indicator: {self.source_title}]"
+        elif self.source_type == SourceType.WORLDBANK_DOCUMENT:
+            return f"[{prefix}Institutional Report: {self.source_title}]"
+        elif self.source_type == SourceType.WORLDBANK_PROJECT:
+            return f"[{prefix}Comparable Project: {self.source_title}]"
+        elif self.source_type == SourceType.IATI_ACTIVITY:
+            return f"[{prefix}Funding Activity: {self.source_title}]"
         elif self.source_type == SourceType.LLM_ESTIMATE:
             return "[LLM Estimate - unverified]"
         else:
@@ -109,7 +127,16 @@ class RetrievalResult:
     def has_verified_facts(self) -> bool:
         """Check if we have facts from corpus, openalex, or web (not just LLM estimates)."""
         return any(
-            f.source_type in [SourceType.CORPUS, SourceType.EVIDENCE, SourceType.OPENALEX, SourceType.WEB]
+            f.source_type in [
+                SourceType.CORPUS,
+                SourceType.EVIDENCE,
+                SourceType.OPENALEX,
+                SourceType.WORLDBANK_INDICATOR,
+                SourceType.WORLDBANK_DOCUMENT,
+                SourceType.WORLDBANK_PROJECT,
+                SourceType.IATI_ACTIVITY,
+                SourceType.WEB,
+            ]
             for f in self.facts
         )
     
@@ -143,6 +170,10 @@ class TieredRetrievalService:
         self._is_byok: bool = False
         self.rag = RAGService(db)
         self.openalex = OpenAlexService()
+        self.worldbank_indicators = WorldBankIndicatorService()
+        self.worldbank_documents = WorldBankDocumentService()
+        self.worldbank_projects = WorldBankProjectService()
+        self.iati = IATIService()
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -153,7 +184,7 @@ class TieredRetrievalService:
         self,
         query: str,
         initiative_id: UUID | None = None,
-        include_openalex: bool = True,
+        include_openalex: bool = False,
         include_web_search: bool = True,
         include_llm_fallback: bool = True,
         require_citation: bool = False,
@@ -377,13 +408,15 @@ class TieredRetrievalService:
                     content_parts.append(f"Published: {work.publication_year}")
                 if work.source_name:
                     content_parts.append(f"Source: {work.source_name}")
+                if work.doi_url:
+                    content_parts.append(f"DOI: {work.doi_url}")
                 
                 facts.append(
                     RetrievedFact(
                         content=" | ".join(content_parts),
                         source_type=SourceType.OPENALEX,
                         source_title=work.title,
-                        source_url=work.doi_url,
+                        source_url=work.doi_url or work.openalex_id,
                         chunk_id=work.openalex_id,
                         confidence=0.8,
                         publisher=work.source_name or None,
@@ -392,6 +425,138 @@ class TieredRetrievalService:
             return facts
         except Exception as e:
             logger.error(f"OpenAlex search failed: {e}")
+            return []
+
+    async def search_worldbank_indicators(
+        self,
+        query: str,
+        country_hint: str | None = None,
+    ) -> list[RetrievedFact]:
+        """Search World Bank Open Data indicators."""
+        try:
+            rows = await self.worldbank_indicators.search_indicators(
+                query=query,
+                country_hint=country_hint,
+                latest_only=True,
+            )
+            facts: list[RetrievedFact] = []
+            for row in rows:
+                value_str = str(row.value) if row.value is not None else "No reported value"
+                content = (
+                    f"{row.indicator_name} ({row.indicator_code}) for {row.country_name} "
+                    f"in {row.year}: {value_str}."
+                )
+                facts.append(
+                    RetrievedFact(
+                        content=content,
+                        source_type=SourceType.WORLDBANK_INDICATOR,
+                        source_title=f"{row.indicator_name} ({row.country_name})",
+                        source_url=row.source_url,
+                        chunk_id=f"{row.country_code}:{row.indicator_code}:{row.year}",
+                        confidence=0.9 if row.value is not None else 0.5,
+                        publisher="World Bank Open Data",
+                    )
+                )
+            return facts
+        except Exception as e:
+            logger.error(f"World Bank indicator search failed: {e}")
+            return []
+
+    async def search_worldbank_documents(self, query: str) -> list[RetrievedFact]:
+        """Search World Bank Documents & Reports."""
+        try:
+            rows = await self.worldbank_documents.search_documents(query=query, max_results=8)
+            facts: list[RetrievedFact] = []
+            for row in rows:
+                parts = [row.title]
+                if row.document_type:
+                    parts.append(f"Type: {row.document_type}")
+                if row.year:
+                    parts.append(f"Year: {row.year}")
+                if row.summary:
+                    parts.append(row.summary)
+                facts.append(
+                    RetrievedFact(
+                        content=" | ".join(parts),
+                        source_type=SourceType.WORLDBANK_DOCUMENT,
+                        source_title=row.title,
+                        source_url=row.source_url,
+                        chunk_id=row.document_id,
+                        confidence=0.75,
+                        publisher=row.publisher,
+                    )
+                )
+            return facts
+        except Exception as e:
+            logger.error(f"World Bank document search failed: {e}")
+            return []
+
+    async def search_worldbank_projects(self, query: str) -> list[RetrievedFact]:
+        """Search World Bank Projects & Operations."""
+        try:
+            rows = await self.worldbank_projects.search_projects(query=query, max_results=8)
+            facts: list[RetrievedFact] = []
+            for row in rows:
+                parts = [row.project_name]
+                if row.country_name:
+                    parts.append(f"Country: {row.country_name}")
+                if row.approval_year:
+                    parts.append(f"Approval year: {row.approval_year}")
+                if row.status:
+                    parts.append(f"Status: {row.status}")
+                if row.financing_amount is not None:
+                    parts.append(f"Financing amount: {row.financing_amount:,.0f}")
+                if row.summary:
+                    parts.append(row.summary)
+                facts.append(
+                    RetrievedFact(
+                        content=" | ".join(parts),
+                        source_type=SourceType.WORLDBANK_PROJECT,
+                        source_title=row.project_name,
+                        source_url=row.source_url,
+                        chunk_id=row.project_id,
+                        confidence=0.75,
+                        publisher=row.publisher,
+                    )
+                )
+            return facts
+        except Exception as e:
+            logger.error(f"World Bank project search failed: {e}")
+            return []
+
+    async def search_iati(self, query: str) -> list[RetrievedFact]:
+        """Search IATI Datastore funding activity."""
+        try:
+            rows = await self.iati.search_activities(query=query, max_results=8)
+            facts: list[RetrievedFact] = []
+            for row in rows:
+                parts = [row.title]
+                if row.reporting_organization:
+                    parts.append(f"Reporting organization: {row.reporting_organization}")
+                if row.recipient_country:
+                    parts.append(f"Recipient country: {row.recipient_country}")
+                if row.sector:
+                    parts.append(f"Sector: {row.sector}")
+                if row.status:
+                    parts.append(f"Activity status: {row.status}")
+                if row.start_date or row.end_date:
+                    parts.append(f"Dates: {row.start_date or 'unknown'} to {row.end_date or 'unknown'}")
+                if row.budget_summary:
+                    parts.append(f"Budget/transaction summary: {row.budget_summary}")
+                facts.append(
+                    RetrievedFact(
+                        content=" | ".join(parts),
+                        source_type=SourceType.IATI_ACTIVITY,
+                        source_title=row.title,
+                        source_url=row.source_url,
+                        chunk_id=row.activity_id,
+                        confidence=0.7,
+                        publisher=row.publisher,
+                    )
+                )
+            return facts
+        except Exception as e:
+            logger.error(f"IATI search failed: {e}")
             return []
     
     async def search_web(

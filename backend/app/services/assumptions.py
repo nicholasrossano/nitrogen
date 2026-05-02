@@ -31,6 +31,16 @@ ACTIVE_STATUSES = {"validated", "extracted", "assumed", "missing"}
 SYSTEM_ACTOR = "system"
 MAX_PROMPT_ASSUMPTIONS = 12
 MAX_EXTRACTION_CHARS = 14000
+WORLDBANK_INDICATOR_TO_ASSUMPTION_KEY: dict[str, str] = {
+    "EG.ELC.ACCS.ZS": "electricity_access_total",
+    "EG.ELC.ACCS.RU.ZS": "electricity_access_rural",
+    "EG.ELC.ACCS.UR.ZS": "electricity_access_urban",
+    "EG.CFT.ACCS.ZS": "clean_cooking_access",
+    "SP.POP.TOTL": "population_total",
+    "NY.GDP.PCAP.CD": "gdp_per_capita",
+    "FP.CPI.TOTL.ZG": "inflation",
+    "SI.POV.DDAY": "poverty_headcount",
+}
 
 
 @dataclass(frozen=True)
@@ -81,6 +91,55 @@ def _coerce_assessments(assessments: list[str] | None, definition: AssumptionDef
     if definition:
         values.update(definition.used_in_assessments)
     return sorted(values)
+
+
+def suggest_assumption_candidates(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Suggest durable assumption candidates from retrieved World Bank indicators."""
+    candidates: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for fact in facts:
+        source_type = str(fact.get("source_type") or "").lower()
+        if source_type != "worldbank_indicator":
+            continue
+
+        chunk_id = str(fact.get("chunk_id") or "")
+        indicator_code = ""
+        if ":" in chunk_id:
+            parts = chunk_id.split(":")
+            if len(parts) >= 2:
+                indicator_code = parts[1]
+        if not indicator_code:
+            content = str(fact.get("content") or "")
+            match = re.search(r"\(([A-Z0-9.]+)\)", content)
+            if match:
+                indicator_code = match.group(1)
+        if not indicator_code:
+            continue
+
+        candidate_key = WORLDBANK_INDICATOR_TO_ASSUMPTION_KEY.get(indicator_code)
+        if not candidate_key or candidate_key in seen_keys:
+            continue
+        seen_keys.add(candidate_key)
+
+        definition = _definition_for_key(candidate_key)
+        candidates.append(
+            {
+                "key": candidate_key,
+                "label": definition.label if definition else candidate_key.replace("_", " ").title(),
+                "value": None,
+                "unit": definition.unit if definition else None,
+                "status": "suggested",
+                "source_reference": {
+                    "source_type": fact.get("source_type"),
+                    "source_title": fact.get("source_title"),
+                    "source_url": fact.get("source_url"),
+                    "indicator_code": indicator_code,
+                    "retrieved_fact_id": chunk_id or None,
+                },
+            }
+        )
+    return candidates
 
 
 def _actor_email(actor: AssumptionActor | None) -> str | None:

@@ -42,21 +42,35 @@ PLANNING_SYSTEM_PROMPT = """You are a research-planning assistant for an environ
 
 Your only job is to decide which tools (if any) to call before generating a response.
 
-You have these data sources available — they are all equally valid and complement each other:
+You have these data sources available:
+- search_project_documents: initiative-specific uploaded materials and evidence context
 - search_scholarly_literature: peer-reviewed papers, empirical studies, impact evaluations
+- search_country_indicators: World Bank Open Data indicators for country baselines
+- search_institutional_reports: World Bank Documents & Reports for institutional evidence
+- search_comparable_projects: World Bank Projects & Operations for precedent projects
+- search_funding_activity: IATI Datastore funding activity records
 - search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
 - propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE, Carbon, or Solar model input field
 - propose_template_value: proposes a value for a template/form requirement field when the user message contains [TEMPLATE_CONTEXT]
 
 GUIDELINES:
 
-The user may be working inside a project workspace. Project documents are ALREADY searched automatically — you do not need to call any tool to search them. When the user asks about THEIR project's specific details (budget, partners, timeline, scope, deliverables, etc.), do NOT call search_scholarly_literature or search_web_sources — the project documents already provide the answer.
+When the user asks about THEIR project's specific details (budget, partners, timeline, scope, deliverables, assumptions, uploaded materials), call search_project_documents first.
 
 If the context includes an "Active Deep Dive Context" block, treat that as a focused project item the user is actively exploring. In that case, prefer calling search_web_sources for questions that ask for more explanation, implementation context, dependencies, risks, best practices, institutional context, or external validation beyond the project's own documents. Only stay document-only when the user is clearly asking just for what the project documents say about that item.
 
-For general research questions that go BEYOND the project's own documents (e.g. industry benchmarks, regulatory standards, methodology comparisons, best practices), call BOTH search_scholarly_literature AND search_web_sources.
+Use source-aware routing:
+- Project-specific details from initiative files -> search_project_documents
+- Country macro/market indicator baselines (electricity access, GDP, inflation, poverty, population) -> search_country_indicators
+- Institutional strategy, diagnostics, appraisal/completion documents -> search_institutional_reports
+- Comparable financed projects and precedent interventions -> search_comparable_projects
+- Funder landscape / who else is funding what -> search_funding_activity
+- Scholarly evidence (adoption, willingness-to-pay, impact evaluations, intervention studies) -> search_scholarly_literature
+- Regulations, standards, recent policy/news updates, practical guidance -> search_web_sources
 
-For straightforward factual lookups like geographic coordinates, city/country names, dates, or unit conversions, prefer search_web_sources only. Scholarly literature is usually unnecessary.
+When the request clearly benefits from multiple evidence types, call multiple tools. Do NOT call every search tool by default.
+
+For straightforward factual lookups like geographic coordinates, city/country names, dates, or unit conversions, prefer search_web_sources only.
 
 Calculator assessments (LCOE, Carbon, Solar) now live in the editor workspace panel. When the user asks to model project economics or emissions, encourage them to open the relevant assessment from the workspace — do NOT attempt to run the model inline.
 
@@ -68,7 +82,7 @@ Call NEITHER search tool only when:
 - The question is purely conversational, definitional, or a simple clarification (e.g. "what is MRV?", "thanks")
 - The conversation already contains a direct answer
 
-When in doubt, call both search tools. More context is better than less.
+When in doubt, choose the minimum relevant set of tools rather than calling all tools.
 
 {model_inputs_context}
 {assessment_context}
@@ -182,7 +196,8 @@ BAD example (missing citations or prefixes):
 
 # Pattern to extract inline citations the LLM produces.
 # Supports optional project prefix for compare mode: [A-Evidence: file.pdf, p3]
-_CITATION_RE = re.compile(r'\[(?:([AB])-)?([^\]:]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]')
+# Titles can contain commas, so match title lazily until optional ", pN" suffix.
+_CITATION_RE = re.compile(r"\[(?:([AB])-)?([^:\]]+):\s*(.+?)(?:,\s*p(\d+))?\]")
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +222,8 @@ class ChatService:
     """
     Orchestrates compliance chat using a plan-then-retrieve-then-generate loop.
 
-    Step 1  — Corpus search (always; fast, local) + tool planning run in parallel
-    Step 2  — Execute the planner's requested tools (typically both scholarly
-               and web search) in parallel
+    Step 1  — Plan which retrieval tools to call
+    Step 2  — Execute selected retrieval tools in parallel
     Step 3  — Generate final answer using all gathered evidence
     Step 4  — Filter returned sources to only those cited in the answer
     """
@@ -330,7 +344,7 @@ class ChatService:
             if on_research_step:
                 await on_research_step(step_id, label, status)
 
-        # Step 1: corpus search (if enabled) + tool planning run in parallel (independent)
+        # Step 1: build normalized queries and ask planner which tools to call
         search_query = await self._build_search_query(user_message, history, project_context=project_context)
         external_search_query = await self._build_external_search_query(
             user_message,
@@ -338,8 +352,6 @@ class ChatService:
             field_context=field_context,
         )
         should_run_scholarly = self._should_run_scholarly_search(field_context)
-
-        await _step("scan_docs", "Scanning project documents", "running")
 
         async def _corpus_search() -> list[RetrievedFact]:
             if initiative_id:
@@ -363,34 +375,19 @@ class ChatService:
                 return []
             return await self.retrieval.search_project_materials(search_query, iid)
 
-        corpus_task = asyncio.create_task(_corpus_search())
-        plan_task = asyncio.create_task(
-            self._plan_tool_calls(
-                user_message,
-                history,
-                model_inputs_context=model_inputs_context,
-                assessment_context=assessment_context,
-                project_context=project_context,
-                initiative_id=initiative_id,
-            )
+        await _step("plan_tools", "Planning evidence retrieval", "running")
+        tool_calls = await self._plan_tool_calls(
+            user_message,
+            history,
+            model_inputs_context=model_inputs_context,
+            assessment_context=assessment_context,
+            project_context=project_context,
+            initiative_id=initiative_id,
         )
-        corpus_facts, tool_calls = await asyncio.gather(corpus_task, plan_task)
+        await _step("plan_tools", "Evidence retrieval plan ready", "done")
 
-        # Only fall back to keyword search when vector search found nothing for this initiative
-        all_facts: list[RetrievedFact] = list(corpus_facts)
-        if not corpus_facts and initiative_id:
-            material_facts = await _material_search()
-            all_facts.extend(material_facts)
-
+        all_facts: list[RetrievedFact] = []
         tiers_used: list[str] = []
-
-        doc_count = len(all_facts)
-        if doc_count:
-            tiers_used.append("corpus")
-            await _think(f"Found {doc_count} relevant sections in project documents")
-            await _step("scan_docs", f"Found {doc_count} relevant sections", "done")
-        else:
-            await _step("scan_docs", "No matching document sections", "done")
 
         # Step 2: execute requested tools — search tools run in parallel
         widget_type: str | None = None
@@ -502,6 +499,68 @@ class ChatService:
                 await _step("search_web", "No web sources found", "done")
             return facts
 
+        async def _run_project_documents(query: str) -> list[RetrievedFact]:
+            await _step("scan_docs", "Scanning project documents", "running")
+            await _think("Scanning project documents for relevant sections...")
+            corpus_facts = await _corpus_search()
+            if not corpus_facts and initiative_id:
+                corpus_facts = await _material_search()
+            if corpus_facts:
+                await _think(f"Found {len(corpus_facts)} relevant sections in project documents")
+                await _step("scan_docs", f"Found {len(corpus_facts)} relevant sections", "done")
+            else:
+                await _think("No matching sections in project documents")
+                await _step("scan_docs", "No matching document sections", "done")
+            return corpus_facts
+
+        async def _run_country_indicators(query: str) -> list[RetrievedFact]:
+            await _step("search_country_indicators", "Retrieving country indicators", "running")
+            await _think("Retrieving World Bank country indicators...")
+            facts = await self.retrieval.search_worldbank_indicators(query)
+            if facts:
+                await _think(f"Found {len(facts)} country indicator records")
+                await _step("search_country_indicators", f"Found {len(facts)} country indicator records", "done")
+            else:
+                await _think("No country indicators found")
+                await _step("search_country_indicators", "No country indicators found", "done")
+            return facts
+
+        async def _run_institutional_reports(query: str) -> list[RetrievedFact]:
+            await _step("search_institutional_reports", "Searching institutional reports", "running")
+            await _think("Searching World Bank institutional reports...")
+            facts = await self.retrieval.search_worldbank_documents(query)
+            if facts:
+                await _think(f"Found {len(facts)} institutional reports")
+                await _step("search_institutional_reports", f"Found {len(facts)} institutional reports", "done")
+            else:
+                await _think("No institutional reports found")
+                await _step("search_institutional_reports", "No institutional reports found", "done")
+            return facts
+
+        async def _run_comparable_projects(query: str) -> list[RetrievedFact]:
+            await _step("search_comparable_projects", "Searching comparable projects", "running")
+            await _think("Searching World Bank comparable projects...")
+            facts = await self.retrieval.search_worldbank_projects(query)
+            if facts:
+                await _think(f"Found {len(facts)} comparable projects")
+                await _step("search_comparable_projects", f"Found {len(facts)} comparable projects", "done")
+            else:
+                await _think("No comparable projects found")
+                await _step("search_comparable_projects", "No comparable projects found", "done")
+            return facts
+
+        async def _run_funding_activity(query: str) -> list[RetrievedFact]:
+            await _step("search_funding_activity", "Searching funding activity", "running")
+            await _think("Searching IATI funding activity...")
+            facts = await self.retrieval.search_iati(query)
+            if facts:
+                await _think(f"Found {len(facts)} funding activity records")
+                await _step("search_funding_activity", f"Found {len(facts)} funding activity records", "done")
+            else:
+                await _think("No funding activity records found")
+                await _step("search_funding_activity", "No funding activity records found", "done")
+            return facts
+
         search_tasks = []
         search_labels = []
         for fn_name, args in parsed_calls:
@@ -514,9 +573,24 @@ class ChatService:
                     continue
                 search_tasks.append(_run_scholarly(tool_query))
                 search_labels.append("openalex")
+            elif fn_name == "search_project_documents":
+                search_tasks.append(_run_project_documents(tool_query))
+                search_labels.append("corpus")
             elif fn_name == "search_web_sources":
                 search_tasks.append(_run_web(tool_query))
                 search_labels.append("web")
+            elif fn_name == "search_country_indicators":
+                search_tasks.append(_run_country_indicators(tool_query))
+                search_labels.append("worldbank_indicator")
+            elif fn_name == "search_institutional_reports":
+                search_tasks.append(_run_institutional_reports(tool_query))
+                search_labels.append("worldbank_document")
+            elif fn_name == "search_comparable_projects":
+                search_tasks.append(_run_comparable_projects(tool_query))
+                search_labels.append("worldbank_project")
+            elif fn_name == "search_funding_activity":
+                search_tasks.append(_run_funding_activity(tool_query))
+                search_labels.append("iati_activity")
 
         if search_tasks:
             search_results = await asyncio.gather(*search_tasks)
@@ -868,6 +942,22 @@ class ChatService:
                 search_tasks.append(self._run_compare_search(
                     "web", tool_query, _step, _think))
                 search_labels.append("web")
+            elif fn_name == "search_country_indicators":
+                search_tasks.append(self._run_compare_search(
+                    "country_indicators", tool_query, _step, _think))
+                search_labels.append("worldbank_indicator")
+            elif fn_name == "search_institutional_reports":
+                search_tasks.append(self._run_compare_search(
+                    "institutional_reports", tool_query, _step, _think))
+                search_labels.append("worldbank_document")
+            elif fn_name == "search_comparable_projects":
+                search_tasks.append(self._run_compare_search(
+                    "comparable_projects", tool_query, _step, _think))
+                search_labels.append("worldbank_project")
+            elif fn_name == "search_funding_activity":
+                search_tasks.append(self._run_compare_search(
+                    "funding_activity", tool_query, _step, _think))
+                search_labels.append("iati_activity")
 
         await _step("plan_tools", "Research plan ready", "done")
 
@@ -922,6 +1012,30 @@ class ChatService:
             facts = await self.retrieval.search_openalex(query)
             label = f"Found {len(facts)} scholarly works" if facts else "No scholarly works found"
             await _step("search_scholarly", label, "done")
+        elif search_type == "country_indicators":
+            await _step("search_country_indicators", "Retrieving country indicators", "running")
+            await _think("Retrieving World Bank country indicators...")
+            facts = await self.retrieval.search_worldbank_indicators(query)
+            label = f"Found {len(facts)} country indicator records" if facts else "No country indicators found"
+            await _step("search_country_indicators", label, "done")
+        elif search_type == "institutional_reports":
+            await _step("search_institutional_reports", "Searching institutional reports", "running")
+            await _think("Searching World Bank institutional reports...")
+            facts = await self.retrieval.search_worldbank_documents(query)
+            label = f"Found {len(facts)} institutional reports" if facts else "No institutional reports found"
+            await _step("search_institutional_reports", label, "done")
+        elif search_type == "comparable_projects":
+            await _step("search_comparable_projects", "Searching comparable projects", "running")
+            await _think("Searching World Bank comparable projects...")
+            facts = await self.retrieval.search_worldbank_projects(query)
+            label = f"Found {len(facts)} comparable projects" if facts else "No comparable projects found"
+            await _step("search_comparable_projects", label, "done")
+        elif search_type == "funding_activity":
+            await _step("search_funding_activity", "Searching funding activity", "running")
+            await _think("Searching IATI funding activity...")
+            facts = await self.retrieval.search_iati(query)
+            label = f"Found {len(facts)} funding activity records" if facts else "No funding activity records found"
+            await _step("search_funding_activity", label, "done")
         else:
             await _step("search_web", "Searching web sources", "running")
             await _think("Searching web sources...")
@@ -2174,7 +2288,10 @@ class ChatService:
             if best is not None and best not in cited:
                 cited.append(best)
 
-        return cited
+        # If we detected citation tags but strict title matching found no
+        # matching fact objects, fall back to returning available facts so
+        # frontend citation chips can still resolve source links.
+        return cited if cited else list(facts)
 
     # ===================================================================
     # PROJECT mode — orchestration logic (migrated from OrchestrationService)
