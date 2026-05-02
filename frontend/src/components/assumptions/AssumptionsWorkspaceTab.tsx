@@ -57,14 +57,26 @@ function formatNumeric(value: number, valueType?: Assumption['value_type']): str
   return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
+function isMissingValue(value: any): boolean {
+  return value === null || value === undefined || value === '';
+}
+
 function formatValue(value: any, unit?: string | null, valueType?: Assumption['value_type']): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (isMissingValue(value)) return '';
   const formatted = typeof value === 'number'
     ? formatNumeric(value, valueType)
     : typeof value === 'object'
       ? JSON.stringify(value)
       : String(value);
   return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function MissingValuePill() {
+  return (
+    <span className="inline-flex items-center rounded border border-stroke-subtle bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium leading-none text-text-secondary">
+      null
+    </span>
+  );
 }
 
 function formatSourceType(sourceType: string): string {
@@ -275,7 +287,7 @@ export function AssumptionsWorkspaceTab({
       draftUnit !== (selected.unit ?? '')
     ),
   );
-  const hasDraftValue = draftValue.trim() !== '' && draftValue.trim() !== '—';
+  const hasDraftValue = draftValue.trim() !== '';
   const canConfirm = Boolean(
     selected &&
     hasDraftValue &&
@@ -308,7 +320,12 @@ export function AssumptionsWorkspaceTab({
         </button>
       ),
     },
-    { key: 'value', header: 'Value', className: 'min-w-[160px]', render: (row) => formatValue(row.value, row.unit, row.value_type) },
+    {
+      key: 'value',
+      header: 'Value',
+      className: 'min-w-[160px]',
+      render: (row) => (isMissingValue(row.value) ? <MissingValuePill /> : formatValue(row.value, row.unit, row.value_type)),
+    },
     {
       key: 'status',
       header: 'Status',
@@ -401,7 +418,7 @@ export function AssumptionsWorkspaceTab({
                 <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
                 <p className="mt-1 text-sm text-text-tertiary">
                   Project-wide values and claims used by assessments, forecasts, and outputs.
-                  {!showDetailPanel ? ' Select an assumption to open it in chat.' : ''}
+                  {!showDetailPanel ? ' Select an assumption to open it to explore it further.' : ''}
                 </p>
               </div>
             </div>
