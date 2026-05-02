@@ -66,7 +66,7 @@ function mockSseResponse(events: unknown[]) {
 describe('api', () => {
   beforeEach(() => {
     mockFetch.mockReset();
-    jest.resetAssessments();
+    jest.resetModules();
   });
 
   describe('getInitiative', () => {
