@@ -142,6 +142,229 @@ def suggest_assumption_candidates(facts: list[dict[str, Any]]) -> list[dict[str,
     return candidates
 
 
+def _source_type_value(source_type: Any) -> str:
+    return str(getattr(source_type, "value", source_type) or "").lower()
+
+
+def _worldbank_indicator_code(fact: Any) -> str | None:
+    chunk_id = str(getattr(fact, "chunk_id", None) or "")
+    if ":" in chunk_id:
+        parts = chunk_id.split(":")
+        if len(parts) >= 2 and parts[1]:
+            return parts[1]
+
+    content = str(getattr(fact, "content", "") or "")
+    match = re.search(r"\(([A-Z0-9.]+)\)", content)
+    return match.group(1) if match else None
+
+
+def _worldbank_country_name(fact: Any) -> str | None:
+    content = str(getattr(fact, "content", "") or "")
+    match = re.search(r"\sfor\s+(.+?)\s+in\s+\d{4}\s*:", content)
+    if match:
+        return match.group(1).strip()
+
+    source_title = str(getattr(fact, "source_title", "") or "")
+    match = re.search(r"\(([^()]+)\)\s*$", source_title)
+    return match.group(1).strip() if match else None
+
+
+def _worldbank_indicator_value(fact: Any) -> float | int | None:
+    content = str(getattr(fact, "content", "") or "")
+    match = re.search(r":\s*(-?\d+(?:\.\d+)?)\s*\.?\s*$", content)
+    if not match:
+        return None
+    value = float(match.group(1))
+    return int(value) if value.is_integer() else value
+
+
+def _fact_was_cited(answer_content: str, fact: Any) -> bool:
+    citation = getattr(fact, "to_citation_string", lambda: "")()
+    if citation and citation in answer_content:
+        return True
+    source_title = str(getattr(fact, "source_title", "") or "")
+    return bool(source_title and f"Country Indicator: {source_title}" in answer_content)
+
+
+def build_chat_assumption_candidate(
+    fact: Any,
+    *,
+    answer_content: str,
+) -> dict[str, Any] | None:
+    """Build a syntactic assumption candidate from a cited indicator fact."""
+    if _source_type_value(getattr(fact, "source_type", None)) != "worldbank_indicator":
+        return None
+    if not _fact_was_cited(answer_content, fact):
+        return None
+
+    indicator_code = _worldbank_indicator_code(fact)
+    candidate_key = WORLDBANK_INDICATOR_TO_ASSUMPTION_KEY.get(indicator_code or "")
+    definition = _definition_for_key(candidate_key or "")
+    if candidate_key is None or definition is None:
+        return None
+
+    value = _worldbank_indicator_value(fact)
+    if value is None:
+        return None
+
+    return {
+        "key": candidate_key,
+        "value": value,
+        "label": definition.label,
+        "unit": definition.unit,
+        "value_type": definition.value_type,
+        "used_in_assessments": definition.used_in_assessments,
+        "source_reference": {
+            "source_type": _source_type_value(getattr(fact, "source_type", None)),
+            "source_title": getattr(fact, "source_title", None),
+            "source_url": getattr(fact, "source_url", None),
+            "publisher": getattr(fact, "publisher", None),
+            "indicator_code": indicator_code,
+            "country": _worldbank_country_name(fact),
+            "retrieved_fact_id": getattr(fact, "chunk_id", None),
+            "quote": getattr(fact, "content", None),
+        },
+    }
+
+
+def _initiative_relevance_context(initiative: Initiative) -> dict[str, Any]:
+    return {
+        "title": getattr(initiative, "title", None),
+        "geography": getattr(initiative, "geography", None),
+        "project_type": getattr(initiative, "project_type", None),
+        "sector": getattr(initiative, "sector", None),
+        "description": getattr(initiative, "project_description", None),
+        "goal": getattr(initiative, "goal", None),
+    }
+
+
+async def _should_log_chat_assumption(
+    db: AsyncSession,
+    initiative: Initiative,
+    candidate: dict[str, Any],
+    *,
+    actor: AssumptionActor,
+    user_message: str | None,
+    answer_content: str,
+) -> tuple[bool, str | None]:
+    prompt = (
+        "Decide whether a cited chat fact should be saved as a reusable project assumption.\n\n"
+        "Only return should_log=true when the cited fact is actually relevant to this project as a "
+        "baseline, model input, planning assumption, or explicitly adopted proxy. Return false for "
+        "general trivia, unrelated countries or sectors, background comparisons not adopted for the "
+        "project, or facts merely mentioned while answering a side question.\n\n"
+        f"Project context:\n{json.dumps(_initiative_relevance_context(initiative), indent=2)}\n\n"
+        f"User question:\n{user_message or ''}\n\n"
+        f"Assistant answer:\n{answer_content[:3000]}\n\n"
+        f"Candidate assumption:\n{json.dumps(candidate, indent=2)}"
+    )
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "classify_assumption_relevance",
+            "description": "Decide whether a cited fact should be logged as a reusable project assumption.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "should_log": {
+                        "type": "boolean",
+                        "description": "True only if this should become a project assumption.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "One concise sentence explaining the decision.",
+                    },
+                },
+                "required": ["should_log", "reason"],
+            },
+        },
+    }
+    try:
+        client, is_byok = await get_openai_client(actor.user_id, db)
+        resp = await client.chat.completions.create(
+            model=settings.openai_orchestration_model,
+            messages=[{"role": "user", "content": prompt}],
+            tools=[tool_def],
+            tool_choice={"type": "function", "function": {"name": "classify_assumption_relevance"}},
+            temperature=0,
+            max_tokens=180,
+        )
+        await record_usage_from_response(
+            actor.user_id or SYSTEM_ACTOR,
+            settings.openai_orchestration_model,
+            resp,
+            db,
+            is_byok=is_byok,
+        )
+        tool_calls = resp.choices[0].message.tool_calls or []
+        if not tool_calls:
+            return False, "No relevance decision returned."
+        payload = json.loads(tool_calls[0].function.arguments)
+        return bool(payload.get("should_log")), str(payload.get("reason") or "")
+    except Exception as exc:
+        logger.warning("Chat assumption relevance classification failed: %s", exc, exc_info=True)
+        return False, "Relevance classification failed."
+
+
+async def extract_assumptions_from_cited_chat_sources(
+    db: AsyncSession,
+    initiative: Initiative | None,
+    cited_sources: list[Any],
+    *,
+    answer_content: str,
+    actor: AssumptionActor,
+    user_message: str | None = None,
+    chat_id: str | None = None,
+) -> list[Assumption]:
+    """Persist project-relevant assumptions from facts the final chat answer cited."""
+    if initiative is None or not getattr(initiative, "id", None):
+        return []
+
+    touched: list[Assumption] = []
+    seen_keys: set[str] = set()
+    for fact in cited_sources:
+        candidate = build_chat_assumption_candidate(
+            fact,
+            answer_content=answer_content,
+        )
+        if candidate is None or candidate["key"] in seen_keys:
+            continue
+        should_log, relevance_reason = await _should_log_chat_assumption(
+            db,
+            initiative,
+            candidate,
+            actor=actor,
+            user_message=user_message,
+            answer_content=answer_content,
+        )
+        if not should_log:
+            continue
+        seen_keys.add(candidate["key"])
+        source_reference = {
+            **candidate["source_reference"],
+            "chat_id": chat_id,
+            "user_message": user_message,
+            "relevance_reason": relevance_reason,
+            "extracted_at": datetime.now(timezone.utc).isoformat(),
+        }
+        assumption, _created = await upsert_assumption(
+            db,
+            initiative_id=initiative.id,
+            key=candidate["key"],
+            value=candidate["value"],
+            label=candidate["label"],
+            unit=candidate["unit"],
+            value_type=candidate["value_type"],
+            source_type="model_candidate",
+            source_reference=source_reference,
+            status="extracted",
+            used_in_assessments=candidate["used_in_assessments"],
+            actor=actor,
+        )
+        touched.append(assumption)
+    return touched
+
+
 def _actor_email(actor: AssumptionActor | None) -> str | None:
     return actor.email if actor and actor.email else None
 
@@ -402,32 +625,10 @@ async def ensure_expected_assumptions(
     assessment_ids: list[str] | None = None,
     actor: AssumptionActor | None = None,
 ) -> tuple[int, list[Assumption]]:
-    assessments = assessment_ids or _assessment_ids_from_initiative(initiative)
-    definitions = expected_assumptions_for_assessments(assessments)
-    touched: list[Assumption] = []
-    created_count = 0
-    for definition in definitions:
-        required = bool(set(assessments).intersection(definition.required_for_assessments))
-        if not required:
-            continue
-        assumption, created = await upsert_assumption(
-            db,
-            initiative_id=initiative.id,
-            key=definition.key,
-            value=None,
-            label=definition.label,
-            unit=definition.unit,
-            value_type=definition.value_type,
-            source_type="missing_placeholder",
-            source_reference={"required_for_assessments": sorted(set(definition.required_for_assessments).intersection(assessments))},
-            status="missing",
-            used_in_assessments=definition.used_in_assessments,
-            actor=actor or AssumptionActor.system(),
-        )
-        touched.append(assumption)
-        if created:
-            created_count += 1
-    return created_count, touched
+    # Config is guidance for extraction/prompting only. We intentionally do not
+    # enforce static missing placeholders from config "required" fields.
+    _ = (db, initiative, assessment_ids, actor)
+    return 0, []
 
 
 def apply_assumptions_to_items(
