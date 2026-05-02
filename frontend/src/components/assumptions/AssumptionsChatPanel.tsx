@@ -137,6 +137,7 @@ export function AssumptionsChatPanel({
     (selected.status !== 'validated' || hasDraftChanges) &&
     !saving,
   );
+  const canDelete = Boolean(selected && !saving);
 
   const handleConfirm = useCallback(async () => {
     if (!selected) return;
@@ -169,6 +170,32 @@ export function AssumptionsChatPanel({
     }
   }, [draftUnit, draftValue, initiativeId, selected]);
 
+  const handleDelete = useCallback(async () => {
+    if (!selected) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateAssumption(selected.id, {
+        value: null,
+        unit: null,
+        status: 'missing',
+      });
+      assumptionCache.set(`${initiativeId}:${updated.id}`, updated);
+      setSelected(updated);
+      setDraftValue(formatAssumptionValue(updated.value, null, updated.value_type));
+      setDraftUnit(updated.unit ?? '');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: updated }),
+        );
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to delete assumption');
+    } finally {
+      setSaving(false);
+    }
+  }, [initiativeId, selected]);
+
   return (
     <ChatPanelWidgetShell
       icon={<ListChecks className="h-3.5 w-3.5 text-accent" />}
@@ -196,7 +223,15 @@ export function AssumptionsChatPanel({
             <span className="text-xs font-medium text-text-tertiary">Unit</span>
             <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
           </label>
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              className="btn-danger !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+              onClick={() => void handleDelete()}
+              disabled={!canDelete}
+            >
+              {saving ? 'Deleting...' : 'Delete'}
+            </button>
             <button
               type="button"
               className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
