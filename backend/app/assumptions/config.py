@@ -198,7 +198,74 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
 ]
 
 
-ALL_ASSUMPTIONS = COMMON_ASSUMPTIONS + MODULE_ASSUMPTIONS
+EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
+    AssumptionDefinition(
+        key="electricity_access_total",
+        label="Electricity access",
+        value_type="percent",
+        unit="%",
+        aliases=["electricity access", "energy access", "electrification rate"],
+        examples=["Electricity access = 15.6%"],
+    ),
+    AssumptionDefinition(
+        key="electricity_access_rural",
+        label="Rural electricity access",
+        value_type="percent",
+        unit="%",
+        aliases=["rural electricity access", "rural electrification"],
+        examples=["Rural electricity access = 8.2%"],
+    ),
+    AssumptionDefinition(
+        key="electricity_access_urban",
+        label="Urban electricity access",
+        value_type="percent",
+        unit="%",
+        aliases=["urban electricity access", "urban electrification"],
+        examples=["Urban electricity access = 62.4%"],
+    ),
+    AssumptionDefinition(
+        key="clean_cooking_access",
+        label="Clean cooking access",
+        value_type="percent",
+        unit="%",
+        aliases=["clean cooking access", "access to clean fuels and technologies for cooking"],
+        examples=["Clean cooking access = 5.1%"],
+    ),
+    AssumptionDefinition(
+        key="population_total",
+        label="Population",
+        value_type="number",
+        aliases=["population", "total population"],
+        examples=["Population = 20,931,751"],
+    ),
+    AssumptionDefinition(
+        key="gdp_per_capita",
+        label="GDP per capita",
+        value_type="currency",
+        unit="USD",
+        aliases=["gdp per capita", "income per capita"],
+        examples=["GDP per capita = 650 USD"],
+    ),
+    AssumptionDefinition(
+        key="inflation",
+        label="Inflation",
+        value_type="percent",
+        unit="%",
+        aliases=["inflation", "consumer price inflation"],
+        examples=["Inflation = 28.8%"],
+    ),
+    AssumptionDefinition(
+        key="poverty_headcount",
+        label="Poverty headcount",
+        value_type="percent",
+        unit="%",
+        aliases=["poverty headcount", "extreme poverty"],
+        examples=["Poverty headcount = 70.1%"],
+    ),
+]
+
+
+ALL_ASSUMPTIONS = COMMON_ASSUMPTIONS + MODULE_ASSUMPTIONS + EXTERNAL_BASELINE_ASSUMPTIONS
 ASSUMPTION_BY_KEY = {definition.key: definition for definition in ALL_ASSUMPTIONS}
 
 

@@ -21,7 +21,11 @@ from app.services.tiered_retrieval import (
     SourceType,
     TieredRetrievalService,
 )
-from app.services.assumptions import format_assumptions_for_initiative_prompt
+from app.services.assumptions import (
+    AssumptionActor,
+    extract_assumptions_from_cited_chat_sources,
+    format_assumptions_for_initiative_prompt,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -819,6 +823,19 @@ class ChatService:
 
         # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)
+        if initiative is not None and cited_sources:
+            try:
+                await extract_assumptions_from_cited_chat_sources(
+                    self.db,
+                    initiative,
+                    cited_sources,
+                    answer_content=content,
+                    actor=AssumptionActor(user_id=self.user_id, email=self.ctx.user_email),
+                    user_message=user_message,
+                    chat_id=str(self.ctx.chat_id) if self.ctx.chat_id else None,
+                )
+            except Exception as exc:
+                logger.warning("Chat assumption extraction failed: %s", exc, exc_info=True)
 
         # Step 5b: attach provenance to proposed_value widget data
         if widget_type == "proposed_value" and widget_data:
