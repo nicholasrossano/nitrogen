@@ -503,7 +503,8 @@ export function ConversationView({
 
 // Matches citations with optional project prefix for compare mode:
 // [Evidence: file.pdf, p3], [A-Evidence: file.pdf, p3], [B-Web: Title]
-const INLINE_CITATION_RE = /\[(?:([AB])-)?([\w\s]+):\s*([^\],]{4,200})(?:,\s*p(\d+))?\]/g;
+// Title may contain commas; match lazily until optional ", pN".
+const INLINE_CITATION_RE = /\[(?:([AB])-)?([^:\]]+):\s*(.+?)(?:,\s*p(\d+))?\]/g;
 const LEADING_CITATION_PUNCTUATION_RE = /^[.,!?;:]+/;
 
 function CitationChip({
@@ -540,7 +541,22 @@ function CitationChip({
     chunkIndex != null
       ? titleCandidates.find((s) => s.chunk_index === chunkIndex)
       : undefined
-  ) ?? titleCandidates[0];
+  ) ?? titleCandidates[0] ?? (() => {
+    const typeToSourceFamilies: Record<string, string[]> = {
+      'country indicator': ['worldbank_indicator'],
+      'institutional report': ['worldbank_document'],
+      'comparable project': ['worldbank_project'],
+      'funding activity': ['iati_activity'],
+      scholarly: ['openalex'],
+      web: ['web'],
+      evidence: ['evidence'],
+      corpus: ['corpus'],
+    };
+    const families = typeToSourceFamilies[type] ?? [type];
+    const sameFamily = sources.filter((s) => families.includes((s.source_type || '').toLowerCase()));
+    // Safe fallback: only auto-resolve by family when unambiguous.
+    return sameFamily.length === 1 ? sameFamily[0] : undefined;
+  })();
 
   const url = matched?.source_url;
   const publisher = matched?.publisher;
@@ -571,6 +587,18 @@ function CitationChip({
   } else if (type === 'evidence' || type === 'uploaded') {
     icon = <FileText className="w-3 h-3 shrink-0" />;
     label = title.trim().length > 30 ? title.trim().slice(0, 28) + '…' : title.trim() || 'Document';
+  } else if (type === 'country indicator') {
+    icon = <Globe className="w-3 h-3 shrink-0" />;
+    label = publisher || 'World Bank Indicator';
+  } else if (type === 'institutional report') {
+    icon = <FileText className="w-3 h-3 shrink-0" />;
+    label = publisher || 'World Bank Report';
+  } else if (type === 'comparable project') {
+    icon = <FileText className="w-3 h-3 shrink-0" />;
+    label = publisher || 'World Bank Project';
+  } else if (type === 'funding activity') {
+    icon = <FileText className="w-3 h-3 shrink-0" />;
+    label = publisher || 'IATI Activity';
   } else {
     icon = <FileText className="w-3 h-3 shrink-0" />;
     label = sourceType;

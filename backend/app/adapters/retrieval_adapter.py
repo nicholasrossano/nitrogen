@@ -99,7 +99,7 @@ class RetrievalAdapter(BaseAdapter):
         result = await service.retrieve(
             query=inputs["query"],
             initiative_id=initiative_uuid,
-            include_openalex=inputs.get("include_openalex", True),
+            include_openalex=inputs.get("include_openalex", False),
             include_web_search=inputs.get("include_web_search", True),
             include_llm_fallback=inputs.get("include_llm_fallback", True),
             require_citation=inputs.get("require_citation", False),
