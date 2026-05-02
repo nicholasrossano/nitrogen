@@ -20,7 +20,6 @@ export const EDITOR_WIDGET_TYPES = [
   'checklist_viewer',
   'document_viewer',
   'assessment_workspace',
-  'assessment_workspace',
 ] as const;
 
 export const WIDGET_MODEL_GROUP: Record<string, string> = {
@@ -33,7 +32,6 @@ export const WIDGET_MODEL_GROUP: Record<string, string> = {
   memo_viewer: 'memo',
   checklist_viewer: 'checklist',
   document_viewer: 'document_viewer',
-  assessment_workspace: 'assessment',
   assessment_workspace: 'assessment',
 };
 
@@ -60,7 +58,6 @@ const WIDGET_LABELS: Record<string, string> = {
   memo_viewer: 'Investment Memo',
   checklist_viewer: 'Due Diligence',
   document_viewer: 'Document',
-  assessment_workspace: 'Assessment',
   assessment_workspace: 'Assessment',
 };
 
@@ -146,7 +143,6 @@ function EditorWidgetRenderer({
       return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive />;
     case 'document_viewer':
       return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
-    case 'assessment_workspace':
     case 'assessment_workspace':
       return (
         <AssessmentWorkspace
