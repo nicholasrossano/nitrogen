@@ -143,7 +143,7 @@ async def refresh_assumptions(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Run config-led extraction and missing placeholder generation."""
+    """Run config-guided extraction from project evidence/materials."""
     initiative = await require_editor(db, initiative_id, user)
     created, updated, touched = await extract_assumptions_from_sources(
         db,
