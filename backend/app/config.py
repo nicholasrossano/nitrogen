@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # OpenAlex
     openalex_email: str = ""
     openalex_base_url: str = "https://api.openalex.org"
+
+    # World Bank public APIs
+    worldbank_api_base: str = "https://api.worldbank.org/v2"
+    worldbank_search_base: str = "https://search.worldbank.org/api/v2"
+
+    # IATI Datastore v3
+    iati_api_key: str = ""
     
     # PVWatts (NREL Solar Production Estimate)
     pvwatts_api_key: str = ""
