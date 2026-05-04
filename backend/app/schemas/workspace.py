@@ -54,3 +54,33 @@ class WorkspaceDetailResponse(WorkspaceResponse):
     """Workspace response including member list."""
 
     members: list[WorkspaceMemberResponse] = Field(default_factory=list, description="Workspace members.")
+
+
+class WorkspaceKnowledgeBankCreate(BaseModel):
+    """Request body for adding a workspace knowledge bank."""
+
+    name: str = Field(..., min_length=1, max_length=255, description="Knowledge bank display name.")
+    base_url: str = Field(..., min_length=5, max_length=2048, description="Knowledge bank base URL.")
+
+
+class WorkspaceKnowledgeBankUpdate(BaseModel):
+    """Request body for updating a workspace knowledge bank."""
+
+    name: str | None = Field(None, min_length=1, max_length=255, description="Knowledge bank display name.")
+    base_url: str | None = Field(None, min_length=5, max_length=2048, description="Knowledge bank base URL.")
+    is_active: bool | None = Field(None, description="Whether this knowledge bank is active for retrieval.")
+
+
+class WorkspaceKnowledgeBankResponse(BaseModel):
+    """Workspace knowledge bank response."""
+
+    id: UUID = Field(..., description="Knowledge bank identifier.")
+    workspace_id: UUID = Field(..., description="Workspace identifier.")
+    name: str = Field(..., description="Knowledge bank display name.")
+    base_url: str = Field(..., description="Knowledge bank base URL.")
+    is_active: bool = Field(..., description="Whether the knowledge bank is active.")
+    status: str = Field(..., description="Indexing status.")
+    last_indexed_at: datetime | None = Field(None, description="Most recent successful indexing timestamp.")
+    index_error: str | None = Field(None, description="Most recent indexing error.")
+    created_at: datetime = Field(..., description="Knowledge bank creation timestamp.")
+    updated_at: datetime = Field(..., description="Knowledge bank update timestamp.")

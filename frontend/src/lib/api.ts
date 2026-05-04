@@ -122,6 +122,19 @@ export interface WorkspaceDetail extends Workspace {
   members: WorkspaceMember[];
 }
 
+export interface WorkspaceKnowledgeBank {
+  id: string;
+  workspace_id: string;
+  name: string;
+  base_url: string;
+  is_active: boolean;
+  status: 'pending' | 'indexing' | 'ready' | 'failed';
+  last_indexed_at: string | null;
+  index_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserSearchResult {
   id: string;
   email: string | null;
@@ -418,6 +431,8 @@ export interface SourceCitation {
   source_type:
     | 'corpus'
     | 'evidence'
+    | 'workspace_evidence'
+    | 'workspace_knowledge'
     | 'openalex'
     | 'worldbank_indicator'
     | 'worldbank_document'
@@ -780,6 +795,42 @@ export const api = {
 
   removeWorkspaceMember: (workspaceId: string, membershipId: string) =>
     fetchApi<{ success: boolean }>(`/api/v1/workspaces/${workspaceId}/members/${membershipId}`, {
+      method: 'DELETE',
+    }),
+
+  listWorkspaceKnowledgeBanks: (workspaceId: string) =>
+    fetchApi<WorkspaceKnowledgeBank[]>(`/api/v1/workspaces/${workspaceId}/knowledge-banks`),
+
+  createWorkspaceKnowledgeBank: (workspaceId: string, data: { name: string; base_url: string; index_now?: boolean }) =>
+    fetchApi<WorkspaceKnowledgeBank>(
+      `/api/v1/workspaces/${workspaceId}/knowledge-banks?index_now=${data.index_now !== false}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ name: data.name, base_url: data.base_url }),
+      },
+    ),
+
+  updateWorkspaceKnowledgeBank: (
+    workspaceId: string,
+    bankId: string,
+    data: { name?: string; base_url?: string; is_active?: boolean },
+  ) =>
+    fetchApi<WorkspaceKnowledgeBank>(
+      `/api/v1/workspaces/${workspaceId}/knowledge-banks/${bankId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  reindexWorkspaceKnowledgeBank: (workspaceId: string, bankId: string) =>
+    fetchApi<WorkspaceKnowledgeBank>(
+      `/api/v1/workspaces/${workspaceId}/knowledge-banks/${bankId}/reindex`,
+      { method: 'POST' },
+    ),
+
+  deleteWorkspaceKnowledgeBank: (workspaceId: string, bankId: string) =>
+    fetchApi<void>(`/api/v1/workspaces/${workspaceId}/knowledge-banks/${bankId}`, {
       method: 'DELETE',
     }),
 

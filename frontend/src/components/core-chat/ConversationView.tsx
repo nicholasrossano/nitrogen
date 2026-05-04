@@ -550,6 +550,8 @@ function CitationChip({
       scholarly: ['openalex'],
       web: ['web'],
       evidence: ['evidence'],
+      'workspace file': ['workspace_evidence'],
+      'workspace kb': ['workspace_knowledge'],
       corpus: ['corpus'],
     };
     const families = typeToSourceFamilies[type] ?? [type];
@@ -561,9 +563,11 @@ function CitationChip({
   const url = matched?.source_url;
   const publisher = matched?.publisher;
   const isSelected = Boolean(matched && selectedCitationKeys?.has(citationSelectionKey(matched)));
-  const isInternal = matched && (
-    matched.source_type === 'corpus' || matched.source_type === 'evidence'
-  ) && matched.evidence_doc_id;
+  const isInternal = Boolean(
+    matched
+    && matched.evidence_doc_id
+    && ['corpus', 'evidence', 'workspace_evidence'].includes(String(matched.source_type)),
+  );
 
   let label: string;
   let icon: React.ReactNode;
@@ -587,6 +591,12 @@ function CitationChip({
   } else if (type === 'evidence' || type === 'uploaded') {
     icon = <FileText className="w-3 h-3 shrink-0" />;
     label = title.trim().length > 30 ? title.trim().slice(0, 28) + '…' : title.trim() || 'Document';
+  } else if (type === 'workspace file') {
+    icon = <FileText className="w-3 h-3 shrink-0" />;
+    label = title.trim().length > 30 ? title.trim().slice(0, 28) + '…' : title.trim() || 'Workspace file';
+  } else if (type === 'workspace kb') {
+    icon = <Globe className="w-3 h-3 shrink-0" />;
+    label = title.trim().length > 30 ? title.trim().slice(0, 28) + '…' : title.trim() || 'Workspace KB';
   } else if (type === 'country indicator') {
     icon = <Globe className="w-3 h-3 shrink-0" />;
     label = publisher || 'World Bank Indicator';
