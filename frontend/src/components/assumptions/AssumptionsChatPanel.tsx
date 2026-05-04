@@ -208,7 +208,9 @@ export function AssumptionsChatPanel({
       {!focusAssumptionId ? (
         <div>
           <p className="text-sm font-medium text-text-secondary">No assumption selected</p>
-          <p className="mt-1 text-xs text-text-tertiary">Select a row in the assumptions table to open it here.</p>
+          <p className="mt-1 text-xs text-text-tertiary">
+            Select a row in the assumptions table, or ask chat to add a new assumption.
+          </p>
         </div>
       ) : loading || (!selected && !error) ? (
         <p className="text-sm text-text-tertiary">Loading selected assumption...</p>
