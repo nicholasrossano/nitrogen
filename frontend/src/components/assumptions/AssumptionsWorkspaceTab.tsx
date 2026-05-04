@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare
 import { AssessmentInstanceOpenDropdown } from '@/components/framework/AssessmentInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
+import { CitationChip } from '@/components/ui/CitationChip';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import {
   api,
@@ -17,6 +18,7 @@ import {
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
 const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
+const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
 
 interface AssumptionsWorkspaceTabProps {
   initiativeId: string;
@@ -140,33 +142,22 @@ function SourceCell({ row }: { row: Assumption }) {
   }
 
   const label = citation.publisher || citation.title;
-  const chip = (
-    <span
-      title={citation.title}
-      className="inline-flex max-w-[220px] items-center gap-1 rounded border border-stroke-subtle bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium leading-none text-text-secondary transition-colors hover:border-accent/30 hover:bg-accent/[0.07] hover:text-accent"
-    >
-      {row.source_type === 'model_candidate' ? (
-        <Globe className="h-3 w-3 shrink-0" />
-      ) : (
-        <FileText className="h-3 w-3 shrink-0" />
-      )}
-      <span className="truncate">{label}</span>
-      {citation.url ? <ExternalLink className="h-2.5 w-2.5 shrink-0" /> : null}
-    </span>
-  );
-
-  if (!citation.url) return chip;
-
   return (
-    <a
+    <CitationChip
+      title={citation.title}
+      size="compact"
       href={citation.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex no-underline"
-      onClick={(event) => event.stopPropagation()}
-    >
-      {chip}
-    </a>
+      onLinkClick={(event) => event.stopPropagation()}
+      icon={row.source_type === 'model_candidate'
+        ? <Globe className="h-2.5 w-2.5 shrink-0" />
+        : <FileText className="h-2.5 w-2.5 shrink-0" />}
+      label={
+        <>
+          <span className="max-w-[220px] truncate">{label}</span>
+          {citation.url ? <ExternalLink className="h-2.5 w-2.5 shrink-0" /> : null}
+        </>
+      }
+    />
   );
 }
 
@@ -252,6 +243,14 @@ export function AssumptionsWorkspaceTab({
     setSelected((current) => (current?.id === match.id ? current : match));
   }, [focusAssumptionId, rows]);
 
+  const matchesActiveFilters = useCallback((row: Assumption) => {
+    if (status && row.status !== status) return false;
+    if (sourceType && row.source_type !== sourceType) return false;
+    const assessment = assessmentFilter.trim();
+    if (assessment && !row.used_in_assessments.includes(assessment)) return false;
+    return true;
+  }, [assessmentFilter, sourceType, status]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -260,15 +259,37 @@ export function AssumptionsWorkspaceTab({
       const updated = customEvent.detail;
       if (!updated || updated.initiative_id !== initiativeId) return;
 
-      setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-      setSelected((current) => (current?.id === updated.id ? updated : current));
+      const includeInTable = matchesActiveFilters(updated);
+      setRows((prev) => {
+        const existingIndex = prev.findIndex((row) => row.id === updated.id);
+        if (!includeInTable) {
+          if (existingIndex === -1) return prev;
+          return prev.filter((row) => row.id !== updated.id);
+        }
+        if (existingIndex === -1) return [updated, ...prev];
+        return prev.map((row) => (row.id === updated.id ? updated : row));
+      });
+      setSelected((current) => {
+        if (current?.id !== updated.id) return current;
+        return includeInTable ? updated : null;
+      });
+    };
+    const handleAssumptionDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent<{ assumptionId?: string; initiativeId?: string }>;
+      const assumptionId = customEvent.detail?.assumptionId;
+      const deletedInitiativeId = customEvent.detail?.initiativeId;
+      if (!assumptionId || deletedInitiativeId !== initiativeId) return;
+      setRows((prev) => prev.filter((row) => row.id !== assumptionId));
+      setSelected((current) => (current?.id === assumptionId ? null : current));
     };
 
     window.addEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
+    window.addEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
     return () => {
       window.removeEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
+      window.removeEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
     };
-  }, [initiativeId]);
+  }, [initiativeId, matchesActiveFilters]);
 
   const assessmentOptions = useMemo(() => {
     const assessments = new Set<string>();
@@ -415,48 +436,48 @@ export function AssumptionsWorkspaceTab({
       <div className={`mx-auto grid max-w-7xl gap-6 ${showDetailPanel ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
         <div className="space-y-6">
           {!embedded ? (
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
-                <p className="mt-1 text-sm text-text-tertiary">
-                  Project-wide values and claims used by assessments, forecasts, and outputs.
-                  {!showDetailPanel ? ' Select an assumption to open it to explore it further.' : ''}
-                </p>
-              </div>
-              {onAddAssumptionInChat ? (
-                <button
-                  type="button"
-                  className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg"
-                  onClick={onAddAssumptionInChat}
-                >
-                  <Plus className="w-3 h-3" />
-                  Add assumption
-                </button>
-              ) : null}
+            <div>
+              <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
+              <p className="mt-1 text-sm text-text-tertiary">
+                Project-wide values and claims used by assessments, forecasts, and outputs.
+                {!showDetailPanel ? ' Select an assumption to open it to explore it further.' : ''}
+              </p>
             </div>
           ) : null}
 
           {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
 
-          <div className="flex flex-wrap gap-2">
-            <CustomDropdown
-              value={status}
-              onChange={(value) => setStatus(value as '' | AssumptionStatus)}
-              options={STATUS_OPTIONS}
-              ariaLabel="Filter assumptions by status"
-            />
-            <CustomDropdown
-              value={sourceType}
-              onChange={(value) => setSourceType(value as '' | AssumptionSourceType)}
-              options={SOURCE_OPTIONS}
-              ariaLabel="Filter assumptions by source type"
-            />
-            <CustomDropdown
-              value={assessmentFilter}
-              onChange={setAssessmentFilter}
-              options={assessmentFilterOptions}
-              ariaLabel="Filter assumptions by assessment"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CustomDropdown
+                value={status}
+                onChange={(value) => setStatus(value as '' | AssumptionStatus)}
+                options={STATUS_OPTIONS}
+                ariaLabel="Filter assumptions by status"
+              />
+              <CustomDropdown
+                value={sourceType}
+                onChange={(value) => setSourceType(value as '' | AssumptionSourceType)}
+                options={SOURCE_OPTIONS}
+                ariaLabel="Filter assumptions by source type"
+              />
+              <CustomDropdown
+                value={assessmentFilter}
+                onChange={setAssessmentFilter}
+                options={assessmentFilterOptions}
+                ariaLabel="Filter assumptions by assessment"
+              />
+            </div>
+            {onAddAssumptionInChat ? (
+              <button
+                type="button"
+                className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg shrink-0"
+                onClick={onAddAssumptionInChat}
+              >
+                <Plus className="w-3 h-3" />
+                Add assumption
+              </button>
+            ) : null}
           </div>
 
           <ReadOnlyDataTable

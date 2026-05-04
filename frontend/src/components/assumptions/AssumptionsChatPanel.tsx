@@ -8,6 +8,7 @@ import { api, type Assumption } from '@/lib/api';
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
 const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
+const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
 const assumptionCache = new Map<string, Assumption>();
 
 function formatAssumptionValue(
@@ -33,21 +34,58 @@ function formatAssumptionValue(
 interface AssumptionsChatPanelProps {
   initiativeId: string;
   focusAssumptionId?: string | null;
+  createNew?: boolean;
   collapsed?: boolean;
   layoutMode?: 'inline' | 'panel';
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
+function normalizeAssumptionKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function parseDraftValue(raw: string): {
+  value: any;
+  status: 'missing' | 'assumed';
+  valueType: Assumption['value_type'];
+} {
+  const trimmed = raw.trim();
+  if (!trimmed) return { value: null, status: 'missing', valueType: 'text' };
+  if (trimmed.toLowerCase() === 'true' || trimmed.toLowerCase() === 'false') {
+    return {
+      value: trimmed.toLowerCase() === 'true',
+      status: 'assumed',
+      valueType: 'boolean',
+    };
+  }
+  const asNumber = Number(trimmed.replace(/,/g, ''));
+  if (Number.isFinite(asNumber)) {
+    return { value: asNumber, status: 'assumed', valueType: 'number' };
+  }
+  return {
+    value: trimmed,
+    status: 'assumed',
+    valueType: trimmed.length > 120 ? 'text' : 'string',
+  };
+}
+
 export function AssumptionsChatPanel({
   initiativeId,
   focusAssumptionId = null,
+  createNew = false,
   collapsed = false,
   layoutMode = 'inline',
   onCollapsedChange,
 }: AssumptionsChatPanelProps) {
   const initialCacheKey = focusAssumptionId ? `${initiativeId}:${focusAssumptionId}` : null;
   const initialCached = initialCacheKey ? assumptionCache.get(initialCacheKey) ?? null : null;
+  const initialCreateMode = createNew && !focusAssumptionId;
   const [selected, setSelected] = useState<Assumption | null>(initialCached);
+  const [draftLabel, setDraftLabel] = useState('');
   const [draftValue, setDraftValue] = useState(
     initialCached ? formatAssumptionValue(initialCached.value, null, initialCached.value_type) : '',
   );
@@ -59,6 +97,9 @@ export function AssumptionsChatPanel({
   useEffect(() => {
     if (!focusAssumptionId) {
       setSelected(null);
+      if (initialCreateMode) {
+        setDraftLabel('');
+      }
       setDraftValue('');
       setDraftUnit('');
       setError(null);
@@ -100,7 +141,7 @@ export function AssumptionsChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [focusAssumptionId, initiativeId]);
+  }, [focusAssumptionId, initiativeId, initialCreateMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -124,6 +165,7 @@ export function AssumptionsChatPanel({
   }, [focusAssumptionId, initiativeId]);
 
   const selectedValueText = selected ? formatAssumptionValue(selected.value, null, selected.value_type) : '';
+  const showCreateForm = initialCreateMode && !selected;
   const hasDraftChanges = useMemo(() => Boolean(
     selected && (
       draftValue !== selectedValueText ||
@@ -138,6 +180,10 @@ export function AssumptionsChatPanel({
     !saving,
   );
   const canDelete = Boolean(selected && !saving);
+  const canCreate = Boolean(
+    !saving &&
+    normalizeAssumptionKey(draftLabel).length > 0,
+  );
 
   const handleConfirm = useCallback(async () => {
     if (!selected) return;
@@ -175,18 +221,18 @@ export function AssumptionsChatPanel({
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateAssumption(selected.id, {
-        value: null,
-        unit: null,
-        status: 'missing',
-      });
-      assumptionCache.set(`${initiativeId}:${updated.id}`, updated);
-      setSelected(updated);
-      setDraftValue(formatAssumptionValue(updated.value, null, updated.value_type));
-      setDraftUnit(updated.unit ?? '');
+      const deletedId = selected.id;
+      await api.deleteAssumption(deletedId);
+      assumptionCache.delete(`${initiativeId}:${deletedId}`);
+      setSelected(null);
+      setDraftLabel('');
+      setDraftValue('');
+      setDraftUnit('');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
-          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: updated }),
+          new CustomEvent(ASSUMPTION_DELETED_EVENT, {
+            detail: { assumptionId: deletedId, initiativeId },
+          }),
         );
       }
     } catch (e: any) {
@@ -196,24 +242,96 @@ export function AssumptionsChatPanel({
     }
   }, [initiativeId, selected]);
 
+  const handleCreate = useCallback(async () => {
+    const key = normalizeAssumptionKey(draftLabel);
+    if (!key) return;
+    const label = draftLabel.trim();
+    if (!label) return;
+    const parsed = parseDraftValue(draftValue);
+
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await api.createAssumption(initiativeId, {
+        key,
+        label,
+        value: parsed.value,
+        unit: draftUnit || null,
+        value_type: parsed.valueType,
+        source_type: 'user_input',
+        status: parsed.status,
+      });
+      assumptionCache.set(`${initiativeId}:${created.id}`, created);
+      setSelected(created);
+      setDraftValue(formatAssumptionValue(created.value, null, created.value_type));
+      setDraftUnit(created.unit ?? '');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: created }),
+        );
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to create assumption');
+    } finally {
+      setSaving(false);
+    }
+  }, [draftLabel, draftUnit, draftValue, initiativeId]);
+
+  const handleCreateCancel = useCallback(() => {
+    setDraftLabel('');
+    setDraftValue('');
+    setDraftUnit('');
+    setError(null);
+  }, []);
+
   return (
     <ChatPanelWidgetShell
       icon={<ListChecks className="h-3.5 w-3.5 text-accent" />}
       eyebrow="Assumptions"
-      title={selected?.label ?? (focusAssumptionId ? 'Loading assumption...' : 'No assumption selected')}
+      title={selected?.label ?? (showCreateForm ? 'New assumption' : (focusAssumptionId ? 'Loading assumption...' : 'No assumption selected'))}
       collapsed={collapsed}
       layoutMode={layoutMode}
       onCollapsedChange={onCollapsedChange}
     >
-      {!focusAssumptionId ? (
-        <div>
-          <p className="text-sm font-medium text-text-secondary">No assumption selected</p>
-          <p className="mt-1 text-xs text-text-tertiary">
-            Select a row in the assumptions table, or ask chat to add a new assumption.
-          </p>
+      {showCreateForm ? (
+        <div className="space-y-4">
+          {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
+          <label className="block">
+            <span className="text-xs font-medium text-text-tertiary">Assumption name</span>
+            <input
+              className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm"
+              value={draftLabel}
+              onChange={(event) => setDraftLabel(event.target.value)}
+              placeholder="e.g. PPA price per MWh"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-text-tertiary">Value</span>
+            <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftValue} onChange={(event) => setDraftValue(event.target.value)} />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-text-tertiary">Unit</span>
+            <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
+          </label>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+              onClick={handleCreateCancel}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+              onClick={() => void handleCreate()}
+              disabled={!canCreate}
+            >
+              {saving ? 'Creating...' : 'Create'}
+            </button>
+          </div>
         </div>
-      ) : loading || (!selected && !error) ? (
-        <p className="text-sm text-text-tertiary">Loading selected assumption...</p>
       ) : selected ? (
         <div className="space-y-4">
           {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
@@ -245,6 +363,15 @@ export function AssumptionsChatPanel({
           </div>
           <AssumptionCommentsThread assumptionId={selected.id} />
         </div>
+      ) : !focusAssumptionId ? (
+        <div>
+          <p className="text-sm font-medium text-text-secondary">No assumption selected</p>
+          <p className="mt-1 text-xs text-text-tertiary">
+            Select a row in the assumptions table, or ask chat to add a new assumption.
+          </p>
+        </div>
+      ) : loading ? (
+        <p className="text-sm text-text-tertiary">Loading selected assumption...</p>
       ) : (
         <p className="text-sm text-text-tertiary">Unable to load selected assumption.</p>
       )}
