@@ -618,6 +618,14 @@ async def update_assumption(
     return assumption
 
 
+async def delete_assumption(
+    db: AsyncSession,
+    assumption: Assumption,
+) -> None:
+    await db.delete(assumption)
+    await db.flush()
+
+
 async def ensure_expected_assumptions(
     db: AsyncSession,
     initiative: Initiative,
