@@ -11,10 +11,23 @@ import {
   FolderOpen,
   RefreshCw,
   ChevronDown,
+  Globe,
+  ExternalLink,
+  Plus,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 
 type TabType = 'uploaded' | 'generated';
-import { api, ProjectMaterial, GeneratedFile, ProjectFilesResponse, DriveLinkedFile } from '@/lib/api';
+import {
+  api,
+  ProjectMaterial,
+  GeneratedFile,
+  ProjectFilesResponse,
+  DriveLinkedFile,
+  WorkspaceKnowledgeBank,
+} from '@/lib/api';
 import { Tooltip } from '@/components/ui/Tooltip';
 import {
   dataTableContainerClass,
@@ -42,6 +55,13 @@ interface ProjectFilesViewProps {
   onImportFromDrive?: () => Promise<void>;
   driveLinkedFiles?: DriveLinkedFile[];
   onSyncDriveFiles?: () => Promise<void>;
+  knowledgeBanks?: WorkspaceKnowledgeBank[];
+  onAddKnowledgeBank?: (data: { name: string; base_url: string }) => Promise<void>;
+  onUpdateKnowledgeBank?: (
+    bankId: string,
+    data: { name: string; base_url: string },
+  ) => Promise<void>;
+  onDeleteKnowledgeBank?: (bankId: string) => Promise<void>;
 }
 
 const FILE_TYPE_LABELS: Record<string, string> = {
@@ -94,6 +114,10 @@ export function ProjectFilesView({
   onImportFromDrive,
   driveLinkedFiles = [],
   onSyncDriveFiles,
+  knowledgeBanks = [],
+  onAddKnowledgeBank,
+  onUpdateKnowledgeBank,
+  onDeleteKnowledgeBank,
 }: ProjectFilesViewProps) {
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,6 +131,13 @@ export function ProjectFilesView({
   const [uploading, setUploading] = useState(false);
   const [driveImporting, setDriveImporting] = useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const [addingKnowledgeBank, setAddingKnowledgeBank] = useState(false);
+  const [newKnowledgeBankName, setNewKnowledgeBankName] = useState('');
+  const [newKnowledgeBankUrl, setNewKnowledgeBankUrl] = useState('');
+  const [bankActionId, setBankActionId] = useState<string | null>(null);
+  const [editingBankId, setEditingBankId] = useState<string | null>(null);
+  const [editKbName, setEditKbName] = useState('');
+  const [editKbUrl, setEditKbUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const uploadMenuRef = useRef<HTMLDivElement>(null);
@@ -271,6 +302,22 @@ export function ProjectFilesView({
   const pagedGenerated = generatedFiles.slice((generatedPage - 1) * PAGE_SIZE, generatedPage * PAGE_SIZE);
 
   const thClass = dataTableHeaderCellClass;
+  const hasKnowledgeBanks = knowledgeBanks.length > 0;
+
+  const handleAddKnowledgeBank = useCallback(async () => {
+    if (!onAddKnowledgeBank) return;
+    const name = newKnowledgeBankName.trim();
+    const base_url = newKnowledgeBankUrl.trim();
+    if (!name || !base_url) return;
+    setAddingKnowledgeBank(true);
+    try {
+      await onAddKnowledgeBank({ name, base_url });
+      setNewKnowledgeBankName('');
+      setNewKnowledgeBankUrl('');
+    } finally {
+      setAddingKnowledgeBank(false);
+    }
+  }, [newKnowledgeBankName, newKnowledgeBankUrl, onAddKnowledgeBank]);
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -327,6 +374,187 @@ export function ProjectFilesView({
           </div>
         ) : activeTab === 'uploaded' ? (
           <div className="space-y-2">
+            {scope === 'workspace' && (onAddKnowledgeBank || hasKnowledgeBanks) && (
+              <div className="space-y-2 mb-6">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-text-tertiary" />
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    Knowledge banks
+                  </h2>
+                </div>
+                <div className={dataTableContainerClass}>
+                  <div className="p-4 space-y-4">
+                    {onAddKnowledgeBank && (
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[11px] text-text-tertiary mb-1">Name</label>
+                          <input
+                            value={newKnowledgeBankName}
+                            onChange={(e) => setNewKnowledgeBankName(e.target.value)}
+                            placeholder="UN Climate Knowledge Hub"
+                            className="w-full rounded-md border border-black/[0.1] px-2 py-1.5 text-xs"
+                          />
+                        </div>
+                        <div className="flex-[2]">
+                          <label className="block text-[11px] text-text-tertiary mb-1">URL</label>
+                          <input
+                            value={newKnowledgeBankUrl}
+                            onChange={(e) => setNewKnowledgeBankUrl(e.target.value)}
+                            placeholder="https://www.un.org/en/climatechange"
+                            className="w-full rounded-md border border-black/[0.1] px-2 py-1.5 text-xs"
+                          />
+                        </div>
+                        <button
+                          onClick={handleAddKnowledgeBank}
+                          disabled={addingKnowledgeBank || !newKnowledgeBankName.trim() || !newKnowledgeBankUrl.trim()}
+                          className={actionButtonClass}
+                        >
+                          {addingKnowledgeBank ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                          <span>Add link</span>
+                        </button>
+                      </div>
+                    )}
+                    {hasKnowledgeBanks ? (
+                      <div className="space-y-2">
+                        {knowledgeBanks.map((bank) => {
+                          const busy = bankActionId === bank.id;
+                          const isEditing = editingBankId === bank.id;
+                          return (
+                            <div
+                              key={bank.id}
+                              className={`flex gap-2 rounded-md border border-black/[0.08] px-3 py-2 ${
+                                isEditing ? 'flex-col sm:flex-row sm:items-center' : 'items-center'
+                              }`}
+                            >
+                              {isEditing ? (
+                                <div className="min-w-0 flex-1 flex flex-col gap-2">
+                                  <input
+                                    value={editKbName}
+                                    onChange={(e) => setEditKbName(e.target.value)}
+                                    aria-label="Knowledge bank name"
+                                    className="w-full rounded-md border border-black/[0.1] px-2 py-1.5 text-xs"
+                                  />
+                                  <input
+                                    value={editKbUrl}
+                                    onChange={(e) => setEditKbUrl(e.target.value)}
+                                    aria-label="Knowledge bank URL"
+                                    className="w-full rounded-md border border-black/[0.1] px-2 py-1.5 text-xs"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="min-w-0 flex-1 select-text">
+                                  <p className="text-xs text-text-primary truncate">{bank.name}</p>
+                                  <p className="text-[11px] text-text-tertiary truncate">{bank.base_url}</p>
+                                </div>
+                              )}
+                              <div
+                                className={`flex items-center gap-1 shrink-0 ${
+                                  isEditing ? 'self-end sm:self-auto' : ''
+                                }`}
+                              >
+                                {isEditing ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        busy ||
+                                        !editKbName.trim() ||
+                                        editKbUrl.trim().length < 5
+                                      }
+                                      onClick={async () => {
+                                        if (!onUpdateKnowledgeBank) return;
+                                        setBankActionId(bank.id);
+                                        try {
+                                          await onUpdateKnowledgeBank(bank.id, {
+                                            name: editKbName.trim(),
+                                            base_url: editKbUrl.trim(),
+                                          });
+                                          setEditingBankId(null);
+                                        } finally {
+                                          setBankActionId(null);
+                                        }
+                                      }}
+                                      className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] disabled:opacity-40"
+                                      title="Save"
+                                    >
+                                      {busy ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Check className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={() => setEditingBankId(null)}
+                                      className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] disabled:opacity-40"
+                                      title="Cancel"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {onUpdateKnowledgeBank && (
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          setEditingBankId(bank.id);
+                                          setEditKbName(bank.name);
+                                          setEditKbUrl(bank.base_url);
+                                        }}
+                                        className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04] disabled:opacity-40"
+                                        title="Edit"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <a
+                                      href={bank.base_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04]"
+                                      title="Open source"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                    {onDeleteKnowledgeBank && (
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={async () => {
+                                          setBankActionId(bank.id);
+                                          try {
+                                            await onDeleteKnowledgeBank(bank.id);
+                                          } finally {
+                                            setBankActionId(null);
+                                          }
+                                        }}
+                                        className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 disabled:opacity-40"
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      onAddKnowledgeBank && (
+                        <p className="text-xs text-text-tertiary">
+                          No linked knowledge banks yet. Add one to index reusable guidance for this workspace.
+                        </p>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <input
               ref={fileInputRef}
               type="file"

@@ -361,7 +361,7 @@ class DeepDiveService:
         self.user_id = user_id
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
-        self.retrieval = TieredRetrievalService(db)
+        self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
         self.rag = RAGService(db)
 
     async def _get_client(self) -> AsyncOpenAI:

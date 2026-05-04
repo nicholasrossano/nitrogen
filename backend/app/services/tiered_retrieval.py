@@ -26,6 +26,7 @@ from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
+from app.services.workspace_knowledge import WorkspaceKnowledgeService
 from app.services.worldbank import (
     WorldBankIndicatorService,
     WorldBankDocumentService,
@@ -44,6 +45,8 @@ class SourceType(str, Enum):
     """Types of sources for retrieved facts."""
     CORPUS = "corpus"
     EVIDENCE = "evidence"
+    WORKSPACE_EVIDENCE = "workspace_evidence"
+    WORKSPACE_KNOWLEDGE = "workspace_knowledge"
     OPENALEX = "openalex"
     WORLDBANK_INDICATOR = "worldbank_indicator"
     WORLDBANK_DOCUMENT = "worldbank_document"
@@ -101,6 +104,10 @@ class RetrievedFact:
             return f"[{prefix}Funding Activity: {self.source_title}]"
         elif self.source_type == SourceType.LLM_ESTIMATE:
             return "[LLM Estimate - unverified]"
+        elif self.source_type == SourceType.WORKSPACE_KNOWLEDGE:
+            return f"[Workspace KB: {self.source_title}]"
+        elif self.source_type == SourceType.WORKSPACE_EVIDENCE:
+            return f"[Workspace File: {self.source_title}]"
         else:
             tag = f"[{prefix}{self.source_type.value.title()}: {self.source_title}"
             if self.chunk_index is not None:
@@ -131,6 +138,8 @@ class RetrievalResult:
                 SourceType.CORPUS,
                 SourceType.EVIDENCE,
                 SourceType.OPENALEX,
+                SourceType.WORKSPACE_EVIDENCE,
+                SourceType.WORKSPACE_KNOWLEDGE,
                 SourceType.WORLDBANK_INDICATOR,
                 SourceType.WORLDBANK_DOCUMENT,
                 SourceType.WORLDBANK_PROJECT,
@@ -169,6 +178,7 @@ class TieredRetrievalService:
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
         self.rag = RAGService(db)
+        self.workspace_knowledge = WorkspaceKnowledgeService(db, user_id=user_id)
         self.openalex = OpenAlexService()
         self.worldbank_indicators = WorldBankIndicatorService()
         self.worldbank_documents = WorldBankDocumentService()
@@ -295,7 +305,13 @@ class TieredRetrievalService:
             return [
                 RetrievedFact(
                     content=chunk.content,
-                    source_type=SourceType.EVIDENCE if chunk.source_type == "evidence" else SourceType.CORPUS,
+                    source_type=(
+                        SourceType.EVIDENCE
+                        if chunk.source_type == "evidence"
+                        else SourceType.WORKSPACE_EVIDENCE
+                        if chunk.source_type == "workspace_evidence"
+                        else SourceType.CORPUS
+                    ),
                     source_title=chunk.source_title,
                     chunk_id=str(chunk.chunk_id),
                     confidence=chunk.similarity,
@@ -311,6 +327,66 @@ class TieredRetrievalService:
             except Exception:
                 pass
             return []
+
+    async def search_workspace_context(
+        self,
+        query: str,
+        workspace_id: UUID,
+        *,
+        workspace_top_k: int = 4,
+        knowledge_top_k: int = 6,
+    ) -> list[RetrievedFact]:
+        """Search workspace-level context (workspace files + linked knowledge banks)."""
+        facts: list[RetrievedFact] = []
+        try:
+            chunks = await self.rag.retrieve(
+                query=query,
+                initiative_id=None,
+                workspace_id=workspace_id,
+                sources=["workspace_evidence"],
+                workspace_top_k=workspace_top_k,
+            )
+            relevant_chunks = [c for c in chunks if c.similarity >= self.CORPUS_RELEVANCE_THRESHOLD]
+            facts.extend(
+                [
+                    RetrievedFact(
+                        content=chunk.content,
+                        source_type=SourceType.WORKSPACE_EVIDENCE,
+                        source_title=chunk.source_title,
+                        chunk_id=str(chunk.chunk_id),
+                        confidence=chunk.similarity,
+                        evidence_doc_id=str(chunk.source_doc_id),
+                        chunk_index=chunk.chunk_index,
+                    )
+                    for chunk in relevant_chunks
+                ]
+            )
+        except Exception as e:
+            logger.error(f"Workspace evidence search failed: {e}", exc_info=True)
+
+        try:
+            matches = await self.workspace_knowledge.search(
+                workspace_id=workspace_id,
+                query=query,
+                top_k=knowledge_top_k,
+            )
+            facts.extend(
+                [
+                    RetrievedFact(
+                        content=match.content,
+                        source_type=SourceType.WORKSPACE_KNOWLEDGE,
+                        source_title=f"{match.bank_name}: {match.source_title}",
+                        source_url=match.source_url,
+                        confidence=match.similarity,
+                        publisher="workspace_knowledge_bank",
+                    )
+                    for match in matches
+                ]
+            )
+        except Exception as e:
+            logger.error(f"Workspace knowledge search failed: {e}", exc_info=True)
+
+        return facts
     
     async def search_project_materials(
         self,
