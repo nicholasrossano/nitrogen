@@ -3,10 +3,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser, get_current_user
 from app.core.database import get_db
+from app.models.chat import CoreChat
 from app.core.permissions import require_editor, require_viewer
 from app.schemas.assumption import (
     AssumptionCommentCreate,
@@ -22,6 +24,7 @@ from app.services.assumptions import (
     AssumptionActor,
     build_summary,
     create_assumption_comment,
+    delete_assumption,
     extract_assumptions_from_sources,
     get_assumption,
     list_assumption_comments,
@@ -189,6 +192,31 @@ async def patch_assumption(
     await db.commit()
     await db.refresh(updated)
     return updated
+
+
+@router.delete("/assumptions/{assumption_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_assumption(
+    assumption_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Delete one project assumption and its assumption-scoped chats."""
+    assumption = await get_assumption(db, assumption_id)
+    if assumption is None:
+        raise HTTPException(status_code=404, detail="Assumption not found")
+    initiative = await require_editor(db, assumption.initiative_id, user)
+    chats_result = await db.execute(
+        select(CoreChat).where(
+            CoreChat.initiative_id == assumption.initiative_id,
+            CoreChat.assumption_id == assumption.id,
+        )
+    )
+    for chat in chats_result.scalars().all():
+        await db.delete(chat)
+    await delete_assumption(db, assumption)
+    initiative.touch()
+    await db.commit()
+    return None
 
 
 @router.get(
