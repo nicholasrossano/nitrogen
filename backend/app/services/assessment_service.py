@@ -228,7 +228,5 @@ async def list_instances(
         )
         .order_by(AssessmentInstance.started_at.desc())
     )
-    if not archived:
-        stmt = stmt.where(AssessmentInstance.status != "draft")
     result = await db.execute(stmt)
     return list(result.scalars().all())
