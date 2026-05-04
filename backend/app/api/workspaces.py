@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +10,13 @@ from app.core.database import get_db
 from app.core.permissions import ensure_user_exists
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
+from app.models.workspace_knowledge import WorkspaceKnowledgeBank
 from app.schemas.workspace import (
     WorkspaceCreate,
     WorkspaceDetailResponse,
+    WorkspaceKnowledgeBankCreate,
+    WorkspaceKnowledgeBankResponse,
+    WorkspaceKnowledgeBankUpdate,
     WorkspaceMemberAdd,
     WorkspaceMemberResponse,
     WorkspaceResponse,
@@ -25,6 +29,8 @@ from app.services.workspaces import (
     serialize_member,
     serialize_workspace,
 )
+from app.services.workspace_knowledge import WorkspaceKnowledgeService
+from app.core.database import AsyncSessionLocal
 
 router = APIRouter()
 
@@ -45,6 +51,35 @@ async def _workspace_detail(
     data = serialize_workspace(workspace, current_membership)
     data["members"] = [serialize_member(membership, member_user) for membership, member_user in rows]
     return data
+
+
+def _serialize_knowledge_bank(bank: WorkspaceKnowledgeBank) -> dict:
+    return {
+        "id": bank.id,
+        "workspace_id": bank.workspace_id,
+        "name": bank.name,
+        "base_url": bank.base_url,
+        "is_active": bank.is_active,
+        "status": bank.status,
+        "last_indexed_at": bank.last_indexed_at,
+        "index_error": bank.index_error,
+        "created_at": bank.created_at,
+        "updated_at": bank.updated_at,
+    }
+
+
+async def _index_workspace_knowledge_bank_task(bank_id: UUID, user_id: str) -> None:
+    """Background job to index a workspace knowledge bank without blocking request latency."""
+    async with AsyncSessionLocal() as db:
+        bank = await db.get(WorkspaceKnowledgeBank, bank_id)
+        if bank is None:
+            return
+        service = WorkspaceKnowledgeService(db, user_id=user_id)
+        try:
+            await service.index_knowledge_bank(bank)
+            await db.commit()
+        except Exception:
+            await db.commit()
 
 
 @router.get("/workspaces", response_model=list[WorkspaceResponse])
@@ -241,4 +276,137 @@ async def delete_workspace(
         )
 
     await db.delete(workspace)
+    await db.commit()
+
+
+@router.get(
+    "/workspaces/{workspace_id}/knowledge-banks",
+    response_model=list[WorkspaceKnowledgeBankResponse],
+)
+async def list_workspace_knowledge_banks(
+    workspace_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """List workspace knowledge banks."""
+    await ensure_user_exists(db, user)
+    await require_workspace_member(db, workspace_id, user.uid)
+    service = WorkspaceKnowledgeService(db, user_id=user.uid)
+    banks = await service.list_workspace_banks(workspace_id)
+    return [_serialize_knowledge_bank(bank) for bank in banks]
+
+
+@router.post(
+    "/workspaces/{workspace_id}/knowledge-banks",
+    response_model=WorkspaceKnowledgeBankResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workspace_knowledge_bank(
+    workspace_id: UUID,
+    data: WorkspaceKnowledgeBankCreate,
+    background_tasks: BackgroundTasks,
+    index_now: bool = True,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Create and optionally index a workspace knowledge bank."""
+    await ensure_user_exists(db, user)
+    await require_workspace_owner(db, workspace_id, user.uid)
+
+    bank = WorkspaceKnowledgeBank(
+        workspace_id=workspace_id,
+        name=data.name.strip(),
+        base_url=data.base_url.strip(),
+    )
+    db.add(bank)
+    await db.flush()
+
+    if index_now:
+        background_tasks.add_task(_index_workspace_knowledge_bank_task, bank.id, user.uid)
+
+    await db.commit()
+    await db.refresh(bank)
+    return _serialize_knowledge_bank(bank)
+
+
+@router.patch(
+    "/workspaces/{workspace_id}/knowledge-banks/{bank_id}",
+    response_model=WorkspaceKnowledgeBankResponse,
+)
+async def update_workspace_knowledge_bank(
+    workspace_id: UUID,
+    bank_id: UUID,
+    data: WorkspaceKnowledgeBankUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Update workspace knowledge bank metadata."""
+    await ensure_user_exists(db, user)
+    await require_workspace_owner(db, workspace_id, user.uid)
+    bank = await db.get(WorkspaceKnowledgeBank, bank_id)
+    if bank is None or bank.workspace_id != workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found")
+
+    url_changed = False
+    if data.name is not None:
+        bank.name = data.name.strip()
+    if data.base_url is not None:
+        new_url = data.base_url.strip()
+        if new_url != bank.base_url:
+            bank.base_url = new_url
+            url_changed = True
+    if data.is_active is not None:
+        bank.is_active = data.is_active
+    await db.commit()
+    await db.refresh(bank)
+    if url_changed:
+        background_tasks.add_task(_index_workspace_knowledge_bank_task, bank.id, user.uid)
+    return _serialize_knowledge_bank(bank)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/knowledge-banks/{bank_id}/reindex",
+    response_model=WorkspaceKnowledgeBankResponse,
+)
+async def reindex_workspace_knowledge_bank(
+    workspace_id: UUID,
+    bank_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Rebuild the embedded index for a workspace knowledge bank."""
+    await ensure_user_exists(db, user)
+    await require_workspace_owner(db, workspace_id, user.uid)
+    bank = await db.get(WorkspaceKnowledgeBank, bank_id)
+    if bank is None or bank.workspace_id != workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found")
+
+    service = WorkspaceKnowledgeService(db, user_id=user.uid)
+    try:
+        await service.index_knowledge_bank(bank)
+    except Exception as exc:
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    await db.commit()
+    await db.refresh(bank)
+    return _serialize_knowledge_bank(bank)
+
+
+@router.delete("/workspaces/{workspace_id}/knowledge-banks/{bank_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_workspace_knowledge_bank(
+    workspace_id: UUID,
+    bank_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Delete a workspace knowledge bank and its indexed chunks."""
+    await ensure_user_exists(db, user)
+    await require_workspace_owner(db, workspace_id, user.uid)
+    bank = await db.get(WorkspaceKnowledgeBank, bank_id)
+    if bank is None or bank.workspace_id != workspace_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found")
+
+    await db.delete(bank)
     await db.commit()
