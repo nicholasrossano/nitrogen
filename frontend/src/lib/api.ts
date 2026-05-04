@@ -1690,6 +1690,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  deleteAssumption: (assumptionId: string) =>
+    fetchApi<void>(`/api/v1/assumptions/${assumptionId}`, {
+      method: 'DELETE',
+    }),
+
   listAssumptionComments: (assumptionId: string) =>
     fetchApi<AssumptionComment[]>(`/api/v1/assumptions/${assumptionId}/comments`),
 
