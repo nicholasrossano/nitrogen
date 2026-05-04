@@ -48,6 +48,7 @@ Your only job is to decide which tools (if any) to call before generating a resp
 
 You have these data sources available:
 - search_project_documents: initiative-specific uploaded materials and evidence context
+- search_workspace_context: workspace-level guidance (shared files + linked knowledge banks)
 - search_scholarly_literature: peer-reviewed papers, empirical studies, impact evaluations
 - search_country_indicators: World Bank Open Data indicators for country baselines
 - search_institutional_reports: World Bank Documents & Reports for institutional evidence
@@ -61,10 +62,13 @@ GUIDELINES:
 
 When the user asks about THEIR project's specific details (budget, partners, timeline, scope, deliverables, assumptions, uploaded materials), call search_project_documents first.
 
+When the user asks for broader organization guidance, precedent, standard approaches, or policy context that should generalize across projects in the workspace, call search_workspace_context.
+
 If the context includes an "Active Deep Dive Context" block, treat that as a focused project item the user is actively exploring. In that case, prefer calling search_web_sources for questions that ask for more explanation, implementation context, dependencies, risks, best practices, institutional context, or external validation beyond the project's own documents. Only stay document-only when the user is clearly asking just for what the project documents say about that item.
 
 Use source-aware routing:
 - Project-specific details from initiative files -> search_project_documents
+- Workspace-level guidance/precedent shared across projects -> search_workspace_context
 - Country macro/market indicator baselines (electricity access, GDP, inflation, poverty, population) -> search_country_indicators
 - Institutional strategy, diagnostics, appraisal/completion documents -> search_institutional_reports
 - Comparable financed projects and precedent interventions -> search_comparable_projects
@@ -244,7 +248,7 @@ class ChatService:
         self.ctx = ctx
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
-        self.retrieval = TieredRetrievalService(db)
+        self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
         from app.services.project_chat_router import ProjectChatRouter
         from app.services.project_tool_executor import ProjectToolExecutor
 
@@ -517,6 +521,23 @@ class ChatService:
                 await _step("scan_docs", "No matching document sections", "done")
             return corpus_facts
 
+        async def _run_workspace_context(query: str) -> list[RetrievedFact]:
+            if initiative is None or not getattr(initiative, "workspace_id", None):
+                return []
+            await _step("scan_workspace_context", "Scanning workspace context", "running")
+            await _think("Scanning workspace-level guidance and knowledge banks...")
+            facts = await self.retrieval.search_workspace_context(
+                query=query,
+                workspace_id=initiative.workspace_id,
+            )
+            if facts:
+                await _think(f"Found {len(facts)} workspace context sources")
+                await _step("scan_workspace_context", f"Found {len(facts)} workspace context sources", "done")
+            else:
+                await _think("No matching workspace context found")
+                await _step("scan_workspace_context", "No matching workspace context", "done")
+            return facts
+
         async def _run_country_indicators(query: str) -> list[RetrievedFact]:
             await _step("search_country_indicators", "Retrieving country indicators", "running")
             await _think("Retrieving World Bank country indicators...")
@@ -580,6 +601,9 @@ class ChatService:
             elif fn_name == "search_project_documents":
                 search_tasks.append(_run_project_documents(tool_query))
                 search_labels.append("corpus")
+            elif fn_name == "search_workspace_context":
+                search_tasks.append(_run_workspace_context(tool_query))
+                search_labels.append("workspace_context")
             elif fn_name == "search_web_sources":
                 search_tasks.append(_run_web(tool_query))
                 search_labels.append("web")

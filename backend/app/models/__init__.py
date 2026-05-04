@@ -14,6 +14,11 @@ from app.models.assessment_instance import AssessmentInstance
 from app.models.decision_event import DecisionEvent
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
+from app.models.workspace_knowledge import (
+    WorkspaceKnowledgeBank,
+    WorkspaceKnowledgeBankStatus,
+    WorkspaceKnowledgeChunk,
+)
 
 __all__ = [
     "Initiative",
@@ -42,6 +47,9 @@ __all__ = [
     "WorkspaceMembership",
     "WorkspaceRole",
     "WorkspaceType",
+    "WorkspaceKnowledgeBank",
+    "WorkspaceKnowledgeBankStatus",
+    "WorkspaceKnowledgeChunk",
     "Assumption",
     "AssumptionBinding",
     "AssumptionComment",

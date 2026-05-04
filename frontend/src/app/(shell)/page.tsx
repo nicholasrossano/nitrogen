@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, FolderOpen, Loader2, Trash2, Undo2, Search, ChevronDown, Check } from 'lucide-react';
-import { api, Initiative, type ProjectMaterial } from '@/lib/api';
+import { api, Initiative, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { ProjectCard } from '@/components/projects';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -33,6 +33,7 @@ function PortfolioView() {
   const searchParams = useSearchParams();
   const [projects, setProjects] = useState<Initiative[]>([]);
   const [workspaceMaterials, setWorkspaceMaterials] = useState<ProjectMaterial[]>([]);
+  const [workspaceKnowledgeBanks, setWorkspaceKnowledgeBanks] = useState<WorkspaceKnowledgeBank[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +132,15 @@ function PortfolioView() {
     setWorkspaceMaterials(docs.map(mapWorkspaceDocToMaterial));
   }, [activeWorkspace?.id, mapWorkspaceDocToMaterial]);
 
+  const loadWorkspaceKnowledgeBanks = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+      setWorkspaceKnowledgeBanks([]);
+      return;
+    }
+    const banks = await api.listWorkspaceKnowledgeBanks(activeWorkspace.id);
+    setWorkspaceKnowledgeBanks(banks);
+  }, [activeWorkspace?.id]);
+
   const uploadWorkspaceFile = useCallback(async (file: File) => {
     if (!activeWorkspace?.id) {
       throw new Error('No active workspace selected');
@@ -146,10 +156,10 @@ function PortfolioView() {
 
   useEffect(() => {
     if (!isFilesView) return;
-    loadWorkspaceFiles().catch((err) => {
-      console.error('Failed to load workspace files:', err);
+    Promise.all([loadWorkspaceFiles(), loadWorkspaceKnowledgeBanks()]).catch((err) => {
+      console.error('Failed to load workspace files context:', err);
     });
-  }, [isFilesView, loadWorkspaceFiles]);
+  }, [isFilesView, loadWorkspaceFiles, loadWorkspaceKnowledgeBanks]);
 
   useEffect(() => {
     if (!isFilesView || driveStatusChecked) return;
@@ -182,6 +192,27 @@ function PortfolioView() {
       );
     });
   }, [activeWorkspace?.id, driveConnected, getDriveAccessToken, loadWorkspaceFiles]);
+
+  const addWorkspaceKnowledgeBank = useCallback(async (data: { name: string; base_url: string }) => {
+    if (!activeWorkspace?.id) return;
+    await api.createWorkspaceKnowledgeBank(activeWorkspace.id, data);
+    await loadWorkspaceKnowledgeBanks();
+  }, [activeWorkspace?.id, loadWorkspaceKnowledgeBanks]);
+
+  const deleteWorkspaceKnowledgeBank = useCallback(async (bankId: string) => {
+    if (!activeWorkspace?.id) return;
+    await api.deleteWorkspaceKnowledgeBank(activeWorkspace.id, bankId);
+    await loadWorkspaceKnowledgeBanks();
+  }, [activeWorkspace?.id, loadWorkspaceKnowledgeBanks]);
+
+  const updateWorkspaceKnowledgeBank = useCallback(
+    async (bankId: string, data: { name: string; base_url: string }) => {
+      if (!activeWorkspace?.id) return;
+      await api.updateWorkspaceKnowledgeBank(activeWorkspace.id, bankId, data);
+      await loadWorkspaceKnowledgeBanks();
+    },
+    [activeWorkspace?.id, loadWorkspaceKnowledgeBanks],
+  );
 
   useShellNav(useCallback((item: NavItem): boolean => {
     if (item === 'files') {
@@ -394,6 +425,10 @@ function PortfolioView() {
                 onDeleteMaterial={deleteWorkspaceFile}
                 onUploadFile={uploadWorkspaceFile}
                 onImportFromDrive={importWorkspaceFromDrive}
+                knowledgeBanks={workspaceKnowledgeBanks}
+                onAddKnowledgeBank={addWorkspaceKnowledgeBank}
+                onUpdateKnowledgeBank={updateWorkspaceKnowledgeBank}
+                onDeleteKnowledgeBank={deleteWorkspaceKnowledgeBank}
               />
             ) : (
               <>
