@@ -16,6 +16,8 @@ import { api } from '@/lib/api';
 import type { FieldContext } from '@/lib/api';
 import type { ChatSession } from '@/types/chat';
 
+const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
+
 interface ProjectChatTab {
   id: string;
   title: string;
@@ -35,6 +37,7 @@ interface PendingDeepDiveContext {
 interface PendingAssumptionsContext {
   requestId: string;
   focusAssumptionId?: string | null;
+  createNew?: boolean;
   title?: string | null;
   collapsed?: boolean;
   forceNewTab?: boolean;
@@ -87,7 +90,7 @@ function makeTab(title = 'New Chat', isLanding = false, isFallback = false): Pro
 interface StoredProjectChatTabsState {
   tabs: ProjectChatTab[];
   activeTabId: string | null;
-  assumptionsByTabId?: Record<string, { focusAssumptionId?: string | null; collapsed?: boolean }>;
+  assumptionsByTabId?: Record<string, { focusAssumptionId?: string | null; createNew?: boolean; collapsed?: boolean }>;
 }
 
 function normalizeProjectChatTabsState(
@@ -137,7 +140,7 @@ function readStoredProjectChatTabsState(storageKey: string): StoredProjectChatTa
               Object.entries(parsed.assumptionsByTabId)
                 .filter(([tabId]) => tabs.some((tab) => tab.id === tabId))
                 .map(([tabId, value]) => {
-                  const source = (value ?? {}) as { focusAssumptionId?: unknown; collapsed?: unknown };
+                  const source = (value ?? {}) as { focusAssumptionId?: unknown; createNew?: unknown; collapsed?: unknown };
                   return [
                     tabId,
                     {
@@ -145,6 +148,7 @@ function readStoredProjectChatTabsState(storageKey: string): StoredProjectChatTa
                         typeof source.focusAssumptionId === 'string' || source.focusAssumptionId === null
                           ? source.focusAssumptionId
                           : null,
+                      createNew: typeof source.createNew === 'boolean' ? source.createNew : false,
                       collapsed: typeof source.collapsed === 'boolean' ? source.collapsed : false,
                     },
                   ];
@@ -303,6 +307,7 @@ export function ProjectChatTabsPanel({
           {
             requestId: `stored-assumption-${tabId}`,
             focusAssumptionId: value.focusAssumptionId ?? null,
+            createNew: value.createNew ?? false,
             collapsed: value.collapsed ?? false,
           },
         ]),
@@ -343,6 +348,7 @@ export function ProjectChatTabsPanel({
           tabId,
           {
             focusAssumptionId: value.focusAssumptionId ?? null,
+            createNew: value.createNew ?? false,
             collapsed: value.collapsed ?? false,
           },
         ]),
@@ -357,6 +363,40 @@ export function ProjectChatTabsPanel({
   useEffect(() => {
     assumptionsByTabIdRef.current = assumptionsByTabId;
   }, [assumptionsByTabId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleAssumptionDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent<{ assumptionId?: string; initiativeId?: string }>;
+      const assumptionId = customEvent.detail?.assumptionId;
+      const deletedInitiativeId = customEvent.detail?.initiativeId;
+      if (!assumptionId || deletedInitiativeId !== initiativeId) return;
+
+      setAssumptionsByTabId((prev) => {
+        let changed = false;
+        const next = Object.fromEntries(
+          Object.entries(prev).map(([tabId, value]) => {
+            if (value.focusAssumptionId !== assumptionId) return [tabId, value];
+            changed = true;
+            return [
+              tabId,
+              {
+                ...value,
+                focusAssumptionId: null,
+                createNew: false,
+              },
+            ];
+          }),
+        );
+        return changed ? next : prev;
+      });
+    };
+
+    window.addEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
+    return () => {
+      window.removeEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
+    };
+  }, [initiativeId]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -1070,6 +1110,7 @@ export function ProjectChatTabsPanel({
             <AssumptionsChatPanel
               initiativeId={initiativeId}
               focusAssumptionId={assumptions.focusAssumptionId ?? null}
+              createNew={assumptions.createNew ?? false}
               collapsed={assumptions.collapsed ?? false}
               layoutMode={showExpandedAssumptions ? 'panel' : 'inline'}
               onCollapsedChange={(collapsed) => handleAssumptionsCollapsedChange(tab.id, collapsed)}

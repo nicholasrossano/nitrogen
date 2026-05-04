@@ -61,6 +61,7 @@ interface PendingDeepDiveRequest {
 interface PendingAssumptionsRequest {
   requestId: string;
   focusAssumptionId?: string | null;
+  createNew?: boolean;
   title?: string | null;
   forceNewTab?: boolean;
   autoSend?: {
@@ -524,6 +525,7 @@ function InitiativePageContent() {
       setPendingAssumptionsRequest({
         requestId,
         focusAssumptionId: detail.assumptionId,
+        createNew: false,
         title: detail.title ?? 'Assumption investigation',
         forceNewTab: true,
         autoSend: detail.text
@@ -843,6 +845,7 @@ function InitiativePageContent() {
     setPendingAssumptionsRequest({
       requestId: `assumption-${assumption.id}-${Date.now()}`,
       focusAssumptionId: assumption.id,
+      createNew: false,
       title: assumption.label,
       forceNewTab: false,
     });
@@ -857,6 +860,7 @@ function InitiativePageContent() {
     setPendingAssumptionsRequest({
       requestId: `assumption-new-${Date.now()}`,
       focusAssumptionId: null,
+      createNew: true,
       title: 'New assumption',
       forceNewTab: true,
     });
