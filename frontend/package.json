@@ -29,8 +29,8 @@
     "clsx": "^2.1.0",
     "docx-preview": "^0.3.7",
     "dompurify": "^3.3.3",
-    "firebase": "^12.12.0",
-    "katex": "^0.16.40",
+    "firebase": "^12.12.1",
+    "katex": "^0.16.45",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.8.0",
     "next": "^14.2.35",
@@ -62,7 +62,7 @@
     "eslint-config-next": "14.2.35",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^30.3.0",
-    "postcss": "^8.4.35",
+    "postcss": "^8.5.13",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.3.3"
   }
