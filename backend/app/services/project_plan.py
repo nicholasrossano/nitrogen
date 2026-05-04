@@ -423,7 +423,7 @@ class ProjectPlanService:
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
         self.model = settings.openai_orchestration_model
-        self.retrieval = TieredRetrievalService(db)
+        self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
