@@ -96,6 +96,8 @@ function getSourceIcon(type: string) {
   switch (type) {
     case 'corpus':   return <BookOpen className="w-3 h-3 shrink-0" />;
     case 'evidence': return <FileText className="w-3 h-3 shrink-0" />;
+    case 'workspace_evidence': return <FileText className="w-3 h-3 shrink-0" />;
+    case 'workspace_knowledge': return <Globe className="w-3 h-3 shrink-0" />;
     case 'openalex': return <GraduationCap className="w-3 h-3 shrink-0" />;
     case 'web':      return <Globe className="w-3 h-3 shrink-0" />;
     default:         return <AlertCircle className="w-3 h-3 shrink-0" />;
@@ -106,6 +108,8 @@ function getSourceLabel(type: string) {
   switch (type) {
     case 'corpus':   return 'Curated';
     case 'evidence': return 'Uploaded';
+    case 'workspace_evidence': return 'Workspace file';
+    case 'workspace_knowledge': return 'Workspace KB';
     case 'openalex': return 'OpenAlex';
     case 'web':      return 'Web';
     default:         return 'Estimate';
@@ -243,7 +247,11 @@ export function AssistantMessageToolbar({
             <div className="absolute bottom-full mb-1.5 left-0 z-50 bg-white border border-stroke-subtle rounded-lg shadow-lg p-2 min-w-[220px] max-w-[320px]">
               <div className="space-y-0.5">
                 {verified.map((source, idx) => {
-                  const isInternal = (source.source_type === 'corpus' || source.source_type === 'evidence') && source.evidence_doc_id;
+                  const isInternal = (
+                    source.source_type === 'corpus'
+                    || source.source_type === 'evidence'
+                    || source.source_type === 'workspace_evidence'
+                  ) && source.evidence_doc_id;
                   return (
                     <div key={idx} className="flex items-center gap-2 min-w-0 rounded-md px-1.5 py-1 hover:bg-surface-subtle transition-colors">
                       <span className="text-text-tertiary shrink-0">

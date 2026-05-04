@@ -356,6 +356,41 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
     ))
 
     registry.register(CapabilityEntry(
+        id="search_workspace_context",
+        kind=CapabilityKind.INTERNAL_TOOL,
+        name="Search Workspace Context",
+        description="Search workspace-level guidance, reusable files, and linked knowledge banks.",
+        routes=[CapabilityRoute.STANDALONE_CHAT, CapabilityRoute.PROJECT_CHAT],
+        requires_initiative=True,
+        openai_tool_def={
+            "type": "function",
+            "function": {
+                "name": "search_workspace_context",
+                "description": (
+                    "Search workspace-level context shared across projects in the same workspace. "
+                    "Use this for organization guidance, precedent, policies, standard approaches, "
+                    "linked knowledge banks, and higher-level assumptions that are not specific "
+                    "to the current project's own files."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Focused query for workspace-level retrieval (max 20 words).",
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "One sentence explaining why workspace context is needed.",
+                        },
+                    },
+                    "required": ["query", "reason"],
+                },
+            },
+        },
+    ))
+
+    registry.register(CapabilityEntry(
         id="search_scholarly_literature",
         kind=CapabilityKind.INTERNAL_TOOL,
         name="Search Scholarly Literature",
