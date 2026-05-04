@@ -848,6 +848,20 @@ function InitiativePageContent() {
     });
   }, [initiativeId, router, setPanelOpen]);
 
+  const handleAddAssumptionInChat = useCallback(() => {
+    setWorkspaceLaunchMode('idle');
+    setPanelOpen('assumptions', 'workspace', true);
+    setPanelOpen('assumptions', 'chat', true);
+    setActiveView('assumptions');
+    router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+    setPendingAssumptionsRequest({
+      requestId: `assumption-new-${Date.now()}`,
+      focusAssumptionId: null,
+      title: 'New assumption',
+      forceNewTab: true,
+    });
+  }, [initiativeId, router, setPanelOpen]);
+
   const openDecisionLogTab = useCallback(
     (context: { instanceId: string; assessmentId: string; title: string }) => {
       setActiveView('assessments');
@@ -1034,6 +1048,7 @@ function InitiativePageContent() {
           onAssessmentInspectorStateChange={handleAssessmentInspectorStateChange}
           onAssessmentApprovalChange={() => loadFrameworkAssessmentInstances(initiativeId, { force: true })}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
+          onAddAssumptionInChat={handleAddAssumptionInChat}
           assessmentInstances={frameworkAssessmentInstances}
           onOpenAssessmentInstance={handleOpenExistingAssessmentInstanceInAssessmentsView}
         />
@@ -1098,6 +1113,7 @@ function InitiativePageContent() {
           initiativeId={initiativeId}
           showDetailPanel={false}
           onAssumptionSelectInChat={handleOpenAssumptionInChat}
+          onAddAssumptionInChat={handleAddAssumptionInChat}
           assessmentInstances={frameworkAssessmentInstances}
           onOpenAssessmentInstance={handleOpenExistingAssessmentInstanceInAssessmentsView}
         />

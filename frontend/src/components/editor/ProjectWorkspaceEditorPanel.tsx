@@ -47,6 +47,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onAssessmentInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onAssessmentApprovalChange?: () => void;
   onOpenAssumptionInChat?: (assumption: Assumption) => void;
+  onAddAssumptionInChat?: () => void;
   assessmentInstances?: AssessmentInstance[];
   onOpenAssessmentInstance?: (instance: AssessmentInstance) => Promise<void> | void;
 }
@@ -71,6 +72,7 @@ export function ProjectWorkspaceEditorPanel({
   onAssessmentInspectorStateChange,
   onAssessmentApprovalChange,
   onOpenAssumptionInChat,
+  onAddAssumptionInChat,
   assessmentInstances = [],
   onOpenAssessmentInstance,
 }: ProjectWorkspaceEditorPanelProps) {
@@ -155,6 +157,7 @@ export function ProjectWorkspaceEditorPanel({
           initiativeId={initiativeId}
           showDetailPanel={false}
           onAssumptionSelectInChat={onOpenAssumptionInChat}
+          onAddAssumptionInChat={onAddAssumptionInChat}
           assessmentInstances={assessmentInstances}
           onOpenAssessmentInstance={onOpenAssessmentInstance}
         />
