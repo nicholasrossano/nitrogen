@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Plus, Sparkles } from 'lucide-react';
 
 import { AssessmentInstanceOpenDropdown } from '@/components/framework/AssessmentInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
@@ -24,6 +24,7 @@ interface AssumptionsWorkspaceTabProps {
   showDetailPanel?: boolean;
   focusAssumptionId?: string | null;
   onAssumptionSelectInChat?: (assumption: Assumption) => void;
+  onAddAssumptionInChat?: () => void;
   assessmentInstances?: AssessmentInstance[];
   onOpenAssessmentInstance?: (instance: AssessmentInstance) => Promise<void> | void;
 }
@@ -202,6 +203,7 @@ export function AssumptionsWorkspaceTab({
   showDetailPanel = true,
   focusAssumptionId = null,
   onAssumptionSelectInChat,
+  onAddAssumptionInChat,
   assessmentInstances = [],
   onOpenAssessmentInstance,
 }: AssumptionsWorkspaceTabProps) {
@@ -421,6 +423,16 @@ export function AssumptionsWorkspaceTab({
                   {!showDetailPanel ? ' Select an assumption to open it to explore it further.' : ''}
                 </p>
               </div>
+              {onAddAssumptionInChat ? (
+                <button
+                  type="button"
+                  className="btn-primary !h-7 !text-xs !leading-none !px-2.5 !py-0 !rounded-lg"
+                  onClick={onAddAssumptionInChat}
+                >
+                  <Plus className="w-3 h-3" />
+                  Add assumption
+                </button>
+              ) : null}
             </div>
           ) : null}
 
