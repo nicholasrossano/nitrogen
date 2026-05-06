@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from app.first_party.mcp import EXPOSED_ADAPTER_IDS, EXPOSED_RESOURCE_TYPES
+from app.domain.registry import exposed_adapter_ids, exposed_resource_types
 
 AdapterVisibility = Literal["internal", "assessment_bound", "exposed"]
 ResourceVisibility = Literal["internal", "exposed"]
+
+EXPOSED_ADAPTER_IDS = exposed_adapter_ids()
+EXPOSED_RESOURCE_TYPES = exposed_resource_types()
 
 
 def adapter_visibility(adapter_id: str, default: AdapterVisibility) -> AdapterVisibility:

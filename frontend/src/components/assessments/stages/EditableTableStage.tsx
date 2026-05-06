@@ -15,7 +15,7 @@ import {
   TABLE_CATEGORY_LABELS,
   TABLE_CATEGORY_ORDER,
   TECHNOLOGY_TYPE_OPTIONS,
-} from '@/first-party/modelInputs';
+} from '@/domain/energy/modelInputs';
 
 interface Props {
   initiativeId?: string;
