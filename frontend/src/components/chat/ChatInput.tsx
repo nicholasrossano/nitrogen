@@ -134,7 +134,7 @@ export function ChatInput({
   return (
     <form onSubmit={handleSubmit} className="relative">
       <div
-        className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
+        className="rounded-xl border border-stroke-subtle bg-white overflow-hidden"
       >
         {draftTag && (
           <div className="px-3 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
