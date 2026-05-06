@@ -13,7 +13,7 @@
 
 import type { ComponentType } from 'react';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
-import { FIRST_PARTY_WIDGET_REGISTRY } from '@/first-party/widgetRegistry';
+import { ENERGY_WIDGET_REGISTRY } from '@/domain/energy/widgetRegistry';
 
 export interface WorkspaceWidgetFooterAction {
   label: string;
@@ -47,7 +47,7 @@ export type WidgetComponent = ComponentType<WorkspaceWidgetProps>;
 const WIDGET_REGISTRY: Record<string, () => Promise<{ default: WidgetComponent }>> = {
   document_viewer: () =>
     import('@/components/widgets/DocumentViewerWidget').then((m) => ({ default: m.DocumentViewerWidget as unknown as WidgetComponent })),
-  ...FIRST_PARTY_WIDGET_REGISTRY,
+  ...ENERGY_WIDGET_REGISTRY,
 };
 
 /**

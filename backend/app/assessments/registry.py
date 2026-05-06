@@ -26,7 +26,7 @@ class AssessmentRegistry:
         if self._loaded:
             return
             
-        from app.first_party.registry import register_assessments
+        from app.domain.registry import register_assessments
 
         register_assessments(self)
         invalid_assessments = self._collect_manifest_errors()
@@ -123,7 +123,7 @@ class AssessmentRegistry:
         
         description_lower = project_description.lower() if project_description else ""
         
-        from app.first_party.catalog import get_first_party_catalog
+        from app.domain.registry import get_first_party_catalog
 
         keyword_scores = get_first_party_catalog().recommendation_keywords
         
@@ -161,7 +161,7 @@ class AssessmentRegistry:
         """Classify project type from description."""
         description_lower = description.lower()
         
-        from app.first_party.catalog import get_first_party_catalog
+        from app.domain.registry import get_first_party_catalog
 
         for project_type, keywords in get_first_party_catalog().project_type_keywords.items():
             if any(kw in description_lower for kw in keywords):

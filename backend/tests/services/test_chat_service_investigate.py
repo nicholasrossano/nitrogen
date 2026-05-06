@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.services.lcoe_engine import LCOEEngine
+from app.domain.energy.services.lcoe_engine import LCOEEngine
 from app.services.chat import ChatService
 
 

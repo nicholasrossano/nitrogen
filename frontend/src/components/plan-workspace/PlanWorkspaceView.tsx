@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { ChevronDown, ChevronsUpDown, Clock, LayoutGrid, MessageSquare, Plus } from 'lucide-react';
 
 import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
-import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
+import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
 
 import { PlanInspectorPanel } from './PlanInspectorPanel';
 import { PlanItemNode } from './PlanItemNode';
@@ -272,7 +272,7 @@ export function PlanWorkspaceView({
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {progress && progress.total > 0 && (
-          <ReadinessProgressBar progress={progress} showSegmentTooltips={true} />
+          <AssessmentsProgressBar progress={progress} showSegmentTooltips={true} />
         )}
 
         <div ref={outerContainerRef} className="flex-1 flex min-h-0 min-w-0 overflow-hidden">

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
 from app.models.initiative import Initiative
-from app.services.memo_generator import MemoGeneratorService
+from app.domain.energy.services.memo_generator import MemoGeneratorService
 
 
 class MemoGenerationAdapter(BaseAdapter):
