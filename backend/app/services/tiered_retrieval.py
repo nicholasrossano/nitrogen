@@ -27,12 +27,12 @@ from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
 from app.services.workspace_knowledge import WorkspaceKnowledgeService
-from app.services.worldbank import (
+from app.domain.energy.services.worldbank import (
     WorldBankIndicatorService,
     WorldBankDocumentService,
     WorldBankProjectService,
 )
-from app.services.iati import IATIService
+from app.domain.energy.services.iati import IATIService
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
 from app.models.evidence import EvidenceDoc
