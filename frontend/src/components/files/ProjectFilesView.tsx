@@ -354,7 +354,7 @@ export function ProjectFilesView({
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1 rounded-[5px] text-xs font-medium transition-colors ${
+                  className={`px-3 py-1 rounded-[3px] text-xs font-medium transition-colors ${
                     activeTab === tab
                       ? 'bg-white text-text-primary shadow-sm'
                       : 'text-text-tertiary hover:text-text-secondary'

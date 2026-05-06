@@ -595,7 +595,7 @@ export function SolarEstimateWidget({
                       <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #9ca3af)' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                       <RechartsTooltip
-                        contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                        contentStyle={{ fontSize: 11, borderRadius: 6, border: '1px solid #e5e7eb' }}
                         cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
                         formatter={(value) => [`${Number(value).toLocaleString()} kWh`, 'AC Energy']}
                       />
