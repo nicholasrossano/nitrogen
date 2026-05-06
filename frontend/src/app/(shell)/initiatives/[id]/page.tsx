@@ -15,7 +15,7 @@ import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardin
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
-import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
+import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatTabsPanel } from '@/components/core-chat/ProjectChatTabsPanel';
@@ -1068,7 +1068,7 @@ function InitiativePageContent() {
             allowInitialProjectOnboarding={true}
             restoreLatestChatOnMount={true}
             useLandingWhenEmpty={true}
-            readinessProgress={frameworkProgress}
+            assessmentProgress={frameworkProgress}
             landingLayoutMode="overview"
             landingHeaderContent={(
               <ProjectOnboardingHeader
@@ -1091,7 +1091,7 @@ function InitiativePageContent() {
           hideTiles={true}
           allowInitialProjectOnboarding={false}
           useLandingWhenEmpty={true}
-          readinessProgress={frameworkProgress}
+          assessmentProgress={frameworkProgress}
           showLanding={overviewChatOpen}
           landingLayoutMode="overview"
           hideLandingComposer={overviewChatOpen}
@@ -1151,7 +1151,7 @@ function InitiativePageContent() {
       return (
         <div className="relative h-full flex flex-col bg-surface overflow-hidden">
           {frameworkProgress && frameworkProgress.total > 0 && (
-            <ReadinessProgressBar progress={frameworkProgress} />
+            <AssessmentsProgressBar progress={frameworkProgress} />
           )}
           <div className="flex-1 min-h-0 overflow-hidden">
             <FrameworkPlanView

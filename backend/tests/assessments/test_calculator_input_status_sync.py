@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.assessments.carbon_assessment import CarbonTool
-from app.assessments.lcoe_assessment import LCOETool
-from app.assessments.pvwatts_assessment import PVWattsTool
+from app.domain.energy.assessments.carbon_assessment import CarbonTool
+from app.domain.energy.assessments.lcoe_assessment import LCOETool
+from app.domain.energy.assessments.pvwatts_assessment import PVWattsTool
 
 
 @pytest.mark.asyncio
@@ -127,7 +127,7 @@ async def test_pvwatts_compute_external_preserves_input_status_and_source(
                 return FakeAdapter()
             return None
 
-    monkeypatch.setattr("app.assessments.pvwatts_assessment.get_adapter_registry", lambda: FakeRegistry())
+    monkeypatch.setattr("app.domain.energy.assessments.pvwatts_assessment.get_adapter_registry", lambda: FakeRegistry())
 
     confirmed_stages = {
         "inputs": {

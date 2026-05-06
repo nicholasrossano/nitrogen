@@ -116,7 +116,7 @@ class ProjectToolExecutor:
                 assistant_response = "I wasn't able to update the project plan right now. Please try again."
 
         elif action == "run_lcoe":
-            from app.assessments.lcoe_assessment import LCOETool
+            from app.domain.energy.assessments.lcoe_assessment import LCOETool
             from app.services import assessment_service
 
             lcoe_tool = LCOETool()
@@ -177,7 +177,7 @@ class ProjectToolExecutor:
                 )
 
         elif action == "run_carbon":
-            from app.assessments.carbon_assessment import CarbonTool
+            from app.domain.energy.assessments.carbon_assessment import CarbonTool
             from app.services import assessment_service
 
             carbon_tool = CarbonTool()

@@ -10,7 +10,7 @@ import {
   STANDALONE_MODULE_IDS,
   type AssessmentCategory,
   type AssessmentOption,
-} from '@/first-party/assessmentCatalog';
+} from '@/domain/energy/assessmentCatalog';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 
 export { ALL_MODULES, MODULE_CATEGORIES, STANDALONE_MODULE_IDS };
