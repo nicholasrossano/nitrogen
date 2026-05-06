@@ -27,6 +27,7 @@ import { sanitizeHref } from '@/lib/sanitizeHref';
 import { debugChatFlow } from '@/lib/chatDebug';
 import { SnippetCard } from './ResearchPanel';
 import type { ResearchPanelCitation } from './ResearchPanel';
+import { CitationChip } from '@/components/ui/CitationChip';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -270,7 +271,7 @@ export function ConversationView({
         ) : null}
         <form onSubmit={handleSubmit} className="relative">
           <div
-            className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
+            className="rounded-xl border border-stroke-subtle bg-white overflow-hidden"
           >
             {(draftTag || inputChips || (showAttachments && attachedFiles.length > 0)) && (
               <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
@@ -507,7 +508,7 @@ export function ConversationView({
 const INLINE_CITATION_RE = /\[(?:([AB])-)?([^:\]]+):\s*(.+?)(?:,\s*p(\d+))?\]/g;
 const LEADING_CITATION_PUNCTUATION_RE = /^[.,!?;:]+/;
 
-function CitationChip({
+function InlineCitationChip({
   sourceType,
   title,
   chunkIndex,
@@ -614,52 +615,44 @@ function CitationChip({
     label = sourceType;
   }
 
-  const chip = (
-    <span
-      title={title.trim()}
-      className={[
-        'inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded border text-[10px] font-medium leading-none align-[0.1em] transition-colors cursor-pointer select-none',
-        isSelected
-          ? 'bg-accent/[0.12] border-accent/40 text-accent'
-          : 'bg-surface-subtle border-stroke-subtle text-text-secondary hover:bg-accent/[0.07] hover:border-accent/30 hover:text-accent',
-      ].join(' ')}
-    >
-      {icon}
-      {label}
-    </span>
-  );
-
   if (isInternal && matched && onExpand) {
     return (
-      <span
-        role="button"
-        tabIndex={0}
-        className="no-underline"
-        onClick={() => {
+      <CitationChip
+        title={title.trim()}
+        icon={icon}
+        label={label}
+        selected={isSelected}
+        size="chat"
+        onActivate={() => {
           track('citation_chip_clicked', { source_type: type, publisher: label, internal: true });
           onExpand(matched);
         }}
-        onKeyDown={(e) => { if (e.key === 'Enter') onExpand(matched); }}
-      >
-        {chip}
-      </span>
+      />
     );
   }
 
   if (url) {
     return (
-      <a
+      <CitationChip
+        title={title.trim()}
+        icon={icon}
+        label={label}
+        selected={isSelected}
+        size="chat"
         href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="no-underline"
-        onClick={() => track('citation_chip_clicked', { source_type: type, publisher: label })}
-      >
-        {chip}
-      </a>
+        onLinkClick={() => track('citation_chip_clicked', { source_type: type, publisher: label })}
+      />
     );
   }
-  return chip;
+  return (
+    <CitationChip
+      title={title.trim()}
+      icon={icon}
+      label={label}
+      selected={isSelected}
+      size="chat"
+    />
+  );
 }
 
 /** Walk React children and replace citation patterns in string nodes with chips. */
@@ -719,7 +712,7 @@ function splitOnCitations(
       parts.push(<span key={`${keyPrefix}-p${partIdx++}`}>{punctuation}</span>);
     }
     parts.push(
-      <CitationChip
+      <InlineCitationChip
         key={`${keyPrefix}-c${m.index}`}
         sourceType={sourceType}
         title={title}
