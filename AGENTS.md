@@ -38,6 +38,7 @@
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
 - For staged `editable_table` inputs, always set `StageDef.allow_add_rows` explicitly (false for fixed variable lists, true only for intentionally extensible tables).
+- Prefer extending existing components/utilities with props or variants before creating new ones; add new abstractions only when reuse is clearly not viable.
 
 **Architecture migration posture:**
 - For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
