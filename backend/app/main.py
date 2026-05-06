@@ -18,7 +18,8 @@ from app.config import get_settings  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.log_sanitizer import sanitize_text, sanitize_exception  # noqa: E402
 import app.core.initiative_activity_listeners  # noqa: F401, E402  # registers ORM hooks for project sort
-from app.api import initiatives, onboarding, evidence, exports, corpus, assessment_catalog, chat, project_plan, lcoe, carbon, project_materials, shares, users, pvwatts, google_drive, billing, api_keys, assessment_workflow, workspaces, assumptions  # noqa: E402
+from app.api import initiatives, onboarding, evidence, exports, corpus, assessment_catalog, chat, project_plan, project_materials, shares, users, google_drive, billing, api_keys, assessment_workflow, workspaces, assumptions  # noqa: E402
+from app.domain.energy.api import lcoe, carbon, pvwatts  # noqa: E402
 from app.mcp import get_mcp_http_app  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)

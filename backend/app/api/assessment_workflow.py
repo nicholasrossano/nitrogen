@@ -172,7 +172,7 @@ async def _generate_legacy_calculator_export(
     widget_data = results_data.get("widget_data") or {}
 
     if assessment_id == "lcoe_model":
-        from app.api.lcoe import RecalculateRequest, export_lcoe_excel
+        from app.domain.energy.api.lcoe import RecalculateRequest, export_lcoe_excel
 
         response = await export_lcoe_excel(
             RecalculateRequest(inputs=widget_data.get("inputs") or {})
@@ -180,7 +180,7 @@ async def _generate_legacy_calculator_export(
         return await _read_response_bytes(response)
 
     if assessment_id == "carbon_model":
-        from app.api.carbon import RecalculateRequest, export_carbon_excel
+        from app.domain.energy.api.carbon import RecalculateRequest, export_carbon_excel
 
         response = await export_carbon_excel(
             RecalculateRequest(inputs=widget_data.get("inputs") or {})
@@ -188,7 +188,7 @@ async def _generate_legacy_calculator_export(
         return await _read_response_bytes(response)
 
     if assessment_id == "solar_estimate":
-        from app.api.pvwatts import ExportRequest, export_solar_excel
+        from app.domain.energy.api.pvwatts import ExportRequest, export_solar_excel
 
         response = await export_solar_excel(
             ExportRequest(

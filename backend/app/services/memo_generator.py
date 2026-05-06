@@ -6,6 +6,7 @@ import json
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.domain.resolver import get_domain_prompt_path
 from app.models.initiative import Initiative
 from app.models.memo import Citation
 from app.schemas.memo import MemoContent, CitationResponse
@@ -213,9 +214,9 @@ Generate a structured memo with the following sections. Use citation numbers [1]
     
     def _load_generation_prompt(self) -> str:
         """Load generation system prompt"""
-        prompt_path = Path(__file__).parent.parent / "prompts" / "memo_generation.txt"
+        prompt_path = Path(__file__).resolve().parents[2] / get_domain_prompt_path("memo_generation.txt")
         if prompt_path.exists():
-            return prompt_path.read_text()
+            return prompt_path.read_text(encoding="utf-8")
         return self._default_generation_prompt()
     
     def _default_generation_prompt(self) -> str:

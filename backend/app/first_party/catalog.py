@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Callable
+from app.domain.resolver import get_active_domain
 
 
 @dataclass(frozen=True)
@@ -35,13 +36,17 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
     Imports are intentionally local so registry construction does not create
     import cycles with concrete assessment implementations.
     """
-    from app.assessments.carbon_assessment import CarbonTool
-    from app.assessments.implementation_plan import ImplementationPlanAssessment
-    from app.assessments.landscape_mapping import LandscapeMappingAssessment
-    from app.assessments.lcoe_assessment import LCOETool
-    from app.assessments.pvwatts_assessment import PVWattsTool
-    from app.assessments.risk_assessment import RiskAssessment
-    from app.assessments.stakeholder_assessment import StakeholderAssessment
+    active_domain = get_active_domain()
+    if active_domain != "energy":
+        raise ValueError(f"Unsupported ACTIVE_DOMAIN '{active_domain}'")
+
+    from app.domain.energy.assessments.carbon_assessment import CarbonTool
+    from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment
+    from app.domain.energy.assessments.landscape_mapping import LandscapeMappingAssessment
+    from app.domain.energy.assessments.lcoe_assessment import LCOETool
+    from app.domain.energy.assessments.pvwatts_assessment import PVWattsTool
+    from app.domain.energy.assessments.risk_assessment import RiskAssessment
+    from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
 
     selection_metadata = {
         "lcoe_model": AssessmentSelectionMetadata(
