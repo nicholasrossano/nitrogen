@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ChatMessage, FieldContext, ResearchStep } from '@/lib/api';
 import type { ResearchPanelCitation } from './ResearchPanel';
@@ -193,6 +195,7 @@ export function ProjectChatSurface({
   );
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewGenerating, setOverviewGenerating] = useState(false);
+  const [healthRefreshToken, setHealthRefreshToken] = useState(0);
   const lastReportedMetaRef = useRef<{ chatId: string | null; title: string | null } | null>(null);
   const autoOverviewAttemptRef = useRef<string | null>(null);
   const associatedAssessmentKeysRef = useRef<Set<string>>(new Set());
@@ -892,10 +895,17 @@ export function ProjectChatSurface({
     }
   }, [generateInitiativeOverview, initiative, initiativeId]);
 
+  const handleRefreshOverviewPanel = useCallback(() => {
+    if (!initiative || initiative.shared_role === 'viewer') return;
+    if (projectMaterials.length > 0) void handleGenerateOverview();
+    setHealthRefreshToken((prev) => prev + 1);
+  }, [handleGenerateOverview, initiative, projectMaterials.length]);
+
   useEffect(() => {
     setOverviewError(null);
     setOverviewGenerating(false);
     setActiveAssessmentsCount(activeAssessmentsCountCache.get(initiativeId) ?? null);
+    setHealthRefreshToken(0);
     autoOverviewAttemptRef.current = null;
   }, [initiativeId]);
 
@@ -921,11 +931,6 @@ export function ProjectChatSurface({
   if (isOnLanding) {
     const filesUploaded = projectMaterials.length;
     const assessmentsCreated = activeAssessmentsCount;
-    const canRefreshOverview = Boolean(
-      initiative &&
-      initiative.shared_role !== 'viewer' &&
-      filesUploaded > 0
-    );
 
     return (
       <>
@@ -946,12 +951,41 @@ export function ProjectChatSurface({
                 assessmentProgress={assessmentProgress}
                 isGenerating={overviewGenerating}
                 errorMessage={overviewError}
-                canRefresh={canRefreshOverview}
-                onRefresh={handleGenerateOverview}
                 onViewAssumptions={onOpenAssumptions}
+                healthRefreshToken={healthRefreshToken}
+                onOpenDocument={onOpenDocument}
+                onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
               />
             ) : null
           ) : undefined)}
+          topRightActions={isOverviewLanding && hideTiles && !landingHeaderContent && initiative ? (
+            <>
+              <button
+                type="button"
+                onClick={handleRefreshOverviewPanel}
+                disabled={initiative.shared_role === 'viewer' || overviewGenerating}
+                className="btn-compact-neutral"
+              >
+                {overviewGenerating ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Refresh
+                  </>
+                )}
+              </button>
+              <Link
+                href={`/initiatives/${initiative.id}?view=framework`}
+                className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
+              >
+                View Framework Plan
+              </Link>
+            </>
+          ) : undefined}
           extraInputActions={isOverviewLanding ? (
             <CompareProjectPicker
               currentProjectId={initiativeId}

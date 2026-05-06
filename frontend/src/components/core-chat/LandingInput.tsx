@@ -18,6 +18,8 @@ interface LandingInputProps {
   hideTiles?: boolean;
   /** Custom content rendered above the input field (below the tiles area) */
   headerContent?: React.ReactNode;
+  /** Action cluster pinned to the overview panel chrome */
+  topRightActions?: React.ReactNode;
   /** Override the default placeholder text */
   placeholder?: string;
   /** Extra action buttons rendered in the composer toolbar (before paperclip) */
@@ -55,6 +57,7 @@ export function LandingInput({
   onDeleteSession,
   hideTiles,
   headerContent,
+  topRightActions,
   placeholder = 'Ask anything',
   extraInputActions,
   inputChips,
@@ -270,17 +273,27 @@ export function LandingInput({
 
   if (layoutMode === 'overview') {
     return (
-      <div className="flex flex-col items-center h-full px-4">
-        <div className="w-full max-w-3xl flex-1 min-h-0 flex flex-col pt-6">
-          {headerContent}
-          {!hideComposer && (
-            <div className="mt-8 flex-1 min-h-0 flex flex-col justify-end pb-4">
-              {renderComposer(
-                'w-full pb-4'
-              )}
-            </div>
-          )}
+      <div className="relative h-full overflow-hidden">
+        {topRightActions ? (
+          <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+            {topRightActions}
+          </div>
+        ) : null}
+        <div className="absolute inset-0 overflow-y-scroll">
+          <div className={`pt-6 px-4 ${hideComposer ? 'pb-8' : 'pb-44'}`}>
+            {headerContent}
+          </div>
         </div>
+        {!hideComposer && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+            <div className="pointer-events-none mx-auto w-full max-w-[52rem] px-4">
+              <div className="pointer-events-none h-16 bg-gradient-to-t from-surface to-transparent" />
+              <div className="pointer-events-auto pb-4">
+                {renderComposer('w-full')}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
