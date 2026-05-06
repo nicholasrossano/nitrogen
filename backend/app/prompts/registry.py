@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+from app.domain.resolver import get_domain_prompt_path
 
 
 @dataclass
@@ -186,7 +187,7 @@ class PromptRegistry:
         ))
 
         # --- memo generation (file-loaded) ---
-        _memo_path = Path(__file__).parent / "memo_generation.txt"
+        _memo_path = Path(__file__).resolve().parents[2] / get_domain_prompt_path("memo_generation.txt")
         _memo_template = _memo_path.read_text(encoding="utf-8") if _memo_path.exists() else ""
 
         self._register(PromptDefinition(
