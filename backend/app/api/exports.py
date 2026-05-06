@@ -15,7 +15,7 @@ from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
-from app.first_party.exports import build_export_handlers
+from app.domain.registry import build_export_handlers
 
 router = APIRouter()
 
@@ -200,7 +200,7 @@ async def _handle_memo_export(content, safe_title, initiative, initiative_id, db
 
 
 async def _handle_lcoe_export(content, safe_title, initiative, initiative_id, db, user):
-    from app.api.lcoe import export_lcoe_excel, RecalculateRequest as LCOEReq
+    from app.domain.energy.api.lcoe import export_lcoe_excel, RecalculateRequest as LCOEReq
     inputs: dict[str, Any] = content.get("inputs") or {}
     if not inputs:
         inputs = await _recover_model_inputs(db, initiative_id, ("lcoe_output", "lcoe_inputs"))
@@ -214,7 +214,7 @@ async def _handle_lcoe_export(content, safe_title, initiative, initiative_id, db
 
 
 async def _handle_carbon_export(content, safe_title, initiative, initiative_id, db, user):
-    from app.api.carbon import export_carbon_excel, RecalculateRequest as CarbonReq
+    from app.domain.energy.api.carbon import export_carbon_excel, RecalculateRequest as CarbonReq
     inputs: dict[str, Any] = content.get("inputs") or {}
     if not inputs:
         inputs = await _recover_model_inputs(db, initiative_id, ("carbon_output", "carbon_inputs"))
@@ -228,7 +228,7 @@ async def _handle_carbon_export(content, safe_title, initiative, initiative_id, 
 
 
 async def _handle_solar_export(content, safe_title, initiative, initiative_id, db, user):
-    from app.api.pvwatts import export_solar_excel, ExportRequest as SolarReq
+    from app.domain.energy.api.pvwatts import export_solar_excel, ExportRequest as SolarReq
     inputs: dict[str, Any] = content.get("inputs") or {}
     result: dict[str, Any] = content.get("result") or {}
     if not inputs or not result:
