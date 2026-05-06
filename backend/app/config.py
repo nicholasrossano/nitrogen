@@ -6,6 +6,9 @@ from typing import Self
 
 
 class Settings(BaseSettings):
+    # Active domain pack (workspace-level deployment toggle)
+    active_domain: str = "energy"
+
     # Database (no default -- app will fail fast if DATABASE_URL is not set)
     database_url: str
     
