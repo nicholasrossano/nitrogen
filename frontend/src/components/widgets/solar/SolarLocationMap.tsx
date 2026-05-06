@@ -202,7 +202,7 @@ export default function SolarLocationMap({
       <style>{`
         .solar-map .leaflet-control-zoom {
           border: 1px solid var(--color-stroke-subtle, #e5e7eb) !important;
-          border-radius: 8px !important;
+          border-radius: 6px !important;
           overflow: hidden;
           box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important;
         }

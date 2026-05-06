@@ -68,7 +68,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-divider);
-  border-radius: 3px;
+  border-radius: 1px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -335,7 +335,7 @@ textarea {
 
 /* Button base styles - with opacity fade effect */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
   @apply border border-accent text-accent bg-surface font-medium text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
@@ -381,7 +381,7 @@ textarea {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
   @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
@@ -437,7 +437,7 @@ textarea {
 }
 
 .btn-danger {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
   @apply border border-indicator-red text-indicator-red bg-surface font-medium text-sm;
   @apply disabled:opacity-50 disabled:cursor-not-allowed;
   position: relative;
@@ -899,7 +899,7 @@ textarea {
   @apply flex items-center gap-2.5 px-4 py-2 text-left text-sm text-text-secondary;
   position: relative;
   overflow: hidden;
-  border-radius: 0.25rem;
+  border-radius: 0.125rem;
   z-index: 0;
   transition: color 200ms ease-out;
   background: transparent;
@@ -940,7 +940,7 @@ textarea {
   top: 20%;
   bottom: 20%;
   width: 2px;
-  border-radius: 1px;
+  border-radius: 0;
   background: var(--color-text-primary);
   z-index: 1;
 }
@@ -958,7 +958,7 @@ textarea {
   outline: none;
   transition: all 150ms ease;
   cursor: text;
-  border-radius: 2px;
+  border-radius: 0;
 }
 
 .editable-content:hover {

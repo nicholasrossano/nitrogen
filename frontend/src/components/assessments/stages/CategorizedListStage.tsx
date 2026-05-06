@@ -234,7 +234,7 @@ function AddItemRow({
           {hasValue ? (
             <Icon className="w-5 h-5" />
           ) : (
-            <span className="w-3.5 h-3.5 rounded-[3px] border-2 border-current/80" />
+            <span className="w-3.5 h-3.5 rounded-[1px] border-2 border-current/80" />
           )}
         </div>
 
