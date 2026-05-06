@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.core.database import AsyncSessionLocal  # noqa: E402
 from app.models.initiative import Initiative  # noqa: E402
 from app.models.assessment_instance import AssessmentInstance  # noqa: E402
-from app.assessments.implementation_plan import ImplementationPlanAssessment  # noqa: E402
+from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment  # noqa: E402
 from app.assessments.utils import infer_category_icon, make_build_item  # noqa: E402
 
 

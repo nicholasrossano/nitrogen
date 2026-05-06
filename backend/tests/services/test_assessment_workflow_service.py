@@ -11,10 +11,10 @@ import pytest
 
 from app.models.initiative import Initiative
 from app.models.assessment_instance import AssessmentInstance
-from app.assessments.lcoe_assessment import LCOETool
-from app.assessments.stakeholder_assessment import StakeholderAssessment
-from app.assessments.carbon_assessment import CarbonTool
-from app.assessments.pvwatts_assessment import PVWattsTool
+from app.domain.energy.assessments.lcoe_assessment import LCOETool
+from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
+from app.domain.energy.assessments.carbon_assessment import CarbonTool
+from app.domain.energy.assessments.pvwatts_assessment import PVWattsTool
 from app.services.assessment_workflow_service import (
     build_workflow_state,
     _build_initial_workflow_state,

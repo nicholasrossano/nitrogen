@@ -2,7 +2,7 @@
 
 import { Tooltip } from './Tooltip';
 
-export interface ReadinessProgressSegment {
+export interface AssessmentProgressSegment {
   id: string;
   label: string;
   color: string;
@@ -10,15 +10,15 @@ export interface ReadinessProgressSegment {
   total: number;
 }
 
-export interface ReadinessProgressData {
+export interface AssessmentProgressData {
   completed: number;
   total: number;
   percentage: number;
-  segments: ReadinessProgressSegment[];
+  segments: AssessmentProgressSegment[];
 }
 
-interface ReadinessProgressBarProps {
-  progress: ReadinessProgressData;
+interface AssessmentProgressBarProps {
+  progress: AssessmentProgressData;
   className?: string;
   showSegmentTooltips?: boolean;
 }
@@ -26,18 +26,18 @@ interface ReadinessProgressBarProps {
 const DEFAULT_CONTAINER_CLASS =
   'flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-divider bg-surface-header';
 
-export function ReadinessProgressBar({
+export function AssessmentsProgressBar({
   progress,
   className,
   showSegmentTooltips = false,
-}: ReadinessProgressBarProps) {
+}: AssessmentProgressBarProps) {
   const containerClass = className ?? DEFAULT_CONTAINER_CLASS;
 
   return (
     <div className={containerClass}>
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-[11px] text-text-tertiary">
-          <span className="uppercase tracking-[0.08em] text-text-secondary">Readiness</span>
+          <span className="uppercase tracking-[0.08em] text-text-secondary">Assessments</span>
           {' '}• <span className="font-medium text-text-secondary">{progress.completed}</span>
           {' '}of {progress.total} complete
         </span>
@@ -85,3 +85,8 @@ export function ReadinessProgressBar({
     </div>
   );
 }
+
+// Backwards-compatible aliases while callers migrate.
+export type ReadinessProgressSegment = AssessmentProgressSegment;
+export type ReadinessProgressData = AssessmentProgressData;
+export const ReadinessProgressBar = AssessmentsProgressBar;

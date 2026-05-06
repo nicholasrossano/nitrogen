@@ -10,7 +10,7 @@ from app.models.initiative import InitiativeStage
 from app.models.memo import MemoVersion
 from app.models.onboarding import ChatMessage
 from app.schemas.memo import MemoGenerateRequest, MemoResponse, MemoContent
-from app.services.memo_generator import MemoGeneratorService
+from app.domain.energy.services.memo_generator import MemoGeneratorService
 from app.assessments import get_assessment_registry
 from app.assessments.base import AssessmentAlignment
 from app.services import assessment_service
