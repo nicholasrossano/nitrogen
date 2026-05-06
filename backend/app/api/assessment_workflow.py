@@ -29,9 +29,9 @@ from app.models.initiative import Initiative
 from app.models.assessment_instance import AssessmentInstance, AssessmentInstanceStatus
 from app.models.user import User
 from app.assessments.base import BaseAssessment
-from app.assessments.implementation_plan import ImplementationPlanAssessment
+from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment
 from app.assessments.registry import get_assessment_registry
-from app.assessments.stakeholder_assessment import StakeholderAssessment
+from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
 from app.assessments.utils import make_build_item
 from app.services.deep_dive import DeepDiveService
 from app.services.assessment_workflow_service import (

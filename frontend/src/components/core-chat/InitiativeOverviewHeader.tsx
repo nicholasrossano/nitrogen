@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Calculator, Files, ListChecks, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
 import { api, type AssumptionSummary, type Initiative } from '@/lib/api';
-import type { ReadinessProgressData } from '@/components/ui/ReadinessProgressBar';
-import { ReadinessProgressBar } from '@/components/ui/ReadinessProgressBar';
+import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
+import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
 
 const collaboratorsCountCache = new Map<string, number>();
 
@@ -13,7 +13,7 @@ interface InitiativeOverviewHeaderProps {
   initiative: Initiative;
   filesUploaded: number;
   assessmentsCreated: number | null;
-  readinessProgress?: ReadinessProgressData | null;
+  assessmentProgress?: AssessmentProgressData | null;
   isGenerating: boolean;
   errorMessage: string | null;
   canRefresh: boolean;
@@ -55,7 +55,7 @@ export function InitiativeOverviewHeader({
   initiative,
   filesUploaded,
   assessmentsCreated,
-  readinessProgress,
+  assessmentProgress,
   isGenerating,
   errorMessage,
   canRefresh,
@@ -142,9 +142,9 @@ export function InitiativeOverviewHeader({
         </div>
       )}
 
-      {readinessProgress && readinessProgress.total > 0 && (
-        <ReadinessProgressBar
-          progress={readinessProgress}
+      {assessmentProgress && assessmentProgress.total > 0 && (
+        <AssessmentsProgressBar
+          progress={assessmentProgress}
           className="mt-4 rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-3"
         />
       )}

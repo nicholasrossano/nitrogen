@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.config import get_settings
 from app.core.llm_client import record_usage_from_response
-from app.first_party.catalog import format_assessment_selection_context, get_tool_hint_action
+from app.domain.registry import format_assessment_selection_context, get_tool_hint_action
 from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT, ProjectChatAction
 from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact

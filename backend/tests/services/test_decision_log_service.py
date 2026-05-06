@@ -2,8 +2,8 @@ from io import BytesIO
 
 import openpyxl
 
-from app.assessments.lcoe_assessment import LCOETool
-from app.assessments.stakeholder_assessment import StakeholderAssessment
+from app.domain.energy.assessments.lcoe_assessment import LCOETool
+from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
 from app.services.decision_log_service import (
     build_current_state_rows,
     build_decision_log_xlsx,

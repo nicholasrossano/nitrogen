@@ -10,7 +10,7 @@ from app.adapters.base import (
 
 
 def register_all(registry: AdapterRegistry) -> None:
-    from app.first_party.registry import register_adapters
+    from app.domain.registry import register_adapters
 
     register_adapters(registry)
 

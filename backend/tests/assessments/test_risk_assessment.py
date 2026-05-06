@@ -3,7 +3,7 @@ from io import BytesIO
 import openpyxl
 import pytest
 
-from app.assessments.risk_assessment import RiskAssessment
+from app.domain.energy.assessments.risk_assessment import RiskAssessment
 from app.assessments.utils import make_build_item
 
 
@@ -166,7 +166,7 @@ async def test_bulk_mitigation_generation_populates_each_risk(monkeypatch):
             }]
         }
 
-    monkeypatch.setattr("app.assessments.risk_assessment.llm_json", fake_llm_json)
+    monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
 
     records = await assessment.enrich_records_for_stage(
         "mitigations",
@@ -206,7 +206,7 @@ async def test_generate_risks_falls_back_to_concrete_category_specific_rows(monk
     async def fake_llm_json(*args, **kwargs):
         return {"risks": []}
 
-    monkeypatch.setattr("app.assessments.risk_assessment.llm_json", fake_llm_json)
+    monkeypatch.setattr("app.domain.energy.assessments.risk_assessment.llm_json", fake_llm_json)
 
     risks = await assessment._generate_risks(
         {

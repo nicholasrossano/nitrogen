@@ -17,7 +17,7 @@ import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSummary } from '@/types/chat';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { debugChatFlow } from '@/lib/chatDebug';
-import type { ReadinessProgressData } from '@/components/ui/ReadinessProgressBar';
+import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 
 const DELIVERABLE_WIDGET_TYPES = ['memo_viewer', 'checklist_viewer'];
 const CHAT_MODULE_WIDGET_TYPES = new Set([
@@ -105,8 +105,8 @@ interface ProjectChatSurfaceProps {
   projectContext?: string | null;
   /** Called before sending a message from the composer */
   onBeforeSendMessage?: () => void;
-  /** Optional readiness progress header shown in overview mode */
-  readinessProgress?: ReadinessProgressData | null;
+  /** Optional assessments progress header shown in overview mode */
+  assessmentProgress?: AssessmentProgressData | null;
   /** Open the project assumptions workspace tab from overview. */
   onOpenAssumptions?: () => void;
 }
@@ -172,7 +172,7 @@ export function ProjectChatSurface({
   topContentMode = 'inline',
   projectContext = null,
   onBeforeSendMessage,
-  readinessProgress = null,
+  assessmentProgress = null,
   onOpenAssumptions,
 }: ProjectChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
@@ -943,7 +943,7 @@ export function ProjectChatSurface({
                 initiative={initiative}
                 filesUploaded={filesUploaded}
                 assessmentsCreated={assessmentsCreated}
-                readinessProgress={readinessProgress}
+                assessmentProgress={assessmentProgress}
                 isGenerating={overviewGenerating}
                 errorMessage={overviewError}
                 canRefresh={canRefreshOverview}
