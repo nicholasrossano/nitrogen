@@ -365,7 +365,7 @@ function InitiativePageContent() {
           : activeView === 'assumptions'
             ? 'assumptions'
             : null;
-  const showPrimaryPanel = activeView === 'files' || workspaceOpen;
+  const showPrimaryPanel = activeView === 'overview' || activeView === 'files' || workspaceOpen;
   const hasSideChatShell = Boolean(sideChatMode);
   const sideChatWidthPercent = !hasSideChatShell
     ? 0
@@ -1324,7 +1324,7 @@ function InitiativePageContent() {
                       event.preventDefault();
                       setIsResizingChat(true);
                     }}
-                    className={`w-2 flex-shrink-0 relative group transition-all duration-300 ease-in-out ${showChatResizeHandle ? 'cursor-col-resize opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'} ${isResizingChat ? 'bg-accent/10' : ''}`}
+                    className={`flex-shrink-0 relative group transition-all duration-300 ease-in-out ${showChatResizeHandle ? 'w-2 cursor-col-resize opacity-100 translate-x-0' : 'w-0 opacity-0 pointer-events-none'} ${isResizingChat ? 'bg-accent/10' : ''}`}
                   >
                     <div className={`absolute left-1/2 top-0 h-full -translate-x-1/2 w-px transition-colors ${isResizingChat ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`} />
                   </div>

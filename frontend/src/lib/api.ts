@@ -393,6 +393,69 @@ export interface AssumptionSummary {
   top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_assessments'>>;
 }
 
+export type ProjectHealthStatus = 'green' | 'yellow' | 'red' | 'unknown';
+export type ProjectHealthConfidence = 'high' | 'medium' | 'low' | 'unknown';
+
+export interface ProjectHealthOverride {
+  id: string;
+  dimension_id: string;
+  prior_system_status: ProjectHealthStatus | null;
+  override_status: ProjectHealthStatus;
+  explanation: string | null;
+  overridden_by_email: string | null;
+  created_at: string;
+}
+
+export interface ProjectHealthSourceReference {
+  source_title: string;
+  source_type: string;
+  source_url?: string | null;
+  citation?: string | null;
+  evidence_doc_id?: string | null;
+  chunk_id?: string | null;
+}
+
+export interface ProjectHealthAssessmentReference {
+  instance_id: string | null;
+  assessment_id: string;
+  display_name: string;
+}
+
+export interface ProjectHealthDimension {
+  dimension_id: string;
+  label: string;
+  description: string;
+  status: ProjectHealthStatus;
+  effective_status: ProjectHealthStatus;
+  confidence: ProjectHealthConfidence;
+  rationale: string;
+  critical_insight: string;
+  supporting_evidence: string[];
+  suggested_improvement: string | null;
+  retrieved_sources: ProjectHealthSourceReference[];
+  positive_drivers: string[];
+  negative_drivers: string[];
+  blockers: string[];
+  missing_items: string[];
+  relevant_modules: string[];
+  relevant_module_names: string[];
+  relevant_assessments: ProjectHealthAssessmentReference[];
+  improvement_actions: string[];
+  uncertainties: string[];
+  update_source: string;
+  last_updated_at: string;
+  is_stale: boolean;
+  has_override: boolean;
+  overrides: ProjectHealthOverride[];
+}
+
+export interface ProjectHealthResponse {
+  domain: string;
+  initiative_id: string;
+  stale: boolean;
+  dimensions: ProjectHealthDimension[];
+}
+
 export interface AssumptionCreateInput {
   key: string;
   label?: string | null;
@@ -1730,6 +1793,29 @@ export const api = {
   getProjectPlan: (initiativeId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
       `/api/v1/initiatives/${initiativeId}/project-plan`
+    ),
+
+  getProjectHealth: (initiativeId: string) =>
+    fetchApi<ProjectHealthResponse>(`/api/v1/initiatives/${initiativeId}/project-health`),
+
+  refreshProjectHealth: (initiativeId: string, source: string = 'manual_refresh') =>
+    fetchApi<ProjectHealthResponse>(`/api/v1/initiatives/${initiativeId}/project-health/refresh`, {
+      method: 'POST',
+      body: JSON.stringify({ source }),
+    }),
+
+  overrideProjectHealthDimension: (
+    initiativeId: string,
+    dimensionId: string,
+    status: ProjectHealthStatus,
+    explanation?: string,
+  ) =>
+    fetchApi<ProjectHealthResponse>(
+      `/api/v1/initiatives/${initiativeId}/project-health/${dimensionId}/override`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ status, explanation: explanation || null }),
+      },
     ),
 
   generateProjectPlan: (initiativeId: string) =>
