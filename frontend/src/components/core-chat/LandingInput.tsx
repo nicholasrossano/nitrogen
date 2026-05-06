@@ -155,7 +155,7 @@ export function LandingInput({
       ) : null}
       <form onSubmit={handleSubmit} className="relative">
         <div
-          className="rounded-[10px] border border-stroke-subtle bg-white overflow-hidden"
+          className="rounded-xl border border-stroke-subtle bg-white overflow-hidden"
         >
           {(inputChips || (showAttachments && attachedFiles.length > 0)) && (
             <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">

@@ -287,21 +287,21 @@ Most data surfaces and workspace elements use no border radius (0px) for a preci
 
 | Element | Radius | Token |
 | --- | --- | --- |
-| **Workspace container** | `8px` | `rounded-lg` |
-| **Cards & panels** | `8px` | `rounded-lg` |
-| Icon-only action buttons (edit, delete, close) | 4–6px | `rounded-sm` / `rounded` |
-| Interactive pill tags (selection, toggle) | 4–6px | `rounded` |
-| Ghost row hovers (history items, nav rows) | 8–12px | `rounded-lg` / `rounded-xl` |
-| Primary / secondary buttons (`btn-primary`, `btn-secondary`) | 20px | `rounded-[20px]` |
-| Assessment workspace header actions (beside stage stepper: Decision log, Approve, Export) | 6px | `!rounded-md` — intentional override so they sit in the same visual tier as the stage toggle group |
-| Search inputs | 20px | `rounded-[20px]` |
-| Chat composer textarea | 28px | `rounded-[28px]` |
-| Message bubbles (user) | 16px | `rounded-2xl` |
+| **Workspace container** | `6px` | `rounded-lg` |
+| **Cards & panels** | `6px` | `rounded-lg` |
+| Icon-only action buttons (edit, delete, close) | 2–4px | `rounded-sm` / `rounded` |
+| Interactive pill tags (selection, toggle) | 2–4px | `rounded` |
+| Ghost row hovers (history items, nav rows) | 6–10px | `rounded-lg` / `rounded-xl` |
+| Primary / secondary buttons (`btn-primary`, `btn-secondary`) | 18px | `rounded-[18px]` |
+| Assessment workspace header actions (beside stage stepper: Decision log, Approve, Export) | 4px | `!rounded-md` — intentional override so they sit in the same visual tier as the stage toggle group |
+| Search inputs | 18px | `rounded-[18px]` |
+| Chat composer textarea | 26px | `rounded-[26px]` |
+| Message bubbles (user) | 14px | `rounded-2xl` |
 
 **Rules**
-- Workspace container and cards use `rounded-lg` (8px) — this is a key change from the prior sharp-edge default for containers
-- Chat and messaging surfaces use pill-style rounding (20–28px) — approved exception
-- Never exceed **28px** anywhere in the UI
+- Workspace container and cards use `rounded-lg` (6px) — this is a key change from the prior sharp-edge default for containers
+- Chat and messaging surfaces use pill-style rounding (18–26px) — approved exception
+- Never exceed **26px** anywhere in the UI
 - Consistent application within a surface: all inputs on the same page should share a radius tier
 
 ---
@@ -373,7 +373,7 @@ The active indicator is a 2px vertical bar on the left edge (not a blue backgrou
   top: 20%;
   bottom: 20%;
   width: 2px;
-  border-radius: 1px;
+  border-radius: 0;
   background: var(--color-text-primary);
 }
 ```
@@ -411,7 +411,7 @@ All structural dividers use warm neutral tones, not blue.
 
 ### Imagery
 - Informational imagery only  
-- Match image corners to container (8px standard)
+- Match image corners to container (6px standard)
 - No decorative illustrations  
 
 ---
@@ -436,7 +436,7 @@ Use for the main confirming action in any panel or widget: Export, Confirm, Gene
 </button>
 ```
 
-**Appearance**: `border border-accent text-accent bg-surface`, pill-shaped (`rounded-[20px]`). Hover fills with accent color via `::before` opacity fade. Press compresses to `scale(0.98)`.
+**Appearance**: `border border-accent text-accent bg-surface`, pill-shaped (`rounded-[18px]`). Hover fills with accent color via `::before` opacity fade. Press compresses to `scale(0.98)`.
 
 ### `btn-secondary` — Secondary / cancel
 Use for secondary actions: Cancel, Re-draft, Settings, less critical triggers.
@@ -473,7 +473,7 @@ Use only for irreversible destructive actions: Delete, Remove, Revoke.
 - `w-full` makes any button full-width inside its container.
 - Compact card/header actions use `btn-compact-neutral` without additional size/radius overrides.
 - **Corner model by context**:
-  - **Floating/standalone CTA** buttons keep the default capsule shape (`rounded-[20px]`).
+  - **Floating/standalone CTA** buttons keep the default capsule shape (`rounded-[18px]`).
   - **Embedded flow buttons** (inline with inputs, table rows, modal form actions — e.g. Share/Create buttons) should override to lightly rounded corners (`!rounded-lg` or `!rounded-md`).
   - In any given button row, peer buttons must use the same radius tier.
 - **Embedded action pairs** (e.g. Cancel + Confirm in side panels) should be right-aligned and use the Share-button compact tier: `!py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5`.
@@ -1046,7 +1046,7 @@ These are the approved patterns for all chat and compliance-chat surfaces. Follo
 
 ```tsx
 <textarea
-  className="w-full resize-none rounded-[28px] border border-stroke-subtle bg-surface
+  className="w-full resize-none rounded-[26px] border border-stroke-subtle bg-surface
              px-5 py-3.5 pr-12 text-sm text-text-primary
              placeholder:text-text-tertiary
              focus:border-accent focus:ring-1 focus:ring-accent/20 focus:outline-none
@@ -1057,7 +1057,7 @@ These are the approved patterns for all chat and compliance-chat surfaces. Follo
 ```
 
 **Rules**
-- `rounded-[28px]` — pill shape is the approved chat input radius
+- `rounded-[26px]` — pill shape is the approved chat input radius
 - `border-stroke-subtle` default → `border-accent` + `ring-1 ring-accent/20` on focus
 - `py-3.5` for the landing/full-page composer; `py-3` for the in-conversation composer
 - Auto-resize capped at `150px`
@@ -1152,13 +1152,13 @@ Defined as a global CSS class — do not replicate inline.
 
 ```css
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
   @apply border border-accent text-accent bg-surface font-medium text-sm;
   /* Opacity-fade fill on hover (accent bg), lift + compress motion */
 }
 ```
 
-- `rounded-[20px]` — slightly softer than data surfaces
+- `rounded-[18px]` — slightly softer than data surfaces
 - Uses `bg-surface` (not `bg-white`) so it adapts correctly in all contexts
 - Hover: accent fill fades in (no shadow, no lift)
 - Active: `scale(0.98)` (100ms)
@@ -1197,13 +1197,13 @@ Defined as a global CSS class — do not replicate inline. Used for cancel/dismi
 
 ```css
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[20px];
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[18px];
   @apply bg-surface text-text-primary font-medium border border-stroke-subtle text-sm;
   /* Same shape as btn-primary; hover fills with surface-subtle */
 }
 ```
 
-- `rounded-[20px]` — identical radius to `btn-primary`; both buttons in a pair must always match in shape
+- `rounded-[18px]` — identical radius to `btn-primary`; both buttons in a pair must always match in shape
 - Hover: `surface-subtle` fill fades in (no accent color)
 - Active: `scale(0.98)` (100ms)
 - Disabled: `opacity-50 cursor-not-allowed`
