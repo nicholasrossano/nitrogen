@@ -9,7 +9,7 @@ import {
   type FeatureFlagContext,
   type FeatureFlagKey,
 } from '@/lib/featureFlags';
-import { type AssessmentOption } from '@/first-party/assessmentCatalog';
+import { type AssessmentOption } from '@/domain/energy/assessmentCatalog';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 export function useFeatureFlagContext(): FeatureFlagContext {

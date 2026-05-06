@@ -11,7 +11,7 @@ from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.assessments import get_assessment_registry
 from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_stage_assumptions
-from app.services.sdg_classifier import classify_sdg
+from app.domain.energy.services.sdg_classifier import classify_sdg
 
 
 def build_deliverables_overview_data(initiative) -> dict:
