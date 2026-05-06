@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Calculator, Files, ListChecks, Loader2, MapPinned, RefreshCw, Tag, Users } from 'lucide-react';
+import { Calculator, Files, ListChecks, Loader2, MapPinned, Tag, Users } from 'lucide-react';
 import { api, type AssumptionSummary, type Initiative } from '@/lib/api';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
+import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTable';
+import type { ResearchPanelCitation } from './ResearchPanel';
 
 const collaboratorsCountCache = new Map<string, number>();
 
@@ -16,9 +17,14 @@ interface InitiativeOverviewHeaderProps {
   assessmentProgress?: AssessmentProgressData | null;
   isGenerating: boolean;
   errorMessage: string | null;
-  canRefresh: boolean;
-  onRefresh: () => void;
   onViewAssumptions?: () => void;
+  healthRefreshToken?: number;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onOpenWorkspaceAssessment?: (assessment: {
+    instanceId: string;
+    assessmentId: string;
+    title?: string | null;
+  }) => void;
 }
 
 function formatProjectType(value: string | null): string | null {
@@ -39,7 +45,7 @@ function FootprintBox({
   Icon: typeof Files;
 }) {
   return (
-    <div className="rounded-xl border border-black/[0.05] bg-white px-4 py-3">
+    <div className="rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-3">
       <div className="flex items-center gap-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
         <Icon className="w-3.5 h-3.5" />
         {label}
@@ -58,9 +64,10 @@ export function InitiativeOverviewHeader({
   assessmentProgress,
   isGenerating,
   errorMessage,
-  canRefresh,
-  onRefresh,
   onViewAssumptions,
+  healthRefreshToken = 0,
+  onOpenDocument,
+  onOpenWorkspaceAssessment,
 }: InitiativeOverviewHeaderProps) {
   const title = initiative.title || 'Untitled initiative';
   const projectType = formatProjectType(initiative.project_type);
@@ -120,7 +127,8 @@ export function InitiativeOverviewHeader({
   }, [initiative.id, initiative.updated_at]);
 
   return (
-    <div className="w-full">
+    <div className="relative w-full">
+      <div className="mx-auto w-full max-w-3xl">
       <div className="min-w-0 pt-10">
         <h2 className="text-xl font-semibold text-text-primary">{title}</h2>
       </div>
@@ -143,17 +151,36 @@ export function InitiativeOverviewHeader({
       )}
 
       {assessmentProgress && assessmentProgress.total > 0 && (
-        <AssessmentsProgressBar
-          progress={assessmentProgress}
-          className="mt-4 rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-3"
-        />
+        <section className="mt-6">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+              Assessments
+            </p>
+          </div>
+          <AssessmentsProgressBar
+            progress={assessmentProgress}
+            showHeader={true}
+            showCategoryLabel={false}
+            className="mt-2 rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-3"
+          />
+        </section>
       )}
 
-      <div className="mt-4 min-h-[150px] rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-4">
-        <div className="mb-4">
-          <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Initiative Summary</p>
-        </div>
+      <section className="mt-8">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Health Overview</p>
+        <ProjectHealthTable
+          initiativeId={initiative.id}
+          readOnly={initiative.shared_role === 'viewer'}
+          hideRefreshButton={true}
+          refreshToken={healthRefreshToken}
+          onOpenDocument={onOpenDocument}
+          onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
+        />
+      </section>
 
+      <section className="mt-8">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Initiative Summary</p>
+      <div className="mt-2 min-h-[150px] rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-4">
         {!hasFiles ? (
           <div className="h-full flex flex-col items-start justify-center">
             <p className="text-sm font-medium text-text-primary">No overview yet</p>
@@ -176,38 +203,13 @@ export function InitiativeOverviewHeader({
           </div>
         )}
 
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <div className="min-h-[20px] text-xs text-text-tertiary">
-            {errorMessage ? <span className="text-red-500">{errorMessage}</span> : null}
+        {errorMessage ? (
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <div className="text-xs text-red-500">{errorMessage}</div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={!canRefresh || isGenerating}
-              className="btn-compact-neutral"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Refresh
-                </>
-              )}
-            </button>
-            <Link
-              href={`/initiatives/${initiative.id}?view=framework`}
-              className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
-            >
-              View Framework Plan
-            </Link>
-          </div>
-        </div>
+        ) : null}
       </div>
+      </section>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <FootprintBox label="Collaborators" value={collaboratorsCount} Icon={Users} />
@@ -215,13 +217,11 @@ export function InitiativeOverviewHeader({
         <FootprintBox label="Files Uploaded" value={filesUploaded} Icon={Files} />
       </div>
 
-      <div className="mt-4 rounded-xl border border-black/[0.05] bg-white px-4 py-4">
+      <section className="mt-8">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Assumptions</p>
+      <div className="mt-2 rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
-              <ListChecks className="w-3.5 h-3.5" />
-              Assumptions
-            </div>
             <p className="mt-1 text-sm text-text-tertiary">
               Reusable project values and claims used across assessments and research.
             </p>
@@ -267,6 +267,8 @@ export function InitiativeOverviewHeader({
             </div>
           </div>
         ) : null}
+      </div>
+      </section>
       </div>
     </div>
   );

@@ -21,6 +21,8 @@ interface AssessmentProgressBarProps {
   progress: AssessmentProgressData;
   className?: string;
   showSegmentTooltips?: boolean;
+  showHeader?: boolean;
+  showCategoryLabel?: boolean;
 }
 
 const DEFAULT_CONTAINER_CLASS =
@@ -30,21 +32,30 @@ export function AssessmentsProgressBar({
   progress,
   className,
   showSegmentTooltips = false,
+  showHeader = true,
+  showCategoryLabel = true,
 }: AssessmentProgressBarProps) {
   const containerClass = className ?? DEFAULT_CONTAINER_CLASS;
 
   return (
     <div className={containerClass}>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] text-text-tertiary">
-          <span className="uppercase tracking-[0.08em] text-text-secondary">Assessments</span>
-          {' '}• <span className="font-medium text-text-secondary">{progress.completed}</span>
-          {' '}of {progress.total} complete
-        </span>
-        <span className="text-[11px] font-medium text-text-secondary tabular-nums">
-          {progress.percentage}%
-        </span>
-      </div>
+      {showHeader ? (
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] text-text-tertiary">
+            {showCategoryLabel ? (
+              <>
+                <span className="uppercase tracking-[0.08em] text-text-secondary">Assessments</span>
+                {' '}•{' '}
+              </>
+            ) : null}
+            <span className="font-medium text-text-secondary">{progress.completed}</span>
+            {' '}of {progress.total} complete
+          </span>
+          <span className="text-[11px] font-medium text-text-secondary tabular-nums">
+            {progress.percentage}%
+          </span>
+        </div>
+      ) : null}
       <div className="h-1.5 rounded-full overflow-hidden bg-surface-subtle w-full">
         <div className="h-full w-full flex">
           {progress.segments.map((segment, idx) => {
