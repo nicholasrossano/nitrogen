@@ -326,6 +326,33 @@ export interface StagedAssessmentWorkflowState {
   assessment_definition: StagedAssessmentDefinition;
 }
 
+export interface AssessmentAgentStatus {
+  run_state: 'running' | 'needs_review' | 'blocked' | 'approved';
+  current_stage_id: string | null;
+  current_action: string | null;
+  last_summary: string | null;
+  workflow_version: number;
+  can_resume: boolean;
+}
+
+export interface AssessmentActivityLogEntry {
+  sequence_number: number;
+  event_type: string;
+  label: string;
+  stage_id: string | null;
+  stage_title: string | null;
+  summary: string | null;
+  occurred_at: string;
+  is_decision_point: boolean;
+}
+
+export interface AssessmentActivityLog {
+  assessment_instance_id: string;
+  assessment_id: string;
+  run_state: AssessmentAgentStatus['run_state'];
+  entries: AssessmentActivityLogEntry[];
+}
+
 export interface DecisionLogHistoryRow {
   assessment: string;
   assessment_id: string;
@@ -807,6 +834,28 @@ async function fetchApi<T>(
     return undefined as T;
   }
   return JSON.parse(text) as T;
+}
+
+async function fetchApiWithTimeout<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  timeoutMs: number = 30000,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchApi<T>(endpoint, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 }
 
 function workflowVersionHeaders(workflowVersion?: number): Record<string, string> | undefined {
@@ -1565,6 +1614,17 @@ export const api = {
   getStagedAssessmentWorkflowState: (instanceId: string) =>
     fetchApi<StagedAssessmentWorkflowState>(`/api/v1/assessment-workflow/${instanceId}/state`),
 
+  getAssessmentAgentStatus: (instanceId: string) =>
+    fetchApi<AssessmentAgentStatus>(`/api/v1/assessment-workflow/${instanceId}/agent-status`),
+
+  getAssessmentActivityLog: (instanceId: string) =>
+    fetchApi<AssessmentActivityLog>(`/api/v1/assessment-workflow/${instanceId}/activity-log`),
+
+  runAssessment: (instanceId: string) =>
+    fetchApi<AssessmentAgentStatus>(`/api/v1/assessment-workflow/${instanceId}/run`, {
+      method: 'POST',
+    }),
+
   populateStage: (instanceId: string, stageId: string, workflowVersion?: number) =>
     fetchApi<{ stage_id: string; stage_state: StageState; workflow_state: StagedWorkflowState; workflow_version: number }>(
       `/api/v1/assessment-workflow/${instanceId}/stages/${stageId}/populate`,
@@ -1621,12 +1681,32 @@ export const api = {
       item_classification: string;
       item_rationale: string;
       pillar_name: string;
+      assessment_type?: string | null;
     },
     workflowVersion?: number,
   ) =>
-    fetchApi<DeepDiveResult>(
+    fetchApiWithTimeout<DeepDiveResult>(
       `/api/v1/assessment-workflow/${instanceId}/implementation/${itemId}/deep-dive`,
-      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify(body) }
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify(body) },
+      30000,
+    ),
+
+  deepDiveAssessmentMapItem: (
+    instanceId: string,
+    itemId: string,
+    body: {
+      item_title: string;
+      item_classification: string;
+      item_rationale: string;
+      pillar_name: string;
+      assessment_type?: string | null;
+    },
+    workflowVersion?: number,
+  ) =>
+    fetchApiWithTimeout<DeepDiveResult>(
+      `/api/v1/assessment-workflow/${instanceId}/map/${itemId}/deep-dive`,
+      { method: 'POST', headers: workflowVersionHeaders(workflowVersion), body: JSON.stringify(body) },
+      30000,
     ),
 
   updateRecord: (instanceId: string, stageId: string, itemId: string, fields: Record<string, any>, workflowVersion?: number) =>
@@ -1867,14 +1947,16 @@ export const api = {
       item_classification: string;
       item_rationale: string;
       pillar_name: string;
+      assessment_type?: string | null;
     }
   ) =>
-    fetchApi<DeepDiveResult>(
+    fetchApiWithTimeout<DeepDiveResult>(
       `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/deep-dive`,
       {
         method: 'POST',
         body: JSON.stringify(body),
-      }
+      },
+      30000,
     ),
 
   // Chat sessions — optionally scoped to a single project

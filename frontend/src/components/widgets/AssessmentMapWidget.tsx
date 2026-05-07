@@ -18,7 +18,7 @@ import {
 } from '@/components/plan-workspace';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import type { WorkspaceWidgetProps } from '@/lib/widgetRegistry';
-import { api } from '@/lib/api';
+import { api, type DeepDiveResult } from '@/lib/api';
 
 interface AssessmentItem {
   id: string;
@@ -63,6 +63,10 @@ interface MapInspectorState {
   loading: boolean;
   error: string | null;
   latencyMs: number;
+}
+
+interface CachedDeepDiveState {
+  result: DeepDiveResult;
 }
 
 interface InspectorFieldSchema<T> {
@@ -151,7 +155,65 @@ function toInspectorResult(
   group: AssessmentGroup,
   latencyMs: number,
   isStakeholderAssessment: boolean,
+  deepDiveResult: DeepDiveResult | null = null,
 ): PlanWorkspaceInspectorResult {
+  if (deepDiveResult) {
+    const deepDiveSources = deepDiveResult.sources ?? [];
+    const documentSources = deepDiveSources
+      .filter((source) => source.source_type === 'evidence' && source.evidence_doc_id)
+      .map((source) => ({
+        title: source.title,
+        evidenceDocId: source.evidence_doc_id!,
+        chunkId: source.chunk_id ?? null,
+      }));
+    const linkSources = deepDiveSources
+      .filter((source) => source.source_type !== 'evidence')
+      .map((source) => ({
+        title: source.title,
+        url: source.url ?? null,
+        publisher: source.publisher ?? null,
+      }));
+    const citationSources = deepDiveSources.map((source, idx) => {
+      const citationNumber = idx + 1;
+      if (source.source_type === 'evidence' && source.evidence_doc_id) {
+        return {
+          key: `doc:${source.evidence_doc_id}:${source.chunk_id ?? source.title}`,
+          label: source.title,
+          type: 'document' as const,
+          citationNumber,
+          title: source.title,
+          evidenceDocId: source.evidence_doc_id,
+          chunkId: source.chunk_id ?? null,
+        };
+      }
+      return {
+        key: `link:${source.title}:${source.url ?? ''}`,
+        label: source.title,
+        type: 'link' as const,
+        citationNumber,
+        title: source.title,
+        url: source.url ?? null,
+        publisher: source.publisher ?? null,
+      };
+    });
+
+    return {
+      summary: deepDiveResult.what_this_is?.length
+        ? deepDiveResult.what_this_is
+        : [item.description?.trim() || `This item belongs to ${group.label}.`],
+      summaryCitations: deepDiveResult.summary_citations ?? [],
+      summaryTitle: 'Overview',
+      requirements: [],
+      dependencies: [],
+      detailFields: [],
+      documentSources,
+      linkSources,
+      citationSources,
+      emptySourcesMessage: 'No citations were returned for this deep dive yet.',
+      latencyMs: deepDiveResult.latency_ms ?? latencyMs,
+    };
+  }
+
   const summary: string[] = [];
   if (item.description) summary.push(item.description);
   if (!item.description && item.role_in_project) summary.push(item.role_in_project);
@@ -176,7 +238,7 @@ function toInspectorResult(
 
   return {
     summary: summary.length > 0 ? summary : ['This is a mapped item relevant to your project context.'],
-    summaryTitle: 'What this is',
+    summaryTitle: 'Overview',
     requirements: [],
     dependencies: [],
     detailFields,
@@ -206,6 +268,7 @@ export function AssessmentMapWidget({
 
   const [groups, setGroups] = useState<AssessmentGroup[]>(incomingGroups);
   const [detailCache, setDetailCache] = useState<Record<string, CachedDetailState>>({});
+  const [deepDiveCache, setDeepDiveCache] = useState<Record<string, CachedDeepDiveState>>({});
   const [inspector, setInspector] = useState<MapInspectorState | null>(null);
   const [localInspectorOpen, setLocalInspectorOpen] = useState(false);
   const deepDiveRequestRef = useRef(0);
@@ -312,14 +375,15 @@ export function AssessmentMapWidget({
 
   const inspectorState = useMemo<PlanWorkspaceInspectorState | null>(() => {
     if (!inspector) return null;
+    const deepDive = deepDiveCache[inspector.item.id]?.result ?? null;
     return {
       item: mapAssessmentItemToWorkspaceItem(inspector.item, inspector.group),
       groupName: inspector.group.label,
-      result: toInspectorResult(inspector.item, inspector.group, inspector.latencyMs, isStakeholderAssessment),
+      result: toInspectorResult(inspector.item, inspector.group, inspector.latencyMs, isStakeholderAssessment, deepDive),
       loading: inspector.loading,
       error: inspector.error,
     };
-  }, [inspector, isStakeholderAssessment]);
+  }, [deepDiveCache, inspector, isStakeholderAssessment]);
 
   useEffect(() => {
     onInspectorStateChange?.(inspectorState);
@@ -343,17 +407,102 @@ export function AssessmentMapWidget({
       });
       if (!onInspectorStateChange) setLocalInspectorOpen(true);
 
-      if (isStakeholderAssessment) {
-        void hydrateStakeholder(item, group, !cached);
+      if (isStakeholderAssessment && !cached) {
+        void hydrateStakeholder(item, group, true);
+      }
+      if (!isStakeholderAssessment && !deepDiveCache[item.id] && instanceId) {
+        setInspector((prev) => {
+          if (!prev || prev.itemId !== item.id || prev.groupId !== group.id) return prev;
+          return { ...prev, loading: true, error: null };
+        });
+        void api.deepDiveAssessmentMapItem(
+          instanceId,
+          item.id,
+          {
+            item_title: item.name,
+            item_classification: 'unknown',
+            item_rationale: item.description?.trim() || '',
+            pillar_name: group.label,
+            assessment_type: mapData?.assessment_id ?? null,
+          },
+          workflowVersion,
+        ).then((result) => {
+          setDeepDiveCache((prev) => ({ ...prev, [item.id]: { result } }));
+          setInspector((prev) => {
+            if (!prev || prev.itemId !== item.id || prev.groupId !== group.id) return prev;
+            return { ...prev, loading: false, error: null, latencyMs: result.latency_ms ?? prev.latencyMs };
+          });
+        }).catch((error) => {
+          setInspector((prev) => {
+            if (!prev || prev.itemId !== item.id || prev.groupId !== group.id) return prev;
+            return {
+              ...prev,
+              loading: false,
+              error: error instanceof Error ? error.message : 'Deep dive failed',
+            };
+          });
+        });
       }
     },
-    [detailCache, groups, hydrateStakeholder, isStakeholderAssessment, onInspectorStateChange],
+    [
+      deepDiveCache,
+      detailCache,
+      groups,
+      hydrateStakeholder,
+      instanceId,
+      isStakeholderAssessment,
+      mapData?.assessment_id,
+      onInspectorStateChange,
+      workflowVersion,
+    ],
   );
 
   const handleRetryInspector = useCallback(() => {
-    if (!inspector || !isStakeholderAssessment) return;
-    void hydrateStakeholder(inspector.item, inspector.group, true);
-  }, [hydrateStakeholder, inspector, isStakeholderAssessment]);
+    if (!inspector) return;
+    if (isStakeholderAssessment) {
+      setDetailCache((prev) => {
+        const next = { ...prev };
+        delete next[inspector.itemId];
+        return next;
+      });
+      void hydrateStakeholder(inspector.item, inspector.group, true);
+      return;
+    }
+    if (!instanceId) return;
+    setDeepDiveCache((prev) => {
+      const next = { ...prev };
+      delete next[inspector.itemId];
+      return next;
+    });
+    setInspector((prev) => (prev ? { ...prev, loading: true, error: null } : prev));
+    void api.deepDiveAssessmentMapItem(
+      instanceId,
+      inspector.itemId,
+      {
+        item_title: inspector.item.name,
+        item_classification: 'unknown',
+        item_rationale: inspector.item.description?.trim() || '',
+        pillar_name: inspector.group.label,
+        assessment_type: mapData?.assessment_id ?? null,
+      },
+      workflowVersion,
+    ).then((result) => {
+      setDeepDiveCache((prev) => ({ ...prev, [inspector.itemId]: { result } }));
+      setInspector((prev) => {
+        if (!prev || prev.itemId !== inspector.itemId) return prev;
+        return { ...prev, loading: false, error: null, latencyMs: result.latency_ms ?? prev.latencyMs };
+      });
+    }).catch((error) => {
+      setInspector((prev) => {
+        if (!prev || prev.itemId !== inspector.itemId) return prev;
+        return {
+          ...prev,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Deep dive failed',
+        };
+      });
+    });
+  }, [hydrateStakeholder, inspector, instanceId, isStakeholderAssessment, mapData?.assessment_id, workflowVersion]);
 
   const noopToggleComplete = useCallback((_itemId: string) => {}, []);
   const noopDeleteItem = useCallback((_itemId: string) => {}, []);
