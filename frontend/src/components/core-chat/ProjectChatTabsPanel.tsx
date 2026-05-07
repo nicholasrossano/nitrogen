@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, MessageSquare, Plus, Trash2, X } from 'lucide-react';
+import { Clock, ListChecks, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import { ProjectChatSurface } from './ProjectChatSurface';
+import { AssessmentActivityLogTab } from './AssessmentActivityLogTab';
 import { DeepDiveWidget } from '@/components/plan-workspace/DeepDiveWidget';
 import { AssumptionsChatPanel } from '@/components/assumptions/AssumptionsChatPanel';
 import type {
@@ -44,6 +45,13 @@ interface PendingAssumptionsContext {
   autoSend?: PendingAutoSendRequest | null;
 }
 
+interface PendingAssessmentActivityLogContext {
+  requestId: string;
+  instanceId: string;
+  assessmentId: string;
+  title: string;
+}
+
 interface ProjectChatTabsPanelProps {
   initiativeId: string;
   researchMode?: boolean;
@@ -66,6 +74,9 @@ interface ProjectChatTabsPanelProps {
   /** Creates or updates a chat tab with a pinned assumptions panel */
   pendingAssumptions?: PendingAssumptionsContext | null;
   onPendingAssumptionsHandled?: () => void;
+  /** Creates or updates a chat tab with an assessment activity log */
+  pendingAssessmentActivityLog?: PendingAssessmentActivityLogContext | null;
+  onPendingAssessmentActivityLogHandled?: () => void;
 }
 
 interface PendingAutoSendRequest {
@@ -91,6 +102,7 @@ interface StoredProjectChatTabsState {
   tabs: ProjectChatTab[];
   activeTabId: string | null;
   assumptionsByTabId?: Record<string, { focusAssumptionId?: string | null; createNew?: boolean; collapsed?: boolean }>;
+  activityLogByTabId?: Record<string, { instanceId: string; assessmentId: string; title: string }>;
 }
 
 function normalizeProjectChatTabsState(
@@ -153,6 +165,25 @@ function readStoredProjectChatTabsState(storageKey: string): StoredProjectChatTa
                     },
                   ];
                 }),
+            )
+          : {},
+      activityLogByTabId:
+        parsed.activityLogByTabId && typeof parsed.activityLogByTabId === 'object'
+          ? Object.fromEntries(
+              Object.entries(parsed.activityLogByTabId)
+                .filter(([tabId, value]) =>
+                  tabs.some((tab) => tab.id === tabId)
+                  && typeof (value as { instanceId?: unknown }).instanceId === 'string'
+                  && typeof (value as { assessmentId?: unknown }).assessmentId === 'string'
+                  && typeof (value as { title?: unknown }).title === 'string')
+                .map(([tabId, value]) => [
+                  tabId,
+                  {
+                    instanceId: (value as { instanceId: string }).instanceId,
+                    assessmentId: (value as { assessmentId: string }).assessmentId,
+                    title: (value as { title: string }).title,
+                  },
+                ]),
             )
           : {},
     };
@@ -278,6 +309,8 @@ export function ProjectChatTabsPanel({
   onPendingDeepDiveHandled,
   pendingAssumptions = null,
   onPendingAssumptionsHandled,
+  pendingAssessmentActivityLog = null,
+  onPendingAssessmentActivityLogHandled,
 }: ProjectChatTabsPanelProps) {
   const initialStateRef = useRef<StoredProjectChatTabsState | null>(null);
   if (!initialStateRef.current) {
@@ -314,6 +347,9 @@ export function ProjectChatTabsPanel({
       );
     },
   );
+  const [activityLogByTabId, setActivityLogByTabId] = useState<Record<string, { instanceId: string; assessmentId: string; title: string }>>(
+    () => initialStateRef.current?.activityLogByTabId ?? {},
+  );
   const [showHistory, setShowHistory] = useState(false);
   const [pendingAutoSendByTabId, setPendingAutoSendByTabId] = useState<Record<string, PendingAutoSendRequest>>({});
   const historyRef = useRef<HTMLDivElement>(null);
@@ -321,10 +357,12 @@ export function ProjectChatTabsPanel({
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deepDiveByTabIdRef = useRef<Record<string, PendingDeepDiveContext>>({});
   const assumptionsByTabIdRef = useRef<Record<string, PendingAssumptionsContext>>({});
+  const activityLogByTabIdRef = useRef<Record<string, { instanceId: string; assessmentId: string; title: string }>>({});
   const tabsRef = useRef<ProjectChatTab[]>([]);
   const activeTabIdRef = useRef<string | null>(null);
   const handledDeepDiveRequestIdsRef = useRef<Set<string>>(new Set());
   const handledAssumptionsRequestIdsRef = useRef<Set<string>>(new Set());
+  const handledActivityLogRequestIdsRef = useRef<Set<string>>(new Set());
   const handledAutoSendRequestIdsRef = useRef<Set<string>>(new Set());
 
   const resolvedActiveTabId = useMemo(
@@ -353,8 +391,18 @@ export function ProjectChatTabsPanel({
           },
         ]),
       ),
+      activityLogByTabId: Object.fromEntries(
+        Object.entries(activityLogByTabId).map(([tabId, value]) => [
+          tabId,
+          {
+            instanceId: value.instanceId,
+            assessmentId: value.assessmentId,
+            title: value.title,
+          },
+        ]),
+      ),
     });
-  }, [sessionStorageKey, tabs, resolvedActiveTabId, assumptionsByTabId]);
+  }, [sessionStorageKey, tabs, resolvedActiveTabId, assumptionsByTabId, activityLogByTabId]);
 
   useEffect(() => {
     deepDiveByTabIdRef.current = deepDiveByTabId;
@@ -363,6 +411,10 @@ export function ProjectChatTabsPanel({
   useEffect(() => {
     assumptionsByTabIdRef.current = assumptionsByTabId;
   }, [assumptionsByTabId]);
+
+  useEffect(() => {
+    activityLogByTabIdRef.current = activityLogByTabId;
+  }, [activityLogByTabId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -408,8 +460,6 @@ export function ProjectChatTabsPanel({
 
   useEffect(() => {
     if (!pendingDeepDive) return;
-    if (handledDeepDiveRequestIdsRef.current.has(pendingDeepDive.requestId)) return;
-
     const existingTabEntry = Object.entries(deepDiveByTabIdRef.current).find(
       ([, value]) => value.requestId === pendingDeepDive.requestId,
     );
@@ -428,6 +478,10 @@ export function ProjectChatTabsPanel({
       onPendingDeepDiveHandled?.();
       return;
     }
+
+    // requestId dedupe should only prevent duplicate tab creation.
+    // Existing tab updates (e.g. loading -> loaded/error) must still flow through.
+    if (handledDeepDiveRequestIdsRef.current.has(pendingDeepDive.requestId)) return;
 
     const reusablePlaceholderTab =
       tabs.find((tab) =>
@@ -604,6 +658,89 @@ export function ProjectChatTabsPanel({
     onPendingAssumptionsHandled?.();
   }, [onPendingAssumptionsHandled, pendingAssumptions, resolvedActiveTabId, tabs]);
 
+  useEffect(() => {
+    if (!pendingAssessmentActivityLog) return;
+    if (handledActivityLogRequestIdsRef.current.has(pendingAssessmentActivityLog.requestId)) return;
+
+    const existingTabId = Object.entries(activityLogByTabIdRef.current).find(
+      ([, value]) => value.instanceId === pendingAssessmentActivityLog.instanceId,
+    )?.[0];
+
+    if (existingTabId) {
+      setTabs((prev) =>
+        prev.map((tab) => (
+          tab.id === existingTabId
+            ? { ...tab, title: `${pendingAssessmentActivityLog.title} Activity`, isLanding: false, isFallback: false }
+            : tab
+        )),
+      );
+      setActivityLogByTabId((prev) => ({
+        ...prev,
+        [existingTabId]: {
+          instanceId: pendingAssessmentActivityLog.instanceId,
+          assessmentId: pendingAssessmentActivityLog.assessmentId,
+          title: pendingAssessmentActivityLog.title,
+        },
+      }));
+      setActiveTabId(existingTabId);
+      handledActivityLogRequestIdsRef.current.add(pendingAssessmentActivityLog.requestId);
+      onPendingAssessmentActivityLogHandled?.();
+      return;
+    }
+
+    const reusablePlaceholderTab =
+      tabs.find((tab) =>
+        tab.id === resolvedActiveTabId
+        && !tab.chatId
+        && (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      ) ??
+      tabs.find((tab) =>
+        !tab.chatId
+        && (tab.isFallback || tab.title.trim().toLowerCase() === 'new chat'),
+      );
+
+    if (reusablePlaceholderTab) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === reusablePlaceholderTab.id
+            ? {
+                ...tab,
+                title: `${pendingAssessmentActivityLog.title} Activity`,
+                isLanding: false,
+                isFallback: false,
+              }
+            : tab,
+        ),
+      );
+      setActivityLogByTabId((prev) => ({
+        ...prev,
+        [reusablePlaceholderTab.id]: {
+          instanceId: pendingAssessmentActivityLog.instanceId,
+          assessmentId: pendingAssessmentActivityLog.assessmentId,
+          title: pendingAssessmentActivityLog.title,
+        },
+      }));
+      setActiveTabId(reusablePlaceholderTab.id);
+      handledActivityLogRequestIdsRef.current.add(pendingAssessmentActivityLog.requestId);
+      onPendingAssessmentActivityLogHandled?.();
+      return;
+    }
+
+    const tab = makeTab(`${pendingAssessmentActivityLog.title} Activity`, false, false);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setActivityLogByTabId((prev) => ({
+      ...prev,
+      [tab.id]: {
+        instanceId: pendingAssessmentActivityLog.instanceId,
+        assessmentId: pendingAssessmentActivityLog.assessmentId,
+        title: pendingAssessmentActivityLog.title,
+      },
+    }));
+    handledActivityLogRequestIdsRef.current.add(pendingAssessmentActivityLog.requestId);
+    onPendingAssessmentActivityLogHandled?.();
+  }, [onPendingAssessmentActivityLogHandled, pendingAssessmentActivityLog, resolvedActiveTabId, tabs]);
+
   const handleDeepDiveCollapsedChange = useCallback((tabId: string, collapsed: boolean) => {
     setDeepDiveByTabId((prev) => {
       const current = prev[tabId];
@@ -701,6 +838,12 @@ export function ProjectChatTabsPanel({
       return next;
     });
     setAssumptionsByTabId((prev) => {
+      if (!(tabId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+    setActivityLogByTabId((prev) => {
       if (!(tabId in prev)) return prev;
       const next = { ...prev };
       delete next[tabId];
@@ -841,6 +984,7 @@ export function ProjectChatTabsPanel({
     setActiveTabId(resetTab.id);
     setDeepDiveByTabId({});
     setAssumptionsByTabId({});
+    setActivityLogByTabId({});
     setShowHistory(false);
   }, [researchMode, resetToLandingSignal]);
 
@@ -903,6 +1047,14 @@ export function ProjectChatTabsPanel({
     setAssumptionsByTabId((prev) => {
       if (removedTabIds.size === 0) return prev;
 
+      const next = { ...prev };
+      removedTabIds.forEach((tabId) => {
+        delete next[tabId];
+      });
+      return next;
+    });
+    setActivityLogByTabId((prev) => {
+      if (removedTabIds.size === 0) return prev;
       const next = { ...prev };
       removedTabIds.forEach((tabId) => {
         delete next[tabId];
@@ -985,6 +1137,7 @@ export function ProjectChatTabsPanel({
           >
             {tabs.map((tab) => {
               const isActive = tab.id === resolvedActiveTabId;
+              const isActivityLogTab = Boolean(activityLogByTabId[tab.id]);
               const style = { flexShrink: 0, width: 148 };
 
               return (
@@ -1003,7 +1156,9 @@ export function ProjectChatTabsPanel({
                   ].join(' ')}
                 >
                   <span className="flex-shrink-0 text-text-tertiary">
-                    <MessageSquare className="w-3.5 h-3.5" />
+                    {isActivityLogTab
+                      ? <ListChecks className="w-3.5 h-3.5" />
+                      : <MessageSquare className="w-3.5 h-3.5" />}
                   </span>
                   <Tooltip content={tab.title} className="flex-1 min-w-0" fitContent showDelayMs={1000}>
                     <span className="block truncate text-left">{tab.title}</span>
@@ -1095,6 +1250,7 @@ export function ProjectChatTabsPanel({
           const isActive = tab.id === resolvedActiveTabId;
           const deepDive = deepDiveByTabId[tab.id];
           const assumptions = assumptionsByTabId[tab.id];
+          const activityLog = activityLogByTabId[tab.id];
           const showExpandedDeepDive = Boolean(deepDive && !deepDive.collapsed);
           const showExpandedAssumptions = Boolean(assumptions && !assumptions.collapsed);
           const tabPendingAutoSend = pendingAutoSendByTabId[tab.id] ?? null;
@@ -1121,40 +1277,57 @@ export function ProjectChatTabsPanel({
               key={tab.id}
               className={isActive ? 'absolute inset-0' : 'absolute inset-0 hidden'}
             >
-              <ProjectChatSurface
-                initiativeId={initiativeId}
-                hideTiles={researchMode}
-                useLandingWhenEmpty={researchMode && tab.isLanding}
-                initialChatId={tab.chatId}
-                initialTitle={tab.title}
-                sessions={sessions}
-                activeAssessmentContext={activeAssessmentContext}
-                focusedAssumptionId={assumptions?.focusAssumptionId ?? null}
-                onDeleteChat={handleDeleteSession}
-                onChatListDirty={loadSessions}
-                onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
-                onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
-                onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
-                onOpenDocument={isActive ? onOpenDocument : undefined}
-                onOpenWorkspaceAssessment={isActive ? onOpenWorkspaceAssessment : undefined}
-                onSendRef={isActive ? onSendRef : undefined}
-                pendingAutoSend={tabPendingAutoSend}
-                onPendingAutoSendHandled={
-                  tabPendingAutoSend
-                    ? () => handleTabAutoSendHandled(tab.id, tabPendingAutoSend.requestId)
-                    : undefined
-                }
-                onBeforeSendMessage={
-                  isActive && deepDive
-                    ? () => handleDeepDiveMessageSent(tab.id)
-                    : isActive && assumptions
-                      ? () => handleAssumptionsMessageSent(tab.id)
+              {activityLog ? (
+                <AssessmentActivityLogTab
+                  instanceId={activityLog.instanceId}
+                  assessmentId={activityLog.assessmentId}
+                  assessmentTitle={activityLog.title}
+                  onOpenModule={
+                    onOpenWorkspaceAssessment
+                      ? () => onOpenWorkspaceAssessment({
+                        instanceId: activityLog.instanceId,
+                        assessmentId: activityLog.assessmentId,
+                        title: activityLog.title,
+                      })
                       : undefined
-                }
-                projectContext={deepDive ? formatDeepDiveProjectContext(deepDive.state) : null}
-                topContentMode={showExpandedDeepDive || showExpandedAssumptions ? 'panel' : 'inline'}
-                topContent={tabTopContent}
-              />
+                  }
+                />
+              ) : (
+                <ProjectChatSurface
+                  initiativeId={initiativeId}
+                  hideTiles={researchMode}
+                  useLandingWhenEmpty={researchMode && tab.isLanding}
+                  initialChatId={tab.chatId}
+                  initialTitle={tab.title}
+                  sessions={sessions}
+                  activeAssessmentContext={activeAssessmentContext}
+                  focusedAssumptionId={assumptions?.focusAssumptionId ?? null}
+                  onDeleteChat={handleDeleteSession}
+                  onChatListDirty={loadSessions}
+                  onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
+                  onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
+                  onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
+                  onOpenDocument={isActive ? onOpenDocument : undefined}
+                  onOpenWorkspaceAssessment={isActive ? onOpenWorkspaceAssessment : undefined}
+                  onSendRef={isActive ? onSendRef : undefined}
+                  pendingAutoSend={tabPendingAutoSend}
+                  onPendingAutoSendHandled={
+                    tabPendingAutoSend
+                      ? () => handleTabAutoSendHandled(tab.id, tabPendingAutoSend.requestId)
+                      : undefined
+                  }
+                  onBeforeSendMessage={
+                    isActive && deepDive
+                      ? () => handleDeepDiveMessageSent(tab.id)
+                      : isActive && assumptions
+                        ? () => handleAssumptionsMessageSent(tab.id)
+                        : undefined
+                  }
+                  projectContext={deepDive ? formatDeepDiveProjectContext(deepDive.state) : null}
+                  topContentMode={showExpandedDeepDive || showExpandedAssumptions ? 'panel' : 'inline'}
+                  topContent={tabTopContent}
+                />
+              )}
             </div>
           );
         })}
