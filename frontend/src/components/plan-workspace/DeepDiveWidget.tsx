@@ -133,7 +133,7 @@ export function DeepDiveWidget({
               {result.summary.length > 0 && (
                 <section>
                   <h4 className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">
-                    {result.summaryTitle ?? 'What this is'}
+                    {result.summaryTitle ?? 'Overview'}
                   </h4>
                   <p className="text-xs text-text-secondary leading-relaxed">
                     {result.summary.map((sentence, sentenceIdx) => (
