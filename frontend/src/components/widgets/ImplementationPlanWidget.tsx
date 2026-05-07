@@ -159,7 +159,7 @@ function toInspectorResult(
   return {
     summary,
     summaryCitations: deepDiveResult?.summary_citations ?? [],
-    summaryTitle: 'What this is',
+    summaryTitle: 'Overview',
     requirements: [],
     dependencies: [],
     detailFields: [],
@@ -271,6 +271,7 @@ export function ImplementationPlanWidget({
           item_classification: normalizeClassification(item.classification),
           item_rationale: item.description?.trim() || '',
           pillar_name: group.label,
+          assessment_type: widgetData?.assessment_id ?? 'implementation_plan',
         },
         workflowVersion,
       ).then((result) => {
@@ -281,7 +282,7 @@ export function ImplementationPlanWidget({
         setInspectorLoading(false);
       });
     },
-    [deepDiveCache, groups, instanceId, onInspectorStateChange, workflowVersion],
+    [deepDiveCache, groups, instanceId, onInspectorStateChange, widgetData?.assessment_id, workflowVersion],
   );
 
   const toggleComplete = useCallback(async (itemId: string) => {
@@ -342,6 +343,7 @@ export function ImplementationPlanWidget({
         item_classification: normalizeClassification(selection.item.classification),
         item_rationale: selection.item.description?.trim() || '',
         pillar_name: selection.group.label,
+        assessment_type: widgetData?.assessment_id ?? 'implementation_plan',
       },
       workflowVersion,
     ).then((result) => {
@@ -351,7 +353,7 @@ export function ImplementationPlanWidget({
       setInspectorError(error instanceof Error ? error.message : 'Deep dive failed');
       setInspectorLoading(false);
     });
-  }, [instanceId, selection, workflowVersion]);
+  }, [instanceId, selection, widgetData?.assessment_id, workflowVersion]);
 
   if (!groups.length) {
     return (
