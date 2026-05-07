@@ -43,6 +43,7 @@ class DeepDiveRequest(BaseModel):
     item_classification: str
     item_rationale: str = ""
     pillar_name: str = ""
+    assessment_type: str | None = None
 
 
 class AddPlanItemRequest(BaseModel):
@@ -331,6 +332,7 @@ async def deep_dive_plan_item(
                 item_classification=body.item_classification,
                 item_rationale=body.item_rationale,
                 pillar_name=body.pillar_name,
+                assessment_type=body.assessment_type,
             )
         except Exception:
             logger.exception(
