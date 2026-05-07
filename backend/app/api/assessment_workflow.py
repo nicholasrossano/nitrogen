@@ -9,6 +9,7 @@ Mounted at: /api/v1/assessment-workflow
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import uuid as _uuid
@@ -18,18 +19,25 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
-from app.core.database import get_db
+from app.core.database import AsyncSessionLocal, get_db
 from app.core.filename_utils import safe_content_disposition
 from app.core.permissions import require_viewer, require_editor
 from app.models.initiative import Initiative
-from app.models.assessment_instance import AssessmentInstance, AssessmentInstanceStatus
+from app.models.assessment_instance import (
+    AssessmentAgentLoopState,
+    AssessmentInstance,
+    AssessmentInstanceStatus,
+)
+from app.models.decision_event import DecisionEvent
 from app.models.user import User
 from app.assessments.base import BaseAssessment
 from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment
+from app.domain.energy.assessments.landscape_mapping import LandscapeMappingAssessment
 from app.assessments.registry import get_assessment_registry
 from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
 from app.assessments.utils import make_build_item
@@ -50,10 +58,38 @@ from app.services.decision_log_service import (
     build_assessment_decision_history_report,
     build_assessment_decision_log_xlsx,
 )
+from app.services.agent_runner_service import derive_assessment_run_state, run_assessment_agent_loop
 from app.services.assumptions import AssumptionActor, sync_stage_assumptions, sync_widget_assumptions
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class AssessmentAgentStatusResponse(BaseModel):
+    run_state: str
+    current_stage_id: str | None
+    current_action: str | None
+    last_summary: str | None
+    workflow_version: int
+    can_resume: bool
+
+
+class AssessmentActivityLogEntryResponse(BaseModel):
+    sequence_number: int
+    event_type: str
+    label: str
+    stage_id: str | None
+    stage_title: str | None
+    summary: str | None
+    occurred_at: str
+    is_decision_point: bool
+
+
+class AssessmentActivityLogResponse(BaseModel):
+    assessment_instance_id: str
+    assessment_id: str
+    run_state: str
+    entries: list[AssessmentActivityLogEntryResponse]
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +249,9 @@ def _workflow_response(
         "status": inst.status,
         "workflow_version": inst.workflow_version,
         "workflow_state": state,
+        "agent_loop_state": inst.agent_loop_state,
+        "agent_current_action": inst.agent_current_action,
+        "agent_last_summary": inst.agent_last_summary,
         "assessment_definition": _assessment_definition_payload(assessment),
     }
 
@@ -247,6 +286,50 @@ def _all_required_stages_confirmed(assessment: BaseAssessment, state: dict[str, 
         state["stages"].get(stage_def.id, {}).get("status") == "confirmed"
         for stage_def in assessment.stage_defs
     )
+
+
+def _activity_event_label(event_type: str) -> str:
+    if event_type == "agent_started":
+        return "Started assessment run"
+    if event_type == "agent_action":
+        return "Completed agent action"
+    if event_type == "agent_paused":
+        return "Paused for review"
+    if event_type == "agent_blocked":
+        return "Blocked"
+    return event_type.replace("_", " ").title()
+
+
+async def _resume_assessment_agent_loop_background(
+    *,
+    instance_id: _uuid.UUID,
+    actor_user_id: str | None,
+    actor_email: str | None,
+) -> None:
+    """Resume the agent loop outside the request/response lifecycle."""
+    async with AsyncSessionLocal() as bg_db:
+        try:
+            inst = await bg_db.get(AssessmentInstance, instance_id)
+            if inst is None:
+                return
+            registry = get_assessment_registry()
+            assessment = registry.get_assessment(inst.assessment_id)
+            if assessment is None or not uses_workspace_flow(assessment):
+                return
+            await run_assessment_agent_loop(
+                bg_db,
+                inst,
+                assessment,
+                actor_user_id=actor_user_id,
+                actor_email=actor_email,
+            )
+            await bg_db.commit()
+        except Exception:
+            await bg_db.rollback()
+            logger.exception(
+                "Background agent loop resume failed for instance '%s'",
+                instance_id,
+            )
 
 
 def _has_meaningful_value(value: Any) -> bool:
@@ -387,6 +470,102 @@ async def get_workflow_state(
     return _workflow_response(instance_id, inst, assessment, state)
 
 
+@router.get("/assessment-workflow/{instance_id}/agent-status", response_model=AssessmentAgentStatusResponse)
+async def get_assessment_agent_status(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Return user-facing run status for agent-assisted staged execution."""
+    inst, assessment = await _get_workflow_instance(db, instance_id, user)
+    state = await ensure_workflow_state(db, inst, assessment)
+    run_state = derive_assessment_run_state(inst, assessment, state)
+    can_resume = run_state in {"running", "blocked", "needs_review"}
+    await db.commit()
+    return AssessmentAgentStatusResponse(
+        run_state=run_state,
+        current_stage_id=state.get("current_stage_id"),
+        current_action=inst.agent_current_action,
+        last_summary=inst.agent_last_summary,
+        workflow_version=inst.workflow_version or 1,
+        can_resume=can_resume,
+    )
+
+
+@router.post("/assessment-workflow/{instance_id}/run", response_model=AssessmentAgentStatusResponse)
+async def run_assessment_agent(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Run/resume the assessment agent loop until the next review point."""
+    inst, assessment = await _get_editable_workflow_instance(db, instance_id, user)
+    if inst.agent_loop_state == AssessmentAgentLoopState.RUNNING.value:
+        state = await ensure_workflow_state(db, inst, assessment)
+    else:
+        state = await run_assessment_agent_loop(
+            db,
+            inst,
+            assessment,
+            actor_user_id=user.uid,
+            actor_email=user.email,
+        )
+        inst.status = AssessmentInstanceStatus.GENERATING
+    run_state = derive_assessment_run_state(inst, assessment, state)
+    await db.commit()
+    return AssessmentAgentStatusResponse(
+        run_state=run_state,
+        current_stage_id=state.get("current_stage_id"),
+        current_action=inst.agent_current_action,
+        last_summary=inst.agent_last_summary,
+        workflow_version=inst.workflow_version or 1,
+        can_resume=run_state in {"running", "blocked", "needs_review"},
+    )
+
+
+@router.get("/assessment-workflow/{instance_id}/activity-log", response_model=AssessmentActivityLogResponse)
+async def get_assessment_activity_log(
+    instance_id: _uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Return user-independent agent activity history up to decision points."""
+    inst, assessment = await _get_workflow_instance(db, instance_id, user)
+    state = await ensure_workflow_state(db, inst, assessment)
+    run_state = derive_assessment_run_state(inst, assessment, state)
+    stage_title_by_id = {stage.id: stage.title for stage in assessment.stage_defs}
+
+    events = list((await db.execute(
+        select(DecisionEvent)
+        .where(
+            DecisionEvent.assessment_instance_id == inst.id,
+            DecisionEvent.event_type.in_(["agent_started", "agent_action", "agent_paused", "agent_blocked"]),
+        )
+        .order_by(DecisionEvent.sequence_number.asc())
+    )).scalars().all())
+
+    entries = [
+        AssessmentActivityLogEntryResponse(
+            sequence_number=event.sequence_number,
+            event_type=event.event_type,
+            label=_activity_event_label(event.event_type),
+            stage_id=event.stage_id,
+            stage_title=stage_title_by_id.get(event.stage_id) if event.stage_id else None,
+            summary=(event.payload_json or {}).get("summary"),
+            occurred_at=event.created_at.isoformat(),
+            is_decision_point=event.event_type in {"agent_paused", "agent_blocked"},
+        )
+        for event in events
+    ]
+    await db.commit()
+    return AssessmentActivityLogResponse(
+        assessment_instance_id=str(inst.id),
+        assessment_id=inst.assessment_id,
+        run_state=run_state,
+        entries=entries,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Stage population
 # ---------------------------------------------------------------------------
@@ -467,7 +646,7 @@ async def confirm_stage_endpoint(
     _get_stage_state_or_404(state, stage_id, instance_id)
     prior_approved = ((state.get("final_approval") or {}).get("status") == "approved")
 
-    state, auto_populate_def = await confirm_stage(
+    state, _ = await confirm_stage(
         db,
         inst,
         assessment,
@@ -502,30 +681,19 @@ async def confirm_stage_endpoint(
             payload={"reason": "stage_reconfirmed", "stage_id": stage_id},
         )
 
+    # Mark as running immediately so polling UIs start streaming updates.
     inst.status = AssessmentInstanceStatus.GENERATING
+    inst.agent_loop_state = AssessmentAgentLoopState.RUNNING.value
+    inst.agent_current_action = "Continuing assessment run"
+    inst.agent_last_summary = None
     await db.commit()
-
-    # Auto-populate next computed stage if applicable (e.g. LCOE results after inputs confirmed)
-    if auto_populate_def is not None:
-        try:
-            state = await populate_stage(db, inst, assessment, auto_populate_def.id)
-            await append_decision_event(
-                db,
-                inst=inst,
-                event_type="stage_populated",
-                entity_type="stage",
-                entity_id=auto_populate_def.id,
-                stage_id=auto_populate_def.id,
-                actor_user_id=user.uid,
-                actor_email=user.email,
-                payload={"trigger": "auto_after_confirmation", "source_stage_id": stage_id},
-            )
-            await db.commit()
-        except Exception as e:
-            logger.error(
-                "Auto-population of stage '%s' failed after confirming '%s': %s",
-                auto_populate_def.id, stage_id, e, exc_info=True,
-            )
+    asyncio.create_task(
+        _resume_assessment_agent_loop_background(
+            instance_id=instance_id,
+            actor_user_id=user.uid,
+            actor_email=user.email,
+        )
+    )
 
     return {
         "stage_id": stage_id,
@@ -960,9 +1128,59 @@ async def deep_dive_implementation_item(
                 item_classification=body.item_classification,
                 item_rationale=body.item_rationale,
                 pillar_name=body.pillar_name,
+                assessment_type=body.assessment_type,
             )
         except Exception:
             logger.exception("Implementation deep dive failed for item %s in instance %s", item_id, instance_id)
+            raise HTTPException(status_code=500, detail="Deep dive failed. Please try again.")
+        serialized = _serialize_deep_dive_payload(generated)
+        cache[item_id] = serialized
+        state[cache_key] = cache
+        save_workflow_state(inst, state, increment_version=False)
+        await db.commit()
+
+    return serialized
+
+
+@router.post("/assessment-workflow/{instance_id}/map/{item_id}/deep-dive")
+async def deep_dive_map_item(
+    instance_id: _uuid.UUID,
+    item_id: str,
+    body: ImplementationDeepDiveRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(require_ai_access),
+):
+    """Run and cache landscape-map deep dive research for inspector panels."""
+    inst, assessment = await _get_editable_workflow_instance(db, instance_id, user)
+    if not isinstance(assessment, LandscapeMappingAssessment):
+        raise HTTPException(status_code=400, detail="Map deep dive is only supported for landscape mapping")
+
+    state = await ensure_workflow_state(db, inst, assessment)
+    cache_key = "landscape_map_deep_dives"
+    cache = state.get(cache_key) if isinstance(state.get(cache_key), dict) else {}
+    cached = cache.get(item_id)
+    service = DeepDiveService(db, user_id=user.uid)
+    if cached and "summary_citations" not in cached:
+        cached = None
+
+    if cached:
+        serialized = cached
+    else:
+        initiative = await db.get(Initiative, inst.initiative_id)
+        if initiative is None:
+            raise HTTPException(status_code=404, detail="Initiative not found")
+        try:
+            generated = await service.generate(
+                initiative=initiative,
+                item_id=item_id,
+                item_title=body.item_title,
+                item_classification=body.item_classification,
+                item_rationale=body.item_rationale,
+                pillar_name=body.pillar_name,
+                assessment_type=body.assessment_type,
+            )
+        except Exception:
+            logger.exception("Map deep dive failed for item %s in instance %s", item_id, instance_id)
             raise HTTPException(status_code=500, detail="Deep dive failed. Please try again.")
         serialized = _serialize_deep_dive_payload(generated)
         cache[item_id] = serialized
@@ -982,6 +1200,7 @@ class ImplementationDeepDiveRequest(BaseModel):
     item_classification: str
     item_rationale: str
     pillar_name: str
+    assessment_type: str | None = None
 
 
 def _serialize_deep_dive_payload(result: Any) -> dict[str, Any]:
