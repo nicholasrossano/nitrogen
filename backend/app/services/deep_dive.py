@@ -1,16 +1,11 @@
 """
-Deep Dive Service
+Shared deep-dive overview service.
 
-Given a project plan sub-item and project context, performs targeted research to
-identify the key elements needed to complete that requirement.
-
-Flow:
-  1. LLM (gpt-4o-mini) generates 4 precision search queries from item title +
-     rationale + geography, targeting government portals and official checklists.
-  2. Fire all 4 queries in parallel via web search.
-  3. Deduplicate results by URL.
-  4. Call main LLM with structured function calling to produce the deep dive output,
-     grounded in the retrieved sources.
+All deep-dive surfaces use this one lightweight pipeline:
+  1. Build an assessment-aware search prompt.
+  2. Run one authoritative web-search LLM call.
+  3. Run fast project-evidence RAG in parallel.
+  4. Return a cited overview payload for inspector panels.
 """
 
 import asyncio
@@ -19,6 +14,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +43,89 @@ def _format_assessment_type(value: str | None) -> str | None:
     if not cleaned:
         return None
     return " ".join(token.capitalize() for token in cleaned.split())
+
+
+@dataclass(frozen=True)
+class DeepDiveAssessmentSettings:
+    label: str
+    search_focus: str
+    overview_questions: tuple[str, ...]
+
+
+DEFAULT_DEEP_DIVE_SETTINGS = DeepDiveAssessmentSettings(
+    label="General Deep Dive",
+    search_focus=(
+        "Use authoritative sources first: government agencies, official project "
+        "or institution pages, multilateral organizations, standards bodies, and "
+        "primary-source documentation."
+    ),
+    overview_questions=(
+        "What is this entity, requirement, deliverable, or topic?",
+        "Why does it matter for the project context?",
+        "What should the user know before deciding how to act on it?",
+    ),
+)
+
+
+DEEP_DIVE_ASSESSMENT_SETTINGS: dict[str, DeepDiveAssessmentSettings] = {
+    "implementation_plan": DeepDiveAssessmentSettings(
+        label="Implementation Plan",
+        search_focus=(
+            "Prioritize official guidance, implementer documentation, funder or "
+            "regulator pages, and primary sources that explain the deliverable or task."
+        ),
+        overview_questions=(
+            "What is this implementation item?",
+            "Why does it matter for project execution?",
+            "What official or authoritative context should guide next steps?",
+        ),
+    ),
+    "landscape_mapping": DeepDiveAssessmentSettings(
+        label="Landscape Mapping",
+        search_focus=(
+            "Prioritize official agency pages, government portals, geospatial data "
+            "catalogs, mapping authorities, policy documents, and multilateral sources."
+        ),
+        overview_questions=(
+            "What is this landscape-map entity or data source?",
+            "What role does it play in understanding the project geography or operating context?",
+            "What authoritative source best establishes its relevance?",
+        ),
+    ),
+    "stakeholder_assessment": DeepDiveAssessmentSettings(
+        label="Stakeholder Assessment",
+        search_focus=(
+            "Prioritize official organization pages, regulator or ministry pages, "
+            "credible institutional profiles, and sources describing mandate, influence, or role."
+        ),
+        overview_questions=(
+            "Who is this stakeholder or institution?",
+            "What role, mandate, or influence might it have for this project?",
+            "What context helps determine engagement priority?",
+        ),
+    ),
+}
+
+
+def _settings_for_assessment(assessment_type: str | None) -> DeepDiveAssessmentSettings:
+    if not assessment_type:
+        return DEFAULT_DEEP_DIVE_SETTINGS
+    key = assessment_type.strip().lower().replace("-", "_").replace(" ", "_")
+    return DEEP_DIVE_ASSESSMENT_SETTINGS.get(key, DEFAULT_DEEP_DIVE_SETTINGS)
+
+
+def _clean_overview_text(text: str) -> str:
+    cleaned = text.strip()
+    for prefix in (
+        "Here is a concise, authoritative overview:",
+        "Here is a concise overview:",
+        "Here is an overview:",
+        "Overview:",
+    ):
+        if cleaned.lower().startswith(prefix.lower()):
+            return cleaned[len(prefix):].strip()
+    return cleaned
+
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -364,6 +443,9 @@ class DeepDiveService:
       4. Call main LLM with structured function calling to produce the deep dive output.
       5. Return typed DeepDiveResult.
     """
+    QUERY_GEN_TIMEOUT_SECONDS = 8.0
+    STRUCTURED_TIMEOUT_SECONDS = 12.0
+    MAX_WEB_QUERIES = 2
 
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
@@ -410,44 +492,44 @@ class DeepDiveService:
             context_lines.append(assumptions_context)
         project_context = "\n".join(context_lines) if context_lines else "Not specified"
 
-        # Step 1: Generate precision search queries via fast LLM call
-        queries = await self._generate_search_queries(
+        assessment_settings = _settings_for_assessment(assessment_type)
+        search_prompt = self._build_search_prompt(
             item_title=item_title,
             item_rationale=item_rationale,
-            geography=initiative.geography or "",
             pillar_name=pillar_name,
-            assessment_type=pretty_assessment_type,
+            project_context=project_context,
+            assessment_settings=assessment_settings,
         )
 
-        logger.info("Deep dive item=%r  queries=%r", item_id, queries)
+        logger.info(
+            "Deep dive overview item=%r assessment=%r",
+            item_id,
+            assessment_settings.label,
+        )
 
-        # Step 2: Fire web searches + evidence RAG in parallel
+        # Run one web-search overview and fast project evidence lookup in parallel.
         rag_query = f"{item_title} {item_rationale or ''}"
-        search_coros = [self.retrieval.search_web(q, max_results=5, max_content_length=800) for q in queries]
+        overview_coro = self._generate_overview_with_web_search(search_prompt)
         evidence_coro = self.rag.retrieve(
             query=rag_query,
             initiative_id=initiative.id,
             sources=["evidence"],
-            evidence_top_k=5,
+            evidence_top_k=3,
             corpus_top_k=0,
         )
-        results = await asyncio.gather(*search_coros, evidence_coro, return_exceptions=True)
+        overview_result, evidence_chunks_result = await asyncio.gather(
+            overview_coro,
+            evidence_coro,
+            return_exceptions=True,
+        )
 
-        web_batches = results[:-1]
-        evidence_chunks_result = results[-1]
-
-        # Collect web facts
-        seen: set[str] = set()
-        all_facts: list[RetrievedFact] = []
-        for batch in web_batches:
-            if isinstance(batch, BaseException):
-                logger.warning("Web search batch failed: %s", batch)
-                continue
-            for fact in batch:
-                key = (fact.source_url or fact.source_title).lower().strip()
-                if key not in seen:
-                    seen.add(key)
-                    all_facts.append(fact)
+        if isinstance(overview_result, BaseException):
+            logger.warning("Deep dive overview web search failed: %s", overview_result)
+            summary_items = []
+            web_sources = []
+        else:
+            summary_items = overview_result["summary_items"]
+            web_sources = overview_result["sources"]
 
         # Collect evidence chunks (RAG results from uploaded documents)
         evidence_chunks = []
@@ -457,99 +539,14 @@ class DeepDiveService:
             logger.warning("Evidence RAG failed: %s", evidence_chunks_result)
 
         logger.info(
-            "Deep dive gathered %d unique web facts + %d evidence chunks",
-            len(all_facts), len(evidence_chunks),
+            "Deep dive gathered %d web sources + %d evidence chunks",
+            len(web_sources), len(evidence_chunks),
         )
-
-        # Step 3: Generate structured output
-        result_data = await self._generate_structured(
-            item_title=item_title,
-            item_classification=item_classification,
-            item_rationale=item_rationale,
-            pillar_name=pillar_name,
-            project_context=project_context,
-            assessment_type=pretty_assessment_type,
-            facts=all_facts,
-            evidence_chunks=evidence_chunks,
-        )
-
-        # Collect the exact source references the model attached to visible summary
-        # sentences and element classifications.
-        raw_summary = result_data.get("what_this_is", [])
-        summary_items: list[dict] = []
-        referenced_web_indices: set[int] = set()
-        referenced_doc_indices: set[int] = set()
-        for item in raw_summary:
-            if isinstance(item, str):
-                summary_items.append({"text": item, "source_indices": [], "document_indices": []})
-                continue
-            if not isinstance(item, dict):
-                continue
-            text = str(item.get("text") or "").strip()
-            if not text:
-                continue
-            source_indices = [
-                idx for idx in item.get("source_indices", [])
-                if isinstance(idx, int) and 1 <= idx <= len(all_facts)
-            ]
-            document_indices = [
-                idx for idx in item.get("document_indices", [])
-                if isinstance(idx, int) and 1 <= idx <= len(evidence_chunks)
-            ]
-            referenced_web_indices.update(source_indices)
-            referenced_doc_indices.update(document_indices)
-            summary_items.append({
-                "text": text,
-                "source_indices": source_indices,
-                "document_indices": document_indices,
-            })
-
-        # Attach per-element provenance from LLM-emitted source indices.
-        elements: list[DeepDiveElement] = []
-        for el in result_data.get("elements", []):
-            indices = el.get("source_indices") or []
-            doc_indices = el.get("document_indices") or []
-            source_attrs = []
-            for idx in indices:
-                if isinstance(idx, int) and 1 <= idx <= len(all_facts):
-                    referenced_web_indices.add(idx)
-                    source_attrs.append(
-                        source_attribution_from_retrieved_fact(all_facts[idx - 1]).model_dump()
-                    )
-            for idx in doc_indices:
-                if isinstance(idx, int) and 1 <= idx <= len(evidence_chunks):
-                    referenced_doc_indices.add(idx)
-            derivation = Derivation.RESEARCHED if source_attrs else Derivation.INFERRED
-            prov = ItemProvenance(
-                derivation=derivation,
-                sources=[SourceAttribution(**sa) for sa in source_attrs],
-                rationale=el.get("description", ""),
-            ).model_dump()
-            elements.append(DeepDiveElement(
-                title=el["title"],
-                description=el["description"],
-                classification=el["classification"],
-                provenance=prov,
-            ))
 
         # Build source list — only facts/documents the model explicitly cited.
-        sources: list[DeepDiveSource] = []
-        web_index_to_citation_number: dict[int, int] = {}
+        sources: list[DeepDiveSource] = list(web_sources)
         doc_index_to_citation_number: dict[int, int] = {}
-        for idx, f in enumerate(all_facts, 1):
-            if idx not in referenced_web_indices or not f.source_url:
-                continue
-            sources.append(DeepDiveSource(
-                title=f.source_title,
-                url=f.source_url,
-                source_type=f.source_type.value,
-                publisher=f.publisher,
-            ))
-            web_index_to_citation_number[idx] = len(sources)
-
         for idx, chunk in enumerate(evidence_chunks, 1):
-            if idx not in referenced_doc_indices:
-                continue
             sources.append(DeepDiveSource(
                 title=chunk.source_title,
                 url=None,
@@ -560,18 +557,7 @@ class DeepDiveService:
             ))
             doc_index_to_citation_number[idx] = len(sources)
 
-        summary_citations: list[list[int]] = []
-        for item in summary_items:
-            citation_numbers: list[int] = []
-            for idx in item["source_indices"]:
-                citation_number = web_index_to_citation_number.get(idx)
-                if citation_number and citation_number not in citation_numbers:
-                    citation_numbers.append(citation_number)
-            for idx in item["document_indices"]:
-                citation_number = doc_index_to_citation_number.get(idx)
-                if citation_number and citation_number not in citation_numbers:
-                    citation_numbers.append(citation_number)
-            summary_citations.append(citation_numbers)
+        summary_citations = [item["source_indices"] for item in summary_items]
 
         elapsed_ms = int((time.time() - start) * 1000)
         return DeepDiveResult(
@@ -580,14 +566,8 @@ class DeepDiveService:
             pillar_name=pillar_name,
             what_this_is=[item["text"] for item in summary_items],
             summary_citations=summary_citations,
-            elements=elements,
-            dependencies=[
-                DeepDiveDependency(
-                    condition=d["condition"],
-                    effect=d["effect"],
-                )
-                for d in result_data.get("dependencies", [])
-            ],
+            elements=[],
+            dependencies=[],
             sources=sources,
             generated_at=datetime.now(timezone.utc).isoformat(),
             latency_ms=elapsed_ms,
@@ -596,6 +576,95 @@ class DeepDiveService:
     # -----------------------------------------------------------------------
     # Internal
     # -----------------------------------------------------------------------
+
+    def _build_search_prompt(
+        self,
+        *,
+        item_title: str,
+        item_rationale: str,
+        pillar_name: str,
+        project_context: str,
+        assessment_settings: DeepDiveAssessmentSettings,
+    ) -> str:
+        questions = "\n".join(f"- {question}" for question in assessment_settings.overview_questions)
+        return (
+            "Run a concise authoritative web search and answer only with a 2-3 sentence overview.\n\n"
+            "SOURCE PRIORITY\n"
+            f"{assessment_settings.search_focus}\n"
+            "Prefer primary and institutional sources over blogs, SEO pages, or generic summaries.\n\n"
+            "QUESTIONS TO ANSWER\n"
+            f"{questions}\n\n"
+            "PROJECT CONTEXT\n"
+            f"{project_context}\n\n"
+            "ITEM TO EXPLAIN\n"
+            f"Title: {item_title}\n"
+            f"Category/Pillar: {pillar_name or 'Not specified'}\n"
+            f"Existing rationale/context: {item_rationale or 'Not provided'}\n\n"
+            "Write plainly for a project team. Do not list requirements or action items. "
+            "Use citations from the web search result."
+        )
+
+    async def _generate_overview_with_web_search(self, prompt: str) -> dict:
+        client = await self._get_client()
+        resp = await asyncio.wait_for(
+            client.responses.create(
+                model=settings.openai_orchestration_model,
+                tools=[{"type": "web_search", "search_context_size": "low"}],
+                input=prompt,
+            ),
+            timeout=self.STRUCTURED_TIMEOUT_SECONDS,
+        )
+        await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
+
+        text_parts: list[str] = []
+        sources: list[DeepDiveSource] = []
+        url_to_citation: dict[str, int] = {}
+
+        for item in resp.output:
+            if getattr(item, "type", None) != "message":
+                continue
+            for block in item.content:
+                text = getattr(block, "text", "") or ""
+                if text:
+                    text_parts.append(text.strip())
+                for ann in getattr(block, "annotations", []) or []:
+                    if getattr(ann, "type", None) != "url_citation":
+                        continue
+                    url = getattr(ann, "url", "") or ""
+                    if not url or url in url_to_citation:
+                        continue
+                    title = getattr(ann, "title", "") or "Web Source"
+                    publisher = None
+                    try:
+                        publisher = urlparse(url).netloc.lstrip("www.") or None
+                    except Exception:
+                        pass
+                    sources.append(DeepDiveSource(
+                        title=title,
+                        url=url,
+                        source_type="web",
+                        publisher=publisher,
+                    ))
+                    url_to_citation[url] = len(sources)
+
+        overview_text = _clean_overview_text(" ".join(part for part in text_parts if part))
+        sentences = [
+            sentence.strip()
+            for sentence in overview_text.replace("\n", " ").split(". ")
+            if sentence.strip()
+        ][:3]
+        if not sentences:
+            return {"summary_items": [], "sources": sources}
+
+        citation_numbers = list(range(1, min(len(sources), 3) + 1))
+        summary_items = []
+        for idx, sentence in enumerate(sentences):
+            text = sentence if sentence.endswith((".", "!", "?")) else f"{sentence}."
+            summary_items.append({
+                "text": text,
+                "source_indices": citation_numbers if idx == 0 else [],
+            })
+        return {"summary_items": summary_items, "sources": sources}
 
     async def _generate_search_queries(
         self,
@@ -619,16 +688,19 @@ class DeepDiveService:
 
         try:
             client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": QUERY_GEN_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
-                ],
-                tools=[QUERY_GEN_FUNCTION],
-                tool_choice={"type": "function", "function": {"name": "generate_search_queries"}},
-                temperature=0.2,
-                max_tokens=300,
+            resp = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": QUERY_GEN_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_message},
+                    ],
+                    tools=[QUERY_GEN_FUNCTION],
+                    tool_choice={"type": "function", "function": {"name": "generate_search_queries"}},
+                    temperature=0.2,
+                    max_tokens=300,
+                ),
+                timeout=self.QUERY_GEN_TIMEOUT_SECONDS,
             )
             await record_usage_from_response(self.user_id, "gpt-4o-mini", resp, self.db, is_byok=self._is_byok)
             tool_calls = resp.choices[0].message.tool_calls
@@ -637,6 +709,11 @@ class DeepDiveService:
                 queries = data.get("queries", [])
                 if len(queries) >= 2:
                     return queries[:3]
+        except TimeoutError:
+            logger.warning(
+                "Query generation timed out after %.1fs; using fallback queries",
+                self.QUERY_GEN_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
             logger.warning("Query generation failed, using fallback queries: %s", exc)
 
@@ -722,14 +799,24 @@ class DeepDiveService:
         ]
 
         client = await self._get_client()
-        resp = await client.chat.completions.create(
-            model=settings.openai_orchestration_model,
-            messages=messages,
-            tools=[DEEP_DIVE_FUNCTION],
-            tool_choice={"type": "function", "function": {"name": "produce_deep_dive"}},
-            temperature=0.3,
-            max_tokens=2000,
-        )
+        try:
+            resp = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=settings.openai_orchestration_model,
+                    messages=messages,
+                    tools=[DEEP_DIVE_FUNCTION],
+                    tool_choice={"type": "function", "function": {"name": "produce_deep_dive"}},
+                    temperature=0.3,
+                    max_tokens=2000,
+                ),
+                timeout=self.STRUCTURED_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Deep dive structured generation timed out after %.1fs",
+                self.STRUCTURED_TIMEOUT_SECONDS,
+            )
+            return {"what_this_is": [], "elements": [], "dependencies": []}
         await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
         tool_calls = resp.choices[0].message.tool_calls

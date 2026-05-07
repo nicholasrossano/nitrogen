@@ -147,7 +147,7 @@ export function PlanInspectorPanel({
             {result.summary.length > 0 && (
               <section>
                 <h3 className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-                  {result.summaryTitle ?? 'What this is'}
+                  {result.summaryTitle ?? 'Overview'}
                 </h3>
                 <p className="text-sm text-text-secondary leading-snug">
                   {result.summary.map((sentence, sentenceIdx) => (

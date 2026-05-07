@@ -171,6 +171,7 @@ class TieredRetrievalService:
     """
     
     CORPUS_RELEVANCE_THRESHOLD = 0.55
+    WEB_SEARCH_TIMEOUT_SECONDS = 12.0
     
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
@@ -640,6 +641,7 @@ class TieredRetrievalService:
         query: str,
         max_results: int = 10,
         max_content_length: int = 400,
+        search_context_size: str = "medium",
     ) -> list[RetrievedFact]:
         """
         Search the web using OpenAI's built-in web_search tool.
@@ -651,13 +653,16 @@ class TieredRetrievalService:
             from urllib.parse import urlparse
 
             client = await self._get_client()
-            resp = await client.responses.create(
-                model=settings.openai_orchestration_model,
-                tools=[{"type": "web_search", "search_context_size": "medium"}],
-                input=(
-                    f"Search the web for the most relevant and authoritative information about: {query}\n\n"
-                    "Summarize the most relevant findings, citing authoritative sources."
+            resp = await asyncio.wait_for(
+                client.responses.create(
+                    model=settings.openai_orchestration_model,
+                    tools=[{"type": "web_search", "search_context_size": search_context_size}],
+                    input=(
+                        f"Search the web for the most relevant and authoritative information about: {query}\n\n"
+                        "Summarize the most relevant findings, citing authoritative sources."
+                    ),
                 ),
+                timeout=self.WEB_SEARCH_TIMEOUT_SECONDS,
             )
             await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
@@ -722,6 +727,13 @@ class TieredRetrievalService:
                 )
 
             return facts[:max_results]
+        except TimeoutError:
+            logger.warning(
+                "Web search timed out after %.1fs for query=%r",
+                self.WEB_SEARCH_TIMEOUT_SECONDS,
+                query[:80],
+            )
+            return []
         except Exception as e:
             logger.error(f"Web search failed for query={query[:80]!r}: {e}", exc_info=True)
             return []
