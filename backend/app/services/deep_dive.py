@@ -39,6 +39,15 @@ from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+
+def _format_assessment_type(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = value.replace("_", " ").replace("-", " ").strip()
+    if not cleaned:
+        return None
+    return " ".join(token.capitalize() for token in cleaned.split())
+
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
@@ -377,6 +386,7 @@ class DeepDiveService:
         item_classification: str,
         item_rationale: str,
         pillar_name: str,
+        assessment_type: str | None = None,
     ) -> DeepDiveResult:
         start = time.time()
 
@@ -392,6 +402,9 @@ class DeepDiveService:
             context_lines.append(
                 f"Description: {initiative.project_description[:600]}"
             )
+        pretty_assessment_type = _format_assessment_type(assessment_type)
+        if pretty_assessment_type:
+            context_lines.append(f"Assessment type: {pretty_assessment_type}")
         assumptions_context = await format_assumptions_for_initiative_prompt(self.db, initiative.id)
         if assumptions_context:
             context_lines.append(assumptions_context)
@@ -403,6 +416,7 @@ class DeepDiveService:
             item_rationale=item_rationale,
             geography=initiative.geography or "",
             pillar_name=pillar_name,
+            assessment_type=pretty_assessment_type,
         )
 
         logger.info("Deep dive item=%r  queries=%r", item_id, queries)
@@ -454,6 +468,7 @@ class DeepDiveService:
             item_rationale=item_rationale,
             pillar_name=pillar_name,
             project_context=project_context,
+            assessment_type=pretty_assessment_type,
             facts=all_facts,
             evidence_chunks=evidence_chunks,
         )
@@ -588,11 +603,14 @@ class DeepDiveService:
         item_rationale: str,
         geography: str,
         pillar_name: str,
+        assessment_type: str | None = None,
     ) -> list[str]:
         """Use gpt-4o-mini to generate 3 precision search queries targeting government sources."""
+        assessment_line = f"Assessment type: {assessment_type}\n" if assessment_type else ""
         user_message = (
             f"Requirement: {item_title}\n"
             f"Pillar: {pillar_name}\n"
+            f"{assessment_line}"
             f"Geography: {geography or 'Not specified'}\n"
             f"Rationale (may name specific regulations/agencies): {item_rationale or 'Not provided'}\n\n"
             "Generate 3 search queries to find the official government portal pages, "
@@ -638,6 +656,7 @@ class DeepDiveService:
         pillar_name: str,
         project_context: str,
         facts: list[RetrievedFact],
+        assessment_type: str | None = None,
         evidence_chunks: list | None = None,
     ) -> dict:
         """Call the LLM with forced function calling to produce the structured result."""
@@ -688,6 +707,7 @@ class DeepDiveService:
             f"SUB-ITEM TO ANALYZE\n"
             f"Title: {item_title}\n"
             f"Pillar: {pillar_name}\n"
+            f"Assessment type: {assessment_type or 'Not specified'}\n"
             f"Current classification: {item_classification}\n"
             f"Rationale (identifies the regulation/source): {item_rationale}\n\n"
             f"TASK\nIdentify the key elements the applicant must produce or provide "
