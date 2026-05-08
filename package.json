@@ -1,7 +1,10 @@
 {
   "private": true,
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:backend:quiet": "scripts/ai_test.sh backend",
+    "test:frontend:quiet": "scripts/ai_test.sh frontend",
+    "test:quiet": "scripts/ai_test.sh all"
   },
   "devDependencies": {
     "husky": "^9.1.7",

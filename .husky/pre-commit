@@ -1,1 +1,14 @@
-npx lint-staged
+#!/usr/bin/env sh
+
+# Git (and some GUIs) invoke hooks with a minimal PATH; Node may live outside it.
+export PATH="$HOME/.volta/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+if [ -f "$HOME/.nvm/nvm.sh" ]; then
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  # shellcheck disable=SC1091
+  . "$HOME/.nvm/nvm.sh"
+fi
+
+cd "$(dirname "$0")/.." || exit 1
+
+exec npx lint-staged
