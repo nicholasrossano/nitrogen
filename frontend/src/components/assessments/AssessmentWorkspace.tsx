@@ -7,12 +7,17 @@ import {
   Loader2, AlertCircle, CheckCircle2, Pencil, ChevronDown, FileSpreadsheet, RotateCcw,
 } from 'lucide-react';
 import type {
-  StagedAssessmentWorkflowState, StageDef, StageState, StagedWorkflowState,
+  AssessmentAgentStatus,
+  StagedAssessmentWorkflowState,
+  StageDef,
+  StageState,
+  StagedWorkflowState,
 } from '@/lib/api';
 import { api } from '@/lib/api';
 import { EditableTableStage } from './stages/EditableTableStage';
 import { CategorizedListStage } from './stages/CategorizedListStage';
 import { CategorizedWorkspaceStage } from './stages/CategorizedWorkspaceStage';
+import { AgentStatusHeader } from './AgentStatusHeader';
 import {
   WIDGET_REGISTRY,
   type WorkspaceWidgetProps,
@@ -272,6 +277,7 @@ interface AssessmentWorkspaceProps {
   isActive?: boolean;
   initiativeId?: string;
   onAddToChat?: (text: string) => void;
+  onOpenActivityLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
@@ -285,6 +291,7 @@ export function AssessmentWorkspace({
   isActive = true,
   initiativeId,
   onAddToChat,
+  onOpenActivityLog,
   onOpenDecisionLog,
   onExportDecisionLog,
   onInspectorStateChange,
@@ -297,6 +304,8 @@ export function AssessmentWorkspace({
   const [isPopulating, setIsPopulating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isApprovingFinal, setIsApprovingFinal] = useState(false);
+  const [isRunningAssessment, setIsRunningAssessment] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<AssessmentAgentStatus | null>(null);
   const [decisionMenuOpen, setDecisionMenuOpen] = useState(false);
   const [editingConfirmedStageIds, setEditingConfirmedStageIds] = useState<Record<string, boolean>>({});
   const [editBaselineByStageId, setEditBaselineByStageId] = useState<Record<string, string>>({});
@@ -312,20 +321,47 @@ export function AssessmentWorkspace({
     }
   }, [instanceId]);
 
+  const fetchAgentStatus = useCallback(async () => {
+    try {
+      const status = await api.getAssessmentAgentStatus(instanceId);
+      setAgentStatus(status);
+      return status;
+    } catch {
+      return null;
+    }
+  }, [instanceId]);
+
+  const runAssessmentAgent = useCallback(async () => {
+    setIsRunningAssessment(true);
+    try {
+      const status = await api.runAssessment(instanceId);
+      setAgentStatus(status);
+      await fetchState();
+      return status;
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to run assessment');
+      await fetchAgentStatus();
+      return null;
+    } finally {
+      setIsRunningAssessment(false);
+    }
+  }, [fetchAgentStatus, fetchState, instanceId]);
+
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail as { instanceId?: string } | undefined;
       if (detail?.instanceId !== instanceId) return;
       void fetchState();
+      void fetchAgentStatus();
     };
 
     window.addEventListener('nitrogen:assessment-workflow-updated', handler);
     return () => window.removeEventListener('nitrogen:assessment-workflow-updated', handler);
-  }, [fetchState, instanceId]);
+  }, [fetchAgentStatus, fetchState, instanceId]);
 
-  // One-time init: fetch state, auto-populate if the assessment is brand-new.
+  // One-time init: fetch state and kick/resume assessment run.
   // Uses a cancelled flag so React Strict Mode double-invoke doesn't cause
-  // a stale GET response to overwrite the populated state.
+  // stale responses to overwrite current state.
   useEffect(() => {
     let cancelled = false;
 
@@ -345,34 +381,10 @@ export function AssessmentWorkspace({
           data.workflow_state.current_stage_id
         ));
         setLoading(false);
-
-        // Auto-populate the first stage when the assessment is brand-new (all stages pending).
-        // Covers calculator assessments (start_from_predefined_rows) and assessment
-        // assessments (seed_from_template + adapt_with_ai_from_project_materials).
-        const allPending = defs.length > 0 && defs.every((d) => stages[d.id]?.status === 'pending');
-        const firstDef = defs[0];
-
-        if (allPending && firstDef) {
-          const hasPopulationSteps = firstDef.population?.some((p) =>
-            p.type !== 'await_user_confirmation'
-          );
-          if (hasPopulationSteps) {
-            setIsPopulating(true);
-            try {
-              const result = await api.populateStage(instanceId, firstDef.id, data.workflow_version);
-              if (cancelled) return;
-              setState((prev) => prev ? {
-                ...prev,
-                workflow_state: result.workflow_state,
-                workflow_version: result.workflow_version,
-              } : prev);
-            } catch {
-              // Silently ignore — user can click Retry in the ConfirmationBar
-              if (!cancelled) await fetchState();
-            } finally {
-              if (!cancelled) setIsPopulating(false);
-            }
-          }
+        const status = await fetchAgentStatus();
+        if (cancelled) return;
+        if (status?.run_state !== 'approved') {
+          await runAssessmentAgent();
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -384,22 +396,37 @@ export function AssessmentWorkspace({
 
     initialize();
     return () => { cancelled = true; };
-  }, [instanceId, fetchState]);
+  }, [instanceId, fetchAgentStatus, runAssessmentAgent]);
 
   useEffect(() => {
     if (!state) return;
     const defs = state.assessment_definition.stage_defs ?? [];
+    const stages = state.workflow_state.stages ?? {};
+    const workflowCurrentStageId = state.workflow_state.current_stage_id ?? null;
     const activeStageStillExists = !!activeStageId && defs.some((def) => def.id === activeStageId);
-    if (activeStageStillExists) return;
-    const nextStageId = resolveLatestAvailableStageId(
-      defs,
-      state.workflow_state.stages ?? {},
-      state.workflow_state.current_stage_id
-    );
-    if (nextStageId !== activeStageId) {
-      setActiveStageId(nextStageId);
+    const shouldFollowWorkflowCurrent =
+      !!workflowCurrentStageId
+      && workflowCurrentStageId !== activeStageId
+      // Allow users to manually revisit prior stages; only auto-follow while the
+      // assessment agent is still progressing the workflow.
+      && agentStatus?.run_state === 'running';
+
+    if (shouldFollowWorkflowCurrent) {
+      setActiveStageId(workflowCurrentStageId);
+      return;
     }
-  }, [state, activeStageId]);
+
+    if (!activeStageStillExists) {
+      const nextStageId = resolveLatestAvailableStageId(
+        defs,
+        stages,
+        workflowCurrentStageId,
+      );
+      if (nextStageId !== activeStageId) {
+        setActiveStageId(nextStageId);
+      }
+    }
+  }, [state, activeStageId, agentStatus?.run_state]);
 
   useEffect(() => {
     if (!decisionMenuOpen) return;
@@ -411,6 +438,15 @@ export function AssessmentWorkspace({
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [decisionMenuOpen]);
+
+  useEffect(() => {
+    if (agentStatus?.run_state !== 'running') return undefined;
+    const intervalId = window.setInterval(() => {
+      void fetchAgentStatus();
+      void fetchState();
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [agentStatus?.run_state, fetchAgentStatus, fetchState]);
 
   // Lazy widget rendering for computed_results stages
   const widgetCache = useRef<Record<string, ComponentType<WorkspaceWidgetProps>>>({});
@@ -478,7 +514,7 @@ export function AssessmentWorkspace({
     } finally {
       setIsPopulating(false);
     }
-  }, [instanceId, state?.workflow_version, fetchState]);
+  }, [instanceId, state?.workflow_version, fetchAgentStatus, fetchState]);
 
   const handleConfirm = useCallback(async (stageId: string) => {
     setIsConfirming(true);
@@ -495,6 +531,7 @@ export function AssessmentWorkspace({
         setActiveStageId(ws.current_stage_id);
       }
       setEditingConfirmedStageIds((prev) => ({ ...prev, [stageId]: false }));
+      await fetchAgentStatus();
     } catch (e: any) {
       setError(e.message ?? 'Failed to confirm stage');
       fetchState();
@@ -743,6 +780,7 @@ export function AssessmentWorkspace({
   };
 
   const isComputedStage = currentStageDef.component === 'computed_results';
+  const isAgentRunning = agentStatus?.run_state === 'running' || isRunningAssessment;
   const isAssessmentMapWidget = isComputedStage
     && (
       currentStageDef.widget === 'assessment_map'
@@ -805,23 +843,6 @@ export function AssessmentWorkspace({
   const badgeApprovedMeta = badgeApprovedAt
     ? `${badgeApprovedAt}${badgeApprovedBy ? ` by ${badgeApprovedBy}` : ''}`
     : null;
-  const badgeConfirmedAt = currentStageState.confirmed_at
-    ? new Date(currentStageState.confirmed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-    : null;
-  const badgeConfirmedBy = currentStageState.confirmed_by_email || currentStageState.confirmed_by || null;
-  const badgeConfirmedMeta = badgeConfirmedAt
-    ? `${badgeConfirmedAt}${badgeConfirmedBy ? ` by ${badgeConfirmedBy}` : ''}`
-    : null;
-  const showApprovedBadge = finalApproved && !isEditingConfirmedStage;
-  const showConfirmedBadge =
-    !showApprovedBadge
-    && isStageConfirmed(currentStageState.status)
-    && !isEditingConfirmedStage
-    && !(requiresFinalApproval && currentStageDef.id === terminalStageId);
-  const showEditInBadge =
-    showConfirmedBadge
-    && !isComputedStage
-    && !(requiresFinalApproval && currentStageDef.id === terminalStageId);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -830,8 +851,20 @@ export function AssessmentWorkspace({
           ? 'h-full w-full p-3 flex flex-col'
           : 'w-full p-3 flex flex-col'}
         >
+          <AgentStatusHeader
+            status={agentStatus}
+            loading={isRunningAssessment}
+            approvedMeta={finalApproved ? badgeApprovedMeta : null}
+            onOpen={() => {
+              if (onOpenActivityLog) {
+                onOpenActivityLog(decisionLogContext);
+                return;
+              }
+              onOpenDecisionLog?.(decisionLogContext);
+            }}
+          />
           {/* Workspace controls row (full panel width) */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="mt-3 flex items-center justify-between gap-4">
             <StageStepper
               stageDefs={stageDefs}
               stages={stages}
@@ -948,7 +981,7 @@ export function AssessmentWorkspace({
                     isConfirming={isConfirming}
                     isEditingConfirmedStage={isEditingConfirmedStage}
                     hasPendingChanges={hasPendingConfirmedStageChanges}
-                    suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
+                    suppressConfirmAction={isAgentRunning || (requiresFinalApproval && currentStageDef.id === terminalStageId)}
                     allFieldsFilled={allEditableTableFieldsFilled}
                     onStartEditConfirmedStage={() =>
                       {
@@ -1007,7 +1040,7 @@ export function AssessmentWorkspace({
                   isConfirming={isConfirming}
                   isEditingConfirmedStage={isEditingConfirmedStage}
                   hasPendingChanges={hasPendingConfirmedStageChanges}
-                  suppressConfirmAction={requiresFinalApproval && currentStageDef.id === terminalStageId}
+                  suppressConfirmAction={isAgentRunning || (requiresFinalApproval && currentStageDef.id === terminalStageId)}
                   allFieldsFilled={allEditableTableFieldsFilled}
                   onStartEditConfirmedStage={() =>
                     {
@@ -1024,33 +1057,6 @@ export function AssessmentWorkspace({
           </div>
         </div>
       </div>
-
-    {/* Floating status badge — bottom-right of workspace */}
-    {(showApprovedBadge || showConfirmedBadge) && (
-      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 py-1.5 px-3 rounded-md text-xs text-accent bg-accent-wash/80 border border-accent/15 shadow-sm pointer-events-auto">
-        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-        <span>
-          {showApprovedBadge
-            ? (badgeApprovedMeta ? `Approved • ${badgeApprovedMeta}` : 'Approved')
-            : (badgeConfirmedMeta ? `Confirmed • ${badgeConfirmedMeta}` : 'Confirmed')}
-        </span>
-        {showEditInBadge && (
-          <button
-            onClick={() => {
-              setEditBaselineByStageId((prev) => ({
-                ...prev,
-                [currentStageDef.id]: currentStageDataSignature,
-              }));
-              setEditingConfirmedStageIds((prev) => ({ ...prev, [currentStageDef.id]: true }));
-            }}
-            className="ml-1 flex items-center gap-1 text-accent enabled:hover:text-accent-anchor transition-colors"
-          >
-            <Pencil className="w-3 h-3" />
-            Edit
-          </button>
-        )}
-      </div>
-    )}
   </div>
 );
 }

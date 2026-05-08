@@ -403,6 +403,27 @@ MISSING_VALUE_TOKENS = {
     "not provided",
 }
 
+STRING_ASSERTION_MARKERS = (
+    " is ",
+    " are ",
+    " was ",
+    " were ",
+    " will be ",
+    " should be ",
+    " equals ",
+    " set to ",
+    " assumed",
+    " baseline",
+    " target",
+    " rate",
+    " cost",
+    " price",
+    " supplier",
+    " provider",
+    " operator",
+    " located",
+)
+
 
 def normalize_missing_value(value: Any) -> Any:
     if value is None:
@@ -418,6 +439,31 @@ def normalize_missing_value(value: Any) -> Any:
 
 def _value_is_missing(value: Any) -> bool:
     return normalize_missing_value(value) is None
+
+
+def _passes_extraction_quality_gate(raw: dict[str, Any], definition: AssumptionDefinition) -> bool:
+    quote = str(raw.get("source_quote") or "").strip()
+    if not quote:
+        return False
+
+    value = normalize_missing_value(raw.get("value"))
+    if value is None:
+        return False
+
+    # For numeric/currency/percent assumptions, insist on explicit quantitative
+    # evidence in the source quote to avoid entity/theme leakage.
+    if definition.value_type in {"number", "percent", "currency"}:
+        if not re.search(r"-?\d", quote):
+            return False
+
+    # For string assumptions, require assertion language in the quote
+    # (e.g., "supplier is X"), not bare entity mentions.
+    if isinstance(value, str):
+        lowered_quote = f" {quote.lower()} "
+        if not any(marker in lowered_quote for marker in STRING_ASSERTION_MARKERS):
+            return False
+
+    return True
 
 
 def infer_assumption_value_type(value: Any) -> str:
@@ -706,30 +752,35 @@ async def sync_stage_assumptions(
         content = item.get("content") if isinstance(item, dict) else None
         if not isinstance(content, dict):
             continue
-        field_key = normalize_assumption_key(str(content.get("field_name") or content.get("name") or ""))
+        # Only sync explicit assumption inputs. Free-form list rows (e.g. landscape
+        # entities with just "name"/"category") should not become assumptions.
+        raw_field_name = str(content.get("field_name") or "").strip()
+        if not raw_field_name:
+            continue
+        field_key = normalize_assumption_key(raw_field_name)
         if not field_key:
             continue
         definition = _definition_for_assessment_field(field_key, assessment_id)
+        # Keep assessment-driven assumption sync scoped to configured variables
+        # that are actually mapped for this assessment.
+        if definition is None:
+            continue
         value = normalize_missing_value(content.get("value"))
         value_is_missing = value is None
         effective_status = normalize_assumption_status(
             content.get("status"),
             default=("missing" if value_is_missing else status),
         )
-        label = (
-            definition.label
-            if definition is not None
-            else str(content.get("variable") or content.get("label") or content.get("name") or field_key.replace("_", " ").title())
-        )
-        key = definition.key if definition is not None else field_key
-        value_type = definition.value_type if definition is not None else infer_assumption_value_type(value)
+        label = definition.label
+        key = definition.key
+        value_type = definition.value_type
         assumption, _created = await upsert_assumption(
             db,
             initiative_id=initiative_id,
             key=key,
             value=value,
             label=label,
-            unit=content.get("unit") or (definition.unit if definition else None),
+            unit=content.get("unit") or definition.unit,
             value_type=value_type,
             source_type="assessment",
             source_reference={
@@ -752,7 +803,7 @@ async def sync_stage_assumptions(
             stage_id=stage_id,
             field_name=field_key,
             field_label=label,
-            unit=content.get("unit") or (definition.unit if definition else None),
+            unit=content.get("unit") or definition.unit,
             value_type=value_type,
             metadata={"variable": content.get("variable")},
         )
@@ -1061,9 +1112,17 @@ async def extract_assumptions_from_sources(
     ]
     system_prompt = (
         "Extract only explicit reusable project assumptions from project materials. "
-        "Be conservative. Return JSON with an 'assumptions' array. "
-        "Each item must have key, value, optional unit, source_quote, and status. "
-        "Use status 'extracted' unless the text is unquestionably direct."
+        "Be very conservative.\n\n"
+        "Include an assumption only when the source quote states a concrete value for one of the configured keys. "
+        "Do NOT extract mere entities, organizations, policies, technologies, headings, themes, or concept lists. "
+        "A named entity can be extracted only when the text explicitly asserts it as a project parameter "
+        "(for example: 'panel supplier is XYZ Supplier').\n\n"
+        "Return JSON with an 'assumptions' array. Each item must include:\n"
+        "- key\n"
+        "- value\n"
+        "- optional unit\n"
+        "- source_quote (verbatim evidence for that value)\n"
+        "- status ('validated' for direct explicit statements, otherwise 'extracted')."
     )
     user_prompt = (
         "Expected assumption config:\n"
@@ -1103,6 +1162,8 @@ async def extract_assumptions_from_sources(
             continue
         value = raw.get("value")
         if value in (None, ""):
+            continue
+        if not _passes_extraction_quality_gate(raw, definition):
             continue
         assumption, created = await upsert_assumption(
             db,
