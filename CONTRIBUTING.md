@@ -71,6 +71,10 @@ docs: update deployment guide for Railway
 - **Frontend**: Follow the [Style Guide](docs/style-guide.md) and existing patterns
 - **Backend**: Follow PEP 8; we use [Ruff](https://docs.astral.sh/ruff/) for linting
 
+### Testing and Validation
+
+Use narrow, quiet test commands while iterating, then run full regression before opening a PR. See [Testing and Validation](docs/testing.md) for single-test commands, quiet wrappers, and fast validation checks.
+
 ## Reporting Bugs
 
 Open a [Bug Report](../../issues/new?template=bug_report.yml) issue. Include steps to reproduce, expected vs. actual behavior, and your environment.
