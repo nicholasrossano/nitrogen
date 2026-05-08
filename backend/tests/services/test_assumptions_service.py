@@ -164,6 +164,36 @@ def test_normalize_missing_value_coerces_placeholder_tokens():
     assert normalize_missing_value("Malawi") == "Malawi"
 
 
+def test_extraction_quality_gate_accepts_explicit_string_assertion():
+    definition = assumptions_service.ASSUMPTION_BY_KEY["operator_model"]
+    raw = {
+        "value": "XYZ Supplier",
+        "source_quote": "The panel supplier is XYZ Supplier for the first deployment phase.",
+    }
+
+    assert assumptions_service._passes_extraction_quality_gate(raw, definition) is True
+
+
+def test_extraction_quality_gate_rejects_bare_entity_mention_for_string():
+    definition = assumptions_service.ASSUMPTION_BY_KEY["operator_model"]
+    raw = {
+        "value": "OpenStreetMap Malawi Community",
+        "source_quote": "OpenStreetMap Malawi Community",
+    }
+
+    assert assumptions_service._passes_extraction_quality_gate(raw, definition) is False
+
+
+def test_extraction_quality_gate_rejects_numeric_without_numeric_evidence():
+    definition = assumptions_service.ASSUMPTION_BY_KEY["discount_rate"]
+    raw = {
+        "value": 0.08,
+        "source_quote": "The financing assumptions are still under discussion.",
+    }
+
+    assert assumptions_service._passes_extraction_quality_gate(raw, definition) is False
+
+
 @pytest.mark.asyncio
 async def test_ensure_expected_assumptions_is_config_guidance_only():
     created, touched = await ensure_expected_assumptions(
@@ -175,6 +205,89 @@ async def test_ensure_expected_assumptions_is_config_guidance_only():
 
     assert created == 0
     assert touched == []
+
+
+@pytest.mark.asyncio
+async def test_sync_stage_assumptions_ignores_rows_without_field_name(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    called = False
+
+    async def fake_upsert_assumption(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return SimpleNamespace(id=uuid4()), True
+
+    async def fake_upsert_binding(*_args, **_kwargs):
+        return SimpleNamespace(assumption_id=uuid4())
+
+    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert_assumption)
+    monkeypatch.setattr(assumptions_service, "upsert_assumption_binding", fake_upsert_binding)
+
+    touched, item_map = await assumptions_service.sync_stage_assumptions(
+        SimpleNamespace(),
+        initiative_id=uuid4(),
+        assessment_id="landscape_mapping",
+        stage_id="entities",
+        stage_data={
+            "items": [
+                {
+                    "id": "entity-1",
+                    "content": {
+                        "name": "OpenStreetMap Malawi Community",
+                        "category": "Data Ecosystem",
+                        "description": "Community group",
+                    },
+                }
+            ]
+        },
+        actor=AssumptionActor.system(),
+    )
+
+    assert called is False
+    assert touched == []
+    assert item_map == {}
+
+
+@pytest.mark.asyncio
+async def test_sync_stage_assumptions_ignores_unmapped_field_name(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    called = False
+
+    async def fake_upsert_assumption(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return SimpleNamespace(id=uuid4()), True
+
+    async def fake_upsert_binding(*_args, **_kwargs):
+        return SimpleNamespace(assumption_id=uuid4())
+
+    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert_assumption)
+    monkeypatch.setattr(assumptions_service, "upsert_assumption_binding", fake_upsert_binding)
+
+    touched, item_map = await assumptions_service.sync_stage_assumptions(
+        SimpleNamespace(),
+        initiative_id=uuid4(),
+        assessment_id="landscape_mapping",
+        stage_id="entities",
+        stage_data={
+            "items": [
+                {
+                    "id": "item-1",
+                    "content": {
+                        "field_name": "open_street_map_community",
+                        "value": "OpenStreetMap Malawi Community",
+                    },
+                }
+            ]
+        },
+        actor=AssumptionActor.system(),
+    )
+
+    assert called is False
+    assert touched == []
+    assert item_map == {}
 
 
 def test_build_chat_assumption_candidate_extracts_cited_project_country_indicator():

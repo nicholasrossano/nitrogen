@@ -437,10 +437,10 @@ export function FrameworkPlanView({
                                   {isCreatingWorkspace ? (
                                     <>
                                       <UniversalLoadingIcon size={12} colorClassName="text-white" />
-                                      New
+                                      Start Task
                                     </>
                                   ) : (
-                                    'New'
+                                    'Start Task'
                                   )}
                                 </button>
                               )}
