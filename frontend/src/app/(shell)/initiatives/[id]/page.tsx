@@ -109,7 +109,8 @@ function readStoredWorkspaceUiState(storageKey: string): StoredInitiativeWorkspa
             typeof tab === 'object' &&
             typeof (tab as { id?: unknown }).id === 'string' &&
             typeof (tab as { title?: unknown }).title === 'string' &&
-            typeof (tab as { kind?: unknown }).kind === 'string',
+            typeof (tab as { kind?: unknown }).kind === 'string' &&
+            (tab as { kind?: unknown }).kind !== 'artifacts',
         )
       : [];
 
@@ -195,7 +196,12 @@ function InitiativePageContent() {
     content: string;
     toolHint?: string;
   } | null>(null);
-  const [preferArtifactsTab, setPreferArtifactsTab] = useState(false);
+  const [pendingAssessmentActivityLogRequest, setPendingAssessmentActivityLogRequest] = useState<{
+    requestId: string;
+    instanceId: string;
+    assessmentId: string;
+    title: string;
+  } | null>(null);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>(
     initialWorkspaceUiRef.current?.workspaceTabs ?? [],
@@ -674,7 +680,7 @@ function InitiativePageContent() {
     setWorkspaceLaunchMode('idle');
     setPendingChatToOpen(null);
     setPendingOverviewAutoSend(null);
-    setPreferArtifactsTab(false);
+      setPendingAssessmentActivityLogRequest(null);
     setPageReady(false);
     setChromeReady(false);
     setShowOverlay(true);
@@ -733,33 +739,14 @@ function InitiativePageContent() {
   }, [pageReady]);
 
   useEffect(() => {
-    const hasArtifactsTab = workspaceTabs.some((tab) => tab.id === 'chat-artifacts');
-    if (chatEditorWidgets.length > 0 && !hasArtifactsTab) {
-      setWorkspaceTabs((prev) => [...prev, { id: 'chat-artifacts', kind: 'artifacts', title: 'Chat Outputs' }]);
-      return;
+    // Safety cleanup: remove any persisted Chat Outputs tab from prior sessions.
+    if (!workspaceTabs.some((tab) => tab.kind === 'artifacts')) return;
+    const nextTabs = workspaceTabs.filter((tab) => tab.kind !== 'artifacts');
+    setWorkspaceTabs(nextTabs);
+    if (activeWorkspaceTabId && !nextTabs.some((tab) => tab.id === activeWorkspaceTabId)) {
+      setActiveWorkspaceTabId(nextTabs[0]?.id ?? null);
     }
-
-    if (chatEditorWidgets.length === 0 && hasArtifactsTab) {
-      setWorkspaceTabs((prev) => prev.filter((tab) => tab.id !== 'chat-artifacts'));
-      setActiveWorkspaceTabId((current) => {
-        if (current !== 'chat-artifacts') return current;
-        if (activeView === 'assessments') {
-          const fallbackTabs = workspaceTabs.filter((tab) => tab.id !== 'chat-artifacts');
-          return fallbackTabs[0]?.id ?? null;
-        }
-        const fallbackDocument = workspaceTabs.find(
-          (tab) => tab.id !== 'chat-artifacts' && tab.kind === 'document',
-        );
-        return fallbackDocument?.id ?? null;
-      });
-    }
-  }, [chatEditorWidgets.length, workspaceTabs, activeView]);
-
-  useEffect(() => {
-    if (!preferArtifactsTab || !chatEditorWidgets.length) return;
-    setActiveWorkspaceTabId('chat-artifacts');
-    setPreferArtifactsTab(false);
-  }, [preferArtifactsTab, chatEditorWidgets.length]);
+  }, [workspaceTabs, activeWorkspaceTabId]);
 
   useEffect(() => {
     if (activeView !== 'assessments') return;
@@ -879,6 +866,22 @@ function InitiativePageContent() {
       });
     },
     [initiativeId, openWorkspaceTab, router],
+  );
+
+  const openAssessmentActivityLogInChat = useCallback(
+    (context: { instanceId: string; assessmentId: string; title: string }) => {
+      setActiveView('assessments');
+      setPanelOpen('assessments', 'workspace', true);
+      setPanelOpen('assessments', 'chat', true);
+      router.replace(`/initiatives/${initiativeId}?view=assessments`);
+      setPendingAssessmentActivityLogRequest({
+        requestId: `assessment-activity-${context.instanceId}-${Date.now()}`,
+        instanceId: context.instanceId,
+        assessmentId: context.assessmentId,
+        title: context.title,
+      });
+    },
+    [initiativeId, router, setPanelOpen],
   );
 
   const exportDecisionLog = useCallback(
@@ -1042,9 +1045,9 @@ function InitiativePageContent() {
             setPanelOpen('assessments', 'chat', true);
             chatSendRef.current?.(content, toolHint);
           }}
+          onOpenAssessmentActivityLogInChat={openAssessmentActivityLogInChat}
           onOpenChatSession={(chat) => {
             setPanelOpen('assessments', 'chat', true);
-            setPreferArtifactsTab(true);
             setPendingChatToOpen(chat);
           }}
           onOpenDecisionLog={openDecisionLogTab}
@@ -1214,6 +1217,8 @@ function InitiativePageContent() {
             state: assessmentsDeepDiveRequest.state,
           } : null}
           onPendingDeepDiveHandled={() => setAssessmentsDeepDiveRequest(null)}
+          pendingAssessmentActivityLog={pendingAssessmentActivityLogRequest}
+          onPendingAssessmentActivityLogHandled={() => setPendingAssessmentActivityLogRequest(null)}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />

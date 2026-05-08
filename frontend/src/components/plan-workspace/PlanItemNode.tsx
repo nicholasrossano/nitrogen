@@ -90,10 +90,10 @@ export function PlanItemNode({
               ? 'bg-green-50/30 border border-green-200/50'
               : `bg-surface border border-transparent ${isClickable ? 'plan-item-lift cursor-pointer' : ''}`
           }`}
-          onClick={isClickable && !isComplete ? () => onOpen?.(item) : undefined}
-          role={isClickable && !isComplete ? 'button' : undefined}
-          tabIndex={isClickable && !isComplete ? 0 : undefined}
-          onKeyDown={isClickable && !isComplete ? (e) => {
+          onClick={isClickable ? () => onOpen?.(item) : undefined}
+          role={isClickable ? 'button' : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+          onKeyDown={isClickable ? (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               onOpen?.(item);
