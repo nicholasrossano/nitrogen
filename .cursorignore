@@ -1,0 +1,77 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+.venv/
+venv/
+ENV/
+
+# Build and framework output
+dist/
+build/
+out/
+.next/
+frontend/.next/
+frontend/.next-build/
+*.tsbuildinfo
+
+# Python caches and packaging output
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Test, lint, and coverage output
+.test-output/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage/
+htmlcov/
+frontend/coverage/
+
+# Logs and local process output
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+firebase-service-account.json
+*firebase-adminsdk*.json
+
+# Local exports, uploads, and generated artifacts
+exports/
+uploads/
+backend/exports/
+backend/uploads/
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE and OS noise
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+.claude/
+
+# Large binary fixtures and documents
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.zip
+*.tar
+*.tar.gz
+*.tgz

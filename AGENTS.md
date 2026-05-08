@@ -16,6 +16,10 @@
   - Add minimal tests only when changing core logic, and keep them simple.
   - Otherwise provide a concrete manual verification checklist.
 - Always include: "How to verify" steps.
+- Start with the narrowest useful validation: one test case, one test file, or one changed package before running a full suite.
+- Use quiet fail-fast output (`pytest -q -x`, Jest `--silent --bail`, or `npm run test:*:quiet`) while iterating.
+- When a test run fails, inspect the first relevant failure block first; only expand to full logs if that failure is inconclusive.
+- Run full regression commands only for final validation or when touching shared behavior with broad blast radius.
 - For adapter/resource/capability registries, prefer scalable contract tests: baseline `issubset` + shape checks, not exact full-set equality.
 - When adding/removing a baseline adapter/resource contract, update the corresponding registry contract tests in the same change.
 - For phased architecture migrations, add tests in-phase: contract tests immediately, targeted parity/regression tests at each wiring step (do not wait until the final phase).
@@ -37,8 +41,41 @@
 **Scope discipline:**
 - Make surgical changes only. Do not refactor broadly unless I explicitly ask.
 - If you see improvements, list them as optional follow-ups instead of doing them.
+- Keep file scope narrow: read or edit the files directly implicated by the task before opening adjacent modules.
+- Avoid broad repo searches until narrow symbol/file searches fail; prefer scoped `rg`/glob paths over whole-repo scans.
+- Stop and ask before touching more than 3 unrelated files or crossing unrelated frontend/backend/domain boundaries.
 - For staged `editable_table` inputs, always set `StageDef.allow_add_rows` explicitly (false for fixed variable lists, true only for intentionally extensible tables).
 - Prefer extending existing components/utilities with props or variants before creating new ones; add new abstractions only when reuse is clearly not viable.
+
+## AI-Friendly Commands
+
+Prefer these commands while iterating to reduce token-heavy output. Full logs from quiet wrappers are saved under ignored `.test-output/`.
+
+### Narrow Tests
+
+- Backend single test case: `cd backend && python3 -m pytest -q -x tests/services/test_assumptions_service.py::test_normalize_missing_value_coerces_placeholder_tokens`
+- Backend single test file: `cd backend && python3 -m pytest -q -x tests/services/test_assumptions_service.py`
+- Backend unit-focused subset: `cd backend && python3 -m pytest -q -x tests/services tests/assessments tests/adapters tests/resources tests/capabilities tests/plans tests/test_permissions.py`
+- Frontend single test case: `cd frontend && npm test -- --runInBand --silent --bail src/__tests__/components/ui/Button.test.tsx -t "renders"`
+- Frontend single test file: `cd frontend && npm test -- --runInBand --silent --bail src/__tests__/components/ui/Button.test.tsx`
+- Frontend unit tests: `cd frontend && npm test -- --runInBand --silent --bail`
+
+### Quiet Wrappers
+
+- Backend quiet wrapper: `npm run test:backend:quiet -- tests/services/test_assumptions_service.py`
+- Frontend quiet wrapper: `npm run test:frontend:quiet -- src/__tests__/components/ui/Button.test.tsx`
+- All quiet wrapper: `npm run test:quiet`
+
+### Fast Validation
+
+- Backend lint: `cd backend && ruff check .`
+- Backend format check: `cd backend && ruff format --check .`
+- Backend targeted tests: `cd backend && python3 -m pytest -q -x <path-or-nodeid>`
+- Frontend typecheck: `cd frontend && npm run typecheck`
+- Frontend lint: `cd frontend && npm run lint`
+- Frontend targeted tests: `cd frontend && npm test -- --runInBand --silent --bail <path> -t "<test name>"`
+- Full backend regression: `cd backend && python3 -m pytest tests/ -q`
+- Full frontend regression: `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build`
 
 **Architecture migration posture:**
 - For pre-launch architecture upgrades, prefer full cutover to the target design over long-lived compatibility shims.
