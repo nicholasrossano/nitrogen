@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 jest.mock('@/lib/api', () => ({
   api: {
     getStagedAssessmentWorkflowState: jest.fn(),
+    getAssessmentAgentStatus: jest.fn(),
+    runAssessment: jest.fn(),
     confirmStage: jest.fn(),
     approveFinalAssessmentOutput: jest.fn(),
     revokeFinalAssessmentApproval: jest.fn(),
@@ -125,6 +127,22 @@ function baseWorkflowState() {
 describe('AssessmentWorkspace', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedApi.getAssessmentAgentStatus.mockResolvedValue({
+      run_state: 'needs_review',
+      current_stage_id: 'plan',
+      current_action: null,
+      last_summary: 'Needs review for plan.',
+      workflow_version: 3,
+      can_resume: true,
+    } as any);
+    mockedApi.runAssessment.mockResolvedValue({
+      run_state: 'needs_review',
+      current_stage_id: 'plan',
+      current_action: null,
+      last_summary: 'Needs review for plan.',
+      workflow_version: 3,
+      can_resume: true,
+    } as any);
   });
 
   it('keeps backend-confirmed stages navigable and read-only when revisiting them', async () => {

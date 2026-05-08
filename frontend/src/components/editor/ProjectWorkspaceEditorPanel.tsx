@@ -41,6 +41,7 @@ interface ProjectWorkspaceEditorPanelProps {
   frameworkPlanAssessments?: FrameworkPlanAssessmentOption[];
   onNewAssessment?: (assessmentId: string, assessmentName: string) => void;
   onSendToChat?: (content: string, toolHint?: string) => void;
+  onOpenAssessmentActivityLogInChat?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
@@ -66,6 +67,7 @@ export function ProjectWorkspaceEditorPanel({
   frameworkPlanAssessments,
   onNewAssessment,
   onSendToChat,
+  onOpenAssessmentActivityLogInChat,
   onOpenChatSession,
   onOpenDecisionLog,
   onExportDecisionLog,
@@ -139,6 +141,7 @@ export function ProjectWorkspaceEditorPanel({
           isActive={isActive}
           initiativeId={initiativeId}
           onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
+          onOpenActivityLog={onOpenAssessmentActivityLogInChat}
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
           onInspectorStateChange={isActive ? onAssessmentInspectorStateChange : undefined}
