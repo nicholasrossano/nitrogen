@@ -46,6 +46,7 @@ logs/
 
 # Testing
 .coverage
+.test-output/
 htmlcov/
 .pytest_cache/
 .ruff_cache/
