@@ -11,6 +11,14 @@ Keep this file minimal and always-on. Put specialized guidance in `docs/agent-pl
 - Prefer extending existing utilities/components before introducing new abstractions.
 - Add concise "How to verify" steps with every substantive change.
 
+## Routine response length
+
+- Keep routine replies short and direct; do not narrate obvious tool use or restate the full task unless it clarifies something.
+- Prefer a tight paragraph or a few bullets over long explanations; use normal, complete sentences (not cryptic shorthand).
+- Preserve full precision for code, commands, file paths, errors, API names, and validation results.
+- Go longer only for high-risk topics (security, payments, auth, schema/architecture), meaningful tradeoffs, or when the user asks for depth.
+- Final handoffs should cover what changed, what was validated, and real risks; no fixed template required.
+
 ## Token Budget Protocol
 
 - Use scoped search first (`rg` with path/glob, targeted file reads); avoid broad repo scans by default.
