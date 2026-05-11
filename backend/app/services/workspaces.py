@@ -128,4 +128,5 @@ def serialize_member(membership: WorkspaceMembership, user: User | None) -> dict
         "user_display_name": user.display_name if user else None,
         "role": membership.role,
         "created_at": membership.created_at,
+        "pending": False,
     }

@@ -16,11 +16,12 @@ class ShareUpdate(BaseModel):
 class ShareResponse(BaseModel):
     id: UUID
     initiative_id: UUID
-    user_id: str
+    user_id: Optional[str] = None
     user_email: Optional[str] = None
     user_display_name: Optional[str] = None
     role: str
     created_at: datetime
+    pending: bool = False
 
     class Config:
         from_attributes = True
