@@ -190,6 +190,118 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
 
 
 @pytest.mark.asyncio
+async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monkeypatch: pytest.MonkeyPatch):
+    """tool_hint matches a workspace-flow assessment, but assumption-scoped sends must not reopen the module."""
+    fake_db = _FakeDbSession()
+    initiative_id = uuid.uuid4()
+    chat_id = uuid.uuid4()
+    assumption_id = uuid.uuid4()
+    fake_db.assumptions[assumption_id] = SimpleNamespace(
+        id=assumption_id,
+        initiative_id=initiative_id,
+        label="Fuel savings %",
+        key="fuel_savings_pct",
+        status="assumed",
+        value=5.0,
+        unit="%",
+        used_in_assessments=["carbon_model"],
+    )
+
+    async def override_db():
+        yield fake_db
+
+    async def override_ai_access():
+        return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
+
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
+        assert assumption_id is not None
+        return SimpleNamespace(
+            id=chat_id,
+            initiative_id=initiative_id,
+            compare_initiative_ids=None,
+            assumption_id=assumption_id,
+        )
+
+    async def fake_get_initiative_with_role(_db, _initiative_id, _user):
+        initiative = SimpleNamespace(
+            id=initiative_id,
+            title="Test project",
+            project_type="solar",
+            project_description="A test project",
+            geography="Kenya",
+            selected_tools=[],
+            goal="Estimate value",
+        )
+        return initiative, "editor"
+
+    async def fake_build_context(_db, _user, _initiative_id):
+        return SimpleNamespace(user_id="user-1", chat_id=None)
+
+    async def fake_generate_response(
+        self,
+        user_message,
+        history,
+        on_thinking=None,
+        **kwargs,
+    ):
+        assert kwargs.get("tool_hint") == "carbon_model"
+        return chat_api.ServiceChatResponse(
+            content="Suggest 8%.",
+            sources=[],
+            tiers_used=["planner"],
+            latency_ms=3,
+            widget_type="proposed_value",
+            widget_data={
+                "field_name": "fuel_savings_pct",
+                "label": "Fuel savings %",
+                "proposed_value": 8.0,
+                "unit": "%",
+                "model_type": "carbon",
+            },
+        )
+
+    app.dependency_overrides[chat_api.get_db] = override_db
+    app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
+    monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
+    monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
+    monkeypatch.setattr(chat_api, "build_context", fake_build_context)
+    monkeypatch.setattr(chat_api.ChatService, "generate_response", fake_generate_response)
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                "/api/v1/chat/stream",
+                json={
+                    "content": "Can you investigate and propose a value for Fuel savings %?",
+                    "history": [],
+                    "initiative_id": str(initiative_id),
+                    "tool_hint": "carbon_model",
+                    "field_context": {
+                        "field_name": "fuel_savings_pct",
+                        "label": "Fuel savings %",
+                        "current_value": 5.0,
+                        "unit": "%",
+                        "model_type": "carbon",
+                        "status": "assumed",
+                        "assumption_id": str(assumption_id),
+                    },
+                    "assumption_id": str(assumption_id),
+                    "model_inputs_context": "### Carbon Model Inputs\n- Fuel savings %: 5 %",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    complete_event = _get_complete_event(response)
+    assert complete_event["widget_type"] == "proposed_value"
+    assert complete_event["tiers_used"] == ["planner"]
+
+
+@pytest.mark.asyncio
 async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypatch: pytest.MonkeyPatch):
     fake_db = _FakeDbSession()
     initiative_id = uuid.uuid4()
