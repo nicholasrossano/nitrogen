@@ -5,6 +5,9 @@ frontend/node_modules/
 venv/
 ENV/
 
+# VCS object store (never useful for coding context)
+.git/
+
 # Build and framework output
 dist/
 build/
@@ -12,7 +15,12 @@ out/
 .next/
 frontend/.next/
 frontend/.next-build/
+**/.swc/
 *.tsbuildinfo
+
+# Bundler / deploy tooling caches
+.turbo/
+.vercel/
 
 # Python caches and packaging output
 __pycache__/
@@ -29,6 +37,14 @@ __pycache__/
 coverage/
 htmlcov/
 frontend/coverage/
+coverage.xml
+*.lcov
+coverage-final.json
+
+# E2E / CI artifacts
+playwright-report/
+test-results/
+junit.xml
 
 # Logs and local process output
 *.log
@@ -63,9 +79,15 @@ backend/uploads/
 .cursor/
 .claude/
 
-# Legal text (large, rarely edited during implementation work)
+# Docker / local tooling caches (large, low coding signal)
+.docker/
+
+# Legal blobs (low signal for routine edits)
 LICENSE
 CLA.md
+
+# Generated / dependency noise (source maps are huge and rarely edited by hand)
+*.map
 
 # Large binary fixtures and documents
 *.pdf

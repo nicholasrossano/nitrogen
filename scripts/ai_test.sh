@@ -21,7 +21,7 @@ print_usage() {
 run_backend() {
   (
     cd "$ROOT_DIR/backend"
-    python3 -m pytest -q -x "$@"
+    python3 -m pytest -q -x --tb=short "$@"
   )
 }
 

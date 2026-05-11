@@ -78,7 +78,24 @@ npm test -- --runInBand --silent --bail <path> -t "<test name>"
 
 The frontend does not currently have a dedicated formatter check script. Use lint/typecheck for fast validation unless a formatter is added to the frontend toolchain.
 
+## Cursor / agent hygiene (token-safe audits)
+
+Prefer these over improvised `find .` / root-level `grep`:
+
+```bash
+npm run cursor:audit          # concise stdout; details under .test-output/
+npm run scan:repo             # largest tracked files + risky script patterns (capped)
+npm run scan:largest          # largest tracked files + selected `du` summary
+scripts/safe_search.sh 'pattern' -- frontend/src
+```
+
+Backend CI keeps coverage enforcement but emits a **short terminal summary** plus `coverage.xml`; open the XML or HTML report locally when you need line-level misses.
+
+**Optional local-only:** if dependency work is idle, you may add `frontend/package-lock.json` to a **personal** Cursor ignore overlay—never commit that ignore without team agreement, since lockfile reviews are important during npm upgrades.
+
 ## Full Regression
+
+These are **final validation**, not the default iteration loop (see `AGENTS.md`).
 
 Backend:
 
