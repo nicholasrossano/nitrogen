@@ -4,7 +4,10 @@
     "prepare": "husky",
     "test:backend:quiet": "scripts/ai_test.sh backend",
     "test:frontend:quiet": "scripts/ai_test.sh frontend",
-    "test:quiet": "scripts/ai_test.sh all"
+    "test:quiet": "scripts/ai_test.sh all",
+    "cursor:audit": "scripts/cursor_token_audit.sh",
+    "scan:repo": "scripts/safe_repo_scan.sh",
+    "scan:largest": "scripts/largest_files.sh"
   },
   "devDependencies": {
     "husky": "^9.1.7",
