@@ -1,7 +1,15 @@
 ---
 description: Nitrogen development setup and common issues
-globs: **/*
-alwaysApply: true
+globs:
+  - backend/**
+  - frontend/**
+  - scripts/**
+  - package.json
+  - docker-compose.yml
+  - .github/workflows/**
+  - .env.example
+  - docs/agent-playbook.md
+alwaysApply: false
 ---
 
 # Nitrogen Development Setup
