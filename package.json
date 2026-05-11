@@ -2,11 +2,15 @@
   "private": true,
   "scripts": {
     "prepare": "husky",
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && python3 -m uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
     "test:backend:quiet": "scripts/ai_test.sh backend",
     "test:frontend:quiet": "scripts/ai_test.sh frontend",
     "test:quiet": "scripts/ai_test.sh all"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0"
   }

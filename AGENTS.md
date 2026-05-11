@@ -35,6 +35,7 @@ cd backend && python3 -m alembic upgrade head
 
 | Goal | Command |
 |---|---|
+| Local full stack (backend + frontend, one terminal) | `npm run dev` (from repo root; requires `backend/.env` / DB as usual) |
 | Backend targeted test | `cd backend && python3 -m pytest -q -x <path-or-nodeid>` |
 | Backend lint | `cd backend && ruff check .` |
 | Backend format check | `cd backend && ruff format --check .` |
