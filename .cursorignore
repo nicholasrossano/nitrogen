@@ -63,6 +63,10 @@ backend/uploads/
 .cursor/
 .claude/
 
+# Legal text (large, rarely edited during implementation work)
+LICENSE
+CLA.md
+
 # Large binary fixtures and documents
 *.pdf
 *.doc
