@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assessments.utils import llm_json
 from app.domain.registry import get_project_health_definition
 from app.models.assumption import Assumption
-from app.models.assessment_instance import AssessmentInstance
 from app.models.evidence import EvidenceDoc, EvidenceDocStatus
 from app.models.initiative import Initiative
 from app.models.project_health import ProjectHealthOverride, ProjectHealthResult
