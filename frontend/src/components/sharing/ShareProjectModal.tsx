@@ -209,8 +209,8 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
               shares.filter(s => s.user_email !== ownerEmail).map((share) => (
                 <AccessMemberRow
                   key={share.id}
-                  emailOrId={share.user_email || share.user_id}
-                  displayName={share.user_display_name}
+                  emailOrId={share.user_email || share.user_id || 'Invited'}
+                  displayName={share.pending ? 'Invited — no account yet' : share.user_display_name}
                   roleValue={share.role}
                   roleOptions={[
                     { value: 'editor', label: 'Editor' },
@@ -218,6 +218,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
                   ]}
                   onRoleChange={(value) => handleRoleChange(share.id, value as 'editor' | 'viewer')}
                   onRemove={() => handleRemove(share.id)}
+                  removeTitle={share.pending ? 'Cancel invitation' : 'Remove access'}
                 />
               ))
             )}

@@ -7,6 +7,7 @@ from app.models.chat import CoreChat, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
 from app.models.project_material import ProjectMaterial
 from app.models.user import User
+from app.models.pending_invitation import ProjectShareInvitation, WorkspaceInvitation
 from app.models.project_share import ProjectShare
 from app.models.google_drive import UserGoogleConnection, DriveLinkedFile
 from app.models.subscription import Subscription, UsageRecord, UserApiKey
@@ -36,6 +37,8 @@ __all__ = [
     "ProvenanceTrace",
     "ProjectMaterial",
     "User",
+    "WorkspaceInvitation",
+    "ProjectShareInvitation",
     "ProjectShare",
     "UserGoogleConnection",
     "DriveLinkedFile",

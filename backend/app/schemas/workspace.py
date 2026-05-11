@@ -28,13 +28,14 @@ class WorkspaceMemberAdd(BaseModel):
 class WorkspaceMemberResponse(BaseModel):
     """Workspace membership response."""
 
-    id: UUID = Field(..., description="Membership identifier.")
+    id: UUID = Field(..., description="Membership or pending-invitation identifier.")
     workspace_id: UUID = Field(..., description="Workspace identifier.")
-    user_id: str = Field(..., description="Member user identifier.")
+    user_id: str | None = Field(None, description="Member user identifier (null while invite is pending).")
     user_email: str | None = Field(None, description="Member email address.")
     user_display_name: str | None = Field(None, description="Member display name.")
     role: str = Field(..., description="Workspace role: owner or member.")
     created_at: datetime = Field(..., description="Membership creation timestamp.")
+    pending: bool = Field(False, description="True if this row is a pre-signup invitation.")
 
 
 class WorkspaceResponse(BaseModel):
