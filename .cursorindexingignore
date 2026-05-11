@@ -1,0 +1,114 @@
+# Cursor codebase index only (does not replace .cursorignore for AI context).
+# After editing this file: Command Palette → "Developer: Reload Window", or use
+# Cursor’s index rebuild / resync if your build exposes it, so stale chunks drop.
+#
+# Mirrored from .cursorignore (high-churn / low-signal for semantic search), plus
+# lockfiles (very large line counts; rarely edited by hand — tradeoff: dep drift
+# search uses package.json / npm view instead).
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+.venv/
+venv/
+ENV/
+
+# VCS object store
+.git/
+
+# Build and framework output
+dist/
+build/
+out/
+.next/
+frontend/.next/
+frontend/.next-build/
+**/.swc/
+*.tsbuildinfo
+
+# Bundler / deploy tooling caches
+.turbo/
+.vercel/
+
+# Python caches and packaging output
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Test, lint, and coverage output
+.test-output/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage/
+htmlcov/
+frontend/coverage/
+coverage.xml
+*.lcov
+coverage-final.json
+
+# E2E / CI artifacts
+playwright-report/
+test-results/
+junit.xml
+
+# Logs and local process output
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+firebase-service-account.json
+*firebase-adminsdk*.json
+
+# Local exports, uploads, and generated artifacts
+exports/
+uploads/
+backend/exports/
+backend/uploads/
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE and OS noise
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+.claude/
+
+# Docker / local tooling caches
+.docker/
+
+# Legal blobs (low signal for routine search)
+LICENSE
+CLA.md
+
+# Generated / dependency noise
+*.map
+
+# Large binary fixtures and documents
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Lockfiles (generated; huge token surface if indexed)
+**/package-lock.json
