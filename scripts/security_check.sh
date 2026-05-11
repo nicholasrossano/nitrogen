@@ -10,12 +10,23 @@ if [[ "${1:-}" == "--history" ]]; then
   SCAN_HISTORY=true
 fi
 
-# Exclude obvious placeholders and example files.
+# Exclude obvious placeholders, docs, lockfiles, dependency/build noise, and giant generated paths.
 EXCLUDES=(
   ".env.example"
   "docs/**"
   "**/*.md"
   "**/*.lock"
+  "**/node_modules/**"
+  ".git/**"
+  "**/.next/**"
+  "**/dist/**"
+  "**/build/**"
+  "**/out/**"
+  "**/coverage/**"
+  "**/htmlcov/**"
+  ".test-output/**"
+  "**/__pycache__/**"
+  "**/*.map"
 )
 
 PATTERNS=(
@@ -38,8 +49,8 @@ run_worktree_scan() {
   for p in "${PATTERNS[@]}"; do
     if rg -n --hidden --pcre2 "$p" "${glob_args[@]}" . >/tmp/nitrogen_secret_scan.$$ 2>/dev/null; then
       echo ""
-      echo "[MATCH] Pattern: $p"
-      cat /tmp/nitrogen_secret_scan.$$
+      echo "[MATCH] Pattern: $p (first 200 lines; full scan was written to temp)"
+      head -200 /tmp/nitrogen_secret_scan.$$
       found=1
     fi
   done
@@ -58,14 +69,21 @@ run_history_scan() {
     ":(exclude)**/*.example.*"
     ":(exclude)**/*.md"
     ":(exclude)**/*.lock"
+    ":(exclude,glob)**/node_modules/**"
+    ":(exclude,glob)**/.git/**"
+    ":(exclude,glob)**/.next/**"
+    ":(exclude,glob)**/dist/**"
+    ":(exclude,glob)**/build/**"
+    ":(exclude,glob)**/coverage/**"
+    ":(exclude,glob)**/*.map"
   )
 
   for p in "${PATTERNS[@]}"; do
     while read -r commit; do
       if git grep -I -n -E "$p" "$commit" -- . "${history_excludes[@]}" 2>/dev/null >/tmp/nitrogen_secret_history_scan.$$; then
         echo ""
-        echo "[HISTORY MATCH] Pattern: $p (commit: $commit)"
-        cat /tmp/nitrogen_secret_history_scan.$$
+        echo "[HISTORY MATCH] Pattern: $p (commit: $commit) — first 200 lines"
+        head -200 /tmp/nitrogen_secret_history_scan.$$
         found=1
         break
       fi
