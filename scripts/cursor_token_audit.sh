@@ -21,12 +21,20 @@ LOG="$OUT_DIR/cursor-token-audit-${STAMP}.log"
   du -sh "$ROOT_DIR/backend/app" "$ROOT_DIR/frontend/src" "$ROOT_DIR/docs" 2>/dev/null || true
   echo ""
   echo "=== pytest / jest / coverage hints in CI + package.json (first 80 lines) ==="
-  rg -n 'pytest|jest|coverage|cov-report|term-missing|npm run test' \
-    "$ROOT_DIR/.github/workflows" "$ROOT_DIR/package.json" "$ROOT_DIR/frontend/package.json" \
-    2>/dev/null | head -80 || true
+  if command -v rg >/dev/null 2>&1; then
+    rg -n 'pytest|jest|coverage|cov-report|term-missing|npm run test' \
+      "$ROOT_DIR/.github/workflows" "$ROOT_DIR/package.json" "$ROOT_DIR/frontend/package.json" \
+      2>/dev/null | head -80 || true
+  else
+    echo "(skipped: ripgrep not installed)"
+  fi
   echo ""
   echo "=== scripts: scan-prone commands in *.sh (first 40 matches) ==="
-  rg -n -g '*.sh' 'find \.|grep -[rR]|ls -R|git rev-list' "$ROOT_DIR/scripts" 2>/dev/null | head -40 || true
+  if command -v rg >/dev/null 2>&1; then
+    rg -n -g '*.sh' 'find \.|grep -[rR]|ls -R|git rev-list' "$ROOT_DIR/scripts" 2>/dev/null | head -40 || true
+  else
+    echo "(skipped: ripgrep not installed)"
+  fi
   echo ""
   echo "=== Migration count ==="
   ls -1 "$ROOT_DIR/backend/alembic/versions" 2>/dev/null | wc -l || true
