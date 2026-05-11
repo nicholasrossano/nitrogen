@@ -9,7 +9,13 @@ from app.core.auth import AuthUser, get_current_user
 from app.core.database import get_db
 from app.core.permissions import ensure_user_exists
 from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
+from app.models.pending_invitation import WorkspaceInvitation
+from app.models.workspace import (
+    Workspace,
+    WorkspaceMembership,
+    WorkspaceRole,
+    WorkspaceType,
+)
 from app.models.workspace_knowledge import WorkspaceKnowledgeBank
 from app.schemas.workspace import (
     WorkspaceCreate,
@@ -21,6 +27,11 @@ from app.schemas.workspace import (
     WorkspaceMemberResponse,
     WorkspaceResponse,
     WorkspaceUpdate,
+)
+from app.services.pending_invitations import (
+    delete_workspace_invitations_for_email,
+    normalize_invite_email,
+    serialize_workspace_invitation,
 )
 from app.services.workspaces import (
     ensure_personal_workspace,
@@ -49,7 +60,24 @@ async def _workspace_detail(
         )
     ).all()
     data = serialize_workspace(workspace, current_membership)
-    data["members"] = [serialize_member(membership, member_user) for membership, member_user in rows]
+    member_rows = [
+        serialize_member(membership, member_user) for membership, member_user in rows
+    ]
+    inv_rows = (
+        (
+            await db.execute(
+                select(WorkspaceInvitation)
+                .where(WorkspaceInvitation.workspace_id == workspace.id)
+                .order_by(WorkspaceInvitation.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    pending_rows = [serialize_workspace_invitation(inv) for inv in inv_rows]
+    combined = member_rows + pending_rows
+    combined.sort(key=lambda row: row["created_at"])
+    data["members"] = combined
     return data
 
 
@@ -100,10 +128,16 @@ async def list_workspaces(
             .order_by(Workspace.workspace_type.asc(), Workspace.created_at.asc())
         )
     ).all()
-    return [serialize_workspace(workspace, membership) for workspace, membership in rows]
+    return [
+        serialize_workspace(workspace, membership) for workspace, membership in rows
+    ]
 
 
-@router.post("/workspaces", response_model=WorkspaceDetailResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/workspaces",
+    response_model=WorkspaceDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_workspace(
     data: WorkspaceCreate,
     db: AsyncSession = Depends(get_db),
@@ -141,7 +175,9 @@ async def get_workspace(
     membership = await require_workspace_member(db, workspace_id, user.uid)
     workspace = await db.get(Workspace, workspace_id)
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     return await _workspace_detail(db, workspace, membership)
 
 
@@ -157,7 +193,9 @@ async def update_workspace(
     membership = await require_workspace_owner(db, workspace_id, user.uid)
     workspace = await db.get(Workspace, workspace_id)
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
 
     if data.name is not None:
         workspace.name = data.name.strip()
@@ -187,41 +225,74 @@ async def add_workspace_member(
 
     workspace = await db.get(Workspace, workspace_id)
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     if workspace.workspace_type == WorkspaceType.PERSONAL.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Personal workspaces cannot have additional members",
         )
 
-    target_user = await _resolve_user_by_email(db, data.email.strip().lower())
-    if not target_user:
+    invite_email = normalize_invite_email(data.email)
+    if user.email and invite_email == normalize_invite_email(user.email):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No Nitrogen account found for {data.email}. Ask them to sign in first, then try again.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot add yourself as a workspace member.",
         )
-    await ensure_personal_workspace(db, target_user.id)
 
-    existing = (
+    target_user = await _resolve_user_by_email(db, invite_email)
+    if target_user:
+        await delete_workspace_invitations_for_email(db, workspace_id, invite_email)
+        await ensure_personal_workspace(db, target_user.id)
+
+        existing = (
+            await db.execute(
+                select(WorkspaceMembership).where(
+                    WorkspaceMembership.workspace_id == workspace_id,
+                    WorkspaceMembership.user_id == target_user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="User is already a member"
+            )
+
+        membership = WorkspaceMembership(
+            workspace_id=workspace_id,
+            user_id=target_user.id,
+            role=WorkspaceRole.MEMBER.value,
+        )
+        db.add(membership)
+        await db.commit()
+        await db.refresh(membership)
+        return serialize_member(membership, target_user)
+
+    pending_existing = (
         await db.execute(
-            select(WorkspaceMembership).where(
-                WorkspaceMembership.workspace_id == workspace_id,
-                WorkspaceMembership.user_id == target_user.id,
+            select(WorkspaceInvitation).where(
+                WorkspaceInvitation.workspace_id == workspace_id,
+                WorkspaceInvitation.email == invite_email,
             )
         )
     ).scalar_one_or_none()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User is already a member")
+    if pending_existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An invitation for this email is already pending for this workspace.",
+        )
 
-    membership = WorkspaceMembership(
+    invitation = WorkspaceInvitation(
         workspace_id=workspace_id,
-        user_id=target_user.id,
+        email=invite_email,
         role=WorkspaceRole.MEMBER.value,
+        invited_by=user.uid,
     )
-    db.add(membership)
+    db.add(invitation)
     await db.commit()
-    await db.refresh(membership)
-    return serialize_member(membership, target_user)
+    await db.refresh(invitation)
+    return serialize_workspace_invitation(invitation)
 
 
 @router.delete("/workspaces/{workspace_id}/members/{membership_id}")
@@ -235,8 +306,23 @@ async def remove_workspace_member(
     await ensure_user_exists(db, user)
     current = await require_workspace_member(db, workspace_id, user.uid)
     membership = await db.get(WorkspaceMembership, membership_id)
-    if membership is None or membership.workspace_id != workspace_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    if membership is not None and membership.workspace_id == workspace_id:
+        pass  # handle below
+    else:
+        invitation = await db.get(WorkspaceInvitation, membership_id)
+        if invitation is None or invitation.workspace_id != workspace_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+            )
+        is_owner = current.role == WorkspaceRole.OWNER.value
+        if not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only workspace owners can remove pending invitations",
+            )
+        await db.delete(invitation)
+        await db.commit()
+        return {"success": True}
 
     is_self = membership.user_id == user.uid
     is_owner = current.role == WorkspaceRole.OWNER.value
@@ -268,7 +354,9 @@ async def delete_workspace(
 
     workspace = await db.get(Workspace, workspace_id)
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     if workspace.workspace_type == WorkspaceType.PERSONAL.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -322,7 +410,9 @@ async def create_workspace_knowledge_bank(
     await db.flush()
 
     if index_now:
-        background_tasks.add_task(_index_workspace_knowledge_bank_task, bank.id, user.uid)
+        background_tasks.add_task(
+            _index_workspace_knowledge_bank_task, bank.id, user.uid
+        )
 
     await db.commit()
     await db.refresh(bank)
@@ -346,7 +436,9 @@ async def update_workspace_knowledge_bank(
     await require_workspace_owner(db, workspace_id, user.uid)
     bank = await db.get(WorkspaceKnowledgeBank, bank_id)
     if bank is None or bank.workspace_id != workspace_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found"
+        )
 
     url_changed = False
     if data.name is not None:
@@ -361,7 +453,9 @@ async def update_workspace_knowledge_bank(
     await db.commit()
     await db.refresh(bank)
     if url_changed:
-        background_tasks.add_task(_index_workspace_knowledge_bank_task, bank.id, user.uid)
+        background_tasks.add_task(
+            _index_workspace_knowledge_bank_task, bank.id, user.uid
+        )
     return _serialize_knowledge_bank(bank)
 
 
@@ -380,7 +474,9 @@ async def reindex_workspace_knowledge_bank(
     await require_workspace_owner(db, workspace_id, user.uid)
     bank = await db.get(WorkspaceKnowledgeBank, bank_id)
     if bank is None or bank.workspace_id != workspace_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found"
+        )
 
     service = WorkspaceKnowledgeService(db, user_id=user.uid)
     try:
@@ -394,7 +490,10 @@ async def reindex_workspace_knowledge_bank(
     return _serialize_knowledge_bank(bank)
 
 
-@router.delete("/workspaces/{workspace_id}/knowledge-banks/{bank_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/workspaces/{workspace_id}/knowledge-banks/{bank_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_workspace_knowledge_bank(
     workspace_id: UUID,
     bank_id: UUID,
@@ -406,7 +505,9 @@ async def delete_workspace_knowledge_bank(
     await require_workspace_owner(db, workspace_id, user.uid)
     bank = await db.get(WorkspaceKnowledgeBank, bank_id)
     if bank is None or bank.workspace_id != workspace_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge bank not found"
+        )
 
     await db.delete(bank)
     await db.commit()

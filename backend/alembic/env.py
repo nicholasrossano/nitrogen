@@ -11,7 +11,8 @@ from alembic import context
 from app.models import (  # noqa: F401
     Initiative, ChatMessage, EvidenceDoc, EvidenceChunk, MemoVersion, Citation,
     CorpusDocument, CorpusChunk, CoreChat, CoreChatMessage, ProvenanceTrace,
-    ProjectMaterial, User, ProjectShare, AssessmentInstance, DecisionEvent,
+    ProjectMaterial, User, ProjectShare, ProjectShareInvitation, WorkspaceInvitation,
+    AssessmentInstance, DecisionEvent,
 )
 from app.core.database import Base
 from app.config import get_settings
