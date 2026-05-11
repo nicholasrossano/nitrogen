@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,9 +14,14 @@ from app.core.permissions import (
     require_editor,
     require_owner,
 )
+from app.models.pending_invitation import ProjectShareInvitation
 from app.models.project_share import ProjectShare
 from app.models.user import User
 from app.schemas.share import ShareCreate, ShareUpdate, ShareResponse
+from app.services.pending_invitations import (
+    delete_project_share_invitations_for_email,
+    normalize_invite_email,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -25,7 +30,9 @@ logger = logging.getLogger(__name__)
 async def _resolve_user_by_email(db: AsyncSession, email: str) -> User | None:
     """Look up a user by email. If not in our DB but exists in Firebase, auto-upsert and return them."""
     # 1. Check our local users table first
-    local = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    local = (
+        await db.execute(select(User).where(func.lower(User.email) == email.lower()))
+    ).scalar_one_or_none()
     if local:
         return local
 
@@ -34,6 +41,7 @@ async def _resolve_user_by_email(db: AsyncSession, email: str) -> User | None:
         return None
     try:
         from firebase_admin import auth as fb_auth
+
         fb_user = fb_auth.get_user_by_email(email)
         # Auto-upsert into our users table
         new_user = User(
@@ -67,50 +75,93 @@ async def create_share(
     await ensure_user_exists(db, user)
     initiative = await require_editor(db, initiative_id, user)
 
-    target_user = await _resolve_user_by_email(db, body.email)
-    if not target_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No Nitrogen account found for {body.email}. Ask them to sign in to Nitrogen first, then try sharing again.",
-        )
-    if target_user.id == user.uid:
+    invite_email = normalize_invite_email(body.email)
+    if user.email and invite_email == normalize_invite_email(user.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot share a project with yourself.",
         )
 
-    existing = (
+    target_user = await _resolve_user_by_email(db, invite_email)
+    if target_user:
+        await delete_project_share_invitations_for_email(
+            db, initiative.id, invite_email
+        )
+
+        if target_user.id == user.uid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You cannot share a project with yourself.",
+            )
+
+        existing = (
+            await db.execute(
+                select(ProjectShare).where(
+                    ProjectShare.initiative_id == initiative.id,
+                    ProjectShare.user_id == target_user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This user already has access to the project.",
+            )
+
+        share = ProjectShare(
+            initiative_id=initiative.id,
+            user_id=target_user.id,
+            role=body.role,
+            shared_by=user.uid,
+        )
+        db.add(share)
+        await db.commit()
+        await db.refresh(share)
+
+        return ShareResponse(
+            id=share.id,
+            initiative_id=share.initiative_id,
+            user_id=share.user_id,
+            user_email=target_user.email,
+            user_display_name=target_user.display_name,
+            role=share.role,
+            created_at=share.created_at,
+            pending=False,
+        )
+
+    pending_existing = (
         await db.execute(
-            select(ProjectShare).where(
-                ProjectShare.initiative_id == initiative.id,
-                ProjectShare.user_id == target_user.id,
+            select(ProjectShareInvitation).where(
+                ProjectShareInvitation.initiative_id == initiative.id,
+                ProjectShareInvitation.email == invite_email,
             )
         )
     ).scalar_one_or_none()
-    if existing:
+    if pending_existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This user already has access to the project.",
+            detail="An invitation for this email is already pending for this project.",
         )
 
-    share = ProjectShare(
+    invitation = ProjectShareInvitation(
         initiative_id=initiative.id,
-        user_id=target_user.id,
+        email=invite_email,
         role=body.role,
         shared_by=user.uid,
     )
-    db.add(share)
+    db.add(invitation)
     await db.commit()
-    await db.refresh(share)
+    await db.refresh(invitation)
 
     return ShareResponse(
-        id=share.id,
-        initiative_id=share.initiative_id,
-        user_id=share.user_id,
-        user_email=target_user.email,
-        user_display_name=target_user.display_name,
-        role=share.role,
-        created_at=share.created_at,
+        id=invitation.id,
+        initiative_id=invitation.initiative_id,
+        user_id=None,
+        user_email=invitation.email,
+        user_display_name=None,
+        role=invitation.role,
+        created_at=invitation.created_at,
+        pending=True,
     )
 
 
@@ -134,7 +185,14 @@ async def list_shares(
     )
     shares = result.scalars().all()
 
-    return [
+    inv_result = await db.execute(
+        select(ProjectShareInvitation)
+        .where(ProjectShareInvitation.initiative_id == initiative.id)
+        .order_by(ProjectShareInvitation.created_at)
+    )
+    invitations = inv_result.scalars().all()
+
+    rows: list[ShareResponse] = [
         ShareResponse(
             id=s.id,
             initiative_id=s.initiative_id,
@@ -143,9 +201,25 @@ async def list_shares(
             user_display_name=s.user.display_name if s.user else None,
             role=s.role,
             created_at=s.created_at,
+            pending=False,
         )
         for s in shares
     ]
+    rows.extend(
+        ShareResponse(
+            id=inv.id,
+            initiative_id=inv.initiative_id,
+            user_id=None,
+            user_email=inv.email,
+            user_display_name=None,
+            role=inv.role,
+            created_at=inv.created_at,
+            pending=True,
+        )
+        for inv in invitations
+    )
+    rows.sort(key=lambda r: r.created_at)
+    return rows
 
 
 @router.patch(
@@ -170,21 +244,41 @@ async def update_share(
         )
     )
     share = result.scalar_one_or_none()
-    if not share:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
+    if share:
+        share.role = body.role
+        await db.commit()
+        await db.refresh(share)
 
-    share.role = body.role
+        return ShareResponse(
+            id=share.id,
+            initiative_id=share.initiative_id,
+            user_id=share.user_id,
+            user_email=share.user.email if share.user else None,
+            user_display_name=share.user.display_name if share.user else None,
+            role=share.role,
+            created_at=share.created_at,
+            pending=False,
+        )
+
+    invitation = await db.get(ProjectShareInvitation, share_id)
+    if invitation is None or invitation.initiative_id != initiative.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Share not found"
+        )
+
+    invitation.role = body.role
     await db.commit()
-    await db.refresh(share)
+    await db.refresh(invitation)
 
     return ShareResponse(
-        id=share.id,
-        initiative_id=share.initiative_id,
-        user_id=share.user_id,
-        user_email=share.user.email if share.user else None,
-        user_display_name=share.user.display_name if share.user else None,
-        role=share.role,
-        created_at=share.created_at,
+        id=invitation.id,
+        initiative_id=invitation.initiative_id,
+        user_id=None,
+        user_email=invitation.email,
+        user_display_name=None,
+        role=invitation.role,
+        created_at=invitation.created_at,
+        pending=True,
     )
 
 
@@ -209,16 +303,30 @@ async def delete_share(
         )
     )
     share = result.scalar_one_or_none()
-    if not share:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
+    if share:
+        is_owner = role == "owner"
+        is_self_removing = share.user_id == user.uid
+        if not is_owner and not is_self_removing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the project owner or the shared user can remove access.",
+            )
 
-    is_owner = role == "owner"
-    is_self_removing = share.user_id == user.uid
-    if not is_owner and not is_self_removing:
+        await db.delete(share)
+        await db.commit()
+        return
+
+    invitation = await db.get(ProjectShareInvitation, share_id)
+    if invitation is None or invitation.initiative_id != initiative.id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the project owner or the shared user can remove access.",
+            status_code=status.HTTP_404_NOT_FOUND, detail="Share not found"
         )
 
-    await db.delete(share)
+    if role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the project owner can remove a pending invitation.",
+        )
+
+    await db.delete(invitation)
     await db.commit()
