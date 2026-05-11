@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Nitrogen UI Style Guide
 
-Follow the complete style guide in `STYLEGUIDE.md`. Key rules:
+For narrative detail see `docs/style-guide.md` (do not confuse with a missing `STYLEGUIDE.md`). Key rules:
 
 ## Design Principles
 
