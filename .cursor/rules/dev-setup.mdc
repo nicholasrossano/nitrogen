@@ -1,7 +1,10 @@
 ---
 description: Nitrogen development setup and common issues
-globs: **/*
-alwaysApply: true
+globs:
+  - backend/**
+  - frontend/**
+  - scripts/**
+alwaysApply: false
 ---
 
 # Nitrogen Development Setup
