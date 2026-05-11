@@ -2,6 +2,17 @@ import { debugChatFlow } from '@/lib/chatDebug';
 import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const DEV_AUTH_BYPASS_STORAGE_KEY = 'nitrogen_dev_auth_bypass';
+const DEV_AUTH_BYPASS_TOKEN = 'mock-token';
+
+function isLocalDevelopmentHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    (hostname === 'localhost' || hostname === '127.0.0.1')
+  );
+}
 
 // Get the current user's ID token for API requests.
 // Uses authStateReady() so calls made immediately after a page load/redirect
@@ -16,9 +27,23 @@ async function getAuthToken(): Promise<string | null> {
     const auth = getAuth(app);
     await auth.authStateReady();
     const user = auth.currentUser;
-    if (!user) return null;
+    if (!user) {
+      if (
+        isLocalDevelopmentHost() &&
+        window.localStorage.getItem(DEV_AUTH_BYPASS_STORAGE_KEY) === 'true'
+      ) {
+        return DEV_AUTH_BYPASS_TOKEN;
+      }
+      return null;
+    }
     return await user.getIdToken();
   } catch {
+    if (
+      isLocalDevelopmentHost() &&
+      window.localStorage.getItem(DEV_AUTH_BYPASS_STORAGE_KEY) === 'true'
+    ) {
+      return DEV_AUTH_BYPASS_TOKEN;
+    }
     return null;
   }
 }

@@ -67,6 +67,7 @@ describe('api', () => {
   beforeEach(() => {
     mockFetch.mockReset();
     jest.resetModules();
+    window.localStorage.removeItem('nitrogen_dev_auth_bypass');
   });
 
   describe('getInitiative', () => {
@@ -102,6 +103,23 @@ describe('api', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/v1/initiatives'),
         expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('adds local dev bypass token when Firebase auth is unavailable', async () => {
+      window.localStorage.setItem('nitrogen_dev_auth_bypass', 'true');
+      mockFetch.mockResolvedValueOnce(mockOk({ id: '2', title: 'New' }));
+
+      const { api } = await import('@/lib/api');
+      await api.createInitiative('New Initiative');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer mock-token',
+          }),
+        }),
       );
     });
   });

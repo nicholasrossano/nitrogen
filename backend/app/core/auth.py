@@ -11,6 +11,9 @@ from app.core.log_sanitizer import sanitize_exception
 settings = get_settings()
 security = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
+DEV_AUTH_BYPASS_TOKEN = "mock-token"
+DEV_AUTH_BYPASS_UID = "shared-user"
+DEV_AUTH_BYPASS_EMAIL = "shared@nitrogen.ai"
 
 # Initialize Firebase Admin SDK if configured
 _firebase_initialized = False
@@ -79,6 +82,9 @@ class AuthUser:
 
 async def authenticate_bearer_token(token: str) -> AuthUser:
     """Validate a Firebase bearer token and return the authenticated user."""
+    if settings.debug and not settings.firebase_project_id and token == DEV_AUTH_BYPASS_TOKEN:
+        return AuthUser(uid=DEV_AUTH_BYPASS_UID, email=DEV_AUTH_BYPASS_EMAIL)
+
     if not settings.firebase_project_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
