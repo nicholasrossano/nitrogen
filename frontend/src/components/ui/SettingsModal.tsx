@@ -660,6 +660,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </p>
                   <p className="text-xs text-text-tertiary px-1 pb-1">
                     Adding a team member gives them access to all workspace projects and allows them to upload workspace-level materials.
+                    You can add an email before they create an account; they will join automatically when they sign up with that address.
                   </p>
                   <div className="space-y-4 pt-3">
                     {isWorkspaceOwner && (
@@ -681,10 +682,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     )}
                     <div className="border border-stroke-subtle rounded-lg divide-y divide-stroke-subtle">
                       {(activeWorkspaceDetail?.members ?? []).map((member) => {
-                        const primaryLabel = member.user_email ?? member.user_display_name ?? member.user_id;
-                        const secondaryLabel = member.user_email && member.user_display_name
-                          ? member.user_display_name
-                          : null;
+                        const primaryLabel = member.user_email ?? member.user_display_name ?? member.user_id ?? 'Invited';
+                        const secondaryLabel = member.pending
+                          ? 'Invited — no account yet'
+                          : member.user_email && member.user_display_name
+                            ? member.user_display_name
+                            : null;
                         return (
                           <AccessMemberRow
                             key={member.id}
@@ -693,7 +696,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                             roleLabel={member.role}
                             accentAvatar={member.role === 'owner'}
                             onRemove={isWorkspaceOwner && member.role !== 'owner' ? () => removeMember(member.id) : undefined}
-                            removeTitle="Remove member"
+                            removeTitle={member.pending ? 'Cancel invitation' : 'Remove member'}
                           />
                         );
                       })}
@@ -812,6 +815,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </p>
                   <p className="text-xs text-text-tertiary px-1 pb-1">
                     Adding a collaborator gives them access to this project and allows them to view or make changes.
+                    You can invite an email before they create an account; they will get access automatically when they sign up with that address.
                   </p>
                   <div className="space-y-4 pt-3">
                     {(projectRole === 'owner' || projectRole === 'editor') && (
@@ -864,8 +868,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                           .map((share) => (
                             <AccessMemberRow
                               key={share.id}
-                              emailOrId={share.user_email || share.user_id}
-                              displayName={share.user_display_name}
+                              emailOrId={share.user_email || share.user_id || 'Invited'}
+                              displayName={share.pending ? 'Invited — no account yet' : share.user_display_name}
                               roleValue={projectRole === 'owner' ? share.role : undefined}
                               roleLabel={projectRole === 'owner' ? undefined : share.role}
                               roleOptions={projectRole === 'owner' ? [
@@ -876,7 +880,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                                 ? (value) => void handleProjectShareRoleChange(share.id, value as 'editor' | 'viewer')
                                 : undefined}
                               onRemove={projectRole === 'owner' ? () => void handleProjectShareRemove(share.id) : undefined}
-                              removeTitle="Remove access"
+                              removeTitle={share.pending ? 'Cancel invitation' : 'Remove access'}
                             />
                           ))
                       )}

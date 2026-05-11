@@ -90,21 +90,25 @@ export interface ChatAssessmentSummary {
 export interface ProjectShare {
   id: string;
   initiative_id: string;
-  user_id: string;
+  user_id: string | null;
   user_email: string | null;
   user_display_name: string | null;
   role: 'editor' | 'viewer';
   created_at: string;
+  /** True when the email was invited but no Nitrogen account exists yet. */
+  pending?: boolean;
 }
 
 export interface WorkspaceMember {
   id: string;
   workspace_id: string;
-  user_id: string;
+  user_id: string | null;
   user_email: string | null;
   user_display_name: string | null;
   role: 'owner' | 'member';
   created_at: string;
+  /** True when the email was invited but no Nitrogen account exists yet. */
+  pending?: boolean;
 }
 
 export interface Workspace {
