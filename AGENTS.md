@@ -19,6 +19,16 @@ Keep this file minimal and always-on. Put specialized guidance in `docs/agent-pl
 - Use quiet/fail-fast commands (`pytest -q -x`, Jest `--silent --bail`, or `npm run test:*:quiet`).
 - On failure, inspect only the first relevant failure block; open full logs only if still inconclusive.
 
+### Terminal Output Safety
+
+Chat transcripts absorb **unbounded shell output** as model input. A single huge `find`, recursive `grep`, full log paste, or `cat` of a lockfile/build artifact can blow past **millions of tokens**.
+
+- Never print unbounded repository output into the chat. Cap stdout (`head`/`tail`/`wc`), or write full output to **ignored** `.test-output/` and paste only a short summary.
+- Avoid by default: `find .`, `ls -R`, `du -ah .`, `grep -R`, root-level `rg .` without `--glob` excludes, and `cat` on large logs, lockfiles, generated files, dependency trees, source maps, build artifacts, or binary-ish files—unless the task explicitly requires it.
+- Prefer `git ls-files`, scoped `rg` with path + `--glob` excludes, targeted reads, and `npm run cursor:audit` / `scripts/safe_search.sh` for audits.
+- Broad scans must exclude at minimum: `**/node_modules/**`, `.git`, `**/.next/**`, `dist`, `build`, `coverage`, `htmlcov`, `.test-output`, caches, logs, and generated/binary artifacts.
+- Full regression (whole-suite tests, full CI-equivalent runs) is **final validation**, not the default iteration loop.
+
 ## Validation Workflow
 
 1. Run the narrowest meaningful check for the edited area.
@@ -43,8 +53,9 @@ cd backend && python3 -m alembic upgrade head
 | Frontend lint | `cd frontend && npm run lint` |
 | Quiet backend wrapper | `npm run test:backend:quiet -- <path-or-nodeid>` |
 | Quiet frontend wrapper | `npm run test:frontend:quiet -- <path>` |
+| Safe token/repo audit | `npm run cursor:audit` |
 | Full backend regression | `cd backend && python3 -m pytest tests/ -q` |
-| Full frontend regression | `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build` |
+| Full frontend regression (final) | `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build` |
 
 More examples and wrappers: `docs/testing.md`.
 

@@ -19,6 +19,8 @@ const customJestConfig = {
     '!src/**/index.ts',
     '!src/app/**',
   ],
+  // Keep CI/agent logs short; open `coverage/lcov-report` or `coverage/lcov.info` for detail.
+  coverageReporters: ['text-summary', 'lcov'],
 };
 
 module.exports = createJestConfig(customJestConfig);
