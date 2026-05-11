@@ -18,10 +18,14 @@ REPORT="$OUT_DIR/safe-repo-scan-${STAMP}.txt"
   du -sh "$ROOT_DIR/backend" "$ROOT_DIR/frontend" "$ROOT_DIR/docs" "$ROOT_DIR/scripts" 2>/dev/null || true
   echo ""
   echo "=== Risky shell idioms in scripts + .github (first 50 lines) ==="
-  rg -n --glob '!**/.git/**' \
-    --glob '!**/node_modules/**' \
-    'find \.|grep -[rR]|ls -R|du -ah \.|git rev-list --all' \
-    "$ROOT_DIR/scripts" "$ROOT_DIR/.github" 2>/dev/null | head -50 || true
+  if command -v rg >/dev/null 2>&1; then
+    rg -n --glob '!**/.git/**' \
+      --glob '!**/node_modules/**' \
+      'find \.|grep -[rR]|ls -R|du -ah \.|git rev-list --all' \
+      "$ROOT_DIR/scripts" "$ROOT_DIR/.github" 2>/dev/null | head -50 || true
+  else
+    echo "(skipped: ripgrep not installed)"
+  fi
 } >"$REPORT"
 
 echo "Summary:"
