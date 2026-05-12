@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser
@@ -49,7 +50,13 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
                 last_seen_at=now,
             )
         )
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            existing = await db.get(User, user.uid)
+            if existing is None:
+                raise
         await ensure_personal_workspace(db, user.uid)
         await redeem_pending_invitations(db, user.uid, user.email)
         await db.commit()
