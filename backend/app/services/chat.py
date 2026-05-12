@@ -458,29 +458,54 @@ class ChatService:
             parsed_calls=[fn_name for fn_name, _ in parsed_calls],
         )
 
-        if is_investigate_request and not any(
-            fn_name in {"search_scholarly_literature", "search_web_sources"}
-            for fn_name, _ in parsed_calls
-        ):
-            if should_run_scholarly:
-                parsed_calls.append(
+        if is_investigate_request:
+            existing_tools = {fn_name for fn_name, _ in parsed_calls}
+            if "search_project_documents" not in existing_tools:
+                parsed_calls.insert(
+                    0,
                     (
-                        "search_scholarly_literature",
+                        "search_project_documents",
                         {
                             "query": external_search_query,
-                            "reason": "Investigate requests should be grounded in external benchmarks when available.",
+                            "reason": "Investigate requests should first check project documents for relevant data.",
+                        },
+                    ),
+                )
+            if "search_workspace_context" not in existing_tools:
+                insert_pos = 1 if parsed_calls and parsed_calls[0][0] == "search_project_documents" else 0
+                parsed_calls.insert(
+                    insert_pos,
+                    (
+                        "search_workspace_context",
+                        {
+                            "query": external_search_query,
+                            "reason": "Investigate requests should check workspace knowledge banks for organisational context.",
+                        },
+                    ),
+                )
+            if not any(
+                fn_name in {"search_scholarly_literature", "search_web_sources"}
+                for fn_name in existing_tools
+            ):
+                if should_run_scholarly:
+                    parsed_calls.append(
+                        (
+                            "search_scholarly_literature",
+                            {
+                                "query": external_search_query,
+                                "reason": "Investigate requests should be grounded in external benchmarks when available.",
+                            },
+                        )
+                    )
+                parsed_calls.append(
+                    (
+                        "search_web_sources",
+                        {
+                            "query": external_search_query,
+                            "reason": "Investigate requests should cite current institutional or industry references when available.",
                         },
                     )
                 )
-            parsed_calls.append(
-                (
-                    "search_web_sources",
-                    {
-                        "query": external_search_query,
-                        "reason": "Investigate requests should cite current institutional or industry references when available.",
-                    },
-                )
-            )
 
         # Run search tools (scholarly + web) concurrently
         async def _run_scholarly(query: str) -> list[RetrievedFact]:
@@ -1612,10 +1637,11 @@ class ChatService:
         """Return True if the message is asking to investigate/propose a value for a model input."""
         lower = user_message.lower()
         investigate_keywords = [
-            "investigate", "propose", "suggest a value", "estimate a value",
-            "what should", "what value", "help me find", "research the value",
-            "propose a specific", "estimate for", "validate the value",
-            "better value", "alternative", "different value",
+            "investigate the value", "investigate a value",
+            "propose a value", "propose a specific value", "propose an alternative value",
+            "suggest a value", "estimate a value", "estimate for",
+            "what value should", "research the value", "validate the value",
+            "better value for", "different value for",
         ]
         return any(k in lower for k in investigate_keywords)
 
