@@ -20,6 +20,8 @@ export interface ModelInputGroup<T extends ModelInputRow> {
   inputs: T[];
 }
 
+export const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
+
 export const MODEL_INPUT_STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   validated: { bg: 'bg-green-50', text: 'text-green-700', label: 'Validated' },
   extracted: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Extracted' },
@@ -38,7 +40,9 @@ interface Props<T extends ModelInputRow> {
   renderTrailingCell?: (row: T) => ReactNode;
   trailingCellClassName?: string;
   valueCellClassName?: string;
+  investigateCursor?: boolean;
   onRowMouseEnter?: (event: React.MouseEvent, row: T) => void;
+  onRowMouseMove?: (event: React.MouseEvent, row: T) => void;
   onRowMouseLeave?: () => void;
   onRowClick?: (event: React.MouseEvent, row: T) => void;
   renderValueCell: (row: T, isEditing: boolean) => ReactNode;
@@ -55,7 +59,9 @@ export function ModelInputsTable<T extends ModelInputRow>({
   renderTrailingCell,
   trailingCellClassName = 'w-6 flex justify-center shrink-0',
   valueCellClassName = 'w-36 text-right shrink-0 text-xs font-mono tabular-nums text-text-primary',
+  investigateCursor = false,
   onRowMouseEnter,
+  onRowMouseMove,
   onRowMouseLeave,
   onRowClick,
   renderValueCell,
@@ -81,8 +87,10 @@ export function ModelInputsTable<T extends ModelInputRow>({
                 <div
                   key={row.field_name}
                   onMouseEnter={(event) => onRowMouseEnter?.(event, row)}
+                  onMouseMove={(event) => onRowMouseMove?.(event, row)}
                   onMouseLeave={() => onRowMouseLeave?.()}
                   onClick={(event) => onRowClick?.(event, row)}
+                  style={investigateCursor ? { cursor: INVESTIGATE_CURSOR } : undefined}
                   className={`px-5 py-2.5 flex items-center gap-4 ${
                     isMissing ? 'bg-red-50/40' : 'bg-white'
                   } ${hoveredFieldName === row.field_name ? 'bg-gray-50/60' : ''}`}
