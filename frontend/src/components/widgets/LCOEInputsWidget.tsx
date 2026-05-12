@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   Pencil,
@@ -65,7 +66,11 @@ export function LCOEInputsWidget({
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
   );
-  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; status: string; top: number } | null>(null);
+  const [hoveredRow, setHoveredRow] = useState<{ field_name: string; label: string; status: string } | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [overInteractive, setOverInteractive] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const cardRef = useRef<HTMLDivElement>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -222,120 +227,116 @@ export function LCOEInputsWidget({
     }
   }, [localInputs, preConfirmStatuses, persistWidget, onRecalculated]);
 
-  const handleRowHover = useCallback((e: React.MouseEvent, inp: LCOEInput) => {
-    if (!cardRef.current) return;
-    const rowRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const cardRect = cardRef.current.getBoundingClientRect();
-    setHoveredRow({
-      field_name: inp.field_name,
-      label: inp.label,
-      status: inp.status,
-      top: rowRect.top - cardRect.top + rowRect.height / 2,
-    });
+  const handleRowEnter = useCallback((_e: React.MouseEvent, inp: LCOEInput) => {
+    setHoveredRow({ field_name: inp.field_name, label: inp.label, status: inp.status });
+  }, []);
+
+  const handleRowMove = useCallback((e: React.MouseEvent, _inp: LCOEInput) => {
+    const isInteractive = !!(e.target as HTMLElement).closest('button, input, select, a');
+    setOverInteractive(isInteractive);
+    setMousePos({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleRowLeave = useCallback(() => {
+    setHoveredRow(null);
+    setOverInteractive(false);
   }, []);
 
   return (
-    <div
-      ref={cardRef}
-      className="relative flex items-start gap-0"
-      onMouseLeave={() => setHoveredRow(null)}
-    >
-      <div className="flex-1 min-w-0 card-elevated overflow-hidden">
-        <PanelHeader
-          icon={SlidersHorizontal}
-          title="LCOE Model Inputs"
-          subtitle={<>{Object.keys(localInputs).length} fields{missingEssentials.length > 0 && <span className="text-red-600 ml-2">&middot; {missingEssentials.length} critical input{missingEssentials.length !== 1 ? 's' : ''} missing</span>}</>}
-        />
+    <div ref={cardRef} className="card-elevated overflow-hidden">
+      <PanelHeader
+        icon={SlidersHorizontal}
+        title="LCOE Model Inputs"
+        subtitle={<>{Object.keys(localInputs).length} fields{missingEssentials.length > 0 && <span className="text-red-600 ml-2">&middot; {missingEssentials.length} critical input{missingEssentials.length !== 1 ? 's' : ''} missing</span>}</>}
+      />
 
-        {/* Missing essentials banner */}
-        {missingEssentials.length > 0 && (
-          <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-            <span className="text-xs text-red-700">
-              Missing to compute LCOE:{' '}
-              {missingEssentials
-                .map((f) => {
-                  const inp = localInputs[f] as LCOEInput | undefined;
-                  return inp?.label || f;
-                })
-                .join(', ')}
-            </span>
-          </div>
-        )}
-
-        <ModelInputsTable
-          groups={groupedInputs}
-          hoveredFieldName={hoveredRow?.field_name ?? null}
-          editingField={editingField}
-          isActive={isActive}
-          confirmingFields={confirmingFields}
-          showConfirmCheckbox={!hasOutputWidget}
-          onToggleConfirm={(row) => toggleConfirm(row.field_name, row.status, row.value)}
-          onRowMouseEnter={(event, row) => handleRowHover(event, row)}
-          renderValueCell={(row, isEditing) => (
-            isEditing ? (
-              <input
-                type="text"
-                value={editValue}
-                onChange={(event) => setEditValue(event.target.value)}
-                onKeyDown={handleKeyDown}
-                onBlur={commitEdit}
-                autoFocus
-                className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
-              />
-            ) : (
-              <button
-                onClick={() => isActive && startEdit(row.field_name, row.value)}
-                disabled={!isActive}
-                className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {row.status === 'missing' ? (
-                  <span className="text-red-500 italic">—</span>
-                ) : (
-                  <span>
-                    {typeof row.value === 'number'
-                      ? row.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
-                      : row.value}
-                  </span>
-                )}
-                {isActive && (
-                  <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
-                )}
-              </button>
-            )
-          )}
-        />
-
-        {/* Footer */}
-        {isRecalculating && (
-          <div className="px-5 py-2.5 bg-accent-wash border-t border-divider text-center">
-            <span className="text-xs text-accent">Recalculating…</span>
-          </div>
-        )}
-
-        <div className="px-5 py-3 bg-surface-header border-t border-divider">
-          <p className="text-[10px] text-text-tertiary text-center">
-            Click any value to edit &middot; Yellow = assumed value &middot; Red = missing
-          </p>
+      {missingEssentials.length > 0 && (
+        <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+          <span className="text-xs text-red-700">
+            Missing to compute LCOE:{' '}
+            {missingEssentials
+              .map((f) => {
+                const inp = localInputs[f] as LCOEInput | undefined;
+                return inp?.label || f;
+              })
+              .join(', ')}
+          </span>
         </div>
+      )}
+
+      <ModelInputsTable
+        groups={groupedInputs}
+        hoveredFieldName={hoveredRow?.field_name ?? null}
+        editingField={editingField}
+        isActive={isActive}
+        investigateCursor={isActive}
+        confirmingFields={confirmingFields}
+        showConfirmCheckbox={!hasOutputWidget}
+        onToggleConfirm={(row) => toggleConfirm(row.field_name, row.status, row.value)}
+        onRowMouseEnter={handleRowEnter}
+        onRowMouseMove={handleRowMove}
+        onRowMouseLeave={handleRowLeave}
+        onRowClick={(event, row) => {
+          if ((event.target as HTMLElement).closest('button, input, select, a')) return;
+          investigate(row.label, row.status, row.field_name);
+        }}
+        renderValueCell={(row, isEditing) => (
+          isEditing ? (
+            <input
+              type="text"
+              value={editValue}
+              onChange={(event) => setEditValue(event.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={commitEdit}
+              autoFocus
+              className="w-full text-xs text-right px-2 py-1 border border-accent rounded bg-white outline-none"
+            />
+          ) : (
+            <button
+              onClick={() => isActive && startEdit(row.field_name, row.value)}
+              disabled={!isActive}
+              className="group inline-flex items-center gap-1 text-xs font-mono tabular-nums text-text-primary enabled:hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {row.status === 'missing' ? (
+                <span className="text-red-500 italic">—</span>
+              ) : (
+                <span>
+                  {typeof row.value === 'number'
+                    ? row.value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                    : row.value}
+                </span>
+              )}
+              {isActive && (
+                <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+              )}
+            </button>
+          )
+        )}
+      />
+
+      {isRecalculating && (
+        <div className="px-5 py-2.5 bg-accent-wash border-t border-divider text-center">
+          <span className="text-xs text-accent">Recalculating…</span>
+        </div>
+      )}
+
+      <div className="px-5 py-3 bg-surface-header border-t border-divider">
+        <p className="text-[10px] text-text-tertiary text-center">
+          Click any value to edit &middot; Yellow = assumed value &middot; Red = missing
+        </p>
       </div>
 
-      {/* Right gutter — holds Investigate button aligned with hovered row */}
-      <div className="relative w-[90px] flex-shrink-0 self-stretch">
-        {hoveredRow && (
-          <button
-            onClick={() => {
-              const { label, status, field_name } = hoveredRow;
-              setHoveredRow(null);
-              investigate(label, status, field_name);
-            }}
-            className="absolute left-2 -translate-y-1/2 text-[11px] font-medium text-accent hover:text-accent-anchor px-2.5 py-1 rounded-md border border-accent/20 bg-white hover:bg-accent-wash shadow-sm transition-all whitespace-nowrap cursor-pointer"
-            style={{ top: hoveredRow.top }}
+      {mounted && hoveredRow && mousePos && !overInteractive &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-gray-700 text-white text-[11px] font-medium shadow-md whitespace-nowrap"
+            style={{ left: mousePos.x + 16, top: mousePos.y - 32 }}
           >
             Investigate
-          </button>
+          </div>,
+          document.body
         )}
-      </div>
     </div>
   );
 }

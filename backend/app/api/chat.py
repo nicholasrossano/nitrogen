@@ -767,14 +767,12 @@ async def chat_stream(
                 else:
                     _workflow_assessment = None
 
-                # Assumption-scoped chats (investigate-from-row) send tool_hint so the model
-                # knows which assessment the field belongs to; they must not take the
-                # first-turn workspace shortcut or we re-open the module instead of researching.
                 if (
                     _workflow_assessment
                     and data.initiative_id
                     and uses_workspace_flow(_workflow_assessment)
                     and focused_assumption is None
+                    and not field_context
                 ):
                     if not verified_initiative:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'Project access required for this assessment.'})}\n\n"
