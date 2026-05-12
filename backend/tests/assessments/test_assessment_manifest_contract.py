@@ -125,11 +125,20 @@ def test_stage_defs_are_well_formed() -> None:
                 )
 
 
-def test_every_stage_ends_with_await_user_confirmation() -> None:
-    """Every stage pipeline must terminate with await_user_confirmation."""
+def test_stage_confirmation_semantics() -> None:
+    """Non-auto-confirmed stages must end with await_user_confirmation.
+
+    Computed terminal stages may omit it — they auto-confirm after
+    computation and rely on final_approval as the deliberate sign-off.
+    """
     for assessment in get_assessment_registry().get_all_assessments():
-        for stage in assessment.stage_defs:
+        stage_defs = assessment.stage_defs
+        for stage in stage_defs:
             if not stage.population:
+                continue
+            is_terminal = stage_defs[-1].id == stage.id
+            is_computed = stage.component == "computed_results"
+            if is_terminal and is_computed:
                 continue
             last_step = stage.population[-1]
             assert last_step.type == "await_user_confirmation", (

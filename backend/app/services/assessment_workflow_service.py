@@ -264,6 +264,34 @@ def _is_legacy_state(state: dict[str, Any]) -> bool:
 # Downstream invalidation
 # ---------------------------------------------------------------------------
 
+def _should_auto_confirm_stage(stage_def: StageDef, assessment: BaseAssessment) -> bool:
+    """Whether a stage should auto-confirm after successful population.
+
+    A computed terminal stage auto-confirms when its pipeline does NOT include
+    ``await_user_confirmation``.  This lets each assessment declare intent:
+
+    * Calculator assessments (LCOE, PVWatts, Carbon) keep
+      ``await_user_confirmation`` on results — the user reviews the output
+      before confirming.
+    * Structured assessments (Landscape, Stakeholder, Implementation Plan)
+      omit it on the terminal map/plan — the output is derived from
+      already-confirmed entities, so it auto-confirms. Final approval
+      remains as the deliberate workspace-level sign-off.
+    """
+    if stage_def.component != "computed_results":
+        return False
+    is_terminal = (
+        assessment.stage_defs
+        and assessment.stage_defs[-1].id == stage_def.id
+    )
+    if not is_terminal:
+        return False
+    has_await = any(
+        step.type == "await_user_confirmation" for step in stage_def.population
+    )
+    return not has_await
+
+
 def _get_downstream_stage_ids(assessment: BaseAssessment, changed_stage_id: str) -> list[str]:
     """Return stage IDs that directly depend on changed_stage_id via population steps."""
     stage_defs = assessment.stage_defs
@@ -396,6 +424,11 @@ async def populate_stage(
         items_empty = stage_def.component in ("list", "table") and not accumulated_data.get("items")
         if ai_steps_ran and items_empty:
             state["stages"][stage_id]["status"] = "error"
+        elif _should_auto_confirm_stage(stage_def, assessment):
+            state["stages"][stage_id]["status"] = "confirmed"
+            now = datetime.now(timezone.utc).isoformat()
+            state["stages"][stage_id]["confirmed_at"] = now
+            state["stages"][stage_id]["confirmed_by"] = "system:auto"
         else:
             state["stages"][stage_id]["status"] = "draft"
 
