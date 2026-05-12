@@ -148,7 +148,7 @@ function writeStoredWorkspaceUiState(storageKey: string, state: StoredInitiative
   try {
     sessionStorage.setItem(storageKey, JSON.stringify(state));
   } catch {
-    // Ignore private mode / quota errors.
+    // Quota / private mode: ignore.
   }
 }
 
@@ -619,7 +619,6 @@ function InitiativePageContent() {
     }
     if (item === 'workspace') {
       setPanelOpen('assessments', 'workspace', true);
-      // Drawer click should always land on the assessment hub.
       setWorkspaceLaunchMode('open');
       setActiveWorkspaceTabId(null);
       setActiveView('assessments');
@@ -749,7 +748,7 @@ function InitiativePageContent() {
   }, [pageReady]);
 
   useEffect(() => {
-    // Safety cleanup: remove any persisted Chat Outputs tab from prior sessions.
+    // Drop persisted "Chat Outputs" tabs from older clients; they are no longer supported.
     if (!workspaceTabs.some((tab) => tab.kind === 'artifacts')) return;
     const nextTabs = workspaceTabs.filter((tab) => tab.kind !== 'artifacts');
     setWorkspaceTabs(nextTabs);

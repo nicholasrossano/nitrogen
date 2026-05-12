@@ -128,8 +128,7 @@ async def upload_evidence(
             file_size=len(prepared.content),
         )
 
-        # Kick off the parse/embed pipeline in the background; the response
-        # returns immediately.
+        # Background parse/embed; HTTP returns immediately.
         schedule_processing(evidence_doc.id, user_id=user.uid)
 
         return EvidenceUploadResponse(
@@ -149,9 +148,7 @@ async def upload_evidence(
             evidence_ready=initiative.evidence_ready,
         )
 
-    # --- Text paste path -------------------------------------------------
-    # Text pastes are small and synchronous — keep the legacy behaviour
-    # (chunk + embed inline) so callers see the text immediately available.
+    # Text pastes: small payload — chunk+embed inline so text is queryable immediately (unlike file upload path).
     from app.services.document_parser import DocumentParserService
     from app.services.embeddings import EmbeddingsService
 
@@ -238,7 +235,6 @@ async def paste_evidence_text(
     user: AuthUser = Depends(get_current_user),
 ):
     """Paste text as evidence (alternative to file upload)"""
-    # Reuse upload endpoint logic with text
     return await upload_evidence(
         request=request,
         initiative_id=initiative_id,
@@ -370,7 +366,6 @@ async def list_evidence(
     """List evidence documents for an initiative"""
     initiative = await require_viewer(db, initiative_id, user)
 
-    # Get evidence docs with chunk counts in a single query
     stmt = (
         select(
             EvidenceDoc,
@@ -404,7 +399,6 @@ async def get_evidence_content(
     user: AuthUser = Depends(get_current_user),
 ):
     """Get the full content of an evidence document"""
-    # Get evidence doc
     result = await db.execute(
         select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
     )
@@ -418,7 +412,7 @@ async def get_evidence_content(
 
     await _require_evidence_viewer(db, evidence_doc, user)
 
-    # Get only the columns we need (exclude embedding vectors)
+    # Plain chunk text only (omit embedding columns).
     chunks_result = await db.execute(
         select(
             EvidenceChunk.content,
@@ -677,7 +671,6 @@ async def delete_evidence(
     user: AuthUser = Depends(get_current_user),
 ):
     """Delete an evidence document and its chunks"""
-    # Get evidence doc
     result = await db.execute(
         select(EvidenceDoc).where(EvidenceDoc.id == evidence_id)
     )
@@ -705,12 +698,10 @@ async def delete_evidence(
         if preview_path:
             await storage.delete(preview_path)
 
-    # Delete all chunks first
     await db.execute(
         sql_delete(EvidenceChunk).where(EvidenceChunk.evidence_doc_id == evidence_id)
     )
-    
-    # Delete the evidence doc
+
     await db.delete(evidence_doc)
     await db.commit()
     

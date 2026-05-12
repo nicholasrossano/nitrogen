@@ -134,7 +134,6 @@ def _initiative_to_response(initiative: Initiative, shared_role: str | None = No
 def _initiative_to_list_item(initiative: Initiative, shared_role: str | None = None, owner_email: str | None = None) -> dict:
     """Lightweight version for list endpoints — skips heavy fields."""
     data = InitiativeResponse.model_validate(initiative).model_dump()
-    # Derive a simple deliverable count without iterating assessment instances
     instances = _active_assessment_instances(initiative.assessment_instances or [])
     seen_tools: set[str] = set()
     for inst in instances:
@@ -354,8 +353,7 @@ async def list_initiatives(
     )
     initiatives = workspace_projects.scalars().all()
 
-    # Legacy project shares stay visible from the personal workspace so existing
-    # collaboration links do not disappear while workspaces become the default.
+    # Personal workspace also lists projects shared into you from other workspaces (legacy shares stay visible).
     shared_initiatives: list[tuple[Initiative, str, str | None]] = []
     if not archived and workspace.workspace_type == "personal":
         shared_result = await db.execute(
@@ -618,9 +616,9 @@ async def create_assessment_instance(
     """Create a fresh assessment instance directly (no chat session required)."""
     await ensure_user_exists(db, user)
     initiative = await require_editor(db, initiative_id, user)
+    # No chat_id: this entrypoint always creates a new instance (see get_or_create_instance).
     inst = await assessment_service.get_or_create_instance(
         db, initiative.id, body.assessment_id, user.uid
-        # no chat_id → always creates a fresh instance
     )
     await ensure_expected_assumptions(
         db,
@@ -643,7 +641,7 @@ async def permanently_delete_initiative(
     """Permanently delete an initiative and all related data - owner only"""
     initiative = await require_owner(db, initiative_id, user)
 
-    # Collect export file paths before CASCADE deletes the rows
+    # Snapshot memo export paths before CASCADE removes MemoVersion rows.
     memo_result = await db.execute(
         select(MemoVersion.export_path)
         .where(
@@ -656,7 +654,7 @@ async def permanently_delete_initiative(
     await db.delete(initiative)
     await db.commit()
 
-    # Clean up storage blobs (best-effort, don't fail the request)
+    # Best-effort blob cleanup; request still succeeds if storage delete fails.
     settings = get_settings()
     try:
         uploads_dir = Path(settings.uploads_dir) / str(initiative.id)

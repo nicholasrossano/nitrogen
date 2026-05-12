@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from dotenv import load_dotenv
-# Load .env before any config reads (backend/.env when run from backend/)
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")  # before pydantic reads backend/.env
 
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -33,8 +33,7 @@ PRODUCTION_ORIGINS = [
     "https://app.the-nitrogen.ai",
 ]
 
-# CORS origins: prefer settings (loaded from .env by pydantic) since os.environ
-# may not have CORS_ORIGINS when pydantic-settings loads .env for its own use
+# CORS: merge env/settings with production list (pydantic may load .env without populating os.environ).
 def get_cors_origins():
     base_origins: list[str] = []
     cors_env = os.environ.get('CORS_ORIGINS', '')
@@ -79,12 +78,9 @@ def cors_headers_for_request(request: Request) -> dict[str, str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     async with engine.begin():
         pass
-    # Restart-safety: pick up any evidence docs that were mid-processing when
-    # the previous worker died and re-enqueue them.  Fire-and-forget — a DB
-    # hiccup during reclaim must never prevent the API from serving.
+    # Re-queue evidence jobs interrupted by worker restart; failures here must not block startup.
     try:
         from app.services.evidence_processor import reclaim_stale_jobs
 
@@ -94,7 +90,6 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Could not schedule reclaim_stale_jobs at startup: %s", exc)
     yield
-    # Shutdown
     from app.core.http_client import close_http_client
     await close_http_client()
     await engine.dispose()
@@ -107,7 +102,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting
 from app.core.rate_limit import limiter  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler as rate_limit_handler  # noqa: E402
@@ -115,7 +109,6 @@ from slowapi import _rate_limit_exceeded_handler as rate_limit_handler  # noqa: 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
-# CORS — only allow known origins + Nitrogen Vercel preview deploys
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -170,7 +163,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Include routers
 app.include_router(initiatives.router, prefix="/api/v1", tags=["initiatives"])
 app.include_router(workspaces.router, prefix="/api/v1", tags=["workspaces"])
 app.include_router(onboarding.router, prefix="/api/v1", tags=["onboarding"])

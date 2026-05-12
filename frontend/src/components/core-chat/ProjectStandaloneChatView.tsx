@@ -265,9 +265,7 @@ export function ProjectChatSurface({
         if (!latest?.id) return;
         await loadChat(latest.id, latest.title);
       })
-      .catch(() => {
-        // Keep default landing behavior if auto-restore fails.
-      });
+      .catch(() => {});
   }, [
     currentChatId,
     initialChatId,
@@ -294,12 +292,10 @@ export function ProjectChatSurface({
     onChatMetaChange?.(nextMeta);
   }, [currentChatId, sessionTitle, onChatMetaChange]);
 
-  // When showLanding transitions to true, clear current conversation
-  // (it's already persisted to DB by the streaming endpoint)
+  // Returning to landing: messages are already persisted; clear local state and refresh history.
   const prevShowLanding = useRef(showLanding);
   useEffect(() => {
     if (showLanding && !prevShowLanding.current && localMessages.length > 0) {
-      // Refresh shared chats so the finished conversation appears in history.
       onChatListDirty?.();
       setLocalMessages([]);
       setSessionTitle(null);
@@ -312,7 +308,6 @@ export function ProjectChatSurface({
     prevShowLanding.current = showLanding;
   }, [showLanding, localMessages, onChatListDirty]);
 
-  // Persist the AI-generated title to the DB chat once both are available
   const titlePersistedRef = useRef(false);
   useEffect(() => {
     if (sessionTitle && currentChatId && !titlePersistedRef.current) {
@@ -348,7 +343,6 @@ export function ProjectChatSurface({
     void refreshChatAssessments(currentChatId);
   }, [currentChatId, localMessages, refreshChatAssessments]);
 
-  // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
     if (!onEditorWidgetsChange) return;
     const raw: EditorWidget[] = localMessages
@@ -802,7 +796,6 @@ export function ProjectChatSurface({
     [loadChat],
   );
 
-  // Expose handleSend to parent via ref for programmatic sends.
   useEffect(() => {
     if (onSendRef) onSendRef.current = handleSend;
     return () => {

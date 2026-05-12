@@ -307,7 +307,6 @@ async def list_project_files(
     initiative = await require_viewer(db, initiative_id, user)
     await _repair_project_file_workspace_ids(db, initiative.id, initiative.workspace_id)
 
-    # Uploaded materials (project_materials + evidence_docs with files)
     mat_result = await db.execute(
         select(ProjectMaterial)
         .where(
@@ -346,7 +345,6 @@ async def list_project_files(
         ))
     uploaded.sort(key=lambda r: r.created_at, reverse=True)
 
-    # Generated outputs from assessment instances (single source of truth)
     generated: list[GeneratedFileResponse] = []
     deliverables = initiative.get_deliverables_dict()
 
@@ -374,7 +372,6 @@ async def list_project_files(
             exported = True
             download_url = f"/api/v1/exports/{latest_memo.id}"
 
-        # Templates stored as deliverables point at a ProjectMaterial row
         if output_type == "template":
             material_id = content.get("material_id") if isinstance(content, dict) else None
             if material_id:
@@ -420,7 +417,7 @@ async def delete_deliverable(
     if removed:
         await db.commit()
     else:
-        # tool_id may be a MemoVersion UUID (fallback path)
+        # tool_id can be a MemoVersion UUID when not tied to an assessment instance
         try:
             from uuid import UUID as _UUID
             memo_uuid = _UUID(tool_id)

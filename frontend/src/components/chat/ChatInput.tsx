@@ -69,7 +69,6 @@ export function ChatInput({
     adjustHeight();
   }, [input, adjustHeight]);
 
-  // Re-measure when container resizes (e.g. after client-side nav when layout settles)
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -100,8 +99,7 @@ export function ChatInput({
       });
       onSend(message, draftFieldContext, draftModelInputsContext);
     } else if (initiativeId) {
-      // Legacy fallback path intentionally removed: all active chat surfaces
-      // should provide an explicit onSend callback bound to the current tab state.
+      // Submit requires onSend from the parent; no implicit legacy initiative POST.
       console.warn('[ChatInput] Ignoring submit without onSend callback');
     }
   };
