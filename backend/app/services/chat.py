@@ -38,10 +38,6 @@ def _log_proposal_debug(event: str, **fields: Any) -> None:
 ThinkingCallback = Callable[[str], Awaitable[None]]
 ResearchStepCallback = Callable[[str, str, str], Awaitable[None]]  # (id, label, status)
 
-# ---------------------------------------------------------------------------
-# Prompts
-# ---------------------------------------------------------------------------
-
 PLANNING_SYSTEM_PROMPT = """You are a research-planning assistant for an environmental compliance advisor.
 
 Your only job is to decide which tools (if any) to call before generating a response.
@@ -202,15 +198,9 @@ BAD example (missing citations or prefixes):
   Both projects target high thermal efficiency.
 """
 
-# Pattern to extract inline citations the LLM produces.
-# Supports optional project prefix for compare mode: [A-Evidence: file.pdf, p3]
-# Titles can contain commas, so match title lazily until optional ", pN" suffix.
+# Inline citations from the model; optional A-/B- prefix in compare mode. Lazy title match because titles may contain commas.
 _CITATION_RE = re.compile(r"\[(?:([AB])-)?([^:\]]+):\s*(.+?)(?:,\s*p(\d+))?\]")
 
-
-# ---------------------------------------------------------------------------
-# Data types
-# ---------------------------------------------------------------------------
 
 @dataclass
 class ChatResponse:
@@ -222,19 +212,8 @@ class ChatResponse:
     widget_data: dict | None = None
 
 
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
-
 class ChatService:
-    """
-    Orchestrates compliance chat using a plan-then-retrieve-then-generate loop.
-
-    Step 1  — Plan which retrieval tools to call
-    Step 2  — Execute selected retrieval tools in parallel
-    Step 3  — Generate final answer using all gathered evidence
-    Step 4  — Filter returned sources to only those cited in the answer
-    """
+    """Planner → parallel retrieval → grounded generation; sources list matches inline citations."""
 
     def __init__(
         self,
@@ -352,7 +331,6 @@ class ChatService:
             if on_research_step:
                 await on_research_step(step_id, label, status)
 
-        # Step 1: build normalized queries and ask planner which tools to call
         search_query = await self._build_search_query(user_message, history, project_context=project_context)
         external_search_query = await self._build_external_search_query(
             user_message,
@@ -372,7 +350,6 @@ class ChatService:
                 return []
             return await self.retrieval.search_corpus(search_query, None)
 
-        # Search project materials when inside a workspace
         async def _material_search() -> list[RetrievedFact]:
             if not initiative_id:
                 return []
@@ -397,7 +374,6 @@ class ChatService:
         all_facts: list[RetrievedFact] = []
         tiers_used: list[str] = []
 
-        # Step 2: execute requested tools — search tools run in parallel
         widget_type: str | None = None
         widget_data: dict | None = None
 
@@ -438,7 +414,6 @@ class ChatService:
             widget_type = plan_handler.definition.summary_widget_type
             widget_data = plan_handler.build_summary_widget_data(plan_data)
 
-        # Parse all tool calls
         parsed_calls: list[tuple[str, dict]] = []
         for tool_call in tool_calls:
             fn_name = tool_call.function.name
@@ -507,7 +482,6 @@ class ChatService:
                     )
                 )
 
-        # Run search tools (scholarly + web) concurrently
         async def _run_scholarly(query: str) -> list[RetrievedFact]:
             await _step("search_scholarly", "Searching scholarly databases", "running")
             await _think("Searching scholarly databases for relevant evidence...")
@@ -655,8 +629,7 @@ class ChatService:
         requires_distinct_proposal = self._requires_distinct_proposal(user_message, field_context)
         planner_candidate_widget_data: dict[str, Any] | None = None
 
-        # Assessments (LCOE / carbon / solar) live in the editor workspace — not chat.
-        # If the planner calls a model tool, acknowledge it but do not execute inline.
+        # LCOE/Carbon/Solar run in the editor workspace; never execute model tools inside chat.
         for fn_name, args in parsed_calls:
             if fn_name in ("run_lcoe", "run_carbon", "run_solar"):
                 label_map = {
@@ -717,7 +690,7 @@ class ChatService:
                     "explanation": args.get("reason", ""),
                 }
 
-        # Track propose intent (field_name set by planner if it called propose_input_value)
+        # propose_input_value from planner overrides field_context defaults.
         propose_field_name: str | None = field_context.get("field_name") if field_context else None
         propose_model_type: str = (field_context or {}).get("model_type") or "lcoe"
         for fn_name, args in parsed_calls:
@@ -725,7 +698,6 @@ class ChatService:
                 propose_field_name = args.get("field_name") or None
                 propose_model_type = args.get("model_type", "lcoe")
 
-        # Step 4: generate answer — LLM only sees what was actually retrieved
         ranked_facts = self._rank_facts(all_facts)
         source_count = len([f for f in ranked_facts if f.source_type != SourceType.LLM_ESTIMATE])
 
@@ -735,8 +707,7 @@ class ChatService:
         else:
             await _think("Generating response...")
 
-        # For propose requests: use the full research context to generate the answer,
-        # then extract the concrete proposal from the text afterward.
+        # Propose flow: answer may narrate research; widget value is extracted afterward.
         is_propose_request = widget_type == "proposed_value" or is_investigate_request
         _log_proposal_debug(
             "proposal-branch",
@@ -832,8 +803,6 @@ class ChatService:
                 user_message, history, ranked_facts, project_context=combined_context or None
             )
 
-        # Step 4b: if this was an investigate/propose request, extract a structured
-        # proposal from the generated text so we can show a confirm widget.
         if is_propose_request and model_inputs_context and not widget_type:
             proposal = await self._extract_value_proposal(
                 answer_text=content,
@@ -870,7 +839,6 @@ class ChatService:
 
         await _step("analyze_sources", "Analysis complete", "done")
 
-        # Step 5: return only sources that appear cited in the response
         cited_sources = self._extract_cited_sources(content, ranked_facts)
         if initiative is not None and cited_sources:
             try:
@@ -886,7 +854,6 @@ class ChatService:
             except Exception as exc:
                 logger.warning("Chat assumption extraction failed: %s", exc, exc_info=True)
 
-        # Step 5b: attach provenance to proposed_value widget data
         if widget_type == "proposed_value" and widget_data:
             from app.schemas.provenance import (
                 Derivation,
@@ -922,10 +889,6 @@ class ChatService:
             widget_type=widget_type,
             widget_data=widget_data,
         )
-
-    # -----------------------------------------------------------------------
-    # Compare mode
-    # -----------------------------------------------------------------------
 
     async def _generate_compare_response(
         self,
@@ -1181,10 +1144,6 @@ class ChatService:
         )
         await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
         return resp.choices[0].message.content or ""
-
-    # -----------------------------------------------------------------------
-    # Internal helpers
-    # -----------------------------------------------------------------------
 
     async def _generate_carbon_answer(
         self,
@@ -2199,11 +2158,7 @@ class ChatService:
         field_name = proposal.get("field_name", "")
         if not field_name:
             return proposal
-        # Parse lines like:
-        #   "- Total CAPEX (field_name=total_capex): — USD [missing]"
-        #   "- Annual O&M (field_name=annual_opex): 0 USD/yr [assumed]"
-        #   "- Capacity Factor (field_name=capacity_factor): 0.2  [assumed]"
-        import re
+        # Lines look like: `- Label (field_name=total_capex): — USD [missing]` — see tests for shapes.
         pattern = re.compile(
             r"- (.+?) \(field_name=" + re.escape(field_name) + r"\): ([^\[]*)\[",
         )
@@ -2214,8 +2169,7 @@ class ChatService:
             if not proposal.get("label") and label_str:
                 proposal["label"] = label_str
             if not proposal.get("unit"):
-                # value_unit_str is like "— USD" or "0 USD/yr" or "0.2 "
-                # The unit is everything after the numeric/dash part
+                # Strip leading number/em dash; remainder is the unit string.
                 unit_match = re.search(r'[\d.—\-]+\s*(.*)', value_unit_str)
                 if unit_match:
                     unit = unit_match.group(1).strip()
@@ -2360,10 +2314,6 @@ class ChatService:
         # frontend citation chips can still resolve source links.
         return cited if cited else list(facts)
 
-    # ===================================================================
-    # PROJECT mode — orchestration logic (migrated from OrchestrationService)
-    # ===================================================================
-
     async def extract_inputs_from_message(
         self,
         message: str,
@@ -2411,10 +2361,6 @@ class ChatService:
         except Exception as e:
             logger.error(f"Input extraction failed: {e}")
             return {}
-
-    # -----------------------------------------------------------------------
-    # PROJECT-mode helpers
-    # -----------------------------------------------------------------------
 
     @staticmethod
     def _format_model_inputs_from_messages(

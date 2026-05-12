@@ -172,8 +172,7 @@ async def _should_trigger_initial_project_onboarding(
     if (prior_project_message_count or 0) > 0:
         return False
 
-    # Any existing evidence doc (even one still processing) means onboarding
-    # has already been kicked off — don't re-prompt for uploads.
+    # Any evidence doc (even processing) means onboarding already started — do not re-prompt uploads.
     from app.models.evidence import EvidenceDoc
 
     evidence_doc_count = await db.scalar(
@@ -526,7 +525,6 @@ async def chat_stream(
 
     async def generate():
         try:
-            # Resolve initiative_id for chat scoping.
             resolved_initiative_id: uuid.UUID | None = None
             requested_assumption_id: uuid.UUID | None = None
             focused_assumption: Assumption | None = None
@@ -537,7 +535,7 @@ async def chat_stream(
                     )
                     resolved_initiative_id = resolved_initiative.id
                 except HTTPException:
-                    # Keep session unscoped; access is enforced below where needed.
+                    # Invalid or inaccessible initiative: leave chat unscoped; later checks still enforce access.
                     pass
             raw_assumption_id = data.assumption_id
             if raw_assumption_id is None and data.field_context and data.field_context.assumption_id:
@@ -556,7 +554,6 @@ async def chat_stream(
                         detail="Assumption does not belong to the selected initiative.",
                     )
 
-            # Persist chat + user message upfront
             chat = await _get_or_create_chat(
                 db,
                 user.uid,
@@ -596,7 +593,7 @@ async def chat_stream(
                 event = {"type": "research_step", "id": step_id, "label": label, "status": step_status}
                 await event_queue.put(json.dumps(event))
 
-            # Reconstruct history server-side from stored messages
+            # Build history from stored messages (authoritative; do not trust client `history` for retrieval).
             prior_msgs_result = await db.execute(
                 select(CoreChatMessage)
                 .where(CoreChatMessage.chat_id == chat.id)
@@ -627,7 +624,6 @@ async def chat_stream(
                 has_assumption_context=bool(focused_assumption),
             )
 
-            # --- Compare mode ---
             compare_contexts: list[dict] | None = None
             if data.compare_initiative_ids and len(data.compare_initiative_ids) == 2:
                 compare_contexts = []
@@ -647,7 +643,6 @@ async def chat_stream(
 
                 if compare_contexts:
                     service = ChatService(db, ctx=ctx)
-                    # Persist compare_initiative_ids on the chat
                     if not chat.compare_initiative_ids:
                         chat.compare_initiative_ids = data.compare_initiative_ids
                         await db.flush()
@@ -665,7 +660,6 @@ async def chat_stream(
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to load one or both projects for comparison.'})}\n\n"
                     return
 
-            # --- Single project / normal mode ---
             if not compare_contexts:
                 if data.initiative_id:
                     try:
@@ -710,10 +704,7 @@ async def chat_stream(
                             and not data.tool_hint
                         )
                     )
-                    # Extract structured fields (type, geography, title) from the user's
-                    # message whenever they're missing — including the first message even when
-                    # we're returning a scripted response.  Skip synthetic UI messages that
-                    # carry no project detail (e.g. "I've uploaded my documents.").
+                    # Fill missing initiative fields from user text; skip synthetic onboarding lines with no project detail.
                     should_extract = (
                         data.content not in _SKIP_EXTRACTION_MESSAGES
                         and (
@@ -879,9 +870,7 @@ async def chat_stream(
                             yield f"data: {json.dumps(complete)}\n\n"
                             return
 
-                        # Synthetic transition messages ("I've uploaded my documents.",
-                        # "I don't have any documents.") are known onboarding pivot points.
-                        # True bypass: call the plan handler directly, no LLM research pipeline.
+                        # Scripted onboarding pivots: skip the LLM pipeline and propose assessments from uploads (see propose_structure).
                         _is_onboarding_pivot = (
                             data.content in _SKIP_EXTRACTION_MESSAGES
                             and data.allow_initial_project_onboarding
@@ -892,10 +881,6 @@ async def chat_stream(
                             async def _direct_assessment_proposal() -> ServiceChatResponse:
                                 from app.plans.registry import get_plan_registry as _get_plan_registry
 
-                                # The conditional gate (wait for at least one
-                                # uploaded doc to pass the lightweight milestone,
-                                # or no-op when no files were uploaded) lives
-                                # inside ``propose_structure`` below.
                                 if on_thinking:
                                     await on_thinking("Reviewing uploaded materials…")
 
@@ -1001,14 +986,12 @@ async def chat_stream(
                 citation_count=len([s for s in result.sources if s.source_type.value != "llm_estimate"]),
             )
 
-            # Stream response token-by-token
             tokens = [t for t in result.content.split(' ') if t]
             for i, token in enumerate(tokens):
                 chunk = {"type": "word", "content": token, "is_last": i == len(tokens) - 1}
                 yield f"data: {json.dumps(chunk)}\n\n"
                 await asyncio.sleep(0.02)
 
-            # Persist assistant message
             sources_list = [s.to_dict() for s in result.sources]
             assistant_msg = CoreChatMessage(
                 chat_id=chat.id,
@@ -1038,7 +1021,6 @@ async def chat_stream(
                 "widget_type": result.widget_type,
                 "widget_data": result.widget_data,
                 "thinking_lines": thinking_lines,
-                # IDs for the frontend to track for feedback / retry
                 "chat_id": str(chat.id),
                 "user_message_id": str(user_msg.id),
                 "assistant_message_id": str(assistant_msg.id),

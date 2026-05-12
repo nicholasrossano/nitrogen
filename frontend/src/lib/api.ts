@@ -3,10 +3,7 @@ import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Get the current user's ID token for API requests.
-// Uses authStateReady() so calls made immediately after a page load/redirect
-// (e.g. the OAuth callback redirect) still get a token once Firebase has
-// restored the session — without blocking after auth state is already known.
+// Waits for auth.authStateReady() so requests right after OAuth redirect still get a token.
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
@@ -43,7 +40,6 @@ export interface Initiative {
   archived: boolean;
   created_at: string;
   updated_at: string;
-  // Tool-based fields
   project_description: string | null;
   project_type: string | null;
   overview_description: string | null;
@@ -56,7 +52,6 @@ export interface Initiative {
   assessment_instances_count?: number;
   /** Non-archived assessment instances with status complete + deliverable (grid tile). */
   generated_assessments_count?: number;
-  // Sharing fields
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
 }
@@ -154,8 +149,6 @@ export interface AssessmentDefinition {
   output_type: string;
   category: string;
 }
-
-// ── Assessment Workflow Types ──────────────────────────────────────────────
 
 export type BuildItemOrigin = 'inferred' | 'assumed' | 'provided' | 'researched' | 'user edited';
 
@@ -258,8 +251,6 @@ export interface AssessmentWorkflowState {
   workflow_state: WorkflowState;
   assessment_definition: WorkflowAssessmentDefinition;
 }
-
-// ── Unified Staged Workflow Types (new architecture) ──────────────────────
 
 export interface FieldDef {
   name: string;
@@ -727,7 +718,6 @@ export interface DriveSyncResult {
   errors: { file_id: string; error: string }[];
 }
 
-// Project Plan types
 export interface ProjectPlanItem {
   id: string;
   title: string;
@@ -765,7 +755,6 @@ export interface ProjectPlan {
   deep_dives?: Record<string, DeepDiveResult>;
 }
 
-// Deep Dive types
 export interface DeepDiveElement {
   title: string;
   description: string;
@@ -805,8 +794,7 @@ async function fetchApi<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_URL}${endpoint}`;
-  
-  // Get auth token
+
   const token = await getAuthToken();
   const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
   
@@ -832,7 +820,7 @@ async function fetchApi<T>(
     throw new Error(error.detail?.message || error.detail || `HTTP ${response.status}`);
   }
 
-  // 204 No Content and other empty bodies
+  // Empty body (e.g. 204): JSON.parse would throw on "".
   const text = await response.text();
   if (!text) {
     return undefined as T;
@@ -868,7 +856,6 @@ function workflowVersionHeaders(workflowVersion?: number): Record<string, string
 }
 
 export const api = {
-  // Initiatives
   listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false, workspaceId?: string | null) => {
     const params = new URLSearchParams({
       limit: String(limit),
@@ -1044,7 +1031,6 @@ export const api = {
       { method: 'POST' }
     ),
 
-  // Chat
   getChatHistory: (initiativeId: string) =>
     fetchApi<{ messages: ChatMessage[]; stage_status: StageStatus }>(
       `/api/v1/initiatives/${initiativeId}/chat`
@@ -1068,7 +1054,7 @@ export const api = {
     toolHint?: string,
     fieldContext?: FieldContext | null,
   ) => {
-    // Call the regular API since backend doesn't support streaming yet
+    // Legacy initiative path: non-SSE POST; chunk the full reply on the client for UX.
     const response = await fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1078,15 +1064,12 @@ export const api = {
       }),
     });
 
-    // Simulate word-by-word streaming for better UX
     const words = response.message.content.split(' ');
     for (let i = 0; i < words.length; i++) {
       onWord(words[i]);
-      // Small delay between words for streaming effect
       await new Promise(resolve => setTimeout(resolve, 30));
     }
 
-    // Call completion callback
     onComplete(response.message, response.stage_status);
   },
 
@@ -1110,7 +1093,7 @@ export const api = {
           },
         );
       } catch {
-        // Project chats use the core chat table; fall back to that endpoint.
+        // Some messages only exist on core chat rows; initiative-scoped PATCH can 404.
       }
     }
 
@@ -1138,7 +1121,6 @@ export const api = {
       { method: 'POST' }
     ),
 
-  // Evidence
   uploadEvidence: async (initiativeId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -1207,7 +1189,6 @@ export const api = {
       }
     ),
 
-  // Generate
   generateMemo: (initiativeId: string, includeCorpus: boolean = true) =>
     fetchApi<MemoResponse>(`/api/v1/initiatives/${initiativeId}/generate`, {
       method: 'POST',
@@ -1217,7 +1198,6 @@ export const api = {
   getMemo: (initiativeId: string) =>
     fetchApi<MemoResponse>(`/api/v1/initiatives/${initiativeId}/memo`),
 
-  // Export
   exportMemo: (initiativeId: string, memoVersionId?: string) =>
     fetchApi<{ success: boolean; export_id: string; download_url: string; filename: string }>(
       `/api/v1/initiatives/${initiativeId}/export`,
@@ -1308,8 +1288,6 @@ export const api = {
     }
     return response.json();
   },
-
-  // --- Project Materials ---
 
   getMaterials: (initiativeId: string) =>
     fetchApi<ProjectMaterial[]>(`/api/v1/initiatives/${initiativeId}/materials`),
@@ -1470,7 +1448,6 @@ export const api = {
       throw new Error('Failed to export checklist');
     }
     
-    // Download the file
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1482,7 +1459,6 @@ export const api = {
     document.body.removeChild(a);
   },
 
-  // Tools
   getTools: () =>
     fetchApi<AssessmentDefinition[]>('/api/v1/tools'),
 
@@ -1515,8 +1491,6 @@ export const api = {
       `/api/v1/initiatives/${initiativeId}/generate-all`,
       { method: 'POST' }
     ),
-
-  // ── Assessment Workflow ──────────────────────────────────────────
 
   getAssessmentWorkflowState: (instanceId: string) =>
     fetchApi<AssessmentWorkflowState>(`/api/v1/assessment-workflow/${instanceId}/state`),
@@ -1612,8 +1586,6 @@ export const api = {
     const blob = await res.blob();
     return { blob, filename };
   },
-
-  // ── Staged workflow endpoints ──────────────────────────────────────
 
   getStagedAssessmentWorkflowState: (instanceId: string) =>
     fetchApi<StagedAssessmentWorkflowState>(`/api/v1/assessment-workflow/${instanceId}/state`),
@@ -1873,7 +1845,6 @@ export const api = {
     return { blob, filename };
   },
 
-  // Project Plan
   getProjectPlan: (initiativeId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
       `/api/v1/initiatives/${initiativeId}/project-plan`
@@ -1942,7 +1913,6 @@ export const api = {
       { method: 'DELETE' }
     ),
 
-  // Project plan deep dive
   deepDiveItem: (
     initiativeId: string,
     itemId: string,
@@ -1963,7 +1933,6 @@ export const api = {
       30000,
     ),
 
-  // Chat sessions — optionally scoped to a single project
   getChats: (initiativeId?: string) =>
     fetchApi<{
       chats: {
@@ -2165,21 +2134,19 @@ export const api = {
       }
     }
 
-    // Flush remaining buffer after stream closes
+    // Final decoder chunk may contain a trailing partial SSE line.
     buffer += decoder.decode();
     if (buffer.trim()) {
       processLine(buffer);
     }
   },
 
-  // Generate a brief 3-5 word title for a chat based on the first message
   generateChatTitle: (message: string) =>
     fetchApi<{ title: string }>('/api/v1/chat/title', {
       method: 'POST',
       body: JSON.stringify({ message }),
     }),
 
-  // LCOE endpoints
   async recalculateLCOE(inputs: Record<string, any>): Promise<any> {
     return fetchApi('/api/v1/lcoe/recalculate', {
       method: 'POST',
@@ -2229,7 +2196,6 @@ export const api = {
     return resp.blob();
   },
 
-  // Carbon endpoints
   async recalculateCarbon(inputs: Record<string, any>): Promise<any> {
     return fetchApi('/api/v1/carbon/recalculate', {
       method: 'POST',
@@ -2296,7 +2262,6 @@ export const api = {
     return resp.blob();
   },
 
-  // Solar estimate (PVWatts) endpoints
   async recalculateSolar(inputs: Record<string, any>): Promise<any> {
     return fetchApi('/api/v1/pvwatts/recalculate', {
       method: 'POST',
@@ -2359,7 +2324,6 @@ export const api = {
     return resp.blob();
   },
 
-  // ── Sharing ──────────────────────────────────────────────────────
   searchUsers: (q: string): Promise<UserSearchResult[]> =>
     fetchApi<UserSearchResult[]>(`/api/v1/users/search?q=${encodeURIComponent(q)}`),
 
@@ -2382,8 +2346,6 @@ export const api = {
     fetchApi<void>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
       method: 'DELETE',
     }),
-
-  // ── Google Drive ────────────────────────────────────────────────────────────
 
   getGoogleAuthUrl: (initiativeId: string) =>
     fetchApi<{ auth_url: string }>(
@@ -2427,8 +2389,6 @@ export const api = {
       { method: 'DELETE' }
     ),
 
-  // ── Billing ──────────────────────────────────────────────────────
-
   getBillingStatus: () =>
     fetchApi<BillingStatus>('/api/v1/billing/status'),
 
@@ -2449,8 +2409,6 @@ export const api = {
       '/api/v1/billing/redeem-code',
       { method: 'POST', body: JSON.stringify({ code }) }
     ),
-
-  // ── API Keys (BYOK) ─────────────────────────────────────────────
 
   listApiKeys: () =>
     fetchApi<{ provider: string; masked_key: string; created_at: string }[]>(

@@ -7,7 +7,6 @@ interface MessageVariantEntry {
 }
 
 interface InitiativeState {
-  // Data
   initiative: Initiative | null;
   messages: ChatMessage[];
   stageStatus: StageStatus | null;
@@ -18,7 +17,6 @@ interface InitiativeState {
   driveLinkedFiles: DriveLinkedFile[];
   projectPlan: ProjectPlan | null;
 
-  // UI State
   loading: boolean;
   sending: boolean;
   generating: boolean;
@@ -26,16 +24,13 @@ interface InitiativeState {
   error: string | null;
   streamingMessageId: string | null;
 
-  // Message toolbar state
   messageFeedback: Record<string, 'like' | 'dislike' | null>;
   messageVariants: Record<string, MessageVariantEntry>;
   retryingMessageId: string | null;
 
-  // Chat input draft (pre-fill without sending)
   draftMessage: string | null;
   setDraftMessage: (msg: string | null) => void;
-  
-  // Actions
+
   loadInitiative: (id: string) => Promise<void>;
   loadChatHistory: (id: string) => Promise<void>;
   loadEvidence: (id: string) => Promise<void>;
@@ -92,10 +87,7 @@ function withRequestTimeout<T>(promise: Promise<T>, message: string, timeoutMs =
   });
 }
 
-// ── Background poll: keep evidence_docs / projectMaterials in sync with the
-// server while any uploaded doc is still processing. We poll cheaply (list
-// endpoint, no heavy joins) and exit as soon as everything is indexed or
-// failed.  Only one poll runs per initiative at a time.
+// Poll evidence/material lists while uploads process; cheap list calls, one loop per initiative.
 const activeProcessingPolls = new Set<string>();
 
 async function schedulePollForProcessing(
@@ -117,7 +109,6 @@ async function schedulePollForProcessing(
       try {
         evidenceDocs = await api.getEvidence(initiativeId);
       } catch {
-        // Transient network errors shouldn't kill the poll loop — try again.
         continue;
       }
 
@@ -144,14 +135,13 @@ async function schedulePollForProcessing(
           d.processing_status === 'lightweight_ready',
       );
       if (!stillProcessing) {
-        // Once everything has settled, refresh the initiative so flags like
-        // evidence_ready propagate.
+        // Refresh initiative so evidence_ready and related flags match the server.
         try {
           const initiative = await api.getInitiative(initiativeId);
           set({ initiative });
           get()._refreshPlanInBackground(initiativeId);
         } catch {
-          // Non-fatal.
+          // ignore refresh errors when polling stops
         }
         return;
       }
@@ -163,7 +153,6 @@ async function schedulePollForProcessing(
 
 
 export const useInitiativeStore = create<InitiativeState>((set, get) => ({
-  // Initial state
   initiative: null,
   messages: [],
   stageStatus: null,
@@ -185,7 +174,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
   draftMessage: null,
   setDraftMessage: (msg) => set({ draftMessage: msg }),
 
-  // Load initiative details (also populates projectPlan from the response)
   loadInitiative: async (id: string) => {
     const requestId = ++latestLoadInitiativeRequest;
     set({ loading: true, error: null });
@@ -198,7 +186,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({
         initiative,
         loading: false,
-        // Always sync projectPlan so stale plan state from another project cannot persist.
+        // Keep projectPlan aligned with initiative payload so switching projects cannot leak stale plan state.
         projectPlan: initiative.project_plan ?? null,
       });
     } catch (error) {
@@ -210,13 +198,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Load chat history
   loadChatHistory: async (id: string) => {
     try {
       const response = await api.getChatHistory(id);
       const messages = response?.messages || [];
       const stage_status = response?.stage_status;
-      // Hydrate feedback map from persisted message data
       const feedbackMap: Record<string, 'like' | 'dislike' | null> = {};
       for (const msg of messages) {
         if (msg.feedback) {
@@ -229,7 +215,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Load evidence documents
   loadEvidence: async (id: string) => {
     try {
       const evidenceDocs = await api.getEvidence(id);
@@ -239,7 +224,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Load project materials
   loadMaterials: async (id: string) => {
     try {
       const projectMaterials = await api.getMaterials(id);
@@ -249,7 +233,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Upload project material — routes through evidence so all files get semantic indexing
+  // Uploads go through evidence indexing so materials and corpus stay consistent.
   uploadMaterial: async (id: string, file: File) => {
     try {
       const response = await api.uploadEvidence(id, file);
@@ -275,7 +259,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Delete project material (or evidence doc if source === 'evidence')
   deleteMaterial: async (materialId: string) => {
     const prev = get().projectMaterials;
     const mat = prev.find(m => m.id === materialId);
@@ -300,7 +283,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Load Drive-linked file records for this initiative
   loadDriveLinkedFiles: async (id: string) => {
     try {
       const links = await api.getDriveLinkedFiles(id);
@@ -310,7 +292,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Import files from Google Drive and add them to the materials list
   importFromDrive: async (id: string, fileIds: string[]) => {
     const result = await api.importFromDrive(id, fileIds);
     if (result.imported.length > 0) {
@@ -322,7 +303,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         created_at: f.created_at,
         source: 'evidence',
       }));
-      // Reload linked files to reflect the new links
       const links = await api.getDriveLinkedFiles(id);
       set((state) => ({
         projectMaterials: [...newMaterials, ...state.projectMaterials],
@@ -332,29 +312,24 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     return result;
   },
 
-  // Check Drive-linked files for changes and re-index updated ones
   syncDriveFiles: async (id: string) => {
     const result = await api.syncDriveFiles(id);
     if (result.updated > 0) {
-      // Reload materials so updated file sizes/dates are reflected
       const projectMaterials = await api.getMaterials(id);
       set({ projectMaterials });
     }
     return result;
   },
 
-  // Send a message with streaming
   sendMessage: async (id: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) => {
     const { messages } = get();
-    
-    // Set sending state first
-    set({ 
+
+    set({
       sending: true,
       error: null,
       streamingMessageId: null,
     });
-    
-    // Optimistic update - add user message immediately
+
     const userMessage: ChatMessage = {
       id: `temp-user-${Date.now()}`,
       role: 'user',
@@ -369,7 +344,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       messages: [...currentMessages, userMessage],
     });
 
-    // Create a placeholder assistant message for streaming
     const streamingMessageId = `streaming-${Date.now()}`;
     const streamingMessage: ChatMessage = {
       id: streamingMessageId,
@@ -381,8 +355,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     };
 
     try {
-      
-      // Add the streaming message and mark it as streaming
+
       set(state => ({
         messages: [...state.messages, streamingMessage],
         streamingMessageId: streamingMessageId,
@@ -419,7 +392,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
           const initiative = await api.getInitiative(id);
           set({ initiative });
 
-          // Sync the project plan from the initiative (covers both initial generation and chat-driven updates)
           if (initiative.project_plan) {
             set({ projectPlan: initiative.project_plan });
           }
@@ -433,7 +405,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       );
     } catch (error) {
       console.error('sendMessage: error', error);
-      // Remove optimistic updates on error
       set(state => ({
         messages: state.messages.filter(m => m.id !== userMessage.id && m.id !== streamingMessageId),
         error: error instanceof Error ? error.message : 'Failed to send message',
@@ -443,12 +414,10 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Edit a user message: truncate from that message and re-send with new content
   editMessage: async (id: string, messageId: string, newContent: string) => {
     set({ sending: true, error: null });
     try {
       await api.truncateChatFrom(id, messageId);
-      // sendMessage will handle the rest (optimistic UI, streaming, reload)
       await get().sendMessage(id, newContent);
     } catch (error) {
       set({
@@ -458,12 +427,10 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Retry an assistant message: delete it and regenerate
   retryMessage: async (id: string, messageId: string) => {
     set({ retryingMessageId: messageId, error: null });
     try {
-      // Resolve the real DB ID in case this message has already been retried
-      // (the display keeps the original stable ID but the variant entry tracks real IDs)
+      // Retries use the latest DB id from messageVariants while the list keeps the stable UI id.
       const { messageVariants } = get();
       const existing = messageVariants[messageId];
       const realDbId = existing
@@ -474,13 +441,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       const newMessage = response.message;
 
       set(state => {
-        // Keep the original message ID stable in the flat list so variant lookups stay consistent
         const stableMessage = { ...newMessage, id: messageId };
         const updatedMessages = state.messages.map(m =>
           m.id === messageId ? stableMessage : m
         );
 
-        // Track variants: seed with original message if first retry
         const prevEntry = state.messageVariants[messageId];
         const originalMsg = state.messages.find(m => m.id === messageId);
         const prevVersions = prevEntry ? prevEntry.versions : (originalMsg ? [originalMsg] : []);
@@ -504,7 +469,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Toggle like/dislike feedback for a message (optimistic + persist)
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => {
     const prev = get().messageFeedback[messageId] ?? null;
     set(state => ({
@@ -513,7 +477,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     const initiative = get().initiative;
     if (initiative) {
       api.setMessageFeedback(initiative.id, messageId, feedback).catch(() => {
-        // Revert on failure
         set(state => ({
           messageFeedback: { ...state.messageFeedback, [messageId]: prev },
         }));
@@ -521,13 +484,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Navigate between retry variants
   setVariantIndex: (originalMessageId: string, index: number) => {
     set(state => {
       const entry = state.messageVariants[originalMessageId];
       if (!entry) return state;
       const clampedIndex = Math.max(0, Math.min(index, entry.versions.length - 1));
-      // Keep the stable display ID while swapping content to the selected variant
       const selectedVariant = entry.versions[clampedIndex];
       const stableMessage = { ...selectedVariant, id: originalMessageId };
       const updatedMessages = state.messages.map(m =>
@@ -543,13 +504,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     });
   },
 
-  // Confirm intake
   confirmIntake: async (id: string) => {
     set({ loading: true, error: null });
     try {
       await api.confirmInitiative(id);
-      
-      // Reload everything
+
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
@@ -569,18 +528,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Upload evidence file (used by EvidenceInputWidget / DocumentRequestWidget)
   uploadEvidence: async (id: string, file: File) => {
     set({ loading: true, error: null });
     try {
       const response = await api.uploadEvidence(id, file);
 
-      // Optimistic: insert the new doc immediately, then refresh listings in
-      // parallel so we see server-side deduped filenames and processing state
-      // right away. We intentionally *do not* await a full initiative reload
-      // here — the endpoint now returns as soon as the file is stored, so
-      // blocking on initiative/messages reloads would undo the whole point of
-      // the async processing pipeline.
+      // Show the new doc immediately; avoid awaiting full initiative/chat reload (upload returns before indexing finishes).
       const doc: EvidenceDoc = response.document;
       const asMaterial: ProjectMaterial = {
         id: doc.id,
@@ -603,8 +556,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
         error: null,
       }));
 
-      // Fire-and-forget refreshes to sync server state (e.g. initiative.evidence_ready
-      // once indexing completes). These poll in the background.
       schedulePollForProcessing(id, get, set);
     } catch (error) {
       console.error('Failed to upload evidence:', error);
@@ -613,13 +564,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Paste evidence text
   pasteEvidence: async (id: string, content: string, title?: string) => {
     set({ loading: true, error: null });
     try {
       await api.pasteEvidence(id, content, title);
-      
-      // Reload
+
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
@@ -639,13 +588,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Delete evidence document
   deleteEvidence: async (evidenceId: string) => {
     set({ loading: true, error: null });
     try {
       await api.deleteEvidence(evidenceId);
-      
-      // Reload evidence list
+
       const evidenceDocs = get().evidenceDocs;
       const updatedDocs = evidenceDocs.filter(doc => doc.id !== evidenceId);
       
@@ -666,13 +613,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Generate memo
   generateMemo: async (id: string, includeCorpus: boolean = true) => {
     set({ generating: true, error: null });
     try {
       const response = await api.generateMemo(id, includeCorpus);
-      
-      // Reload chat to get memo viewer message
+
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
@@ -694,7 +639,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Export memo
   exportMemo: async (id: string) => {
     const { memoId } = get();
     set({ loading: true, error: null });
@@ -710,16 +654,12 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Select tools for initiative
   selectTools: async (id: string, toolIds: string[]) => {
     set({ loading: true, error: null });
     try {
       const response = await api.selectTools(id, toolIds);
 
-      // Keep confirmation fast: selecting assessments should not block on a full
-      // initiative + chat-history reload before we can navigate into the
-      // framework view. We update the local initiative shape optimistically and
-      // let the project plan request refresh the rest of the view afterward.
+      // Optimistic only: fast handoff to framework view; plan/chat refresh happens on the next focused fetch.
       set((state) => ({
         initiative: state.initiative
           ? {
@@ -739,13 +679,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Generate all deliverables
   generateAllDeliverables: async (id: string) => {
     set({ generating: true, error: null });
     try {
       await api.generateAllDeliverables(id);
-      
-      // Reload everything
+
       const [initiative, { messages, stage_status }] = await Promise.all([
         api.getInitiative(id),
         api.getChatHistory(id),
@@ -776,7 +714,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     return initiative;
   },
 
-  // Update initiative title
   updateTitle: async (id: string, title: string) => {
     try {
       const initiative = await api.updateInitiative(id, { title });
@@ -786,7 +723,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Silently refresh the project plan in the background (if one already exists)
+  /** Background refresh when a plan already exists (keeps UI responsive). */
   _refreshPlanInBackground: async (id: string) => {
     const { projectPlan } = get();
     if (!projectPlan) return;
@@ -799,7 +736,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Load project plan (keeps stale data visible until fresh data arrives)
   loadProjectPlan: async (id: string) => {
     try {
       const response = await api.getProjectPlan(id);
@@ -809,7 +745,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Generate (or refresh) project plan
   generateProjectPlan: async (id: string) => {
     set({ projectPlanLoading: true, error: null });
     try {
@@ -823,7 +758,7 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Update widget_data on a message in-memory (no API call — caller handles persistence)
+  /** In-memory widget_data only; persistence is the caller's responsibility. */
   updateMessageWidgetData: (messageId: string, widgetData: Record<string, any>) => {
     set((state) => ({
       messages: state.messages.map((m) =>
@@ -832,12 +767,10 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }));
   },
 
-  // Update a single plan item status (optimistic)
   updatePlanItemStatus: async (id: string, itemId: string, status: 'not_started' | 'in_progress' | 'complete') => {
     const { projectPlan } = get();
     if (!projectPlan) return;
 
-    // Optimistic update
     const updatedPillars = projectPlan.pillars.map(pillar => ({
       ...pillar,
       items: pillar.items.map(item =>
@@ -849,13 +782,11 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     try {
       await api.updatePlanItemStatus(id, itemId, status);
     } catch (error) {
-      // Revert on failure
       set({ projectPlan });
       console.error('Failed to update plan item status:', error);
     }
   },
 
-  // Delete a single plan item (optimistic)
   deletePlanItem: async (id: string, itemId: string) => {
     const { projectPlan } = get();
     if (!projectPlan) return;
@@ -874,7 +805,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Add a new item to a pillar (optimistic); optionally assign to a phase
   addPlanItem: async (id: string, pillarId: string, title: string, itemType: 'deliverable' | 'assessment' = 'deliverable', phaseId?: string) => {
     const { projectPlan } = get();
     if (!projectPlan) return;
@@ -917,7 +847,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Reset state
   reset: () => {
     set({
       initiative: null,

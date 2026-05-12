@@ -69,13 +69,11 @@ export interface ConversationViewProps {
 }
 
 function preprocessMath(content: string): string {
-  // Convert proper LaTeX block delimiters to KaTeX-compatible $ notation
+  // KaTeX-friendly: normalize \[ \] / \( \), strip stray LaTeX outside $...$ segments.
   let result = content
     .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, math: string) => `$$${math}$$`)
     .replace(/\\\(([\s\S]*?)\\\)/g, (_: string, math: string) => `$${math}$`);
 
-  // Strip bare LaTeX commands outside of $ delimiters.
-  // Split on properly-delimited math blocks, only touch the non-math segments.
   const segments = result.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]*?\$)/);
   return segments.map((seg, i) => {
     if (i % 2 === 1) return seg; // inside delimiters — leave KaTeX alone
@@ -129,7 +127,6 @@ export function ConversationView({
   const prevCount = useRef(0);
   const wasStreaming = useRef(false);
 
-  // Scroll when a new message bubble is added
   useEffect(() => {
     if (messages.length > prevCount.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -137,7 +134,6 @@ export function ConversationView({
     prevCount.current = messages.length;
   }, [messages.length]);
 
-  // Scroll once when streaming begins; do NOT scroll on every word update
   useEffect(() => {
     if (sending && !wasStreaming.current) {
       wasStreaming.current = true;
@@ -251,9 +247,7 @@ export function ConversationView({
     }
   };
 
-  // True while we're still in the planning/retrieval phase (no words yet)
   const isThinking = sending && !streamingContent;
-  // True once words are coming in
   const isStreaming = sending && !!streamingContent;
   const latestMessage = messages[messages.length - 1];
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
@@ -397,13 +391,10 @@ export function ConversationView({
         <div className="max-w-[52rem] mx-auto">
         <div className="w-[90%] mx-auto space-y-8">
           {messages.map((msg, idx) => {
-            // Compute consecutive-assistant-run info
             const isAssistant = msg.role !== 'user';
             const nextIsAssistant = idx < messages.length - 1 && messages[idx + 1].role !== 'user';
-            // Only show toolbar on the last message of a consecutive assistant run
             const showToolbar = !isAssistant || !nextIsAssistant;
 
-            // For grouped toolbar actions, find the start of this assistant run
             let groupContent: string | undefined;
             let groupRetryId = msg.id;
             if (isAssistant) {
@@ -498,13 +489,7 @@ export function ConversationView({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Inline citation chip                                               */
-/* ------------------------------------------------------------------ */
-
-// Matches citations with optional project prefix for compare mode:
-// [Evidence: file.pdf, p3], [A-Evidence: file.pdf, p3], [B-Web: Title]
-// Title may contain commas; match lazily until optional ", pN".
+// Citation tags: optional A-/B- prefix; lazy title; optional ", pN" (keep in sync with backend parsing).
 const INLINE_CITATION_RE = /\[(?:([AB])-)?([^:\]]+):\s*(.+?)(?:,\s*p(\d+))?\]/g;
 const LEADING_CITATION_PUNCTUATION_RE = /^[.,!?;:]+/;
 
@@ -527,10 +512,8 @@ function InlineCitationChip({
 }) {
   const type = sourceType.toLowerCase().trim();
 
-  // Fuzzy-match the cited title to a source; prefer chunk_index match when available
   const trimmedTitle = title.trim().toLowerCase();
   const titleCandidates = sources.filter((s) => {
-    // In compare mode, only match sources with the same project label
     if (projectLabel && s.project_label && projectLabel !== s.project_label) return false;
     const a = s.source_title.toLowerCase();
     return (
