@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
-import { ModelInputsTable, type ModelInputRow } from '@/components/widgets/shared/ModelInputsTable';
+import { ModelInputsTable, INVESTIGATE_CURSOR, type ModelInputRow } from '@/components/widgets/shared/ModelInputsTable';
 import {
   PROPOSAL_MODEL_TYPES_BY_MODULE_ID,
   SOLAR_LOCATION_MODULE_ID,
@@ -42,7 +42,6 @@ interface StageTableRow extends ModelInputRow {
   assumptionId?: string;
 }
 
-const INVESTIGATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%231a1a1a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cline x1='10' y1='10' x2='14.5' y2='14.5'/%3E%3C/svg%3E") 6 6, auto`;
 const SolarLocationMap = lazy(() => import('@/components/widgets/solar/SolarLocationMap'));
 
 function normalizeKey(value: string): string {
@@ -852,6 +851,7 @@ export function EditableTableStage({
         <ModelInputsTable
           groups={groupedTableRows}
           hoveredFieldName={hoveredInvestigateRow?.fieldName ?? null}
+          investigateCursor={enableInvestigate}
           onRowMouseEnter={(event, row) => {
             if (!enableInvestigate || row.readOnly) return;
             const isInteractive = !!(event.target as HTMLElement).closest('button, input, select, a');
@@ -862,6 +862,12 @@ export function EditableTableStage({
               label: row.label,
               status: row.status,
             });
+          }}
+          onRowMouseMove={(event, row) => {
+            if (!enableInvestigate || row.readOnly) return;
+            const isInteractive = !!(event.target as HTMLElement).closest('button, input, select, a');
+            setOverInteractive(isInteractive);
+            setMousePos({ x: event.clientX, y: event.clientY });
           }}
           onRowMouseLeave={() => {
             setHoveredInvestigateRow(null);
