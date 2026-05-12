@@ -526,11 +526,18 @@ function InitiativePageContent() {
       } | null;
       if (!detail?.assumptionId) return;
       const requestId = `assumption-investigate-${detail.assumptionId}-${Date.now()}`;
-      setWorkspaceLaunchMode('idle');
-      setPanelOpen('assumptions', 'workspace', true);
-      setPanelOpen('assumptions', 'chat', true);
-      setActiveView('assumptions');
-      router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+
+      const stayOnAssessments = activeView === 'assessments';
+      if (stayOnAssessments) {
+        setPanelOpen('assessments', 'chat', true);
+      } else {
+        setWorkspaceLaunchMode('idle');
+        setPanelOpen('assumptions', 'workspace', true);
+        setPanelOpen('assumptions', 'chat', true);
+        setActiveView('assumptions');
+        router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+      }
+
       setPendingAssumptionsRequest({
         requestId,
         focusAssumptionId: detail.assumptionId,
@@ -552,7 +559,7 @@ function InitiativePageContent() {
 
     window.addEventListener('nitrogen:open-assumption-chat', handler);
     return () => window.removeEventListener('nitrogen:open-assumption-chat', handler);
-  }, [initiativeId, router, setPanelOpen]);
+  }, [activeView, initiativeId, router, setPanelOpen]);
 
   const handleFilesViewDriveImport = useCallback(async () => {
     await importFromDriveViaPicker({
