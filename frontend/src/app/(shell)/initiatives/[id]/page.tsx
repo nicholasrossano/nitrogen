@@ -495,16 +495,19 @@ function InitiativePageContent() {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail ?? {};
       if (detail._workspaceForwarded) return;
-      if (activeView !== 'assessments' || panelVisibility.assessments.chat) return;
+      if (activeView !== 'assessments') return;
 
-      setPanelOpen('assessments', 'chat', true);
+      const chatAlreadyOpen = panelVisibility.assessments.chat;
+      if (!chatAlreadyOpen) {
+        setPanelOpen('assessments', 'chat', true);
+      }
       window.setTimeout(() => {
         window.dispatchEvent(
           new CustomEvent('nitrogen:draft', {
             detail: { ...detail, _workspaceForwarded: true },
           }),
         );
-      }, 75);
+      }, chatAlreadyOpen ? 0 : 75);
     };
 
     window.addEventListener('nitrogen:draft', handler);
@@ -960,7 +963,7 @@ function InitiativePageContent() {
   const handleChatMouseMove = useCallback((event: MouseEvent) => {
     if (!isResizingChat || !workspaceContainerRef.current) return;
     const rect = workspaceContainerRef.current.getBoundingClientRect();
-    const nextPercent = ((rect.right - event.clientX) / rect.width) * 100;
+    const nextPercent = ((event.clientX - rect.left) / rect.width) * 100;
     setChatPanelWidthPercent(
       Math.min(MAX_CHAT_PANEL_PERCENT, Math.max(MIN_CHAT_PANEL_PERCENT, nextPercent)),
     );
@@ -1272,8 +1275,8 @@ function InitiativePageContent() {
             initiative={initiative}
             onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
             readOnly={Boolean(isViewer)}
-            leftToggle={workspaceHeaderToggle}
-            rightToggle={chatHeaderToggle}
+            leftToggle={chatHeaderToggle}
+            rightToggle={workspaceHeaderToggle}
           />
         )}
       </ShellPageHeader>
@@ -1308,21 +1311,23 @@ function InitiativePageContent() {
             )
           ) : (
             <main ref={workspaceContainerRef} className="h-full min-w-0 flex overflow-hidden relative">
-              {(showPrimaryPanel || hasSideChatShell) && (
-                <div
-                  className={`overflow-hidden transition-[width,opacity,transform] duration-300 ease-in-out ${showPrimaryPanel ? 'translate-x-0 opacity-100' : '-translate-x-6 opacity-0 pointer-events-none'}`}
-                  style={{ width: `${primaryPanelWidthPercent}%` }}
-                >
-                  <div
-                    className={`h-full min-w-0 transition-opacity duration-200 ease-out ${showPrimaryPanel ? 'opacity-100' : 'opacity-0'}`}
-                  >
-                    {primaryWorkspaceContent}
-                  </div>
-                </div>
-              )}
-
               {hasSideChatShell && (
                 <>
+                  <div
+                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+                    style={{ width: `${sideChatWidthPercent}%` }}
+                  >
+                    <div
+                      className={`h-full w-full transition-all duration-300 ease-in-out ${sideChatOpen ? 'translate-x-0 opacity-100' : '-translate-x-6 opacity-0 pointer-events-none'}`}
+                    >
+                      <div
+                        className={`h-full transition-opacity duration-200 ease-out ${sideChatOpen ? 'opacity-100' : 'opacity-0'}`}
+                      >
+                        {sideChatContent}
+                      </div>
+                    </div>
+                  </div>
+
                   <div
                     onMouseDown={(event) => {
                       if (!showChatResizeHandle) return;
@@ -1333,22 +1338,20 @@ function InitiativePageContent() {
                   >
                     <div className={`absolute left-1/2 top-0 h-full -translate-x-1/2 w-px transition-colors ${isResizingChat ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`} />
                   </div>
-
-                  <div
-                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-                    style={{ width: `${sideChatWidthPercent}%` }}
-                  >
-                    <div
-                      className={`h-full w-full transition-all duration-300 ease-in-out ${sideChatOpen ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0 pointer-events-none'}`}
-                    >
-                      <div
-                        className={`h-full transition-opacity duration-200 ease-out ${sideChatOpen ? 'opacity-100' : 'opacity-0'}`}
-                      >
-                        {sideChatContent}
-                      </div>
-                    </div>
-                  </div>
                 </>
+              )}
+
+              {(showPrimaryPanel || hasSideChatShell) && (
+                <div
+                  className={`overflow-hidden transition-[width,opacity,transform] duration-300 ease-in-out ${showPrimaryPanel ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0 pointer-events-none'}`}
+                  style={{ width: `${primaryPanelWidthPercent}%` }}
+                >
+                  <div
+                    className={`h-full min-w-0 transition-opacity duration-200 ease-out ${showPrimaryPanel ? 'opacity-100' : 'opacity-0'}`}
+                  >
+                    {primaryWorkspaceContent}
+                  </div>
+                </div>
               )}
 
             </main>
