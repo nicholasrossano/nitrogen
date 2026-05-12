@@ -2,6 +2,12 @@
 
 Use `AGENTS.md` as the primary operating guide for workflow, testing, scope discipline, and **Terminal Output Safety** (avoid unbounded shell output in chat).
 
+## Worktree Setup
+
+Git worktrees don't share gitignored files (`.env`, `node_modules`).
+Run `scripts/worktree_setup.sh` from the worktree root before starting dev servers.
+It symlinks `.env` from the main repo and installs frontend deps if missing.
+
 ## Schema & Release Guardrails
 
 - Treat `main` as production-compatible at all times.
