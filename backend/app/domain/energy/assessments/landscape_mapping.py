@@ -99,7 +99,6 @@ class LandscapeMappingAssessment(BaseAssessment):
                 population=[
                     PopulationStep("read_confirmed_prior_stage", {"stage_id": "entities"}),
                     PopulationStep("compute_with_assessment_logic"),
-                    PopulationStep("await_user_confirmation"),
                 ],
             ),
         ]
