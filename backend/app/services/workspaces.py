@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -21,7 +22,14 @@ async def ensure_personal_workspace(db: AsyncSession, user_id: str) -> Workspace
             personal_owner_id=user_id,
         )
         db.add(workspace)
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            result = await db.execute(
+                select(Workspace).where(Workspace.personal_owner_id == user_id)
+            )
+            workspace = result.scalar_one()
 
     membership = await get_workspace_membership(db, workspace.id, user_id)
     if membership is None:
@@ -32,7 +40,10 @@ async def ensure_personal_workspace(db: AsyncSession, user_id: str) -> Workspace
                 role=WorkspaceRole.OWNER.value,
             )
         )
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
 
     return workspace
 
