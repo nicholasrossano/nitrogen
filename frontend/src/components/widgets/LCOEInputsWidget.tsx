@@ -227,8 +227,11 @@ export function LCOEInputsWidget({
     }
   }, [localInputs, preConfirmStatuses, persistWidget, onRecalculated]);
 
-  const handleRowEnter = useCallback((_e: React.MouseEvent, inp: LCOEInput) => {
+  const handleRowEnter = useCallback((e: React.MouseEvent, inp: LCOEInput) => {
     setHoveredRow({ field_name: inp.field_name, label: inp.label, status: inp.status });
+    const isInteractive = !!(e.target as HTMLElement).closest('button, input, select, a');
+    setOverInteractive(isInteractive);
+    setMousePos({ x: e.clientX, y: e.clientY });
   }, []);
 
   const handleRowMove = useCallback((e: React.MouseEvent, _inp: LCOEInput) => {
