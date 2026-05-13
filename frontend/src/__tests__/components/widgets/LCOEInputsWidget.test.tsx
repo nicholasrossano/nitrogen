@@ -78,8 +78,10 @@ describe('LCOEInputsWidget', () => {
       />,
     );
 
-    fireEvent.mouseEnter(screen.getByText('Capacity factor'));
-    fireEvent.click(await screen.findByText('Investigate'));
+    const label = screen.getByText('Capacity factor');
+    fireEvent.mouseEnter(label);
+    // Tooltip uses pointer-events-none; real clicks pass through to the row. Click the label so the row onClick runs.
+    fireEvent.click(label);
 
     await waitFor(() => {
       expect(dispatchSpy).toHaveBeenCalledWith(

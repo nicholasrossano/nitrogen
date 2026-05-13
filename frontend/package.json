@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:clean": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev -p 3000",
-    "build": "rm -rf .next-build && NITROGEN_NEXT_DIST_DIR=.next-build next build",
+    "build": "bash scripts/next-build.sh",
+    "vercel:ignore-build": "bash scripts/vercel-ignore-build.sh",
     "start": "NITROGEN_NEXT_DIST_DIR=.next-build next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -43,7 +44,6 @@
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
     "tailwind-merge": "^2.2.1",
-    "three": "^0.184.0",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.12"
   },
@@ -57,7 +57,6 @@
     "@types/node": "^25.5.0",
     "@types/react": "^18.2.52",
     "@types/react-dom": "^18.2.18",
-    "@types/three": "^0.184.0",
     "autoprefixer": "^10.4.17",
     "eslint": "^8.56.0",
     "eslint-config-next": "14.2.35",
