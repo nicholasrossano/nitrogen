@@ -9,7 +9,6 @@ import {
   dotRadius,
   drawDot,
   setupCanvas,
-  stepConvergence,
   stepZ,
 } from './physics';
 import { resolveCssColorValue } from './utils';
@@ -45,8 +44,6 @@ interface Dot {
   homeY: number;
   foldX: number;
   foldY: number;
-  convergencePhase: number;
-  convergenceSpeed: number;
 }
 
 export function PonderLoadingArt({
@@ -106,8 +103,8 @@ export function PonderLoadingArt({
 
     // ── Tail ovals (rendered as single circular lobes for simplicity) ─────────
     const tailLobes: Lobe[] = [
-      { cx: size * 0.73, cy: size * 0.69, r: size * 0.060 },  // medium
-      { cx: size * 0.82, cy: size * 0.79, r: size * 0.038 },  // small
+      { cx: size * 0.69, cy: size * 0.72, r: size * 0.060 },  // medium
+      { cx: size * 0.77, cy: size * 0.83, r: size * 0.038 },  // small
     ];
 
     // ── Sample dots across all lobes ──────────────────────────────────────────
@@ -163,8 +160,6 @@ export function PonderLoadingArt({
           foldY: foldCy + (y - foldCy) * foldScale,
           z: Math.random() * 2 - 1,
           phase: Math.random() * Math.PI * 2,
-          convergencePhase: Math.random() * Math.PI * 2,
-          convergenceSpeed: 0.013 + Math.random() * 0.012,
         });
       }
     }
@@ -189,7 +184,7 @@ export function PonderLoadingArt({
     const tailDotCount = TOTAL_DOTS - cloudDotCount;
 
     seedUniformUnion(cloudLobes, cloudDotCount, cloudCx, cloudCy, 0.84);
-    seedUniformUnion(tailLobes, tailDotCount, size * 0.77, size * 0.74, 0.78);
+    seedUniformUnion(tailLobes, tailDotCount, size * 0.72, size * 0.78, 0.78);
 
     let time = 0;
     let animFrameId: number | null = null;
@@ -203,26 +198,19 @@ export function PonderLoadingArt({
       applyFade(context, fw, fh, 0.15);
       context.fillStyle = anchorInk;
 
+      // One coherent breath: home → fold → home, then repeat.
+      // This preserves the good first inhale, then runs the same motion in reverse.
+      const breath = (1 - Math.cos(time * 1.15)) * 0.5;
+
       for (const dot of dots) {
-        const { cycle, isConverging, nextPhase } = stepConvergence(
-          dot.convergencePhase,
-          dot.convergenceSpeed,
-        );
-        dot.convergencePhase = nextPhase;
+        const targetX = dot.homeX + (dot.foldX - dot.homeX) * breath;
+        const targetY = dot.homeY + (dot.foldY - dot.homeY) * breath;
+        dot.x += (targetX - dot.x) * 0.12;
+        dot.y += (targetY - dot.y) * 0.12;
 
-        if (isConverging) {
-          const speed = 0.030 * cycle;
-          dot.x += (dot.foldX - dot.x) * speed;
-          dot.y += (dot.foldY - dot.y) * speed;
-        } else {
-          const speed = 0.024 * Math.abs(cycle);
-          dot.x += (dot.homeX - dot.x) * speed;
-          dot.y += (dot.homeY - dot.y) * speed;
-        }
-
-        dot.z = stepZ(dot.z, time, dot.phase, Math.abs(cycle), 0.18, 0.012);
+        dot.z = stepZ(dot.z, time, dot.phase, breath, 0.18, 0.012);
         const df = depthFactor(dot.z);
-        const opacity = Math.max(0.025, 0.30 * Math.abs(cycle) + 0.05 * df);
+        const opacity = Math.max(0.025, 0.28 + 0.07 * df);
         drawDot(context, dot.x, dot.y, dotRadius(size, df, 950, 0.3), opacity);
       }
 
