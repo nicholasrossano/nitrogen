@@ -107,7 +107,7 @@ export function PonderLoadingArt({
       { cx: size * 0.61, cy: size * 0.72, r: size * 0.060 },
     ];
     const smallTailLobes: Lobe[] = [
-      { cx: size * 0.70, cy: size * 0.84, r: size * 0.038 },
+      { cx: size * 0.67, cy: size * 0.81, r: size * 0.038 },
     ];
 
     // ── Sample dots across all lobes ──────────────────────────────────────────
@@ -238,8 +238,12 @@ export function PonderLoadingArt({
 
         dot.z = stepZ(dot.z, time, dot.phase, breath, 0.18, 0.012);
         const df = depthFactor(dot.z);
-        const opacity = Math.max(0.025, 0.28 + 0.07 * df);
-        drawDot(context, dot.x, dot.y, dotRadius(size, df, 950, 0.3), opacity);
+        const normalX = (dot.x - sharedFoldCx) / (size * 0.42);
+        const normalY = (dot.y - sharedFoldCy) / (size * 0.42);
+        const lightFacing = Math.max(0, (-normalX - normalY) / Math.SQRT2);
+        const depthGlow = Math.max(0, df - 1);
+        const opacity = Math.max(0.025, 0.24 + 0.08 * df + 0.08 * lightFacing + 0.05 * depthGlow);
+        drawDot(context, dot.x, dot.y, dotRadius(size, df, 900, 0.3), opacity);
       }
 
       context.globalAlpha = 1;
