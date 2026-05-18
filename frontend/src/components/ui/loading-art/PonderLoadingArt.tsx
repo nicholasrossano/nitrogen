@@ -9,6 +9,7 @@ import {
   dotRadius,
   drawDot,
   setupCanvas,
+  stepConvergence,
   stepZ,
 } from './physics';
 import { resolveCssColorValue } from './utils';
@@ -33,6 +34,19 @@ interface Lobe {
   cx: number;
   cy: number;
   r: number;
+}
+
+interface Dot {
+  x: number;
+  y: number;
+  z: number;
+  phase: number;
+  homeX: number;
+  homeY: number;
+  foldX: number;
+  foldY: number;
+  convergencePhase: number;
+  convergenceSpeed: number;
 }
 
 export function PonderLoadingArt({
@@ -70,10 +84,9 @@ export function PonderLoadingArt({
     cloudLobes.push({ cx: cloudCx - cloudRx * 0.10, cy: cloudCy - cloudRy * 0.40, r: size * 0.11 });
     cloudLobes.push({ cx: cloudCx + cloudRx * 0.05, cy: cloudCy + cloudRy * 0.45, r: size * 0.10 });
 
-    // Outer perimeter lobes — 9 bumps around the bounding ellipse.  Each lobe
-    // sits at angle θ from cloud centre at the ellipse boundary, with a radius
-    // jittered slightly so bumps look natural rather than mechanical.
-    const PERIMETER_BUMPS = 9;
+    // Outer perimeter lobes — closer/larger than before so they read as one
+    // cloud body instead of a ring of separate circles.
+    const PERIMETER_BUMPS = 10;
     const seed = (i: number) => Math.sin(i * 12.9898) * 43758.5453;
     const rand1 = (i: number) => {
       const v = seed(i);
@@ -81,13 +94,13 @@ export function PonderLoadingArt({
     };
     for (let i = 0; i < PERIMETER_BUMPS; i++) {
       const θ = (i / PERIMETER_BUMPS) * Math.PI * 2 + 0.18; // small offset
-      const sizeJitter = 0.85 + rand1(i) * 0.30;            // 0.85–1.15
-      const radJitter  = 0.92 + rand1(i + 31) * 0.16;       // 0.92–1.08
-      const lobeR = size * 0.085 * sizeJitter;
-      // place lobe centres just inside the bounding ellipse so they overlap
-      // with the inner body — gives smooth scallops around the perimeter.
-      const px = cloudCx + cloudRx * 0.92 * Math.cos(θ) * radJitter;
-      const py = cloudCy + cloudRy * 0.92 * Math.sin(θ) * radJitter;
+      const sizeJitter = 0.90 + rand1(i) * 0.20;            // 0.90–1.10
+      const radJitter  = 0.94 + rand1(i + 31) * 0.12;       // 0.94–1.06
+      const lobeR = size * 0.105 * sizeJitter;
+      // Centres sit well inside the bounding ellipse: bumps overlap each other
+      // and the body, producing rounded scallops without visible separate discs.
+      const px = cloudCx + cloudRx * 0.74 * Math.cos(θ) * radJitter;
+      const py = cloudCy + cloudRy * 0.74 * Math.sin(θ) * radJitter;
       cloudLobes.push({ cx: px, cy: py, r: lobeR });
     }
 
@@ -98,52 +111,85 @@ export function PonderLoadingArt({
     ];
 
     // ── Sample dots across all lobes ──────────────────────────────────────────
-    // Sampling strategy: pick a lobe weighted by its area; sample uniformly in
-    // a disc; outline-bias half the dots toward the rim so the cloud silhouette
-    // reads clearly.  Lobe overlaps then naturally raise interior density.
-    type Dot = { x: number; y: number; z: number; phase: number };
     const dots: Dot[] = [];
 
     // Family-standard density (matches Dahlia/Dandelion/Fern).
     const TOTAL_DOTS = Math.max(9000, Math.round((size * size) / 9));
-    // Cloud carries the bulk of dots; tail ovals share the rest by area.
-    const cloudArea = cloudLobes.reduce((s, l) => s + l.r * l.r, 0);
-    const tailArea  = tailLobes.reduce((s, l) => s + l.r * l.r, 0);
-    const cloudDotCount = Math.round(TOTAL_DOTS * cloudArea / (cloudArea + tailArea));
-    const tailDotCount  = TOTAL_DOTS - cloudDotCount;
 
-    function pickLobe(lobes: Lobe[]): Lobe {
-      const totalArea = lobes.reduce((s, l) => s + l.r * l.r, 0);
-      let pick = Math.random() * totalArea;
-      for (const l of lobes) {
-        pick -= l.r * l.r;
-        if (pick <= 0) return l;
-      }
-      return lobes[lobes.length - 1];
+    function insideAnyLobe(x: number, y: number, lobes: Lobe[]): boolean {
+      return lobes.some((lobe) => (x - lobe.cx) ** 2 + (y - lobe.cy) ** 2 <= lobe.r ** 2);
     }
 
-    function seedInLobes(lobes: Lobe[], n: number, outlineRatio: number) {
-      const nOutline = Math.round(n * outlineRatio);
+    function estimateUnionArea(lobes: Lobe[], minX: number, minY: number, maxX: number, maxY: number): number {
+      const samples = 1600;
+      let hits = 0;
+      for (let i = 0; i < samples; i++) {
+        const x = minX + Math.random() * (maxX - minX);
+        const y = minY + Math.random() * (maxY - minY);
+        if (insideAnyLobe(x, y, lobes)) hits += 1;
+      }
+      return ((maxX - minX) * (maxY - minY) * hits) / samples;
+    }
+
+    function boundsFor(lobes: Lobe[]) {
+      return lobes.reduce(
+        (bounds, lobe) => ({
+          minX: Math.min(bounds.minX, lobe.cx - lobe.r),
+          minY: Math.min(bounds.minY, lobe.cy - lobe.r),
+          maxX: Math.max(bounds.maxX, lobe.cx + lobe.r),
+          maxY: Math.max(bounds.maxY, lobe.cy + lobe.r),
+        }),
+        { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: 0, maxY: 0 },
+      );
+    }
+
+    function seedUniformUnion(lobes: Lobe[], n: number, foldCx: number, foldCy: number, foldScale: number) {
+      const { minX, minY, maxX, maxY } = boundsFor(lobes);
       for (let i = 0; i < n; i++) {
-        const lobe = pickLobe(lobes);
-        const angle = Math.random() * Math.PI * 2;
-        // Outline dots sit in the outer 25 % of each lobe's radius, giving
-        // a strong silhouette where lobes don't overlap with neighbours.
-        // Interior dots use sqrt(random) for uniform area distribution.
-        const distFrac = i < nOutline
-          ? 0.78 + Math.random() * 0.22
-          : Math.sqrt(Math.random());
+        let x = minX;
+        let y = minY;
+        // Rejection sampling across the union avoids extra density where lobes overlap.
+        for (let attempt = 0; attempt < 120; attempt++) {
+          x = minX + Math.random() * (maxX - minX);
+          y = minY + Math.random() * (maxY - minY);
+          if (insideAnyLobe(x, y, lobes)) break;
+        }
         dots.push({
-          x: lobe.cx + Math.cos(angle) * distFrac * lobe.r,
-          y: lobe.cy + Math.sin(angle) * distFrac * lobe.r,
+          x,
+          y,
+          homeX: x,
+          homeY: y,
+          foldX: foldCx + (x - foldCx) * foldScale,
+          foldY: foldCy + (y - foldCy) * foldScale,
           z: Math.random() * 2 - 1,
           phase: Math.random() * Math.PI * 2,
+          convergencePhase: Math.random() * Math.PI * 2,
+          convergenceSpeed: 0.010 + Math.random() * 0.010,
         });
       }
     }
 
-    seedInLobes(cloudLobes, cloudDotCount, 0.45);
-    seedInLobes(tailLobes, tailDotCount, 0.55);
+    const cloudBounds = boundsFor(cloudLobes);
+    const tailBounds = boundsFor(tailLobes);
+    const cloudArea = estimateUnionArea(
+      cloudLobes,
+      cloudBounds.minX,
+      cloudBounds.minY,
+      cloudBounds.maxX,
+      cloudBounds.maxY,
+    );
+    const tailArea = estimateUnionArea(
+      tailLobes,
+      tailBounds.minX,
+      tailBounds.minY,
+      tailBounds.maxX,
+      tailBounds.maxY,
+    );
+    const cloudDotCount = Math.round(TOTAL_DOTS * cloudArea / (cloudArea + tailArea));
+    const tailDotCount = TOTAL_DOTS - cloudDotCount;
+
+    seedUniformUnion(cloudLobes, cloudDotCount, cloudCx, cloudCy, 0.94);
+    seedUniformUnion(tailLobes, tailDotCount, size * 0.82, size * 0.80, 0.92);
 
     let time = 0;
     let animFrameId: number | null = null;
@@ -158,10 +204,25 @@ export function PonderLoadingArt({
       context.fillStyle = anchorInk;
 
       for (const dot of dots) {
-        // z-only breathing — positions are stationary, no drift.
-        dot.z = stepZ(dot.z, time, dot.phase, 0, 0.18, 0.012);
+        const { cycle, isConverging, nextPhase } = stepConvergence(
+          dot.convergencePhase,
+          dot.convergenceSpeed,
+        );
+        dot.convergencePhase = nextPhase;
+
+        if (isConverging) {
+          const speed = 0.018 * cycle;
+          dot.x += (dot.foldX - dot.x) * speed;
+          dot.y += (dot.foldY - dot.y) * speed;
+        } else {
+          const speed = 0.016 * Math.abs(cycle);
+          dot.x += (dot.homeX - dot.x) * speed;
+          dot.y += (dot.homeY - dot.y) * speed;
+        }
+
+        dot.z = stepZ(dot.z, time, dot.phase, Math.abs(cycle), 0.18, 0.012);
         const df = depthFactor(dot.z);
-        const opacity = Math.max(0.025, 0.34 + 0.05 * df);
+        const opacity = Math.max(0.025, 0.30 * Math.abs(cycle) + 0.05 * df);
         drawDot(context, dot.x, dot.y, dotRadius(size, df, 950, 0.3), opacity);
       }
 
