@@ -27,6 +27,10 @@ export function createDevMockUser(): User {
     providerData: [],
     refreshToken: '',
     tenantId: null,
+    metadata: {},
+    phoneNumber: null,
+    photoURL: null,
+    providerId: 'dev-mock',
     delete: async () => {},
     getIdToken: async () => token,
     getIdTokenResult: async () => ({
@@ -40,5 +44,5 @@ export function createDevMockUser(): User {
     }),
     reload: async () => {},
     toJSON: () => ({}),
-  } as User;
+  } as unknown as User;
 }
