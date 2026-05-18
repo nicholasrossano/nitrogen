@@ -46,16 +46,15 @@ Use this file only when the task needs domain-specific policy not covered by `AG
 - If Next dev cache corruption appears (`vendor-chunks`/missing module artifacts), clear `.next` and restart dev.
 - For cloud VM usage, check path and service setup details in `.cursor/rules/dev-setup.mdc`.
 
-### Cloud agents — `.env` and auth (do not simulate)
+### Cloud agents — `.env` and auth
 
-Gitignored files (including root `.env`) are **not** in the repo clone on a cloud VM. Worktrees also do not share `.env` (`CLAUDE.md`).
+Gitignored root `.env` is often absent on cloud VMs. Worktrees do not share `.env` (`CLAUDE.md`).
 
-1. **If `.env` is missing:** stop and ask the user to provide it (local machine, Cursor secrets, or team store). Do **not** create one from `.env.example`.
-2. **If `.env` exists:** run `bash scripts/worktree_setup.sh`, then start backend + frontend.
-3. **Verify before claiming auth works:** `NEXT_PUBLIC_FIREBASE_API_KEY` must be non-empty in `.env` (do not print the value). Login without Firebase config will always fail.
-4. Do not replace Neon/Postgres `DATABASE_URL` with SQLite unless explicitly requested.
-
-`docs/deployment.md` mentions mock auth with `DEBUG=true`; production code uses **Firebase only** — stale doc, not a workaround for missing `.env`.
+1. Run `bash scripts/check_dev_env.sh` when `.env` exists; fix symlink warnings with `bash scripts/worktree_setup.sh`.
+2. If `.env` is missing, use `bash scripts/start_emulator.sh` (falls back to committed `scripts/dev-mock.env` — mock user, sqlite). Tell the user this is smoke-test only.
+3. **Never** `cp .env.example .env` over a real env file.
+4. **Firebase mode:** `NEXT_PUBLIC_FIREBASE_API_KEY` and `FIREBASE_PROJECT_ID` must both be set or tokens will not verify.
+5. **Mock mode:** empty Firebase vars + `DEBUG=true` + matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN`.
 
 ## UI and Loading Art Guidance
 

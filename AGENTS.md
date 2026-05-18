@@ -78,13 +78,14 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 
 ## Local emulator and cloud agents (auth)
 
-Recurring failure mode: starting the stack without the real root `.env` (empty Firebase vars → login never works).
+Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
 
-- **Never** run `cp .env.example .env`, invent a stub `.env`, or point `DATABASE_URL` at SQLite to “make it boot” unless the user explicitly asks for that.
-- Root `.env` is gitignored; **cloud agent VMs often do not have it**. If `.env` is missing, **stop** and tell the user — do not substitute `.env.example`.
-- Before starting dev servers: confirm `.env` exists, then run `bash scripts/worktree_setup.sh` (symlinks `backend/.env` and `frontend/.env.local` → root `.env`).
-- Auth needs the real `NEXT_PUBLIC_FIREBASE_*` vars (frontend) and `DATABASE_URL` + optional `FIREBASE_PROJECT_ID` (backend). Empty Firebase config = broken sign-in.
-- Emulator: backend `:8000`, frontend `:3000`, open `http://localhost:3000`. Art Lab (`/art-lab`) also requires **Developer Mode** in Settings.
+- **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
+- Before starting: `bash scripts/worktree_setup.sh` then `bash scripts/check_dev_env.sh`.
+- Start both servers: `bash scripts/start_emulator.sh` (uses root `.env`, or `scripts/dev-mock.env` only when `.env` is missing).
+- **Firebase mode:** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` must both be set.
+- **Mock mode (local only):** leave Firebase vars empty, set `DEBUG=true`, matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN` (defaults in `.env.example`).
+- Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
 
 ## Specialized Guidance (Read Only When Relevant)
 

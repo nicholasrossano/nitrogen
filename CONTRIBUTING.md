@@ -20,7 +20,8 @@ Only submit code, documentation, data, designs, or other assets that you have th
 1. Fork and clone the repo
 2. Copy the environment template:
    ```bash
-   cp .env.example .env
+   cp .env.example .env   # first-time only; then keep your real .env
+   bash scripts/worktree_setup.sh && bash scripts/check_dev_env.sh
    ```
 3. Fill in your API keys and database URL in `.env`
 4. Start the backend:
