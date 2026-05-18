@@ -45,6 +45,7 @@ interface Dot {
   foldX: number;
   foldY: number;
   breathOffset: number;
+  breathRate: number;
 }
 
 export function PonderLoadingArt({
@@ -104,7 +105,7 @@ export function PonderLoadingArt({
 
     // ── Tail ovals (rendered as single circular lobes for simplicity) ─────────
     const mediumTailLobes: Lobe[] = [
-      { cx: size * 0.65, cy: size * 0.72, r: size * 0.060 },
+      { cx: size * 0.61, cy: size * 0.72, r: size * 0.060 },
     ];
     const smallTailLobes: Lobe[] = [
       { cx: size * 0.70, cy: size * 0.84, r: size * 0.038 },
@@ -150,6 +151,7 @@ export function PonderLoadingArt({
       foldCy: number,
       foldScale: number,
       breathOffset: number,
+      breathRate: number,
     ) {
       const { minX, minY, maxX, maxY } = boundsFor(lobes);
       for (let i = 0; i < n; i++) {
@@ -169,6 +171,7 @@ export function PonderLoadingArt({
           foldX: foldCx + (x - foldCx) * foldScale,
           foldY: foldCy + (y - foldCy) * foldScale,
           breathOffset,
+          breathRate,
           z: Math.random() * 2 - 1,
           phase: Math.random() * Math.PI * 2,
         });
@@ -208,10 +211,11 @@ export function PonderLoadingArt({
     // all three parts contract toward one common "thought" centre.
     const sharedFoldCx = size * 0.53;
     const sharedFoldCy = size * 0.61;
-    // Smallest/lower tail starts first, then medium tail, then cloud.
-    seedUniformUnion(cloudLobes, cloudDotCount, sharedFoldCx, sharedFoldCy, 0.84, 0);
-    seedUniformUnion(mediumTailLobes, mediumTailDotCount, sharedFoldCx, sharedFoldCy, 0.78, 0.24);
-    seedUniformUnion(smallTailLobes, smallTailDotCount, sharedFoldCx, sharedFoldCy, 0.78, 0.48);
+    // Smallest/lower tail starts first and moves a little faster; medium follows;
+    // cloud is slowest. This keeps the motion organic instead of locked-step.
+    seedUniformUnion(cloudLobes, cloudDotCount, sharedFoldCx, sharedFoldCy, 0.84, 0, 1.00);
+    seedUniformUnion(mediumTailLobes, mediumTailDotCount, sharedFoldCx, sharedFoldCy, 0.78, 0.28, 1.08);
+    seedUniformUnion(smallTailLobes, smallTailDotCount, sharedFoldCx, sharedFoldCy, 0.78, 0.58, 1.18);
 
     let time = 0;
     let animFrameId: number | null = null;
@@ -230,7 +234,7 @@ export function PonderLoadingArt({
       const breathPhase = time * 1.15;
 
       for (const dot of dots) {
-        const breath = (1 - Math.cos(breathPhase + dot.breathOffset)) * 0.5;
+        const breath = (1 - Math.cos(breathPhase * dot.breathRate + dot.breathOffset)) * 0.5;
         const targetX = dot.homeX + (dot.foldX - dot.homeX) * breath;
         const targetY = dot.homeY + (dot.foldY - dot.homeY) * breath;
         dot.x += (targetX - dot.x) * 0.12;
