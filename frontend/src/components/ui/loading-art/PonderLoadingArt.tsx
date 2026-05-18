@@ -3,48 +3,28 @@
 import { useEffect, useRef } from 'react';
 
 import type { LoadingArtProps } from './types';
-import {
-  depthFactor,
-  dotRadius,
-  drawDot,
-  setupCanvas,
-  stepZ,
-} from './physics';
+import { depthFactor, dotRadius, drawDot, setupCanvas, stepZ } from './physics';
 import { resolveCssColorValue } from './utils';
 
 const DEFAULT_SIZE = 280;
 
-// ── Animation timing (time advances 0.04/frame at 30 fps ≈ 1.2 units/sec) ────
-const CYCLE = 8.0;
-const BUBBLE_DELAYS = [0, 1.8, 3.5];
-const FADE_IN_DURATION = 0.55;
-const GLOBAL_FADE_START = 6.0;
-const GLOBAL_FADE_END = 8.0;
-
-// ── Bubble layout ─────────────────────────────────────────────────────────────
-// Conventional thought-bubble direction: tiny at bottom-right, large at upper-left.
-const BUBBLE_LAYOUT = [
-  { relCx: 0.74, relCy: 0.78, relR: 0.055 },  // tiny  (bottom-right)
-  { relCx: 0.54, relCy: 0.58, relR: 0.110 },  // medium (centre)
-  { relCx: 0.34, relCy: 0.27, relR: 0.220 },  // large  (upper-left)
-] as const;
-
-// Fraction of dots seeded near the rim — higher than typical arts so the circle
-// boundary reads clearly without requiring a solid filled disc.
-const RIM_FRACTION = 0.48;
-
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
+// ── Cloud bump profile ────────────────────────────────────────────────────────
+// Returns a radial scale factor > 1 at peaks and < 1 at troughs.
+// 9 primary bumps + two weaker harmonics so the bumps are uneven / natural.
+function cloudBump(θ: number): number {
+  return (
+    1 +
+    0.13 * Math.sin(9 * θ + 0.4) +
+    0.04 * Math.sin(6 * θ + 1.0) +
+    0.03 * Math.cos(12 * θ)
+  );
 }
 
-interface ThoughtDot {
-  // Positions are fixed — no drift accumulates, so clearRect gives crisp dots.
+interface PonderDot {
   readonly x: number;
   readonly y: number;
   z: number;
   readonly phase: number;
-  readonly bubbleIndex: number;
 }
 
 export function PonderLoadingArt({
@@ -67,75 +47,100 @@ export function PonderLoadingArt({
     const context = ctx;
     setupCanvas(canvas, context, fw, fh, deviceScale);
 
-    const bubbles = BUBBLE_LAYOUT.map(({ relCx, relCy, relR }) => ({
-      cx: relCx * size,
-      cy: relCy * size,
-      r:  relR  * size,
-    }));
+    // ── Shape parameters ──────────────────────────────────────────────────────
+    // Classic thought bubble: large bumpy cloud (upper-left) + two shrinking
+    // ovals as the "tail" toward the implied thinker (lower-right).
+    const cCx = size * 0.38;   // cloud centre x
+    const cCy = size * 0.37;   // cloud centre y
+    const cRx = size * 0.30;   // cloud half-width (slightly wider than tall)
+    const cRy = size * 0.26;   // cloud half-height
 
-    // ── Seed dots ─────────────────────────────────────────────────────────────
-    // Same density as the rest of the art family (≈ 2 × r²) so dot size matches.
-    // Nearly half the dots land on the rim, giving a clear circular outline;
-    // radial jitter on rim dots (85–110 % of r) keeps the shape organic, not
-    // a ruler-drawn circle.
-    const dots: ThoughtDot[] = [];
+    const o1Cx = size * 0.73;  // oval 1 centre
+    const o1Cy = size * 0.72;
+    const o1Rx = size * 0.088; // oval 1 half-width
+    const o1Ry = size * 0.062; // oval 1 half-height
 
-    for (let bi = 0; bi < bubbles.length; bi++) {
-      const { cx, cy, r } = bubbles[bi];
-      const total    = Math.max(300, Math.round(2.0 * r * r));
-      const rimCount = Math.round(total * RIM_FRACTION);
+    const o2Cx = size * 0.84;  // oval 2 centre (smallest)
+    const o2Cy = size * 0.84;
+    const o2Rx = size * 0.052;
+    const o2Ry = size * 0.038;
 
-      for (let i = 0; i < total; i++) {
-        const isRim = i < rimCount;
-        const angle = Math.random() * Math.PI * 2;
-        const dist = isRim
-          // Rim: slight radial jitter for organic edge
-          ? r * (0.85 + Math.random() * 0.25)
-          // Interior: power-law so centre is a touch denser, capped inside rim
-          : r * Math.pow(Math.random(), 0.75) * 0.84;
-
-        dots.push({
-          x: cx + Math.cos(angle) * dist,
-          y: cy + Math.sin(angle) * dist,
+    // ── Dot seeding helpers ───────────────────────────────────────────────────
+    // For the cloud: 82 % of dots placed near the bumpy outline so the shape
+    // reads as a cloud silhouette, not a solid disc.  Outline dots scatter
+    // ±14 % radially from the bump surface.  Interior dots are uniformly sparse.
+    function seedCloud(n: number): PonderDot[] {
+      const out: PonderDot[] = [];
+      const nOutline = Math.round(n * 0.82);
+      for (let i = 0; i < n; i++) {
+        const θ = Math.random() * Math.PI * 2;
+        const bump = cloudBump(θ);
+        let scaleFrac: number;
+        if (i < nOutline) {
+          // outline band: 86 % – 114 % of bump radius
+          scaleFrac = bump * (0.86 + Math.random() * 0.28);
+        } else {
+          // interior: uniform up to 85 % of bump radius
+          scaleFrac = bump * Math.random() * 0.85;
+        }
+        out.push({
+          x: cCx + cRx * scaleFrac * Math.cos(θ),
+          y: cCy + cRy * scaleFrac * Math.sin(θ),
           z: Math.random() * 2 - 1,
           phase: Math.random() * Math.PI * 2,
-          bubbleIndex: bi,
         });
       }
+      return out;
     }
+
+    // For the ovals: 80 % outline, 20 % interior.
+    function seedOval(
+      n: number,
+      cx: number, cy: number,
+      rx: number, ry: number,
+    ): PonderDot[] {
+      const out: PonderDot[] = [];
+      const nOutline = Math.round(n * 0.80);
+      for (let i = 0; i < n; i++) {
+        const θ = Math.random() * Math.PI * 2;
+        let rFrac: number;
+        if (i < nOutline) {
+          rFrac = 0.84 + Math.random() * 0.32; // 84–116 %
+        } else {
+          rFrac = Math.sqrt(Math.random()) * 0.82;
+        }
+        out.push({
+          x: cx + rx * rFrac * Math.cos(θ),
+          y: cy + ry * rFrac * Math.sin(θ),
+          z: Math.random() * 2 - 1,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      return out;
+    }
+
+    // Dot counts keep per-shape density proportional to their outline length.
+    const cloudDots = seedCloud(4200);
+    const oval1Dots = seedOval(620, o1Cx, o1Cy, o1Rx, o1Ry);
+    const oval2Dots = seedOval(260, o2Cx, o2Cy, o2Rx, o2Ry);
+    const allDots: PonderDot[] = [...cloudDots, ...oval1Dots, ...oval2Dots];
 
     let time = 0;
     let animFrameId: number | null = null;
     let lastFrameTime = 0;
     const frameInterval = 1000 / 30;
 
-    function getBubbleAlpha(bi: number, tCycle: number): number {
-      const tRel = tCycle - BUBBLE_DELAYS[bi];
-      const appear = smoothstep(0, FADE_IN_DURATION, tRel);
-      const globalFade = 1 - smoothstep(GLOBAL_FADE_START, GLOBAL_FADE_END, tCycle);
-      return appear * globalFade;
-    }
-
     function drawFrame() {
-      // clearRect instead of destination-out: every dot is drawn crisp each frame
-      // with no accumulated smearing from previous frames.
+      // clearRect keeps every dot crisp — no destination-out accumulation.
       context.clearRect(0, 0, fw, fh);
       context.fillStyle = anchorInk;
 
-      const tCycle = time % CYCLE;
-      const bubbleAlphas = bubbles.map((_, bi) => getBubbleAlpha(bi, tCycle));
-
-      for (const dot of dots) {
-        const bAlpha = bubbleAlphas[dot.bubbleIndex];
-        if (bAlpha < 0.01) continue;
-
-        // z breathes independently — drives opacity and size shimmer.
-        // Positions are immutable so dots never drift or smear.
-        dot.z = stepZ(dot.z, time, dot.phase, 0, 0.22, 0.016);
-        const df = depthFactor(dot.z);
-
-        const opacity = Math.max(0.03, 0.40 * df * bAlpha);
-        const radius  = dotRadius(size, df, 800, 0.32);
+      for (const dot of allDots) {
+        // Only z breathes — positions are fixed at seed time.
+        dot.z = stepZ(dot.z, time, dot.phase, 0, 0.20, 0.016);
+        const df      = depthFactor(dot.z);
+        const opacity = Math.max(0.04, 0.40 * df);
+        const radius  = dotRadius(size, df, 700, 0.30);
         drawDot(context, dot.x, dot.y, radius, opacity);
       }
 
