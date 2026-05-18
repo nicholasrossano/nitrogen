@@ -183,8 +183,12 @@ export function PonderLoadingArt({
     const cloudDotCount = Math.round(TOTAL_DOTS * cloudArea / (cloudArea + tailArea));
     const tailDotCount = TOTAL_DOTS - cloudDotCount;
 
-    seedUniformUnion(cloudLobes, cloudDotCount, cloudCx, cloudCy, 0.84);
-    seedUniformUnion(tailLobes, tailDotCount, size * 0.72, size * 0.78, 0.78);
+    // Shared inhale point between the main cloud and the two tail bubbles, so
+    // all three parts contract toward one common "thought" centre.
+    const sharedFoldCx = size * 0.56;
+    const sharedFoldCy = size * 0.61;
+    seedUniformUnion(cloudLobes, cloudDotCount, sharedFoldCx, sharedFoldCy, 0.84);
+    seedUniformUnion(tailLobes, tailDotCount, sharedFoldCx, sharedFoldCy, 0.78);
 
     let time = 0;
     let animFrameId: number | null = null;
