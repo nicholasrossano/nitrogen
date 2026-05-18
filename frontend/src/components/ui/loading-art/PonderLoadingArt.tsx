@@ -106,8 +106,8 @@ export function PonderLoadingArt({
 
     // ── Tail ovals (rendered as single circular lobes for simplicity) ─────────
     const tailLobes: Lobe[] = [
-      { cx: size * 0.78, cy: size * 0.74, r: size * 0.060 },  // medium
-      { cx: size * 0.88, cy: size * 0.86, r: size * 0.038 },  // small
+      { cx: size * 0.73, cy: size * 0.69, r: size * 0.060 },  // medium
+      { cx: size * 0.82, cy: size * 0.79, r: size * 0.038 },  // small
     ];
 
     // ── Sample dots across all lobes ──────────────────────────────────────────
@@ -164,7 +164,7 @@ export function PonderLoadingArt({
           z: Math.random() * 2 - 1,
           phase: Math.random() * Math.PI * 2,
           convergencePhase: Math.random() * Math.PI * 2,
-          convergenceSpeed: 0.010 + Math.random() * 0.010,
+          convergenceSpeed: 0.013 + Math.random() * 0.012,
         });
       }
     }
@@ -188,8 +188,8 @@ export function PonderLoadingArt({
     const cloudDotCount = Math.round(TOTAL_DOTS * cloudArea / (cloudArea + tailArea));
     const tailDotCount = TOTAL_DOTS - cloudDotCount;
 
-    seedUniformUnion(cloudLobes, cloudDotCount, cloudCx, cloudCy, 0.94);
-    seedUniformUnion(tailLobes, tailDotCount, size * 0.82, size * 0.80, 0.92);
+    seedUniformUnion(cloudLobes, cloudDotCount, cloudCx, cloudCy, 0.84);
+    seedUniformUnion(tailLobes, tailDotCount, size * 0.77, size * 0.74, 0.78);
 
     let time = 0;
     let animFrameId: number | null = null;
@@ -211,11 +211,11 @@ export function PonderLoadingArt({
         dot.convergencePhase = nextPhase;
 
         if (isConverging) {
-          const speed = 0.018 * cycle;
+          const speed = 0.030 * cycle;
           dot.x += (dot.foldX - dot.x) * speed;
           dot.y += (dot.foldY - dot.y) * speed;
         } else {
-          const speed = 0.016 * Math.abs(cycle);
+          const speed = 0.024 * Math.abs(cycle);
           dot.x += (dot.homeX - dot.x) * speed;
           dot.y += (dot.homeY - dot.y) * speed;
         }
