@@ -55,8 +55,8 @@ curl https://your-app.up.railway.app/debug/config
 
 ```bash
 # Get the memo (replace {id} with your initiative ID)
-# Use your DEV_MOCK_TOKEN value or a valid Firebase token
-curl -H "Authorization: Bearer $DEV_MOCK_TOKEN" \
+# Use your DEV_MOCK_TOKEN value (default dev-mock-token when DEBUG=true) or a valid Firebase token
+curl -H "Authorization: Bearer ${DEV_MOCK_TOKEN:-dev-mock-token}" \
   https://your-app.up.railway.app/api/v1/initiatives/{id}/memo
 ```
 
@@ -281,8 +281,8 @@ curl https://your-app.up.railway.app/debug/cors
 curl https://your-app.up.railway.app/debug/config
 
 # Check if memo exists (replace {id})
-# Use your DEV_MOCK_TOKEN value or a valid Firebase token
-curl -H "Authorization: Bearer $DEV_MOCK_TOKEN" \
+# Use your DEV_MOCK_TOKEN value (default dev-mock-token when DEBUG=true) or a valid Firebase token
+curl -H "Authorization: Bearer ${DEV_MOCK_TOKEN:-dev-mock-token}" \
   https://your-app.up.railway.app/api/v1/initiatives/{id}/memo
 ```
 

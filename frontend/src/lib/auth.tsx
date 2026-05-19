@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import type { User, Auth } from 'firebase/auth';
 
+import { createDevMockUser, getDevMockToken, isDevMockAuthEnabled } from '@/lib/devAuth';
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -29,15 +31,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let unsubscribe: (() => void) | undefined;
 
     const initAuth = async () => {
+      if (isDevMockAuthEnabled()) {
+        setUser(createDevMockUser());
+        setLoading(false);
+        return;
+      }
+
       try {
         const { getAuth, onAuthStateChanged } = await import('firebase/auth');
         const { app } = await import('./firebase');
-        
+
         const authInstance = getAuth(app);
         setAuth(authInstance);
-        
-        unsubscribe = onAuthStateChanged(authInstance, (user) => {
-          setUser(user);
+
+        unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
+          setUser(nextUser);
           setLoading(false);
         });
       } catch (error) {
@@ -54,18 +62,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
+    if (isDevMockAuthEnabled()) {
+      setUser(createDevMockUser());
+      return;
+    }
     if (!auth) throw new Error('Auth not initialized');
     const { signInWithEmailAndPassword } = await import('firebase/auth');
     await signInWithEmailAndPassword(auth, email, password);
   }, [auth]);
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
+    if (isDevMockAuthEnabled()) {
+      setUser(createDevMockUser());
+      return;
+    }
     if (!auth) throw new Error('Auth not initialized');
     const { createUserWithEmailAndPassword } = await import('firebase/auth');
     await createUserWithEmailAndPassword(auth, email, password);
   }, [auth]);
 
   const signInWithGoogle = useCallback(async () => {
+    if (isDevMockAuthEnabled()) {
+      setUser(createDevMockUser());
+      return;
+    }
     if (!auth) throw new Error('Auth not initialized');
     const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
     const provider = new GoogleAuthProvider();
@@ -73,6 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   const signOut = useCallback(async () => {
+    if (isDevMockAuthEnabled()) {
+      setUser(null);
+      return;
+    }
     if (!auth) throw new Error('Auth not initialized');
     const { signOut: firebaseSignOut } = await import('firebase/auth');
     await firebaseSignOut(auth);
@@ -85,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   const getIdToken = useCallback(async (): Promise<string | null> => {
-    if (!user) return null;
+    if (!user) return isDevMockAuthEnabled() ? getDevMockToken() : null;
     return user.getIdToken();
   }, [user]);
 

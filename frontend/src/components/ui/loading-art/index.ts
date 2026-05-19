@@ -5,6 +5,7 @@ export { DahliaLoadingArt } from './DahliaLoadingArt';
 export { LoadingArtHost } from './LoadingArtHost';
 export { OakLoadingArt } from './OakLoadingArt';
 export { PineLoadingArt } from './PineLoadingArt';
+export { PonderLoadingArt } from './PonderLoadingArt';
 export { SunflowerLoadingArt } from './SunflowerLoadingArt';
 export { loadingArtRegistry, getLoadingArtById, getRandomLoadingArt } from './registry';
 export type { LoadingArtDefinition, LoadingArtProps } from './types';

@@ -76,6 +76,17 @@ There are two chat surfaces. Default to **Generate flow (standalone)** unless th
 
 Do not modify `ToolPicker.tsx` when the request is about generate-flow landing tiles.
 
+## Local emulator and cloud agents (auth)
+
+Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
+
+- **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
+- Before starting: `bash scripts/worktree_setup.sh` then `bash scripts/check_dev_env.sh`.
+- Start both servers: `bash scripts/start_emulator.sh` (uses root `.env`, or `scripts/dev-mock.env` only when `.env` is missing).
+- **Firebase mode:** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` must both be set.
+- **Mock mode (local only):** leave Firebase vars empty, set `DEBUG=true`, matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN` (defaults in `.env.example`).
+- Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
+
 ## Specialized Guidance (Read Only When Relevant)
 
 For detailed conventions and edge-case policy, consult `docs/agent-playbook.md` sections as needed:
