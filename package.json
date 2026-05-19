@@ -7,7 +7,9 @@
     "test:quiet": "scripts/ai_test.sh all",
     "cursor:audit": "scripts/cursor_token_audit.sh",
     "scan:repo": "scripts/safe_repo_scan.sh",
-    "scan:largest": "scripts/largest_files.sh"
+    "scan:largest": "scripts/largest_files.sh",
+    "dev:check-env": "scripts/check_dev_env.sh",
+    "dev:emulator": "scripts/start_emulator.sh"
   },
   "devDependencies": {
     "husky": "^9.1.7",
