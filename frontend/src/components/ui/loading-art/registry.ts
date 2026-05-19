@@ -4,6 +4,7 @@ import { FernLoadingArt } from './FernLoadingArt';
 import { DahliaLoadingArt } from './DahliaLoadingArt';
 import { OakLoadingArt } from './OakLoadingArt';
 import { PineLoadingArt } from './PineLoadingArt';
+import { PonderLoadingArt } from './PonderLoadingArt';
 import { SunflowerLoadingArt } from './SunflowerLoadingArt';
 import type { LoadingArtDefinition } from './types';
 
@@ -49,6 +50,13 @@ export const loadingArtRegistry: LoadingArtDefinition[] = [
     enabled: false,
     description: 'Dense needle-tuft rosette radiating from a glowing core with soft harmonic breath.',
     Component: PineLoadingArt,
+  },
+  {
+    id: 'ponder',
+    name: 'Ponder',
+    enabled: true,
+    description: 'Three thought-bubble circles rising diagonally — smallest first, each appearing in sequence before fading together.',
+    Component: PonderLoadingArt,
   },
   {
     id: 'sunflower',

@@ -1,4 +1,5 @@
 import { debugChatFlow } from '@/lib/chatDebug';
+import { getDevMockToken, isDevMockAuthEnabled } from '@/lib/devAuth';
 import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -9,6 +10,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 // restored the session — without blocking after auth state is already known.
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
+
+  if (isDevMockAuthEnabled()) {
+    return getDevMockToken();
+  }
 
   try {
     const { getAuth } = await import('firebase/auth');

@@ -109,10 +109,11 @@ NEXT_PUBLIC_API_URL=https://your-app.up.railway.app
 **Symptom**: 401 Unauthorized errors
 
 **Solution**:
-1. In development: Ensure `DEBUG=true` to enable mock auth
-2. In production: Verify Firebase credentials are uploaded to Railway
-3. Check browser localStorage has valid token
-4. Access code bypass: Check `nitrogen_access_granted` in localStorage
+1. Run `bash scripts/check_dev_env.sh` from repo root.
+2. **Firebase dev:** set `NEXT_PUBLIC_FIREBASE_*` and `FIREBASE_PROJECT_ID` in `.env`; run `bash scripts/worktree_setup.sh`.
+3. **Mock dev (no Firebase):** set `DEBUG=true` and matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN` (see `.env.example`).
+4. In production: verify Firebase credentials on the host (e.g. Railway).
+5. Check browser session / sign-in; mock auth is disabled when `NODE_ENV=production`.
 
 ## Monitoring
 

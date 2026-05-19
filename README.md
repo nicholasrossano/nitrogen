@@ -47,12 +47,14 @@ The goal is not to replace domain expertise, but to make it easier to apply, ada
 ```bash
 git clone https://github.com/nicholasrossano/nitrogen.git
 cd nitrogen
-cp .env.example .env
+cp .env.example .env   # first-time template only — then keep your real .env
+bash scripts/worktree_setup.sh
+bash scripts/check_dev_env.sh
 ```
 
-Set at least `DATABASE_URL` and `OPENAI_API_KEY` in `.env`, and replace any placeholder values with your own credentials.
+Set `DATABASE_URL`, `OPENAI_API_KEY`, and either Firebase (`NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID`) or mock dev auth (`DEBUG=true`, `DEV_MOCK_TOKEN`).
 
-`backend/.env` and `frontend/.env.local` are symlinked to the root `.env` in this repo.
+`backend/.env` and `frontend/.env.local` symlink to root `.env`. Quick start: `bash scripts/start_emulator.sh`.
 
 ### 2) Start backend
 

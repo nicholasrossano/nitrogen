@@ -8,25 +8,29 @@ import logging
 from app.config import get_settings
 from app.core.log_sanitizer import sanitize_exception
 
-settings = get_settings()
 security = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 
+SHARED_DEV_USER_ID = "shared-user"
+SHARED_DEV_USER_EMAIL = "shared@nitrogen.ai"
+
 # Initialize Firebase Admin SDK if configured
 _firebase_initialized = False
+
 
 def _init_firebase():
     global _firebase_initialized
     if _firebase_initialized:
         return True
-    
+
+    settings = get_settings()
     if not settings.firebase_project_id:
         return False
-    
+
     try:
         import firebase_admin
         from firebase_admin import credentials
-        
+
         # Check if already initialized
         try:
             firebase_admin.get_app()
@@ -34,11 +38,11 @@ def _init_firebase():
             return True
         except ValueError:
             pass
-        
+
         cred = None
-        
+
         # Option 1: Service account JSON content as env var (for Railway/cloud)
-        firebase_sa_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON', '')
+        firebase_sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
         if firebase_sa_json:
             try:
                 sa_dict = json.loads(firebase_sa_json)
@@ -49,19 +53,23 @@ def _init_firebase():
                     "Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: %s",
                     sanitize_exception(e),
                 )
-        
+
         # Option 2: Service account file path (for local dev)
-        if not cred and settings.nitrogen_firebase_credentials and os.path.exists(settings.nitrogen_firebase_credentials):
+        if (
+            not cred
+            and settings.nitrogen_firebase_credentials
+            and os.path.exists(settings.nitrogen_firebase_credentials)
+        ):
             cred = credentials.Certificate(settings.nitrogen_firebase_credentials)
             logger.info("Using Firebase credentials from file")
-        
+
         # Option 3: Project ID only (works on GCP with default credentials)
         if cred:
             firebase_admin.initialize_app(cred)
         else:
-            firebase_admin.initialize_app(options={'projectId': settings.firebase_project_id})
+            firebase_admin.initialize_app(options={"projectId": settings.firebase_project_id})
             logger.info("Using Firebase with project ID only (no service account)")
-        
+
         _firebase_initialized = True
         logger.info("Firebase Admin SDK initialized successfully")
         return True
@@ -71,21 +79,37 @@ def _init_firebase():
 
 
 class AuthUser:
-    """Authenticated user from Firebase or mock user for development"""
+    """Authenticated user from Firebase or shared dev user when mock auth is enabled."""
+
     def __init__(self, uid: str, email: str | None = None):
         self.uid = uid
         self.email = email
 
 
+def shared_dev_user() -> AuthUser:
+    return AuthUser(uid=SHARED_DEV_USER_ID, email=SHARED_DEV_USER_EMAIL)
+
+
+def _accept_dev_mock_token(token: str) -> bool:
+    settings = get_settings()
+    mock = (settings.dev_mock_token or "").strip()
+    return bool(mock) and settings.debug and token == mock
+
+
 async def authenticate_bearer_token(token: str) -> AuthUser:
     """Validate a Firebase bearer token and return the authenticated user."""
+    settings = get_settings()
     if not settings.firebase_project_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service not configured",
-        )
+        return shared_dev_user()
+
+    if _accept_dev_mock_token(token):
+        logger.debug("Dev mock token accepted (debug only)")
+        return shared_dev_user()
 
     if not _init_firebase():
+        if settings.debug:
+            logger.warning("Firebase not initialized, using shared dev user in debug mode")
+            return shared_dev_user()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service unavailable",
@@ -109,11 +133,15 @@ async def authenticate_bearer_token(token: str) -> AuthUser:
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> AuthUser:
     """
-    Get current user from Firebase token or return mock user in dev mode.
+    Get current user from Firebase token, or shared dev user when mock auth is enabled.
     """
+    settings = get_settings()
+    if not settings.firebase_project_id:
+        return shared_dev_user()
+
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -125,7 +153,7 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[AuthUser]:
     """Get current user if authenticated, otherwise None"""
     if not credentials:
