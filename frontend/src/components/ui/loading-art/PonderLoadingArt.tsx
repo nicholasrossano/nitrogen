@@ -45,6 +45,9 @@ interface Dot {
   foldX: number;
   foldY: number;
   breathOffset: number;
+  lobeCx: number;
+  lobeCy: number;
+  lobeR: number;
 }
 
 export function PonderLoadingArt({
@@ -120,6 +123,21 @@ export function PonderLoadingArt({
       return lobes.some((lobe) => (x - lobe.cx) ** 2 + (y - lobe.cy) ** 2 <= lobe.r ** 2);
     }
 
+    function depthLobeFor(x: number, y: number, lobes: Lobe[]): Lobe {
+      let selected = lobes[0];
+      let selectedEdgeScore = -1;
+      for (const lobe of lobes) {
+        const dx = x - lobe.cx;
+        const dy = y - lobe.cy;
+        const radiusRatio = Math.sqrt(dx * dx + dy * dy) / lobe.r;
+        if (radiusRatio <= 1 && radiusRatio > selectedEdgeScore) {
+          selected = lobe;
+          selectedEdgeScore = radiusRatio;
+        }
+      }
+      return selected;
+    }
+
     function estimateUnionArea(lobes: Lobe[], minX: number, minY: number, maxX: number, maxY: number): number {
       const samples = 1600;
       let hits = 0;
@@ -161,6 +179,7 @@ export function PonderLoadingArt({
           y = minY + Math.random() * (maxY - minY);
           if (insideAnyLobe(x, y, lobes)) break;
         }
+        const depthLobe = depthLobeFor(x, y, lobes);
         dots.push({
           x,
           y,
@@ -169,6 +188,9 @@ export function PonderLoadingArt({
           foldX: foldCx + (x - foldCx) * foldScale,
           foldY: foldCy + (y - foldCy) * foldScale,
           breathOffset,
+          lobeCx: depthLobe.cx,
+          lobeCy: depthLobe.cy,
+          lobeR: depthLobe.r,
           z: Math.random() * 2 - 1,
           phase: Math.random() * Math.PI * 2,
         });
@@ -238,12 +260,18 @@ export function PonderLoadingArt({
 
         dot.z = stepZ(dot.z, time, dot.phase, breath, 0.18, 0.012);
         const df = depthFactor(dot.z);
-        const normalX = (dot.x - sharedFoldCx) / (size * 0.42);
-        const normalY = (dot.y - sharedFoldCy) / (size * 0.42);
-        const lightFacing = Math.max(0, (-normalX - normalY) / Math.SQRT2);
+        // Lobe-local lighting: each underlying circle behaves like its own
+        // shallow dome, so the smaller circles that build the cloud are visible
+        // through pointillist depth rather than hard outlines.
+        const normalX = (dot.x - dot.lobeCx) / dot.lobeR;
+        const normalY = (dot.y - dot.lobeCy) / dot.lobeR;
+        const normalZ = Math.sqrt(Math.max(0, 1 - normalX * normalX - normalY * normalY));
+        const lightFacing = Math.max(0, -0.42 * normalX - 0.55 * normalY + 0.72 * normalZ);
+        const domeCenter = Math.max(0, 1 - Math.sqrt(normalX * normalX + normalY * normalY));
         const depthGlow = Math.max(0, df - 1);
-        const opacity = Math.max(0.025, 0.24 + 0.08 * df + 0.08 * lightFacing + 0.05 * depthGlow);
-        drawDot(context, dot.x, dot.y, dotRadius(size, df, 900, 0.3), opacity);
+        const opacity = Math.max(0.025, 0.18 + 0.08 * df + 0.16 * lightFacing + 0.08 * domeCenter + 0.05 * depthGlow);
+        const radiusDepth = df + 0.14 * lightFacing + 0.06 * domeCenter;
+        drawDot(context, dot.x, dot.y, dotRadius(size, radiusDepth, 900, 0.3), opacity);
       }
 
       context.globalAlpha = 1;
