@@ -96,6 +96,7 @@ def test_resolve_document_file_type_accepts_pptx_and_iwork_extensions():
     assert resolve_document_file_type("", "deck.pptx") == "pptx"
     assert resolve_document_file_type("", "brief.pages") == "pages"
     assert resolve_document_file_type("", "slides.keynote") == "keynote"
+    assert resolve_document_file_type("", "model.numbers") == "numbers"
     assert resolve_document_file_type("", "model.dwg") is None
 
 
@@ -121,6 +122,18 @@ def test_prepare_uploaded_document_converts_keynote_to_pptx_filename():
     assert prepared.content == b"converted"
     assert prepared.filename == "Deck.pptx"
     assert prepared.file_type == "pptx"
+
+
+def test_prepare_uploaded_document_converts_numbers_to_xlsx_filename():
+    with patch(
+        "app.services.document_conversion._convert_with_libreoffice",
+        return_value=b"converted",
+    ):
+        prepared = prepare_uploaded_document(b"raw", "Budget.numbers", "numbers")
+
+    assert prepared.content == b"converted"
+    assert prepared.filename == "Budget.xlsx"
+    assert prepared.file_type == "xlsx"
 
 
 def test_parse_pptx_extracts_slide_text():
