@@ -24,6 +24,9 @@ _MAGIC_SIGNATURES: dict[str, list[bytes]] = {
     "application/vnd.apple.keynote": [b"PK\x03\x04"],
     "application/x-iwork-keynote-sffkey": [b"PK\x03\x04"],
     "application/vnd.apple.iwork.keynote.sffkey": [b"PK\x03\x04"],
+    "application/vnd.apple.numbers": [b"PK\x03\x04"],
+    "application/x-iwork-numbers-sffnumbers": [b"PK\x03\x04"],
+    "application/vnd.apple.iwork.numbers.sffnumbers": [b"PK\x03\x04"],
     "image/png": [b"\x89PNG"],
     "image/jpeg": [b"\xff\xd8\xff"],
 }

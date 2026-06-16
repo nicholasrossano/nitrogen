@@ -65,6 +65,9 @@ export const SUPPORTED_MIME_TYPES = new Set([
   'application/vnd.apple.keynote',
   'application/x-iwork-keynote-sffkey',
   'application/vnd.apple.iwork.keynote.sffkey',
+  'application/vnd.apple.numbers',
+  'application/x-iwork-numbers-sffnumbers',
+  'application/vnd.apple.iwork.numbers.sffnumbers',
 ]);
 
 const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
@@ -76,6 +79,7 @@ const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
   '.pages': 'application/vnd.apple.pages',
   '.key': 'application/vnd.apple.keynote',
   '.keynote': 'application/vnd.apple.keynote',
+  '.numbers': 'application/vnd.apple.numbers',
 };
 
 export const SUPPORTED_FILE_EXTENSIONS = new Set([
@@ -87,10 +91,11 @@ export const SUPPORTED_FILE_EXTENSIONS = new Set([
   '.pages',
   '.key',
   '.keynote',
+  '.numbers',
 ]);
 
-export const SUPPORTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.pages,.key,.keynote';
-export const SUPPORTED_FILE_LABEL = 'PDF, DOCX, PPTX, Excel, Pages, or Keynote';
+export const SUPPORTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.pages,.key,.keynote,.numbers';
+export const SUPPORTED_FILE_LABEL = 'PDF, DOCX, PPTX, Excel, Pages, Keynote, or Numbers';
 
 function hasSupportedExtension(filename: string): boolean {
   const lower = filename.toLowerCase();
