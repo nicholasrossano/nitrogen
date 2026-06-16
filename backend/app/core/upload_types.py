@@ -10,6 +10,7 @@ XLS_MIME = "application/vnd.ms-excel"
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 PAGES_MIME = "application/vnd.apple.pages"
 KEYNOTE_MIME = "application/vnd.apple.keynote"
+NUMBERS_MIME = "application/vnd.apple.numbers"
 
 
 DOCUMENT_CONTENT_TYPES = {
@@ -24,6 +25,9 @@ DOCUMENT_CONTENT_TYPES = {
     KEYNOTE_MIME: "keynote",
     "application/x-iwork-keynote-sffkey": "keynote",
     "application/vnd.apple.iwork.keynote.sffkey": "keynote",
+    NUMBERS_MIME: "numbers",
+    "application/x-iwork-numbers-sffnumbers": "numbers",
+    "application/vnd.apple.iwork.numbers.sffnumbers": "numbers",
 }
 
 DOCUMENT_EXTENSION_TYPES = {
@@ -35,6 +39,7 @@ DOCUMENT_EXTENSION_TYPES = {
     ".pages": "pages",
     ".key": "keynote",
     ".keynote": "keynote",
+    ".numbers": "numbers",
 }
 
 FILE_TYPE_CONTENT_TYPES = {
@@ -45,6 +50,7 @@ FILE_TYPE_CONTENT_TYPES = {
     "pptx": PPTX_MIME,
     "pages": PAGES_MIME,
     "keynote": KEYNOTE_MIME,
+    "numbers": NUMBERS_MIME,
 }
 
 

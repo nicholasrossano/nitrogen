@@ -22,6 +22,7 @@ class PreparedDocument:
 _IWORK_TARGETS = {
     "pages": ("docx", ".docx"),
     "keynote": ("pptx", ".pptx"),
+    "numbers": ("xlsx", ".xlsx"),
 }
 
 
