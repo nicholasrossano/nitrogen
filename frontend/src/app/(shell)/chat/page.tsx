@@ -7,7 +7,7 @@ import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { PersonalChatSurface } from '@/components/chat-shell/PersonalChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { ChangeProjectSelect, resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
-import { readLastProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
+import { readLastProjectId, writeLastProjectId, useChatShellLandingReset } from '@/components/chat-shell/ChatShellProvider';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
 import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
@@ -239,6 +239,31 @@ function ChatWorkbenchContent() {
     setFocusedAssumptionId(null);
     setAssumptionsCreateNew(true);
   }, []);
+
+  const resetLandingOverlays = useCallback((): boolean => {
+    let didReset = false;
+
+    if (assumptionsWorkspaceOpen) {
+      setAssumptionsWorkspaceOpen(false);
+      setFocusedAssumptionId(null);
+      setAssumptionsCreateNew(false);
+      didReset = true;
+    }
+
+    if (pinnedEditorWidgets?.length || editorWidgets.length) {
+      setPinnedEditorWidgets(null);
+      setEditorWidgets([]);
+      didReset = true;
+    }
+
+    if (didReset && !activeChatId) {
+      setHasMessages(false);
+    }
+
+    return didReset;
+  }, [activeChatId, assumptionsWorkspaceOpen, editorWidgets.length, pinnedEditorWidgets]);
+
+  useChatShellLandingReset(resetLandingOverlays);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
