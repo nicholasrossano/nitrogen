@@ -14,6 +14,7 @@ import { LandingInput } from './LandingInput';
 import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
+import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
 import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { CoreChatMessage, ChatSummary } from '@/types/chat';
@@ -44,8 +45,12 @@ interface ProjectChatSurfaceProps {
   showLanding?: boolean;
   /** When true, hides the assessment tile grid on the landing page (Research mode) */
   hideTiles?: boolean;
+  /** Show module picker in composer (chat workbench — tiles hidden but modules still reachable) */
+  showComposerModulePicker?: boolean;
   /** Custom content rendered above the landing composer */
   landingHeaderContent?: React.ReactNode;
+  /** Large serif project title above the landing composer */
+  landingComposerTitle?: string | null;
   /** Landing layout override */
   landingLayoutMode?: 'default' | 'overview';
   /** Hide landing composer in overview mode */
@@ -111,6 +116,9 @@ interface ProjectChatSurfaceProps {
   assessmentProgress?: AssessmentProgressData | null;
   /** Open the project assumptions workspace tab from overview. */
   onOpenAssumptions?: () => void;
+  /** Enable promote-to-finding on assistant messages */
+  showPromoteFinding?: boolean;
+  onPromoteMessage?: (messageId: string, body: string) => void;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -147,7 +155,9 @@ export function ProjectChatSurface({
   initiativeId,
   showLanding = false,
   hideTiles = false,
+  showComposerModulePicker = false,
   landingHeaderContent,
+  landingComposerTitle,
   landingLayoutMode,
   hideLandingComposer = false,
   allowInitialProjectOnboarding = false,
@@ -176,6 +186,8 @@ export function ProjectChatSurface({
   onBeforeSendMessage,
   assessmentProgress = null,
   onOpenAssumptions,
+  showPromoteFinding = false,
+  onPromoteMessage,
 }: ProjectChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -196,6 +208,7 @@ export function ProjectChatSurface({
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [overviewGenerating, setOverviewGenerating] = useState(false);
   const [healthRefreshToken, setHealthRefreshToken] = useState(0);
+  const [loadingChat, setLoadingChat] = useState(false);
   const lastReportedMetaRef = useRef<{ chatId: string | null; title: string | null } | null>(null);
   const autoOverviewAttemptRef = useRef<string | null>(null);
   const associatedAssessmentKeysRef = useRef<Set<string>>(new Set());
@@ -217,6 +230,7 @@ export function ProjectChatSurface({
 
   const loadChat = useCallback(
     async (chatId: string, fallbackTitle?: string | null) => {
+      setLoadingChat(true);
       try {
         const { messages, title } = await api.getChatMessages(chatId);
         setLocalMessages(messages);
@@ -236,18 +250,41 @@ export function ProjectChatSurface({
       } catch (err) {
         console.error('Failed to load chat messages:', err);
         setError('Failed to load chat history.');
+      } finally {
+        setLoadingChat(false);
       }
     },
     [onMessageSent],
   );
 
   useEffect(() => {
-    if (!initialChatId) return;
-    if (lastLoadedChatIdRef.current === initialChatId && currentChatId === initialChatId) {
+    if (!initialChatId) {
+      if (lastLoadedChatIdRef.current !== null) {
+        setLocalMessages([]);
+        setCurrentChatId(null);
+        setChatAssessments([]);
+        lastLoadedChatIdRef.current = null;
+      }
+      setLoadingChat(false);
       return;
     }
+
+    if (lastLoadedChatIdRef.current === initialChatId) {
+      return;
+    }
+
+    if (currentChatId === initialChatId && localMessages.length > 0) {
+      lastLoadedChatIdRef.current = initialChatId;
+      setLoadingChat(false);
+      return;
+    }
+
+    setLocalMessages([]);
+    setThinkingLines([]);
+    setStreamingContent('');
+    setResearchSteps([]);
     void loadChat(initialChatId, initialTitle);
-  }, [currentChatId, initialChatId, initialTitle, loadChat]);
+  }, [currentChatId, initialChatId, initialTitle, loadChat, localMessages.length]);
 
   useEffect(() => {
     if (!restoreLatestChatOnMount) return;
@@ -810,7 +847,11 @@ export function ProjectChatSurface({
     };
   }, [onSendRef, handleSend]);
 
-  const isOnLanding = showLanding || (useLandingWhenEmpty && localMessages.length === 0);
+  const isOnLanding =
+    !loadingChat &&
+    !initialChatId &&
+    localMessages.length === 0 &&
+    (showLanding || useLandingWhenEmpty);
 
   const associatedAssessments = useMemo(() => {
     return chatAssessments
@@ -844,6 +885,30 @@ export function ProjectChatSurface({
       : undefined),
     [compareProject],
   );
+
+  const composerModulePicker = showComposerModulePicker ? (
+    <AssessmentPicker
+      selected={null}
+      onSelect={(assessment) => {
+        if (assessment) void handleSend(`Generate ${assessment.name}`, assessment.id);
+      }}
+      disabled={sending}
+      mode="project"
+    />
+  ) : null;
+
+  const landingExtraInputActions = isOverviewLanding ? (
+    <>
+      <CompareProjectPicker
+        currentProjectId={initiativeId}
+        selected={compareProject}
+        onSelect={setCompareProject}
+      />
+      {composerModulePicker}
+    </>
+  ) : composerModulePicker;
+
+  const conversationExtraInputActions = landingExtraInputActions;
 
   useEffect(() => {
     onLandingStateChange?.(isOnLanding);
@@ -941,6 +1006,7 @@ export function ProjectChatSurface({
           onLoadSession={handleLoadSession}
           onDeleteSession={onDeleteChat}
           hideTiles={hideTiles}
+          composerTitle={landingComposerTitle}
           layoutMode={landingLayoutMode ?? (hideTiles ? 'overview' : 'default')}
           headerContent={landingHeaderContent ?? (hideTiles ? (
             initiative ? (
@@ -986,13 +1052,7 @@ export function ProjectChatSurface({
               </Link>
             </>
           ) : undefined}
-          extraInputActions={isOverviewLanding ? (
-            <CompareProjectPicker
-              currentProjectId={initiativeId}
-              selected={compareProject}
-              onSelect={setCompareProject}
-            />
-          ) : undefined}
+          extraInputActions={landingExtraInputActions}
           topComposerContent={associatedAssessmentsTray}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
@@ -1019,19 +1079,16 @@ export function ProjectChatSurface({
       retryingMessageId={null}
       initiativeId={initiativeId}
       onOpenDocument={onOpenDocument}
-      extraInputActions={isOverviewLanding ? (
-        <CompareProjectPicker
-          currentProjectId={initiativeId}
-          selected={compareProject}
-          onSelect={setCompareProject}
-        />
-      ) : undefined}
+      extraInputActions={conversationExtraInputActions}
       topComposerContent={associatedAssessmentsTray}
       inputChips={inputChips}
       topContent={topContent}
       topContentMode={topContentMode}
       onApplyProposedValue={handleApplyProposedValue}
       showAttachments={!allowInitialProjectOnboarding}
+      showPromoteFinding={showPromoteFinding}
+      onPromoteMessage={onPromoteMessage}
+      historyLoading={loadingChat}
     />
   );
 }

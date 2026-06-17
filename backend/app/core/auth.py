@@ -11,9 +11,6 @@ from app.core.log_sanitizer import sanitize_exception
 security = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 
-SHARED_DEV_USER_ID = "shared-user"
-SHARED_DEV_USER_EMAIL = "shared@nitrogen.ai"
-
 # Initialize Firebase Admin SDK if configured
 _firebase_initialized = False
 
@@ -79,37 +76,27 @@ def _init_firebase():
 
 
 class AuthUser:
-    """Authenticated user from Firebase or shared dev user when mock auth is enabled."""
+    """Authenticated user from Firebase."""
 
     def __init__(self, uid: str, email: str | None = None):
         self.uid = uid
         self.email = email
 
 
-def shared_dev_user() -> AuthUser:
-    return AuthUser(uid=SHARED_DEV_USER_ID, email=SHARED_DEV_USER_EMAIL)
-
-
-def _accept_dev_mock_token(token: str) -> bool:
+def _require_firebase_configured() -> None:
     settings = get_settings()
-    mock = (settings.dev_mock_token or "").strip()
-    return bool(mock) and settings.debug and token == mock
+    if not settings.firebase_project_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication not configured. Set FIREBASE_PROJECT_ID in .env.",
+        )
 
 
 async def authenticate_bearer_token(token: str) -> AuthUser:
     """Validate a Firebase bearer token and return the authenticated user."""
-    settings = get_settings()
-    if not settings.firebase_project_id:
-        return shared_dev_user()
-
-    if _accept_dev_mock_token(token):
-        logger.debug("Dev mock token accepted (debug only)")
-        return shared_dev_user()
+    _require_firebase_configured()
 
     if not _init_firebase():
-        if settings.debug:
-            logger.warning("Firebase not initialized, using shared dev user in debug mode")
-            return shared_dev_user()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service unavailable",
@@ -135,12 +122,8 @@ async def authenticate_bearer_token(token: str) -> AuthUser:
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> AuthUser:
-    """
-    Get current user from Firebase token, or shared dev user when mock auth is enabled.
-    """
-    settings = get_settings()
-    if not settings.firebase_project_id:
-        return shared_dev_user()
+    """Get current user from Firebase ID token."""
+    _require_firebase_configured()
 
     if not credentials:
         raise HTTPException(
@@ -155,7 +138,7 @@ async def get_current_user(
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[AuthUser]:
-    """Get current user if authenticated, otherwise None"""
+    """Get current user if authenticated, otherwise None."""
     if not credentials:
         return None
     try:

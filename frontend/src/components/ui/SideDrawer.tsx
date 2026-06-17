@@ -2,12 +2,14 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { LayoutGrid, LogOut, Map, Home, Calculator, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle } from 'lucide-react';
+import { LayoutGrid, LogOut, Map, Home, Calculator, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle, PanelLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { DrawerChatTree } from '@/components/chat-shell/DrawerChatTree';
+import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
-import { ShellNavContext } from './ShellContext';
+import { ShellNavContext, useChatSidebar } from './ShellContext';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useBillingStore } from '@/stores/billingStore';
@@ -18,6 +20,12 @@ import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_
 import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import {
+  CHAT_FLOATING_PANEL_CHROME,
+  CHAT_SIDEBAR_COLLAPSED_WIDTH,
+  CHAT_SIDEBAR_EXPANDED_WIDTH,
+  CHAT_SIDEBAR_MARGIN,
+} from './chatSidebarLayout';
 
 export type NavItem = 'portfolio' | 'trash' | 'plan' | 'assumptions' | 'files' | 'chat' | 'research' | 'workspace';
 
@@ -45,6 +53,8 @@ const PROJECT_ITEMS: NavItemConfig[] = [
 
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
 
+const NAV_LABEL_CLASS = 'whitespace-nowrap';
+
 function UsagePill() {
   const showBillingFeatures = useFeatureFlag('billing_features');
   const { tier, usagePercent, trialMessagesRemaining, loaded } = useBillingStore();
@@ -54,7 +64,7 @@ function UsagePill() {
 
   if (tier === 'trial' && trialMessagesRemaining != null) {
     return (
-      <div className="w-full px-1.5 opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 transition-opacity duration-150">
+      <div className="w-full px-1.5">
         <div className="text-[9px] text-text-tertiary text-center whitespace-nowrap">
           {trialMessagesRemaining} free msg{trialMessagesRemaining !== 1 ? 's' : ''} left
         </div>
@@ -64,7 +74,7 @@ function UsagePill() {
 
   if (tier === 'starter' || tier === 'pro') {
     return (
-      <div className="w-full px-1.5 opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 transition-opacity duration-150">
+      <div className="w-full px-1.5">
         <div className="h-1 rounded-full bg-surface-subtle overflow-hidden">
           <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, usagePercent)}%` }} />
         </div>
@@ -85,12 +95,20 @@ export function SideDrawer() {
   const { navHandlerRef } = useContext(ShellNavContext);
   const { user, signOut } = useAuth();
 
+  const chatShell = useChatShell();
+  const { chatSidebarCollapsed, toggleChatSidebar } = useChatSidebar();
+  const isChatShell = pathname.startsWith('/chat') || pathname === '/';
+
   const initiativeId = useMemo(() => {
     const m = INITIATIVE_RE.exec(pathname);
     return m ? m[1] : undefined;
   }, [pathname]);
 
   const activeItem: NavItem = useMemo(() => {
+    if (isChatShell) {
+      if (pathname.startsWith('/chat/files')) return 'files';
+      return 'chat';
+    }
     if (!initiativeId) return searchParams.get('view') === 'files' ? 'files' : 'portfolio';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
@@ -99,7 +117,7 @@ export function SideDrawer() {
     if (view === 'workspace' || view === 'assessments') return 'workspace';
     if (view === 'files') return 'files';
     return 'research';
-  }, [initiativeId, searchParams]);
+  }, [initiativeId, isChatShell, pathname, searchParams]);
 
   const hasProject = !!initiativeId;
   const initiative = useInitiativeStore((s) => s.initiative);
@@ -136,14 +154,17 @@ export function SideDrawer() {
   const filesDisabledReason = filesDisabled ? 'Complete onboarding to unlock this area' : undefined;
 
   const longestLabelLength = useMemo(() => {
-    const labels = GLOBAL_ITEMS.map((item) => item.label);
-    projectItems.forEach((item) => labels.push(item.label));
+    const labels: string[] = [];
+    if (!isChatShell) {
+      GLOBAL_ITEMS.forEach((item) => labels.push(item.label));
+      projectItems.forEach((item) => labels.push(item.label));
+    }
     labels.push('Files');
     labels.push('Help');
     labels.push('Settings');
     labels.push('Log out');
     return Math.max(0, ...labels.map((label) => label.length));
-  }, [projectItems]);
+  }, [isChatShell, projectItems]);
 
   const drawerStyle = {
     '--side-drawer-expanded-width': `calc(${longestLabelLength}ch + 3.75rem)`,
@@ -151,8 +172,18 @@ export function SideDrawer() {
 
   const handleNav = useCallback((item: NavItem) => {
     if (navHandlerRef.current?.(item)) return;
+    if (isChatShell) {
+      if (item === 'chat') {
+        router.push('/chat');
+        return;
+      }
+      if (item === 'files') {
+        router.push('/chat/files');
+        return;
+      }
+    }
     if (item === 'files' && !hasProject) {
-      router.push('/?view=files');
+      router.push('/chat/files');
       return;
     }
     if (item === 'files' && hasProject && initiativeId) {
@@ -160,10 +191,10 @@ export function SideDrawer() {
       return;
     }
     if (item === 'portfolio') {
-      router.push('/');
+      router.push(isChatShell ? '/chat' : '/');
       return;
     }
-  }, [hasProject, initiativeId, navHandlerRef, router]);
+  }, [hasProject, initiativeId, isChatShell, navHandlerRef, router]);
 
   const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
     <button
@@ -180,7 +211,7 @@ export function SideDrawer() {
       <Icon
         className={`w-4 h-4 flex-shrink-0 ${activeItem === key ? '[&_*]:fill-current' : ''}`}
       />
-      <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+      <span className={NAV_LABEL_CLASS}>
         {label}
       </span>
     </button>
@@ -460,32 +491,68 @@ export function SideDrawer() {
   const gridOpen = 'grid-rows-[1fr] opacity-100';
   const gridClosed = 'grid-rows-[0fr] opacity-0 pointer-events-none';
 
-  return (
-    <aside
-      data-open={isGlobalDragging || undefined}
-      className="group w-12 hover:w-[var(--side-drawer-expanded-width)] data-[open]:w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out pb-2"
-      style={drawerStyle}
-    >
-      {/* Spacer matches the shell header slot in the content column */}
-      <div className="shrink-0 h-12" />
-      <nav className="flex-1 pt-1">
-        {GLOBAL_ITEMS.map((item) => renderNavButton(item))}
+  const chatShellAsideClass = chatSidebarCollapsed
+    ? `absolute z-20 left-3 top-3 flex overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} transition-[width,height] duration-300 ease-in-out`
+    : `absolute z-20 left-3 top-3 flex flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} pb-2 transition-[width,height] duration-300 ease-in-out`;
 
-        {/* Project nav — always in the DOM, collapses/expands via CSS grid */}
+  const chatShellAsideStyle: CSSProperties = chatSidebarCollapsed
+    ? {
+        width: CHAT_SIDEBAR_COLLAPSED_WIDTH,
+        height: CHAT_SIDEBAR_COLLAPSED_WIDTH,
+      }
+    : {
+        width: CHAT_SIDEBAR_EXPANDED_WIDTH,
+        height: `calc(100vh - (2 * ${CHAT_SIDEBAR_MARGIN}))`,
+      };
+
+  const drawerBody = (
+    <>
+      {isChatShell && (
+        <div className={`shrink-0 flex items-center px-2 pt-2 pb-1 ${chatSidebarCollapsed ? 'hidden' : ''}`}>
+          <button
+            type="button"
+            onClick={toggleChatSidebar}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/[0.04] transition-colors"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col min-h-0 flex-1">
+      {!isChatShell && <div className="shrink-0 h-12" />}
+      <nav className={`flex-1 min-h-0 flex flex-col ${isChatShell ? 'pt-0' : 'pt-1'}`}>
+        {!isChatShell && GLOBAL_ITEMS.map((item) => renderNavButton(item))}
+
+        {isChatShell && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <DrawerChatTree
+              activeChatId={chatShell?.activeChatId ?? null}
+              onSelectChat={chatShell?.onSelectChat ?? (() => {})}
+              onNewChat={chatShell?.onNewChat ?? (() => {})}
+              refreshKey={chatShell?.drawerRefreshKey ?? 0}
+            />
+          </div>
+        )}
+
+        {/* Legacy initiative project nav */}
+        {!isChatShell && (
         <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
           <div className="overflow-hidden">
             {/* Original header — made relative so the collapsed divider can overlay it
                 without affecting layout. pt-3 pb-1 are the original values. */}
             <div className="relative px-3 pt-3 pb-1">
               {/* Collapsed-only divider — absolute, zero layout impact */}
-              <div className="absolute bottom-3 left-2 right-2 h-px bg-black/[0.16] opacity-100 group-hover:opacity-0 group-data-[open]:opacity-0 transition-opacity duration-150" />
-              <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary whitespace-nowrap">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary whitespace-nowrap">
                 Current Project
               </span>
             </div>
             {projectItems.map((item) => renderNavButton(item))}
           </div>
         </div>
+        )}
       </nav>
 
       {/* Upload materials — conditionally rendered (absolute-positioned
@@ -510,21 +577,7 @@ export function SideDrawer() {
             onChange={handleFileChange}
           />
 
-          <button
-            onClick={handleFileSelect}
-            className="group-hover:opacity-0 group-data-[open]:opacity-0 group-hover:pointer-events-none group-data-[open]:pointer-events-none transition-opacity duration-150 flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:bg-white/40"
-            title="Upload files"
-          >
-            {uploading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <FileUp className="w-4 h-4" />
-            )}
-          </button>
-
-          <div
-            className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:pointer-events-auto group-data-[open]:pointer-events-auto group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150"
-          >
+          <div className="flex flex-col gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1">
               {fileScopeLabel}
             </span>
@@ -600,8 +653,8 @@ export function SideDrawer() {
         </div>
       )}
 
-      {/* Files button — collapses with project items */}
-      <div className={`${gridCollapse} ${(hasProject || activeWorkspace) ? gridOpen : gridClosed}`}>
+      {/* Files — bottom of nav (chat shell + project context) */}
+      <div className={`${gridCollapse} ${(hasProject || activeWorkspace || isChatShell) ? gridOpen : gridClosed}`}>
         <div className="overflow-hidden">
           <button
             onClick={() => {
@@ -616,7 +669,7 @@ export function SideDrawer() {
             <FolderOpen
               className={`w-4 h-4 flex-shrink-0 ${activeItem === 'files' ? '[&_*]:fill-current' : ''}`}
             />
-            <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+            <span className={NAV_LABEL_CLASS}>
               Files
             </span>
           </button>
@@ -643,7 +696,7 @@ export function SideDrawer() {
         title="Help"
       >
         <HelpCircle className="w-4 h-4 flex-shrink-0" />
-        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+        <span className={NAV_LABEL_CLASS}>
           Help
         </span>
       </a>
@@ -654,7 +707,7 @@ export function SideDrawer() {
         title="Settings"
       >
         <Settings className="w-4 h-4 flex-shrink-0" />
-        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+        <span className={NAV_LABEL_CLASS}>
           Settings
         </span>
       </button>
@@ -665,11 +718,16 @@ export function SideDrawer() {
         title={user?.email || 'Log out'}
       >
         <LogOut className="w-4 h-4 flex-shrink-0" />
-        <span className="opacity-0 group-hover:opacity-100 group-data-[open]:opacity-100 group-hover:delay-[200ms] group-data-[open]:delay-[200ms] transition-opacity duration-150 whitespace-nowrap">
+        <span className={NAV_LABEL_CLASS}>
           Log out
         </span>
       </button>
+      </div>
+    </>
+  );
 
+  const drawerOverlays = (
+    <>
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
       {showToast && (
@@ -697,6 +755,49 @@ export function SideDrawer() {
           onCancel={() => setPendingDuplicates(null)}
         />
       )}
+    </>
+  );
+
+  if (isChatShell) {
+    return (
+      <>
+        <aside
+          data-open={isGlobalDragging || undefined}
+          className={`${chatShellAsideClass} relative`}
+          style={chatShellAsideStyle}
+        >
+          <div
+            className={`flex flex-col min-h-0 flex-1 w-full transition-opacity duration-200 ${
+              chatSidebarCollapsed ? 'opacity-0 invisible pointer-events-none' : 'opacity-100'
+            }`}
+          >
+            {drawerBody}
+          </div>
+          {chatSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={toggleChatSidebar}
+              className="absolute inset-0 flex items-center justify-center rounded-2xl text-text-secondary hover:text-text-primary transition-colors"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+          )}
+        </aside>
+        {drawerOverlays}
+      </>
+    );
+  }
+
+  return (
+    <aside
+      data-open={isGlobalDragging || undefined}
+      className="w-[var(--side-drawer-expanded-width)] max-w-[16rem] h-full flex flex-col flex-shrink-0 overflow-hidden pb-2"
+      style={drawerStyle}
+    >
+      {drawerBody}
+      {drawerOverlays}
     </aside>
   );
 }

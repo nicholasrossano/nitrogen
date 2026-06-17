@@ -54,14 +54,14 @@ class ResourceRegistry:
     def list_definitions(self) -> list[ResourceDefinition]:
         return list(self._definitions)
 
-    async def list_for_initiative(self, initiative_id: UUID, db: AsyncSession) -> list[str]:
-        uris: list[str] = [f"nitrogen://initiatives/{initiative_id}"]
+    async def list_for_project(self, project_id: UUID, db: AsyncSession) -> list[str]:
+        uris: list[str] = [f"nitrogen://projects/{project_id}"]
 
         evidence_docs = (
-            await db.execute(select(EvidenceDoc.id).where(EvidenceDoc.initiative_id == initiative_id))
+            await db.execute(select(EvidenceDoc.id).where(EvidenceDoc.project_id == project_id))
         ).scalars().all()
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/evidence/docs/{doc_id}"
+            f"nitrogen://projects/{project_id}/evidence/docs/{doc_id}"
             for doc_id in evidence_docs
         )
 
@@ -69,43 +69,43 @@ class ResourceRegistry:
             await db.execute(
                 select(EvidenceChunk.id)
                 .join(EvidenceDoc, EvidenceDoc.id == EvidenceChunk.evidence_doc_id)
-                .where(EvidenceDoc.initiative_id == initiative_id)
+                .where(EvidenceDoc.project_id == project_id)
             )
         ).scalars().all()
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/evidence/chunks/{chunk_id}"
+            f"nitrogen://projects/{project_id}/evidence/chunks/{chunk_id}"
             for chunk_id in evidence_chunks
         )
 
         materials = (
             await db.execute(
-                select(ProjectMaterial.id).where(ProjectMaterial.initiative_id == initiative_id)
+                select(ProjectMaterial.id).where(ProjectMaterial.project_id == project_id)
             )
         ).scalars().all()
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/materials/{material_id}"
+            f"nitrogen://projects/{project_id}/materials/{material_id}"
             for material_id in materials
         )
 
         memos = (
-            await db.execute(select(MemoVersion.id).where(MemoVersion.initiative_id == initiative_id))
+            await db.execute(select(MemoVersion.id).where(MemoVersion.project_id == project_id))
         ).scalars().all()
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/memos/{version_id}"
+            f"nitrogen://projects/{project_id}/memos/{version_id}"
             for version_id in memos
         )
 
         instances = (
             await db.execute(
-                select(AssessmentInstance.id).where(AssessmentInstance.initiative_id == initiative_id)
+                select(AssessmentInstance.id).where(AssessmentInstance.project_id == project_id)
             )
         ).scalars().all()
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/assessments/{instance_id}"
+            f"nitrogen://projects/{project_id}/assessments/{instance_id}"
             for instance_id in instances
         )
         uris.extend(
-            f"nitrogen://initiatives/{initiative_id}/artifacts/{instance_id}"
+            f"nitrogen://projects/{project_id}/artifacts/{instance_id}"
             for instance_id in instances
         )
 
@@ -113,6 +113,10 @@ class ResourceRegistry:
         uris.extend(f"nitrogen://corpus/{doc_id}" for doc_id in corpus_docs)
 
         return uris
+
+    async def list_for_initiative(self, initiative_id: UUID, db: AsyncSession) -> list[str]:
+        """Backward-compatible alias — initiative IDs are project IDs after contract migration."""
+        return await self.list_for_project(initiative_id, db)
 
 
 _registry: ResourceRegistry | None = None

@@ -7,13 +7,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser
-from app.models.initiative import Initiative
+from app.models.project import Initiative, Project
 from app.models.project_share import ProjectShare
 from app.models.user import User
 from app.models.workspace import WorkspaceRole
 from app.services.pending_invitations import redeem_pending_invitations
 from app.services.workspaces import (
-    ensure_personal_workspace,
+    ensure_company_workspace,
     get_workspace_membership,
     require_workspace_member as _require_workspace_member,
     require_workspace_owner as _require_workspace_owner,
@@ -38,7 +38,7 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
             > _LAST_SEEN_THROTTLE_SECONDS
         ):
             existing.last_seen_at = now
-        await ensure_personal_workspace(db, user.uid)
+        await ensure_company_workspace(db, user.uid)
         redeem_email = user.email or existing.email
         await redeem_pending_invitations(db, user.uid, redeem_email)
         await db.commit()
@@ -57,7 +57,7 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
             existing = await db.get(User, user.uid)
             if existing is None:
                 raise
-        await ensure_personal_workspace(db, user.uid)
+        await ensure_company_workspace(db, user.uid)
         await redeem_pending_invitations(db, user.uid, user.email)
         await db.commit()
 
@@ -82,7 +82,7 @@ async def _get_role_for_initiative(
 
     share_result = await db.execute(
         select(ProjectShare).where(
-            ProjectShare.initiative_id == initiative.id,
+            ProjectShare.project_id == initiative.id,
             ProjectShare.user_id == user.uid,
         )
     )
@@ -123,6 +123,48 @@ async def get_initiative_with_role(
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found"
     )
+
+
+async def get_project_with_role(
+    db: AsyncSession,
+    project_id: uuid.UUID | str,
+    user: AuthUser,
+) -> tuple[Project, str]:
+    """Return (project, role) for a canonical project UUID."""
+    try:
+        uid = uuid.UUID(str(project_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
+
+    result = await db.execute(select(Project).where(Project.id == uid))
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        )
+
+    role = await _get_role_for_initiative(db, project, user)
+    if role:
+        return project, role
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+    )
+
+
+async def require_project_editor(
+    db: AsyncSession,
+    project_id: uuid.UUID | str,
+    user: AuthUser,
+) -> Project:
+    project, role = await get_project_with_role(db, project_id, user)
+    if role == "viewer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewers cannot modify this project",
+        )
+    return project
 
 
 async def require_owner(

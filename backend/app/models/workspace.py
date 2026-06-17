@@ -65,7 +65,7 @@ class Workspace(Base):
         back_populates="workspace",
         cascade="all, delete-orphan",
     )
-    initiatives: Mapped[list["Initiative"]] = relationship(back_populates="workspace")
+    projects: Mapped[list["Project"]] = relationship(back_populates="workspace")
 
 
 class WorkspaceMembership(Base):
@@ -113,5 +113,5 @@ class WorkspaceMembership(Base):
     user: Mapped["User"] = relationship()
 
 
-from app.models.initiative import Initiative  # noqa: E402
+from app.models.project import Project  # noqa: E402
 from app.models.user import User  # noqa: E402

@@ -25,8 +25,7 @@ read_env_var() {
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "❌ Missing $ENV_FILE"
-  echo "   Use your team .env at repo root (never commit it)."
-  echo "   For mock-only smoke tests: bash scripts/start_emulator.sh (uses scripts/dev-mock.env)."
+  echo "   cp .env.example .env and fill Firebase + DATABASE_URL."
   exit 1
 fi
 
@@ -44,22 +43,17 @@ fi
 
 firebase_api_key="$(read_env_var NEXT_PUBLIC_FIREBASE_API_KEY)"
 firebase_project="$(read_env_var FIREBASE_PROJECT_ID)"
-debug="$(read_env_var DEBUG)"
 
-if [[ -n "$firebase_api_key" ]]; then
-  echo "✓ Auth mode: Firebase (NEXT_PUBLIC_FIREBASE_API_KEY set)"
-  if [[ -z "$firebase_project" ]]; then
-    echo "⚠ FIREBASE_PROJECT_ID is empty — backend cannot verify Firebase tokens"
-    exit 1
-  fi
-else
-  if [[ "$debug" != "true" ]]; then
-    echo "❌ No Firebase config and DEBUG is not true — enable mock auth with DEBUG=true"
-    echo "   or add NEXT_PUBLIC_FIREBASE_* vars to .env"
-    exit 1
-  fi
-  echo "✓ Auth mode: dev mock (DEBUG=true, no NEXT_PUBLIC_FIREBASE_API_KEY)"
+if [[ -z "$firebase_api_key" ]]; then
+  echo "❌ NEXT_PUBLIC_FIREBASE_API_KEY is required for local dev"
+  exit 1
 fi
 
+if [[ -z "$firebase_project" ]]; then
+  echo "❌ FIREBASE_PROJECT_ID is required — backend cannot verify Firebase tokens"
+  exit 1
+fi
+
+echo "✓ Auth mode: Firebase"
 echo "✓ DATABASE_URL set"
 echo "✓ Dev environment OK"

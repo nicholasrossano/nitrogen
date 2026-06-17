@@ -102,7 +102,7 @@ function LoginPageContent() {
       {/* Header */}
       <header className="h-[72px] px-6 flex items-center">
         <h1 className="text-xl font-display font-semibold text-text-primary tracking-tight">
-          Nitrogen AI
+          Nitrogen
         </h1>
       </header>
       {/* Main content */}
@@ -122,7 +122,7 @@ function LoginPageContent() {
                 {mode === 'reset'
                   ? 'Enter your email to receive a reset link'
                   : mode === 'signup'
-                    ? 'Sign up to start generating investment memos'
+                    ? 'Sign up to start diligence research'
                     : 'Sign in to continue to Nitrogen'}
               </p>
             </div>

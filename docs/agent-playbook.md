@@ -51,10 +51,9 @@ Use this file only when the task needs domain-specific policy not covered by `AG
 Gitignored root `.env` is often absent on cloud VMs. Worktrees do not share `.env` (`CLAUDE.md`).
 
 1. Run `bash scripts/check_dev_env.sh` when `.env` exists; fix symlink warnings with `bash scripts/worktree_setup.sh`.
-2. If `.env` is missing, use `bash scripts/start_emulator.sh` (falls back to committed `scripts/dev-mock.env` — mock user, sqlite). Tell the user this is smoke-test only.
+2. If `.env` is missing, stop and ask the user for their real `.env` (Firebase + DATABASE_URL). **Never** start local dev without Firebase — mock auth was removed.
 3. **Never** `cp .env.example .env` over a real env file.
-4. **Firebase mode:** `NEXT_PUBLIC_FIREBASE_API_KEY` and `FIREBASE_PROJECT_ID` must both be set or tokens will not verify.
-5. **Mock mode:** empty Firebase vars + `DEBUG=true` + matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN`.
+4. **Firebase required locally:** `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and `NITROGEN_FIREBASE_CREDENTIALS` must be set.
 
 ## UI and Loading Art Guidance
 
