@@ -50,6 +50,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
 
   // Fallback plain-text state
   const [chunks, setChunks] = useState<EvidenceChunkDetail[]>([]);
+  const [showingExtractedTextFallback, setShowingExtractedTextFallback] = useState(false);
   const highlightRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     setError(null);
     setFileData(null);
     setChunks([]);
+    setShowingExtractedTextFallback(false);
     setFileType(null);
     setInitialPage(null);
 
@@ -76,6 +78,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
           }
 
           const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+          setShowingExtractedTextFallback(true);
           setChunks([{ id: 'full', chunk_index: 0, content: text }]);
           return;
         }
@@ -102,9 +105,11 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
             setFileData(bytes);
           } catch {
             if (cancelled) return;
+            setShowingExtractedTextFallback(true);
             setChunks(chunkRes.chunks);
           }
         } else {
+          setShowingExtractedTextFallback(true);
           setChunks(chunkRes.chunks);
         }
       } catch {
@@ -114,6 +119,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
             const res = await api.getEvidenceContent(evidenceDocId);
             if (cancelled) return;
             setFileType(res.file_type || 'text');
+            setShowingExtractedTextFallback(true);
             setChunks([{ id: 'full', chunk_index: 0, content: res.content }]);
           } catch {
             if (!cancelled) setError('Could not load document');
@@ -195,6 +201,11 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
         </button>
       )}
       <ZoomableContainer className="flex-1 px-5 py-4">
+        {showingExtractedTextFallback && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Could not load the original file. Showing extracted text instead.
+          </div>
+        )}
         <div className="space-y-4">
           {chunks.map((chunk) => {
             const isHighlighted = chunkId && chunk.id === chunkId;

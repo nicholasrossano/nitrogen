@@ -8,7 +8,7 @@ import logging
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
-from app.core.storage import get_uploads_storage
+from app.core.storage import get_uploads_storage, load_upload
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.core.upload_types import (
     DOCUMENT_CONTENT_TYPES,
@@ -472,8 +472,7 @@ async def download_material(
             detail="File not available for download",
         )
 
-    storage = get_uploads_storage()
-    file_bytes = await storage.load(material.storage_path)
+    file_bytes = await load_upload(material.storage_path)
 
     content_type_map = {
         "pdf": "application/pdf",
