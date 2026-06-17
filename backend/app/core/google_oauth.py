@@ -87,9 +87,9 @@ async def revoke_token(token: str) -> None:
         await client.post(GOOGLE_REVOKE_URL, params={"token": token})
 
 
-def create_oauth_state(user_id: str, initiative_id: str) -> str:
+def create_oauth_state(user_id: str, project_id: str) -> str:
     """Create a signed, time-limited CSRF state token."""
-    payload = json.dumps({"uid": user_id, "iid": initiative_id, "t": int(time.time())})
+    payload = json.dumps({"uid": user_id, "pid": project_id, "t": int(time.time())})
     sig = hmac.new(
         settings.google_client_secret.encode(),
         payload.encode(),
@@ -100,7 +100,7 @@ def create_oauth_state(user_id: str, initiative_id: str) -> str:
 
 
 def verify_oauth_state(state: str) -> tuple[str, str]:
-    """Verify and decode a state token. Returns (user_id, initiative_id)."""
+    """Verify and decode a state token. Returns (user_id, project_id)."""
     try:
         decoded = base64.urlsafe_b64decode(state.encode()).decode()
         payload_str, sig = decoded.rsplit("|", 1)
@@ -114,6 +114,6 @@ def verify_oauth_state(state: str) -> tuple[str, str]:
         payload = json.loads(payload_str)
         if time.time() - payload["t"] > 600:
             raise ValueError("State expired (10-minute window)")
-        return payload["uid"], payload["iid"]
+        return payload["uid"], payload.get("pid") or payload.get("iid")
     except (KeyError, ValueError) as e:
         raise ValueError(f"Invalid or expired state: {e}")

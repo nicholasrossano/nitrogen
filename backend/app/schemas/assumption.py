@@ -13,6 +13,7 @@ AssumptionSourceType = Literal[
     "default",
     "missing_placeholder",
     "model_candidate",
+    "promotion",
 ]
 AssumptionValueType = Literal["number", "string", "boolean", "percent", "currency", "text"]
 

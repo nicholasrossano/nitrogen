@@ -66,6 +66,11 @@ export interface ConversationViewProps {
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
   /** Show file attachment controls in the composer */
   showAttachments?: boolean;
+  /** Promote assistant message to a shared project finding */
+  onPromoteMessage?: (messageId: string, body: string) => void;
+  showPromoteFinding?: boolean;
+  /** Loading an existing chat history from the server */
+  historyLoading?: boolean;
 }
 
 function preprocessMath(content: string): string {
@@ -115,6 +120,9 @@ export function ConversationView({
   topContentMode = 'inline',
   onApplyProposedValue,
   showAttachments = true,
+  onPromoteMessage,
+  showPromoteFinding = false,
+  historyLoading = false,
 }: ConversationViewProps) {
 
   const [input, setInput] = useState('');
@@ -259,117 +267,129 @@ export function ConversationView({
   const showDocumentRequest = latestMessage?.widget_type === ABOVE_INPUT_WIDGET_TYPE;
   const hideTextInput = showDocumentRequest;
   const showTopContentAsPanel = Boolean(topContent) && topContentMode === 'panel';
+  const hasComposerTray = Boolean(topComposerContent);
+  const composerShellClassName = hasComposerTray
+    ? 'chat-composer-shell chat-composer-shell--stacked'
+    : 'chat-composer-shell';
+
+  const composerShell = (
+    <div className={composerShellClassName}>
+      {(draftTag || inputChips || (showAttachments && attachedFiles.length > 0)) && (
+        <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
+          {draftTag && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
+              {draftTag}
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftTag(null);
+                  setDraftFieldContext(null);
+                  setDraftModelInputsContext(null);
+                  setInput('');
+                }}
+                className="hover:opacity-60 transition-opacity"
+                aria-label="Remove"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          )}
+          {inputChips}
+          {showAttachments && attachedFiles.map((file, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
+            >
+              <Paperclip className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">{file.name}</span>
+              <button
+                type="button"
+                onClick={() => removeAttachedFile(i)}
+                className="hover:opacity-60 transition-opacity shrink-0"
+                aria-label="Remove file"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <textarea
+        ref={textareaRef}
+        value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '')}
+        onChange={(e) => {
+          const ctx = input.match(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/)?.[0] || '';
+          setInput(ctx ? e.target.value + ctx : e.target.value);
+        }}
+        onKeyDown={handleKeyDown}
+        placeholder="Ask anything"
+        disabled={sending}
+        rows={1}
+        className="no-global-focus-style w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
+      />
+
+      <div className="flex items-center justify-between gap-2 px-4 pb-2.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {extraInputActions}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {showAttachments && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+                aria-label="Attach files"
+              />
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                aria-label="Attach files"
+              >
+                <Paperclip className="w-[13px] h-[13px]" />
+              </button>
+            </>
+          )}
+          <button
+            type="submit"
+            disabled={sending || uploading || !input.trim()}
+            className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+          >
+            {uploading ? (
+              <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+            ) : (
+              <ArrowUp className="w-[11px] h-[11px] text-white" />
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const composerForm = (
+    <form onSubmit={handleSubmit} className="relative">
+      {composerShell}
+    </form>
+  );
 
   const composer = !hideTextInput ? (
     <div className="flex-shrink-0 relative">
       <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
       <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
-        {topComposerContent ? (
-          <div className="relative z-10 mx-3 mb-[-1px]">
+        {hasComposerTray ? (
+          <div className="chat-composer-stack">
             {topComposerContent}
+            {composerForm}
           </div>
-        ) : null}
-        <form onSubmit={handleSubmit} className="relative">
-          <div
-            className="rounded-xl border border-stroke-subtle bg-white overflow-hidden"
-          >
-            {(draftTag || inputChips || (showAttachments && attachedFiles.length > 0)) && (
-              <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 flex-wrap">
-                {draftTag && (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/10 border border-accent/20 text-[11px] font-medium text-accent leading-none">
-                    {draftTag}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraftTag(null);
-                        setDraftFieldContext(null);
-                        setDraftModelInputsContext(null);
-                        setInput('');
-                      }}
-                      className="hover:opacity-60 transition-opacity"
-                      aria-label="Remove"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  </span>
-                )}
-                {inputChips}
-                {showAttachments && attachedFiles.map((file, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
-                  >
-                    <Paperclip className="w-2.5 h-2.5 shrink-0" />
-                    <span className="truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachedFile(i)}
-                      className="hover:opacity-60 transition-opacity shrink-0"
-                      aria-label="Remove file"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <textarea
-              ref={textareaRef}
-              value={input.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '')}
-              onChange={(e) => {
-                const ctx = input.match(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/)?.[0] || '';
-                setInput(ctx ? e.target.value + ctx : e.target.value);
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything"
-              disabled={sending}
-              rows={1}
-              className="no-global-focus-style w-full resize-none bg-transparent px-5 pt-3 pb-4 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:text-text-tertiary overflow-hidden"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: '2.25rem' }}
-            />
-
-            <div className="flex items-center justify-between gap-2 px-4 pb-2.5">
-              <div className="flex items-center gap-1.5 min-w-0">
-                {extraInputActions}
-              </div>
-              <div className="flex items-center gap-1.5">
-                {showAttachments && (
-                  <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileChange}
-                      aria-label="Attach files"
-                    />
-                    <button
-                      type="button"
-                      disabled={sending}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                      aria-label="Attach files"
-                    >
-                      <Paperclip className="w-[13px] h-[13px]" />
-                    </button>
-                  </>
-                )}
-                <button
-                  type="submit"
-                  disabled={sending || uploading || !input.trim()}
-                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
-                >
-                  {uploading ? (
-                    <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
-                  ) : (
-                    <ArrowUp className="w-[11px] h-[11px] text-white" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
+        ) : (
+          composerForm
+        )}
       </div>
     </div>
   ) : null;
@@ -396,6 +416,11 @@ export function ConversationView({
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
         <div className="max-w-[52rem] mx-auto">
         <div className="w-[90%] mx-auto space-y-8">
+          {historyLoading && messages.length === 0 ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-label="Loading chat" />
+            </div>
+          ) : null}
           {messages.map((msg, idx) => {
             // Compute consecutive-assistant-run info
             const isAssistant = msg.role !== 'user';
@@ -432,6 +457,8 @@ export function ConversationView({
                 onOpenDocument={onOpenDocument}
                 onSendMessage={(content) => onSendMessage(content)}
                 onApplyProposedValue={onApplyProposedValue}
+                onPromoteMessage={onPromoteMessage}
+                showPromoteFinding={showPromoteFinding}
               />
             );
           })}
@@ -902,6 +929,8 @@ function MessageBubble({
   onOpenDocument,
   onSendMessage,
   onApplyProposedValue,
+  onPromoteMessage,
+  showPromoteFinding = false,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -917,6 +946,8 @@ function MessageBubble({
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onSendMessage: (content: string) => void | Promise<void>;
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
+  onPromoteMessage?: (messageId: string, body: string) => void;
+  showPromoteFinding?: boolean;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -1006,6 +1037,8 @@ function MessageBubble({
                 retrying={retrying}
                 sources={message.sources ?? undefined}
                 onOpenDocument={onOpenDocument}
+                showPromote={showPromoteFinding}
+                onPromote={onPromoteMessage ? () => onPromoteMessage(message.id, groupContent ?? message.content) : undefined}
               />
             )}
           </div>

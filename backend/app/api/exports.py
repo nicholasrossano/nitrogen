@@ -11,7 +11,7 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_viewer
 from app.core.storage import get_storage
 from app.core.filename_utils import safe_content_disposition
-from app.models.onboarding import ChatMessage
+from app.models.chat import CoreChat, CoreChatMessage
 from app.models.memo import MemoVersion
 from app.schemas.memo import ExportRequest, ExportResponse, MemoContent
 from app.services.docx_exporter import DocxExporterService
@@ -345,14 +345,15 @@ async def _recover_model_inputs(
     """
     from sqlalchemy import and_
     result = await db.execute(
-        select(ChatMessage)
+        select(CoreChatMessage)
+        .join(CoreChat, CoreChat.id == CoreChatMessage.chat_id)
         .where(
             and_(
-                ChatMessage.initiative_id == initiative_id,
-                ChatMessage.widget_type.in_(widget_types),
+                CoreChat.project_id == initiative_id,
+                CoreChatMessage.widget_type.in_(widget_types),
             )
         )
-        .order_by(ChatMessage.created_at.desc())
+        .order_by(CoreChatMessage.created_at.desc())
     )
     messages = result.scalars().all()
     for msg in messages:

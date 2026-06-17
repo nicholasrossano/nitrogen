@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.core.database import Base
 
@@ -14,19 +14,20 @@ class Assumption(Base):
     __tablename__ = "assumptions"
 
     __table_args__ = (
-        Index("ix_assumptions_initiative_key", "initiative_id", "key"),
-        Index("ix_assumptions_initiative_status", "initiative_id", "status"),
+        Index("ix_assumptions_project_key", "project_id", "key"),
+        Index("ix_assumptions_project_status", "project_id", "status"),
         Index("ix_assumptions_source_type", "source_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     key: Mapped[str] = mapped_column(String(160), nullable=False)
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSONB)
@@ -61,7 +62,7 @@ class AssumptionComment(Base):
 
     __table_args__ = (
         Index("ix_assumption_comments_assumption_created", "assumption_id", "created_at"),
-        Index("ix_assumption_comments_initiative_created", "initiative_id", "created_at"),
+        Index("ix_assumption_comments_project_created", "project_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -72,11 +73,12 @@ class AssumptionComment(Base):
         ForeignKey("assumptions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_by_user_id: Mapped[str | None] = mapped_column(String(255))
     created_by_email: Mapped[str | None] = mapped_column(String(255))
@@ -94,8 +96,8 @@ class AssumptionBinding(Base):
 
     __table_args__ = (
         Index(
-            "ix_assumption_bindings_initiative_assessment_field",
-            "initiative_id",
+            "ix_assumption_bindings_project_assessment_field",
+            "project_id",
             "assessment_id",
             "field_name",
         ),
@@ -106,11 +108,12 @@ class AssumptionBinding(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     assumption_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("assumptions.id", ondelete="CASCADE"),

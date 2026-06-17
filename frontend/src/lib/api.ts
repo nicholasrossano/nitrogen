@@ -1,5 +1,4 @@
 import { debugChatFlow } from '@/lib/chatDebug';
-import { getDevMockToken, isDevMockAuthEnabled } from '@/lib/devAuth';
 import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -10,10 +9,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 // restored the session — without blocking after auth state is already known.
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-
-  if (isDevMockAuthEnabled()) {
-    return getDevMockToken();
-  }
 
   try {
     const { getAuth } = await import('firebase/auth');
@@ -64,6 +59,34 @@ export interface Initiative {
   // Sharing fields
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
+}
+
+export interface Project {
+  id: string;
+  workspace_id: string;
+  name: string;
+  subject: string | null;
+  slug: string;
+  icon?: string | null;
+  created_by: string;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+  shared_role?: 'editor' | 'viewer' | null;
+  owner_email?: string | null;
+}
+
+export interface Finding {
+  id: string;
+  project_id: string;
+  body: string;
+  sources: Record<string, unknown>[] | null;
+  promoted_by: string;
+  source_chat_message_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  promoter_email?: string | null;
 }
 
 export interface AssessmentInstance {
@@ -399,7 +422,8 @@ export type AssumptionSourceType =
   | 'assessment'
   | 'default'
   | 'missing_placeholder'
-  | 'model_candidate';
+  | 'model_candidate'
+  | 'promotion';
 
 export interface Assumption {
   id: string;
@@ -890,6 +914,35 @@ export const api = {
       body: JSON.stringify({ title, workspace_id: workspaceId ?? undefined }),
     }),
 
+  listProjects: (limit: number = 50, offset: number = 0, archived: boolean = false, workspaceId?: string | null) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      archived: String(archived),
+    });
+    if (workspaceId) params.set('workspace_id', workspaceId);
+    return fetchApi<Project[]>(`/api/v1/projects?${params.toString()}`);
+  },
+
+  createProject: (title?: string, workspaceId?: string | null) =>
+    fetchApi<Project>('/api/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ title, workspace_id: workspaceId ?? undefined }),
+    }),
+
+  listProjectFindings: (projectId: string) =>
+    fetchApi<{ findings: Finding[] }>(`/api/v1/projects/${projectId}/findings`),
+
+  promoteFinding: (payload: {
+    chat_message_id: string;
+    project_id: string;
+    body?: string;
+  }) =>
+    fetchApi<Finding>('/api/v1/findings/promote', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   listWorkspaces: () =>
     fetchApi<Workspace[]>('/api/v1/workspaces'),
 
@@ -1137,12 +1190,6 @@ export const api = {
       }
     ),
 
-  retryAssistantMessage: (initiativeId: string, messageId: string) =>
-    fetchApi<{ message: ChatMessage; stage_status: StageStatus }>(
-      `/api/v1/initiatives/${initiativeId}/chat/retry/${messageId}`,
-      { method: 'POST' }
-    ),
-
   // Evidence
   uploadEvidence: async (initiativeId: string, file: File) => {
     const formData = new FormData();
@@ -1211,13 +1258,6 @@ export const api = {
         body: JSON.stringify({ content, title }),
       }
     ),
-
-  // Generate
-  generateMemo: (initiativeId: string, includeCorpus: boolean = true) =>
-    fetchApi<MemoResponse>(`/api/v1/initiatives/${initiativeId}/generate`, {
-      method: 'POST',
-      body: JSON.stringify({ include_corpus: includeCorpus }),
-    }),
 
   getMemo: (initiativeId: string) =>
     fetchApi<MemoResponse>(`/api/v1/initiatives/${initiativeId}/memo`),
@@ -1513,12 +1553,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(inputs),
       }
-    ),
-
-  generateAllDeliverables: (initiativeId: string) =>
-    fetchApi<{ success: boolean; deliverables: Record<string, any> }>(
-      `/api/v1/initiatives/${initiativeId}/generate-all`,
-      { method: 'POST' }
     ),
 
   // ── Assessment Workflow ──────────────────────────────────────────
@@ -1969,7 +2003,7 @@ export const api = {
     ),
 
   // Chat sessions — optionally scoped to a single project
-  getChats: (initiativeId?: string) =>
+  getChats: (initiativeId?: string, projectId?: string) =>
     fetchApi<{
       chats: {
         id: string;
@@ -1979,12 +2013,17 @@ export const api = {
         message_count: number;
         compare_initiative_ids: string[] | null;
         initiative_id: string | null;
+        project_id?: string | null;
         assumption_id: string | null;
       }[];
     }>(
-      initiativeId
-        ? `/api/v1/chats?initiative_id=${encodeURIComponent(initiativeId)}`
-        : '/api/v1/chats',
+      (() => {
+        const params = new URLSearchParams();
+        if (initiativeId) params.set('initiative_id', initiativeId);
+        if (projectId) params.set('project_id', projectId);
+        const qs = params.toString();
+        return qs ? `/api/v1/chats?${qs}` : '/api/v1/chats';
+      })(),
     ),
 
   getChatMessages: (chatId: string) =>

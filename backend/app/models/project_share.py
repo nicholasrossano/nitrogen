@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from app.core.database import Base
 
@@ -10,7 +11,7 @@ from app.core.database import Base
 class ProjectShare(Base):
     __tablename__ = "project_shares"
     __table_args__ = (
-        UniqueConstraint("initiative_id", "user_id", name="uq_project_shares_initiative_user"),
+        UniqueConstraint("project_id", "user_id", name="uq_project_shares_project_user"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -18,19 +19,20 @@ class ProjectShare(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+    initiative_id = synonym("project_id")
     user_id: Mapped[str] = mapped_column(
         String(255),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # 'editor' | 'viewer'
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
     shared_by: Mapped[str | None] = mapped_column(
         String(255),
         ForeignKey("users.id", ondelete="SET NULL"),

@@ -14,7 +14,7 @@ from app.core.permissions import get_initiative_with_role
 from app.mcp.exposure_policy import resource_visibility
 from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.initiative import Initiative
+from app.models.project import Initiative, Project
 from app.models.memo import MemoVersion
 from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
@@ -49,12 +49,16 @@ async def _read_initiative(uri: str, db: AsyncSession, ctx: ExecutionContext) ->
     }
 
 
-def _initiative_id_from_uri(uri: str) -> UUID:
+def _project_id_from_uri(uri: str) -> UUID:
     parsed = urlparse(uri)
     segments = [segment for segment in parsed.path.split("/") if segment]
-    if parsed.netloc != "initiatives" or not segments:
-        raise ValueError(f"Invalid initiative-scoped URI: {uri}")
+    if parsed.netloc not in {"initiatives", "projects"} or not segments:
+        raise ValueError(f"Invalid project-scoped URI: {uri}")
     return UUID(segments[0])
+
+
+def _initiative_id_from_uri(uri: str) -> UUID:
+    return _project_id_from_uri(uri)
 
 
 async def _read_evidence_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
@@ -231,6 +235,18 @@ async def _read_artifact(uri: str, db: AsyncSession, ctx: ExecutionContext) -> d
 
 
 def register_all(registry: ResourceRegistry) -> None:
+    registry.register(
+        ResourceDefinition(
+            uri_pattern="nitrogen://projects/{id}",
+            resource_type="project",
+            name="Project",
+            description="Top-level project metadata.",
+            mime_type="application/json",
+            initiative_scoped=True,
+            read_handler=_read_initiative,
+            visibility=resource_visibility("initiative"),
+        )
+    )
     registry.register(
         ResourceDefinition(
             uri_pattern="nitrogen://initiatives/{id}",

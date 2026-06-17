@@ -9,7 +9,7 @@ from alembic import context
 
 # Import models to ensure they're registered with Base
 from app.models import (  # noqa: F401
-    Initiative, ChatMessage, EvidenceDoc, EvidenceChunk, MemoVersion, Citation,
+    Initiative, Project, Finding, EvidenceDoc, EvidenceChunk, MemoVersion, Citation,
     CorpusDocument, CorpusChunk, CoreChat, CoreChatMessage, ProvenanceTrace,
     ProjectMaterial, User, ProjectShare, ProjectShareInvitation, WorkspaceInvitation,
     AssessmentInstance, DecisionEvent,

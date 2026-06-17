@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.initiative import Initiative
-from app.models.onboarding import ChatMessage
+from app.models.chat import CoreChatMessage
+
+ChatMessage = CoreChatMessage
 from app.assessments import get_assessment_registry
 
 settings = get_settings()

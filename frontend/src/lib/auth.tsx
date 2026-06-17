@@ -3,8 +3,6 @@
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import type { User, Auth } from 'firebase/auth';
 
-import { createDevMockUser, getDevMockToken, isDevMockAuthEnabled } from '@/lib/devAuth';
-
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -18,25 +16,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function isFirebaseConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim());
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [auth, setAuth] = useState<Auth | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only run on client
     if (typeof window === 'undefined') return;
+
+    if (!isFirebaseConfigured()) {
+      setConfigError(
+        'Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* vars to root .env and restart the dev server.',
+      );
+      setLoading(false);
+      return;
+    }
 
     let unsubscribe: (() => void) | undefined;
 
     const initAuth = async () => {
-      if (isDevMockAuthEnabled()) {
-        setUser(createDevMockUser());
-        setLoading(false);
-        return;
-      }
-
       try {
         const { getAuth, onAuthStateChanged } = await import('firebase/auth');
         const { app } = await import('./firebase');
@@ -50,11 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } catch (error) {
         console.error('Failed to initialize Firebase auth:', error);
+        setConfigError('Failed to initialize Firebase auth. Check NEXT_PUBLIC_FIREBASE_* in .env.');
         setLoading(false);
       }
     };
 
-    initAuth();
+    void initAuth();
 
     return () => {
       if (unsubscribe) unsubscribe();
@@ -62,30 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
-    if (isDevMockAuthEnabled()) {
-      setUser(createDevMockUser());
-      return;
-    }
     if (!auth) throw new Error('Auth not initialized');
     const { signInWithEmailAndPassword } = await import('firebase/auth');
     await signInWithEmailAndPassword(auth, email, password);
   }, [auth]);
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
-    if (isDevMockAuthEnabled()) {
-      setUser(createDevMockUser());
-      return;
-    }
     if (!auth) throw new Error('Auth not initialized');
     const { createUserWithEmailAndPassword } = await import('firebase/auth');
     await createUserWithEmailAndPassword(auth, email, password);
   }, [auth]);
 
   const signInWithGoogle = useCallback(async () => {
-    if (isDevMockAuthEnabled()) {
-      setUser(createDevMockUser());
-      return;
-    }
     if (!auth) throw new Error('Auth not initialized');
     const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
     const provider = new GoogleAuthProvider();
@@ -93,10 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   const signOut = useCallback(async () => {
-    if (isDevMockAuthEnabled()) {
-      setUser(null);
-      return;
-    }
     if (!auth) throw new Error('Auth not initialized');
     const { signOut: firebaseSignOut } = await import('firebase/auth');
     await firebaseSignOut(auth);
@@ -109,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   const getIdToken = useCallback(async (): Promise<string | null> => {
-    if (!user) return isDevMockAuthEnabled() ? getDevMockToken() : null;
+    if (!user) return null;
     return user.getIdToken();
   }, [user]);
 
@@ -123,6 +111,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetPassword,
     getIdToken,
   }), [user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signOut, resetPassword, getIdToken]);
+
+  if (configError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8 bg-surface">
+        <div className="max-w-md text-center space-y-2">
+          <p className="text-sm font-medium text-text-primary">Firebase auth required</p>
+          <p className="text-xs text-text-secondary">{configError}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={value}>
