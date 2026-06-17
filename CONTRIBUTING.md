@@ -59,6 +59,22 @@ fix: prevent crash on empty memo export
 docs: update deployment guide for Railway
 ```
 
+Keep subjects short and specific. Avoid generic prefixes like "Enhance" or "Refactor" without saying what changed.
+
+### Secrets and User Data
+
+Never commit:
+
+- `.env` or any file containing API keys, database URLs with credentials, or service account JSON
+- `exports/` or `uploads/` (runtime user artifacts; gitignored but double-check before `git add -A`)
+- Local SQLite or mock databases (e.g. `backend/.dev-mock.db`)
+
+Pre-commit runs `./scripts/security_check.sh`. Before a public release, also run:
+
+```bash
+./scripts/oss_pre_release.sh
+```
+
 ### Pull Request Process
 
 1. Create your branch from `main`

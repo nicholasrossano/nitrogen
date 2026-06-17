@@ -40,6 +40,10 @@ out/
 exports/
 uploads/
 
+# Local dev databases
+*.dev-mock.db
+**/.dev-mock.db
+
 # Logs
 *.log
 logs/

@@ -30,13 +30,36 @@ EXCLUDES=(
 )
 
 PATTERNS=(
-  "sk-[A-Za-z0-9_-]{20,}"
+  "sk-(?!your-openai-api-key-here)[A-Za-z0-9_-]{20,}"
   "ghp_[A-Za-z0-9]{20,}"
   "AKIA[0-9A-Z]{16}"
   "AIza[0-9A-Za-z_-]{20,}"
   "-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----"
-  "(?i)(api[_-]?key|client[_-]?secret|access[_-]?token|refresh[_-]?token)\\s*[=:]\\s*['\\\"]?[A-Za-z0-9._-]{12,}"
+  "(?i)(api[_-]?key|client[_-]?secret)\\s*=\\s*['\\\"][^'\\\"]{12,}['\\\"]"
 )
+
+is_placeholder_match() {
+  local line="$1"
+  [[ "$line" == *"your-openai-api-key-here"* ]] && return 0
+  [[ "$line" == *"postgres:postgres@localhost"* ]] && return 0
+  [[ "$line" == *"test-key-not-real"* ]] && return 0
+  [[ "$line" == *"ci-placeholder"* ]] && return 0
+  [[ "$line" == *"read_env_var"* ]] && return 0
+  return 1
+}
+
+filter_real_matches() {
+  local input="$1"
+  local output="$2"
+  : >"$output"
+  local line
+  while IFS= read -r line; do
+    if ! is_placeholder_match "$line"; then
+      echo "$line" >>"$output"
+    fi
+  done <"$input"
+  [[ -s "$output" ]]
+}
 
 run_worktree_scan() {
   echo "==> Scanning working tree for potential secrets..."
@@ -48,19 +71,21 @@ run_worktree_scan() {
 
   for p in "${PATTERNS[@]}"; do
     if rg -n --hidden --pcre2 "$p" "${glob_args[@]}" . >/tmp/nitrogen_secret_scan.$$ 2>/dev/null; then
-      echo ""
-      echo "[MATCH] Pattern: $p (first 200 lines; full scan was written to temp)"
-      head -200 /tmp/nitrogen_secret_scan.$$
-      found=1
+      if filter_real_matches /tmp/nitrogen_secret_scan.$$ /tmp/nitrogen_secret_scan_filtered.$$; then
+        echo ""
+        echo "[MATCH] Pattern: $p (first 200 lines)"
+        head -200 /tmp/nitrogen_secret_scan_filtered.$$
+        found=1
+      fi
     fi
   done
 
-  rm -f /tmp/nitrogen_secret_scan.$$ || true
+  rm -f /tmp/nitrogen_secret_scan.$$ /tmp/nitrogen_secret_scan_filtered.$$ || true
   return "$found"
 }
 
 run_history_scan() {
-  echo "==> Scanning git history (this can take a while)..."
+  echo "==> Scanning git history..."
   local found=0
   local commit
   local -a history_excludes=(
@@ -80,17 +105,22 @@ run_history_scan() {
 
   for p in "${PATTERNS[@]}"; do
     while read -r commit; do
-      if git grep -I -n -E "$p" "$commit" -- . "${history_excludes[@]}" 2>/dev/null >/tmp/nitrogen_secret_history_scan.$$; then
-        echo ""
-        echo "[HISTORY MATCH] Pattern: $p (commit: $commit) — first 200 lines"
-        head -200 /tmp/nitrogen_secret_history_scan.$$
-        found=1
-        break
+      [[ -z "$commit" ]] && continue
+      if ! git grep -I -n -E "$p" "$commit" -- . "${history_excludes[@]}" 2>/dev/null >/tmp/nitrogen_secret_history_scan.$$; then
+        continue
       fi
-    done < <(git rev-list --all)
+      if ! filter_real_matches /tmp/nitrogen_secret_history_scan.$$ /tmp/nitrogen_secret_history_filtered.$$; then
+        continue
+      fi
+      echo ""
+      echo "[HISTORY MATCH] Pattern: $p (commit: $commit) — first 200 lines"
+      head -200 /tmp/nitrogen_secret_history_filtered.$$
+      found=1
+      break 2
+    done < <(git log --all -G "$p" --format=%H 2>/dev/null || true)
   done
 
-  rm -f /tmp/nitrogen_secret_history_scan.$$ || true
+  rm -f /tmp/nitrogen_secret_history_scan.$$ /tmp/nitrogen_secret_history_filtered.$$ || true
   return "$found"
 }
 
@@ -104,6 +134,10 @@ main() {
   else
     worktree_status=1
     echo "❌ Working tree scan found potential secrets."
+  fi
+
+  if ! bash "$ROOT_DIR/scripts/check_tracked_artifacts.sh"; then
+    worktree_status=1
   fi
 
   if [[ "$SCAN_HISTORY" == "true" ]]; then

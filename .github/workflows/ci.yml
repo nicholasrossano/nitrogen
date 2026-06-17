@@ -11,8 +11,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  security:
+    name: Security (secrets + artifacts)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret and artifact scan
+        run: bash scripts/security_check.sh --history
+
   frontend:
     name: Frontend (typecheck + lint + test + build)
+    needs: security
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,6 +56,7 @@ jobs:
 
   backend:
     name: Backend (lint + test)
+    needs: security
     runs-on: ubuntu-latest
     defaults:
       run:
