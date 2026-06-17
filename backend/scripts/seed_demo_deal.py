@@ -15,14 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
 from app.models.finding import Finding
 from app.models.project import Project
 from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceType
 from app.services.workspaces import ensure_company_workspace
 
 DEMO_PROJECT_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")

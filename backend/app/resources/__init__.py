@@ -14,7 +14,7 @@ from app.core.permissions import get_initiative_with_role
 from app.mcp.exposure_policy import resource_visibility
 from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.project import Initiative, Project
+from app.models.project import Initiative
 from app.models.memo import MemoVersion
 from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
