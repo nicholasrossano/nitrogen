@@ -16,6 +16,8 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+rm -rf .git/filter-repo
+
 REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
 REPLACEMENTS="$(mktemp)"
 cat >"$REPLACEMENTS" <<'EOF'
