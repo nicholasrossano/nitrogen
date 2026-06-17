@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 import { api, type Assumption, type AssumptionStatus } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
@@ -61,9 +61,11 @@ export function ProjectAssumptionsPanel({
             <button
               type="button"
               onClick={onViewAll}
-              className="shrink-0 text-[10px] font-medium text-accent hover:underline"
+              className="shrink-0 p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04]"
+              aria-label={`View all ${PROJECT_VARIABLES.lower}`}
+              title={`View all ${PROJECT_VARIABLES.lower}`}
             >
-              View all
+              <ExternalLink className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

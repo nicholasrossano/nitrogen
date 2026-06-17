@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Loader2 } from 'lucide-react';
+import { ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, type ProjectMaterial } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
@@ -28,13 +28,11 @@ interface ProjectFilesPanelProps {
 export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: ProjectFilesPanelProps) {
   const router = useRouter();
   const [rows, setRows] = useState<ProjectMaterial[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!projectId) {
       setRows([]);
-      setTotalCount(0);
       return;
     }
     setLoading(true);
@@ -44,12 +42,10 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: Pro
         const sorted = [...materials].sort(
           (a, b) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''),
         );
-        setTotalCount(sorted.length);
         setRows(sorted.slice(0, MAX_FILES));
       })
       .catch(() => {
         setRows([]);
-        setTotalCount(0);
       })
       .finally(() => setLoading(false));
   }, [projectId, refreshKey]);
@@ -71,9 +67,11 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: Pro
           <button
             type="button"
             onClick={() => router.push(viewAllHref)}
-            className="shrink-0 text-[10px] font-medium text-accent hover:underline"
+            className="shrink-0 p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04]"
+            aria-label="View all files"
+            title="View all files"
           >
-            View all
+            <ExternalLink className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -89,8 +87,7 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: Pro
             No project files yet. Upload materials from the files page to build the data room.
           </p>
         ) : (
-          <>
-            <ul className="space-y-1.5">
+          <ul className="space-y-1.5">
               {rows.map((row) => (
                 <li key={row.id}>
                   <button
@@ -111,17 +108,7 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: Pro
                   </button>
                 </li>
               ))}
-            </ul>
-            {totalCount > MAX_FILES && (
-              <button
-                type="button"
-                onClick={() => router.push(viewAllHref)}
-                className="mt-2 w-full text-left px-1 text-[10px] font-medium text-accent hover:underline"
-              >
-                View all {totalCount} files
-              </button>
-            )}
-          </>
+          </ul>
         )}
       </div>
     </aside>
