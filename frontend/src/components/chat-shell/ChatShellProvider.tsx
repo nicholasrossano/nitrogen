@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChatShellContext } from './ChatShellContext';
 
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
@@ -27,6 +27,7 @@ export function writeLastProjectId(projectId: string | null) {
 
 export function ChatShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [activeChatId, setActiveChatId] = useState<string | null>(searchParams.get('chat'));
   const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
@@ -47,9 +48,10 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const handleNewChat = useCallback((projectId?: string | null) => {
     const currentProject = searchParams.get('project');
     const currentChat = searchParams.get('chat');
+    const onChatLandingPage = pathname === '/chat' || pathname === '/';
 
-    // Already on the landing page for this scope — nothing to do.
-    if (!currentChat) {
+    // Already on the chat landing page for this scope — nothing to do.
+    if (onChatLandingPage && !currentChat) {
       if (projectId && currentProject === projectId) return;
       if (!projectId && !currentProject) return;
     }
@@ -61,7 +63,7 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
       return;
     }
     router.replace('/chat');
-  }, [router, searchParams]);
+  }, [pathname, router, searchParams]);
 
   const refreshDrawer = useCallback(() => {
     setDrawerRefreshKey((k) => k + 1);
