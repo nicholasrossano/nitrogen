@@ -6,6 +6,7 @@ import { ProjectChatSurface } from './ProjectChatSurface';
 import { AssessmentActivityLogTab } from './AssessmentActivityLogTab';
 import { DeepDiveWidget } from '@/components/plan-workspace/DeepDiveWidget';
 import { AssumptionsChatPanel } from '@/components/assumptions/AssumptionsChatPanel';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import type {
   PlanWorkspaceInspectorDocumentSource,
   PlanWorkspaceInspectorState,
@@ -537,7 +538,7 @@ export function ProjectChatTabsPanel({
   useEffect(() => {
     if (!pendingAssumptions) return;
     if (handledAssumptionsRequestIdsRef.current.has(pendingAssumptions.requestId)) return;
-    const nextAssumptionTitle = pendingAssumptions.title?.trim() || 'Assumptions';
+    const nextAssumptionTitle = pendingAssumptions.title?.trim() || PROJECT_VARIABLES.title;
     const queueAutoSend = (tabId: string) => {
       if (!pendingAssumptions.autoSend) return;
       setPendingAutoSendByTabId((prev) => ({

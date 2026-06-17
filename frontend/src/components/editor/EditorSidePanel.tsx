@@ -1,8 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { EditorPanelHeader } from './EditorPanelHeader';
+import {
+  EditorPanelChromeProvider,
+  type EditorPanelChrome,
+} from './EditorPanelChromeContext';
 
 const LCOEModelWidget = dynamic(() => import('@/components/widgets/LCOEModelWidget').then(m => ({ default: m.LCOEModelWidget })), { ssr: false });
 const CarbonModelWidget = dynamic(() => import('@/components/widgets/CarbonModelWidget').then(m => ({ default: m.CarbonModelWidget })), { ssr: false });
@@ -44,8 +49,19 @@ export interface EditorWidget {
 interface EditorSidePanelProps {
   widgets: EditorWidget[];
   initiativeId?: string;
+  onClose?: () => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
+}
+
+function getWidgetTitle(widget: EditorWidget): string {
+  const dataTitle = typeof widget.data?.title === 'string' ? widget.data.title.trim() : '';
+  if (dataTitle) return dataTitle;
+  const dataName = typeof widget.data?.name === 'string' ? widget.data.name.trim() : '';
+  if (dataName) return dataName;
+  const filename = typeof widget.data?.filename === 'string' ? widget.data.filename.trim() : '';
+  if (filename) return filename;
+  return WIDGET_LABELS[widget.type] ?? 'Output';
 }
 
 const WIDGET_LABELS: Record<string, string> = {
@@ -64,18 +80,39 @@ const WIDGET_LABELS: Record<string, string> = {
 export function EditorSidePanel({
   widgets,
   initiativeId = '',
+  onClose,
   onOpenDecisionLog,
   onExportDecisionLog,
 }: EditorSidePanelProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [childChrome, setChildChrome] = useState<EditorPanelChrome | null>(null);
+
+  const handleChromeChange = useCallback((chrome: EditorPanelChrome | null) => {
+    setChildChrome(chrome);
+  }, []);
 
   const displayIndex = activeIndex ?? widgets.length - 1;
   const widget = widgets[displayIndex];
 
+  useEffect(() => {
+    setChildChrome(null);
+  }, [widget?.messageId]);
+
+  const headerTitle = childChrome?.title ?? (widget ? getWidgetTitle(widget) : 'Output');
+  const headerSuffix = childChrome?.suffix;
+  const headerActions = childChrome?.actions;
+
   if (!widget) return null;
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="flex h-full flex-col bg-white">
+      <EditorPanelHeader
+        title={headerTitle}
+        suffix={headerSuffix}
+        onClose={onClose}
+        actions={headerActions}
+      />
+
       {widgets.length > 1 && (
         <div className="flex-shrink-0 flex border-b border-divider bg-white overflow-x-auto">
           {widgets.map((w, i) => (
@@ -89,23 +126,25 @@ export function EditorSidePanel({
                   : 'border-transparent text-text-secondary hover:text-text-primary'
               }`}
             >
-              {WIDGET_LABELS[w.type] ?? 'Output'}
+              {getWidgetTitle(w)}
             </button>
           ))}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <ErrorBoundary>
-          <EditorWidgetRenderer
-            key={widget.messageId}
-            type={widget.type}
-            data={widget.data}
-            initiativeId={initiativeId}
-            messageId={widget.messageId}
-            onOpenDecisionLog={onOpenDecisionLog}
-            onExportDecisionLog={onExportDecisionLog}
-          />
+          <EditorPanelChromeProvider onChromeChange={handleChromeChange}>
+            <EditorWidgetRenderer
+              key={widget.messageId}
+              type={widget.type}
+              data={widget.data}
+              initiativeId={initiativeId}
+              messageId={widget.messageId}
+              onOpenDecisionLog={onOpenDecisionLog}
+              onExportDecisionLog={onExportDecisionLog}
+            />
+          </EditorPanelChromeProvider>
         </ErrorBoundary>
       </div>
     </div>
@@ -148,7 +187,9 @@ function EditorWidgetRenderer({
         <AssessmentWorkspace
           instanceId={data.instance_id}
           assessmentId={data.assessment_id}
+          assessmentTitle={data.title}
           initiativeId={initiativeId}
+          usePanelHeader
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
         />

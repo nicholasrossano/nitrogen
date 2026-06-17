@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api, type Assumption, type AssumptionStatus } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
 const STATUS_CLASS: Record<AssumptionStatus, string> = {
   validated: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -53,14 +54,9 @@ export function ProjectAssumptionsPanel({
     <aside
       className={`flex flex-col min-h-0 flex-1 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`}
     >
-      <div className="px-4 py-3 border-b border-divider shrink-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-text-primary">Assumptions</h2>
-            <p className="mt-0.5 text-[10px] text-text-tertiary leading-snug">
-              New assumptions are extracted when chat messages are promoted to project findings.
-            </p>
-          </div>
+      <div className="px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-text-primary">{PROJECT_VARIABLES.title}</h2>
           {onViewAll && (
             <button
               type="button"
@@ -81,7 +77,7 @@ export function ProjectAssumptionsPanel({
           </div>
         ) : rows.length === 0 ? (
           <p className="px-1 text-xs text-text-secondary">
-            No project assumptions yet. Promote a finding from project chat to extract structured values.
+            No project {PROJECT_VARIABLES.lower} yet. Promote a finding from project chat to extract structured values.
           </p>
         ) : (
           <ul className="space-y-2">
@@ -92,8 +88,10 @@ export function ProjectAssumptionsPanel({
                   onClick={() => onAssumptionSelect?.(row)}
                   disabled={!onAssumptionSelect}
                   className={`w-full text-left rounded-md border border-stroke-subtle bg-white px-2.5 py-2 transition-colors ${
-                    onAssumptionSelect ? 'hover:border-accent/30 hover:bg-accent/5 cursor-pointer' : ''
-                  }`}
+                    onAssumptionSelect
+                      ? 'hover:bg-surface-subtle cursor-pointer'
+                      : 'disabled:cursor-default'
+                  } disabled:hover:bg-white`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-xs font-medium text-text-primary leading-snug">{row.label}</span>

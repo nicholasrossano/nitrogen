@@ -110,7 +110,7 @@ module.exports = {
         md: '4px',
         lg: '6px',
         xl: '8px',
-        '2xl': '14px',
+        '2xl': 'var(--radius-floating-panel)',
         '3xl': '22px',
       },
       borderWidth: {
@@ -128,6 +128,7 @@ module.exports = {
         'card': '0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.03)',
         'card-hover': '0 8px 24px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04)',
         'modal': '0 16px 48px -8px rgba(0, 0, 0, 0.16), 0 4px 12px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04)',
+        'floating-panel': 'var(--shadow-floating-panel)',
       },
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out',

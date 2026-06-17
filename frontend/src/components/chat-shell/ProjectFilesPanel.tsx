@@ -22,9 +22,10 @@ function fileTypeLabel(fileType: string): string {
 interface ProjectFilesPanelProps {
   projectId: string | null;
   refreshKey?: number;
+  onOpenFile?: (file: ProjectMaterial) => void;
 }
 
-export function ProjectFilesPanel({ projectId, refreshKey = 0 }: ProjectFilesPanelProps) {
+export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: ProjectFilesPanelProps) {
   const router = useRouter();
   const [rows, setRows] = useState<ProjectMaterial[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -64,14 +65,9 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0 }: ProjectFilesPan
     <aside
       className={`flex flex-col min-h-0 max-h-[min(32vh,14rem)] overflow-hidden shrink-0 ${CHAT_FLOATING_PANEL_CHROME}`}
     >
-      <div className="px-4 py-3 border-b border-divider shrink-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-text-primary">Files</h2>
-            <p className="mt-0.5 text-[10px] text-text-tertiary leading-snug">
-              Project data room uploads for this deal.
-            </p>
-          </div>
+      <div className="px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-text-primary">Files</h2>
           <button
             type="button"
             onClick={() => router.push(viewAllHref)}
@@ -96,19 +92,23 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0 }: ProjectFilesPan
           <>
             <ul className="space-y-1.5">
               {rows.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-center gap-2 rounded-md border border-stroke-subtle bg-white px-2.5 py-2"
-                >
-                  <FileText className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-text-primary truncate" title={row.filename}>
-                      {row.filename}
-                    </p>
-                    <p className="text-[10px] text-text-tertiary">
-                      {fileTypeLabel(row.file_type)} · {formatFileSize(row.file_size)}
-                    </p>
-                  </div>
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenFile?.(row)}
+                    disabled={!onOpenFile}
+                    className="flex w-full items-center gap-2 rounded-md border border-stroke-subtle bg-white px-2.5 py-2 text-left transition-colors hover:bg-surface-subtle disabled:cursor-default disabled:hover:bg-white"
+                  >
+                    <FileText className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-text-primary truncate" title={row.filename}>
+                        {row.filename}
+                      </p>
+                      <p className="text-[10px] text-text-tertiary">
+                        {fileTypeLabel(row.file_type)} · {formatFileSize(row.file_size)}
+                      </p>
+                    </div>
+                  </button>
                 </li>
               ))}
             </ul>
