@@ -85,7 +85,7 @@ export function ProjectOutputsSection({
       <p className="mb-3 pl-6 text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
         Outputs
       </p>
-      <div className="overflow-visible rounded-2xl border border-stroke-subtle bg-white p-3 sm:p-4">
+      <div className="mx-auto w-[90%] overflow-visible rounded-2xl border border-stroke-subtle bg-white p-3 sm:p-4">
         {loading ? (
           <div className="flex justify-center py-5">
             <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
