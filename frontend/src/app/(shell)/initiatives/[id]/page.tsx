@@ -1067,8 +1067,6 @@ function InitiativePageContent() {
           onAssessmentApprovalChange={() => loadFrameworkAssessmentInstances(initiativeId, { force: true })}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
-          assessmentInstances={frameworkAssessmentInstances}
-          onOpenAssessmentInstance={handleOpenExistingAssessmentInstanceInAssessmentsView}
         />
       );
     }
@@ -1132,8 +1130,6 @@ function InitiativePageContent() {
           showDetailPanel={false}
           onAssumptionSelectInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
-          assessmentInstances={frameworkAssessmentInstances}
-          onOpenAssessmentInstance={handleOpenExistingAssessmentInstanceInAssessmentsView}
         />
       );
     }

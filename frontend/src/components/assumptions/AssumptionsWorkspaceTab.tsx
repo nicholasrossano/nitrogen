@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Plus, Sparkles } from 'lucide-react';
 
-import { AssessmentInstanceOpenDropdown } from '@/components/framework/AssessmentInstanceOpenDropdown';
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
 import { CitationChip } from '@/components/ui/CitationChip';
@@ -12,7 +11,6 @@ import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import {
   api,
   type Assumption,
-  type AssessmentInstance,
   type AssumptionSourceType,
   type AssumptionStatus,
 } from '@/lib/api';
@@ -28,8 +26,6 @@ interface AssumptionsWorkspaceTabProps {
   focusAssumptionId?: string | null;
   onAssumptionSelectInChat?: (assumption: Assumption) => void;
   onAddAssumptionInChat?: () => void;
-  assessmentInstances?: AssessmentInstance[];
-  onOpenAssessmentInstance?: (instance: AssessmentInstance) => Promise<void> | void;
 }
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
@@ -196,8 +192,6 @@ export function AssumptionsWorkspaceTab({
   focusAssumptionId = null,
   onAssumptionSelectInChat,
   onAddAssumptionInChat,
-  assessmentInstances = [],
-  onOpenAssessmentInstance,
 }: AssumptionsWorkspaceTabProps) {
   const [rows, setRows] = useState<Assumption[]>([]);
   const [selected, setSelected] = useState<Assumption | null>(null);
@@ -370,23 +364,6 @@ export function AssumptionsWorkspaceTab({
     },
     { key: 'source_type', header: 'Source', className: 'min-w-[180px] max-w-[240px]', render: (row) => <SourceCell row={row} /> },
     { key: 'last_updated_by_email', header: 'Updated By', className: 'whitespace-nowrap min-w-[150px]', render: (row) => row.last_updated_by_email || row.created_by_email || 'system' },
-    {
-      key: 'used_in_assessments',
-      header: 'Assessments',
-      className: 'min-w-[180px]',
-      render: (row) => {
-        const relevantInstances = assessmentInstances.filter((instance) => row.used_in_assessments.includes(instance.assessment_id));
-        if (relevantInstances.length === 0) return '—';
-        if (!onOpenAssessmentInstance) return `${relevantInstances.length} linked`;
-        return (
-          <AssessmentInstanceOpenDropdown
-            instances={relevantInstances}
-            onOpenInstance={onOpenAssessmentInstance}
-            getInstanceLabel={(instance) => instance.display_name || instance.title || instance.assessment_id.replace(/_/g, ' ')}
-          />
-        );
-      },
-    },
   ];
 
   const updateSelected = useCallback(async (updates: Partial<Assumption>) => {
