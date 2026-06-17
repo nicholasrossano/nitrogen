@@ -633,7 +633,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                                     {selected ? <Check className="w-3.5 h-3.5" /> : null}
                                   </span>
                                   <span className="truncate">
-                                    {workspace.name} · {workspace.workspace_type === 'personal' ? 'Personal' : 'Team'}
+                                    {workspace.name}
                                   </span>
                                 </button>
                               );

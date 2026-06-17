@@ -2,17 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { PersonalChatSurface } from '@/components/chat-shell/PersonalChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
-import { ChangeProjectSelect } from '@/components/chat-shell/ChangeProjectSelect';
-import { writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
+import { ChangeProjectSelect, resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
+import { readLastProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
 import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
-import { PromoteFindingDialog } from '@/components/chat-shell/PromoteFindingDialog';
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { AssumptionsChatPanel } from '@/components/assumptions/AssumptionsChatPanel';
 import { EditorSidePanel, type EditorWidget } from '@/components/editor/EditorSidePanel';
@@ -32,6 +30,7 @@ import {
   readChatEditorPanelWidth,
   writeChatEditorPanelWidth,
 } from '@/components/ui/chatSidebarLayout';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 const FLOATING_PANEL_CLASS = `absolute z-20 right-3 flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`;
 const RIGHT_MARGIN_PX = 12;
@@ -43,10 +42,10 @@ function ChatWorkbenchContent() {
   const { activeWorkspace, loadWorkspaces } = useWorkspaceStore();
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [hasMessages, setHasMessages] = useState(false);
   const [editorWidgets, setEditorWidgets] = useState<EditorWidget[]>([]);
   const [pinnedEditorWidgets, setPinnedEditorWidgets] = useState<EditorWidget[] | null>(null);
-  const [promoteTarget, setPromoteTarget] = useState<{ messageId: string; body: string } | null>(null);
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const [assumptionsWorkspaceOpen, setAssumptionsWorkspaceOpen] = useState(false);
   const [focusedAssumptionId, setFocusedAssumptionId] = useState<string | null>(null);
@@ -62,16 +61,42 @@ function ChatWorkbenchContent() {
   }, [activeWorkspace, loadWorkspaces]);
 
   useEffect(() => {
-    if (!activeWorkspace?.id) return;
-    api.listProjects(100, 0, false, activeWorkspace.id).then(setProjects).catch(() => setProjects([]));
+    if (!activeWorkspace?.id) {
+      setProjects([]);
+      setProjectsLoaded(false);
+      return;
+    }
+    setProjectsLoaded(false);
+    api.listProjects(100, 0, false, activeWorkspace.id)
+      .then(setProjects)
+      .catch(() => setProjects([]))
+      .finally(() => setProjectsLoaded(true));
   }, [activeWorkspace?.id]);
 
-  useEffect(() => {
-    if (selectedProjectId) {
-      void useInitiativeStore.getState().loadInitiative(selectedProjectId);
-      writeLastProjectId(selectedProjectId);
+  const effectiveProjectId = useMemo(() => {
+    if (selectedProjectId && projects.some((project) => project.id === selectedProjectId)) {
+      return selectedProjectId;
     }
-  }, [selectedProjectId]);
+    if (projects.length === 0) return null;
+    return resolveDefaultProjectId(projects, readLastProjectId());
+  }, [projects, selectedProjectId]);
+
+  useEffect(() => {
+    if (!projectsLoaded || !effectiveProjectId) return;
+    if (effectiveProjectId === selectedProjectId) return;
+
+    const params = new URLSearchParams();
+    params.set('project', effectiveProjectId);
+    if (activeChatId) params.set('chat', activeChatId);
+    router.replace(`/chat?${params.toString()}`);
+  }, [activeChatId, effectiveProjectId, projectsLoaded, router, selectedProjectId]);
+
+  useEffect(() => {
+    if (effectiveProjectId) {
+      void useInitiativeStore.getState().loadInitiative(effectiveProjectId);
+      writeLastProjectId(effectiveProjectId);
+    }
+  }, [effectiveProjectId]);
 
   useEffect(() => {
     setPinnedEditorWidgets(null);
@@ -79,17 +104,17 @@ function ChatWorkbenchContent() {
     setAssumptionsWorkspaceOpen(false);
     setFocusedAssumptionId(null);
     setAssumptionsCreateNew(false);
-  }, [selectedProjectId, activeChatId]);
+  }, [effectiveProjectId, activeChatId]);
 
   const selectedProject = useMemo(
-    () => projects.find((p) => p.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId],
+    () => projects.find((p) => p.id === effectiveProjectId) ?? null,
+    [projects, effectiveProjectId],
   );
 
   const effectiveEditorWidgets = pinnedEditorWidgets ?? editorWidgets;
-  const showAssumptionsWorkspace = assumptionsWorkspaceOpen && Boolean(selectedProjectId);
+  const showAssumptionsWorkspace = assumptionsWorkspaceOpen && Boolean(effectiveProjectId);
   const showAssumptionsSidePanel = showAssumptionsWorkspace && (Boolean(focusedAssumptionId) || assumptionsCreateNew);
-  const showContextStack = !hasMessages && Boolean(selectedProjectId) && !showAssumptionsWorkspace;
+  const showContextStack = !hasMessages && Boolean(effectiveProjectId) && !showAssumptionsWorkspace;
   const showEditorPanel = effectiveEditorWidgets.length > 0;
   const reserveRightSpace = showContextStack || showEditorPanel || showAssumptionsSidePanel;
   const rightGutter = showEditorPanel
@@ -127,20 +152,20 @@ function ChatWorkbenchContent() {
   }, [editorPanelWidthPx, isResizingEditorPanel]);
 
   const handleChangeProject = useCallback((projectId: string) => {
-    if (!projectId || projectId === selectedProjectId) return;
+    if (!projectId || projectId === effectiveProjectId) return;
     writeLastProjectId(projectId);
     router.replace(`/chat?project=${projectId}`);
-  }, [router, selectedProjectId]);
+  }, [effectiveProjectId, router]);
 
   const changeProjectControl = useMemo(() => (
     projects.length > 0 ? (
       <ChangeProjectSelect
         projects={projects}
-        value={selectedProjectId}
+        value={effectiveProjectId}
         onChange={handleChangeProject}
       />
     ) : null
-  ), [handleChangeProject, projects, selectedProjectId]);
+  ), [effectiveProjectId, handleChangeProject, projects]);
 
   const handleCloseEditorPanel = useCallback(() => {
     setPinnedEditorWidgets(null);
@@ -187,11 +212,6 @@ function ChatWorkbenchContent() {
     setPinnedEditorWidgets([editorWidgetForProjectMaterial(file)]);
   }, []);
 
-  const handlePromoteMessage = useCallback((messageId: string, body: string) => {
-    if (!selectedProjectId) return;
-    setPromoteTarget({ messageId, body });
-  }, [selectedProjectId]);
-
   const handleChatListDirty = useCallback(() => {
     chatShell?.refreshDrawer();
   }, [chatShell]);
@@ -199,10 +219,10 @@ function ChatWorkbenchContent() {
   const handleChatIdResolved = useCallback((chatId: string) => {
     const params = new URLSearchParams();
     params.set('chat', chatId);
-    if (selectedProjectId) params.set('project', selectedProjectId);
+    if (effectiveProjectId) params.set('project', effectiveProjectId);
     router.replace(`/chat?${params.toString()}`);
     chatShell?.refreshDrawer();
-  }, [chatShell, router, selectedProjectId]);
+  }, [chatShell, effectiveProjectId, router]);
 
   const handleOpenAssumptionsView = useCallback((assumption?: Assumption) => {
     setAssumptionsWorkspaceOpen(true);
@@ -218,12 +238,6 @@ function ChatWorkbenchContent() {
   const handleAddAssumptionInChat = useCallback(() => {
     setFocusedAssumptionId(null);
     setAssumptionsCreateNew(true);
-  }, []);
-
-  const handleBackToChatLanding = useCallback(() => {
-    setAssumptionsWorkspaceOpen(false);
-    setFocusedAssumptionId(null);
-    setAssumptionsCreateNew(false);
   }, []);
 
   useEffect(() => {
@@ -244,32 +258,18 @@ function ChatWorkbenchContent() {
         style={{ paddingRight: rightGutter }}
       >
         <div className="flex-1 min-h-0">
-          {showAssumptionsWorkspace && selectedProjectId ? (
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="shrink-0 flex items-center gap-2 border-b border-divider px-4 py-2.5">
-                <button
-                  type="button"
-                  onClick={handleBackToChatLanding}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text-primary"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to chat
-                </button>
-              </div>
-              <div className="flex-1 min-h-0">
-                <AssumptionsWorkspaceTab
-                  initiativeId={selectedProjectId}
-                  showDetailPanel={false}
-                  focusAssumptionId={focusedAssumptionId}
-                  onAssumptionSelectInChat={handleAssumptionSelectInWorkspace}
-                  onAddAssumptionInChat={handleAddAssumptionInChat}
-                />
-              </div>
-            </div>
-          ) : selectedProjectId ? (
+          {showAssumptionsWorkspace && effectiveProjectId ? (
+            <AssumptionsWorkspaceTab
+              initiativeId={effectiveProjectId}
+              showDetailPanel={false}
+              focusAssumptionId={focusedAssumptionId}
+              onAssumptionSelectInChat={handleAssumptionSelectInWorkspace}
+              onAddAssumptionInChat={handleAddAssumptionInChat}
+            />
+          ) : effectiveProjectId ? (
             <ProjectChatSurface
-              key={selectedProjectId}
-              initiativeId={selectedProjectId}
+              key={effectiveProjectId}
+              initiativeId={effectiveProjectId}
               initialChatId={activeChatId}
               useLandingWhenEmpty
               hideTiles
@@ -283,12 +283,10 @@ function ChatWorkbenchContent() {
               onChatMetaChange={({ chatId }) => {
                 if (chatId && chatId !== activeChatId) handleChatIdResolved(chatId);
               }}
-              showPromoteFinding
-              onPromoteMessage={handlePromoteMessage}
               onChatListDirty={handleChatListDirty}
               composerLeadingActions={changeProjectControl}
             />
-          ) : (
+          ) : projectsLoaded ? (
             <PersonalChatSurface
               key="personal"
               initialChatId={activeChatId}
@@ -298,6 +296,10 @@ function ChatWorkbenchContent() {
               onChatIdResolved={handleChatIdResolved}
               composerLeadingActions={changeProjectControl}
             />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <PageLoader label="" />
+            </div>
           )}
         </div>
       </div>
@@ -313,7 +315,7 @@ function ChatWorkbenchContent() {
           </div>
           <div className="pointer-events-auto flex-1 min-h-[8rem] flex flex-col min-w-0">
             <ProjectAssumptionsPanel
-              projectId={selectedProjectId}
+              projectId={effectiveProjectId}
               refreshKey={contextRefreshKey}
               onAssumptionSelect={(assumption) => handleOpenAssumptionsView(assumption)}
               onViewAll={() => handleOpenAssumptionsView()}
@@ -321,7 +323,7 @@ function ChatWorkbenchContent() {
           </div>
           <div className="pointer-events-auto min-h-0 flex flex-col min-w-0">
             <ProjectFilesPanel
-              projectId={selectedProjectId}
+              projectId={effectiveProjectId}
               refreshKey={contextRefreshKey}
               onOpenFile={handleOpenProjectFile}
             />
@@ -329,7 +331,7 @@ function ChatWorkbenchContent() {
         </div>
       )}
 
-      {showEditorPanel && selectedProjectId && (
+      {showEditorPanel && effectiveProjectId && (
         <aside
           className={`${FLOATING_PANEL_CLASS} top-3 bottom-3 ${isResizingEditorPanel ? '' : 'transition-[width] duration-300 ease-in-out'}`}
           style={{ width: editorPanelWidthPx }}
@@ -350,16 +352,16 @@ function ChatWorkbenchContent() {
           </div>
           <EditorSidePanel
             widgets={effectiveEditorWidgets}
-            initiativeId={selectedProjectId}
+            initiativeId={effectiveProjectId}
             onClose={handleCloseEditorPanel}
           />
         </aside>
       )}
 
-      {showAssumptionsSidePanel && selectedProjectId && (
+      {showAssumptionsSidePanel && effectiveProjectId && (
         <aside className={`${FLOATING_PANEL_CLASS} top-3 bottom-3 w-[min(22rem,34vw)]`}>
           <AssumptionsChatPanel
-            initiativeId={selectedProjectId}
+            initiativeId={effectiveProjectId}
             focusAssumptionId={focusedAssumptionId}
             createNew={assumptionsCreateNew}
             layoutMode="panel"
@@ -367,20 +369,6 @@ function ChatWorkbenchContent() {
         </aside>
       )}
 
-      {promoteTarget && selectedProjectId && (
-        <PromoteFindingDialog
-          open
-          projectId={selectedProjectId}
-          projectName={selectedProject?.name}
-          messageId={promoteTarget.messageId}
-          initialBody={promoteTarget.body}
-          onClose={() => setPromoteTarget(null)}
-          onPromoted={() => {
-            setContextRefreshKey((k) => k + 1);
-            setPromoteTarget(null);
-          }}
-        />
-      )}
     </div>
   );
 }

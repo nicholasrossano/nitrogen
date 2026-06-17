@@ -62,6 +62,11 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
       router.replace(`/chat?project=${projectId}`);
       return;
     }
+    const lastProjectId = readLastProjectId();
+    if (lastProjectId) {
+      router.replace(`/chat?project=${lastProjectId}`);
+      return;
+    }
     router.replace('/chat');
   }, [pathname, router, searchParams]);
 
