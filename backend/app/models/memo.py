@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
@@ -15,11 +15,12 @@ class MemoVersion(Base):
         primary_key=True, 
         default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
-        index=True
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        index=True,
     )
+    initiative_id = synonym("project_id")
     
     # Memo content (structured JSON)
     content: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -34,7 +35,7 @@ class MemoVersion(Base):
     )
     
     # Relationships
-    initiative: Mapped["Initiative"] = relationship(back_populates="memo_versions")
+    project: Mapped["Project"] = relationship(back_populates="memo_versions")
     citations: Mapped[list["Citation"]] = relationship(
         back_populates="memo_version", 
         cascade="all, delete-orphan"
@@ -75,4 +76,4 @@ class Citation(Base):
 
 
 # Import for relationship typing
-from app.models.initiative import Initiative  # noqa: E402
+from app.models.project import Project  # noqa: E402

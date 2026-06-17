@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
@@ -17,10 +18,16 @@ class CoreChat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Nullable: landing-page chats have no project; project-scoped chats do
-    initiative_id: Mapped[uuid.UUID | None] = mapped_column(
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="SET NULL"),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    initiative_id = synonym("project_id")
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -31,8 +38,8 @@ class CoreChat(Base):
         index=True,
     )
 
-    # Compare mode: pair of initiative UUIDs (as strings), null for regular sessions
-    compare_initiative_ids: Mapped[list | None] = mapped_column(JSONB)
+    compare_project_ids: Mapped[list | None] = mapped_column(JSONB)
+    compare_initiative_ids = synonym("compare_project_ids")
 
     messages: Mapped[list["CoreChatMessage"]] = relationship(
         back_populates="chat", cascade="all, delete-orphan", order_by="CoreChatMessage.created_at"
@@ -47,21 +54,15 @@ class CoreChatMessage(Base):
     chat_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("core_chats.id", ondelete="CASCADE"), index=True
     )
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user | assistant
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Research metadata (assistant messages only)
-    sources: Mapped[list | None] = mapped_column(JSONB)            # [{source_type, source_title, source_url, ...}]
-    thinking_lines: Mapped[list | None] = mapped_column(JSONB)     # ["Searching corpus...", ...]
-    completion_meta: Mapped[dict | None] = mapped_column(JSONB)    # {latency_ms, citation_count, tiers_used}
-
-    # Widget attachment (for LCOE / Carbon outputs)
+    sources: Mapped[list | None] = mapped_column(JSONB)
+    thinking_lines: Mapped[list | None] = mapped_column(JSONB)
+    completion_meta: Mapped[dict | None] = mapped_column(JSONB)
     widget_type: Mapped[str | None] = mapped_column(String(50))
     widget_data: Mapped[dict | None] = mapped_column(JSONB)
-
-    # User feedback — "like" | "dislike" | null
     feedback: Mapped[str | None] = mapped_column(String(20))
-
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     chat: Mapped["CoreChat"] = relationship(back_populates="messages")

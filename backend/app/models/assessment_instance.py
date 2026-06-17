@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
 from sqlalchemy import String, DateTime, ForeignKey, Index, Integer
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
-    from app.models.initiative import Initiative
+    from app.models.project import Project
 
 
 class AssessmentInstanceStatus(str, Enum):
@@ -45,18 +45,19 @@ class AssessmentInstance(Base):
     __tablename__ = "assessment_instances"
 
     __table_args__ = (
-        Index("ix_mi_initiative_assessment", "initiative_id", "assessment_id"),
-        Index("ix_mi_initiative_chat", "initiative_id", "chat_id"),
+        Index("ix_mi_project_assessment", "project_id", "assessment_id"),
+        Index("ix_mi_project_chat", "project_id", "chat_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     assessment_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="started")
     title: Mapped[str | None] = mapped_column(String(255))
@@ -87,7 +88,7 @@ class AssessmentInstance(Base):
         nullable=False,
     )
 
-    initiative: Mapped["Initiative"] = relationship(back_populates="assessment_instances")
+    project: Mapped["Project"] = relationship(back_populates="assessment_instances")
 
     @property
     def is_plan_complete(self) -> bool:

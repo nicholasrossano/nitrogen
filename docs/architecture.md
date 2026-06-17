@@ -1,6 +1,10 @@
 # Nitrogen Architecture
 
-Nitrogen now exposes one canonical staged assessment workflow driven by `StageDef[]`.
+Nitrogen is a chat-first diligence workbench: **projects** hold shared deal state; **core chat** handles personal and project-scoped research; **findings** and **assumptions** capture promoted team knowledge. The backend is FastAPI + PostgreSQL/pgvector; the frontend is Next.js.
+
+Legacy `/api/v1/initiatives/*` routes remain as compatibility aliases — they operate on the `projects` table after migration `061`.
+
+## Assessment workflow
 
 Every workspace assessment is an ordered set of confirmable stages stored on `assessment_instances.workflow_state`. The difference between assessment families is not a separate lifecycle; it is only which stage components and population steps they declare.
 

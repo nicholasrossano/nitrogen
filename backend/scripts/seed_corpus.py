@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Seed the corpus with 5 clean cooking case studies.
-Run after migrations: python scripts/seed_corpus.py
+Seed the corpus with synthetic public-domain-style case study snippets for demos.
+All narratives below are fictional composites for local development — safe to ship in the OSS repo.
+Run after migrations: python3 scripts/seed_corpus.py
 """
 
 import asyncio

@@ -19,9 +19,8 @@ from app.core.permissions import (
     require_owner,
 )
 from app.core.storage import get_storage
-from app.models.initiative import Initiative
+from app.models.project import Initiative
 from app.models.assessment_instance import AssessmentInstance
-from app.models.onboarding import ChatMessage
 from app.models.memo import MemoVersion
 from app.models.evidence import EvidenceDoc
 from app.models.google_drive import DriveLinkedFile
@@ -58,7 +57,7 @@ async def _generate_unique_slug(db: AsyncSession, user_id: str, title: str | Non
     base = _slugify(title) if title else 'project'
     result = await db.execute(
         select(Initiative.slug).where(
-            Initiative.user_id == user_id,
+            Initiative.created_by == user_id,
             Initiative.slug.like(f"{base}%"),
         )
     )
@@ -258,15 +257,6 @@ async def create_initiative(
     db.add(initiative)
     await db.commit()
     await db.refresh(initiative)
-    
-    initial_message = ChatMessage(
-        initiative_id=initiative.id,
-        role="assistant",
-        content="Briefly describe your project.",
-    )
-    db.add(initial_message)
-    await db.commit()
-    await db.refresh(initiative)
 
     owner_user = await db.get(User, initiative.user_id)
     owner_email = owner_user.email if owner_user else None
@@ -310,16 +300,6 @@ async def confirm_initiative(
     
     initiative.stage_1_complete = True
     initiative.stage = "evidence"
-    await db.commit()
-    
-    confirm_message = ChatMessage(
-        initiative_id=initiative.id,
-        role="assistant",
-        content="Great! Your initiative is confirmed. Now let's add some supporting evidence. You can upload a document or paste text.",
-        widget_type="evidence_input",
-        widget_data={"status": "ready"},
-    )
-    db.add(confirm_message)
     await db.commit()
     
     return InitiativeConfirmResponse(

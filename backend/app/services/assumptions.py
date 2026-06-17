@@ -360,7 +360,10 @@ async def extract_assumptions_from_cited_chat_sources(
             status="extracted",
             used_in_assessments=candidate["used_in_assessments"],
             actor=actor,
+            allow_create=False,
         )
+        if assumption is None:
+            continue
         touched.append(assumption)
     return touched
 
@@ -564,7 +567,8 @@ async def upsert_assumption(
     actor: AssumptionActor | None = None,
     notes: str | None = None,
     replace_validated: bool = False,
-) -> tuple[Assumption, bool]:
+    allow_create: bool = True,
+) -> tuple[Assumption | None, bool]:
     normalized_key = normalize_assumption_key(key)
     definition = _definition_for_key(normalized_key)
     result = await db.execute(
@@ -584,6 +588,9 @@ async def upsert_assumption(
     if normalized_value is None and normalized_status != "missing":
         normalized_status = "missing"
     now = datetime.now(timezone.utc)
+
+    if existing is None and not allow_create:
+        return None, False
 
     if existing:
         if existing.status == "validated" and not replace_validated and source_type in {"extraction", "model_candidate"}:
@@ -793,7 +800,10 @@ async def sync_stage_assumptions(
             used_in_assessments=[assessment_id],
             actor=actor,
             replace_validated=True,
+            allow_create=False,
         )
+        if assumption is None:
+            continue
         binding = await upsert_assumption_binding(
             db,
             initiative_id=initiative_id,
@@ -1182,10 +1192,122 @@ async def extract_assumptions_from_sources(
             status="extracted",
             used_in_assessments=definition.used_in_assessments,
             actor=actor if actor.email else AssumptionActor.system(),
+            allow_create=False,
         )
+        if assumption is None:
+            continue
         touched.append(assumption)
         if created:
             created_count += 1
         else:
             updated_count += 1
     return created_count, updated_count, touched
+
+
+async def extract_assumptions_from_finding(
+    db: AsyncSession,
+    initiative: Initiative,
+    *,
+    finding_id: UUID,
+    body: str,
+    sources: list[Any] | None,
+    chat_message_id: UUID | None,
+    actor: AssumptionActor,
+) -> list[Assumption]:
+    """Extract structured assumptions when a chat message graduates to a project finding."""
+    assessments = _assessment_ids_from_initiative(initiative)
+    definitions = expected_assumptions_for_assessments(assessments)
+    text = (body or "").strip()
+    if not text or not definitions:
+        return []
+
+    schema_lines = [
+        {
+            "key": d.key,
+            "label": d.label,
+            "value_type": d.value_type,
+            "unit": d.unit,
+            "aliases": d.aliases,
+            "examples": d.examples,
+        }
+        for d in definitions
+    ]
+    sources_blob = json.dumps(sources[:8], indent=2) if sources else "[]"
+    system_prompt = (
+        "Extract reusable project assumptions from a promoted team finding. "
+        "Be conservative.\n\n"
+        "Include an assumption only when the finding states a concrete value for one of the configured keys. "
+        "Do NOT extract mere entities, themes, or summaries without a parameter value.\n\n"
+        "Return JSON with an 'assumptions' array. Each item must include:\n"
+        "- key\n"
+        "- value\n"
+        "- optional unit\n"
+        "- source_quote (verbatim evidence from the finding)\n"
+        "- status ('validated' for direct explicit statements, otherwise 'extracted')."
+    )
+    user_prompt = (
+        "Expected assumption config:\n"
+        f"{json.dumps(schema_lines, indent=2)}\n\n"
+        f"Promoted finding:\n{text[:MAX_EXTRACTION_CHARS]}\n\n"
+        f"Cited sources (if any):\n{sources_blob}"
+    )
+    try:
+        client, is_byok = await get_openai_client(actor.user_id, db)
+        response = await client.chat.completions.create(
+            model=settings.openai_generation_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+        )
+        await record_usage_from_response(
+            actor.user_id or "",
+            settings.openai_generation_model,
+            response,
+            db,
+            is_byok=is_byok,
+        )
+        payload = json.loads(response.choices[0].message.content or "{}")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Finding assumption extraction failed: %s", exc, exc_info=True)
+        payload = {}
+
+    touched: list[Assumption] = []
+    extracted_at = datetime.now(timezone.utc).isoformat()
+    for raw in payload.get("assumptions", []):
+        if not isinstance(raw, dict):
+            continue
+        key = normalize_assumption_key(str(raw.get("key") or ""))
+        definition = _definition_for_key(key)
+        if definition is None:
+            continue
+        value = raw.get("value")
+        if value in (None, ""):
+            continue
+        if not _passes_extraction_quality_gate(raw, definition):
+            continue
+        assumption, _created = await upsert_assumption(
+            db,
+            initiative_id=initiative.id,
+            key=key,
+            value=value,
+            label=definition.label,
+            unit=raw.get("unit") or definition.unit,
+            value_type=definition.value_type,
+            source_type="promotion",
+            source_reference={
+                "finding_id": str(finding_id),
+                "chat_message_id": str(chat_message_id) if chat_message_id else None,
+                "quote": raw.get("source_quote"),
+                "extracted_at": extracted_at,
+            },
+            status=normalize_assumption_status(str(raw.get("status") or "extracted")),
+            used_in_assessments=definition.used_in_assessments,
+            actor=actor,
+            allow_create=True,
+        )
+        if assumption is not None:
+            touched.append(assumption)
+    return touched

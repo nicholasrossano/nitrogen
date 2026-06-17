@@ -278,6 +278,7 @@ async def _get_or_create_chat(
 @router.get("/chats")
 async def list_chats(
     initiative_id: Optional[str] = None,
+    project_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
@@ -296,6 +297,7 @@ async def list_chats(
             CoreChat.updated_at,
             CoreChat.compare_initiative_ids,
             CoreChat.initiative_id,
+            CoreChat.project_id,
             CoreChat.assumption_id,
             func.count(CoreChatMessage.id).label("message_count"),
         )
@@ -313,6 +315,13 @@ async def list_chats(
             raise HTTPException(status_code=400, detail="Invalid initiative_id")
         query = query.where(CoreChat.initiative_id == init_uuid)
 
+    if project_id:
+        try:
+            proj_uuid = uuid.UUID(project_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid project_id")
+        query = query.where(CoreChat.project_id == proj_uuid)
+
     result = await db.execute(query)
     rows = result.all()
 
@@ -326,6 +335,7 @@ async def list_chats(
                 "message_count": r.message_count,
                 "compare_initiative_ids": r.compare_initiative_ids,
                 "initiative_id": str(r.initiative_id) if r.initiative_id else None,
+                "project_id": str(r.project_id) if getattr(r, "project_id", None) else None,
                 "assumption_id": str(r.assumption_id) if r.assumption_id else None,
             }
             for r in rows

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Text, BigInteger, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -15,11 +15,12 @@ class ProjectMaterial(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         index=True,
     )
+    initiative_id = synonym("project_id")
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -38,9 +39,9 @@ class ProjectMaterial(Base):
         default=datetime.utcnow,
     )
 
-    initiative: Mapped["Initiative"] = relationship(back_populates="project_materials")
+    project: Mapped["Project"] = relationship(back_populates="project_materials")
     workspace: Mapped["Workspace"] = relationship()
 
 
-from app.models.initiative import Initiative  # noqa: E402
+from app.models.project import Project  # noqa: E402
 from app.models.workspace import Workspace  # noqa: E402

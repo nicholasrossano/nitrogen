@@ -3,8 +3,8 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'Nitrogen AI',
-  description: 'Artificial intelligence powering sustainable development',
+  title: 'Nitrogen',
+  description: 'Chat-first climate-impact investment diligence',
 };
 
 export default function RootLayout({

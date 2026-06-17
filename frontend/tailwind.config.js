@@ -101,6 +101,7 @@ module.exports = {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Urbanist', 'Inter', 'system-ui', 'sans-serif'],
+        serif: ["'Times New Roman'", 'Times', 'serif'],
       },
       borderRadius: {
         none: '0',
