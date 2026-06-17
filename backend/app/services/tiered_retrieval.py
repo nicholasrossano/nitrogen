@@ -24,15 +24,10 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.domain.registry import get_retrieval_connectors
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
 from app.services.workspace_knowledge import WorkspaceKnowledgeService
-from app.domain.energy.services.worldbank import (
-    WorldBankIndicatorService,
-    WorldBankDocumentService,
-    WorldBankProjectService,
-)
-from app.domain.energy.services.iati import IATIService
 from app.models.initiative import Initiative
 from app.models.project_material import ProjectMaterial
 from app.models.evidence import EvidenceDoc
@@ -181,10 +176,12 @@ class TieredRetrievalService:
         self.rag = RAGService(db)
         self.workspace_knowledge = WorkspaceKnowledgeService(db, user_id=user_id)
         self.openalex = OpenAlexService()
-        self.worldbank_indicators = WorldBankIndicatorService()
-        self.worldbank_documents = WorldBankDocumentService()
-        self.worldbank_projects = WorldBankProjectService()
-        self.iati = IATIService()
+        self._retrieval_connectors = None
+
+    def _domain_connectors(self):
+        if self._retrieval_connectors is None:
+            self._retrieval_connectors = get_retrieval_connectors()
+        return self._retrieval_connectors
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -510,8 +507,11 @@ class TieredRetrievalService:
         country_hint: str | None = None,
     ) -> list[RetrievedFact]:
         """Search World Bank Open Data indicators."""
+        connectors = self._domain_connectors()
+        if connectors is None:
+            return []
         try:
-            rows = await self.worldbank_indicators.search_indicators(
+            rows = await connectors.worldbank_indicators.search_indicators(
                 query=query,
                 country_hint=country_hint,
                 latest_only=True,
@@ -541,8 +541,11 @@ class TieredRetrievalService:
 
     async def search_worldbank_documents(self, query: str) -> list[RetrievedFact]:
         """Search World Bank Documents & Reports."""
+        connectors = self._domain_connectors()
+        if connectors is None:
+            return []
         try:
-            rows = await self.worldbank_documents.search_documents(query=query, max_results=8)
+            rows = await connectors.worldbank_documents.search_documents(query=query, max_results=8)
             facts: list[RetrievedFact] = []
             for row in rows:
                 parts = [row.title]
@@ -570,8 +573,11 @@ class TieredRetrievalService:
 
     async def search_worldbank_projects(self, query: str) -> list[RetrievedFact]:
         """Search World Bank Projects & Operations."""
+        connectors = self._domain_connectors()
+        if connectors is None:
+            return []
         try:
-            rows = await self.worldbank_projects.search_projects(query=query, max_results=8)
+            rows = await connectors.worldbank_projects.search_projects(query=query, max_results=8)
             facts: list[RetrievedFact] = []
             for row in rows:
                 parts = [row.project_name]
@@ -603,8 +609,11 @@ class TieredRetrievalService:
 
     async def search_iati(self, query: str) -> list[RetrievedFact]:
         """Search IATI Datastore funding activity."""
+        connectors = self._domain_connectors()
+        if connectors is None:
+            return []
         try:
-            rows = await self.iati.search_activities(query=query, max_results=8)
+            rows = await connectors.iati.search_activities(query=query, max_results=8)
             facts: list[RetrievedFact] = []
             for row in rows:
                 parts = [row.title]

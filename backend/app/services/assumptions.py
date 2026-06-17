@@ -18,6 +18,7 @@ from app.assumptions.config import (
 )
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.domain.resolver import get_active_domain
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.initiative import Initiative
@@ -95,6 +96,8 @@ def _coerce_assessments(assessments: list[str] | None, definition: AssumptionDef
 
 def suggest_assumption_candidates(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Suggest durable assumption candidates from retrieved World Bank indicators."""
+    if get_active_domain() != "energy":
+        return []
     candidates: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
 
@@ -192,6 +195,8 @@ def build_chat_assumption_candidate(
     answer_content: str,
 ) -> dict[str, Any] | None:
     """Build a syntactic assumption candidate from a cited indicator fact."""
+    if get_active_domain() != "energy":
+        return None
     if _source_type_value(getattr(fact, "source_type", None)) != "worldbank_indicator":
         return None
     if not _fact_was_cited(answer_content, fact):

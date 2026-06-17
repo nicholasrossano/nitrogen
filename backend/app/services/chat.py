@@ -50,11 +50,7 @@ You have these data sources available:
 - search_project_documents: initiative-specific uploaded materials and evidence context
 - search_workspace_context: workspace-level guidance (shared files + linked knowledge banks)
 - search_scholarly_literature: peer-reviewed papers, empirical studies, impact evaluations
-- search_country_indicators: World Bank Open Data indicators for country baselines
-- search_institutional_reports: World Bank Documents & Reports for institutional evidence
-- search_comparable_projects: World Bank Projects & Operations for precedent projects
-- search_funding_activity: IATI Datastore funding activity records
-- search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
+{domain_retrieval_sources}- search_web_sources: NGO reports, government data, standards bodies, news, market info, practical guidance
 - propose_input_value: proposes a specific value for a model input field when the user asks to investigate, estimate, or determine a value for a specific LCOE, Carbon, or Solar model input field
 - propose_template_value: proposes a value for a template/form requirement field when the user message contains [TEMPLATE_CONTEXT]
 
@@ -69,11 +65,7 @@ If the context includes an "Active Deep Dive Context" block, treat that as a foc
 Use source-aware routing:
 - Project-specific details from initiative files -> search_project_documents
 - Workspace-level guidance/precedent shared across projects -> search_workspace_context
-- Country macro/market indicator baselines (electricity access, GDP, inflation, poverty, population) -> search_country_indicators
-- Institutional strategy, diagnostics, appraisal/completion documents -> search_institutional_reports
-- Comparable financed projects and precedent interventions -> search_comparable_projects
-- Funder landscape / who else is funding what -> search_funding_activity
-- Scholarly evidence (adoption, willingness-to-pay, impact evaluations, intervention studies) -> search_scholarly_literature
+{domain_routing_guidelines}- Scholarly evidence (adoption, willingness-to-pay, impact evaluations, intervention studies) -> search_scholarly_literature
 - Regulations, standards, recent policy/news updates, practical guidance -> search_web_sources
 
 When the request clearly benefits from multiple evidence types, call multiple tools. Do NOT call every search tool by default.
@@ -1391,10 +1383,25 @@ class ChatService:
         if project_context:
             project_block = f"\nActive project context:\n{project_context}\n"
 
+        from app.domain.registry import (
+            format_planning_retrieval_sources,
+            format_planning_routing_guidelines,
+        )
+
+        domain_retrieval_sources = format_planning_retrieval_sources()
+        if domain_retrieval_sources:
+            domain_retrieval_sources += "\n"
+
+        domain_routing_guidelines = format_planning_routing_guidelines()
+        if domain_routing_guidelines:
+            domain_routing_guidelines += "\n"
+
         planning_prompt = PLANNING_SYSTEM_PROMPT.format(
             model_inputs_context=inputs_block,
             assessment_context=assessment_block,
             project_context=project_block,
+            domain_retrieval_sources=domain_retrieval_sources,
+            domain_routing_guidelines=domain_routing_guidelines,
         )
         messages: list[dict] = [{"role": "system", "content": planning_prompt}]
         for msg in (history[-6:] if len(history) > 6 else history):
