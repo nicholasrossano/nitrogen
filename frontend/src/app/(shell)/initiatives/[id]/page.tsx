@@ -197,12 +197,6 @@ function InitiativePageContent() {
     content: string;
     toolHint?: string;
   } | null>(null);
-  const [pendingAssessmentActivityLogRequest, setPendingAssessmentActivityLogRequest] = useState<{
-    requestId: string;
-    instanceId: string;
-    assessmentId: string;
-    title: string;
-  } | null>(null);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>(
     initialWorkspaceUiRef.current?.workspaceTabs ?? [],
@@ -352,6 +346,52 @@ function InitiativePageContent() {
   const overviewWorkspaceOpen = activeView === 'overview' && panelVisibility.overview.workspace;
   const overviewChatOpen = activeView === 'overview' && panelVisibility.overview.chat;
   const assessmentsWorkspaceOpen = activeView === 'assessments' && panelVisibility.assessments.workspace;
+  const activeEditorContext = useMemo(() => {
+    if (!assessmentsWorkspaceOpen || !activeWorkspaceTab) return null;
+
+    switch (activeWorkspaceTab.kind) {
+      case 'document':
+        return {
+          kind: 'document',
+          title: activeWorkspaceTab.title,
+          evidence_doc_id: activeWorkspaceTab.citation.evidence_doc_id,
+          chunk_id: activeWorkspaceTab.citation.chunk_id,
+        };
+      case 'assessment':
+        return {
+          kind: 'assessment',
+          title: activeWorkspaceTab.title,
+          assessment_id: activeWorkspaceTab.assessmentId,
+          instance_id: activeWorkspaceTab.instanceId,
+        };
+      case 'decision-log':
+        return {
+          kind: 'decision-log',
+          title: activeWorkspaceTab.title,
+          assessment_id: activeWorkspaceTab.assessmentId ?? null,
+          instance_id: activeWorkspaceTab.assessmentInstanceId,
+        };
+      case 'activity-log':
+        return {
+          kind: 'activity-log',
+          title: activeWorkspaceTab.title,
+          assessment_id: activeWorkspaceTab.assessmentId,
+          instance_id: activeWorkspaceTab.assessmentInstanceId,
+        };
+      case 'assumptions':
+        return {
+          kind: 'assumptions',
+          title: activeWorkspaceTab.title,
+        };
+      case 'artifacts':
+        return {
+          kind: 'artifacts',
+          title: activeWorkspaceTab.title,
+        };
+      default:
+        return null;
+    }
+  }, [activeWorkspaceTab, assessmentsWorkspaceOpen]);
   const assessmentsChatOpen = activeView === 'assessments' && panelVisibility.assessments.chat;
   const frameworkWorkspaceOpen =
     activeView === 'framework' && (!hasFrameworkSelection || panelVisibility.framework.workspace);
@@ -691,7 +731,6 @@ function InitiativePageContent() {
     setWorkspaceLaunchMode('idle');
     setPendingChatToOpen(null);
     setPendingOverviewAutoSend(null);
-      setPendingAssessmentActivityLogRequest(null);
     setPageReady(false);
     setChromeReady(false);
     setShowOverlay(true);
@@ -864,11 +903,20 @@ function InitiativePageContent() {
     });
   }, [initiativeId, router, setPanelOpen]);
 
-  const openDecisionLogTab = useCallback(
-    (context: { instanceId: string; assessmentId: string; title: string }) => {
+  const openAssessmentWorkspaceLogTab = useCallback(
+    (tab: WorkspacePanelTab) => {
+      setWorkspaceLaunchMode('idle');
+      setPanelOpen('assessments', 'workspace', true);
       setActiveView('assessments');
       router.replace(`/initiatives/${initiativeId}?view=assessments`);
-      openWorkspaceTab({
+      openWorkspaceTab(tab);
+    },
+    [initiativeId, openWorkspaceTab, router, setPanelOpen],
+  );
+
+  const openDecisionLogTab = useCallback(
+    (context: { instanceId: string; assessmentId: string; title: string }) => {
+      openAssessmentWorkspaceLogTab({
         id: `decision-log-${context.instanceId}`,
         kind: 'decision-log',
         title: `[Log] ${context.title}`,
@@ -876,23 +924,21 @@ function InitiativePageContent() {
         assessmentId: context.assessmentId,
       });
     },
-    [initiativeId, openWorkspaceTab, router],
+    [openAssessmentWorkspaceLogTab],
   );
 
-  const openAssessmentActivityLogInChat = useCallback(
+  const openActivityLogTab = useCallback(
     (context: { instanceId: string; assessmentId: string; title: string }) => {
-      setActiveView('assessments');
-      setPanelOpen('assessments', 'workspace', true);
-      setPanelOpen('assessments', 'chat', true);
-      router.replace(`/initiatives/${initiativeId}?view=assessments`);
-      setPendingAssessmentActivityLogRequest({
-        requestId: `assessment-activity-${context.instanceId}-${Date.now()}`,
-        instanceId: context.instanceId,
+      openAssessmentWorkspaceLogTab({
+        id: `activity-log-${context.instanceId}`,
+        kind: 'activity-log',
+        title: `[Agent] ${context.title}`,
+        assessmentInstanceId: context.instanceId,
         assessmentId: context.assessmentId,
-        title: context.title,
+        assessmentTitle: context.title,
       });
     },
-    [initiativeId, router, setPanelOpen],
+    [openAssessmentWorkspaceLogTab],
   );
 
   const exportDecisionLog = useCallback(
@@ -1056,7 +1102,7 @@ function InitiativePageContent() {
             setPanelOpen('assessments', 'chat', true);
             chatSendRef.current?.(content, toolHint);
           }}
-          onOpenAssessmentActivityLogInChat={openAssessmentActivityLogInChat}
+          onOpenAssessmentActivityLog={openActivityLogTab}
           onOpenChatSession={(chat) => {
             setPanelOpen('assessments', 'chat', true);
             setPendingChatToOpen(chat);
@@ -1214,6 +1260,7 @@ function InitiativePageContent() {
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
           activeAssessmentContext={activeAssessmentContext}
+          activeEditorContext={activeEditorContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onEditorWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
@@ -1224,8 +1271,6 @@ function InitiativePageContent() {
             state: assessmentsDeepDiveRequest.state,
           } : null}
           onPendingDeepDiveHandled={() => setAssessmentsDeepDiveRequest(null)}
-          pendingAssessmentActivityLog={pendingAssessmentActivityLogRequest}
-          onPendingAssessmentActivityLogHandled={() => setPendingAssessmentActivityLogRequest(null)}
           pendingAssumptions={pendingAssumptionsRequest}
           onPendingAssumptionsHandled={() => setPendingAssumptionsRequest(null)}
         />

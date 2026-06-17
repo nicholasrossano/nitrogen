@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, FolderOpen, Plus, X } from 'lucide-react';
 import { AssessmentWorkspace } from '@/components/assessments/AssessmentWorkspace';
+import { AssessmentActivityLogTab } from '@/components/core-chat/AssessmentActivityLogTab';
 import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWorkspaceTab';
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
@@ -18,6 +19,14 @@ export type WorkspacePanelTab =
   | { id: 'chat-artifacts'; kind: 'artifacts'; title: 'Chat Outputs' }
   | { id: string; kind: 'assessment'; title: string; instanceId: string; assessmentId: string }
   | { id: string; kind: 'decision-log'; title: string; assessmentInstanceId: string; assessmentId?: string }
+  | {
+    id: string;
+    kind: 'activity-log';
+    title: string;
+    assessmentInstanceId: string;
+    assessmentId: string;
+    assessmentTitle: string;
+  }
   | { id: string; kind: 'assumptions'; title: string }
   | { id: string; kind: 'document'; title: string; citation: ResearchPanelCitation };
 
@@ -41,7 +50,7 @@ interface ProjectWorkspaceEditorPanelProps {
   frameworkPlanAssessments?: FrameworkPlanAssessmentOption[];
   onNewAssessment?: (assessmentId: string, assessmentName: string) => void;
   onSendToChat?: (content: string, toolHint?: string) => void;
-  onOpenAssessmentActivityLogInChat?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
+  onOpenAssessmentActivityLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenChatSession?: (chat: { chatId: string; title?: string | null }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
@@ -65,7 +74,7 @@ export function ProjectWorkspaceEditorPanel({
   frameworkPlanAssessments,
   onNewAssessment,
   onSendToChat,
-  onOpenAssessmentActivityLogInChat,
+  onOpenAssessmentActivityLog,
   onOpenChatSession,
   onOpenDecisionLog,
   onExportDecisionLog,
@@ -137,7 +146,7 @@ export function ProjectWorkspaceEditorPanel({
           isActive={isActive}
           initiativeId={initiativeId}
           onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
-          onOpenActivityLog={onOpenAssessmentActivityLogInChat}
+          onOpenActivityLog={onOpenAssessmentActivityLog}
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
           onInspectorStateChange={isActive ? onAssessmentInspectorStateChange : undefined}
@@ -148,6 +157,26 @@ export function ProjectWorkspaceEditorPanel({
 
     if (tab.kind === 'decision-log') {
       return <DecisionLogWorkspaceTab assessmentInstanceId={tab.assessmentInstanceId} />;
+    }
+
+    if (tab.kind === 'activity-log') {
+      return (
+        <AssessmentActivityLogTab
+          instanceId={tab.assessmentInstanceId}
+          assessmentId={tab.assessmentId}
+          assessmentTitle={tab.assessmentTitle}
+          onOpenModule={(context) => {
+            setLocalWorkspaceLaunchMode('idle');
+            onOpenTab({
+              id: `assessment-${context.instanceId}`,
+              kind: 'assessment',
+              title: context.title,
+              instanceId: context.instanceId,
+              assessmentId: context.assessmentId,
+            });
+          }}
+        />
+      );
     }
 
     if (tab.kind === 'assumptions') {
