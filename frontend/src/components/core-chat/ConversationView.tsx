@@ -61,7 +61,6 @@ export interface ConversationViewProps {
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
   /** Project title rendered above the composer (serif) */
-  composerTitle?: string | null;
   /** Fixed content rendered above the messages area (e.g. a deep-dive context widget) */
   topContent?: React.ReactNode;
   /** How top content should be laid out when present */
@@ -121,7 +120,6 @@ export function ConversationView({
   trailingInputActions,
   topComposerContent,
   inputChips,
-  composerTitle,
   topContent,
   topContentMode = 'inline',
   onApplyProposedValue,
@@ -390,11 +388,6 @@ export function ConversationView({
       <div className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-white to-transparent" />
       <div className="max-w-[52rem] mx-auto w-full pb-4 px-4">
         <div className="relative w-full">
-          {composerTitle?.trim() ? (
-            <h1 className="absolute bottom-full left-0 mb-6 min-w-0 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl">
-              {composerTitle}
-            </h1>
-          ) : null}
           {hasComposerTray ? (
             <div className="chat-composer-stack">
               {topComposerContent}
