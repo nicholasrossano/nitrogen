@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { buildModelInputsContext } from '@/lib/modelInputsContext';
+import { projectVariableLower } from '@/lib/projectVariablesCopy';
 import { ModelInputsTable } from './shared/ModelInputsTable';
 
 interface CarbonOutputWidgetProps {
@@ -248,7 +249,7 @@ export function CarbonOutputWidget({
           </div>
         </div>
         <p className="text-xs text-text-tertiary mt-2">
-          {result.assumption_count} assumption{result.assumption_count !== 1 ? 's' : ''} used
+          {result.assumption_count} {projectVariableLower(result.assumption_count)} used
           &middot; {result.period_years}-year crediting period
         </p>
         {isRecalculating && (

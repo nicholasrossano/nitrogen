@@ -15,6 +15,7 @@ interface PersonalChatSurfaceProps {
   onChatListDirty?: () => void;
   onChatIdResolved?: (chatId: string) => void;
   projectContext?: string | null;
+  composerLeadingActions?: React.ReactNode;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -44,6 +45,7 @@ export function PersonalChatSurface({
   onChatListDirty,
   onChatIdResolved,
   projectContext = null,
+  composerLeadingActions,
 }: PersonalChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -318,6 +320,7 @@ export function PersonalChatSurface({
         onSend={handleSend}
         disabled={sending}
         hideTiles
+        extraInputActions={composerLeadingActions}
       />
     );
   }
@@ -339,6 +342,7 @@ export function PersonalChatSurface({
       onSetFeedback={handleSetFeedback}
       retryingMessageId={null}
       historyLoading={loadingChat}
+      extraInputActions={composerLeadingActions}
     />
   );
 }

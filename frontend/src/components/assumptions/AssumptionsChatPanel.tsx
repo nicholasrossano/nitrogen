@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ChatPanelWidgetShell } from '@/components/core-chat/ChatPanelWidgetShell';
 import { api, type Assumption } from '@/lib/api';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
 const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
@@ -132,7 +133,7 @@ export function AssumptionsChatPanel({
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setError(e?.message ?? 'Failed to load assumption');
+        setError(e?.message ?? `Failed to load ${PROJECT_VARIABLES.lowerSingular}`);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -210,7 +211,7 @@ export function AssumptionsChatPanel({
         );
       }
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to update assumption');
+      setError(e?.message ?? `Failed to update ${PROJECT_VARIABLES.lowerSingular}`);
     } finally {
       setSaving(false);
     }
@@ -236,7 +237,7 @@ export function AssumptionsChatPanel({
         );
       }
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to delete assumption');
+      setError(e?.message ?? `Failed to delete ${PROJECT_VARIABLES.lowerSingular}`);
     } finally {
       setSaving(false);
     }
@@ -271,7 +272,7 @@ export function AssumptionsChatPanel({
         );
       }
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to create assumption');
+      setError(e?.message ?? `Failed to create ${PROJECT_VARIABLES.lowerSingular}`);
     } finally {
       setSaving(false);
     }
@@ -287,8 +288,8 @@ export function AssumptionsChatPanel({
   return (
     <ChatPanelWidgetShell
       icon={<ListChecks className="h-3.5 w-3.5 text-accent" />}
-      eyebrow="Assumptions"
-      title={selected?.label ?? (showCreateForm ? 'New assumption' : (focusAssumptionId ? 'Loading assumption...' : 'No assumption selected'))}
+      eyebrow={PROJECT_VARIABLES.title}
+      title={selected?.label ?? (showCreateForm ? `New ${PROJECT_VARIABLES.lowerSingular}` : (focusAssumptionId ? `Loading ${PROJECT_VARIABLES.lowerSingular}...` : `No ${PROJECT_VARIABLES.lowerSingular} selected`))}
       collapsed={collapsed}
       layoutMode={layoutMode}
       onCollapsedChange={onCollapsedChange}
@@ -297,7 +298,7 @@ export function AssumptionsChatPanel({
         <div className="space-y-4">
           {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
           <label className="block">
-            <span className="text-xs font-medium text-text-tertiary">Assumption name</span>
+            <span className="text-xs font-medium text-text-tertiary">{PROJECT_VARIABLES.titleSingular} name</span>
             <input
               className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm"
               value={draftLabel}
@@ -365,15 +366,15 @@ export function AssumptionsChatPanel({
         </div>
       ) : !focusAssumptionId ? (
         <div>
-          <p className="text-sm font-medium text-text-secondary">No assumption selected</p>
+          <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lowerSingular} selected</p>
           <p className="mt-1 text-xs text-text-tertiary">
             Select a row in the assumptions table, or ask chat to add a new assumption.
           </p>
         </div>
       ) : loading ? (
-        <p className="text-sm text-text-tertiary">Loading selected assumption...</p>
+        <p className="text-sm text-text-tertiary">Loading selected {PROJECT_VARIABLES.lowerSingular}...</p>
       ) : (
-        <p className="text-sm text-text-tertiary">Unable to load selected assumption.</p>
+        <p className="text-sm text-text-tertiary">Unable to load selected {PROJECT_VARIABLES.lowerSingular}.</p>
       )}
     </ChatPanelWidgetShell>
   );

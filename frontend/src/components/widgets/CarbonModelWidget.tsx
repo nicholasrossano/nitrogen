@@ -18,6 +18,7 @@ import { ConfirmButton } from '@/components/ui';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { WidgetGeneratingProgress, MODEL_INPUTS_STEPS } from './WidgetGeneratingProgress';
+import { projectVariableLower } from '@/lib/projectVariablesCopy';
 import { ModelInputsTable } from './shared/ModelInputsTable';
 
 async function persistWidgetToDb(
@@ -570,7 +571,7 @@ export function CarbonModelWidget({
             </p>
           </div>
           <Tooltip
-            content="Reflects data quality. High = mostly validated inputs. Moderate = mix of extracted and assumed values. Low = significant assumptions or missing data."
+            content="Reflects data quality. High = mostly validated inputs. Moderate = mix of extracted and assumed values. Low = many assumed values or missing data."
           >
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-help ${qualityStyle.bg}`}>
               <QualityIcon className={`w-3 h-3 ${qualityStyle.text}`} />
@@ -583,7 +584,7 @@ export function CarbonModelWidget({
         <p className="text-xs text-text-tertiary mt-2">
           {PROJECT_TYPE_OPTIONS.find(o => o.value === currentMethodPack)?.label || currentMethodPack}
           {' '}&middot;{' '}
-          {result.assumption_count} assumption{result.assumption_count !== 1 ? 's' : ''} used
+          {result.assumption_count} {projectVariableLower(result.assumption_count)} used
           &middot; {result.period_years}-year crediting period
         </p>
         {isRecalculating && (
