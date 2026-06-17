@@ -24,6 +24,8 @@ def test_project_surface_exposes_research_tools_and_plan_updates():
 
     assert "search_web_sources" in names
     assert "search_scholarly_literature" in names
+    assert "search_country_indicators" in names
+    assert "search_funding_activity" in names
     assert "generate_project_plan" in names
     assert "update_project_plan" in names
     assert "run_lcoe" in names

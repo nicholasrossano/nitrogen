@@ -80,3 +80,39 @@ def exposed_resource_types():
 def get_project_health_definition():
     return _energy_project_health().get_project_health_definition()
 
+
+def _optional_energy_retrieval():
+    if get_active_domain() != "energy":
+        return None
+    from app.domain.energy import retrieval
+
+    return retrieval
+
+
+def get_retrieval_connectors():
+    pack = _optional_energy_retrieval()
+    if pack is None:
+        return None
+    return pack.get_retrieval_connectors()
+
+
+def register_retrieval_tools(registry) -> None:
+    pack = _optional_energy_retrieval()
+    if pack is None:
+        return
+    pack.register_retrieval_tools(registry)
+
+
+def format_planning_retrieval_sources() -> str:
+    pack = _optional_energy_retrieval()
+    if pack is None:
+        return ""
+    return pack.format_planning_retrieval_sources()
+
+
+def format_planning_routing_guidelines() -> str:
+    pack = _optional_energy_retrieval()
+    if pack is None:
+        return ""
+    return pack.format_planning_routing_guidelines()
+
