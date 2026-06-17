@@ -54,20 +54,14 @@ interface InitiativeState {
    * @deprecated Legacy chat state path kept temporarily for compatibility.
    */
   editMessage: (id: string, messageId: string, newContent: string) => Promise<void>;
-  /**
-   * @deprecated Legacy chat state path kept temporarily for compatibility.
-   */
-  retryMessage: (id: string, messageId: string) => Promise<void>;
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   setVariantIndex: (originalMessageId: string, index: number) => void;
   confirmIntake: (id: string) => Promise<void>;
   uploadEvidence: (id: string, file: File) => Promise<void>;
   pasteEvidence: (id: string, content: string, title?: string) => Promise<void>;
   deleteEvidence: (evidenceId: string) => Promise<void>;
-  generateMemo: (id: string, includeCorpus?: boolean) => Promise<void>;
   exportMemo: (id: string) => Promise<void>;
   selectTools: (id: string, toolIds: string[]) => Promise<void>;
-  generateAllDeliverables: (id: string) => Promise<void>;
   generateInitiativeOverview: (id: string) => Promise<Initiative>;
   updateTitle: (id: string, title: string) => Promise<void>;
   _refreshPlanInBackground: (id: string) => Promise<void>;
@@ -458,52 +452,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Retry an assistant message: delete it and regenerate
-  retryMessage: async (id: string, messageId: string) => {
-    set({ retryingMessageId: messageId, error: null });
-    try {
-      // Resolve the real DB ID in case this message has already been retried
-      // (the display keeps the original stable ID but the variant entry tracks real IDs)
-      const { messageVariants } = get();
-      const existing = messageVariants[messageId];
-      const realDbId = existing
-        ? existing.versions[existing.currentIndex].id
-        : messageId;
-
-      const response = await api.retryAssistantMessage(id, realDbId);
-      const newMessage = response.message;
-
-      set(state => {
-        // Keep the original message ID stable in the flat list so variant lookups stay consistent
-        const stableMessage = { ...newMessage, id: messageId };
-        const updatedMessages = state.messages.map(m =>
-          m.id === messageId ? stableMessage : m
-        );
-
-        // Track variants: seed with original message if first retry
-        const prevEntry = state.messageVariants[messageId];
-        const originalMsg = state.messages.find(m => m.id === messageId);
-        const prevVersions = prevEntry ? prevEntry.versions : (originalMsg ? [originalMsg] : []);
-        const versions = [...prevVersions, newMessage];
-
-        return {
-          messages: updatedMessages,
-          stageStatus: response.stage_status,
-          retryingMessageId: null,
-          messageVariants: {
-            ...state.messageVariants,
-            [messageId]: { versions, currentIndex: versions.length - 1 },
-          },
-        };
-      });
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to retry message',
-        retryingMessageId: null,
-      });
-    }
-  },
-
   // Toggle like/dislike feedback for a message (optimistic + persist)
   setMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => {
     const prev = get().messageFeedback[messageId] ?? null;
@@ -666,34 +614,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
     }
   },
 
-  // Generate memo
-  generateMemo: async (id: string, includeCorpus: boolean = true) => {
-    set({ generating: true, error: null });
-    try {
-      const response = await api.generateMemo(id, includeCorpus);
-      
-      // Reload chat to get memo viewer message
-      const [initiative, { messages, stage_status }] = await Promise.all([
-        api.getInitiative(id),
-        api.getChatHistory(id),
-      ]);
-      
-      set({
-        initiative,
-        messages,
-        stageStatus: stage_status,
-        memo: response.content,
-        memoId: response.id,
-        generating: false,
-      });
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to generate',
-        generating: false,
-      });
-    }
-  },
-
   // Export memo
   exportMemo: async (id: string) => {
     const { memoId } = get();
@@ -735,34 +655,6 @@ export const useInitiativeStore = create<InitiativeState>((set, get) => ({
       set({
         error: error instanceof Error ? error.message : 'Failed to select tools',
         loading: false,
-      });
-    }
-  },
-
-  // Generate all deliverables
-  generateAllDeliverables: async (id: string) => {
-    set({ generating: true, error: null });
-    try {
-      await api.generateAllDeliverables(id);
-      
-      // Reload everything
-      const [initiative, { messages, stage_status }] = await Promise.all([
-        api.getInitiative(id),
-        api.getChatHistory(id),
-      ]);
-      
-      set({
-        initiative,
-        messages,
-        stageStatus: stage_status,
-        generating: false,
-      });
-
-      get()._refreshPlanInBackground(id);
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to generate deliverables',
-        generating: false,
       });
     }
   },

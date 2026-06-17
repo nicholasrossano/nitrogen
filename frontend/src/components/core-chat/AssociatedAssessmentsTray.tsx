@@ -37,20 +37,20 @@ export function AssociatedAssessmentsTray({
   });
 
   return (
-    <div className="overflow-hidden rounded-t-xl rounded-b-none border border-stroke-subtle bg-white shadow-[0_-1px_0_rgba(0,0,0,0.02)]">
+    <div className="chat-composer-tray">
       <button
         type="button"
         onClick={() => setCollapsed((prev) => !prev)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-[11px] font-medium text-text-tertiary transition-colors hover:bg-surface-subtle/70"
+        className="flex w-full items-center gap-1.5 px-4 py-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-black/[0.03]"
         aria-expanded={!collapsed}
         aria-label={collapsed ? 'Expand associated assessments' : 'Collapse associated assessments'}
       >
-        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-text-tertiary" /> : <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" />}
         <span>{visibleAssessments.length} Assessment{visibleAssessments.length === 1 ? '' : 's'}</span>
       </button>
       {!collapsed ? (
-        <div className="border-t border-stroke-subtle bg-white">
-          {visibleAssessments.map((assessment, index) => {
+        <div className="divide-y divide-stroke-subtle/80">
+          {visibleAssessments.map((assessment) => {
             const assessmentOption = ALL_MODULES.find((candidate) => candidate.id === assessment.assessment_id);
             if (!assessmentOption) return null;
 
@@ -68,20 +68,16 @@ export function AssociatedAssessmentsTray({
                   })
                 }
                 disabled={!onOpenWorkspaceAssessment}
-                className={[
-                  'group flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors disabled:cursor-default disabled:opacity-70',
-                  index > 0 ? 'border-t border-stroke-subtle' : '',
-                  'text-text-secondary enabled:hover:bg-surface-subtle enabled:hover:text-text-primary',
-                ].join(' ')}
+                className="group flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors disabled:cursor-default disabled:opacity-70 text-text-secondary enabled:hover:bg-black/[0.03] enabled:hover:text-text-primary"
                 aria-label={title}
               >
-                <span className="text-accent">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
                   {assessmentOption.icon}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
                   {title}
                 </span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-quaternary transition-colors group-enabled:group-hover:text-text-tertiary" />
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-tertiary transition-colors group-enabled:group-hover:text-text-secondary" />
               </button>
             );
           })}

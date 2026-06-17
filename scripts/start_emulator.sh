@@ -5,17 +5,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-if [[ -f "$ROOT/.env" ]]; then
-  bash "$ROOT/scripts/worktree_setup.sh"
-  bash "$ROOT/scripts/check_dev_env.sh"
-else
-  echo "⚠ No root .env — using scripts/dev-mock.env (shared dev user, sqlite DB)"
-  echo "  Add your real .env for Firebase + Neon."
-  set -a
-  # shellcheck source=/dev/null
-  source "$ROOT/scripts/dev-mock.env"
-  set +a
+if [[ ! -f "$ROOT/.env" ]]; then
+  echo "❌ Missing $ROOT/.env"
+  echo "   cp .env.example .env"
+  echo "   Fill DATABASE_URL, FIREBASE_PROJECT_ID, NITROGEN_FIREBASE_CREDENTIALS, and NEXT_PUBLIC_FIREBASE_*"
+  exit 1
 fi
+
+bash "$ROOT/scripts/worktree_setup.sh"
+bash "$ROOT/scripts/check_dev_env.sh"
 
 if ss -tlnp 2>/dev/null | rg -q ':8000'; then
   echo "✓ Backend already listening on :8000"
@@ -40,4 +38,4 @@ fi
 
 echo ""
 echo "Open http://localhost:3000 (art lab: http://localhost:3000/art-lab)"
-echo "Enable Developer Mode in Settings for art lab when using mock auth."
+echo "Enable Developer Mode in Settings for art lab."

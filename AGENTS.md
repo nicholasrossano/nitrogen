@@ -82,9 +82,9 @@ Recurring failure mode: overwriting root `.env` from `.env.example` (empty Fireb
 
 - **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
 - Before starting: `bash scripts/worktree_setup.sh` then `bash scripts/check_dev_env.sh`.
-- Start both servers: `bash scripts/start_emulator.sh` (uses root `.env`, or `scripts/dev-mock.env` only when `.env` is missing).
-- **Firebase mode:** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` must both be set.
-- **Mock mode (local only):** leave Firebase vars empty, set `DEBUG=true`, matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN` (defaults in `.env.example`).
+- Start both servers: `bash scripts/start_emulator.sh` (requires root `.env` with Firebase + DATABASE_URL).
+- **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
+- **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
 
 ## Specialized Guidance (Read Only When Relevant)

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.core.database import Base
 
@@ -14,7 +14,7 @@ class DecisionEvent(Base):
     __tablename__ = "decision_events"
 
     __table_args__ = (
-        Index("ix_decision_events_initiative_created", "initiative_id", "created_at"),
+        Index("ix_decision_events_project_created", "project_id", "created_at"),
         Index("ix_decision_events_instance_created", "assessment_instance_id", "created_at"),
         Index("ix_decision_events_event_type", "event_type"),
     )
@@ -22,11 +22,12 @@ class DecisionEvent(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     assessment_instance_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("assessment_instances.id", ondelete="CASCADE"),

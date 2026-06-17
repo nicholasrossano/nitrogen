@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Copy, Pencil, ThumbsUp, ThumbsDown, RefreshCw, Check, BookMarked, BookOpen, FileText, GraduationCap, Globe, AlertCircle } from 'lucide-react';
+import { Copy, Pencil, ThumbsUp, ThumbsDown, RefreshCw, Check, BookMarked, BookOpen, FileText, GraduationCap, Globe, AlertCircle, Share2 } from 'lucide-react';
 import type { SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -90,6 +90,8 @@ interface AssistantMessageToolbarProps {
   hideRetry?: boolean;
   sources?: SourceCitation[];
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onPromote?: () => void;
+  showPromote?: boolean;
 }
 
 function getSourceIcon(type: string) {
@@ -125,6 +127,8 @@ export function AssistantMessageToolbar({
   hideRetry = false,
   sources,
   onOpenDocument,
+  onPromote,
+  showPromote = false,
 }: AssistantMessageToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -214,6 +218,14 @@ export function AssistantMessageToolbar({
           onClick={onRetry}
           disabled={retrying}
           spinning={retrying}
+        />
+      )}
+
+      {showPromote && onPromote && (
+        <ToolbarIcon
+          icon={<Share2 className="w-3.5 h-3.5" />}
+          label="Promote to project finding"
+          onClick={onPromote}
         />
       )}
 

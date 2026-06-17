@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Text, Integer, BigInteger, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector
 
@@ -36,12 +36,13 @@ class EvidenceDoc(Base):
         primary_key=True, 
         default=uuid.uuid4
     )
-    initiative_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), 
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         index=True,
         nullable=True,
     )
+    initiative_id = synonym("project_id")
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -84,7 +85,7 @@ class EvidenceDoc(Base):
     )
     
     # Relationships
-    initiative: Mapped["Initiative | None"] = relationship(back_populates="evidence_docs")
+    project: Mapped["Project | None"] = relationship(back_populates="evidence_docs")
     workspace: Mapped["Workspace"] = relationship()
     chunks: Mapped[list["EvidenceChunk"]] = relationship(
         back_populates="evidence_doc", 
@@ -145,5 +146,5 @@ class EvidenceChunk(Base):
 
 
 # Import for relationship typing
-from app.models.initiative import Initiative  # noqa: E402
+from app.models.project import Project  # noqa: E402
 from app.models.workspace import Workspace  # noqa: E402

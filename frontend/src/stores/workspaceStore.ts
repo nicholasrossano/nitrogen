@@ -53,6 +53,8 @@ function readPreferredWorkspaceId(): string | null {
 
 function pickFallbackWorkspace(workspaces: Workspace[]): Workspace | null {
   if (workspaces.length === 0) return null;
+  const team = workspaces.find((w) => w.workspace_type === 'team');
+  if (team) return team;
   return [...workspaces].sort((a, b) => {
     const aTime = Date.parse(a.updated_at || a.created_at || '');
     const bTime = Date.parse(b.updated_at || b.created_at || '');

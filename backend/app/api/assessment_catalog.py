@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
-from app.models.onboarding import ChatMessage
 from app.models.initiative import InitiativeStage
 from app.assessments import get_assessment_registry
 from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_stage_assumptions
@@ -233,14 +232,7 @@ async def select_tools(
         await db.refresh(initiative)
 
         widget_data = build_deliverables_overview_data(initiative)
-        message = ChatMessage(
-            initiative_id=initiative.id,
-            role="assistant",
-            content=get_deliverables_overview_message(tool_names),
-            widget_type="deliverables_overview",
-            widget_data=widget_data,
-        )
-        db.add(message)
+        _ = widget_data
         await db.commit()
     else:
         # Need to gather more inputs - ask first question
@@ -255,16 +247,10 @@ async def select_tools(
         
         if all_missing_inputs:
             first_input = all_missing_inputs[0]
-            question = f"Great! I'll help you prepare the **{', '.join(tool_names)}**.\n\nTo get started: {first_input.description}"
+            _ = f"Great! I'll help you prepare the **{', '.join(tool_names)}**.\n\nTo get started: {first_input.description}"
         else:
-            question = f"Great! I'll help you prepare the **{', '.join(tool_names)}**. Tell me more about your project."
+            _ = f"Great! I'll help you prepare the **{', '.join(tool_names)}**. Tell me more about your project."
         
-        message = ChatMessage(
-            initiative_id=initiative.id,
-            role="assistant",
-            content=question,
-        )
-        db.add(message)
         await db.commit()
     
     return {

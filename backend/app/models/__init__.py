@@ -1,5 +1,4 @@
-from app.models.initiative import Initiative
-from app.models.onboarding import ChatMessage
+from app.models.project import Initiative, InitiativeStage, Project
 from app.models.evidence import EvidenceDoc, EvidenceChunk, EvidenceDocStatus
 from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
@@ -16,6 +15,7 @@ from app.models.decision_event import DecisionEvent
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 from app.models.project_health import ProjectHealthResult, ProjectHealthOverride
+from app.models.finding import Finding
 from app.models.workspace_knowledge import (
     WorkspaceKnowledgeBank,
     WorkspaceKnowledgeBankStatus,
@@ -23,8 +23,10 @@ from app.models.workspace_knowledge import (
 )
 
 __all__ = [
+    "Project",
     "Initiative",
-    "ChatMessage",
+    "InitiativeStage",
+    "Finding",
     "EvidenceDoc",
     "EvidenceChunk",
     "EvidenceDocStatus",

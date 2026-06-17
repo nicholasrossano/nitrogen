@@ -26,6 +26,8 @@ interface LandingInputProps {
   extraInputActions?: React.ReactNode;
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
+  /** Large serif title rendered above the composer (left-aligned) */
+  composerTitle?: string | null;
   /** Attached tray rendered above and visually connected to the composer */
   topComposerContent?: React.ReactNode;
   /** Alternate landing layout for initiative overview pages */
@@ -61,6 +63,7 @@ export function LandingInput({
   placeholder = 'Ask anything',
   extraInputActions,
   inputChips,
+  composerTitle,
   topComposerContent,
   layoutMode = 'default',
   hideComposer = false,
@@ -149,101 +152,115 @@ export function LandingInput({
     }
   };
 
-  const renderComposer = (containerClassName?: string) => (
-    <div className={containerClassName ?? 'w-full max-w-2xl'}>
-      {topComposerContent ? (
-        <div className="relative z-10 mx-3 mb-[-1px]">
-          {topComposerContent}
-        </div>
-      ) : null}
-      <form onSubmit={handleSubmit} className="relative">
-        <div
-          className="rounded-xl border border-stroke-subtle bg-white overflow-hidden"
-        >
-          {(inputChips || (showAttachments && attachedFiles.length > 0)) && (
-            <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
-              {inputChips}
-              {showAttachments && attachedFiles.map((file, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
+  const contentMaxWidth = hideTiles ? 'max-w-3xl' : 'max-w-2xl';
+  const showComposerTitle = Boolean(composerTitle?.trim());
+
+  const renderComposer = (containerClassName?: string) => {
+    const hasTray = Boolean(topComposerContent);
+    const shellClassName = hasTray ? 'chat-composer-shell chat-composer-shell--stacked' : 'chat-composer-shell';
+
+    const shellContent = (
+      <>
+        {(inputChips || (showAttachments && attachedFiles.length > 0)) && (
+          <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+            {inputChips}
+            {showAttachments && attachedFiles.map((file, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-subtle border border-stroke-subtle text-[11px] font-medium text-text-secondary leading-none max-w-[160px]"
+              >
+                <Paperclip className="w-2.5 h-2.5 shrink-0" />
+                <span className="truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachedFile(i)}
+                  className="hover:opacity-60 transition-opacity shrink-0"
+                  aria-label="Remove file"
                 >
-                  <Paperclip className="w-2.5 h-2.5 shrink-0" />
-                  <span className="truncate">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeAttachedFile(i)}
-                    className="hover:opacity-60 transition-opacity shrink-0"
-                    aria-label="Remove file"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              ))}
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+            }}
+            onFocus={() => {
+              setFocused(true);
+            }}
+            onBlur={() => setFocused(false)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className="no-global-focus-style w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          />
+          {extraInputActions && (
+            <div className="absolute left-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+              {extraInputActions}
             </div>
           )}
-          <div className="relative">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-              }}
-              onFocus={() => {
-                setFocused(true);
-              }}
-              onBlur={() => setFocused(false)}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              disabled={disabled}
-              rows={1}
-              className="no-global-focus-style w-full resize-none bg-transparent px-5 py-3.5 pb-11 pr-5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:bg-surface-subtle disabled:text-text-tertiary overflow-hidden"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            />
-            {extraInputActions && (
-              <div className="absolute left-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-                {extraInputActions}
-              </div>
+          <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+            {showAttachments && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileChange}
+                  aria-label="Attach files"
+                />
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
+                  aria-label="Attach files"
+                >
+                  <Paperclip className="w-[13px] h-[13px]" />
+                </button>
+              </>
             )}
-            <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
-              {showAttachments && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={handleFileChange}
-                    aria-label="Attach files"
-                  />
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 text-text-tertiary enabled:hover:text-text-secondary disabled:opacity-40 disabled:cursor-default"
-                    aria-label="Attach files"
-                  >
-                    <Paperclip className="w-[13px] h-[13px]" />
-                  </button>
-                </>
+            <button
+              type="submit"
+              disabled={disabled || uploading || !input.trim()}
+              className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
+            >
+              {uploading ? (
+                <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
+              ) : (
+                <ArrowUp className="w-[11px] h-[11px] text-white" />
               )}
-              <button
-                type="submit"
-                disabled={disabled || uploading || !input.trim()}
-                className="w-5 h-5 flex items-center justify-center rounded-full transition-colors duration-150 disabled:cursor-default disabled:bg-stroke-subtle enabled:bg-accent"
-              >
-                {uploading ? (
-                  <Loader2 className="w-[11px] h-[11px] text-white animate-spin" />
-                ) : (
-                  <ArrowUp className="w-[11px] h-[11px] text-white" />
-                )}
-              </button>
-            </div>
+            </button>
           </div>
         </div>
-      </form>
-    </div>
-  );
+      </>
+    );
+
+    return (
+      <div className={containerClassName ?? `w-full ${contentMaxWidth}`}>
+        {hasTray ? (
+          <div className="chat-composer-stack">
+            {topComposerContent}
+            <form onSubmit={handleSubmit} className="relative">
+              <div className={shellClassName}>{shellContent}</div>
+            </form>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="relative">
+            <div className={shellClassName}>{shellContent}</div>
+          </form>
+        )}
+      </div>
+    );
+  };
 
   const renderHistory = (containerClassName?: string, compact = false) => (
     <div className={containerClassName ?? 'flex-1 min-h-0 w-full max-w-2xl flex flex-col'}>
@@ -300,7 +317,7 @@ export function LandingInput({
 
   return (
     <div className="flex flex-col items-center h-full px-4">
-      <div className="flex-1 flex flex-col justify-end items-center w-full max-w-2xl">
+      <div className={`flex-1 flex flex-col justify-end items-center w-full ${contentMaxWidth}`}>
         {headerContent}
         {!hideTiles && (
         <div className="w-[70%] grid grid-cols-3 gap-3 mb-12">
@@ -324,7 +341,14 @@ export function LandingInput({
         )}
       </div>
 
-      {renderComposer()}
+      <div className={`relative w-full ${contentMaxWidth}`}>
+        {showComposerTitle ? (
+          <h1 className="absolute bottom-full left-0 mb-3 text-left font-serif text-2xl leading-tight tracking-tight text-text-primary sm:text-3xl">
+            {composerTitle}
+          </h1>
+        ) : null}
+        {renderComposer('w-full')}
+      </div>
 
       {renderHistory()}
     </div>

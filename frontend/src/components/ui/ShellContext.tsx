@@ -5,10 +5,14 @@ import type { NavItem } from './SideDrawer';
 
 interface ShellNavContextValue {
   navHandlerRef: MutableRefObject<((item: NavItem) => boolean) | null>;
+  chatSidebarCollapsed: boolean;
+  toggleChatSidebar: () => void;
 }
 
 export const ShellNavContext = createContext<ShellNavContextValue>({
   navHandlerRef: { current: null },
+  chatSidebarCollapsed: false,
+  toggleChatSidebar: () => {},
 });
 
 /**
@@ -22,4 +26,9 @@ export function useShellNav(handler: (item: NavItem) => boolean) {
     navHandlerRef.current = handler;
     return () => { navHandlerRef.current = null; };
   }, [handler, navHandlerRef]);
+}
+
+export function useChatSidebar() {
+  const { chatSidebarCollapsed, toggleChatSidebar } = useContext(ShellNavContext);
+  return { chatSidebarCollapsed, toggleChatSidebar };
 }

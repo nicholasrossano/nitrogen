@@ -36,9 +36,9 @@ class _FakeInitiativeCreateDb:
 
     async def execute(self, statement, *_args, **_kwargs):
         statement_text = str(statement)
-        if "initiatives.user_id" in statement_text:
+        if "projects.created_by" in statement_text or "initiatives.user_id" in statement_text:
             return _FakeExecuteResult(["project"])
-        if "initiatives.workspace_id" in statement_text:
+        if "projects.workspace_id" in statement_text or "initiatives.workspace_id" in statement_text:
             return _FakeExecuteResult([])
         return _FakeExecuteResult([])
 

@@ -25,7 +25,6 @@ from app.services.assumptions import (
     build_summary,
     create_assumption_comment,
     delete_assumption,
-    extract_assumptions_from_sources,
     get_assumption,
     list_assumption_comments,
     list_assumptions,
@@ -146,18 +145,12 @@ async def refresh_assumptions(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Run config-guided extraction from project evidence/materials."""
-    initiative = await require_editor(db, initiative_id, user)
-    created, updated, touched = await extract_assumptions_from_sources(
-        db,
-        initiative,
-        actor=_actor_from_user(user),
+    """Legacy bulk extraction — disabled; new assumptions come from finding promotion."""
+    await require_editor(db, initiative_id, user)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Assumption refresh is retired. Promote chat messages to project findings to extract new assumptions.",
     )
-    initiative.touch()
-    await db.commit()
-    for assumption in touched:
-        await db.refresh(assumption)
-    return {"created": created, "updated": updated, "assumptions": touched}
 
 
 @router.get("/assumptions/{assumption_id}", response_model=AssumptionResponse)

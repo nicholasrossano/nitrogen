@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.core.database import Base
 
@@ -14,17 +14,18 @@ class ProjectHealthResult(Base):
     __tablename__ = "project_health_results"
 
     __table_args__ = (
-        UniqueConstraint("initiative_id", "dimension_id", name="uq_project_health_results_dimension"),
-        Index("ix_project_health_results_initiative_status", "initiative_id", "status"),
+        UniqueConstraint("project_id", "dimension_id", name="uq_project_health_results_project_dimension"),
+        Index("ix_project_health_results_project_status", "project_id", "status"),
         Index("ix_project_health_results_is_stale", "is_stale"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     domain: Mapped[str] = mapped_column(String(64), nullable=False, default="energy")
     dimension_id: Mapped[str] = mapped_column(String(120), nullable=False)
     dimension_label: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -66,16 +67,17 @@ class ProjectHealthOverride(Base):
     __tablename__ = "project_health_overrides"
 
     __table_args__ = (
-        Index("ix_project_health_overrides_initiative_dimension", "initiative_id", "dimension_id"),
+        Index("ix_project_health_overrides_project_dimension", "project_id", "dimension_id"),
         Index("ix_project_health_overrides_created_at", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
+    initiative_id = synonym("project_id")
     dimension_id: Mapped[str] = mapped_column(String(120), nullable=False)
     prior_system_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
     override_status: Mapped[str] = mapped_column(String(24), nullable=False)

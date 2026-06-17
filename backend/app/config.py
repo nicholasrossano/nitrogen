@@ -90,9 +90,6 @@ class Settings(BaseSettings):
     # Access code — upgrades trial to Starter-equivalent budget (one-time)
     access_code: str = ""
 
-    # Local dev mock auth (must match NEXT_PUBLIC_DEV_MOCK_TOKEN on frontend)
-    dev_mock_token: str = "dev-mock-token"
-
     # Usage limits (API cost in USD per billing period)
     starter_usage_limit_usd: float = 14.0
     pro_usage_limit_usd: float = 42.0

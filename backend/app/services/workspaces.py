@@ -1,12 +1,67 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
+
+COMPANY_WORKSPACE_DEFAULT_NAME = "Company"
+
+
+async def ensure_company_workspace(db: AsyncSession, user_id: str) -> Workspace:
+    """Return the singleton company (team) workspace, ensuring the user is a member."""
+    result = await db.execute(
+        select(Workspace)
+        .where(Workspace.workspace_type == WorkspaceType.TEAM.value)
+        .order_by(Workspace.created_at)
+        .limit(1)
+    )
+    workspace = result.scalar_one_or_none()
+    if workspace is None:
+        workspace = Workspace(
+            name=COMPANY_WORKSPACE_DEFAULT_NAME,
+            workspace_type=WorkspaceType.TEAM.value,
+        )
+        db.add(workspace)
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            result = await db.execute(
+                select(Workspace)
+                .where(Workspace.workspace_type == WorkspaceType.TEAM.value)
+                .order_by(Workspace.created_at)
+                .limit(1)
+            )
+            workspace = result.scalar_one()
+
+    membership = await get_workspace_membership(db, workspace.id, user_id)
+    if membership is None:
+        owner_count = await db.scalar(
+            select(func.count())
+            .select_from(WorkspaceMembership)
+            .where(
+                WorkspaceMembership.workspace_id == workspace.id,
+                WorkspaceMembership.role == WorkspaceRole.OWNER.value,
+            )
+        )
+        role = WorkspaceRole.OWNER.value if not owner_count else WorkspaceRole.MEMBER.value
+        db.add(
+            WorkspaceMembership(
+                workspace_id=workspace.id,
+                user_id=user_id,
+                role=role,
+            )
+        )
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+
+    return workspace
 
 
 async def ensure_personal_workspace(db: AsyncSession, user_id: str) -> Workspace:
@@ -91,8 +146,8 @@ async def require_workspace_owner(
 
 
 async def get_default_workspace_for_user(db: AsyncSession, user_id: str) -> Workspace:
-    """Return a stable default workspace for a user."""
-    return await ensure_personal_workspace(db, user_id)
+    """Return the singleton company workspace for a user."""
+    return await ensure_company_workspace(db, user_id)
 
 
 async def resolve_workspace_for_user(

@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.core.database import Base
 
@@ -51,9 +51,9 @@ class ProjectShareInvitation(Base):
     __tablename__ = "project_share_invitations"
     __table_args__ = (
         UniqueConstraint(
-            "initiative_id",
+            "project_id",
             "email",
-            name="uq_project_share_invitation_initiative_email",
+            name="uq_project_share_invitation_project_email",
         ),
     )
 
@@ -62,12 +62,13 @@ class ProjectShareInvitation(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    initiative_id: Mapped[uuid.UUID] = mapped_column(
+    project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("initiatives.id", ondelete="CASCADE"),
+        ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+    initiative_id = synonym("project_id")
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     shared_by: Mapped[str | None] = mapped_column(
