@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChatShellContext } from './ChatShellContext';
 
@@ -31,6 +31,11 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const [activeChatId, setActiveChatId] = useState<string | null>(searchParams.get('chat'));
   const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
+  const landingResetRef = useRef<(() => boolean) | null>(null);
+
+  const registerLandingReset = useCallback((handler: (() => boolean) | null) => {
+    landingResetRef.current = handler;
+  }, []);
 
   useEffect(() => {
     setActiveChatId(searchParams.get('chat'));
@@ -50,10 +55,16 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
     const currentChat = searchParams.get('chat');
     const onChatLandingPage = pathname === '/chat' || pathname === '/';
 
-    // Already on the chat landing page for this scope — nothing to do.
+    // Already on the chat landing page for this scope — nothing to do unless a
+    // sub-view (variables, editor panel, etc.) is open on top of the landing.
     if (onChatLandingPage && !currentChat) {
-      if (projectId && currentProject === projectId) return;
-      if (!projectId && !currentProject) return;
+      const leftOverlay = landingResetRef.current?.() ?? false;
+      if (leftOverlay) {
+        if (!projectId || projectId === currentProject) return;
+      } else {
+        if (projectId && currentProject === projectId) return;
+        if (!projectId && !currentProject) return;
+      }
     }
 
     setActiveChatId(null);
@@ -81,9 +92,20 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
       onNewChat: handleNewChat,
       drawerRefreshKey,
       refreshDrawer,
+      registerLandingReset,
     }),
-    [activeChatId, drawerRefreshKey, handleNewChat, handleSelectChat, refreshDrawer],
+    [activeChatId, drawerRefreshKey, handleNewChat, handleSelectChat, refreshDrawer, registerLandingReset],
   );
 
   return <ChatShellContext.Provider value={value}>{children}</ChatShellContext.Provider>;
+}
+
+/** Reset chat landing overlays (variables, editor, etc.) when the sidebar project header is clicked. */
+export function useChatShellLandingReset(handler: () => boolean) {
+  const chatShell = useContext(ChatShellContext);
+
+  useEffect(() => {
+    chatShell?.registerLandingReset(handler);
+    return () => chatShell?.registerLandingReset(null);
+  }, [chatShell, handler]);
 }

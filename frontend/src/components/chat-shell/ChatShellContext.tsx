@@ -8,6 +8,7 @@ export interface ChatShellContextValue {
   onNewChat: (projectId?: string | null) => void;
   drawerRefreshKey: number;
   refreshDrawer: () => void;
+  registerLandingReset: (handler: (() => boolean) | null) => void;
 }
 
 export const ChatShellContext = createContext<ChatShellContextValue | null>(null);
