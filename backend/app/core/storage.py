@@ -137,3 +137,33 @@ def get_uploads_storage() -> StorageBackend:
     if settings.storage_type == "firebase" and settings.firebase_storage_bucket:
         return FirebaseStorage(settings.firebase_storage_bucket)
     return LocalStorage(settings.uploads_dir)
+
+
+def _firebase_uploads_storage() -> FirebaseStorage | None:
+    if settings.firebase_storage_bucket:
+        return FirebaseStorage(settings.firebase_storage_bucket)
+    return None
+
+
+async def load_upload(path: str) -> bytes:
+    """Load a user upload from the configured backend.
+
+    When running with local storage, fall back to Firebase if the file is
+    missing on disk. This supports the common dev setup of a shared Neon DB
+    whose uploads were stored in Firebase by cloud/preview environments.
+    """
+    primary = get_uploads_storage()
+    try:
+        return await primary.load(path)
+    except Exception as primary_error:
+        if settings.storage_type != "local":
+            raise primary_error
+
+        fallback = _firebase_uploads_storage()
+        if fallback is None:
+            raise primary_error
+
+        try:
+            return await fallback.load(path)
+        except Exception:
+            raise primary_error from None

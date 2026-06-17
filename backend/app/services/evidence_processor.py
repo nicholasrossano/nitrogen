@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.core.storage import get_uploads_storage
+from app.core.storage import get_uploads_storage, load_upload
 from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
 from app.models.initiative import Initiative
 from app.services.document_parser import DocumentParserService
@@ -159,7 +159,7 @@ async def process_evidence_doc(
         try:
             if not doc.storage_path:
                 raise ValueError("Evidence doc missing storage_path")
-            file_bytes = await storage.load(doc.storage_path)
+            file_bytes = await load_upload(doc.storage_path)
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Failed to load evidence doc %s bytes: %s", doc_id, exc, exc_info=True

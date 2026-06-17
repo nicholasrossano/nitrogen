@@ -9,7 +9,7 @@ import logging
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import require_editor, require_viewer
-from app.core.storage import get_uploads_storage
+from app.core.storage import get_uploads_storage, load_upload
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.core.upload_types import (
     DOCUMENT_CONTENT_TYPES,
@@ -598,9 +598,8 @@ async def download_evidence_chunk_preview(
             detail="Evidence chunk preview not available",
         )
 
-    storage = get_uploads_storage()
     try:
-        preview_bytes = await storage.load(chunk.preview_image_path)
+        preview_bytes = await load_upload(chunk.preview_image_path)
     except (FileNotFoundError, Exception) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -648,9 +647,8 @@ async def download_evidence(
             detail="File not available for download",
         )
 
-    storage = get_uploads_storage()
     try:
-        file_bytes = await storage.load(evidence_doc.storage_path)
+        file_bytes = await load_upload(evidence_doc.storage_path)
     except (FileNotFoundError, Exception) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
