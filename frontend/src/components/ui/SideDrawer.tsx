@@ -4,6 +4,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSS
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { LayoutGrid, LogOut, Map, Home, Calculator, ListChecks, FileUp, FolderOpen, Loader2, Settings, HardDriveDownload, Unlink, HelpCircle, PanelLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { ChangeWorkspaceSelect } from '@/components/chat-shell/ChangeWorkspaceSelect';
 import { DrawerChatTree } from '@/components/chat-shell/DrawerChatTree';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { SettingsModal } from './SettingsModal';
@@ -130,9 +131,12 @@ export function SideDrawer() {
   const isOnboarding = Boolean(hasProject && initiative && !hasFrameworkSelection && !isViewer);
   const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
   const {
+    workspaces,
     activeWorkspace,
     loadWorkspaces,
+    setActiveWorkspace,
   } = useWorkspaceStore();
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
 
   const showMaterials = hasProject && !isViewer;
   const fileScope = hasProject ? 'project' : 'workspace';
@@ -222,6 +226,29 @@ export function SideDrawer() {
     await signOut();
     router.push('/');
   }, [signOut, router]);
+
+  const handleChangeWorkspace = useCallback(async (workspaceId: string) => {
+    if (!workspaceId || workspaceId === activeWorkspace?.id || workspaceSwitching) return;
+    setWorkspaceSwitching(true);
+    try {
+      await setActiveWorkspace(workspaceId);
+      if (isChatShell) {
+        router.replace('/chat');
+      }
+    } finally {
+      setWorkspaceSwitching(false);
+    }
+  }, [activeWorkspace?.id, isChatShell, router, setActiveWorkspace, workspaceSwitching]);
+
+  const workspaceSwitcher = workspaces.length > 1 ? (
+    <ChangeWorkspaceSelect
+      workspaces={workspaces}
+      value={activeWorkspace?.id ?? null}
+      onChange={(workspaceId) => void handleChangeWorkspace(workspaceId)}
+      disabled={workspaceSwitching}
+      rootClassName="ml-auto min-w-0"
+    />
+  ) : null;
 
   // --- Upload / materials logic (self-contained) ---
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -509,16 +536,17 @@ export function SideDrawer() {
   const drawerBody = (
     <>
       {isChatShell && (
-        <div className={`shrink-0 flex items-center px-2 pt-2 pb-1 ${chatSidebarCollapsed ? 'hidden' : ''}`}>
+        <div className={`shrink-0 flex items-center gap-1 px-2 pt-2 pb-1 ${chatSidebarCollapsed ? 'hidden' : ''}`}>
           <button
             type="button"
             onClick={toggleChatSidebar}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/[0.04] transition-colors"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/[0.04] transition-colors shrink-0"
             aria-label="Collapse sidebar"
             title="Collapse sidebar"
           >
             <PanelLeft className="w-4 h-4" />
           </button>
+          {workspaceSwitcher}
         </div>
       )}
 
