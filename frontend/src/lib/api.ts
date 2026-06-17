@@ -619,6 +619,15 @@ export interface FieldContext {
   assumption_id?: string | null;
 }
 
+export interface ActiveEditorContext {
+  kind: string;
+  title: string;
+  evidence_doc_id?: string | null;
+  chunk_id?: string | null;
+  assessment_id?: string | null;
+  instance_id?: string | null;
+}
+
 export interface StageStatus {
   stage: string;
   stage_1_complete: boolean;
@@ -2123,6 +2132,7 @@ export const api = {
     onResearchStep?: (step: ResearchStep) => void,
     compareInitiativeIds?: string[] | null,
     allowInitialProjectOnboarding?: boolean,
+    activeEditorContext?: ActiveEditorContext | null,
   ) => {
     const token = await getAuthToken();
     const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
@@ -2146,6 +2156,8 @@ export const api = {
       assumption_id: assumptionId ?? null,
       compare_mode: Boolean(compareInitiativeIds?.length),
       allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
+      has_active_editor_context: Boolean(activeEditorContext),
+      active_editor_kind: activeEditorContext?.kind ?? null,
     });
 
     const response = await fetch(`${API_URL}/api/v1/chat/stream`, {
@@ -2164,6 +2176,7 @@ export const api = {
         assumption_id: assumptionId ?? null,
         compare_initiative_ids: compareInitiativeIds ?? null,
         allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
+        active_editor_context: activeEditorContext ?? null,
       }),
     });
 

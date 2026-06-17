@@ -84,6 +84,83 @@ def _build_focused_assumption_context(assumption: Assumption | None) -> str:
     return "\n".join(lines)
 
 
+def _build_active_editor_view_context(active_editor_context: dict) -> str:
+    """Describe a non-document editor tab for the chat system prompt."""
+    kind = active_editor_context.get("kind") or "unknown"
+    title = active_editor_context.get("title") or "Untitled"
+    lines = [
+        "## Active Editor View",
+        "The user currently has the following view open in the editor workspace:",
+        f"- kind: {kind}",
+        f"- title: {title}",
+    ]
+    if active_editor_context.get("assessment_id"):
+        lines.append(f"- assessment_id: {active_editor_context['assessment_id']}")
+    if active_editor_context.get("instance_id"):
+        lines.append(f"- instance_id: {active_editor_context['instance_id']}")
+    if active_editor_context.get("evidence_doc_id"):
+        lines.append(f"- evidence_doc_id: {active_editor_context['evidence_doc_id']}")
+    if active_editor_context.get("chunk_id"):
+        lines.append(f"- chunk_id: {active_editor_context['chunk_id']}")
+    lines.append(
+        'When the user refers to "this", "here", or "what I am looking at", interpret it in the context of this open view.'
+    )
+    return "\n".join(lines)
+
+
+async def _load_active_editor_document(
+    db: AsyncSession,
+    user: AuthUser,
+    evidence_doc_id: str,
+) -> dict | None:
+    """Load all chunks for a document open in the editor workspace."""
+    from app.api.evidence import _require_evidence_viewer
+    from app.models.evidence import EvidenceChunk, EvidenceDoc
+
+    try:
+        doc_uuid = uuid.UUID(evidence_doc_id)
+    except ValueError:
+        return None
+
+    result = await db.execute(select(EvidenceDoc).where(EvidenceDoc.id == doc_uuid))
+    evidence_doc = result.scalar_one_or_none()
+    if not evidence_doc:
+        return None
+
+    try:
+        await _require_evidence_viewer(db, evidence_doc, user)
+    except HTTPException:
+        return None
+
+    chunks_result = await db.execute(
+        select(
+            EvidenceChunk.id,
+            EvidenceChunk.chunk_index,
+            EvidenceChunk.content,
+            EvidenceChunk.page_number,
+        )
+        .where(EvidenceChunk.evidence_doc_id == doc_uuid)
+        .order_by(EvidenceChunk.chunk_index)
+    )
+    chunks = [
+        {
+            "id": str(chunk.id),
+            "chunk_index": chunk.chunk_index,
+            "content": chunk.content,
+            "page_number": chunk.page_number,
+        }
+        for chunk in chunks_result.all()
+    ]
+    if not chunks:
+        return None
+
+    return {
+        "evidence_doc_id": str(evidence_doc.id),
+        "filename": evidence_doc.filename,
+        "chunks": chunks,
+    }
+
+
 def _to_title_case(text: str) -> str:
     """Convert extracted titles into consistent title case."""
     if not text:
@@ -224,6 +301,7 @@ class ChatStreamRequest(BaseModel):
     compare_initiative_ids: Optional[list[str]] = None
     allow_initial_project_onboarding: bool = False
     assumption_id: Optional[str] = None
+    active_editor_context: Optional[dict] = None
 
 
 class TitleRequest(BaseModel):
@@ -633,6 +711,8 @@ async def chat_stream(
                 has_field_context=bool(field_context),
                 has_model_inputs_context=bool(data.model_inputs_context),
                 has_assessment_context=bool(data.assessment_context),
+                has_active_editor_context=bool(data.active_editor_context),
+                active_editor_kind=(data.active_editor_context or {}).get("kind"),
                 allow_initial_project_onboarding=data.allow_initial_project_onboarding,
                 has_assumption_context=bool(focused_assumption),
             )
@@ -760,6 +840,32 @@ async def chat_stream(
                     if project_context
                     else f"## Active Deep Dive Context\n{supplemental_project_context}"
                 )
+
+            active_editor_doc: dict | None = None
+            editor_ctx = data.active_editor_context if isinstance(data.active_editor_context, dict) else None
+            if editor_ctx:
+                editor_kind = editor_ctx.get("kind")
+                if editor_kind == "document" and editor_ctx.get("evidence_doc_id"):
+                    active_editor_doc = await _load_active_editor_document(
+                        db,
+                        user,
+                        str(editor_ctx["evidence_doc_id"]),
+                    )
+                    if active_editor_doc and editor_ctx.get("chunk_id"):
+                        active_editor_doc["focused_chunk_id"] = str(editor_ctx["chunk_id"])
+                    open_title = editor_ctx.get("title") or (active_editor_doc or {}).get("filename") or "Document"
+                    open_block = (
+                        "## Active Editor View\n"
+                        f"The user has this document open in the editor workspace: {open_title}."
+                    )
+                    project_context = (
+                        f"{project_context}\n\n{open_block}" if project_context else open_block
+                    )
+                else:
+                    view_block = _build_active_editor_view_context(editor_ctx)
+                    project_context = (
+                        f"{project_context}\n\n{view_block}" if project_context else view_block
+                    )
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
@@ -972,6 +1078,7 @@ async def chat_stream(
                                     on_research_step=on_research_step,
                                     initiative_id=str(verified_initiative.id),
                                     initiative=verified_initiative,
+                                    active_editor_doc=active_editor_doc,
                                 )
                             )
                     else:
@@ -987,6 +1094,7 @@ async def chat_stream(
                                 project_context=project_context,
                                 on_research_step=on_research_step,
                                 initiative_id=data.initiative_id if verified_initiative else None,
+                                active_editor_doc=active_editor_doc,
                             )
                         )
 

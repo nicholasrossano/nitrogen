@@ -15,7 +15,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import type { EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { api } from '@/lib/api';
-import type { FieldContext } from '@/lib/api';
+import type { FieldContext, ActiveEditorContext } from '@/lib/api';
 import type { ChatSession } from '@/types/chat';
 
 const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
@@ -61,6 +61,7 @@ interface ProjectChatTabsPanelProps {
   pendingChatToOpen?: { chatId: string; title?: string | null } | null;
   pendingAutoSend?: PendingAutoSendRequest | null;
   activeAssessmentContext?: { instanceId: string; assessmentId: string; title?: string | null } | null;
+  activeEditorContext?: ActiveEditorContext | null;
   onPendingSessionHandled?: () => void;
   onPendingAutoSendHandled?: () => void;
   onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
@@ -299,6 +300,7 @@ export function ProjectChatTabsPanel({
   pendingChatToOpen = null,
   pendingAutoSend = null,
   activeAssessmentContext = null,
+  activeEditorContext = null,
   onPendingSessionHandled,
   onPendingAutoSendHandled,
   onEditorWidgetsChange,
@@ -1302,6 +1304,7 @@ export function ProjectChatTabsPanel({
                   initialTitle={tab.title}
                   sessions={sessions}
                   activeAssessmentContext={activeAssessmentContext}
+                  activeEditorContext={activeEditorContext}
                   focusedAssumptionId={assumptions?.focusAssumptionId ?? null}
                   onDeleteChat={handleDeleteSession}
                   onChatListDirty={loadSessions}

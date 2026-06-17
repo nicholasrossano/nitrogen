@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Copy, Pencil, ThumbsUp, ThumbsDown, RefreshCw, Check, BookMarked, BookOpen, FileText, GraduationCap, Globe, AlertCircle, Share2 } from 'lucide-react';
+import { Copy, ThumbsUp, ThumbsDown, RefreshCw, Check, BookMarked, BookOpen, FileText, GraduationCap, Globe, AlertCircle } from 'lucide-react';
 import type { SourceCitation } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -38,49 +38,6 @@ function ToolbarIcon({ icon, label, onClick, active = false, disabled = false, s
   );
 }
 
-interface UserMessageToolbarProps {
-  content: string;
-  onEdit: () => void;
-  hideEdit?: boolean;
-}
-
-export function UserMessageToolbar({ content, onEdit, hideEdit = false }: UserMessageToolbarProps) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard API unavailable
-    }
-  }, [content]);
-
-  return (
-    <div className="flex items-center gap-1 relative">
-      {copied && (
-        <span className="absolute -top-6 right-0 text-xs text-text-secondary bg-surface-subtle border border-stroke-subtle rounded px-1.5 py-0.5 whitespace-nowrap pointer-events-none">
-          Copied
-        </span>
-      )}
-      <ToolbarIcon
-        icon={copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-        label="Copy message"
-        onClick={handleCopy}
-        active={copied}
-      />
-      {!hideEdit && (
-        <ToolbarIcon
-          icon={<Pencil className="w-3.5 h-3.5" />}
-          label="Edit message"
-          onClick={onEdit}
-        />
-      )}
-    </div>
-  );
-}
-
 interface AssistantMessageToolbarProps {
   content: string;
   feedback: 'like' | 'dislike' | null;
@@ -90,8 +47,6 @@ interface AssistantMessageToolbarProps {
   hideRetry?: boolean;
   sources?: SourceCitation[];
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
-  onPromote?: () => void;
-  showPromote?: boolean;
 }
 
 function getSourceIcon(type: string) {
@@ -127,8 +82,6 @@ export function AssistantMessageToolbar({
   hideRetry = false,
   sources,
   onOpenDocument,
-  onPromote,
-  showPromote = false,
 }: AssistantMessageToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -218,14 +171,6 @@ export function AssistantMessageToolbar({
           onClick={onRetry}
           disabled={retrying}
           spinning={retrying}
-        />
-      )}
-
-      {showPromote && onPromote && (
-        <ToolbarIcon
-          icon={<Share2 className="w-3.5 h-3.5" />}
-          label="Promote to project finding"
-          onClick={onPromote}
         />
       )}
 

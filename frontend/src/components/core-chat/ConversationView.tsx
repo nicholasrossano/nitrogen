@@ -21,7 +21,7 @@ import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
 import { track } from '@/lib/analytics';
 import { ABOVE_INPUT_WIDGET_TYPE, ChatWidgetRenderer } from '@/components/chat/ChatWidgetRenderer';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
-import { UserMessageToolbar, AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
+import { AssistantMessageToolbar } from '@/components/chat/MessageToolbar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { sanitizeHref } from '@/lib/sanitizeHref';
 import { debugChatFlow } from '@/lib/chatDebug';
@@ -69,9 +69,6 @@ export interface ConversationViewProps {
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
   /** Show file attachment controls in the composer */
   showAttachments?: boolean;
-  /** Promote assistant message to a shared project finding */
-  onPromoteMessage?: (messageId: string, body: string) => void;
-  showPromoteFinding?: boolean;
   /** Loading an existing chat history from the server */
   historyLoading?: boolean;
 }
@@ -124,8 +121,6 @@ export function ConversationView({
   topContentMode = 'inline',
   onApplyProposedValue,
   showAttachments = true,
-  onPromoteMessage,
-  showPromoteFinding = false,
   historyLoading = false,
 }: ConversationViewProps) {
 
@@ -456,7 +451,6 @@ export function ConversationView({
                 initiativeId={initiativeId}
                 feedback={messageFeedback[msg.id] ?? null}
                 onFeedback={(f) => onSetFeedback(msg.id, f)}
-                onEdit={(newContent) => onEditMessage(msg.id, newContent)}
                 onRetry={() => onRetryMessage(groupRetryId)}
                 retrying={retryingMessageId === msg.id}
                 showToolbar={showToolbar}
@@ -464,8 +458,6 @@ export function ConversationView({
                 onOpenDocument={onOpenDocument}
                 onSendMessage={(content) => onSendMessage(content)}
                 onApplyProposedValue={onApplyProposedValue}
-                onPromoteMessage={onPromoteMessage}
-                showPromoteFinding={showPromoteFinding}
               />
             );
           })}
@@ -928,7 +920,6 @@ function MessageBubble({
   initiativeId,
   feedback,
   onFeedback,
-  onEdit,
   onRetry,
   retrying,
   showToolbar = true,
@@ -936,8 +927,6 @@ function MessageBubble({
   onOpenDocument,
   onSendMessage,
   onApplyProposedValue,
-  onPromoteMessage,
-  showPromoteFinding = false,
 }: {
   message: CoreChatMessage;
   animate: boolean;
@@ -945,7 +934,6 @@ function MessageBubble({
   initiativeId?: string;
   feedback: 'like' | 'dislike' | null;
   onFeedback: (f: 'like' | 'dislike' | null) => void;
-  onEdit: (newContent: string) => void;
   onRetry: () => void;
   retrying: boolean;
   showToolbar?: boolean;
@@ -953,8 +941,6 @@ function MessageBubble({
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onSendMessage: (content: string) => void | Promise<void>;
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
-  onPromoteMessage?: (messageId: string, body: string) => void;
-  showPromoteFinding?: boolean;
 }) {
   const isUser = message.role === 'user';
   const enterClass = animate ? (isUser ? 'message-enter' : 'message-enter-bot') : '';
@@ -990,64 +976,24 @@ function MessageBubble({
       onOpenDocument,
     );
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(message.content);
-  const [bubbleWidth, setBubbleWidth] = useState<number | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
-
-  const handleEditStart = useCallback(() => {
-    if (bubbleRef.current) {
-      setBubbleWidth(bubbleRef.current.offsetWidth);
-    }
-    setEditValue(message.content);
-    setIsEditing(true);
-  }, [message.content]);
-
-  const handleEditSave = useCallback(() => {
-    const trimmed = editValue.trim();
-    if (!trimmed || trimmed === message.content) { setIsEditing(false); return; }
-    setIsEditing(false);
-    onEdit(trimmed);
-  }, [editValue, message.content, onEdit]);
-
-  const handleEditCancel = useCallback(() => {
-    setIsEditing(false);
-    setEditValue(message.content);
-  }, [message.content]);
-
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-      textareaRef.current.focus();
-      const len = textareaRef.current.value.length;
-      textareaRef.current.setSelectionRange(len, len);
-    }
-  }, [isEditing]);
 
   return (
     <div className={`group flex ${enterClass} ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`relative flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[90%] items-start pb-2'}`}>
 
         {/* Floating toolbar */}
-        {!isEditing && showToolbar && (
-          <div className={`absolute z-10 flex items-center transition-opacity ${isUser ? 'right-0 -bottom-5 opacity-0 group-hover:opacity-100' : 'left-0 -bottom-5'}`}>
-            {isUser ? (
-              <UserMessageToolbar content={message.content} onEdit={handleEditStart} />
-            ) : (
-              <AssistantMessageToolbar
-                content={groupContent ?? message.content}
-                feedback={feedback}
-                onFeedback={onFeedback}
-                onRetry={onRetry}
-                retrying={retrying}
-                sources={message.sources ?? undefined}
-                onOpenDocument={onOpenDocument}
-                showPromote={showPromoteFinding}
-                onPromote={onPromoteMessage ? () => onPromoteMessage(message.id, groupContent ?? message.content) : undefined}
-              />
-            )}
+        {!isUser && showToolbar && (
+          <div className="absolute z-10 flex items-center transition-opacity left-0 -bottom-5">
+            <AssistantMessageToolbar
+              content={groupContent ?? message.content}
+              feedback={feedback}
+              onFeedback={onFeedback}
+              onRetry={onRetry}
+              retrying={retrying}
+              sources={message.sources ?? undefined}
+              onOpenDocument={onOpenDocument}
+            />
           </div>
         )}
 
@@ -1061,28 +1007,7 @@ function MessageBubble({
           />
         )}
 
-        {isUser && isEditing ? (
-          <div style={bubbleWidth ? { minWidth: bubbleWidth } : undefined}>
-            <textarea
-              ref={textareaRef}
-              value={editValue}
-              onChange={e => {
-                setEditValue(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${e.target.scrollHeight}px`;
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditSave(); }
-                if (e.key === 'Escape') handleEditCancel();
-              }}
-              className="w-full text-sm leading-relaxed px-4 py-3 rounded-2xl border border-zinc-400 bg-transparent text-text-primary resize-none outline-none focus:border-zinc-500"
-            />
-            <div className="flex items-center gap-2 mt-1.5 justify-end">
-              <button onClick={handleEditCancel} className="text-xs text-text-tertiary hover:text-text-secondary transition-colors">Cancel</button>
-              <button onClick={handleEditSave} className="text-xs text-accent hover:text-accent-anchor font-medium transition-colors">Save & regenerate</button>
-            </div>
-          </div>
-        ) : isUser ? (
+        {isUser ? (
           <div ref={bubbleRef} className="px-4 py-3 rounded-2xl bg-zinc-700 text-white prose-user">
             <ReactMarkdown components={streamingMarkdownComponents}>
               {message.content.replace(/\n?\[TEMPLATE_CONTEXT\][\s\S]*?\[\/TEMPLATE_CONTEXT\]/g, '').trim()}

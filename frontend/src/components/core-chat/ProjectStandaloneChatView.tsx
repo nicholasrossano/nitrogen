@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { ChatMessage, FieldContext, ResearchStep } from '@/lib/api';
+import type { ChatMessage, FieldContext, ResearchStep, ActiveEditorContext } from '@/lib/api';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { filterSupportedFiles } from '@/lib/fileUtils';
@@ -89,6 +89,8 @@ interface ProjectChatSurfaceProps {
   sessions?: ChatSummary[];
   /** Active assessment context from the workspace panel */
   activeAssessmentContext?: { instanceId: string; assessmentId: string; title?: string | null } | null;
+  /** Active editor tab context from the workspace panel */
+  activeEditorContext?: ActiveEditorContext | null;
   /** Assumption pinned to this chat tab (if any). */
   focusedAssumptionId?: string | null;
   /** Automatically send a message into this chat view when it becomes active */
@@ -117,9 +119,6 @@ interface ProjectChatSurfaceProps {
   assessmentProgress?: AssessmentProgressData | null;
   /** Open the project assumptions workspace tab from overview. */
   onOpenAssumptions?: () => void;
-  /** Enable promote-to-finding on assistant messages */
-  showPromoteFinding?: boolean;
-  onPromoteMessage?: (messageId: string, body: string) => void;
   /** Controls rendered on the left side of the composer toolbar (before attach/send) */
   composerLeadingActions?: React.ReactNode;
 }
@@ -178,6 +177,7 @@ export function ProjectChatSurface({
   onSendRef,
   sessions = [],
   activeAssessmentContext = null,
+  activeEditorContext = null,
   focusedAssumptionId = null,
   pendingAutoSend = null,
   onPendingAutoSendHandled,
@@ -189,8 +189,6 @@ export function ProjectChatSurface({
   onBeforeSendMessage,
   assessmentProgress = null,
   onOpenAssumptions,
-  showPromoteFinding = false,
-  onPromoteMessage,
   composerLeadingActions,
 }: ProjectChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
@@ -517,6 +515,7 @@ export function ProjectChatSurface({
       modelInputsContext?: string | null,
       associatedAssessment?: { instanceId: string; assessmentId: string; title?: string | null } | null,
       assumptionId?: string | null,
+      activeEditorContextOverride?: ActiveEditorContext | null,
     ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
         role: m.role,
@@ -541,6 +540,8 @@ export function ProjectChatSurface({
         model_type: fieldContext?.model_type ?? null,
         has_field_context: Boolean(fieldContext),
         has_model_inputs_context: Boolean(modelInputsContext),
+        has_active_editor_context: Boolean(activeEditorContextOverride),
+        active_editor_kind: activeEditorContextOverride?.kind ?? null,
         initiative_id: initiativeId,
         compare_mode: Boolean(compareIds),
       });
@@ -635,6 +636,7 @@ export function ProjectChatSurface({
         },
         compareIds,
         allowInitialProjectOnboarding,
+        activeEditorContextOverride ?? null,
       );
     },
     [
@@ -716,6 +718,7 @@ export function ProjectChatSurface({
           modelInputsContext,
           associatedAssessment,
           effectiveAssumptionId,
+          activeEditorContext,
         );
       } catch {
         setLocalMessages((prev) =>
@@ -726,6 +729,7 @@ export function ProjectChatSurface({
     },
     [
       activeAssessmentContext,
+      activeEditorContext,
       focusedAssumptionId,
       localMessages,
       onBeforeSendMessage,
@@ -1105,8 +1109,6 @@ export function ProjectChatSurface({
       topContentMode={topContentMode}
       onApplyProposedValue={handleApplyProposedValue}
       showAttachments={!allowInitialProjectOnboarding}
-      showPromoteFinding={showPromoteFinding}
-      onPromoteMessage={onPromoteMessage}
       historyLoading={loadingChat}
     />
   );
