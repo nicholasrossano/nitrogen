@@ -1,4 +1,4 @@
-# Nitrogen AI
+# Nitrogen
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![CI](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml/badge.svg)](https://github.com/nicholasrossano/nitrogen/actions/workflows/ci.yml)
@@ -7,31 +7,29 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-Open-source software for sustainable development project design and implementation.
+Open-source, chat-first reference architecture for climate-impact investment diligence.
 
-Nitrogen AI is a collaborative platform for teams designing, evaluating, and advancing sustainable development projects, orchestrating micro-model assessments like solar yield, levelized cost of electricity, health impact analyses, and more all within one tool. It can then turn project materials and assessments into deliverables like investment memos, landscape assessments, and other decision-ready materials with clear, traceable logs across citations and decisions.
+Nitrogen is a self-hostable platform for impact investors and diligence teams: research companies in personal chat, promote findings to shared project records, and track deal health with rubric snapshots. Energy calculators (carbon, LCOE, solar) ship as signal providers for the worked example — the engine is domain-agnostic.
+
+See [docs/positioning.md](docs/positioning.md) for the product narrative and [docs/architecture.md](docs/architecture.md) for system design.
 
 ## Overview
 
-Sustainable development work is often shaped by unequal access to expertise, tools, and implementation support. Nitrogen AI is motivated by the idea that teams working in lower-resource environments — along with the global organizations that support them — should have better access to the analytical tools, structured workflows, and precedent needed to design and execute successful projects.
+Investment diligence is fragmented across spreadsheets, data rooms, consultant memos, and ad-hoc notes. Nitrogen brings that work into a shared, chat-native system with clear promotion boundaries between private research and team-visible findings.
 
-In practice, those workflows are often fragmented across spreadsheets, consultant reports, internal notes, institution-specific knowledge, and more. Nitrogen AI is an attempt to bring more of that work into a shared, adaptable system.
+The platform helps teams:
 
-The platform is designed to help teams:
-
-- structure project information through guided and conversational workflows
-- run targeted assessments across technical, financial, and impact-related questions
-- incorporate precedent, datasets, and supporting evidence into project design
-- generate decision-ready materials such as memos, applications, and supporting documents
-
-The goal is not to replace domain expertise, but to make it easier to apply, adapt, and extend. The platform prioritizes simplicity and usability, with a straightforward interface that keeps users in control while shifting more of the technical complexity into the underlying system.
+- research deals in personal, project-optional chat with cited retrieval
+- promote curated outputs to project-level findings and structured assumptions
+- upload and organize company library and deal-room documents
+- track rubric health across documents, findings, and computed signals
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14 (TypeScript), Tailwind CSS, Zustand
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Database**: PostgreSQL with pgvector for vector search and RAG embeddings
-- **Auth**: Firebase Authentication
+- **Auth**: Firebase Authentication (or mock dev auth)
 
 ## Quick Start (Local Development)
 
@@ -40,7 +38,8 @@ The goal is not to replace domain expertise, but to make it easier to apply, ada
 - Python 3.12+
 - Node.js 22+
 - PostgreSQL with pgvector (or a Neon database)
-- OpenAI API key
+- **Required:** `OPENAI_API_KEY` and `DATABASE_URL`
+- **Optional:** Firebase for production-like auth, or mock dev auth (see below)
 
 ### 1) Clone and configure environment
 
@@ -52,36 +51,49 @@ bash scripts/worktree_setup.sh
 bash scripts/check_dev_env.sh
 ```
 
-Set `DATABASE_URL`, `OPENAI_API_KEY`, and either Firebase (`NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID`) or mock dev auth (`DEBUG=true`, `DEV_MOCK_TOKEN`).
+Minimal mock-auth `.env` (local only):
+
+```bash
+DEBUG=true
+DEV_MOCK_TOKEN=dev-mock-token
+NEXT_PUBLIC_DEV_MOCK_TOKEN=dev-mock-token
+DATABASE_URL=postgresql+asyncpg://...
+OPENAI_API_KEY=sk-...
+```
 
 `backend/.env` and `frontend/.env.local` symlink to root `.env`. Quick start: `bash scripts/start_emulator.sh`.
 
-### 2) Start backend
+### 2) Migrate and optional demo seed
 
 ```bash
 cd backend
 pip install -r requirements.txt
 python3 -m alembic upgrade head
-python3 -m uvicorn app.main:app --reload --port 8000
+python3 scripts/seed_demo_deal.py   # optional synthetic sample deal
+python3 scripts/seed_corpus.py        # optional public corpus snippets
 ```
 
-### 3) Start frontend
+### 3) Start servers
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# from repo root
+bash scripts/start_emulator.sh
+```
+
+Or manually:
+
+```bash
+cd backend && python3 -m uvicorn app.main:app --reload --port 8000
+cd frontend && npm run dev
 ```
 
 ### 4) Open the app
 
-- Frontend: `http://localhost:3000`
+- Frontend: `http://localhost:3000` (redirects to `/chat`)
 - Backend API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 
 ## Docker (Optional)
-
-If you prefer Docker-based local setup:
 
 ```bash
 docker compose up -d
@@ -90,26 +102,18 @@ docker compose exec backend alembic upgrade head
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details. Contributions require a signed [Contributor License Agreement](CLA.md) before merge.
-
-Browse [open issues](https://github.com/nicholasrossano/nitrogen/issues) to get started.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions require a signed [Contributor License Agreement](CLA.md) before merge.
 
 ## Security Checks
 
-Run the local secret scanner before opening a PR or preparing an open-source release:
-
 ```bash
-./scripts/security_check.sh
+./scripts/security_check.sh          # pre-commit (working tree)
+./scripts/security_check.sh --history # full scan including git history
+./scripts/oss_pre_release.sh         # run before making the repo public
 ```
 
-For a deeper scan that also checks commit history:
-
-```bash
-./scripts/security_check.sh --history
-```
+CI runs the full secret and artifact scan on every push.
 
 ## License
 
-[GNU Affero General Public License v3.0](LICENSE): any modifications must be open-sourced under the same license, including when deployed as a hosted service.
-
-Organizations that need terms outside the AGPLv3 may contact Nitrogen AI about a separate [commercial license](COMMERCIAL_LICENSE.md). Use of Nitrogen AI names, logos, and branding is covered by the [trademark guidelines](TRADEMARKS.md).
+[GNU Affero General Public License v3.0](LICENSE). Organizations needing terms outside the AGPLv3 may contact Nitrogen about a separate [commercial license](COMMERCIAL_LICENSE.md). Use of Nitrogen names, logos, and branding is covered by the [trademark guidelines](TRADEMARKS.md).

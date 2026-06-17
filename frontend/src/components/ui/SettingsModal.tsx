@@ -20,12 +20,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// SettingsModal
-// ---------------------------------------------------------------------------
-// Sectioned layout — add new sections by appending <SettingsSection> blocks.
-// Each toggle/input should read from and write to useSettingsStore.
-// ---------------------------------------------------------------------------
+// Sectioned layout — add new sections via <SettingsSection>. Wire toggles through useSettingsStore.
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -600,7 +595,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                           : 'Personal workspace'}
                       </p>
                     </div>
-                    {workspaceOptions.length > 0 && (
+                    {workspaceOptions.length > 1 && (
                       <div ref={workspaceSwitcherRef} className="relative flex-shrink-0">
                         <button
                           type="button"
