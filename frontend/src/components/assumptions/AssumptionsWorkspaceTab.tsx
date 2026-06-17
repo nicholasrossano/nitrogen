@@ -8,6 +8,7 @@ import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui
 import { WorkspaceTabLoader } from '@/components/ui';
 import { CitationChip } from '@/components/ui/CitationChip';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import {
   api,
   type Assumption,
@@ -221,7 +222,7 @@ export function AssumptionsWorkspaceTab({
       setRows(next);
       setSelected((current) => next.find((row) => row.id === current?.id) ?? null);
     } catch (e: any) {
-      setError(e.message ?? 'Failed to load assumptions');
+      setError(e.message ?? `Failed to load ${PROJECT_VARIABLES.lower}`);
     } finally {
       setLoading(false);
     }
@@ -328,7 +329,7 @@ export function AssumptionsWorkspaceTab({
   const columns: ReadOnlyDataTableColumn<Assumption>[] = [
     {
       key: 'label',
-      header: 'Assumption',
+      header: PROJECT_VARIABLES.titleSingular,
       className: 'min-w-[190px] text-text-primary',
       render: (row) => (
         <button
@@ -402,7 +403,7 @@ export function AssumptionsWorkspaceTab({
         );
       }
     } catch (e: any) {
-      setError(e.message ?? 'Failed to update assumption');
+      setError(e.message ?? `Failed to update ${PROJECT_VARIABLES.lowerSingular}`);
     } finally {
       setSaving(false);
     }
@@ -437,10 +438,10 @@ export function AssumptionsWorkspaceTab({
         <div className="space-y-6">
           {!embedded ? (
             <div>
-              <h1 className="text-lg font-semibold text-text-primary">Assumptions</h1>
+              <h1 className="text-lg font-semibold text-text-primary">{PROJECT_VARIABLES.title}</h1>
               <p className="mt-1 text-sm text-text-tertiary">
                 Project-wide values and claims used by assessments, forecasts, and outputs.
-                {!showDetailPanel ? ' Select an assumption to open it to explore it further.' : ''}
+                {!showDetailPanel ? ` Select a ${PROJECT_VARIABLES.lowerSingular} to open it to explore it further.` : ''}
               </p>
             </div>
           ) : null}
@@ -453,19 +454,19 @@ export function AssumptionsWorkspaceTab({
                 value={status}
                 onChange={(value) => setStatus(value as '' | AssumptionStatus)}
                 options={STATUS_OPTIONS}
-                ariaLabel="Filter assumptions by status"
+                ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by status`}
               />
               <CustomDropdown
                 value={sourceType}
                 onChange={(value) => setSourceType(value as '' | AssumptionSourceType)}
                 options={SOURCE_OPTIONS}
-                ariaLabel="Filter assumptions by source type"
+                ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by source type`}
               />
               <CustomDropdown
                 value={assessmentFilter}
                 onChange={setAssessmentFilter}
                 options={assessmentFilterOptions}
-                ariaLabel="Filter assumptions by assessment"
+                ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by assessment`}
               />
             </div>
             {onAddAssumptionInChat ? (
@@ -475,7 +476,7 @@ export function AssumptionsWorkspaceTab({
                 onClick={onAddAssumptionInChat}
               >
                 <Plus className="w-3 h-3" />
-                Add assumption
+                Add {PROJECT_VARIABLES.lowerSingular}
               </button>
             ) : null}
           </div>
@@ -487,9 +488,9 @@ export function AssumptionsWorkspaceTab({
             onRowClick={handleAssumptionOpen}
             emptyState={
               <div className="py-20 text-center">
-                <p className="text-sm font-medium text-text-secondary">No assumptions yet</p>
+                <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
                 <p className="mt-1 text-xs text-text-tertiary">
-                  Upload project materials or create assessments to start tracking assumptions.
+                  Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
                 </p>
               </div>
             }
@@ -500,7 +501,7 @@ export function AssumptionsWorkspaceTab({
           {selected ? (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">Selected assumption</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">Selected {PROJECT_VARIABLES.lowerSingular}</p>
                 <h2 className="mt-1 text-base font-semibold text-text-primary">{selected.label}</h2>
                 <p className="mt-1 text-xs text-text-tertiary">{selected.key}</p>
               </div>
@@ -539,7 +540,7 @@ export function AssumptionsWorkspaceTab({
           ) : (
             <div className="flex h-full min-h-[260px] items-center justify-center text-center">
               <div>
-                <p className="text-sm font-medium text-text-secondary">Select an assumption</p>
+                <p className="text-sm font-medium text-text-secondary">Select a {PROJECT_VARIABLES.lowerSingular}</p>
                 <p className="mt-1 text-xs text-text-tertiary">Open a row to inspect provenance, edit values, or change status.</p>
               </div>
             </div>

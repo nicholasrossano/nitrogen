@@ -24,12 +24,16 @@ interface LandingInputProps {
   placeholder?: string;
   /** Extra action buttons rendered in the composer toolbar (before paperclip) */
   extraInputActions?: React.ReactNode;
+  /** Controls rendered on the right side of the composer toolbar (before attach/send) */
+  trailingInputActions?: React.ReactNode;
   /** Chips rendered above the textarea (e.g. compare project chip) */
   inputChips?: React.ReactNode;
-  /** Large serif title rendered above the composer (left-aligned) */
+  /** Large title rendered above the composer (left-aligned) */
   composerTitle?: string | null;
   /** Attached tray rendered above and visually connected to the composer */
   topComposerContent?: React.ReactNode;
+  /** Content rendered below the composer (e.g. project outputs on chat landing) */
+  belowComposerContent?: React.ReactNode;
   /** Alternate landing layout for initiative overview pages */
   layoutMode?: 'default' | 'overview';
   /** Hide composer input area (used when side chat is active) */
@@ -62,9 +66,11 @@ export function LandingInput({
   topRightActions,
   placeholder = 'Ask anything',
   extraInputActions,
+  trailingInputActions,
   inputChips,
   composerTitle,
   topComposerContent,
+  belowComposerContent,
   layoutMode = 'default',
   hideComposer = false,
   showAttachments = true,
@@ -207,6 +213,7 @@ export function LandingInput({
             </div>
           )}
           <div className="absolute right-3 bottom-2.5 flex items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+            {trailingInputActions}
             {showAttachments && (
               <>
                 <input
@@ -343,12 +350,18 @@ export function LandingInput({
 
       <div className={`relative w-full ${contentMaxWidth}`}>
         {showComposerTitle ? (
-          <h1 className="absolute bottom-full left-0 mb-3 text-left font-serif text-2xl leading-tight tracking-tight text-text-primary sm:text-3xl">
+          <h1 className="absolute bottom-full left-0 mb-6 min-w-0 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl">
             {composerTitle}
           </h1>
         ) : null}
         {renderComposer('w-full')}
       </div>
+
+      {belowComposerContent ? (
+        <div className={`w-full overflow-visible ${contentMaxWidth} mt-6`}>
+          {belowComposerContent}
+        </div>
+      ) : null}
 
       {renderHistory()}
     </div>

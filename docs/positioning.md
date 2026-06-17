@@ -4,7 +4,7 @@ Nitrogen is a **domain-agnostic, chat-first diligence reference architecture** w
 
 ## What changed (contract cutover)
 
-The legacy **initiative** model and onboarding chat table are retired. **`projects`** is the canonical deal record; child tables scope to `project_id`. Personal work happens in **core chat**; shared curation crosses a single **promotion boundary** into project **findings** and structured **assumptions**.
+The legacy **initiative** model and onboarding chat table are retired. **`projects`** is the canonical deal record; child tables scope to `project_id`. Personal work happens in **core chat**; shared curation crosses a single **promotion boundary** into project **findings** and structured **variables** (API: assumptions).
 
 Energy-specific calculators (carbon, LCOE, solar) remain as **signal providers** and assessment tooling inside the example domain pack — they are not the core abstraction.
 
@@ -13,10 +13,10 @@ Energy-specific calculators (carbon, LCOE, solar) remain as **signal providers**
 | Primitive | Role |
 |-----------|------|
 | **Company workspace** | Singleton tenant: members, company library, rubric templates (future), flows (future) |
-| **Project** | Lightweight shared deal: documents, findings, assumptions, health |
+| **Project** | Lightweight shared deal: documents, findings, variables, health |
 | **Personal chat** | Private research; optional project scope for retrieval |
 | **Finding** | Promoted, cited markdown shared on a project |
-| **Assumption** | Structured deal parameter; new rows created at promotion time |
+| **Variable** | Structured deal parameter (validated fact or working value); new rows often created at promotion time |
 | **Files** | Company library vs project data room (single UI, scope toggle) |
 
 ## UX spine

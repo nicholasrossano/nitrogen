@@ -48,14 +48,14 @@ export function ProjectContextPanel({
 
   return (
     <aside className={panelClass}>
-      <div className="px-4 py-3 border-b border-divider shrink-0">
+      <div className="px-4 py-3 shrink-0">
         <h2 className="text-sm font-semibold text-text-primary truncate">Overview</h2>
         {project.subject && (
           <p className="mt-1 text-xs text-text-secondary line-clamp-3">{project.subject}</p>
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
         <section>
           <h3 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
             Status

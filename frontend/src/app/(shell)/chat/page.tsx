@@ -7,6 +7,8 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
 import { PersonalChatSurface } from '@/components/chat-shell/PersonalChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
+import { ChangeProjectSelect } from '@/components/chat-shell/ChangeProjectSelect';
+import { writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
 import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
@@ -14,7 +16,12 @@ import { PromoteFindingDialog } from '@/components/chat-shell/PromoteFindingDial
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { AssumptionsChatPanel } from '@/components/assumptions/AssumptionsChatPanel';
 import { EditorSidePanel, type EditorWidget } from '@/components/editor/EditorSidePanel';
-import { api, type Assumption, type Project } from '@/lib/api';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
+import {
+  editorWidgetForCitation,
+  editorWidgetForProjectMaterial,
+} from '@/lib/openProjectFileInEditor';
+import { api, type Assumption, type Project, type ProjectMaterial } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
@@ -62,6 +69,7 @@ function ChatWorkbenchContent() {
   useEffect(() => {
     if (selectedProjectId) {
       void useInitiativeStore.getState().loadInitiative(selectedProjectId);
+      writeLastProjectId(selectedProjectId);
     }
   }, [selectedProjectId]);
 
@@ -118,6 +126,30 @@ function ChatWorkbenchContent() {
     writeChatEditorPanelWidth(editorPanelWidthPx);
   }, [editorPanelWidthPx, isResizingEditorPanel]);
 
+  const handleChangeProject = useCallback((projectId: string) => {
+    if (!projectId || projectId === selectedProjectId) return;
+    writeLastProjectId(projectId);
+    router.replace(`/chat?project=${projectId}`);
+  }, [router, selectedProjectId]);
+
+  const changeProjectControl = useMemo(() => (
+    projects.length > 0 ? (
+      <ChangeProjectSelect
+        projects={projects}
+        value={selectedProjectId}
+        onChange={handleChangeProject}
+      />
+    ) : null
+  ), [handleChangeProject, projects, selectedProjectId]);
+
+  const handleCloseEditorPanel = useCallback(() => {
+    setPinnedEditorWidgets(null);
+    setEditorWidgets([]);
+    if (!activeChatId) {
+      setHasMessages(false);
+    }
+  }, [activeChatId]);
+
   const handleEditorWidgetsChange = useCallback((widgets: EditorWidget[]) => {
     setEditorWidgets(widgets);
     if (widgets.length > 0) setPinnedEditorWidgets(null);
@@ -144,6 +176,16 @@ function ChatWorkbenchContent() {
     },
     [],
   );
+
+  const handleOpenDocument = useCallback((citation: ResearchPanelCitation) => {
+    setHasMessages(true);
+    setPinnedEditorWidgets([editorWidgetForCitation(citation)]);
+  }, []);
+
+  const handleOpenProjectFile = useCallback((file: ProjectMaterial) => {
+    setHasMessages(true);
+    setPinnedEditorWidgets([editorWidgetForProjectMaterial(file)]);
+  }, []);
 
   const handlePromoteMessage = useCallback((messageId: string, body: string) => {
     if (!selectedProjectId) return;
@@ -234,16 +276,17 @@ function ChatWorkbenchContent() {
               landingLayoutMode="default"
               landingComposerTitle={selectedProject?.name}
               landingHeaderContent={<></>}
-              showComposerModulePicker
               onLandingStateChange={(onLanding) => setHasMessages(!onLanding)}
               onEditorWidgetsChange={handleEditorWidgetsChange}
               onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
+              onOpenDocument={handleOpenDocument}
               onChatMetaChange={({ chatId }) => {
                 if (chatId && chatId !== activeChatId) handleChatIdResolved(chatId);
               }}
               showPromoteFinding
               onPromoteMessage={handlePromoteMessage}
               onChatListDirty={handleChatListDirty}
+              composerLeadingActions={changeProjectControl}
             />
           ) : (
             <PersonalChatSurface
@@ -253,6 +296,7 @@ function ChatWorkbenchContent() {
               onLandingStateChange={(onLanding) => setHasMessages(!onLanding)}
               onChatListDirty={handleChatListDirty}
               onChatIdResolved={handleChatIdResolved}
+              composerLeadingActions={changeProjectControl}
             />
           )}
         </div>
@@ -276,7 +320,11 @@ function ChatWorkbenchContent() {
             />
           </div>
           <div className="pointer-events-auto min-h-0 flex flex-col min-w-0">
-            <ProjectFilesPanel projectId={selectedProjectId} refreshKey={contextRefreshKey} />
+            <ProjectFilesPanel
+              projectId={selectedProjectId}
+              refreshKey={contextRefreshKey}
+              onOpenFile={handleOpenProjectFile}
+            />
           </div>
         </div>
       )}
@@ -300,7 +348,11 @@ function ChatWorkbenchContent() {
               className={`absolute left-1/2 top-0 h-full w-px -translate-x-1/2 transition-colors ${isResizingEditorPanel ? 'bg-accent/60' : 'bg-divider group-hover:bg-accent/40'}`}
             />
           </div>
-          <EditorSidePanel widgets={effectiveEditorWidgets} initiativeId={selectedProjectId} />
+          <EditorSidePanel
+            widgets={effectiveEditorWidgets}
+            initiativeId={selectedProjectId}
+            onClose={handleCloseEditorPanel}
+          />
         </aside>
       )}
 
