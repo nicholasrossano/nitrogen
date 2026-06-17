@@ -1101,7 +1101,6 @@ export function ProjectChatSurface({
       extraInputActions={composerToolbarLeading}
       topComposerContent={associatedAssessmentsTray}
       inputChips={inputChips}
-      composerTitle={landingComposerTitle}
       topContent={topContent}
       topContentMode={topContentMode}
       onApplyProposedValue={handleApplyProposedValue}
