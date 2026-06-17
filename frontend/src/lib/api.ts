@@ -1470,6 +1470,19 @@ export const api = {
     return response.arrayBuffer();
   },
 
+  getMaterialFileBytes: async (materialId: string): Promise<ArrayBuffer> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_URL}/api/v1/materials/${materialId}/download`, {
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch project material file');
+    }
+    return response.arrayBuffer();
+  },
+
   getEvidenceChunkPreviewBytes: async (evidenceId: string, chunkId: string): Promise<ArrayBuffer> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};

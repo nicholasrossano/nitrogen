@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Plus } from 'lucide-react';
 import { api, type Project } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -36,6 +36,7 @@ export function DrawerChatTree({
   const [visibleCount, setVisibleCount] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     if (!activeWorkspace) void loadWorkspaces();
@@ -43,7 +44,9 @@ export function DrawerChatTree({
 
   const load = useCallback(async () => {
     if (!activeWorkspace?.id) return;
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
     setLoadError(null);
     try {
       const [projectRows, chatResponse] = await Promise.all([
@@ -64,6 +67,7 @@ export function DrawerChatTree({
         }
         return next;
       });
+      hasLoadedOnceRef.current = true;
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load projects');
     } finally {

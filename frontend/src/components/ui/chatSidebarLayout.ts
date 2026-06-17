@@ -49,9 +49,12 @@ export function writeChatEditorPanelWidth(widthPx: number) {
   }
 }
 
+/** Shared drop shadow for floating chat-shell panels and popovers. */
+export const CHAT_FLOATING_PANEL_SHADOW = 'shadow-floating-panel';
+
 /** Shared border, shadow, and surface for floating chat-shell panels (sidebar, health, editor). */
 export const CHAT_FLOATING_PANEL_CHROME =
-  'rounded-2xl bg-surface border border-stroke-subtle shadow-[0_4px_24px_rgba(15,23,42,0.08)]';
+  `rounded-2xl bg-surface border border-stroke-subtle ${CHAT_FLOATING_PANEL_SHADOW}`;
 
 export function chatShellContentGutter(collapsed: boolean): string {
   const drawerWidth = collapsed ? CHAT_SIDEBAR_COLLAPSED_WIDTH : CHAT_SIDEBAR_EXPANDED_WIDTH;

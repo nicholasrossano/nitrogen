@@ -26,6 +26,7 @@ import {
   CHAT_SIDEBAR_EXPANDED_WIDTH,
   CHAT_SIDEBAR_MARGIN,
 } from './chatSidebarLayout';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
 export type NavItem = 'portfolio' | 'trash' | 'plan' | 'assumptions' | 'files' | 'chat' | 'research' | 'workspace';
 
@@ -48,7 +49,7 @@ const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'research', label: 'Overview', Icon: Home },
   { key: 'plan', label: 'Framework', Icon: Map },
   { key: 'workspace', label: 'Assessments', Icon: Calculator },
-  { key: 'assumptions', label: 'Assumptions', Icon: ListChecks },
+  { key: 'assumptions', label: PROJECT_VARIABLES.title, Icon: ListChecks },
 ];
 
 const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;

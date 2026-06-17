@@ -12,6 +12,7 @@ import {
   type AssessmentOption,
 } from '@/domain/energy/assessmentCatalog';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
+import { CHAT_FLOATING_PANEL_SHADOW } from '@/components/ui/chatSidebarLayout';
 
 export { ALL_MODULES, MODULE_CATEGORIES, STANDALONE_MODULE_IDS };
 export type { AssessmentCategory, AssessmentOption };
@@ -95,7 +96,7 @@ export function AssessmentPicker({
     <div
       ref={dropdownRef}
       style={dropdownStyle}
-      className="rounded-xl border border-stroke-subtle bg-white shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.08)] overflow-hidden"
+      className={`rounded-xl border border-stroke-subtle bg-white overflow-hidden ${CHAT_FLOATING_PANEL_SHADOW}`}
     >
       <div className="px-3 pt-2.5 pb-1.5">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">

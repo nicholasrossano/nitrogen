@@ -36,6 +36,8 @@ type FileType = 'pdf' | 'docx' | 'xlsx' | 'xls' | 'text' | string;
 
 export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewerWidgetProps) {
   const evidenceDocId = data.evidence_doc_id as string | undefined;
+  const projectMaterialId = data.project_material_id as string | undefined;
+  const declaredFileType = data.file_type as string | undefined;
   const chunkId = data.chunk_id as string | null | undefined;
 
   const [fileType, setFileType] = useState<FileType | null>(null);
@@ -51,14 +53,34 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
   const highlightRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!evidenceDocId) return;
+    if (!evidenceDocId && !projectMaterialId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setFileData(null);
+    setChunks([]);
+    setFileType(null);
+    setInitialPage(null);
 
     (async () => {
       try {
-        const chunkRes = await api.getEvidenceChunks(evidenceDocId);
+        if (projectMaterialId && !evidenceDocId) {
+          const ft = declaredFileType || 'text';
+          setFileType(ft);
+          const bytes = await api.getMaterialFileBytes(projectMaterialId);
+          if (cancelled) return;
+
+          if (['pdf', 'docx', 'xlsx', 'xls'].includes(ft)) {
+            setFileData(bytes);
+            return;
+          }
+
+          const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+          setChunks([{ id: 'full', chunk_index: 0, content: text }]);
+          return;
+        }
+
+        const chunkRes = await api.getEvidenceChunks(evidenceDocId!);
         if (cancelled) return;
 
         const ft = chunkRes.file_type || 'text';
@@ -75,7 +97,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
 
         if (isNative) {
           try {
-            const bytes = await api.getEvidenceFileBytes(evidenceDocId);
+            const bytes = await api.getEvidenceFileBytes(evidenceDocId!);
             if (cancelled) return;
             setFileData(bytes);
           } catch {
@@ -87,13 +109,17 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
         }
       } catch {
         if (cancelled) return;
-        try {
-          const res = await api.getEvidenceContent(evidenceDocId);
-          if (cancelled) return;
-          setFileType(res.file_type || 'text');
-          setChunks([{ id: 'full', chunk_index: 0, content: res.content }]);
-        } catch {
-          if (!cancelled) setError('Could not load document');
+        if (evidenceDocId) {
+          try {
+            const res = await api.getEvidenceContent(evidenceDocId);
+            if (cancelled) return;
+            setFileType(res.file_type || 'text');
+            setChunks([{ id: 'full', chunk_index: 0, content: res.content }]);
+          } catch {
+            if (!cancelled) setError('Could not load document');
+          }
+        } else if (!cancelled) {
+          setError('Could not load document');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -101,7 +127,7 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     })();
 
     return () => { cancelled = true; };
-  }, [evidenceDocId, chunkId]);
+  }, [evidenceDocId, projectMaterialId, declaredFileType, chunkId]);
 
   const scrollToHighlight = useCallback(() => {
     if (highlightRef.current) {

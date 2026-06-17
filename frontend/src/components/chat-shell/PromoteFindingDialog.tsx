@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
 interface PromoteFindingDialogProps {
   open: boolean;
@@ -83,7 +84,7 @@ export function PromoteFindingDialog({
 
         <div className="p-4 space-y-3">
           <p className="text-xs text-text-secondary">
-            Shared findings appear in the team feed and can trigger assumption extraction.
+            Shared findings appear in the team feed and can trigger {PROJECT_VARIABLES.lowerSingular} extraction.
           </p>
           <textarea
             value={body}

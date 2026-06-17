@@ -12,6 +12,7 @@ import { AssociatedAssessmentsTray, type AssociatedChatAssessment } from './Asso
 import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
+import { ProjectOutputsSection } from '@/components/chat-shell/ProjectOutputsSection';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
@@ -119,6 +120,8 @@ interface ProjectChatSurfaceProps {
   /** Enable promote-to-finding on assistant messages */
   showPromoteFinding?: boolean;
   onPromoteMessage?: (messageId: string, body: string) => void;
+  /** Controls rendered on the left side of the composer toolbar (before attach/send) */
+  composerLeadingActions?: React.ReactNode;
 }
 
 function toCoreMessage(m: ChatMessage): CoreChatMessage {
@@ -188,6 +191,7 @@ export function ProjectChatSurface({
   onOpenAssumptions,
   showPromoteFinding = false,
   onPromoteMessage,
+  composerLeadingActions,
 }: ProjectChatSurfaceProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -910,6 +914,13 @@ export function ProjectChatSurface({
 
   const conversationExtraInputActions = landingExtraInputActions;
 
+  const composerToolbarLeading = (composerLeadingActions || conversationExtraInputActions) ? (
+    <div className="flex items-center gap-1.5 min-w-0">
+      {composerLeadingActions}
+      {conversationExtraInputActions}
+    </div>
+  ) : null;
+
   useEffect(() => {
     onLandingStateChange?.(isOnLanding);
   }, [isOnLanding, onLandingStateChange]);
@@ -1052,11 +1063,19 @@ export function ProjectChatSurface({
               </Link>
             </>
           ) : undefined}
-          extraInputActions={landingExtraInputActions}
+          extraInputActions={composerToolbarLeading}
           topComposerContent={associatedAssessmentsTray}
           inputChips={inputChips}
           hideComposer={hideLandingComposer}
           showAttachments={!allowInitialProjectOnboarding}
+          belowComposerContent={
+            hideTiles && onOpenWorkspaceAssessment ? (
+              <ProjectOutputsSection
+                projectId={initiativeId}
+                onOpenOutput={onOpenWorkspaceAssessment}
+              />
+            ) : null
+          }
         />
       </>
     );
@@ -1079,9 +1098,10 @@ export function ProjectChatSurface({
       retryingMessageId={null}
       initiativeId={initiativeId}
       onOpenDocument={onOpenDocument}
-      extraInputActions={conversationExtraInputActions}
+      extraInputActions={composerToolbarLeading}
       topComposerContent={associatedAssessmentsTray}
       inputChips={inputChips}
+      composerTitle={landingComposerTitle}
       topContent={topContent}
       topContentMode={topContentMode}
       onApplyProposedValue={handleApplyProposedValue}

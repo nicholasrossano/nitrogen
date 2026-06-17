@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectFilesView } from '@/components/files';
+import { ChangeProjectSelect, resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
+import { readLastProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { api, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -14,7 +16,11 @@ function FilesPageContent() {
   const searchParams = useSearchParams();
   const projectParam = searchParams.get('project');
   const { activeWorkspace, loadWorkspaces } = useWorkspaceStore();
-  const [scope, setScope] = useState<FilesScope>(() => (projectParam ? 'project' : 'company'));
+  const [scope, setScope] = useState<FilesScope>(() => {
+    if (projectParam) return 'project';
+    if (typeof window !== 'undefined' && readLastProjectId()) return 'project';
+    return 'company';
+  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectParam);
   const [workspaceMaterials, setWorkspaceMaterials] = useState<ProjectMaterial[]>([]);
@@ -37,13 +43,30 @@ function FilesPageContent() {
     if (nextProject) {
       setSelectedProjectId(nextProject);
       setScope('project');
+      writeLastProjectId(nextProject);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (projects.length === 0 || scope !== 'project') return;
+
+    setSelectedProjectId((current) => {
+      if (current && projects.some((project) => project.id === current)) {
+        return current;
+      }
+      return resolveDefaultProjectId(projects, projectParam, readLastProjectId());
+    });
+  }, [projectParam, projects, scope]);
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+
+  const handleProjectChange = useCallback((projectId: string) => {
+    setSelectedProjectId(projectId);
+    writeLastProjectId(projectId);
+  }, []);
 
   const loadCompanyFiles = useCallback(async () => {
     if (!activeWorkspace?.id) return;
@@ -99,16 +122,13 @@ function FilesPageContent() {
             {selectedProject?.name ?? 'Project'}
           </button>
           {scope === 'project' && (
-            <select
-              value={selectedProjectId ?? ''}
-              onChange={(e) => setSelectedProjectId(e.target.value || null)}
-              className="ml-auto text-xs rounded-md border border-stroke-subtle px-2 py-1.5 bg-white"
-            >
-              <option value="" disabled>Select project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <ChangeProjectSelect
+              projects={projects}
+              value={selectedProjectId}
+              onChange={handleProjectChange}
+              size="default"
+              rootClassName="ml-auto"
+            />
           )}
         </div>
 
@@ -145,7 +165,7 @@ function FilesPageContent() {
             }}
           />
         ) : (
-          <div className="p-8 text-sm text-text-secondary">Select a project to view its data room.</div>
+          <div className="p-8 text-sm text-text-secondary">No projects available yet.</div>
         )}
     </main>
   );

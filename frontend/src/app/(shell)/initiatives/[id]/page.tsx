@@ -26,6 +26,7 @@ import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { api, type Assumption, type AssessmentInstance } from '@/lib/api';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { filterVisibleAssessments } from '@/lib/featureFlags';
@@ -542,7 +543,7 @@ function InitiativePageContent() {
         requestId,
         focusAssumptionId: detail.assumptionId,
         createNew: false,
-        title: detail.title ?? 'Assumption investigation',
+        title: detail.title ?? `${PROJECT_VARIABLES.titleSingular} investigation`,
         forceNewTab: true,
         autoSend: detail.text
           ? {
@@ -858,7 +859,7 @@ function InitiativePageContent() {
       requestId: `assumption-new-${Date.now()}`,
       focusAssumptionId: null,
       createNew: true,
-      title: 'New assumption',
+      title: `New ${PROJECT_VARIABLES.lowerSingular}`,
       forceNewTab: true,
     });
   }, [initiativeId, router, setPanelOpen]);

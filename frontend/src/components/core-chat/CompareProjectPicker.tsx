@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Scale, Search, X, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Initiative } from '@/lib/api';
+import { CHAT_FLOATING_PANEL_SHADOW } from '@/components/ui/chatSidebarLayout';
 
 export interface CompareProject {
   id: string;
@@ -114,7 +115,7 @@ export function CompareProjectPicker({
     <div
       ref={dropdownRef}
       style={dropdownStyle}
-      className="rounded-xl border border-stroke-subtle bg-white shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.08)] overflow-hidden"
+      className={`rounded-xl border border-stroke-subtle bg-white overflow-hidden ${CHAT_FLOATING_PANEL_SHADOW}`}
     >
       <div className="px-3 pt-2.5 pb-1.5">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">

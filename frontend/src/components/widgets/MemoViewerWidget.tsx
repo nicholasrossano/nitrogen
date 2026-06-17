@@ -51,7 +51,7 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
       initial['executive_summary-title'] = 'Executive Summary';
       initial['recommendation_rationale-title'] = 'Recommendation Rationale';
       initial['evidence_summary-title'] = 'Evidence Summary';
-      initial['risks_and_assumptions-title'] = 'Risks and Assumptions';
+      initial['risks_and_assumptions-title'] = 'Risks and Variables';
       initial['open_questions-title'] = 'Open Questions';
       // Store open questions
       if (content.open_questions) {

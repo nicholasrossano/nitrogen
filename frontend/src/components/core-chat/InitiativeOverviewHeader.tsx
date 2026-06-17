@@ -6,6 +6,7 @@ import { api, type AssumptionSummary, type Initiative } from '@/lib/api';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
 import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTable';
+import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import type { ResearchPanelCitation } from './ResearchPanel';
 
 const collaboratorsCountCache = new Map<string, number>();
@@ -218,7 +219,7 @@ export function InitiativeOverviewHeader({
       </div>
 
       <section className="mt-8">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Assumptions</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">{PROJECT_VARIABLES.title}</p>
       <div className="mt-2 rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>

@@ -42,6 +42,12 @@
   --color-divider: #EDECEA;
   --color-stroke-subtle: #E3E2E0;
   --color-stroke-accent: #005e72;
+
+  /* Floating panels + chat composer chrome */
+  --shadow-floating-panel: 0 1px 2px rgba(15, 23, 42, 0.035), 0 2px 10px -2px rgba(15, 23, 42, 0.05);
+  --radius-floating-panel: 14px;
+  --floating-panel-border: var(--color-stroke-subtle);
+  --floating-panel-background: var(--color-surface);
 }
 
 html {
@@ -894,32 +900,13 @@ textarea {
   border-color: var(--color-divider);
 }
 
-/* Frosted glass shell for chat composer (landing + conversation) */
-.chat-composer-stack {
-  border-radius: 1.375rem;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(22px) saturate(1.3);
-  -webkit-backdrop-filter: blur(22px) saturate(1.3);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.92) inset,
-    0 0 0 1px rgba(15, 23, 42, 0.04),
-    0 0 28px rgba(15, 23, 42, 0.12),
-    0 0 10px rgba(15, 23, 42, 0.06);
-  overflow: hidden;
-}
-
+/* Chat composer — match floating panel chrome (sidebar, editor, context stack) */
+.chat-composer-stack,
 .chat-composer-shell {
-  border-radius: 1.375rem;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(22px) saturate(1.3);
-  -webkit-backdrop-filter: blur(22px) saturate(1.3);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.92) inset,
-    0 0 0 1px rgba(15, 23, 42, 0.04),
-    0 0 28px rgba(15, 23, 42, 0.12),
-    0 0 10px rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-floating-panel);
+  border: 1px solid var(--floating-panel-border);
+  background: var(--floating-panel-background);
+  box-shadow: var(--shadow-floating-panel);
   overflow: hidden;
 }
 
@@ -933,7 +920,7 @@ textarea {
 }
 
 .chat-composer-tray {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 /* Navigation row — quiet rail item, no borders */

@@ -26,6 +26,7 @@ import {
 } from '@/lib/widgetRegistry';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 import { ConfirmButton, ExportButton, WorkspaceTabLoader } from '@/components/ui';
+import { AssessmentWorkspacePanelChrome } from './AssessmentWorkspacePanelChrome';
 
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -282,6 +283,8 @@ interface AssessmentWorkspaceProps {
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onApprovalChange?: () => void;
+  /** Lift title/actions into EditorSidePanel header when embedded in chat editor */
+  usePanelHeader?: boolean;
 }
 
 export function AssessmentWorkspace({
@@ -296,6 +299,7 @@ export function AssessmentWorkspace({
   onExportDecisionLog,
   onInspectorStateChange,
   onApprovalChange,
+  usePanelHeader = false,
 }: AssessmentWorkspaceProps) {
   const [state, setState] = useState<StagedAssessmentWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -846,6 +850,25 @@ export function AssessmentWorkspace({
 
   return (
     <div className="relative flex flex-col h-full">
+      {usePanelHeader ? (
+        <AssessmentWorkspacePanelChrome
+          title={assessmentDisplayTitle}
+          exportFormat={mod.export_format}
+          initiativeId={initiativeId}
+          decisionMenuRef={decisionMenuRef}
+          decisionMenuOpen={decisionMenuOpen}
+          onDecisionMenuToggle={() => setDecisionMenuOpen((prev) => !prev)}
+          onDecisionLogOpen={handleDecisionLogOpen}
+          onDecisionLogExport={handleDecisionLogExport}
+          showExportAction={showExportAction}
+          onExport={handleExport}
+          canApproveFinal={canApproveFinal}
+          onApproveFinal={handleApproveFinal}
+          finalApproved={finalApproved}
+          onRevokeApproval={handleRevokeFinalApproval}
+          isApprovingFinal={isApprovingFinal}
+        />
+      ) : null}
       <div className={isAssessmentMapWidget ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto'}>
         <div className={isAssessmentMapWidget
           ? 'h-full w-full p-3 flex flex-col'
@@ -864,13 +887,14 @@ export function AssessmentWorkspace({
             }}
           />
           {/* Workspace controls row (full panel width) */}
-          <div className="mt-3 flex items-center justify-between gap-4">
+          <div className={`mt-3 flex items-center gap-4 ${usePanelHeader ? '' : 'justify-between'}`}>
             <StageStepper
               stageDefs={stageDefs}
               stages={stages}
               currentStageId={activeStageId}
               onSelect={setActiveStageId}
             />
+            {!usePanelHeader ? (
             <div className="flex items-center gap-2 shrink-0">
               {initiativeId && (
                 <div ref={decisionMenuRef} className="relative">
@@ -937,6 +961,7 @@ export function AssessmentWorkspace({
                 </button>
               )}
             </div>
+            ) : null}
           </div>
 
           <div className={isAssessmentMapWidget ? 'mt-[38px] flex min-h-0 flex-1 flex-col' : 'mt-[38px] max-w-3xl mx-auto w-full flex flex-col'}>

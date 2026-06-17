@@ -6,7 +6,7 @@ import { ChatShellContext } from './ChatShellContext';
 
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
 
-function readLastProjectId(): string | null {
+export function readLastProjectId(): string | null {
   if (typeof window === 'undefined') return null;
   try {
     return localStorage.getItem(LAST_PROJECT_KEY);
