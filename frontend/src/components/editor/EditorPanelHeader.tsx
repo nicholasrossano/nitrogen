@@ -59,7 +59,8 @@ export function EditorPanelHeader({
         {suffix ? (
           <span className="text-text-tertiary">
             {' '}
-            ·
+            •
+            {' '}
             {suffix}
           </span>
         ) : null}

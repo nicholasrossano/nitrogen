@@ -1,58 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, AlertCircle, HelpCircle, Loader2, MinusCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, HelpCircle, ExternalLink, Loader2, MinusCircle } from 'lucide-react';
 import { api, type Project, type ProjectHealthDimension, type ProjectHealthStatus, type ProjectShare } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
+import { buildCollaborators, CollaboratorRow } from '@/components/chat-shell/projectContextCollaborators';
 
 const MAX_COLLABORATOR_ROWS = 3;
-
-interface CollaboratorEntry {
-  id: string;
-  label: string;
-  roleLabel: string;
-  isOwner?: boolean;
-}
-
-function buildCollaborators(project: Project, shares: ProjectShare[]): CollaboratorEntry[] {
-  const ownerEmail = project.owner_email?.trim() || null;
-  const owner: CollaboratorEntry = {
-    id: 'owner',
-    label: ownerEmail || project.created_by,
-    roleLabel: 'Owner',
-    isOwner: true,
-  };
-  const others = shares
-    .filter((share) => !ownerEmail || share.user_email !== ownerEmail)
-    .map((share) => ({
-      id: share.id,
-      label: share.user_email || share.user_id || 'Invited',
-      roleLabel: share.role === 'editor' ? 'Editor' : 'Viewer',
-    }));
-  return [owner, ...others];
-}
-
-function CollaboratorRow({ label, roleLabel, isOwner = false }: CollaboratorEntry) {
-  const initials = (label || '?')[0].toUpperCase();
-
-  return (
-    <li className="flex items-center gap-2 py-1 min-h-[1.75rem]">
-      <div
-        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-          isOwner ? 'bg-accent/10' : 'bg-surface-subtle'
-        }`}
-      >
-        <span className={`text-[9px] font-semibold ${isOwner ? 'text-accent' : 'text-text-secondary'}`}>
-          {initials}
-        </span>
-      </div>
-      <span className="min-w-0 flex-1 text-[11px] text-text-primary truncate">{label}</span>
-      <span className="text-[9px] font-medium text-text-tertiary uppercase tracking-wide shrink-0">
-        {roleLabel}
-      </span>
-    </li>
-  );
-}
 
 const STATUS_META: Record<ProjectHealthStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
   green: { label: 'On track', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', Icon: CheckCircle2 },
@@ -66,12 +20,14 @@ interface ProjectContextPanelProps {
   /** Floating card in stack vs docked column */
   variant?: 'docked' | 'floating' | 'stacked';
   refreshKey?: number;
+  onViewAll?: () => void;
 }
 
 export function ProjectContextPanel({
   project,
   variant = 'docked',
   refreshKey = 0,
+  onViewAll,
 }: ProjectContextPanelProps) {
   const [healthDimensions, setHealthDimensions] = useState<ProjectHealthDimension[]>([]);
   const [shares, setShares] = useState<ProjectShare[]>([]);
@@ -120,7 +76,20 @@ export function ProjectContextPanel({
   return (
     <aside className={panelClass}>
       <div className="px-4 py-3 shrink-0">
-        <h2 className="text-sm font-semibold text-text-primary truncate">Overview</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-text-primary truncate">Overview</h2>
+          {onViewAll && (
+            <button
+              type="button"
+              onClick={onViewAll}
+              className="shrink-0 p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04]"
+              aria-label="View full overview"
+              title="View full overview"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
         {project.subject && (
           <p className="mt-1 text-xs text-text-secondary line-clamp-3">{project.subject}</p>
         )}
