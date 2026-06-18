@@ -1,9 +1,58 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { CheckCircle2, AlertCircle, HelpCircle, MinusCircle } from 'lucide-react';
-import { api, type Project, type ProjectHealthDimension, type ProjectHealthStatus } from '@/lib/api';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, AlertCircle, HelpCircle, Loader2, MinusCircle } from 'lucide-react';
+import { api, type Project, type ProjectHealthDimension, type ProjectHealthStatus, type ProjectShare } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
+
+const MAX_COLLABORATOR_ROWS = 3;
+
+interface CollaboratorEntry {
+  id: string;
+  label: string;
+  roleLabel: string;
+  isOwner?: boolean;
+}
+
+function buildCollaborators(project: Project, shares: ProjectShare[]): CollaboratorEntry[] {
+  const ownerEmail = project.owner_email?.trim() || null;
+  const owner: CollaboratorEntry = {
+    id: 'owner',
+    label: ownerEmail || project.created_by,
+    roleLabel: 'Owner',
+    isOwner: true,
+  };
+  const others = shares
+    .filter((share) => !ownerEmail || share.user_email !== ownerEmail)
+    .map((share) => ({
+      id: share.id,
+      label: share.user_email || share.user_id || 'Invited',
+      roleLabel: share.role === 'editor' ? 'Editor' : 'Viewer',
+    }));
+  return [owner, ...others];
+}
+
+function CollaboratorRow({ label, roleLabel, isOwner = false }: CollaboratorEntry) {
+  const initials = (label || '?')[0].toUpperCase();
+
+  return (
+    <li className="flex items-center gap-2 py-1 min-h-[1.75rem]">
+      <div
+        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+          isOwner ? 'bg-accent/10' : 'bg-surface-subtle'
+        }`}
+      >
+        <span className={`text-[9px] font-semibold ${isOwner ? 'text-accent' : 'text-text-secondary'}`}>
+          {initials}
+        </span>
+      </div>
+      <span className="min-w-0 flex-1 text-[11px] text-text-primary truncate">{label}</span>
+      <span className="text-[9px] font-medium text-text-tertiary uppercase tracking-wide shrink-0">
+        {roleLabel}
+      </span>
+    </li>
+  );
+}
 
 const STATUS_META: Record<ProjectHealthStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
   green: { label: 'On track', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', Icon: CheckCircle2 },
@@ -25,6 +74,8 @@ export function ProjectContextPanel({
   refreshKey = 0,
 }: ProjectContextPanelProps) {
   const [healthDimensions, setHealthDimensions] = useState<ProjectHealthDimension[]>([]);
+  const [shares, setShares] = useState<ProjectShare[]>([]);
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
 
   useEffect(() => {
     if (!project?.id) {
@@ -36,6 +87,26 @@ export function ProjectContextPanel({
       .then((res) => setHealthDimensions(res.dimensions.slice(0, 4)))
       .catch(() => setHealthDimensions([]));
   }, [project?.id, refreshKey]);
+
+  useEffect(() => {
+    if (!project?.id) {
+      setShares([]);
+      return;
+    }
+    setCollaboratorsLoading(true);
+    api
+      .getShares(project.id)
+      .then((data) => setShares(data))
+      .catch(() => setShares([]))
+      .finally(() => setCollaboratorsLoading(false));
+  }, [project?.id, refreshKey]);
+
+  const collaborators = useMemo(
+    () => (project ? buildCollaborators(project, shares) : []),
+    [project, shares],
+  );
+  const visibleCollaborators = collaborators.slice(0, MAX_COLLABORATOR_ROWS);
+  const hiddenCollaboratorCount = Math.max(0, collaborators.length - MAX_COLLABORATOR_ROWS);
 
   if (!project) return null;
 
@@ -79,6 +150,29 @@ export function ProjectContextPanel({
                 );
               })}
             </ul>
+          )}
+        </section>
+
+        <section className="mt-4">
+          <h3 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
+            Collaborators
+          </h3>
+          {collaboratorsLoading ? (
+            <div className="flex items-center gap-2 text-xs text-text-tertiary">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Loading…
+            </div>
+          ) : (
+            <ul>
+              {visibleCollaborators.map((collaborator) => (
+                <CollaboratorRow key={collaborator.id} {...collaborator} />
+              ))}
+            </ul>
+          )}
+          {!collaboratorsLoading && hiddenCollaboratorCount > 0 && (
+            <p className="mt-1 pl-3.5 text-[10px] text-text-tertiary">
+              +{hiddenCollaboratorCount} more
+            </p>
           )}
         </section>
       </div>
