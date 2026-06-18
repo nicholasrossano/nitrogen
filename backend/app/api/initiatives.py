@@ -37,6 +37,7 @@ from app.schemas.assessment_instance import AssessmentInstanceResponse
 from app.assessments.registry import get_assessment_registry
 from app.services import assessment_service
 from app.services.assumptions import AssumptionActor, ensure_expected_assumptions
+from app.services.assessment_workflow_service import is_instance_visible_in_lists
 from app.services.initiative_overview import generate_initiative_overview
 from app.services.workspaces import resolve_workspace_for_user
 
@@ -512,7 +513,8 @@ async def list_assessment_instances(
     await ensure_user_exists(db, user)
     initiative, _role = await get_initiative_with_role(db, initiative_id, user)
     instances = await assessment_service.list_instances(db, initiative.id, archived=archived)
-    return await _serialize_assessment_instances(db, instances)
+    visible_instances = [inst for inst in instances if is_instance_visible_in_lists(inst)]
+    return await _serialize_assessment_instances(db, visible_instances)
 
 
 @router.delete(
