@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { readLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 
 export default function HomeRedirectPage() {
   const router = useRouter();
@@ -10,11 +11,12 @@ export default function HomeRedirectPage() {
 
   useEffect(() => {
     const view = searchParams.get('view');
+    const projectId = readLastProjectId();
     if (view === 'files') {
-      router.replace('/chat/files');
+      router.replace(projectId ? `/chat/files?project=${projectId}` : '/chat/files');
       return;
     }
-    router.replace('/chat');
+    router.replace(projectId ? `/chat?project=${projectId}` : '/chat');
   }, [router, searchParams]);
 
   return (

@@ -3,10 +3,13 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChatShellContext } from './ChatShellContext';
+import { resolveDefaultProjectId } from './ChangeProjectSelect';
 import {
   CONTEXT_PANEL_SEARCH_PARAM,
   type ChatContextExpandedWidget,
 } from '@/components/chat-shell/chatContextStackMotion';
+import { api, type Project } from '@/lib/api';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
 
@@ -29,10 +32,54 @@ export function writeLastProjectId(projectId: string | null) {
   }
 }
 
+export function resolveActiveProjectId(
+  pathname: string,
+  projectParam: string | null,
+  projects: Project[] = [],
+): string | null {
+  const initiativeMatch = /^\/initiatives\/([^/]+)/.exec(pathname);
+  const fromRoute = initiativeMatch?.[1] ?? projectParam;
+  if (fromRoute && (projects.length === 0 || projects.some((project) => project.id === fromRoute))) {
+    return fromRoute;
+  }
+  if (
+    fromRoute &&
+    projectParam === fromRoute &&
+    (pathname === '/chat' || pathname === '/' || pathname.startsWith('/chat/'))
+  ) {
+    return fromRoute;
+  }
+  if (projects.length > 0) {
+    return resolveDefaultProjectId(projects, fromRoute, readLastProjectId());
+  }
+  return readLastProjectId();
+}
+
+export function buildChatPath(
+  pathname: string,
+  searchParams: URLSearchParams,
+  projectId: string | null,
+): string {
+  const basePath = pathname.startsWith('/chat/files')
+    ? '/chat/files'
+    : pathname.startsWith('/chat') || pathname === '/'
+      ? '/chat'
+      : pathname;
+  const params = new URLSearchParams(searchParams.toString());
+  if (projectId) {
+    params.set('project', projectId);
+  } else {
+    params.delete('project');
+  }
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
+}
+
 export function ChatShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { activeWorkspace } = useWorkspaceStore();
   const [activeChatId, setActiveChatId] = useState<string | null>(searchParams.get('chat'));
   const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
   const [activeContextWidget, setActiveContextWidget] = useState<ChatContextExpandedWidget | null>(null);
@@ -93,6 +140,17 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
     setDrawerRefreshKey((k) => k + 1);
   }, []);
 
+  const handleNewProject = useCallback(async () => {
+    if (!activeWorkspace?.id) return;
+
+    const project = await api.createProject('New Project', activeWorkspace.id);
+    setActiveChatId(null);
+    setActiveContextWidget(null);
+    writeLastProjectId(project.id);
+    refreshDrawer();
+    router.replace(`/chat?project=${project.id}`);
+  }, [activeWorkspace?.id, refreshDrawer, router]);
+
   const openProjectContextPanel = useCallback((projectId: string, widget: ChatContextExpandedWidget) => {
     writeLastProjectId(projectId);
     setActiveChatId(null);
@@ -110,6 +168,7 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
       activeContextWidget,
       onSelectChat: handleSelectChat,
       onNewChat: handleNewChat,
+      onNewProject: handleNewProject,
       openProjectContextPanel,
       drawerRefreshKey,
       refreshDrawer,
@@ -122,6 +181,7 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
       activeProjectId,
       drawerRefreshKey,
       handleNewChat,
+      handleNewProject,
       handleSelectChat,
       openProjectContextPanel,
       refreshDrawer,
