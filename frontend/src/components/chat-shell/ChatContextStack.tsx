@@ -12,6 +12,8 @@ import {
   contextStackWidgetMotionClass,
   CONTEXT_STACK_MOTION_MS,
   type ChatContextExpandedWidget,
+  type ContextPanelExpandMotion,
+  type ExpandedWidgetChangeOptions,
 } from '@/components/chat-shell/chatContextStackMotion';
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
@@ -20,7 +22,7 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 
-export type { ChatContextExpandedWidget };
+export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
 
 const AssumptionsWorkspaceTab = dynamic(
   () => import('@/components/assumptions/AssumptionsWorkspaceTab').then((m) => m.AssumptionsWorkspaceTab),
@@ -37,7 +39,11 @@ export interface ChatContextStackProps {
   projectId: string | null;
   refreshKey?: number;
   expandedWidget: ChatContextExpandedWidget | null;
-  onExpandedWidgetChange: (widget: ChatContextExpandedWidget | null) => void;
+  expandMotionMode?: ContextPanelExpandMotion;
+  onExpandedWidgetChange: (
+    widget: ChatContextExpandedWidget | null,
+    options?: ExpandedWidgetChangeOptions,
+  ) => void;
   variablesFocusId?: string | null;
   onVariablesFocusIdChange?: (assumptionId: string | null) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
@@ -109,6 +115,7 @@ export function ChatContextStack({
   projectId,
   refreshKey = 0,
   expandedWidget,
+  expandMotionMode = 'stack',
   onExpandedWidgetChange,
   variablesFocusId = null,
   onVariablesFocusIdChange,
@@ -117,6 +124,7 @@ export function ChatContextStack({
   onOpenWorkspaceAssessment,
 }: ChatContextStackProps) {
   const { renderedWidget, visible } = useExpandedPanelVisibility(expandedWidget);
+  const [shellMotion, setShellMotion] = useState<ContextPanelExpandMotion>('stack');
   const uploadMaterial = useInitiativeStore((state) => state.uploadMaterial);
   const deleteMaterial = useInitiativeStore((state) => state.deleteMaterial);
   const [projectMaterials, setProjectMaterials] = useState<ProjectMaterial[]>([]);
@@ -145,17 +153,32 @@ export function ChatContextStack({
     }
   }, [renderedWidget]);
 
-  const handleExpandOverview = useCallback(() => {
-    onExpandedWidgetChange('overview');
+  useEffect(() => {
+    if (!expandedWidget) {
+      setShellMotion('stack');
+      return;
+    }
+    if (expandMotionMode === 'center') {
+      setShellMotion('center');
+    }
+  }, [expandMotionMode, expandedWidget]);
+
+  const openFromStack = useCallback((widget: ChatContextExpandedWidget) => {
+    setShellMotion('stack');
+    onExpandedWidgetChange(widget, { motion: 'stack' });
   }, [onExpandedWidgetChange]);
+
+  const handleExpandOverview = useCallback(() => {
+    openFromStack('overview');
+  }, [openFromStack]);
 
   const handleExpandVariables = useCallback(() => {
-    onExpandedWidgetChange('variables');
-  }, [onExpandedWidgetChange]);
+    openFromStack('variables');
+  }, [openFromStack]);
 
   const handleExpandFiles = useCallback(() => {
-    onExpandedWidgetChange('files');
-  }, [onExpandedWidgetChange]);
+    openFromStack('files');
+  }, [openFromStack]);
 
   const handleCloseExpanded = useCallback(() => {
     onExpandedWidgetChange(null);
@@ -164,13 +187,14 @@ export function ChatContextStack({
 
   const handleAssumptionSelect = useCallback((assumption: Assumption) => {
     onVariablesFocusIdChange?.(assumption.id);
-    onExpandedWidgetChange('variables');
-  }, [onExpandedWidgetChange, onVariablesFocusIdChange]);
+    openFromStack('variables');
+  }, [onVariablesFocusIdChange, openFromStack]);
 
   if (!projectId) return null;
 
   return (
     <>
+      {(shellMotion === 'stack' || !expandedWidget) && (
       <div
         className={`pointer-events-none absolute z-20 right-3 top-3 bottom-3 flex flex-col gap-3 ${contextStackTransitionClass}`}
         style={{ width: CHAT_CONTEXT_STACK_WIDTH }}
@@ -218,6 +242,7 @@ export function ChatContextStack({
           />
         </ContextStackWidgetSlot>
       </div>
+      )}
 
       {renderedWidget === 'overview' && project && (
         <ChatExpandablePanelShell
@@ -225,6 +250,7 @@ export function ChatContextStack({
           title="Overview"
           suffix={project.name}
           visible={visible}
+          motionMode={shellMotion}
           onClose={handleCloseExpanded}
           headerActions={
             !project.shared_role || project.shared_role === 'editor' ? (
@@ -256,6 +282,7 @@ export function ChatContextStack({
           title={PROJECT_VARIABLES.title}
           suffix={project?.name ?? null}
           visible={visible}
+          motionMode={shellMotion}
           onClose={handleCloseExpanded}
         >
           <AssumptionsWorkspaceTab
@@ -273,6 +300,7 @@ export function ChatContextStack({
           title="Files"
           suffix={project?.name ?? null}
           visible={visible}
+          motionMode={shellMotion}
           onClose={handleCloseExpanded}
         >
           <ProjectFilesView
