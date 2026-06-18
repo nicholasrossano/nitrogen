@@ -26,6 +26,7 @@ import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { api, type Assumption, type AssessmentInstance } from '@/lib/api';
+import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
 import { importFromDriveViaPicker } from '@/lib/driveImport';
@@ -211,6 +212,7 @@ function InitiativePageContent() {
   const assessmentsDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
   const frameworkAssessmentsCacheRef = useRef<Map<string, AssessmentInstance[]>>(new Map());
   const frameworkAssessmentsRequestRef = useRef<Map<string, Promise<AssessmentInstance[]>>>(new Map());
+  const ephemeralAssessmentSessionsRef = useRef<Map<string, { initiativeId: string; engaged: boolean }>>(new Map());
 
   const {
     initiative,
@@ -826,8 +828,15 @@ function InitiativePageContent() {
       chatId?: string | null;
       chatTitle?: string | null;
       openChatPanel?: boolean;
+      pendingEngagement?: boolean;
     }) => {
       const openChatPanel = assessment.openChatPanel ?? true;
+      if (assessment.pendingEngagement) {
+        ephemeralAssessmentSessionsRef.current.set(assessment.instanceId, {
+          initiativeId,
+          engaged: false,
+        });
+      }
       setWorkspaceLaunchMode('idle');
       setPanelOpen('assessments', 'workspace', true);
       setPanelOpen('assessments', 'chat', openChatPanel);
@@ -846,10 +855,18 @@ function InitiativePageContent() {
         title: assessment.title || assessment.assessmentId.replace(/_/g, ' '),
         instanceId: assessment.instanceId,
         assessmentId: assessment.assessmentId,
+        pendingEngagement: assessment.pendingEngagement === true,
       });
     },
     [initiativeId, openWorkspaceTab, router, setPanelOpen, loadFrameworkAssessmentInstances],
   );
+
+  const handleAssessmentEngaged = useCallback((instanceId: string) => {
+    const session = ephemeralAssessmentSessionsRef.current.get(instanceId);
+    if (session) {
+      session.engaged = true;
+    }
+  }, []);
 
   const openWorkspaceDocument = useCallback((citation: ResearchPanelCitation) => {
     setWorkspaceLaunchMode('idle');
@@ -969,6 +986,7 @@ function InitiativePageContent() {
       assessmentId: instance.assessment_id,
       title: instance.display_name || assessmentName,
       openChatPanel: false,
+      pendingEngagement: true,
     });
   }, [initiativeId, handleOpenWorkspaceAssessment]);
 
@@ -996,6 +1014,15 @@ function InitiativePageContent() {
   }, [frameworkPlannedAssessmentIds, initiativeId]);
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
+    const closingTab = workspaceTabs.find((tab) => tab.id === tabId);
+    if (closingTab?.kind === 'assessment') {
+      const session = ephemeralAssessmentSessionsRef.current.get(closingTab.instanceId);
+      if (session && !session.engaged) {
+        void discardEphemeralAssessmentInstance(session.initiativeId, closingTab.instanceId);
+      }
+      ephemeralAssessmentSessionsRef.current.delete(closingTab.instanceId);
+    }
+
     setWorkspaceTabs((prev) => {
       const nextTabs = prev.filter((tab) => tab.id !== tabId);
       setActiveWorkspaceTabId((current) => {
@@ -1008,7 +1035,7 @@ function InitiativePageContent() {
       });
       return nextTabs;
     });
-  }, [activeView]);
+  }, [activeView, workspaceTabs]);
 
   const handleChatEditorWidgetsChange = useCallback((widgets: EditorWidget[]) => {
     setChatEditorWidgets(widgets);
@@ -1111,6 +1138,7 @@ function InitiativePageContent() {
           onExportDecisionLog={exportDecisionLog}
           onAssessmentInspectorStateChange={handleAssessmentInspectorStateChange}
           onAssessmentApprovalChange={() => loadFrameworkAssessmentInstances(initiativeId, { force: true })}
+          onAssessmentEngaged={handleAssessmentEngaged}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
         />

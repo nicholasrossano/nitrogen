@@ -341,6 +341,7 @@ export interface StagedWorkflowState {
   current_stage_id: string | null;
   stages: Record<string, StageState>;
   final_approval: FinalApprovalState;
+  user_engaged?: boolean;
 }
 
 export interface StagedAssessmentDefinition extends AssessmentDefinition {

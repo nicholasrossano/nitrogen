@@ -48,6 +48,7 @@ from app.services.assessment_workflow_service import (
     enrich_record_item,
     ensure_workflow_state,
     get_initiative_context,
+    mark_user_engaged,
     populate_stage,
     requires_final_approval,
     save_workflow_state,
@@ -589,6 +590,8 @@ async def populate_stage_endpoint(
 
     prior_approved = ((inst.workflow_state or {}).get("final_approval") or {}).get("status") == "approved"
     state = await populate_stage(db, inst, assessment, stage_id)
+    mark_user_engaged(state)
+    save_workflow_state(inst, state)
     await append_decision_event(
         db,
         inst=inst,
@@ -654,7 +657,7 @@ async def confirm_stage_endpoint(
         confirmed_by=user.uid,
         confirmed_by_email=user.email,
     )
-    save_workflow_state(inst, state)
+    save_workflow_state(inst, state, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -764,7 +767,7 @@ async def edit_item(
         status="validated" if value_is_present else "missing",
     )
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -830,7 +833,7 @@ async def add_item(
         stage_state["status"] = "draft"
 
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -884,7 +887,7 @@ async def delete_item(
     stage_data["items"] = items
     stage_state["data"] = stage_data
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -950,7 +953,7 @@ async def reorder_items(
     stage_data["items"] = reordered
     stage_state["data"] = stage_data
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -1067,7 +1070,7 @@ async def enrich_stakeholder_from_map(
 
     await _refresh_stakeholder_map_widget(assessment, state, context, records)
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -1136,7 +1139,7 @@ async def deep_dive_implementation_item(
         serialized = _serialize_deep_dive_payload(generated)
         cache[item_id] = serialized
         state[cache_key] = cache
-        save_workflow_state(inst, state, increment_version=False)
+        save_workflow_state(inst, state, increment_version=False, user_initiated=True)
         await db.commit()
 
     return serialized
@@ -1185,7 +1188,7 @@ async def deep_dive_map_item(
         serialized = _serialize_deep_dive_payload(generated)
         cache[item_id] = serialized
         state[cache_key] = cache
-        save_workflow_state(inst, state, increment_version=False)
+        save_workflow_state(inst, state, increment_version=False, user_initiated=True)
         await db.commit()
 
     return serialized
@@ -1270,7 +1273,7 @@ async def update_record(
     stage_data["records"] = records
     stage_state["data"] = stage_data
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -1359,7 +1362,7 @@ async def persist_widget_state(
         stage_state["status"] = "draft"
 
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -1448,7 +1451,7 @@ async def approve_final_output(
         "approved_by": user.uid,
         "approved_by_email": user.email,
     }
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     await append_decision_event(
         db,
         inst=inst,
@@ -1480,7 +1483,7 @@ async def revoke_final_approval(
     state = await ensure_workflow_state(db, inst, assessment)
     was_revoked = clear_final_approval(state)
     if was_revoked:
-        save_workflow_state(inst, state, increment_version=True)
+        save_workflow_state(inst, state, increment_version=True, user_initiated=True)
         await append_decision_event(
             db,
             inst=inst,
@@ -1636,7 +1639,7 @@ async def export_writeup(
                 await _refresh_stakeholder_map_widget(assessment, state, context, records)
                 if state.get("cached_exports"):
                     state["cached_exports"] = {}
-                save_workflow_state(inst, state, increment_version=True)
+                save_workflow_state(inst, state, increment_version=True, user_initiated=True)
                 await db.commit()
                 cached_writeup = {}
                 confirmed_stages = _build_confirmed_stages_snapshot(state)
@@ -1663,7 +1666,7 @@ async def export_writeup(
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "invalidated": False,
         }
-        save_workflow_state(inst, state)
+        save_workflow_state(inst, state, user_initiated=True)
         await db.commit()
     else:
         logger.info("Returning cached write-up for instance %s", instance_id)

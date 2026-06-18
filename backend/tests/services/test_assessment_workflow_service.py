@@ -22,6 +22,9 @@ from app.services.assessment_workflow_service import (
     _migrate_legacy_state,
     _get_downstream_stage_ids,
     _infer_current_stage_id,
+    has_meaningful_assessment_progress,
+    is_instance_visible_in_lists,
+    mark_user_engaged,
     uses_workspace_flow,
     is_calculator_assessment,
     is_structured_assessment,
@@ -254,3 +257,28 @@ def test_is_calculator_assessment():
 def test_is_structured_assessment():
     assert is_structured_assessment(StakeholderAssessment())
     assert not is_structured_assessment(LCOETool())
+
+
+def test_initial_workflow_state_is_not_user_engaged():
+    state = _build_initial_workflow_state(StakeholderAssessment())
+    assert state["user_engaged"] is False
+    assert not has_meaningful_assessment_progress(state)
+
+
+def test_mark_user_engaged_makes_instance_visible():
+    assessment = StakeholderAssessment()
+    state = _build_initial_workflow_state(assessment)
+    inst = AssessmentInstance(
+        id=uuid4(),
+        project_id=uuid4(),
+        assessment_id=assessment.definition.id,
+        status="draft",
+        instance_number=1,
+        started_by="user-1",
+        workflow_state=state,
+    )
+    assert not is_instance_visible_in_lists(inst)
+
+    mark_user_engaged(state)
+    inst.workflow_state = state
+    assert is_instance_visible_in_lists(inst)

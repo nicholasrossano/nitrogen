@@ -17,7 +17,14 @@ import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
 export type WorkspacePanelTab =
   | { id: 'chat-artifacts'; kind: 'artifacts'; title: 'Chat Outputs' }
-  | { id: string; kind: 'assessment'; title: string; instanceId: string; assessmentId: string }
+  | {
+    id: string;
+    kind: 'assessment';
+    title: string;
+    instanceId: string;
+    assessmentId: string;
+    pendingEngagement?: boolean;
+  }
   | { id: string; kind: 'decision-log'; title: string; assessmentInstanceId: string; assessmentId?: string }
   | {
     id: string;
@@ -56,6 +63,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
   onAssessmentInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onAssessmentApprovalChange?: () => void;
+  onAssessmentEngaged?: (instanceId: string) => void;
   onOpenAssumptionInChat?: (assumption: Assumption) => void;
   onAddAssumptionInChat?: () => void;
 }
@@ -80,6 +88,7 @@ export function ProjectWorkspaceEditorPanel({
   onExportDecisionLog,
   onAssessmentInspectorStateChange,
   onAssessmentApprovalChange,
+  onAssessmentEngaged,
   onOpenAssumptionInChat,
   onAddAssumptionInChat,
 }: ProjectWorkspaceEditorPanelProps) {
@@ -145,6 +154,8 @@ export function ProjectWorkspaceEditorPanel({
           assessmentTitle={tab.title}
           isActive={isActive}
           initiativeId={initiativeId}
+          deferAgentStart={tab.pendingEngagement === true}
+          onUserEngaged={() => onAssessmentEngaged?.(tab.instanceId)}
           onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
           onOpenActivityLog={onOpenAssessmentActivityLog}
           onOpenDecisionLog={onOpenDecisionLog}

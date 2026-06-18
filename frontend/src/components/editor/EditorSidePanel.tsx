@@ -50,6 +50,7 @@ interface EditorSidePanelProps {
   widgets: EditorWidget[];
   initiativeId?: string;
   onClose?: () => void;
+  onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
 }
@@ -81,6 +82,7 @@ export function EditorSidePanel({
   widgets,
   initiativeId = '',
   onClose,
+  onAssessmentEngaged,
   onOpenDecisionLog,
   onExportDecisionLog,
 }: EditorSidePanelProps) {
@@ -141,6 +143,7 @@ export function EditorSidePanel({
               data={widget.data}
               initiativeId={initiativeId}
               messageId={widget.messageId}
+              onAssessmentEngaged={onAssessmentEngaged}
               onOpenDecisionLog={onOpenDecisionLog}
               onExportDecisionLog={onExportDecisionLog}
             />
@@ -156,6 +159,7 @@ function EditorWidgetRenderer({
   data,
   initiativeId,
   messageId,
+  onAssessmentEngaged,
   onOpenDecisionLog,
   onExportDecisionLog,
 }: {
@@ -163,6 +167,7 @@ function EditorWidgetRenderer({
   data: Record<string, any>;
   initiativeId: string;
   messageId: string;
+  onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
 }) {
@@ -190,6 +195,8 @@ function EditorWidgetRenderer({
           assessmentTitle={data.title}
           initiativeId={initiativeId}
           usePanelHeader
+          deferAgentStart={data.pending_engagement === true}
+          onUserEngaged={() => onAssessmentEngaged?.(data.instance_id)}
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
         />
