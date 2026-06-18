@@ -7,6 +7,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ChangeWorkspaceSelect } from '@/components/chat-shell/ChangeWorkspaceSelect';
 import { DrawerChatTree } from '@/components/chat-shell/DrawerChatTree';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
+import { readLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
@@ -175,15 +176,17 @@ export function SideDrawer() {
     '--side-drawer-expanded-width': `calc(${longestLabelLength}ch + 3.75rem)`,
   } as CSSProperties;
 
+  const chatProjectId = searchParams.get('project') ?? readLastProjectId();
+
   const handleNav = useCallback((item: NavItem) => {
     if (navHandlerRef.current?.(item)) return;
     if (isChatShell) {
       if (item === 'chat') {
-        router.push('/chat');
+        router.push(chatProjectId ? `/chat?project=${chatProjectId}` : '/chat');
         return;
       }
       if (item === 'files') {
-        router.push('/chat/files');
+        router.push(chatProjectId ? `/chat/files?project=${chatProjectId}` : '/chat/files');
         return;
       }
     }
@@ -196,10 +199,10 @@ export function SideDrawer() {
       return;
     }
     if (item === 'portfolio') {
-      router.push(isChatShell ? '/chat' : '/');
+      router.push(isChatShell ? (chatProjectId ? `/chat?project=${chatProjectId}` : '/chat') : '/');
       return;
     }
-  }, [hasProject, initiativeId, isChatShell, navHandlerRef, router]);
+  }, [chatProjectId, hasProject, initiativeId, isChatShell, navHandlerRef, router]);
 
   const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
     <button
@@ -233,7 +236,8 @@ export function SideDrawer() {
     try {
       await setActiveWorkspace(workspaceId);
       if (isChatShell) {
-        router.replace('/chat');
+        const lastProjectId = readLastProjectId();
+        router.replace(lastProjectId ? `/chat?project=${lastProjectId}` : '/chat');
       }
     } finally {
       setWorkspaceSwitching(false);

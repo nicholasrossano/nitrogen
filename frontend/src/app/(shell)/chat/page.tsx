@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectChatSurface } from '@/components/core-chat/ProjectChatSurface';
+import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
 import { PersonalChatSurface } from '@/components/chat-shell/PersonalChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
-import { ChangeProjectSelect, resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
-import { readLastProjectId, writeLastProjectId, useChatShellLandingReset } from '@/components/chat-shell/ChatShellProvider';
+import { ChangeProjectSelect } from '@/components/chat-shell/ChangeProjectSelect';
+import { readLastProjectId, resolveActiveProjectId, useChatShellLandingReset, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import {
   ChatContextStack,
   type ChatContextExpandedWidget,
@@ -17,6 +18,8 @@ import {
   contextStackBackdropMotionClass,
   contextStackTransitionClass,
   parseContextPanelParam,
+  type ContextPanelExpandMotion,
+  type ExpandedWidgetChangeOptions,
 } from '@/components/chat-shell/chatContextStackMotion';
 import { EditorSidePanel, type EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -42,6 +45,7 @@ const RIGHT_MARGIN_PX = 12;
 
 function ChatWorkbenchContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const chatShell = useChatShell();
   const { activeWorkspace, loadWorkspaces } = useWorkspaceStore();
@@ -53,6 +57,7 @@ function ChatWorkbenchContent() {
   const [pinnedEditorWidgets, setPinnedEditorWidgets] = useState<EditorWidget[] | null>(null);
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
   const [expandedContextWidget, setExpandedContextWidget] = useState<ChatContextExpandedWidget | null>(null);
+  const [expandMotionMode, setExpandMotionMode] = useState<ContextPanelExpandMotion>('stack');
   const [variablesFocusId, setVariablesFocusId] = useState<string | null>(null);
   const [editorPanelWidthPx, setEditorPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [isResizingEditorPanel, setIsResizingEditorPanel] = useState(false);
@@ -90,15 +95,27 @@ function ChatWorkbenchContent() {
       .then(setProjects)
       .catch(() => setProjects([]))
       .finally(() => setProjectsLoaded(true));
-  }, [activeWorkspace?.id]);
+  }, [activeWorkspace?.id, chatShell?.drawerRefreshKey]);
 
-  const effectiveProjectId = useMemo(() => {
-    if (selectedProjectId && projects.some((project) => project.id === selectedProjectId)) {
-      return selectedProjectId;
-    }
-    if (projects.length === 0) return null;
-    return resolveDefaultProjectId(projects, readLastProjectId());
-  }, [projects, selectedProjectId]);
+  useEffect(() => {
+    if (!projectsLoaded || !activeWorkspace?.id || projects.length > 0) return;
+    let cancelled = false;
+    void api.createProject('New Project', activeWorkspace.id)
+      .then((project) => {
+        if (cancelled) return;
+        setProjects([project]);
+        writeLastProjectId(project.id);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace?.id, projects.length, projectsLoaded]);
+
+  const effectiveProjectId = useMemo(
+    () => resolveActiveProjectId(pathname, selectedProjectId, projects),
+    [pathname, projects, selectedProjectId],
+  );
 
   useEffect(() => {
     if (!projectsLoaded || !effectiveProjectId) return;
@@ -115,6 +132,7 @@ function ChatWorkbenchContent() {
   useEffect(() => {
     if (effectiveProjectId) {
       void useInitiativeStore.getState().loadInitiative(effectiveProjectId);
+      void useInitiativeStore.getState().loadMaterials(effectiveProjectId);
       writeLastProjectId(effectiveProjectId);
     }
   }, [effectiveProjectId]);
@@ -122,28 +140,28 @@ function ChatWorkbenchContent() {
   useEffect(() => {
     setPinnedEditorWidgets(null);
     setEditorWidgets([]);
-    if (!panelParam) {
-      setExpandedContextWidget(null);
-      setVariablesFocusId(null);
-    }
-  }, [effectiveProjectId, panelParam]);
+    setExpandedContextWidget(null);
+    setVariablesFocusId(null);
+    setExpandMotionMode('stack');
+  }, [effectiveProjectId]);
 
   useEffect(() => {
-    if (activeChatId) return;
-
-    if (!panelParam) {
-      setExpandedContextWidget(null);
-      chatShell?.setActiveContextWidget(null);
-      return;
-    }
+    if (activeChatId || !panelParam) return;
+    // Stack expansions are local-only; ignore stale ?panel= until URL catches up on close.
+    if (expandedContextWidget == null) return;
+    if (expandedContextWidget != null && expandMotionMode === 'stack') return;
+    if (expandedContextWidget === panelParam && expandMotionMode === 'center') return;
 
     setPinnedEditorWidgets(null);
     setEditorWidgets([]);
-    setVariablesFocusId(null);
+    if (panelParam !== 'variables') {
+      setVariablesFocusId(null);
+    }
     setHasMessages(false);
+    setExpandMotionMode('center');
     setExpandedContextWidget(panelParam);
     chatShell?.setActiveContextWidget(panelParam);
-  }, [activeChatId, chatShell, panelParam]);
+  }, [activeChatId, chatShell, expandMotionMode, expandedContextWidget, panelParam]);
 
   useEffect(() => {
     if (!activeChatId || !panelParam) return;
@@ -154,6 +172,21 @@ function ChatWorkbenchContent() {
     () => projects.find((p) => p.id === effectiveProjectId) ?? null,
     [projects, effectiveProjectId],
   );
+
+  const initiative = useInitiativeStore((s) => s.initiative);
+  const projectPlan = useInitiativeStore((s) => s.projectPlan);
+  const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
+
+  const isOnboarding = useMemo(() => {
+    if (!effectiveProjectId || !initiative || initiative.id !== effectiveProjectId) return false;
+    if (initiative.shared_role === 'viewer') return false;
+    const hasFrameworkSelection = Boolean(
+      projectPlan ||
+      (initiative.selected_tools?.length ?? 0) > 0 ||
+      initiative.project_plan,
+    );
+    return !hasFrameworkSelection;
+  }, [effectiveProjectId, initiative, projectPlan]);
 
   const effectiveEditorWidgets = pinnedEditorWidgets ?? editorWidgets;
   const showContextStack = Boolean(effectiveProjectId) && (!hasMessages || panelParam != null || expandedContextWidget != null);
@@ -281,6 +314,7 @@ function ChatWorkbenchContent() {
     if (expandedContextWidget || panelParam) {
       setExpandedContextWidget(null);
       setVariablesFocusId(null);
+      setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
       clearContextPanelParam();
       didReset = true;
@@ -309,10 +343,24 @@ function ChatWorkbenchContent() {
 
   useChatShellLandingReset(resetLandingOverlays);
 
-  const handleExpandedContextWidgetChange = useCallback((widget: ChatContextExpandedWidget | null) => {
+  const handleExpandedContextWidgetChange = useCallback((
+    widget: ChatContextExpandedWidget | null,
+    options?: ExpandedWidgetChangeOptions,
+  ) => {
+    const motion = options?.motion ?? (widget ? 'stack' : undefined);
+
+    if (widget && motion === 'stack') {
+      setExpandMotionMode('stack');
+    } else if (widget) {
+      setExpandMotionMode('center');
+    } else {
+      setExpandMotionMode('stack');
+    }
+
     setExpandedContextWidget(widget);
     chatShell?.setActiveContextWidget(widget);
-    if (widget) {
+
+    if (widget && motion === 'center') {
       replaceChatSearchParams((params) => {
         params.delete('chat');
         if (effectiveProjectId) params.set('project', effectiveProjectId);
@@ -320,8 +368,11 @@ function ChatWorkbenchContent() {
       });
       return;
     }
-    clearContextPanelParam();
-  }, [chatShell, clearContextPanelParam, effectiveProjectId, replaceChatSearchParams]);
+
+    if (searchParams.get(CONTEXT_PANEL_SEARCH_PARAM)) {
+      clearContextPanelParam();
+    }
+  }, [chatShell, clearContextPanelParam, effectiveProjectId, replaceChatSearchParams, searchParams]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -334,7 +385,7 @@ function ChatWorkbenchContent() {
     };
   }, []);
 
-  const chatSurfaceKey = panelParam && !activeChatId
+  const chatSurfaceKey = expandMotionMode === 'center' && panelParam && !activeChatId
     ? `${effectiveProjectId}:${panelParam}`
     : effectiveProjectId;
 
@@ -345,7 +396,7 @@ function ChatWorkbenchContent() {
         style={{ paddingRight: rightGutter }}
       >
         <div
-          className={`flex-1 min-h-0 ${contextStackTransitionClass} ${contextStackBackdropMotionClass(Boolean(expandedContextWidget))}`}
+          className={`flex-1 min-h-0 ${contextStackTransitionClass} ${contextStackBackdropMotionClass(Boolean(expandedContextWidget), expandMotionMode)}`}
         >
           {effectiveProjectId ? (
             <ProjectChatSurface
@@ -354,9 +405,18 @@ function ChatWorkbenchContent() {
               initialChatId={activeChatId}
               useLandingWhenEmpty
               hideTiles
-              landingLayoutMode="default"
+              allowInitialProjectOnboarding={isOnboarding}
+              restoreLatestChatOnMount={isOnboarding}
+              landingLayoutMode={isOnboarding ? 'overview' : 'default'}
               landingComposerTitle={selectedProject?.name}
-              landingHeaderContent={<></>}
+              landingHeaderContent={isOnboarding && initiative ? (
+                <ProjectOnboardingHeader
+                  initiative={initiative}
+                  filesUploaded={projectMaterials.length}
+                />
+              ) : (
+                <></>
+              )}
               onLandingStateChange={(onLanding) => {
                 if (wasOnLandingRef.current && !onLanding && panelParam) {
                   clearContextPanelParam();
@@ -401,6 +461,7 @@ function ChatWorkbenchContent() {
           projectId={effectiveProjectId}
           refreshKey={contextRefreshKey}
           expandedWidget={expandedContextWidget}
+          expandMotionMode={expandMotionMode}
           onExpandedWidgetChange={handleExpandedContextWidgetChange}
           variablesFocusId={variablesFocusId}
           onVariablesFocusIdChange={setVariablesFocusId}
