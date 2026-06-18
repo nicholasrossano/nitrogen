@@ -10,6 +10,7 @@ import {
 import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
 import { useFeatureFlag, useFeatureFlagContext, useVisibleAssessments } from '@/hooks/useFeatureFlag';
 import { api, type AssessmentInstance } from '@/lib/api';
+import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
 import { filterVisibleAssessments } from '@/lib/featureFlags';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 
@@ -19,6 +20,7 @@ interface ProjectRecommendedAssessmentsSectionProps {
     instanceId: string;
     assessmentId: string;
     title?: string | null;
+    pendingEngagement?: boolean;
   }) => void;
   refreshKey?: number;
 }
@@ -177,8 +179,9 @@ export function ProjectRecommendedAssessmentsSection({
     const assessmentMeta = assessmentMetaById.get(assessmentId);
     const assessmentName = assessmentMeta?.name ?? assessmentId.replace(/_/g, ' ');
     const assessmentInstances = instancesByAssessmentId.get(assessmentId) ?? [];
-    const completedInstance = assessmentInstances.find((instance) => instance.is_plan_complete === true) ?? null;
-    const existingInstance = completedInstance ?? assessmentInstances[0] ?? null;
+    const engagedInstances = assessmentInstances.filter(isAssessmentUserEngaged);
+    const completedInstance = engagedInstances.find((instance) => instance.is_plan_complete === true) ?? null;
+    const existingInstance = completedInstance ?? engagedInstances[0] ?? null;
 
     if (existingInstance) {
       onOpenAssessment({
@@ -198,6 +201,7 @@ export function ProjectRecommendedAssessmentsSection({
         instanceId: instance.id,
         assessmentId: instance.assessment_id,
         title: instance.display_name || assessmentName,
+        pendingEngagement: true,
       });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to start assessment.');
@@ -325,7 +329,8 @@ export function ProjectRecommendedAssessmentsSection({
                   const assessmentMeta = assessmentMetaById.get(assessmentId);
                   const assessmentName = assessmentMeta?.name ?? assessmentId.replace(/_/g, ' ');
                   const assessmentInstances = instancesByAssessmentId.get(assessmentId) ?? [];
-                  const completedInstance = assessmentInstances.find(
+                  const engagedInstances = assessmentInstances.filter(isAssessmentUserEngaged);
+                  const completedInstance = engagedInstances.find(
                     (instance) => instance.is_plan_complete === true,
                   ) ?? null;
                   const isAssessmentComplete = Boolean(completedInstance);

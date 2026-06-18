@@ -283,6 +283,10 @@ interface AssessmentWorkspaceProps {
   onExportDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void | Promise<void>;
   onInspectorStateChange?: (state: PlanWorkspaceInspectorState | null) => void;
   onApprovalChange?: () => void;
+  /** When true, do not auto-run the assessment agent until the user engages. */
+  deferAgentStart?: boolean;
+  /** Called once the assessment is saved as an intentional draft. */
+  onUserEngaged?: () => void;
   /** Lift title/actions into EditorSidePanel header when embedded in chat editor */
   usePanelHeader?: boolean;
 }
@@ -299,6 +303,8 @@ export function AssessmentWorkspace({
   onExportDecisionLog,
   onInspectorStateChange,
   onApprovalChange,
+  deferAgentStart = false,
+  onUserEngaged,
   usePanelHeader = false,
 }: AssessmentWorkspaceProps) {
   const [state, setState] = useState<StagedAssessmentWorkflowState | null>(null);
@@ -314,6 +320,23 @@ export function AssessmentWorkspace({
   const [editingConfirmedStageIds, setEditingConfirmedStageIds] = useState<Record<string, boolean>>({});
   const [editBaselineByStageId, setEditBaselineByStageId] = useState<Record<string, string>>({});
   const decisionMenuRef = useRef<HTMLDivElement>(null);
+  const hasNotifiedEngagementRef = useRef(false);
+
+  const notifyUserEngaged = useCallback(() => {
+    if (hasNotifiedEngagementRef.current) return;
+    hasNotifiedEngagementRef.current = true;
+    onUserEngaged?.();
+  }, [onUserEngaged]);
+
+  useEffect(() => {
+    hasNotifiedEngagementRef.current = false;
+  }, [instanceId]);
+
+  useEffect(() => {
+    if (state?.workflow_state?.user_engaged) {
+      notifyUserEngaged();
+    }
+  }, [notifyUserEngaged, state?.workflow_state?.user_engaged]);
 
   // Refresh callback for child components (onChanged / onWorkflowUpdated).
   const fetchState = useCallback(async () => {
@@ -387,7 +410,7 @@ export function AssessmentWorkspace({
         setLoading(false);
         const status = await fetchAgentStatus();
         if (cancelled) return;
-        if (status?.run_state !== 'approved') {
+        if (!deferAgentStart && status?.run_state !== 'approved') {
           await runAssessmentAgent();
         }
       } catch (e: any) {
@@ -400,7 +423,7 @@ export function AssessmentWorkspace({
 
     initialize();
     return () => { cancelled = true; };
-  }, [instanceId, fetchAgentStatus, runAssessmentAgent]);
+  }, [instanceId, fetchAgentStatus, runAssessmentAgent, deferAgentStart]);
 
   useEffect(() => {
     if (!state) return;
