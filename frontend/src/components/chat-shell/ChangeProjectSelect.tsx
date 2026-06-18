@@ -15,6 +15,7 @@ interface ChangeProjectSelectProps {
   className?: string;
   placeholder?: string;
   size?: 'compact' | 'default';
+  menuPlacement?: 'above' | 'below';
 }
 
 const COMPACT_TRIGGER_CLASS =
@@ -24,7 +25,7 @@ const DEFAULT_TRIGGER_CLASS =
   'h-8 min-w-[10rem] max-w-[14rem] inline-flex items-center justify-between gap-2 rounded-md border border-stroke-subtle bg-white px-2.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-60';
 
 const MENU_CLASS =
-  'absolute left-0 top-full z-50 mt-1 min-w-full max-w-[16rem] rounded-lg border border-stroke-subtle bg-white p-1 shadow-lg';
+  'rounded-lg border border-stroke-subtle bg-white p-1 shadow-lg';
 
 const ITEM_CLASS =
   'flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs transition-colors';
@@ -38,6 +39,7 @@ export function ChangeProjectSelect({
   className,
   placeholder = 'Change project',
   size = 'compact',
+  menuPlacement = 'below',
 }: ChangeProjectSelectProps) {
   const options = useMemo(
     () => projects.map((project) => ({ value: project.id, label: project.name })),
@@ -58,6 +60,7 @@ export function ChangeProjectSelect({
         className={triggerClassName}
         menuClassName={MENU_CLASS}
         itemClassName={ITEM_CLASS}
+        menuPlacement={menuPlacement}
       />
     </div>
   );
