@@ -82,7 +82,9 @@ Pre-commit runs `./scripts/security_check.sh`. Before a public release, also run
 2. Make your changes — a pre-commit hook will automatically lint staged files on commit
 3. Open a PR against `main` using the PR template
 4. Fill in the summary, link related issues, and complete the checklist
-5. Wait for CI to pass (lint, typecheck, test, build) and a maintainer review
+5. Wait for CI to pass (lint, typecheck, test, build)
+
+External contributions merge via PR only. Maintainers may bypass branch rules when needed (see [Repository governance](#repository-governance)).
 
 ### Code Style
 
@@ -92,6 +94,23 @@ Pre-commit runs `./scripts/security_check.sh`. Before a public release, also run
 ### Testing and Validation
 
 Use narrow, quiet test commands while iterating, then run full regression before opening a PR. See [Testing and Validation](docs/testing.md) for single-test commands, quiet wrappers, and fast validation checks.
+
+## Repository governance
+
+After the repo is public, `main` is protected as follows (applied via `scripts/github_post_public_setup.sh`):
+
+| Rule | Why |
+|------|-----|
+| CI must pass (security scan, frontend, backend) | Keeps broken code off `main` |
+| Pull requests required to merge | Standard OSS gate for forks and collaborators |
+| Zero required approving reviews | Solo maintainer — no waiting on yourself |
+| **Admins may bypass** | You can still ship urgent fixes without friction |
+
+**Does this slow you down?** A little for PR-based merges: you wait for CI (~3 min). As repo admin with bypass enabled, you can still push or merge when you need to. Direct pushes to `main` are discouraged but not blocked for admins.
+
+**GitHub Actions** are restricted to workflows defined in this repository (no third-party actions from untrusted forks beyond what GitHub allows).
+
+**Deployment environments** (`Production`, `Preview`) are not gated in GitHub today — production secrets live in Railway/Vercel/Firebase, not GitHub Actions.
 
 ## Reporting Bugs
 

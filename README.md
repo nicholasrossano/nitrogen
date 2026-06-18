@@ -106,6 +106,12 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions
 
 CI runs the full secret and artifact scan on every push.
 
+After making the repo public, run once:
+
+```bash
+bash scripts/github_post_public_setup.sh
+```
+
 ## License
 
 Code: [GNU Affero General Public License v3.0](LICENSE). The Nitrogen name and branding are not covered by that license — see [brand and naming](TRADEMARKS.md). Organizations needing terms outside the AGPLv3 may contact us about a [commercial license](COMMERCIAL_LICENSE.md).
