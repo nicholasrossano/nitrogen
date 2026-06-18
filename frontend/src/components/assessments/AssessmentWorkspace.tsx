@@ -862,7 +862,7 @@ export function AssessmentWorkspace({
     (isCalculationComputedWidget && shouldShowMergedConfirmAction)
   );
 
-  // Floating status badge — "Approved" uses the same final approval state as framework tiles.
+  // Floating status badge — "Confirmed" uses the same final approval state as framework tiles.
   const badgeApprovedAt = finalApproval.approved_at
     ? new Date(finalApproval.approved_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
     : null;
@@ -961,7 +961,7 @@ export function AssessmentWorkspace({
                   {isApprovingFinal
                     ? <Loader2 className="w-3 h-3 animate-spin" />
                     : <CheckCircle2 className="w-3 h-3" />}
-                  Approve
+                  Confirm
                 </button>
               )}
               {finalApproved && (
@@ -969,7 +969,7 @@ export function AssessmentWorkspace({
                   type="button"
                   onClick={handleRevokeFinalApproval}
                   disabled={isApprovingFinal}
-                  title="Click to revoke approval"
+                  title="Click to revoke confirmation"
                   className="btn-primary group !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 !bg-accent !border-accent !text-white before:!opacity-100 flex items-center shrink-0 disabled:opacity-100"
                 >
                   {isApprovingFinal ? (
@@ -980,7 +980,7 @@ export function AssessmentWorkspace({
                       <RotateCcw className="absolute inset-0 h-3 w-3 text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100" />
                     </span>
                   )}
-                  Approved
+                  Confirmed
                 </button>
               )}
             </div>

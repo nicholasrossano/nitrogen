@@ -19,7 +19,7 @@ interface AssessmentActivityLogTabProps {
 function runStateLabel(runState: AssessmentActivityLog['run_state']): string {
   if (runState === 'running') return 'Running';
   if (runState === 'blocked') return 'Blocked';
-  if (runState === 'approved') return 'Approved';
+  if (runState === 'approved') return 'Confirmed';
   return 'Needs review';
 }
 
