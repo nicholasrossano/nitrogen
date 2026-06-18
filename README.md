@@ -29,7 +29,7 @@ The platform helps teams:
 - **Frontend**: Next.js 14 (TypeScript), Tailwind CSS, Zustand
 - **Backend**: FastAPI (Python), SQLAlchemy, Alembic
 - **Database**: PostgreSQL with pgvector for vector search and RAG embeddings
-- **Auth**: Firebase Authentication (or mock dev auth)
+- **Auth**: Firebase Authentication (required)
 
 ## Quick Start (Local Development)
 
@@ -38,8 +38,7 @@ The platform helps teams:
 - Python 3.12+
 - Node.js 22+
 - PostgreSQL with pgvector (or a Neon database)
-- **Required:** `OPENAI_API_KEY` and `DATABASE_URL`
-- **Optional:** Firebase for production-like auth, or mock dev auth (see below)
+- **Required:** `OPENAI_API_KEY`, `DATABASE_URL`, and Firebase (see below)
 
 ### 1) Clone and configure environment
 
@@ -51,15 +50,9 @@ bash scripts/worktree_setup.sh
 bash scripts/check_dev_env.sh
 ```
 
-Minimal mock-auth `.env` (local only):
+**Authentication:** Nitrogen uses Firebase for sign-in in every environment (local and production). Mock auth was removed. Create a [Firebase project](https://console.firebase.google.com/) (free tier is fine), enable Email/Password and/or Google sign-in, then copy the Web app config into `NEXT_PUBLIC_FIREBASE_*` and set `FIREBASE_PROJECT_ID` plus a service account path in `NITROGEN_FIREBASE_CREDENTIALS` (see `.env.example`). `bash scripts/check_dev_env.sh` validates the minimum vars before you start.
 
-```bash
-DEBUG=true
-DEV_MOCK_TOKEN=dev-mock-token
-NEXT_PUBLIC_DEV_MOCK_TOKEN=dev-mock-token
-DATABASE_URL=postgresql+asyncpg://...
-OPENAI_API_KEY=sk-...
-```
+For self-hosting, Firebase is the supported path today: you run Nitrogen's app and database yourself; Firebase handles identity. That keeps auth out of the critical path for a small team fork without maintaining a separate auth server. Alternative identity providers are not wired in yet.
 
 `backend/.env` and `frontend/.env.local` symlink to root `.env`. Quick start: `bash scripts/start_emulator.sh`.
 
@@ -70,7 +63,6 @@ cd backend
 pip install -r requirements.txt
 python3 -m alembic upgrade head
 python3 scripts/seed_demo_deal.py   # optional synthetic sample deal
-python3 scripts/seed_corpus.py        # optional public corpus snippets
 ```
 
 ### 3) Start servers
@@ -116,4 +108,4 @@ CI runs the full secret and artifact scan on every push.
 
 ## License
 
-[GNU Affero General Public License v3.0](LICENSE). Organizations needing terms outside the AGPLv3 may contact Nitrogen about a separate [commercial license](COMMERCIAL_LICENSE.md). Use of Nitrogen names, logos, and branding is covered by the [trademark guidelines](TRADEMARKS.md).
+Code: [GNU Affero General Public License v3.0](LICENSE). The Nitrogen name and branding are not covered by that license — see [brand and naming](TRADEMARKS.md). Organizations needing terms outside the AGPLv3 may contact us about a [commercial license](COMMERCIAL_LICENSE.md).
