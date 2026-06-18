@@ -39,7 +39,7 @@ pydantic-settings>=2.14.0
 python-dotenv>=1.2.2
 httpx>=0.26.0
 aiofiles>=23.2.1
-mcp>=1.27.0
+mcp>=1.28.0
 
 # Development & Testing
 ruff>=0.4.0
