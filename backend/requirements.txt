@@ -19,7 +19,7 @@ PyMuPDF>=1.24.0
 python-docx>=1.2.0
 python-pptx>=1.0.2
 docxtpl>=0.16.7
-openpyxl>=3.1.2
+openpyxl>=3.1.5
 mammoth>=1.6.0
 
 # Auth
