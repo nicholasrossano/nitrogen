@@ -24,8 +24,10 @@ UPLOADS_DIR=./uploads
 CORS_ORIGINS=["https://your-domain.com"]
 
 
-# Firebase Auth (optional if using access code bypass)
+# Firebase Auth (required)
 FIREBASE_PROJECT_ID=your-firebase-project
+NITROGEN_FIREBASE_CREDENTIALS=/path/to/service-account.json
+# Or: FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
 # Note: For GOOGLE_APPLICATION_CREDENTIALS, upload the JSON file to Railway
 # and set this to the file path in the container
 ```
@@ -50,6 +52,14 @@ The `railway.toml` file configures:
 
 ```bash
 NEXT_PUBLIC_API_URL=https://your-app.up.railway.app
+
+# Firebase (required — same Web app config as local .env)
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
 ```
 
 #### Automatic Deployments
@@ -110,10 +120,9 @@ NEXT_PUBLIC_API_URL=https://your-app.up.railway.app
 
 **Solution**:
 1. Run `bash scripts/check_dev_env.sh` from repo root.
-2. **Firebase dev:** set `NEXT_PUBLIC_FIREBASE_*` and `FIREBASE_PROJECT_ID` in `.env`; run `bash scripts/worktree_setup.sh`.
-3. **Mock dev (no Firebase):** set `DEBUG=true` and matching `DEV_MOCK_TOKEN` / `NEXT_PUBLIC_DEV_MOCK_TOKEN` (see `.env.example`).
-4. In production: verify Firebase credentials on the host (e.g. Railway).
-5. Check browser session / sign-in; mock auth is disabled when `NODE_ENV=production`.
+2. Set `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and backend credentials (`NITROGEN_FIREBASE_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON`) in `.env`; run `bash scripts/worktree_setup.sh`.
+3. In production: verify the same Firebase vars on the host (e.g. Railway) and that the frontend Firebase Web config matches the project.
+4. Sign in via the app and confirm the browser sends a Firebase ID token on API requests. Mock auth is not supported.
 
 ## Monitoring
 
