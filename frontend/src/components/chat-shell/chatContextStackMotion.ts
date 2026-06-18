@@ -1,4 +1,11 @@
-export type ChatContextExpandedWidget = 'variables' | 'files';
+export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files';
+
+export const CONTEXT_PANEL_SEARCH_PARAM = 'panel';
+
+export function parseContextPanelParam(value: string | null): ChatContextExpandedWidget | null {
+  if (value === 'overview' || value === 'variables' || value === 'files') return value;
+  return null;
+}
 
 export const CONTEXT_STACK_MOTION_MS = 300;
 
@@ -10,6 +17,8 @@ export const contextStackPanelTransitionClass =
 
 export function contextStackExpandOriginClass(widget: ChatContextExpandedWidget): string {
   switch (widget) {
+    case 'overview':
+      return 'origin-top-right';
     case 'files':
       return 'origin-bottom-right';
     case 'variables':

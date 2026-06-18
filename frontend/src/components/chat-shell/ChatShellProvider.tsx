@@ -3,6 +3,10 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChatShellContext } from './ChatShellContext';
+import {
+  CONTEXT_PANEL_SEARCH_PARAM,
+  type ChatContextExpandedWidget,
+} from '@/components/chat-shell/chatContextStackMotion';
 
 const LAST_PROJECT_KEY = 'nitrogen-last-project-id';
 
@@ -31,7 +35,10 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const [activeChatId, setActiveChatId] = useState<string | null>(searchParams.get('chat'));
   const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
+  const [activeContextWidget, setActiveContextWidget] = useState<ChatContextExpandedWidget | null>(null);
   const landingResetRef = useRef<(() => boolean) | null>(null);
+
+  const activeProjectId = searchParams.get('project');
 
   const registerLandingReset = useCallback((handler: (() => boolean) | null) => {
     landingResetRef.current = handler;
@@ -43,6 +50,7 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
 
   const handleSelectChat = useCallback((chatId: string, projectId?: string | null) => {
     setActiveChatId(chatId);
+    setActiveContextWidget(null);
     if (projectId) writeLastProjectId(projectId);
     const params = new URLSearchParams();
     params.set('chat', chatId);
@@ -85,16 +93,40 @@ export function ChatShellProvider({ children }: { children: ReactNode }) {
     setDrawerRefreshKey((k) => k + 1);
   }, []);
 
+  const openProjectContextPanel = useCallback((projectId: string, widget: ChatContextExpandedWidget) => {
+    writeLastProjectId(projectId);
+    setActiveChatId(null);
+    setActiveContextWidget(widget);
+    const params = new URLSearchParams();
+    params.set('project', projectId);
+    params.set(CONTEXT_PANEL_SEARCH_PARAM, widget);
+    router.replace(`/chat?${params.toString()}`);
+  }, [router]);
+
   const value = useMemo(
     () => ({
       activeChatId,
+      activeProjectId,
+      activeContextWidget,
       onSelectChat: handleSelectChat,
       onNewChat: handleNewChat,
+      openProjectContextPanel,
       drawerRefreshKey,
       refreshDrawer,
       registerLandingReset,
+      setActiveContextWidget,
     }),
-    [activeChatId, drawerRefreshKey, handleNewChat, handleSelectChat, refreshDrawer, registerLandingReset],
+    [
+      activeChatId,
+      activeContextWidget,
+      activeProjectId,
+      drawerRefreshKey,
+      handleNewChat,
+      handleSelectChat,
+      openProjectContextPanel,
+      refreshDrawer,
+      registerLandingReset,
+    ],
   );
 
   return <ChatShellContext.Provider value={value}>{children}</ChatShellContext.Provider>;
@@ -109,3 +141,4 @@ export function useChatShellLandingReset(handler: () => boolean) {
     return () => chatShell?.registerLandingReset(null);
   }, [chatShell, handler]);
 }
+
