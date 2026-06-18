@@ -409,10 +409,20 @@ export function AssumptionsWorkspaceTab({
 
   if (loading) return <WorkspaceTabLoader />;
 
+  const detailPanelClass = embedded
+    ? 'flex min-h-0 h-full flex-col overflow-y-auto border-l border-divider bg-white p-4'
+    : 'rounded-xl border border-divider bg-white p-4';
+
   return (
-    <div className={`h-full overflow-y-auto ${embedded ? 'p-0' : 'p-6'}`}>
-      <div className={`mx-auto grid max-w-7xl gap-6 ${showDetailPanel ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
-        <div className="space-y-6">
+    <div className={embedded ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'h-full overflow-y-auto p-6'}>
+      <div
+        className={
+          embedded && showDetailPanel
+            ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-0'
+            : `mx-auto grid max-w-7xl gap-6 ${showDetailPanel ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`
+        }
+      >
+        <div className={embedded ? 'flex min-h-0 flex-col overflow-hidden px-4 pb-4 pt-4' : 'space-y-6'}>
           {!embedded ? (
             <div>
               <h1 className="text-lg font-semibold text-text-primary">{PROJECT_VARIABLES.title}</h1>
@@ -425,7 +435,7 @@ export function AssumptionsWorkspaceTab({
 
           {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div> : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className={`flex flex-wrap items-center justify-between gap-2 ${embedded ? 'pb-4' : ''}`}>
             <div className="flex flex-wrap items-center gap-2">
               <CustomDropdown
                 value={status}
@@ -458,23 +468,43 @@ export function AssumptionsWorkspaceTab({
             ) : null}
           </div>
 
-          <ReadOnlyDataTable
-            columns={columns}
-            rows={rows}
-            pageSize={25}
-            onRowClick={handleAssumptionOpen}
-            emptyState={
-              <div className="py-20 text-center">
-                <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
-                <p className="mt-1 text-xs text-text-tertiary">
-                  Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
-                </p>
-              </div>
-            }
-          />
+          {embedded ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ReadOnlyDataTable
+                columns={columns}
+                rows={rows}
+                pageSize={25}
+                onRowClick={handleAssumptionOpen}
+                emptyState={
+                  <div className="py-20 text-center">
+                    <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
+                    <p className="mt-1 text-xs text-text-tertiary">
+                      Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
+                    </p>
+                  </div>
+                }
+              />
+            </div>
+          ) : (
+            <ReadOnlyDataTable
+              columns={columns}
+              rows={rows}
+              pageSize={25}
+              onRowClick={handleAssumptionOpen}
+              emptyState={
+                <div className="py-20 text-center">
+                  <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lower} yet</p>
+                  <p className="mt-1 text-xs text-text-tertiary">
+                    Upload project materials or create assessments to start tracking {PROJECT_VARIABLES.lower}.
+                  </p>
+                </div>
+              }
+            />
+          )}
         </div>
 
-        {showDetailPanel ? <aside className="rounded-xl border border-divider bg-white p-4">
+        {showDetailPanel ? (
+          <aside className={detailPanelClass}>
           {selected ? (
             <div className="space-y-4">
               <div>
@@ -515,14 +545,15 @@ export function AssumptionsWorkspaceTab({
               <AssumptionCommentsThread assumptionId={selected.id} />
             </div>
           ) : (
-            <div className="flex h-full min-h-[260px] items-center justify-center text-center">
+            <div className={`flex items-center justify-center text-center ${embedded ? 'h-full flex-1' : 'min-h-[260px] h-full'}`}>
               <div>
                 <p className="text-sm font-medium text-text-secondary">Select a {PROJECT_VARIABLES.lowerSingular}</p>
                 <p className="mt-1 text-xs text-text-tertiary">Open a row to inspect provenance, edit values, or change status.</p>
               </div>
             </div>
           )}
-        </aside> : null}
+          </aside>
+        ) : null}
       </div>
     </div>
   );
