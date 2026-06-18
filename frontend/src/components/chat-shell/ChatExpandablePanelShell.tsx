@@ -8,6 +8,7 @@ import {
   contextStackExpandedPanelMotionClass,
   contextStackPanelTransitionClass,
   type ChatContextExpandedWidget,
+  type ContextPanelExpandMotion,
 } from './chatContextStackMotion';
 
 interface ChatExpandablePanelShellProps {
@@ -15,6 +16,7 @@ interface ChatExpandablePanelShellProps {
   title: string;
   suffix?: string | null;
   visible: boolean;
+  motionMode?: ContextPanelExpandMotion;
   onClose: () => void;
   headerActions?: ReactNode;
   children: ReactNode;
@@ -25,6 +27,7 @@ export function ChatExpandablePanelShell({
   title,
   suffix,
   visible,
+  motionMode = 'stack',
   onClose,
   headerActions,
   children,
@@ -32,7 +35,7 @@ export function ChatExpandablePanelShell({
   return (
     <aside
       aria-hidden={!visible}
-      className={`absolute z-30 inset-y-3 left-0 right-3 flex min-h-0 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} ${contextStackExpandOriginClass(widget)} ${contextStackPanelTransitionClass} ${contextStackExpandedPanelMotionClass(visible)}`}
+      className={`absolute z-30 inset-y-3 left-0 right-3 flex min-h-0 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME} ${contextStackExpandOriginClass(widget, motionMode)} ${contextStackPanelTransitionClass} ${contextStackExpandedPanelMotionClass(visible, motionMode)}`}
     >
       <EditorPanelHeader
         title={title}
