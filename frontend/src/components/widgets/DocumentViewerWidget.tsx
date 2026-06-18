@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
+import { widgetHeaderIconButtonClassName } from '@/components/editor/EditorPanelHeader';
 import { api } from '@/lib/api';
 import type { EvidenceChunkDetail } from '@/lib/api';
 import { ZoomableContainer } from '@/components/viewers/ZoomableContainer';
@@ -166,8 +167,9 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
       <div className="h-full flex flex-col relative">
         {onClose && (
           <button
+            type="button"
             onClick={onClose}
-            className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded bg-white/80 hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary"
+            className={`absolute top-2 right-2 z-10 bg-white/80 ${widgetHeaderIconButtonClassName()}`}
             aria-label="Close document viewer"
           >
             <X className="w-4 h-4" />
@@ -193,8 +195,9 @@ export function DocumentViewerWidget({ data, isActive, onClose }: DocumentViewer
     <div className="h-full flex flex-col relative">
       {onClose && (
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded bg-white/80 hover:bg-surface-subtle transition-colors text-text-tertiary hover:text-text-secondary"
+          className={`absolute top-2 right-2 z-10 bg-white/80 ${widgetHeaderIconButtonClassName()}`}
           aria-label="Close document viewer"
         >
           <X className="w-4 h-4" />
