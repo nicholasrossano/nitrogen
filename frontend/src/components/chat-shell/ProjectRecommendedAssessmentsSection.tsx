@@ -389,8 +389,8 @@ export function ProjectRecommendedAssessmentsSection({
                             </span>
                           ) : null}
                           {isAssessmentComplete ? (
-                            <span className="mt-2 inline-flex items-center rounded-full border border-accent/20 bg-white/75 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-                              Completed
+                            <span className="mt-2 inline-flex h-[1.375rem] items-center justify-center rounded-full border border-accent/20 bg-white/75 px-2.5 text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-accent">
+                              Confirmed
                             </span>
                           ) : null}
                         </span>

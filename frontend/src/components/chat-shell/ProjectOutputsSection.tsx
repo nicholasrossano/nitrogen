@@ -80,14 +80,14 @@ function shouldShowOutput(
 }
 
 type OutputStatusTag = {
-  label: 'Approved' | 'Draft' | 'In progress';
+  label: 'Confirmed' | 'Draft' | 'In progress';
   className: string;
 };
 
 function outputStatusTag(instance: AssessmentInstance): OutputStatusTag {
   if (instance.is_plan_complete === true) {
     return {
-      label: 'Approved',
+      label: 'Confirmed',
       className: 'border-accent/20 bg-white/75 text-accent',
     };
   }
@@ -199,22 +199,22 @@ export function ProjectOutputsSection({
                         assessmentId: instance.assessment_id,
                         title,
                       })}
-                      className="card-interactive flex h-full w-full flex-col items-center rounded-xl border border-stroke-subtle bg-white p-3.5 text-center"
+                      className="card-interactive flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl border border-stroke-subtle bg-white px-3.5 py-3 text-center"
                     >
                       {moduleMeta?.icon ? (
-                        <div className="mb-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded bg-accent-wash text-accent [&>svg]:h-4 [&>svg]:w-4">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-accent-wash text-accent [&>svg]:h-4 [&>svg]:w-4">
                           {moduleMeta.icon}
                         </div>
                       ) : null}
-                      <h3 className="w-full min-h-[2.5rem] text-sm font-semibold leading-snug text-text-primary line-clamp-2">
+                      <h3 className="w-full text-sm font-semibold leading-snug text-text-primary line-clamp-2">
                         {title}
                       </h3>
-                      <p className="mt-1.5 w-full min-h-[1.875rem] text-[11px] leading-snug text-text-tertiary line-clamp-2">
+                      <p className="w-full text-[11px] leading-snug text-text-tertiary line-clamp-2">
                         {authorEmail}
                       </p>
                       <span
                         className={[
-                          'mt-auto pt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]',
+                          'mt-1 inline-flex h-[1.375rem] items-center justify-center rounded-full border px-2.5 text-[10px] font-semibold uppercase leading-none tracking-[0.08em]',
                           statusTag.className,
                         ].join(' ')}
                       >

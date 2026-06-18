@@ -80,7 +80,7 @@ export function AssessmentWorkspacePanelChrome({
         )}
         {canApproveFinal && (
           <EditorPanelHeaderIconButton
-            label="Approve assessment"
+            label="Confirm assessment"
             onClick={onApproveFinal}
             disabled={isApprovingFinal}
           >
@@ -94,8 +94,8 @@ export function AssessmentWorkspacePanelChrome({
             type="button"
             onClick={onRevokeApproval}
             disabled={isApprovingFinal}
-            title="Approved — click to revoke"
-            aria-label="Approved — click to revoke"
+            title="Confirmed — click to revoke"
+            aria-label="Confirmed — click to revoke"
             className="group flex h-8 items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 text-white transition-colors hover:bg-accent/90 disabled:opacity-100"
           >
             {isApprovingFinal ? (
@@ -106,7 +106,7 @@ export function AssessmentWorkspacePanelChrome({
                 <RotateCcw className="absolute inset-0 h-3.5 w-3.5 text-white opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100" />
               </span>
             )}
-            <span className="text-[11px] font-medium">Approved</span>
+            <span className="text-[11px] font-medium leading-none">Confirmed</span>
           </button>
         )}
       </>

@@ -162,13 +162,13 @@ describe('AssessmentWorkspace', () => {
 
     await screen.findByText('Categorized list stage');
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Confirm' })).toHaveLength(1);
 
     fireEvent.click(activitiesButton);
 
     await screen.findByText('Categorized workspace stage');
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Confirm' })).toHaveLength(1);
   });
 
   it('approves a terminal computed stage without showing an export action', async () => {
@@ -200,19 +200,18 @@ describe('AssessmentWorkspace', () => {
 
     await screen.findByText('Implementation plan widget');
 
-    const approveButton = screen.getByRole('button', { name: 'Approve' });
-    expect(approveButton).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    const confirmButton = screen.getByRole('button', { name: 'Confirm' });
+    expect(confirmButton).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
 
-    fireEvent.click(approveButton);
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(mockedApi.approveFinalAssessmentOutput).toHaveBeenCalledWith('instance-1', 3);
     });
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Approved/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Confirmed/).length).toBeGreaterThan(0);
     });
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
   });
@@ -238,8 +237,8 @@ describe('AssessmentWorkspace', () => {
 
     await screen.findByText('Implementation plan widget');
 
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
-    expect(screen.queryByText(/^Confirmed/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Confirmed$/)).not.toBeInTheDocument();
   });
 
   it('shows export before approval only on the final stage for exportable assessments', async () => {
@@ -268,17 +267,17 @@ describe('AssessmentWorkspace', () => {
     await screen.findByText('Implementation plan widget');
 
     expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
     const actionLabels = screen.getAllByRole('button')
       .map((button) => button.textContent?.trim())
-      .filter((label) => label === 'Log' || label === 'Export' || label === 'Approve');
-    expect(actionLabels).toEqual(['Log', 'Export', 'Approve']);
+      .filter((label) => label === 'Log' || label === 'Export' || label === 'Confirm');
+    expect(actionLabels).toEqual(['Log', 'Export', 'Confirm']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Categories' }));
 
     await screen.findByText('Categorized list stage');
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 
   it('reverts final approval to an approvable state', async () => {
@@ -331,17 +330,17 @@ describe('AssessmentWorkspace', () => {
 
     await screen.findByText('Implementation plan widget');
 
-    const approvedButton = screen.getByRole('button', { name: 'Approved' });
-    expect(approvedButton).toBeInTheDocument();
+    const confirmedButton = screen.getByRole('button', { name: 'Confirmed' });
+    expect(confirmedButton).toBeInTheDocument();
 
-    fireEvent.click(approvedButton);
+    fireEvent.click(confirmedButton);
 
     await waitFor(() => {
       expect(mockedApi.revokeFinalAssessmentApproval).toHaveBeenCalledWith('instance-1', 4);
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
     });
   });
 });
