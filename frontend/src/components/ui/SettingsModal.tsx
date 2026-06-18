@@ -18,6 +18,7 @@ import { RoleDropdown } from '@/components/sharing/RoleDropdown';
 import { SettingsEntityHeader } from '@/components/ui/SettingsEntityHeader';
 import { AccentIconBadge } from '@/components/ui/AccentIconBadge';
 import { resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
+import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import {
   buildChatPath,
   resolveActiveProjectId,
@@ -171,6 +172,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const chatShell = useChatShell();
   const { devMode, setDevMode } = useSettingsStore();
   const showBillingFeatures = useFeatureFlag('billing_features');
   const {
@@ -525,23 +527,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setProjectSettingsLoadedForId(null);
 
       const nextProjectId = resolveDefaultProjectId(remaining);
-      const onDeletedInitiativeRoute = /^\/initiatives\/([^/]+)/.exec(pathname)?.[1] === deletedProjectId;
       if (nextProjectId) {
         setSettingsProjectId(nextProjectId);
         writeLastProjectId(nextProjectId);
-        if (pathname.startsWith('/chat') || pathname === '/') {
-          router.replace(buildChatPath(pathname, searchParams, nextProjectId));
-        } else if (onDeletedInitiativeRoute) {
-          router.replace(`/initiatives/${nextProjectId}`);
-        }
-        return;
-      }
-
-      setSettingsProjectId(null);
-      writeLastProjectId(null);
-      if (pathname.startsWith('/chat') || pathname === '/' || onDeletedInitiativeRoute) {
+        router.replace(`/chat?project=${nextProjectId}`);
+      } else {
+        setSettingsProjectId(null);
+        writeLastProjectId(null);
         router.replace('/chat');
       }
+      chatShell?.refreshDrawer();
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : 'Failed to delete project');
     } finally {
