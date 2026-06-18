@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Users } from 'lucide-react';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
 import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
@@ -119,6 +120,7 @@ export function ChatContextStack({
   const uploadMaterial = useInitiativeStore((state) => state.uploadMaterial);
   const deleteMaterial = useInitiativeStore((state) => state.deleteMaterial);
   const [projectMaterials, setProjectMaterials] = useState<ProjectMaterial[]>([]);
+  const [overviewShareModalOpen, setOverviewShareModalOpen] = useState(false);
 
   const loadProjectMaterials = useCallback(async () => {
     if (!projectId) {
@@ -136,6 +138,12 @@ export function ChatContextStack({
   useEffect(() => {
     void loadProjectMaterials();
   }, [loadProjectMaterials, refreshKey]);
+
+  useEffect(() => {
+    if (renderedWidget !== 'overview') {
+      setOverviewShareModalOpen(false);
+    }
+  }, [renderedWidget]);
 
   const handleExpandOverview = useCallback(() => {
     onExpandedWidgetChange('overview');
@@ -218,10 +226,24 @@ export function ChatContextStack({
           suffix={project.name}
           visible={visible}
           onClose={handleCloseExpanded}
+          headerActions={
+            !project.shared_role || project.shared_role === 'editor' ? (
+              <button
+                type="button"
+                onClick={() => setOverviewShareModalOpen(true)}
+                className="flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg border border-stroke-subtle bg-white text-text-secondary hover:border-accent hover:text-accent transition-colors"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Share
+              </button>
+            ) : undefined
+          }
         >
           <ProjectOverviewExpandedPanel
             project={project}
             refreshKey={refreshKey}
+            shareModalOpen={overviewShareModalOpen}
+            onShareModalChange={setOverviewShareModalOpen}
             onOpenDocument={onOpenDocument}
             onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
           />

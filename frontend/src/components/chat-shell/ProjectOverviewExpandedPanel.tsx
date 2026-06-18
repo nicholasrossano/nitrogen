@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Users } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTable';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
@@ -15,6 +15,8 @@ import {
 interface ProjectOverviewExpandedPanelProps {
   project: Project;
   refreshKey?: number;
+  shareModalOpen?: boolean;
+  onShareModalChange?: (open: boolean) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenWorkspaceAssessment?: (assessment: {
     instanceId: string;
@@ -26,13 +28,16 @@ interface ProjectOverviewExpandedPanelProps {
 export function ProjectOverviewExpandedPanel({
   project,
   refreshKey = 0,
+  shareModalOpen,
+  onShareModalChange,
   onOpenDocument,
   onOpenWorkspaceAssessment,
 }: ProjectOverviewExpandedPanelProps) {
   const initiative = useInitiativeStore((state) => state.initiative);
   const [shares, setShares] = useState<ProjectShare[]>([]);
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
+  const [internalShareModalOpen, setInternalShareModalOpen] = useState(false);
+  const showShareModal = shareModalOpen ?? internalShareModalOpen;
 
   const loadShares = useCallback(async () => {
     setCollaboratorsLoading(true);
@@ -51,9 +56,13 @@ export function ProjectOverviewExpandedPanel({
   }, [loadShares, refreshKey]);
 
   const handleCloseShareModal = useCallback(() => {
-    setShowShareModal(false);
+    if (onShareModalChange) {
+      onShareModalChange(false);
+    } else {
+      setInternalShareModalOpen(false);
+    }
     void loadShares();
-  }, [loadShares]);
+  }, [loadShares, onShareModalChange]);
 
   const collaborators = useMemo(
     () => buildCollaborators(project, shares),
@@ -65,7 +74,6 @@ export function ProjectOverviewExpandedPanel({
     project.subject?.trim() ||
     null;
   const readOnly = project.shared_role === 'viewer';
-  const canShare = !project.shared_role || project.shared_role === 'editor';
   const ownerEmail = project.owner_email ?? initiative?.owner_email ?? null;
 
   return (
@@ -108,21 +116,9 @@ export function ProjectOverviewExpandedPanel({
         </section>
 
         <section>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-              Collaborators
-            </p>
-            {canShare && (
-              <button
-                type="button"
-                onClick={() => setShowShareModal(true)}
-                className="flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg border border-stroke-subtle bg-white text-text-secondary hover:border-accent hover:text-accent transition-colors"
-              >
-                <Users className="w-3.5 h-3.5" />
-                Share
-              </button>
-            )}
-          </div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+            Collaborators
+          </p>
           <div className="mt-2 rounded-xl border border-black/[0.05] bg-surface-subtle/40 px-4 py-3">
             {collaboratorsLoading ? (
               <div className="flex items-center gap-2 text-xs text-text-tertiary">
