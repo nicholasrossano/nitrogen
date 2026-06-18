@@ -17,7 +17,7 @@ function stateLabel(runState?: AssessmentAgentStatus['run_state']): string {
     case 'blocked':
       return 'Blocked';
     case 'approved':
-      return 'Approved';
+      return 'Confirmed';
     case 'needs_review':
     default:
       return 'Needs review';
