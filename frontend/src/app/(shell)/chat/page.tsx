@@ -28,6 +28,7 @@ import {
   editorWidgetForProjectMaterial,
 } from '@/lib/openProjectFileInEditor';
 import { api, type Project, type ProjectMaterial } from '@/lib/api';
+import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
@@ -62,6 +63,7 @@ function ChatWorkbenchContent() {
   const [editorPanelWidthPx, setEditorPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [isResizingEditorPanel, setIsResizingEditorPanel] = useState(false);
   const wasOnLandingRef = useRef(true);
+  const ephemeralAssessmentSessionsRef = useRef<Map<string, { initiativeId: string; engaged: boolean }>>(new Map());
 
   const selectedProjectId = searchParams.get('project');
   const activeChatId = searchParams.get('chat');
@@ -242,13 +244,39 @@ function ChatWorkbenchContent() {
     ) : null
   ), [effectiveProjectId, handleChangeProject, projects]);
 
+  const cleanupActiveEphemeralAssessment = useCallback((widgets: EditorWidget[]) => {
+    const activeWidget = widgets[widgets.length - 1];
+    if (
+      activeWidget?.type !== 'assessment_workspace'
+      || typeof activeWidget.data?.instance_id !== 'string'
+      || !effectiveProjectId
+    ) {
+      return;
+    }
+
+    const instanceId = activeWidget.data.instance_id;
+    const session = ephemeralAssessmentSessionsRef.current.get(instanceId);
+    if (session && !session.engaged) {
+      void discardEphemeralAssessmentInstance(session.initiativeId, instanceId);
+    }
+    ephemeralAssessmentSessionsRef.current.delete(instanceId);
+  }, [effectiveProjectId]);
+
   const handleCloseEditorPanel = useCallback(() => {
+    cleanupActiveEphemeralAssessment(pinnedEditorWidgets ?? editorWidgets);
     setPinnedEditorWidgets(null);
     setEditorWidgets([]);
     if (!activeChatId) {
       setHasMessages(false);
     }
-  }, [activeChatId]);
+  }, [activeChatId, cleanupActiveEphemeralAssessment, editorWidgets, pinnedEditorWidgets]);
+
+  const handleAssessmentEngaged = useCallback((instanceId: string) => {
+    const session = ephemeralAssessmentSessionsRef.current.get(instanceId);
+    if (session) {
+      session.engaged = true;
+    }
+  }, []);
 
   const handleEditorWidgetsChange = useCallback((widgets: EditorWidget[]) => {
     setEditorWidgets(widgets);
@@ -268,11 +296,18 @@ function ChatWorkbenchContent() {
       instanceId: string;
       assessmentId: string;
       title?: string | null;
+      pendingEngagement?: boolean;
     }) => {
       setExpandedContextWidget(null);
       setVariablesFocusId(null);
       clearContextPanelParam();
       setHasMessages(true);
+      if (assessment.pendingEngagement && effectiveProjectId) {
+        ephemeralAssessmentSessionsRef.current.set(assessment.instanceId, {
+          initiativeId: effectiveProjectId,
+          engaged: false,
+        });
+      }
       setPinnedEditorWidgets([
         {
           type: 'assessment_workspace',
@@ -280,12 +315,13 @@ function ChatWorkbenchContent() {
             instance_id: assessment.instanceId,
             assessment_id: assessment.assessmentId,
             title: assessment.title,
+            pending_engagement: assessment.pendingEngagement === true,
           },
           messageId: `workspace-${assessment.instanceId}`,
         },
       ]);
     },
-    [clearContextPanelParam],
+    [clearContextPanelParam, effectiveProjectId],
   );
 
   const handleOpenProjectFile = useCallback((file: ProjectMaterial) => {
@@ -321,6 +357,7 @@ function ChatWorkbenchContent() {
     }
 
     if (pinnedEditorWidgets?.length || editorWidgets.length) {
+      cleanupActiveEphemeralAssessment(pinnedEditorWidgets ?? editorWidgets);
       setPinnedEditorWidgets(null);
       setEditorWidgets([]);
       didReset = true;
@@ -334,6 +371,7 @@ function ChatWorkbenchContent() {
   }, [
     activeChatId,
     chatShell,
+    cleanupActiveEphemeralAssessment,
     clearContextPanelParam,
     editorWidgets.length,
     expandedContextWidget,
@@ -403,20 +441,13 @@ function ChatWorkbenchContent() {
               key={chatSurfaceKey}
               initiativeId={effectiveProjectId}
               initialChatId={activeChatId}
-              useLandingWhenEmpty
+              useLandingWhenEmpty={!isOnboarding}
               hideTiles
               allowInitialProjectOnboarding={isOnboarding}
               restoreLatestChatOnMount={isOnboarding}
-              landingLayoutMode={isOnboarding ? 'overview' : 'default'}
-              landingComposerTitle={selectedProject?.name}
-              landingHeaderContent={isOnboarding && initiative ? (
-                <ProjectOnboardingHeader
-                  initiative={initiative}
-                  filesUploaded={projectMaterials.length}
-                />
-              ) : (
-                <></>
-              )}
+              landingLayoutMode="default"
+              landingComposerTitle={isOnboarding ? undefined : selectedProject?.name}
+              landingHeaderContent={<></>}
               onLandingStateChange={(onLanding) => {
                 if (wasOnLandingRef.current && !onLanding && panelParam) {
                   clearContextPanelParam();
@@ -494,6 +525,7 @@ function ChatWorkbenchContent() {
             widgets={effectiveEditorWidgets}
             initiativeId={effectiveProjectId}
             onClose={handleCloseEditorPanel}
+            onAssessmentEngaged={handleAssessmentEngaged}
           />
         </aside>
       )}

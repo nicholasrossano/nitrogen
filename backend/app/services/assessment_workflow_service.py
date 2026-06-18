@@ -62,12 +62,66 @@ logger = logging.getLogger(__name__)
 # Persistence helpers
 # ---------------------------------------------------------------------------
 
+def mark_user_engaged(state: dict[str, Any]) -> bool:
+    """Mark workflow state as user-engaged. Returns True if newly marked."""
+    if state.get("user_engaged"):
+        return False
+    state["user_engaged"] = True
+    return True
+
+
+def _stage_data_has_content(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    items = data.get("items")
+    if isinstance(items, list) and len(items) > 0:
+        return True
+    records = data.get("records")
+    if isinstance(records, dict) and len(records) > 0:
+        return True
+    widget_data = data.get("widget_data")
+    if isinstance(widget_data, dict) and widget_data:
+        return True
+    return bool(data)
+
+
+def has_meaningful_assessment_progress(state: dict[str, Any] | None) -> bool:
+    """Whether an instance has progressed beyond an untouched open-and-close."""
+    if not isinstance(state, dict):
+        return False
+    stages = state.get("stages") or {}
+    if not isinstance(stages, dict):
+        return False
+    for stage_state in stages.values():
+        if not isinstance(stage_state, dict):
+            continue
+        status = stage_state.get("status")
+        if status in ("confirmed", "validated", "draft", "error"):
+            return True
+        if _stage_data_has_content(stage_state.get("data")):
+            return True
+    return False
+
+
+def is_instance_visible_in_lists(inst: AssessmentInstance) -> bool:
+    """Whether a assessment instance should appear in project output/history lists."""
+    if inst.is_plan_complete:
+        return True
+    state = inst.workflow_state or {}
+    if state.get("user_engaged"):
+        return True
+    return has_meaningful_assessment_progress(state)
+
+
 def save_workflow_state(
     inst: AssessmentInstance,
     state: dict[str, Any],
     *,
     increment_version: bool = False,
+    user_initiated: bool = False,
 ) -> None:
+    if user_initiated:
+        mark_user_engaged(state)
     inst.workflow_state = state
     flag_modified(inst, "workflow_state")
     if increment_version:
@@ -154,6 +208,7 @@ def _build_initial_workflow_state(assessment: BaseAssessment) -> dict[str, Any]:
         "current_stage_id": first_id,
         "stages": stages,
         "final_approval": _initial_final_approval_state(),
+        "user_engaged": False,
     }
 
 
@@ -714,7 +769,7 @@ async def enrich_record_item(
     stage_state["data"] = data
 
     clear_final_approval(state)
-    save_workflow_state(inst, state, increment_version=True)
+    save_workflow_state(inst, state, increment_version=True, user_initiated=True)
     return enriched
 
 
