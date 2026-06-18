@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { widgetHeaderIconButtonClassName } from '@/components/editor/EditorPanelHeader';
 
 interface ChatPanelWidgetShellProps {
   icon: ReactNode;
@@ -64,7 +65,7 @@ export function ChatPanelWidgetShell({
           <button
             type="button"
             onClick={() => onCollapsedChange(!collapsed)}
-            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-secondary"
+            className={widgetHeaderIconButtonClassName({ size: 'sm' })}
             aria-label={collapsed ? 'Expand panel' : 'Collapse panel'}
           >
             {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
@@ -74,7 +75,7 @@ export function ChatPanelWidgetShell({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-secondary"
+            className={widgetHeaderIconButtonClassName({ size: 'sm' })}
             aria-label="Close panel"
           >
             <X className="h-3.5 w-3.5" />

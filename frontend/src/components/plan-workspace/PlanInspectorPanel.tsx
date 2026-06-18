@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef } from 'react';
 import { X, AlertCircle, Zap, PenLine } from 'lucide-react';
+import { widgetHeaderIconButtonClassName } from '@/components/editor/EditorPanelHeader';
 import { PageLoader } from '@/components/ui/PageLoader';
 
 import { DeepDiveSourcesMenu } from './DeepDiveSourcesMenu';
@@ -102,8 +103,9 @@ export function PlanInspectorPanel({
           <DeepDiveSourcesMenu sources={citationSources} onOpenDocument={onOpenDocument} />
         )}
         <button
+          type="button"
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-subtle transition-colors flex-shrink-0 text-text-tertiary hover:text-text-secondary"
+          className={widgetHeaderIconButtonClassName()}
           aria-label="Close"
         >
           <X className="w-4 h-4" />

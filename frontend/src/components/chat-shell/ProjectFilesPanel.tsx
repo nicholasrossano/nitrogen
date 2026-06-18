@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ExternalLink, FileText, Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { api, type ProjectMaterial } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 
@@ -23,10 +22,15 @@ interface ProjectFilesPanelProps {
   projectId: string | null;
   refreshKey?: number;
   onOpenFile?: (file: ProjectMaterial) => void;
+  onViewAll?: () => void;
 }
 
-export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: ProjectFilesPanelProps) {
-  const router = useRouter();
+export function ProjectFilesPanel({
+  projectId,
+  refreshKey = 0,
+  onOpenFile,
+  onViewAll,
+}: ProjectFilesPanelProps) {
   const [rows, setRows] = useState<ProjectMaterial[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -50,11 +54,6 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: Pro
       .finally(() => setLoading(false));
   }, [projectId, refreshKey]);
 
-  const viewAllHref = useMemo(
-    () => (projectId ? `/chat/files?project=${projectId}` : '/chat/files'),
-    [projectId],
-  );
-
   if (!projectId) return null;
 
   return (
@@ -64,15 +63,17 @@ export function ProjectFilesPanel({ projectId, refreshKey = 0, onOpenFile }: Pro
       <div className="px-4 py-3 shrink-0">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-text-primary">Files</h2>
+          {onViewAll ? (
           <button
             type="button"
-            onClick={() => router.push(viewAllHref)}
+            onClick={onViewAll}
             className="shrink-0 p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-black/[0.04]"
             aria-label="View all files"
             title="View all files"
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
+          ) : null}
         </div>
       </div>
 

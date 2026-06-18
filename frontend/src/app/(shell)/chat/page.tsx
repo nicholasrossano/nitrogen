@@ -8,18 +8,18 @@ import { PersonalChatSurface } from '@/components/chat-shell/PersonalChatSurface
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import { ChangeProjectSelect, resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
 import { readLastProjectId, writeLastProjectId, useChatShellLandingReset } from '@/components/chat-shell/ChatShellProvider';
-import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
-import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
-import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
-import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
-import { AssumptionsChatPanel } from '@/components/assumptions/AssumptionsChatPanel';
+import {
+  ChatContextStack,
+  type ChatContextExpandedWidget,
+} from '@/components/chat-shell/ChatContextStack';
+import { contextStackBackdropMotionClass, contextStackTransitionClass } from '@/components/chat-shell/chatContextStackMotion';
 import { EditorSidePanel, type EditorWidget } from '@/components/editor/EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import {
   editorWidgetForCitation,
   editorWidgetForProjectMaterial,
 } from '@/lib/openProjectFileInEditor';
-import { api, type Assumption, type Project, type ProjectMaterial } from '@/lib/api';
+import { api, type Project, type ProjectMaterial } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
@@ -47,9 +47,8 @@ function ChatWorkbenchContent() {
   const [editorWidgets, setEditorWidgets] = useState<EditorWidget[]>([]);
   const [pinnedEditorWidgets, setPinnedEditorWidgets] = useState<EditorWidget[] | null>(null);
   const [contextRefreshKey, setContextRefreshKey] = useState(0);
-  const [assumptionsWorkspaceOpen, setAssumptionsWorkspaceOpen] = useState(false);
-  const [focusedAssumptionId, setFocusedAssumptionId] = useState<string | null>(null);
-  const [assumptionsCreateNew, setAssumptionsCreateNew] = useState(false);
+  const [expandedContextWidget, setExpandedContextWidget] = useState<ChatContextExpandedWidget | null>(null);
+  const [variablesFocusId, setVariablesFocusId] = useState<string | null>(null);
   const [editorPanelWidthPx, setEditorPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [isResizingEditorPanel, setIsResizingEditorPanel] = useState(false);
 
@@ -101,9 +100,8 @@ function ChatWorkbenchContent() {
   useEffect(() => {
     setPinnedEditorWidgets(null);
     setEditorWidgets([]);
-    setAssumptionsWorkspaceOpen(false);
-    setFocusedAssumptionId(null);
-    setAssumptionsCreateNew(false);
+    setExpandedContextWidget(null);
+    setVariablesFocusId(null);
   }, [effectiveProjectId, activeChatId]);
 
   const selectedProject = useMemo(
@@ -112,11 +110,9 @@ function ChatWorkbenchContent() {
   );
 
   const effectiveEditorWidgets = pinnedEditorWidgets ?? editorWidgets;
-  const showAssumptionsWorkspace = assumptionsWorkspaceOpen && Boolean(effectiveProjectId);
-  const showAssumptionsSidePanel = showAssumptionsWorkspace && (Boolean(focusedAssumptionId) || assumptionsCreateNew);
-  const showContextStack = !hasMessages && Boolean(effectiveProjectId) && !showAssumptionsWorkspace;
+  const showContextStack = !hasMessages && Boolean(effectiveProjectId);
   const showEditorPanel = effectiveEditorWidgets.length > 0;
-  const reserveRightSpace = showContextStack || showEditorPanel || showAssumptionsSidePanel;
+  const reserveRightSpace = (showContextStack && !expandedContextWidget) || showEditorPanel;
   const rightGutter = showEditorPanel
     ? chatEditorPanelGutter(editorPanelWidthPx)
     : reserveRightSpace
@@ -208,6 +204,8 @@ function ChatWorkbenchContent() {
   }, []);
 
   const handleOpenProjectFile = useCallback((file: ProjectMaterial) => {
+    setExpandedContextWidget(null);
+    setVariablesFocusId(null);
     setHasMessages(true);
     setPinnedEditorWidgets([editorWidgetForProjectMaterial(file)]);
   }, []);
@@ -224,29 +222,12 @@ function ChatWorkbenchContent() {
     chatShell?.refreshDrawer();
   }, [chatShell, effectiveProjectId, router]);
 
-  const handleOpenAssumptionsView = useCallback((assumption?: Assumption) => {
-    setAssumptionsWorkspaceOpen(true);
-    setFocusedAssumptionId(assumption?.id ?? null);
-    setAssumptionsCreateNew(false);
-  }, []);
-
-  const handleAssumptionSelectInWorkspace = useCallback((assumption: Assumption) => {
-    setFocusedAssumptionId(assumption.id);
-    setAssumptionsCreateNew(false);
-  }, []);
-
-  const handleAddAssumptionInChat = useCallback(() => {
-    setFocusedAssumptionId(null);
-    setAssumptionsCreateNew(true);
-  }, []);
-
   const resetLandingOverlays = useCallback((): boolean => {
     let didReset = false;
 
-    if (assumptionsWorkspaceOpen) {
-      setAssumptionsWorkspaceOpen(false);
-      setFocusedAssumptionId(null);
-      setAssumptionsCreateNew(false);
+    if (expandedContextWidget) {
+      setExpandedContextWidget(null);
+      setVariablesFocusId(null);
       didReset = true;
     }
 
@@ -261,9 +242,16 @@ function ChatWorkbenchContent() {
     }
 
     return didReset;
-  }, [activeChatId, assumptionsWorkspaceOpen, editorWidgets.length, pinnedEditorWidgets]);
+  }, [activeChatId, editorWidgets.length, expandedContextWidget, pinnedEditorWidgets]);
 
   useChatShellLandingReset(resetLandingOverlays);
+
+  useEffect(() => {
+    if (hasMessages && expandedContextWidget) {
+      setExpandedContextWidget(null);
+      setVariablesFocusId(null);
+    }
+  }, [expandedContextWidget, hasMessages]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -282,16 +270,10 @@ function ChatWorkbenchContent() {
         className={`flex-1 flex flex-col min-h-0 min-w-0 ${isResizingEditorPanel ? '' : 'transition-[padding-right] duration-300 ease-in-out'}`}
         style={{ paddingRight: rightGutter }}
       >
-        <div className="flex-1 min-h-0">
-          {showAssumptionsWorkspace && effectiveProjectId ? (
-            <AssumptionsWorkspaceTab
-              initiativeId={effectiveProjectId}
-              showDetailPanel={false}
-              focusAssumptionId={focusedAssumptionId}
-              onAssumptionSelectInChat={handleAssumptionSelectInWorkspace}
-              onAddAssumptionInChat={handleAddAssumptionInChat}
-            />
-          ) : effectiveProjectId ? (
+        <div
+          className={`flex-1 min-h-0 ${contextStackTransitionClass} ${contextStackBackdropMotionClass(Boolean(expandedContextWidget))}`}
+        >
+          {effectiveProjectId ? (
             <ProjectChatSurface
               key={effectiveProjectId}
               initiativeId={effectiveProjectId}
@@ -329,31 +311,17 @@ function ChatWorkbenchContent() {
         </div>
       </div>
 
-      {showContextStack && (
-        <div className="absolute z-20 right-3 top-3 bottom-3 flex flex-col gap-3 w-[min(22rem,34vw)] pointer-events-none">
-          <div className="pointer-events-auto min-h-0">
-            <ProjectContextPanel
-              variant="stacked"
-              project={selectedProject}
-              refreshKey={contextRefreshKey}
-            />
-          </div>
-          <div className="pointer-events-auto flex-1 min-h-[8rem] flex flex-col min-w-0">
-            <ProjectAssumptionsPanel
-              projectId={effectiveProjectId}
-              refreshKey={contextRefreshKey}
-              onAssumptionSelect={(assumption) => handleOpenAssumptionsView(assumption)}
-              onViewAll={() => handleOpenAssumptionsView()}
-            />
-          </div>
-          <div className="pointer-events-auto min-h-0 flex flex-col min-w-0">
-            <ProjectFilesPanel
-              projectId={effectiveProjectId}
-              refreshKey={contextRefreshKey}
-              onOpenFile={handleOpenProjectFile}
-            />
-          </div>
-        </div>
+      {showContextStack && effectiveProjectId && (
+        <ChatContextStack
+          project={selectedProject}
+          projectId={effectiveProjectId}
+          refreshKey={contextRefreshKey}
+          expandedWidget={expandedContextWidget}
+          onExpandedWidgetChange={setExpandedContextWidget}
+          variablesFocusId={variablesFocusId}
+          onVariablesFocusIdChange={setVariablesFocusId}
+          onOpenFile={handleOpenProjectFile}
+        />
       )}
 
       {showEditorPanel && effectiveProjectId && (
@@ -379,17 +347,6 @@ function ChatWorkbenchContent() {
             widgets={effectiveEditorWidgets}
             initiativeId={effectiveProjectId}
             onClose={handleCloseEditorPanel}
-          />
-        </aside>
-      )}
-
-      {showAssumptionsSidePanel && effectiveProjectId && (
-        <aside className={`${FLOATING_PANEL_CLASS} top-3 bottom-3 w-[min(22rem,34vw)]`}>
-          <AssumptionsChatPanel
-            initiativeId={effectiveProjectId}
-            focusAssumptionId={focusedAssumptionId}
-            createNew={assumptionsCreateNew}
-            layoutMode="panel"
           />
         </aside>
       )}
