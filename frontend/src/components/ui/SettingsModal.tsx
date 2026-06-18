@@ -537,6 +537,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         router.replace('/chat');
       }
       chatShell?.refreshDrawer();
+      onClose();
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : 'Failed to delete project');
     } finally {
