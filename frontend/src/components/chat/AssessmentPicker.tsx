@@ -6,16 +6,26 @@ import { Plus, X, Check } from 'lucide-react';
 import {
   ALL_MODULES,
   ANALYSIS_MODULES,
+  groupAssessmentIdsByAnalysisType,
   MODULE_CATEGORIES,
+  QUANTITATIVE_ASSESSMENT_IDS,
   STANDALONE_MODULE_IDS,
   type AssessmentCategory,
   type AssessmentOption,
+  type AssessmentTypeGroup,
 } from '@/domain/energy/assessmentCatalog';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 import { CHAT_FLOATING_PANEL_SHADOW } from '@/components/ui/chatSidebarLayout';
 
-export { ALL_MODULES, MODULE_CATEGORIES, STANDALONE_MODULE_IDS };
-export type { AssessmentCategory, AssessmentOption };
+export {
+  ALL_MODULES,
+  ANALYSIS_MODULES,
+  groupAssessmentIdsByAnalysisType,
+  MODULE_CATEGORIES,
+  QUANTITATIVE_ASSESSMENT_IDS,
+  STANDALONE_MODULE_IDS,
+};
+export type { AssessmentCategory, AssessmentOption, AssessmentTypeGroup };
 
 interface AssessmentPickerProps {
   selected: AssessmentOption | null;
