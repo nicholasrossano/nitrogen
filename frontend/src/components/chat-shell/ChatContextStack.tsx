@@ -16,6 +16,8 @@ import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { api, type Assumption, type Project, type ProjectMaterial } from '@/lib/api';
 import { useInitiativeStore } from '@/stores/initiativeStore';
+import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 
 export type { ChatContextExpandedWidget };
 
@@ -38,6 +40,12 @@ export interface ChatContextStackProps {
   variablesFocusId?: string | null;
   onVariablesFocusIdChange?: (assumptionId: string | null) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onOpenWorkspaceAssessment?: (assessment: {
+    instanceId: string;
+    assessmentId: string;
+    title?: string | null;
+  }) => void;
 }
 
 function useExpandedPanelVisibility(expandedWidget: ChatContextExpandedWidget | null) {
@@ -80,7 +88,7 @@ function ContextStackWidgetSlot({
   className,
   children,
 }: {
-  widgetId: ChatContextExpandedWidget | 'overview';
+  widgetId: ChatContextExpandedWidget;
   expandedWidget: ChatContextExpandedWidget | null;
   renderedWidget: ChatContextExpandedWidget | null;
   className?: string;
@@ -104,6 +112,8 @@ export function ChatContextStack({
   variablesFocusId = null,
   onVariablesFocusIdChange,
   onOpenFile,
+  onOpenDocument,
+  onOpenWorkspaceAssessment,
 }: ChatContextStackProps) {
   const { renderedWidget, visible } = useExpandedPanelVisibility(expandedWidget);
   const uploadMaterial = useInitiativeStore((state) => state.uploadMaterial);
@@ -126,6 +136,10 @@ export function ChatContextStack({
   useEffect(() => {
     void loadProjectMaterials();
   }, [loadProjectMaterials, refreshKey]);
+
+  const handleExpandOverview = useCallback(() => {
+    onExpandedWidgetChange('overview');
+  }, [onExpandedWidgetChange]);
 
   const handleExpandVariables = useCallback(() => {
     onExpandedWidgetChange('variables');
@@ -163,6 +177,7 @@ export function ChatContextStack({
               variant="stacked"
               project={project}
               refreshKey={refreshKey}
+              onViewAll={handleExpandOverview}
             />
           </ContextStackWidgetSlot>
         </div>
@@ -196,10 +211,28 @@ export function ChatContextStack({
         </ContextStackWidgetSlot>
       </div>
 
+      {renderedWidget === 'overview' && project && (
+        <ChatExpandablePanelShell
+          widget="overview"
+          title="Overview"
+          suffix={project.name}
+          visible={visible}
+          onClose={handleCloseExpanded}
+        >
+          <ProjectOverviewExpandedPanel
+            project={project}
+            refreshKey={refreshKey}
+            onOpenDocument={onOpenDocument}
+            onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
+          />
+        </ChatExpandablePanelShell>
+      )}
+
       {renderedWidget === 'variables' && (
         <ChatExpandablePanelShell
           widget="variables"
           title={PROJECT_VARIABLES.title}
+          suffix={project?.name ?? null}
           visible={visible}
           onClose={handleCloseExpanded}
         >
