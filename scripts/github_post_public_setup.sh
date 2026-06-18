@@ -9,11 +9,20 @@ REPO="${GITHUB_REPO:-nicholasrossano/nitrogen}"
 
 echo "==> Configuring $REPO (branch protection + Actions policy)"
 
-echo "==> Restrict Actions to this repository's workflows only"
+echo "==> Allow GitHub-owned Actions (checkout, setup-node, setup-python, etc.)"
 gh api -X PUT "repos/$REPO/actions/permissions" --input - <<'EOF'
 {
   "enabled": true,
-  "allowed_actions": "local_only"
+  "allowed_actions": "selected"
+}
+EOF
+
+gh api -X PUT "repos/$REPO/actions/permissions/workflow" --input - <<'EOF'
+{
+  "default_workflow_permissions": "read",
+  "github_owned_allowed": true,
+  "verified_allowed": false,
+  "patterns_allowed": []
 }
 EOF
 
