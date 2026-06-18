@@ -13,6 +13,7 @@ import { ConversationView } from './ConversationView';
 import { LandingInput } from './LandingInput';
 import { InitiativeOverviewHeader } from './InitiativeOverviewHeader';
 import { ProjectOutputsSection } from '@/components/chat-shell/ProjectOutputsSection';
+import { ProjectRecommendedAssessmentsSection } from '@/components/chat-shell/ProjectRecommendedAssessmentsSection';
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
@@ -1013,7 +1014,7 @@ export function ProjectChatSurface({
     const assessmentsCreated = activeAssessmentsCount;
 
     return (
-      <>
+      <div className="h-full min-h-0">
         <LandingInput
           onSend={onLandingSend ?? handleSend}
           onUploadFile={handleUploadFile}
@@ -1074,14 +1075,20 @@ export function ProjectChatSurface({
           showAttachments={!allowInitialProjectOnboarding}
           belowComposerContent={
             hideTiles && onOpenWorkspaceAssessment ? (
-              <ProjectOutputsSection
-                projectId={initiativeId}
-                onOpenOutput={onOpenWorkspaceAssessment}
-              />
+              <>
+                <ProjectOutputsSection
+                  projectId={initiativeId}
+                  onOpenOutput={onOpenWorkspaceAssessment}
+                />
+                <ProjectRecommendedAssessmentsSection
+                  projectId={initiativeId}
+                  onOpenAssessment={onOpenWorkspaceAssessment}
+                />
+              </>
             ) : null
           }
         />
-      </>
+      </div>
     );
   }
 

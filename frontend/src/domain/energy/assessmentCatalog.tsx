@@ -56,8 +56,31 @@ export const ALL_MODULES: AssessmentOption[] = [
 ];
 
 export const ANALYSIS_MODULES = ALL_MODULES.filter(
-  (m) => m.id === 'lcoe_model' || m.id === 'carbon_model' || m.id === 'solar_estimate'
+  (m) => m.id === 'lcoe_model' || m.id === 'carbon_model' || m.id === 'solar_estimate',
 );
+
+export const QUANTITATIVE_ASSESSMENT_IDS = new Set(ANALYSIS_MODULES.map((module) => module.id));
+
+export interface AssessmentTypeGroup {
+  id: 'quantitative' | 'qualitative';
+  name: string;
+  assessmentIds: string[];
+}
+
+export function groupAssessmentIdsByAnalysisType(assessmentIds: string[]): AssessmentTypeGroup[] {
+  const quantitative = assessmentIds.filter((assessmentId) => QUANTITATIVE_ASSESSMENT_IDS.has(assessmentId));
+  const qualitative = assessmentIds.filter((assessmentId) => !QUANTITATIVE_ASSESSMENT_IDS.has(assessmentId));
+  const grouped: AssessmentTypeGroup[] = [];
+
+  if (quantitative.length > 0) {
+    grouped.push({ id: 'quantitative', name: 'Quantitative', assessmentIds: quantitative });
+  }
+  if (qualitative.length > 0) {
+    grouped.push({ id: 'qualitative', name: 'Qualitative', assessmentIds: qualitative });
+  }
+
+  return grouped;
+}
 
 /** Assessments available in the New Assessment landing page (standalone, not project-side-chat only) */
 export const STANDALONE_MODULE_IDS = new Set(['lcoe_model', 'carbon_model', 'solar_estimate']);
