@@ -37,7 +37,7 @@ slowapi>=0.1.9
 pydantic>=2.5.3
 pydantic-settings>=2.14.0
 python-dotenv>=1.2.2
-httpx>=0.26.0
+httpx>=0.28.1
 aiofiles>=23.2.1
 mcp>=1.28.0
 
