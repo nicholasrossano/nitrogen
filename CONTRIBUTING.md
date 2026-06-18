@@ -108,7 +108,7 @@ After the repo is public, `main` is protected as follows (applied via `scripts/g
 
 **Does this slow you down?** A little for PR-based merges: you wait for CI (~3 min). As repo admin with bypass enabled, you can still push or merge when you need to. Direct pushes to `main` are discouraged but not blocked for admins.
 
-**GitHub Actions** are restricted to workflows defined in this repository (no third-party actions from untrusted forks beyond what GitHub allows).
+**GitHub Actions** allow GitHub-owned actions only (`actions/checkout`, `actions/setup-node`, `actions/setup-python`, etc.) — not arbitrary third-party marketplace actions.
 
 **Deployment environments** (`Production`, `Preview`) are not gated in GitHub today — production secrets live in Railway/Vercel/Firebase, not GitHub Actions.
 
