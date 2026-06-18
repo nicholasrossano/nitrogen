@@ -1,5 +1,11 @@
 export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files';
 
+export type ContextPanelExpandMotion = 'stack' | 'center';
+
+export type ExpandedWidgetChangeOptions = {
+  motion?: ContextPanelExpandMotion;
+};
+
 export const CONTEXT_PANEL_SEARCH_PARAM = 'panel';
 
 export function parseContextPanelParam(value: string | null): ChatContextExpandedWidget | null {
@@ -15,7 +21,11 @@ export const contextStackTransitionClass =
 export const contextStackPanelTransitionClass =
   'transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[transform,opacity]';
 
-export function contextStackExpandOriginClass(widget: ChatContextExpandedWidget): string {
+export function contextStackExpandOriginClass(
+  widget: ChatContextExpandedWidget,
+  motion: ContextPanelExpandMotion = 'stack',
+): string {
+  if (motion === 'center') return 'origin-center';
   switch (widget) {
     case 'overview':
       return 'origin-top-right';
@@ -42,13 +52,24 @@ export function contextStackWidgetMotionClass(
   return 'pointer-events-auto max-h-none flex-[1] opacity-100 scale-100 translate-y-0';
 }
 
-export function contextStackBackdropMotionClass(expanded: boolean): string {
-  return expanded
-    ? 'opacity-45 scale-[0.985]'
-    : 'opacity-100 scale-100';
+export function contextStackBackdropMotionClass(
+  expanded: boolean,
+  motion: ContextPanelExpandMotion = 'stack',
+): string {
+  if (!expanded) return 'opacity-100 scale-100';
+  if (motion === 'center') return 'opacity-45';
+  return 'opacity-45 scale-[0.985]';
 }
 
-export function contextStackExpandedPanelMotionClass(visible: boolean): string {
+export function contextStackExpandedPanelMotionClass(
+  visible: boolean,
+  motion: ContextPanelExpandMotion = 'stack',
+): string {
+  if (motion === 'center') {
+    return visible
+      ? 'scale-100 opacity-100'
+      : 'scale-95 opacity-0 pointer-events-none';
+  }
   return visible
     ? 'scale-100 opacity-100'
     : 'scale-[0.22] opacity-0 pointer-events-none';
