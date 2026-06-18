@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getIconByName, ICON_NAMES } from '@/lib/icons';
+import { accentIconBadgeClasses } from '@/components/ui/AccentIconBadge';
+
+const DEFAULT_BADGE = accentIconBadgeClasses('md');
 
 interface IconPickerButtonProps {
   iconName: string | null | undefined;
@@ -19,8 +22,8 @@ export function IconPickerButton({
   onPick,
   title = 'Change icon',
   disabled = false,
-  buttonClassName = 'w-10 h-10 rounded flex items-center justify-center bg-accent-wash hover:bg-accent/15 transition-colors',
-  iconClassName = 'w-5 h-5 text-accent',
+  buttonClassName = `${DEFAULT_BADGE.container} hover:bg-accent/15 transition-colors`,
+  iconClassName = DEFAULT_BADGE.icon,
   pickerWidthClassName = 'w-[224px]',
 }: IconPickerButtonProps) {
   const [pickerOpen, setPickerOpen] = useState(false);

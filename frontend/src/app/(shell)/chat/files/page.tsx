@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ProjectFilesView } from '@/components/files';
-import { ChangeProjectSelect, resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
-import { readLastProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
+import { ChangeProjectSelect } from '@/components/chat-shell/ChangeProjectSelect';
+import { resolveActiveProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { api, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useInitiativeStore } from '@/stores/initiativeStore';
@@ -13,15 +13,13 @@ import { useInitiativeStore } from '@/stores/initiativeStore';
 type FilesScope = 'company' | 'project';
 
 function FilesPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const projectParam = searchParams.get('project');
   const { activeWorkspace, loadWorkspaces } = useWorkspaceStore();
-  const [scope, setScope] = useState<FilesScope>(() => {
-    if (projectParam) return 'project';
-    if (typeof window !== 'undefined' && readLastProjectId()) return 'project';
-    return 'company';
-  });
+  const [scope, setScope] = useState<FilesScope>('project');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectParam);
   const [workspaceMaterials, setWorkspaceMaterials] = useState<ProjectMaterial[]>([]);
   const [projectMaterials, setProjectMaterials] = useState<ProjectMaterial[]>([]);
@@ -34,29 +32,33 @@ function FilesPageContent() {
   }, [activeWorkspace, loadWorkspaces]);
 
   useEffect(() => {
-    if (!activeWorkspace?.id) return;
-    api.listProjects(100, 0, false, activeWorkspace.id).then(setProjects).catch(() => setProjects([]));
+    if (!activeWorkspace?.id) {
+      setProjects([]);
+      setProjectsLoaded(false);
+      return;
+    }
+    setProjectsLoaded(false);
+    api.listProjects(100, 0, false, activeWorkspace.id)
+      .then(setProjects)
+      .catch(() => setProjects([]))
+      .finally(() => setProjectsLoaded(true));
   }, [activeWorkspace?.id]);
 
+  const effectiveProjectId = useMemo(
+    () => resolveActiveProjectId('/chat/files', projectParam, projects),
+    [projectParam, projects],
+  );
+
   useEffect(() => {
-    const nextProject = searchParams.get('project');
-    if (nextProject) {
-      setSelectedProjectId(nextProject);
-      setScope('project');
-      writeLastProjectId(nextProject);
+    if (!projectsLoaded || !effectiveProjectId) return;
+    writeLastProjectId(effectiveProjectId);
+    setSelectedProjectId(effectiveProjectId);
+    if (effectiveProjectId !== projectParam) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('project', effectiveProjectId);
+      router.replace(`/chat/files?${params.toString()}`);
     }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (projects.length === 0 || scope !== 'project') return;
-
-    setSelectedProjectId((current) => {
-      if (current && projects.some((project) => project.id === current)) {
-        return current;
-      }
-      return resolveDefaultProjectId(projects, projectParam, readLastProjectId());
-    });
-  }, [projectParam, projects, scope]);
+  }, [effectiveProjectId, projectParam, projectsLoaded, router, searchParams]);
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId) ?? null,
@@ -66,7 +68,10 @@ function FilesPageContent() {
   const handleProjectChange = useCallback((projectId: string) => {
     setSelectedProjectId(projectId);
     writeLastProjectId(projectId);
-  }, []);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('project', projectId);
+    router.replace(`/chat/files?${params.toString()}`);
+  }, [router, searchParams]);
 
   const loadCompanyFiles = useCallback(async () => {
     if (!activeWorkspace?.id) return;
@@ -119,17 +124,15 @@ function FilesPageContent() {
               scope === 'project' ? 'bg-surface-subtle text-text-primary' : 'text-text-secondary hover:bg-black/[0.04]'
             }`}
           >
-            {selectedProject?.name ?? 'Project'}
+            Project Files
           </button>
-          {scope === 'project' && (
-            <ChangeProjectSelect
-              projects={projects}
-              value={selectedProjectId}
-              onChange={handleProjectChange}
-              size="default"
-              rootClassName="ml-auto"
-            />
-          )}
+          <ChangeProjectSelect
+            projects={projects}
+            value={effectiveProjectId}
+            onChange={handleProjectChange}
+            size="default"
+            rootClassName={`ml-auto ${scope === 'company' ? 'invisible' : ''}`}
+          />
         </div>
 
         {scope === 'company' ? (
@@ -149,19 +152,19 @@ function FilesPageContent() {
               await loadCompanyFiles();
             }}
           />
-        ) : selectedProjectId ? (
+        ) : effectiveProjectId ? (
           <ProjectFilesView
             scope="project"
-            initiativeId={selectedProjectId}
+            initiativeId={effectiveProjectId}
             title={`${selectedProject?.name ?? 'Project'} files`}
             materials={projectMaterials}
             onUploadFile={async (file) => {
-              await uploadMaterial(selectedProjectId, file);
-              await loadProjectFiles(selectedProjectId);
+              await uploadMaterial(effectiveProjectId, file);
+              await loadProjectFiles(effectiveProjectId);
             }}
             onDeleteMaterial={async (id) => {
               await api.deleteMaterial(id);
-              await loadProjectFiles(selectedProjectId);
+              await loadProjectFiles(effectiveProjectId);
             }}
           />
         ) : (

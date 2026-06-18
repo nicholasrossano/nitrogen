@@ -1,20 +1,28 @@
 'use client';
 
-import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Pencil, Check, ChevronDown } from 'lucide-react';
+import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { api, ProjectShare } from '@/lib/api';
+import { api, type Project, type ProjectShare } from '@/lib/api';
 import { ModalShell } from '@/components/ui/ModalShell';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { BillingOptionsPanel } from '@/components/ui/BillingOptionsPanel';
-import { IconPickerButton } from '@/components/ui/IconPickerButton';
 import { AccessMemberRow } from '@/components/sharing/AccessMemberRow';
 import { EmailAddressField } from '@/components/sharing/EmailAddressField';
 import { RoleDropdown } from '@/components/sharing/RoleDropdown';
+import { SettingsEntityHeader } from '@/components/ui/SettingsEntityHeader';
+import { AccentIconBadge } from '@/components/ui/AccentIconBadge';
+import { resolveDefaultProjectId } from '@/components/chat-shell/ChangeProjectSelect';
+import {
+  buildChatPath,
+  resolveActiveProjectId,
+  writeLastProjectId,
+} from '@/components/chat-shell/ChatShellProvider';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -42,7 +50,7 @@ function SettingsRow({
   checked,
   onChange,
 }: {
-  icon?: React.ComponentType<{ className?: string }>;
+  icon?: LucideIcon;
   label: string;
   description?: string;
   checked: boolean;
@@ -50,11 +58,7 @@ function SettingsRow({
 }) {
   return (
     <label className="flex items-center gap-3 px-4 py-3 hover:bg-surface-subtle/60 cursor-pointer select-none">
-      {Icon && (
-        <div className="w-7 h-7 rounded-lg bg-surface-subtle flex items-center justify-center flex-shrink-0">
-          <Icon className="w-3.5 h-3.5 text-text-secondary" />
-        </div>
-      )}
+      {Icon && <AccentIconBadge icon={Icon} size="md" />}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-text-primary">{label}</p>
         {description && (
@@ -165,6 +169,8 @@ function PlanBillingSection() {
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { devMode, setDevMode } = useSettingsStore();
   const showBillingFeatures = useFeatureFlag('billing_features');
   const {
@@ -182,7 +188,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   } = useWorkspaceStore();
   const [workspaceName, setWorkspaceName] = useState('');
   const [workspaceIcon, setWorkspaceIcon] = useState('Building2');
-  const [isEditingWorkspaceName, setIsEditingWorkspaceName] = useState(false);
   const [workspaceNameSaving, setWorkspaceNameSaving] = useState(false);
   const [workspaceIconSaving, setWorkspaceIconSaving] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
@@ -203,17 +208,24 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [projectShareRole, setProjectShareRole] = useState<'editor' | 'viewer'>('editor');
   const [projectShareSaving, setProjectShareSaving] = useState(false);
   const [projectError, setProjectError] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [projectIcon, setProjectIcon] = useState('FolderOpen');
+  const [projectNameSaving, setProjectNameSaving] = useState(false);
+  const [projectIconSaving, setProjectIconSaving] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState<'workspace' | 'project' | 'billing' | 'developer'>('workspace');
-  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const [projectWorkspaceDropdownOpen, setProjectWorkspaceDropdownOpen] = useState(false);
-  const workspaceNameInputRef = useRef<HTMLInputElement>(null);
-  const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
+  const [projectSwitching, setProjectSwitching] = useState(false);
+  const [projectDeleting, setProjectDeleting] = useState(false);
   const projectWorkspaceDropdownRef = useRef<HTMLDivElement>(null);
-  const initiativeId = useMemo(() => {
-    const match = /^\/initiatives\/([^/]+)/.exec(pathname);
-    return match ? match[1] : null;
-  }, [pathname]);
-  const isInProjectContext = !!initiativeId;
+  const prevWorkspaceIdRef = useRef<string | null>(null);
+
+  const routeProjectId = searchParams.get('project');
+  const activeProjectId = useMemo(
+    () => resolveActiveProjectId(pathname, routeProjectId, projects),
+    [pathname, projects, routeProjectId],
+  );
 
   useEffect(() => {
     if (workspaceLoading || activeWorkspace || workspaces.length > 0) return;
@@ -223,26 +235,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   useEffect(() => {
     setWorkspaceName(activeWorkspaceDetail?.name ?? activeWorkspace?.name ?? '');
     setWorkspaceIcon(activeWorkspaceDetail?.icon ?? activeWorkspace?.icon ?? 'Building2');
-    setIsEditingWorkspaceName(false);
   }, [activeWorkspace, activeWorkspaceDetail]);
-
-  useEffect(() => {
-    if (isEditingWorkspaceName && workspaceNameInputRef.current) {
-      workspaceNameInputRef.current.focus();
-      workspaceNameInputRef.current.select();
-    }
-  }, [isEditingWorkspaceName]);
-
-  useEffect(() => {
-    if (!workspaceSwitcherOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!workspaceSwitcherRef.current?.contains(event.target as Node)) {
-        setWorkspaceSwitcherOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [workspaceSwitcherOpen]);
 
   useEffect(() => {
     if (!projectWorkspaceDropdownOpen) return;
@@ -256,10 +249,69 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   }, [projectWorkspaceDropdownOpen]);
 
   useEffect(() => {
-    if (activeSettingsTab === 'project' && !isInProjectContext) {
-      setActiveSettingsTab('workspace');
+    const workspaceId = activeWorkspace?.id;
+    if (!workspaceId) {
+      setProjects([]);
+      prevWorkspaceIdRef.current = null;
+      return;
     }
-  }, [activeSettingsTab, isInProjectContext]);
+
+    const workspaceChanged =
+      prevWorkspaceIdRef.current !== null && prevWorkspaceIdRef.current !== workspaceId;
+    prevWorkspaceIdRef.current = workspaceId;
+
+    if (workspaceChanged) {
+      setProjects([]);
+      setProjectSettingsLoadedForId(null);
+    }
+
+    let cancelled = false;
+    api.listProjects(100, 0, false, workspaceId)
+      .then((nextProjects) => {
+        if (cancelled) return;
+        setProjects(nextProjects);
+
+        if (!workspaceChanged) return;
+
+        const nextProjectId = resolveDefaultProjectId(nextProjects);
+        setSettingsProjectId(nextProjectId);
+        if (nextProjectId) {
+          writeLastProjectId(nextProjectId);
+          if (pathname.startsWith('/chat') || pathname === '/') {
+            router.replace(buildChatPath(pathname, searchParams, nextProjectId));
+          } else if (/^\/initiatives\/[^/]+/.test(pathname)) {
+            router.replace(`/initiatives/${nextProjectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+          }
+          return;
+        }
+
+        writeLastProjectId(null);
+        if (pathname.startsWith('/chat') || pathname === '/' || /^\/initiatives\/[^/]+/.test(pathname)) {
+          router.replace('/chat');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProjects([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace?.id, pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    if (projects.length > 0 && !projects.some((project) => project.id === activeProjectId)) return;
+    setSettingsProjectId(activeProjectId);
+  }, [activeProjectId, projects]);
+
+  useEffect(() => {
+    if (!settingsProjectId) return;
+    const fromList = projects.find((project) => project.id === settingsProjectId);
+    if (!fromList || projectSettingsLoadedForId === settingsProjectId) return;
+    setProjectName(fromList.name);
+    setProjectIcon(fromList.icon ?? 'FolderOpen');
+  }, [projectSettingsLoadedForId, projects, settingsProjectId]);
 
   useEffect(() => {
     if (!showBillingFeatures && activeSettingsTab === 'billing') {
@@ -268,12 +320,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   }, [showBillingFeatures, activeSettingsTab]);
 
   useEffect(() => {
-    if (activeSettingsTab !== 'project' || !initiativeId) return;
-    if (projectSettingsLoadedForId === initiativeId) return;
+    if (activeSettingsTab !== 'project' || !settingsProjectId) return;
+    if (projectSettingsLoadedForId === settingsProjectId) return;
     let cancelled = false;
     setProjectSettingsLoading(true);
     setProjectError('');
-    Promise.all([api.getInitiative(initiativeId), api.getShares(initiativeId)])
+    Promise.all([api.getInitiative(settingsProjectId), api.getShares(settingsProjectId)])
       .then(([initiative, shares]) => {
         if (cancelled) return;
         setProjectWorkspaceId(initiative.workspace_id);
@@ -281,7 +333,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         setProjectRole((initiative.shared_role as 'editor' | 'viewer' | null) ?? 'owner');
         setProjectOwnerEmail(initiative.owner_email ?? null);
         setProjectShares(shares);
-        setProjectSettingsLoadedForId(initiativeId);
+        const listedProject = projects.find((project) => project.id === settingsProjectId);
+        setProjectName(initiative.title ?? listedProject?.name ?? 'Project');
+        setProjectIcon(initiative.icon ?? listedProject?.icon ?? 'FolderOpen');
+        setProjectSettingsLoadedForId(settingsProjectId);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -294,21 +349,20 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeSettingsTab, initiativeId, projectSettingsLoadedForId]);
+  }, [activeSettingsTab, projectSettingsLoadedForId, projects, settingsProjectId]);
 
   const isWorkspaceOwner = activeWorkspaceDetail?.current_user_role === 'owner';
+  const isProjectOwner = projectRole === 'owner';
   const isTeamWorkspace =
     (activeWorkspaceDetail?.workspace_type ?? activeWorkspace?.workspace_type) === 'team';
   const workspaceOptions = (workspaces.length > 0 ? workspaces : (activeWorkspace ? [activeWorkspace] : []))
     .filter((workspace, index, arr) => arr.findIndex((w) => w.id === workspace.id) === index);
   const selectedProjectWorkspace = workspaceOptions.find((workspace) => workspace.id === projectWorkspaceId) ?? null;
 
-  const handleSaveWorkspaceName = async () => {
+  const handleSaveWorkspaceName = async (trimmed: string) => {
     if (!isWorkspaceOwner) return;
-    const trimmed = workspaceName.trim();
     if (!trimmed) {
       setWorkspaceName(activeWorkspaceDetail?.name ?? activeWorkspace?.name ?? 'Workspace');
-      setIsEditingWorkspaceName(false);
       return;
     }
     setWorkspaceNameSaving(true);
@@ -317,26 +371,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       await updateActiveWorkspace({
         name: trimmed,
       });
-      setIsEditingWorkspaceName(false);
+      setWorkspaceName(trimmed);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : 'Failed to update workspace');
       setWorkspaceName(activeWorkspaceDetail?.name ?? activeWorkspace?.name ?? trimmed);
     } finally {
       setWorkspaceNameSaving(false);
-    }
-  };
-
-  const handleCancelWorkspaceName = () => {
-    setWorkspaceName(activeWorkspaceDetail?.name ?? activeWorkspace?.name ?? 'Workspace');
-    setIsEditingWorkspaceName(false);
-  };
-
-  const handleWorkspaceNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      void handleSaveWorkspaceName();
-    } else if (e.key === 'Escape') {
-      handleCancelWorkspaceName();
     }
   };
 
@@ -353,6 +393,43 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setWorkspaceError(error instanceof Error ? error.message : 'Failed to update workspace icon');
     } finally {
       setWorkspaceIconSaving(false);
+    }
+  };
+
+  const handleSaveProjectName = async (trimmed: string) => {
+    if (!settingsProjectId || !isProjectOwner) return;
+    if (!trimmed) return;
+    setProjectNameSaving(true);
+    setProjectError('');
+    try {
+      await api.updateInitiative(settingsProjectId, { title: trimmed });
+      setProjectName(trimmed);
+      setProjects((prev) => prev.map((project) => (
+        project.id === settingsProjectId ? { ...project, name: trimmed } : project
+      )));
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : 'Failed to update project name');
+    } finally {
+      setProjectNameSaving(false);
+    }
+  };
+
+  const handleProjectIconPick = async (iconName: string) => {
+    if (!settingsProjectId || !isProjectOwner) return;
+    const previous = projectIcon;
+    setProjectIcon(iconName);
+    setProjectIconSaving(true);
+    setProjectError('');
+    try {
+      await api.updateInitiative(settingsProjectId, { icon: iconName });
+      setProjects((prev) => prev.map((project) => (
+        project.id === settingsProjectId ? { ...project, icon: iconName } : project
+      )));
+    } catch (error) {
+      setProjectIcon(previous);
+      setProjectError(error instanceof Error ? error.message : 'Failed to update project icon');
+    } finally {
+      setProjectIconSaving(false);
     }
   };
 
@@ -388,6 +465,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     if (!workspaceId || workspaceId === activeWorkspace?.id) return;
     setWorkspaceSwitching(true);
     setWorkspaceError('');
+    setProjectSettingsLoadedForId(null);
     try {
       await setActiveWorkspace(workspaceId);
     } catch (error) {
@@ -395,6 +473,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     } finally {
       setWorkspaceSwitching(false);
     }
+  };
+
+  const handleProjectSwitch = (projectId: string) => {
+    if (!projectId || projectId === settingsProjectId) return;
+    setProjectSwitching(true);
+    setProjectError('');
+    setSettingsProjectId(projectId);
+    setProjectSettingsLoadedForId(null);
+    writeLastProjectId(projectId);
+    if (pathname.startsWith('/chat') || pathname === '/') {
+      router.replace(buildChatPath(pathname, searchParams, projectId));
+    } else if (/^\/initiatives\/[^/]+/.test(pathname)) {
+      router.replace(`/initiatives/${projectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+    }
+    setProjectSwitching(false);
   };
 
   const handleDeleteWorkspace = async () => {
@@ -415,12 +508,53 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!settingsProjectId || !isProjectOwner) return;
+    const confirmed = window.confirm(
+      `Delete project "${projectName || 'Project'}"? This will archive the project and remove it from your workspace.`,
+    );
+    if (!confirmed) return;
+
+    const deletedProjectId = settingsProjectId;
+    setProjectDeleting(true);
+    setProjectError('');
+    try {
+      await api.deleteInitiative(deletedProjectId);
+      const remaining = projects.filter((project) => project.id !== deletedProjectId);
+      setProjects(remaining);
+      setProjectSettingsLoadedForId(null);
+
+      const nextProjectId = resolveDefaultProjectId(remaining);
+      const onDeletedInitiativeRoute = /^\/initiatives\/([^/]+)/.exec(pathname)?.[1] === deletedProjectId;
+      if (nextProjectId) {
+        setSettingsProjectId(nextProjectId);
+        writeLastProjectId(nextProjectId);
+        if (pathname.startsWith('/chat') || pathname === '/') {
+          router.replace(buildChatPath(pathname, searchParams, nextProjectId));
+        } else if (onDeletedInitiativeRoute) {
+          router.replace(`/initiatives/${nextProjectId}`);
+        }
+        return;
+      }
+
+      setSettingsProjectId(null);
+      writeLastProjectId(null);
+      if (pathname.startsWith('/chat') || pathname === '/' || onDeletedInitiativeRoute) {
+        router.replace('/chat');
+      }
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : 'Failed to delete project');
+    } finally {
+      setProjectDeleting(false);
+    }
+  };
+
   const handleMoveProjectWorkspace = async () => {
-    if (!initiativeId || !projectWorkspaceId) return;
+    if (!settingsProjectId || !projectWorkspaceId) return;
     setProjectWorkspaceSaving(true);
     setProjectError('');
     try {
-      await api.updateInitiative(initiativeId, { workspace_id: projectWorkspaceId });
+      await api.updateInitiative(settingsProjectId, { workspace_id: projectWorkspaceId });
       setInitialProjectWorkspaceId(projectWorkspaceId);
       if (activeWorkspace?.id !== projectWorkspaceId) {
         await setActiveWorkspace(projectWorkspaceId);
@@ -433,11 +567,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const handleProjectShare = async () => {
-    if (!initiativeId || !projectShareEmail.trim()) return;
+    if (!settingsProjectId || !projectShareEmail.trim()) return;
     setProjectShareSaving(true);
     setProjectError('');
     try {
-      const share = await api.createShare(initiativeId, projectShareEmail.trim(), projectShareRole);
+      const share = await api.createShare(settingsProjectId, projectShareEmail.trim(), projectShareRole);
       setProjectShares((prev) => [...prev, share]);
       setProjectShareEmail('');
     } catch (error) {
@@ -448,10 +582,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const handleProjectShareRoleChange = async (shareId: string, role: 'editor' | 'viewer') => {
-    if (!initiativeId) return;
+    if (!settingsProjectId) return;
     setProjectError('');
     try {
-      const updated = await api.updateShare(initiativeId, shareId, role);
+      const updated = await api.updateShare(settingsProjectId, shareId, role);
       setProjectShares((prev) => prev.map((share) => (share.id === shareId ? updated : share)));
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : 'Failed to update share role');
@@ -459,10 +593,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const handleProjectShareRemove = async (shareId: string) => {
-    if (!initiativeId) return;
+    if (!settingsProjectId) return;
     setProjectError('');
     try {
-      await api.deleteShare(initiativeId, shareId);
+      await api.deleteShare(settingsProjectId, shareId);
       setProjectShares((prev) => prev.filter((share) => share.id !== shareId));
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : 'Failed to remove access');
@@ -470,7 +604,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   return (
-    <ModalShell onClose={onClose} maxWidth="max-w-3xl" className="flex flex-col min-h-[520px] max-h-[80vh]">
+    <ModalShell onClose={onClose} maxWidth="max-w-3xl" className="flex flex-col h-[min(640px,80vh)]">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stroke-subtle flex-shrink-0">
         <h2 className="text-sm font-semibold text-text-primary">Settings</h2>
@@ -482,16 +616,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </button>
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        <aside className="w-40 shrink-0 border-r border-stroke-subtle px-3 py-4">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <aside className="w-40 shrink-0 border-r border-stroke-subtle px-3 py-4 overflow-y-auto">
           {([
             { id: 'workspace' as const, label: 'Workspace', disabled: false, disabledReason: '' },
-            {
-              id: 'project' as const,
-              label: 'Project',
-              disabled: !isInProjectContext,
-              disabledReason: 'Navigate to a specific project to manage its settings.',
-            },
+            { id: 'project' as const, label: 'Project', disabled: false, disabledReason: '' },
             ...(showBillingFeatures ? [{ id: 'billing' as const, label: 'Billing', disabled: false, disabledReason: '' }] : []),
             { id: 'developer' as const, label: 'Developer', disabled: false, disabledReason: '' },
           ]).map((item) => {
@@ -536,113 +665,33 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               <>
               <SettingsSection title="Workspace">
                 <div className="px-4 py-3 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="relative flex-shrink-0">
-                      <IconPickerButton
-                        iconName={workspaceIcon}
-                        onPick={handleWorkspaceIconPick}
-                        disabled={!isWorkspaceOwner || workspaceIconSaving}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      {isEditingWorkspaceName && isWorkspaceOwner ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            ref={workspaceNameInputRef}
-                            type="text"
-                            value={workspaceName}
-                            onChange={(e) => setWorkspaceName(e.target.value)}
-                            onKeyDown={handleWorkspaceNameKeyDown}
-                            style={{ width: `${Math.max(workspaceName.length + 2, 10)}ch` }}
-                            className="min-w-0 px-0 py-0.5 text-sm font-medium text-text-primary bg-transparent border-0 border-b border-accent rounded-none focus:outline-none focus:ring-0"
-                            disabled={workspaceNameSaving}
-                          />
-                          <button
-                            onClick={() => void handleSaveWorkspaceName()}
-                            disabled={workspaceNameSaving}
-                            className="icon-btn icon-btn-success p-1 text-indicator-green flex-shrink-0"
-                          >
-                            {workspaceNameSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={handleCancelWorkspaceName}
-                            disabled={workspaceNameSaving}
-                            className="icon-btn p-1 text-text-tertiary flex-shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 group">
-                          <p className="text-sm font-medium text-text-primary">
-                            {activeWorkspaceDetail?.name ?? activeWorkspace?.name ?? 'Workspace'}
-                          </p>
-                          {isWorkspaceOwner && (
-                            <button
-                              onClick={() => setIsEditingWorkspaceName(true)}
-                              className="icon-btn p-1 opacity-0 group-hover:opacity-100 text-text-tertiary"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <p className="text-xs text-text-tertiary mt-0.5">
-                        {activeWorkspaceDetail?.workspace_type === 'team'
-                          ? `Team workspace${activeWorkspaceDetail?.current_user_role && activeWorkspaceDetail.current_user_role !== 'owner'
-                            ? ` · ${activeWorkspaceDetail.current_user_role}`
-                            : ''}`
-                          : 'Personal workspace'}
-                      </p>
-                    </div>
-                    {workspaceOptions.length > 1 && (
-                      <div ref={workspaceSwitcherRef} className="relative flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (workspaceLoading || workspaceSwitching || workspaceOptions.length < 2) return;
-                            setWorkspaceSwitcherOpen((open) => !open);
-                          }}
-                          disabled={workspaceLoading || workspaceSwitching || workspaceOptions.length < 2}
-                          className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 flex items-center shrink-0"
-                          aria-label="Switch workspace"
-                          aria-expanded={workspaceSwitcherOpen}
-                        >
-                          Switch
-                          <ChevronDown className="w-3 h-3 opacity-60" />
-                        </button>
-                        {workspaceSwitcherOpen && (
-                          <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-divider bg-white py-1 shadow-lg">
-                            {workspaceOptions.map((workspace) => {
-                              const selected = workspace.id === activeWorkspace?.id;
-                              return (
-                                <button
-                                  key={workspace.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setWorkspaceSwitcherOpen(false);
-                                    void handleWorkspaceSwitch(workspace.id);
-                                  }}
-                                  className={`flex h-8 w-full items-center gap-2 px-3 text-left text-xs transition-colors ${
-                                    selected
-                                      ? 'bg-surface-subtle text-text-primary'
-                                      : 'text-text-secondary hover:bg-black/[0.04] hover:text-text-primary'
-                                  }`}
-                                >
-                                  <span className="w-3.5 shrink-0">
-                                    {selected ? <Check className="w-3.5 h-3.5" /> : null}
-                                  </span>
-                                  <span className="truncate">
-                                    {workspace.name}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <SettingsEntityHeader
+                    iconName={workspaceIcon}
+                    onIconPick={handleWorkspaceIconPick}
+                    iconPickerDisabled={!isWorkspaceOwner}
+                    iconSaving={workspaceIconSaving}
+                    name={workspaceName}
+                    nameEditable={isWorkspaceOwner}
+                    onSaveName={handleSaveWorkspaceName}
+                    nameSaving={workspaceNameSaving}
+                    nameFallback="Workspace"
+                    subtitle={
+                      activeWorkspaceDetail?.workspace_type === 'team'
+                        ? `Team workspace${activeWorkspaceDetail?.current_user_role && activeWorkspaceDetail.current_user_role !== 'owner'
+                          ? ` · ${activeWorkspaceDetail.current_user_role}`
+                          : ''}`
+                        : 'Personal workspace'
+                    }
+                    switchOptions={workspaceOptions.map((workspace) => ({
+                      id: workspace.id,
+                      label: workspace.name,
+                      iconName: workspace.icon,
+                    }))}
+                    selectedSwitchId={activeWorkspace?.id ?? null}
+                    onSwitch={(workspaceId) => void handleWorkspaceSwitch(workspaceId)}
+                    switchDisabled={workspaceLoading || workspaceSwitching}
+                    switchAriaLabel="Switch workspace"
+                  />
 
                   {workspaceError && <p className="text-[10px] text-red-500">{workspaceError}</p>}
                 </div>
@@ -726,9 +775,53 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 </div>
               </div>
 
+              {isWorkspaceOwner && activeWorkspaceDetail?.workspace_type === 'team' && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={() => void handleDeleteWorkspace()}
+                    disabled={workspaceDeleting || workspaceSaving || workspaceLoading}
+                    className="btn-danger !px-4 !py-1.5 !text-xs !rounded-lg"
+                  >
+                    {workspaceDeleting ? 'Deleting...' : 'Delete Workspace'}
+                  </button>
+                </div>
+              )}
+
               </>
             ) : activeSettingsTab === 'project' ? (
               <>
+                {!settingsProjectId ? (
+                  <div className="px-1 py-6 text-center">
+                    <p className="text-sm text-text-secondary">No projects available yet.</p>
+                  </div>
+                ) : (
+                  <>
+                <SettingsSection title="Project">
+                  <div className="px-4 py-3 space-y-3">
+                    <SettingsEntityHeader
+                      iconName={projectIcon}
+                      onIconPick={handleProjectIconPick}
+                      iconPickerDisabled={!isProjectOwner}
+                      iconSaving={projectIconSaving}
+                      name={projectName}
+                      nameEditable={isProjectOwner}
+                      onSaveName={handleSaveProjectName}
+                      nameSaving={projectNameSaving}
+                      nameFallback="Project"
+                      subtitle={projectRole === 'owner' ? 'Owner' : projectRole === 'editor' ? 'Editor' : 'Viewer'}
+                      switchOptions={projects.map((project) => ({
+                        id: project.id,
+                        label: project.name,
+                        iconName: project.icon,
+                      }))}
+                      selectedSwitchId={settingsProjectId}
+                      onSwitch={handleProjectSwitch}
+                      switchDisabled={projectSettingsLoading || projectSwitching}
+                      switchAriaLabel="Switch project"
+                    />
+                  </div>
+                </SettingsSection>
+
                 <div className="space-y-1">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary px-1 pb-1">
                     Workspace
@@ -884,6 +977,20 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 </div>
 
                 {projectError && <p className="text-[10px] text-red-500">{projectError}</p>}
+
+                {isProjectOwner && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      onClick={() => void handleDeleteProject()}
+                      disabled={projectDeleting || projectSettingsLoading || projectShareSaving || projectWorkspaceSaving}
+                      className="btn-danger !px-4 !py-1.5 !text-xs !rounded-lg"
+                    >
+                      {projectDeleting ? 'Deleting...' : 'Delete Project'}
+                    </button>
+                  </div>
+                )}
+                  </>
+                )}
               </>
             ) : activeSettingsTab === 'billing' ? (
               <>
@@ -903,18 +1010,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </>
             )}
           </div>
-
-          {activeSettingsTab === 'workspace' && isWorkspaceOwner && activeWorkspaceDetail?.workspace_type === 'team' && (
-            <div className="shrink-0 px-5 pb-4 pt-2 flex justify-center">
-              <button
-                onClick={() => void handleDeleteWorkspace()}
-                disabled={workspaceDeleting || workspaceSaving || workspaceLoading}
-                className="btn-danger !px-4 !py-1.5 !text-xs !rounded-lg"
-              >
-                {workspaceDeleting ? 'Deleting...' : 'Delete Workspace'}
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </ModalShell>
