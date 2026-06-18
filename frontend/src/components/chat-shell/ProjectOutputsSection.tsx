@@ -9,8 +9,8 @@ import { api, type AssessmentInstance } from '@/lib/api';
 import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((module) => [module.id, module]));
-const OUTPUT_TILE_WIDTH = '11rem';
-const OUTPUT_SCROLL_MAX_WIDTH = `calc(3 * ${OUTPUT_TILE_WIDTH} + 2 * 0.75rem)`;
+const HIDDEN_SCROLLBAR_CLASSNAME =
+  'overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
 
 function stripCreatorHandleFromTitle(
   title: string,
@@ -179,16 +179,8 @@ export function ProjectOutputsSection({
             Start an assessment to see progress here. If your team members finalize their own assessments, those will show up here too.
           </p>
         ) : (
-          <div
-            className="mx-auto w-full overflow-x-auto"
-            style={{ maxWidth: OUTPUT_SCROLL_MAX_WIDTH }}
-          >
-            <div
-              className={[
-                'flex w-max min-w-full flex-nowrap gap-3 px-1 py-2',
-                visibleOutputs.length <= 3 ? 'justify-center' : 'justify-start',
-              ].join(' ')}
-            >
+          <div className={`w-full pl-3 ${HIDDEN_SCROLLBAR_CLASSNAME}`}>
+            <div className="flex w-max min-w-full flex-nowrap items-stretch gap-3 py-2 pr-3">
               {visibleOutputs.map((instance) => {
                 const moduleMeta = MODULE_MAP.get(instance.assessment_id);
                 const title = outputTitle(instance);
@@ -196,7 +188,10 @@ export function ProjectOutputsSection({
                 const statusTag = outputStatusTag(instance);
 
                 return (
-                  <div key={instance.id} className="overflow-visible p-1">
+                  <div
+                    key={instance.id}
+                    className="flex min-w-[14rem] flex-1 overflow-visible p-1"
+                  >
                     <button
                       type="button"
                       onClick={() => onOpenOutput({
@@ -204,22 +199,22 @@ export function ProjectOutputsSection({
                         assessmentId: instance.assessment_id,
                         title,
                       })}
-                      className="card-interactive flex w-[11rem] shrink-0 flex-col items-center rounded-xl border border-stroke-subtle bg-white p-3.5 text-center"
+                      className="card-interactive flex h-full w-full flex-col items-center rounded-xl border border-stroke-subtle bg-white p-3.5 text-center"
                     >
                       {moduleMeta?.icon ? (
-                        <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded bg-accent-wash text-accent [&>svg]:h-4 [&>svg]:w-4">
+                        <div className="mb-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded bg-accent-wash text-accent [&>svg]:h-4 [&>svg]:w-4">
                           {moduleMeta.icon}
                         </div>
                       ) : null}
-                      <h3 className="w-full text-sm font-semibold leading-snug text-text-primary line-clamp-3">
+                      <h3 className="w-full min-h-[2.5rem] text-sm font-semibold leading-snug text-text-primary line-clamp-2">
                         {title}
                       </h3>
-                      <p className="mt-1.5 w-full text-[11px] leading-snug text-text-tertiary line-clamp-2">
+                      <p className="mt-1.5 w-full min-h-[1.875rem] text-[11px] leading-snug text-text-tertiary line-clamp-2">
                         {authorEmail}
                       </p>
                       <span
                         className={[
-                          'mt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]',
+                          'mt-auto pt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]',
                           statusTag.className,
                         ].join(' ')}
                       >
