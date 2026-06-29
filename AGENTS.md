@@ -91,7 +91,7 @@ Recurring failure mode: overwriting root `.env` from `.env.example` (empty Fireb
 
 - **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
 - `dev_daemon.sh` resolves env via `materialize_dev_env.sh` (existing `.env` → `NITROGEN_ENV_FILE` → injected secrets), symlinks, validates, then runs backend + frontend in tmux with auto-restart.
-- **Cloud agents:** add Cursor secrets for at least `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), and all `NEXT_PUBLIC_FIREBASE_*` vars. Optional: set `NITROGEN_ENV_FILE` to a mounted `.env` path. If materialization fails, report missing secret names — do not stub `.env`.
+- **Cloud agents:** your **local** `.env` does not sync to the VM. Add these as **Cursor cloud agent secrets** (same key names): `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), and all `NEXT_PUBLIC_FIREBASE_*` vars. Optional: set `NITROGEN_ENV_FILE` to a mounted `.env` path. If materialization fails, the daemon still starts **frontend only** (fixes connection refused) but API/login stay broken until secrets are added — report the missing names, do not stub `.env`.
 - **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
 - **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.

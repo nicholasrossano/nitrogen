@@ -49,11 +49,18 @@ health_summary() {
   echo "frontend (:3000): ${frontend_ok}"
 }
 
-ensure_prerequisites() {
+prepare_env() {
   mkdir -p "$LOG_DIR"
-  bash "$ROOT/scripts/materialize_dev_env.sh"
-  bash "$ROOT/scripts/worktree_setup.sh"
-  bash "$ROOT/scripts/check_dev_env.sh"
+  bash "$ROOT/scripts/worktree_setup.sh" || true
+
+  if bash "$ROOT/scripts/materialize_dev_env.sh" && bash "$ROOT/scripts/check_dev_env.sh"; then
+    BACKEND_READY=1
+    return 0
+  fi
+
+  echo "⚠ Backend env incomplete — starting frontend only."
+  echo "  Add Cursor cloud agent secrets (see AGENTS.md) or set NITROGEN_ENV_FILE."
+  BACKEND_READY=0
 }
 
 start_backend_loop() {
@@ -81,7 +88,8 @@ EOF
 }
 
 start_daemon() {
-  ensure_prerequisites
+  BACKEND_READY=0
+  prepare_env
 
   if "${TMUX[@]}" has-session -t "=$SESSION_NAME" 2>/dev/null; then
     echo "✓ tmux session ${SESSION_NAME} already running"
@@ -93,16 +101,20 @@ start_daemon() {
   backend_cmd="$(start_backend_loop)"
   frontend_cmd="$(start_frontend_loop)"
 
-  "${TMUX[@]}" new-session -d -s "$SESSION_NAME" -c "$ROOT" -- "${SHELL:-bash}" -lc \
-    "export ROOT='$ROOT' BACKEND_LOG='$BACKEND_LOG'; ${backend_cmd}"
-
-  "${TMUX[@]}" new-window -t "$SESSION_NAME" -c "$ROOT" -- "${SHELL:-bash}" -lc \
-    "export ROOT='$ROOT' FRONTEND_LOG='$FRONTEND_LOG'; ${frontend_cmd}"
-
-  echo "✓ Started tmux session ${SESSION_NAME} (backend + frontend, auto-restart enabled)"
+  if [[ "$BACKEND_READY" == "1" ]]; then
+    "${TMUX[@]}" new-session -d -s "$SESSION_NAME" -c "$ROOT" -- "${SHELL:-bash}" -lc \
+      "export ROOT='$ROOT' BACKEND_LOG='$BACKEND_LOG'; ${backend_cmd}"
+    "${TMUX[@]}" new-window -t "$SESSION_NAME" -c "$ROOT" -- "${SHELL:-bash}" -lc \
+      "export ROOT='$ROOT' FRONTEND_LOG='$FRONTEND_LOG'; ${frontend_cmd}"
+    echo "✓ Started tmux session ${SESSION_NAME} (backend + frontend, auto-restart enabled)"
+  else
+    "${TMUX[@]}" new-session -d -s "$SESSION_NAME" -c "$ROOT" -- "${SHELL:-bash}" -lc \
+      "export ROOT='$ROOT' FRONTEND_LOG='$FRONTEND_LOG' NEXT_PUBLIC_API_URL='${NEXT_PUBLIC_API_URL:-http://localhost:8000}'; ${frontend_cmd}"
+    echo "✓ Started tmux session ${SESSION_NAME} (frontend only — backend waiting on env)"
+  fi
 
   for _ in $(seq 1 20); do
-    if port_listening 8000 && port_listening 3000; then
+    if port_listening 3000 && { [[ "$BACKEND_READY" != "1" ]] || port_listening 8000; }; then
       break
     fi
     sleep 1
