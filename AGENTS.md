@@ -81,11 +81,13 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
 
 - **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
-- Before starting: `bash scripts/worktree_setup.sh` then `bash scripts/check_dev_env.sh`.
-- Start both servers: `bash scripts/start_emulator.sh` (requires root `.env` with Firebase + DATABASE_URL).
+- Start the persistent dev stack: `bash scripts/dev_daemon.sh start` (or `npm run dev:emulator`).
+- `dev_daemon.sh` resolves env via `materialize_dev_env.sh` (existing `.env` → `NITROGEN_ENV_FILE` → injected secrets), symlinks, validates, then runs backend + frontend in tmux with auto-restart.
+- **Cloud agents:** add Cursor secrets for at least `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), and all `NEXT_PUBLIC_FIREBASE_*` vars. Optional: set `NITROGEN_ENV_FILE` to a mounted `.env` path.
 - **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
 - **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
+- Check status: `bash scripts/dev_daemon.sh status`; restart: `bash scripts/dev_daemon.sh restart`.
 
 ## Specialized Guidance (Read Only When Relevant)
 
