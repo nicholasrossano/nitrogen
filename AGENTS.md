@@ -64,7 +64,7 @@ cd backend && python3 -m alembic upgrade head
 | Safe token/repo audit | `npm run cursor:audit` |
 | Full backend regression | `cd backend && python3 -m pytest tests/ -q` |
 | Full frontend regression (final) | `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build` |
-| Ensure dev stack running (agents) | `bash scripts/dev_daemon.sh status \|\| bash scripts/dev_daemon.sh start` |
+| Dev stack status / start / restart | `bash scripts/dev_daemon.sh [status\|start\|restart]` |
 
 More examples and wrappers: `docs/testing.md`.
 
@@ -79,27 +79,20 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 
 ## Local emulator and cloud agents (auth)
 
-**Vercel/Railway env ≠ cloud agent VM.** Dashboard env vars apply to deployed apps only. Cloud agents run `localhost:3000` on an ephemeral VM with no access to your Vercel/Railway config unless you provide it here. This is not a production regression.
-
-**Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the app, tests in browser, or API calls, run this automatically (no user prompt):
+**Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the running app, automatically run:
 
 ```bash
 bash scripts/dev_daemon.sh status || bash scripts/dev_daemon.sh start
 ```
 
-If status shows unhealthy ports, run `bash scripts/dev_daemon.sh restart`. Do not use one-shot `&` background processes. After env first becomes available, restart the daemon so Next.js picks up `NEXT_PUBLIC_*` vars.
+If ports are unhealthy after starting, run `bash scripts/dev_daemon.sh restart`. Never use one-shot `&` background processes — they die when the session ends.
 
-**One-time cloud agent env setup (pick one):**
-1. **Vercel pull (best if frontend is on Vercel):** add Cursor secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`. `materialize_dev_env.sh` auto-runs `vercel env pull`.
-2. **Mirror secrets:** copy `DATABASE_URL`, Firebase vars, and all `NEXT_PUBLIC_FIREBASE_*` from Vercel/Railway into Cursor cloud agent secrets (same key names as `.env.example`).
-3. **Mount file:** set `NITROGEN_ENV_FILE` to a path containing your real `.env`.
+**Why this sometimes fails on a fresh VM:** Cloud agent VMs are ephemeral. Your local `.env` and Vercel/Railway dashboard vars are not available here unless you configure Cursor secrets. This is standard for all cloud CI/CD — configure once, works forever. See `docs/self-hosting.md` for the one-time setup.
 
-Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
+**If the stack won't fully start:** the daemon still brings up the frontend so `localhost:3000` is reachable. Report the exact error from `materialize_dev_env.sh` and the missing secret names. Do not stub `.env` from `.env.example`.
 
-- **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
-- `dev_daemon.sh` resolves env via `materialize_dev_env.sh` (existing `.env` → `NITROGEN_ENV_FILE` → Vercel pull → injected secrets), symlinks, validates, then runs backend + frontend in tmux with auto-restart.
-- **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
-- **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
+- **Never** `cp .env.example .env` over a real env file — it breaks Firebase login.
+- **Firebase required:** `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and a service account must be configured.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
 
 ## Specialized Guidance (Read Only When Relevant)

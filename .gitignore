@@ -64,3 +64,6 @@ frontend/coverage/
 # IDE / Cursor
 .cursor/
 .claude/
+
+# Vercel CLI project link (written transiently by materialize_dev_env.sh)
+.vercel/

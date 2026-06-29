@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Resolve root .env for local dev without overwriting an existing file.
+# Resolve root .env for local dev without ever overwriting an existing file.
 #
-# Resolution order:
-#   1. Keep repo-root .env if it already exists
-#   2. Symlink NITROGEN_ENV_FILE when that path exists (cloud VM / CI mount)
-#   3. Materialize .env from whitelisted process environment variables
+# Resolution order (stops at first success):
+#   1. Existing repo-root .env              → no-op, keep it
+#   2. NITROGEN_ENV_FILE path               → symlink it
+#   3. VERCEL_TOKEN + VERCEL_PROJECT_ID     → vercel env pull (frontend vars)
+#   4. Individual secrets in env            → write whitelisted vars to .env
 #
 # Never copies .env.example — empty Firebase placeholders break login.
 set -euo pipefail
@@ -12,49 +13,70 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$ROOT/.env"
 
+# ── 1. Already exists ──────────────────────────────────────────
 if [[ -f "$ENV_FILE" ]]; then
-  echo "✓ .env already present"
+  echo "✓ .env present"
   exit 0
 fi
 
+# ── 2. Mounted env file ────────────────────────────────────────
 if [[ -n "${NITROGEN_ENV_FILE:-}" && -f "${NITROGEN_ENV_FILE}" ]]; then
   ln -sfn "$(readlink -f "${NITROGEN_ENV_FILE}")" "$ENV_FILE"
-  echo "✓ Linked .env from NITROGEN_ENV_FILE=${NITROGEN_ENV_FILE}"
+  echo "✓ Linked .env from NITROGEN_ENV_FILE"
   exit 0
 fi
 
-try_vercel_env_pull() {
-  if [[ -z "${VERCEL_TOKEN:-}" ]]; then
-    return 1
-  fi
-  if ! command -v npx >/dev/null 2>&1; then
-    return 1
+# ── 3. Vercel env pull ─────────────────────────────────────────
+# Requires Cursor secrets: VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID
+# One-time Cursor setup pulls everything Vercel already knows about the project.
+try_vercel_pull() {
+  [[ -z "${VERCEL_TOKEN:-}" ]]      && return 1
+  [[ -z "${VERCEL_PROJECT_ID:-}" ]] && { echo "⚠ VERCEL_TOKEN set but VERCEL_PROJECT_ID missing"; return 1; }
+
+  # Install Vercel CLI globally if absent (cached after first run)
+  if ! command -v vercel >/dev/null 2>&1; then
+    echo "↻ Installing Vercel CLI…"
+    npm install -g vercel --silent 2>/dev/null || return 1
   fi
 
-  local pull_args=(env pull "$ENV_FILE" --yes --environment="${VERCEL_ENV:-development}")
-  if [[ -n "${VERCEL_TOKEN:-}" ]]; then
-    pull_args+=(--token="$VERCEL_TOKEN")
-  fi
-  if [[ -n "${VERCEL_ORG_ID:-}" && -n "${VERCEL_PROJECT_ID:-}" ]]; then
-    pull_args+=(--scope="$VERCEL_ORG_ID" --project="$VERCEL_PROJECT_ID")
+  # Write a temporary project link so vercel env pull knows which project
+  local vdir="$ROOT/.vercel"
+  local vfile="$vdir/project.json"
+  local created_vdir=0
+  if [[ ! -f "$vfile" ]]; then
+    mkdir -p "$vdir"
+    printf '{"projectId":"%s","orgId":"%s"}\n' \
+      "$VERCEL_PROJECT_ID" "${VERCEL_ORG_ID:-}" > "$vfile"
+    created_vdir=1
   fi
 
-  echo "↻ Pulling dev env from Vercel (same vars as your deployed frontend)…"
-  if (cd "$ROOT" && npx --yes vercel@latest "${pull_args[@]}" >/dev/null); then
-    if [[ -f "$ENV_FILE" ]]; then
-      echo "✓ Pulled .env from Vercel (${VERCEL_ENV:-development})"
-      return 0
-    fi
+  echo "↻ Pulling dev env from Vercel…"
+  local ok=0
+  if vercel env pull "$ENV_FILE" \
+      --token="$VERCEL_TOKEN" \
+      --environment=development \
+      --yes 2>/dev/null \
+    && [[ -s "$ENV_FILE" ]]; then
+    ok=1
+  fi
+
+  # Always clean up the temp link so we don't pollute the repo
+  [[ "$created_vdir" == "1" ]] && rm -rf "$vdir"
+
+  if [[ "$ok" == "1" ]]; then
+    echo "✓ Pulled .env from Vercel (development)"
+    return 0
   fi
   rm -f "$ENV_FILE"
   return 1
 }
 
-if try_vercel_env_pull; then
+if try_vercel_pull; then
   exit 0
 fi
 
-# Whitelist only — do not dump the entire environment into .env.
+# ── 4. Individual secrets from process environment ─────────────
+# Works when each var is added individually as a Cursor secret.
 ENV_KEYS=(
   DATABASE_URL
   OPENAI_API_KEY
@@ -100,24 +122,29 @@ ENV_KEYS=(
   NEXT_PUBLIC_STRIPE_PRO_PRICE_ID
 )
 
-missing_required=()
-for key in DATABASE_URL NEXT_PUBLIC_FIREBASE_API_KEY FIREBASE_PROJECT_ID; do
-  if [[ -z "${!key:-}" ]]; then
-    missing_required+=("$key")
-  fi
+missing=()
+for key in NEXT_PUBLIC_FIREBASE_API_KEY FIREBASE_PROJECT_ID; do
+  [[ -z "${!key:-}" ]] && missing+=("$key")
 done
 
-if [[ ${#missing_required[@]} -gt 0 ]]; then
-  echo "❌ Missing root .env and required environment variables: ${missing_required[*]}"
-  echo "   Local: cp .env.example .env and fill values."
-  echo "   Vercel (recommended for cloud agents): add VERCEL_TOKEN (+ VERCEL_ORG_ID, VERCEL_PROJECT_ID) as Cursor secrets to auto-pull."
-  echo "   Or add individual vars as Cursor secrets, or set NITROGEN_ENV_FILE to a mounted .env path."
-  echo "   Note: Vercel/Railway dashboard env applies to deployed apps only — not this VM's localhost dev server."
+if [[ ${#missing[@]} -gt 0 ]]; then
+  cat >&2 <<EOF
+❌ Cannot configure .env — no usable secret source found.
+   Missing: ${missing[*]}
+
+   Fix (pick one — one-time setup):
+   A) Vercel pull  — add Cursor secrets: VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID
+   B) Mirror vars  — add each var below as a Cursor secret (same name as .env.example)
+   C) Mount file   — set NITROGEN_ENV_FILE=/path/to/your/.env as a Cursor secret
+   D) Local dev    — cp .env.example .env && fill values (never commit)
+
+   See docs/self-hosting.md for full setup instructions.
+EOF
   exit 1
 fi
 
 if [[ -z "${NITROGEN_FIREBASE_CREDENTIALS:-}" && -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]]; then
-  echo "❌ Missing Firebase service account: set NITROGEN_FIREBASE_CREDENTIALS or FIREBASE_SERVICE_ACCOUNT_JSON"
+  echo "❌ Firebase service account missing: add NITROGEN_FIREBASE_CREDENTIALS or FIREBASE_SERVICE_ACCOUNT_JSON as a Cursor secret." >&2
   exit 1
 fi
 
@@ -131,4 +158,4 @@ fi
   done
 } > "$ENV_FILE"
 
-echo "✓ Materialized .env from process environment ($(wc -l < "$ENV_FILE" | tr -d ' ') lines)"
+echo "✓ Materialized .env from Cursor secrets ($(wc -l < "$ENV_FILE" | tr -d ' ') vars)"

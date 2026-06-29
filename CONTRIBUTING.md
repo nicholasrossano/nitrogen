@@ -19,28 +19,24 @@ Only submit code, documentation, data, designs, or other assets that you have th
 ### Local Setup
 
 1. Fork and clone the repo
-2. Copy the environment template:
+2. Copy and fill the environment template:
    ```bash
-   cp .env.example .env   # first-time only; then keep your real .env
-   bash scripts/worktree_setup.sh && bash scripts/check_dev_env.sh
+   cp .env.example .env   # first-time only — never commit .env
+   # Edit .env: fill DATABASE_URL, OPENAI_API_KEY, Firebase vars (see docs/self-hosting.md)
    ```
-3. Fill in your API keys and database URL in `.env`
-4. Start the backend:
+3. Install deps and start the full stack:
    ```bash
-   cd backend
-   pip install -r requirements.txt
-   alembic upgrade head
-   python -m uvicorn app.main:app --reload --port 8000
+   pip install -r backend/requirements.txt
+   cd backend && alembic upgrade head && cd ..
+   bash scripts/dev_daemon.sh start
    ```
-5. Start the frontend:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-6. Open http://localhost:3000
+4. Open http://localhost:3000
 
-See the [README](README.md) for Docker-based setup and more detail.
+The daemon manages both servers with auto-restart. Use `bash scripts/dev_daemon.sh restart` / `stop` / `status`.
+
+**Using Cursor cloud agents?** See [docs/self-hosting.md](docs/self-hosting.md#2-cursor-cloud-agents-ai-assisted-development) for the one-time secrets setup — you won't need to run anything manually after that.
+
+See [docs/self-hosting.md](docs/self-hosting.md) for full setup details including Firebase config, self-hosting on your own infra, and all env var documentation.
 
 ## Making Changes
 
