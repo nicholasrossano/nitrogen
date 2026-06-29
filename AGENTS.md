@@ -79,19 +79,25 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 
 ## Local emulator and cloud agents (auth)
 
+**Vercel/Railway env ≠ cloud agent VM.** Dashboard env vars apply to deployed apps only. Cloud agents run `localhost:3000` on an ephemeral VM with no access to your Vercel/Railway config unless you provide it here. This is not a production regression.
+
 **Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the app, tests in browser, or API calls, run this automatically (no user prompt):
 
 ```bash
 bash scripts/dev_daemon.sh status || bash scripts/dev_daemon.sh start
 ```
 
-If status shows unhealthy ports, run `bash scripts/dev_daemon.sh restart`. Do not use one-shot `&` background processes.
+If status shows unhealthy ports, run `bash scripts/dev_daemon.sh restart`. Do not use one-shot `&` background processes. After env first becomes available, restart the daemon so Next.js picks up `NEXT_PUBLIC_*` vars.
+
+**One-time cloud agent env setup (pick one):**
+1. **Vercel pull (best if frontend is on Vercel):** add Cursor secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`. `materialize_dev_env.sh` auto-runs `vercel env pull`.
+2. **Mirror secrets:** copy `DATABASE_URL`, Firebase vars, and all `NEXT_PUBLIC_FIREBASE_*` from Vercel/Railway into Cursor cloud agent secrets (same key names as `.env.example`).
+3. **Mount file:** set `NITROGEN_ENV_FILE` to a path containing your real `.env`.
 
 Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
 
 - **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
-- `dev_daemon.sh` resolves env via `materialize_dev_env.sh` (existing `.env` → `NITROGEN_ENV_FILE` → injected secrets), symlinks, validates, then runs backend + frontend in tmux with auto-restart.
-- **Cloud agents:** your **local** `.env` does not sync to the VM. Add these as **Cursor cloud agent secrets** (same key names): `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), and all `NEXT_PUBLIC_FIREBASE_*` vars. Optional: set `NITROGEN_ENV_FILE` to a mounted `.env` path. If materialization fails, the daemon still starts **frontend only** (fixes connection refused) but API/login stay broken until secrets are added — report the missing names, do not stub `.env`.
+- `dev_daemon.sh` resolves env via `materialize_dev_env.sh` (existing `.env` → `NITROGEN_ENV_FILE` → Vercel pull → injected secrets), symlinks, validates, then runs backend + frontend in tmux with auto-restart.
 - **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
 - **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.

@@ -23,6 +23,37 @@ if [[ -n "${NITROGEN_ENV_FILE:-}" && -f "${NITROGEN_ENV_FILE}" ]]; then
   exit 0
 fi
 
+try_vercel_env_pull() {
+  if [[ -z "${VERCEL_TOKEN:-}" ]]; then
+    return 1
+  fi
+  if ! command -v npx >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local pull_args=(env pull "$ENV_FILE" --yes --environment="${VERCEL_ENV:-development}")
+  if [[ -n "${VERCEL_TOKEN:-}" ]]; then
+    pull_args+=(--token="$VERCEL_TOKEN")
+  fi
+  if [[ -n "${VERCEL_ORG_ID:-}" && -n "${VERCEL_PROJECT_ID:-}" ]]; then
+    pull_args+=(--scope="$VERCEL_ORG_ID" --project="$VERCEL_PROJECT_ID")
+  fi
+
+  echo "↻ Pulling dev env from Vercel (same vars as your deployed frontend)…"
+  if (cd "$ROOT" && npx --yes vercel@latest "${pull_args[@]}" >/dev/null); then
+    if [[ -f "$ENV_FILE" ]]; then
+      echo "✓ Pulled .env from Vercel (${VERCEL_ENV:-development})"
+      return 0
+    fi
+  fi
+  rm -f "$ENV_FILE"
+  return 1
+}
+
+if try_vercel_env_pull; then
+  exit 0
+fi
+
 # Whitelist only — do not dump the entire environment into .env.
 ENV_KEYS=(
   DATABASE_URL
@@ -79,7 +110,9 @@ done
 if [[ ${#missing_required[@]} -gt 0 ]]; then
   echo "❌ Missing root .env and required environment variables: ${missing_required[*]}"
   echo "   Local: cp .env.example .env and fill values."
-  echo "   Cloud agent: add those names as Cursor secrets, or set NITROGEN_ENV_FILE to a mounted .env path."
+  echo "   Vercel (recommended for cloud agents): add VERCEL_TOKEN (+ VERCEL_ORG_ID, VERCEL_PROJECT_ID) as Cursor secrets to auto-pull."
+  echo "   Or add individual vars as Cursor secrets, or set NITROGEN_ENV_FILE to a mounted .env path."
+  echo "   Note: Vercel/Railway dashboard env applies to deployed apps only — not this VM's localhost dev server."
   exit 1
 fi
 
