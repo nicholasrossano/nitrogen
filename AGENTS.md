@@ -64,6 +64,7 @@ cd backend && python3 -m alembic upgrade head
 | Safe token/repo audit | `npm run cursor:audit` |
 | Full backend regression | `cd backend && python3 -m pytest tests/ -q` |
 | Full frontend regression (final) | `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build` |
+| Ensure dev stack running (agents) | `bash scripts/dev_daemon.sh status \|\| bash scripts/dev_daemon.sh start` |
 
 More examples and wrappers: `docs/testing.md`.
 
@@ -78,16 +79,22 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 
 ## Local emulator and cloud agents (auth)
 
+**Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the app, tests in browser, or API calls, run this automatically (no user prompt):
+
+```bash
+bash scripts/dev_daemon.sh status || bash scripts/dev_daemon.sh start
+```
+
+If status shows unhealthy ports, run `bash scripts/dev_daemon.sh restart`. Do not use one-shot `&` background processes.
+
 Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
 
 - **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
-- Start the persistent dev stack: `bash scripts/dev_daemon.sh start` (or `npm run dev:emulator`).
 - `dev_daemon.sh` resolves env via `materialize_dev_env.sh` (existing `.env` → `NITROGEN_ENV_FILE` → injected secrets), symlinks, validates, then runs backend + frontend in tmux with auto-restart.
-- **Cloud agents:** add Cursor secrets for at least `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), and all `NEXT_PUBLIC_FIREBASE_*` vars. Optional: set `NITROGEN_ENV_FILE` to a mounted `.env` path.
+- **Cloud agents:** add Cursor secrets for at least `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), and all `NEXT_PUBLIC_FIREBASE_*` vars. Optional: set `NITROGEN_ENV_FILE` to a mounted `.env` path. If materialization fails, report missing secret names — do not stub `.env`.
 - **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
 - **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
-- Check status: `bash scripts/dev_daemon.sh status`; restart: `bash scripts/dev_daemon.sh restart`.
 
 ## Specialized Guidance (Read Only When Relevant)
 
