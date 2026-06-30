@@ -9,12 +9,13 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
 from app.config import get_settings
 from app.services.billing import (
-    get_billing_status,
     create_checkout_session,
     create_portal_session,
+    ensure_subscription,
+    get_billing_status,
+    get_usage_summary,
     handle_webhook_event,
     redeem_access_code,
-    ensure_subscription,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,27 @@ async def billing_status(
     await db.commit()
     status = await get_billing_status(user.uid, db)
     return status
+
+
+@router.get("/usage")
+async def billing_usage(
+    user: AuthUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not settings.billing_enabled:
+        return {
+            "allowed": True,
+            "tier": "unlimited",
+            "used_usd": 0,
+            "limit_usd": 0,
+            "by_model": [],
+            "by_day": [],
+            "recent_calls": [],
+        }
+    await ensure_subscription(user.uid, db)
+    summary = await get_usage_summary(user.uid, db)
+    await db.commit()
+    return summary
 
 
 @router.post("/checkout")

@@ -76,6 +76,16 @@ There are two chat surfaces. Default to **Generate flow (standalone)** unless th
 
 Do not modify `ToolPicker.tsx` when the request is about generate-flow landing tiles.
 
+## Session startup (always run first)
+
+At the start of every cloud agent session, run:
+
+```bash
+python3 scripts/sync_secrets_to_vercel.py
+```
+
+This reads secrets injected by Cursor Secrets, syncs them to Vercel, and writes the local `.env`. If `VERCEL_TOKEN` is not yet injected it skips Vercel sync gracefully and still writes `.env` from whatever is available.
+
 ## Local emulator and cloud agents (auth)
 
 Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).

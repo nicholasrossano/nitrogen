@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     # Stripe billing
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_price_id: str = ""
+    # Deprecated — kept for existing Stripe price / subscription rows
     stripe_starter_price_id: str = ""
     stripe_pro_price_id: str = ""
     billing_testing_mode: bool = False
@@ -87,12 +89,18 @@ class Settings(BaseSettings):
     trial_message_limit: int = 10
     trial_cost_limit_usd: float = 1.0
 
-    # Access code — upgrades trial to Starter-equivalent budget (one-time)
+    # Access code — upgrades trial to subscription-equivalent budget (one-time)
     access_code: str = ""
 
-    # Usage limits (API cost in USD per billing period)
+    # Usage limits (estimated API cost in USD per billing period)
+    subscription_usage_limit_usd: float = 20.0
+    # Deprecated aliases
     starter_usage_limit_usd: float = 14.0
     pro_usage_limit_usd: float = 42.0
+
+    # OpenRouter (platform routing — used when model_routing_enabled ships)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # Encryption key for BYOK API keys at rest (Fernet key)
     api_key_encryption_key: str = ""
