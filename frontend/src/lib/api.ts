@@ -725,13 +725,46 @@ export interface ProjectFilesResponse {
 
 export interface BillingStatus {
   allowed: boolean;
-  tier: 'trial' | 'starter' | 'pro' | 'byok' | 'none' | 'unlimited';
+  tier: 'trial' | 'individual' | 'starter' | 'pro' | 'byok' | 'none' | 'unlimited';
   used_usd: number;
   limit_usd: number;
   trial_messages_remaining?: number | null;
   access_code_redeemed?: boolean;
   access_code_available?: boolean;
   status?: string;
+  byok_providers?: string[];
+  period_start?: string | null;
+  period_end?: string | null;
+}
+
+export interface UsageModelBreakdown {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  call_count: number;
+}
+
+export interface UsageDayBreakdown {
+  date: string;
+  estimated_cost_usd: number;
+}
+
+export interface UsageRecentCall {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  created_at: string;
+}
+
+export interface BillingUsageSummary extends BillingStatus {
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  by_model: UsageModelBreakdown[];
+  by_day: UsageDayBreakdown[];
+  recent_calls: UsageRecentCall[];
+  generated_at?: string;
 }
 
 export interface DriveLinkedFile {
@@ -868,7 +901,18 @@ async function fetchApi<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail?.message || error.detail || `HTTP ${response.status}`);
+    const detail = error.detail ?? error;
+    const { handleBillingHttpError, billingErrorMessage } = await import('@/lib/billingErrors');
+    if (handleBillingHttpError(response.status, detail)) {
+      throw new Error(billingErrorMessage(detail));
+    }
+    throw new Error(
+      (detail && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string'
+        ? detail.message
+        : null) ||
+        (typeof detail === 'string' ? detail : null) ||
+        `HTTP ${response.status}`
+    );
   }
 
   // 204 No Content and other empty bodies
@@ -2183,7 +2227,19 @@ export const api = {
 
     if (!response.ok || !response.body) {
       const err = await response.json().catch(() => ({ detail: 'Stream failed' }));
-      onError(err.detail?.message || err.detail || `HTTP ${response.status}`);
+      const detail = err.detail ?? err;
+      const { handleBillingHttpError, billingErrorMessage } = await import('@/lib/billingErrors');
+      if (handleBillingHttpError(response.status, detail)) {
+        onError(billingErrorMessage(detail));
+        return;
+      }
+      onError(
+        (detail && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string'
+          ? detail.message
+          : null) ||
+          (typeof detail === 'string' ? detail : null) ||
+          `HTTP ${response.status}`
+      );
       return;
     }
 
@@ -2502,6 +2558,9 @@ export const api = {
 
   getBillingStatus: () =>
     fetchApi<BillingStatus>('/api/v1/billing/status'),
+
+  getBillingUsage: () =>
+    fetchApi<BillingUsageSummary>('/api/v1/billing/usage'),
 
   createCheckout: (priceId: string, successUrl: string, cancelUrl: string) =>
     fetchApi<{ url: string }>('/api/v1/billing/checkout', {

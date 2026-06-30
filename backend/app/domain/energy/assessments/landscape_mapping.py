@@ -222,6 +222,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                 f"{evidence_block}"
             ),
             model="gpt-4.1",
+            context=context,
         )
         result = result or {"title": "Landscape Mapping"}
         if citations:
@@ -252,6 +253,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                 f"Project type / sector: {context.get('project_type', '')}\n"
                 f"Project description: {context.get('project_description', '')}"
             ),
+            context=context,
         )
         return [
             {
@@ -280,6 +282,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                 f"Project type / sector: {context.get('project_type', '')}\n"
                 f"Categories:\n{themes_list}"
             ),
+            context=context,
         )
 
         entities_by_theme = self._bucket_entities(data.get("entities", []), themes)
@@ -308,6 +311,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                     f"Existing entities by category:\n{existing}\n\n"
                     f"Underfilled categories:\n{shortfalls}"
                 ),
+                context=context,
             )
             refill_bucket = self._bucket_entities(refill.get("entities", []), themes)
             for theme in themes:

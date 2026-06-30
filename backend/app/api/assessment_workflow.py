@@ -62,6 +62,8 @@ from app.services.decision_log_service import (
 from app.services.agent_runner_service import derive_assessment_run_state, run_assessment_agent_loop
 from app.services.assumptions import AssumptionActor, sync_stage_assumptions, sync_widget_assumptions
 
+ai_access = require_ai_access()
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -497,7 +499,7 @@ async def get_assessment_agent_status(
 async def run_assessment_agent(
     instance_id: _uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(ai_access),
 ):
     """Run/resume the assessment agent loop until the next review point."""
     inst, assessment = await _get_editable_workflow_instance(db, instance_id, user)
@@ -577,7 +579,7 @@ async def populate_stage_endpoint(
     stage_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(ai_access),
 ):
     """Run the population pipeline for a stage.
 
@@ -991,7 +993,7 @@ async def enrich_record_endpoint(
     item_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(ai_access),
 ):
     """AI-enrich a single record in a record-component stage.
 
@@ -1102,7 +1104,7 @@ async def deep_dive_implementation_item(
     item_id: str,
     body: ImplementationDeepDiveRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(ai_access),
 ):
     """Run and cache implementation-task deep dive research for inspector panels."""
     inst, assessment = await _get_editable_workflow_instance(db, instance_id, user)
@@ -1151,7 +1153,7 @@ async def deep_dive_map_item(
     item_id: str,
     body: ImplementationDeepDiveRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(ai_access),
 ):
     """Run and cache landscape-map deep dive research for inspector panels."""
     inst, assessment = await _get_editable_workflow_instance(db, instance_id, user)

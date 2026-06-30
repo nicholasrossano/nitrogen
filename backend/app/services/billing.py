@@ -8,6 +8,18 @@ from app.core.llm_client import check_usage_budget
 settings = get_settings()
 
 
+def _tier_from_stripe_price(price_id: str | None) -> str | None:
+    if not price_id:
+        return None
+    if price_id == settings.stripe_price_id:
+        return "individual"
+    if price_id == settings.stripe_starter_price_id:
+        return "starter"
+    if price_id == settings.stripe_pro_price_id:
+        return "pro"
+    return None
+
+
 async def ensure_subscription(user_id: str, db: AsyncSession) -> Subscription:
     """Get or create a Subscription row for this user (default: trial tier)."""
     result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
@@ -76,6 +88,97 @@ async def get_billing_status(user_id: str, db: AsyncSession) -> dict:
     return await check_usage_budget(user_id, db)
 
 
+async def get_usage_summary(user_id: str, db: AsyncSession) -> dict:
+    """Usage breakdown for the billing dashboard (current period or trial)."""
+    from datetime import datetime, timezone
+
+    from app.core.llm_client import PAID_SUBSCRIPTION_TIERS
+    from app.models.subscription import UsageRecord
+
+    budget = await check_usage_budget(user_id, db)
+    tier = budget.get("tier", "none")
+
+    result = await db.execute(
+        select(Subscription).where(Subscription.user_id == user_id)
+    )
+    sub = result.scalar_one_or_none()
+
+    period_start = None
+    period_end = None
+    if sub:
+        period_start = sub.current_period_start
+        period_end = sub.current_period_end
+
+    if tier == "trial" and sub:
+        period_start = sub.created_at
+        period_end = None
+    elif tier in PAID_SUBSCRIPTION_TIERS and not period_start and sub:
+        period_start = sub.created_at
+
+    usage_query = select(UsageRecord).where(UsageRecord.user_id == user_id)
+    if period_start:
+        usage_query = usage_query.where(UsageRecord.created_at >= period_start)
+    if period_end:
+        usage_query = usage_query.where(UsageRecord.created_at < period_end)
+
+    records_result = await db.execute(usage_query.order_by(UsageRecord.created_at.desc()).limit(500))
+    records = records_result.scalars().all()
+
+    by_model: dict[str, dict] = {}
+    by_day: dict[str, float] = {}
+    total_input = 0
+    total_output = 0
+
+    for record in records:
+        model = record.model
+        bucket = by_model.setdefault(
+            model,
+            {
+                "model": model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "estimated_cost_usd": 0.0,
+                "call_count": 0,
+            },
+        )
+        bucket["input_tokens"] += record.input_tokens
+        bucket["output_tokens"] += record.output_tokens
+        bucket["estimated_cost_usd"] += float(record.estimated_cost_usd)
+        bucket["call_count"] += 1
+        total_input += record.input_tokens
+        total_output += record.output_tokens
+
+        day_key = record.created_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
+        by_day[day_key] = by_day.get(day_key, 0.0) + float(record.estimated_cost_usd)
+
+    model_rows = sorted(by_model.values(), key=lambda row: row["estimated_cost_usd"], reverse=True)
+    daily_rows = [
+        {"date": day, "estimated_cost_usd": round(cost, 6)}
+        for day, cost in sorted(by_day.items())
+    ]
+
+    return {
+        **budget,
+        "period_start": period_start.isoformat() if period_start else None,
+        "period_end": period_end.isoformat() if period_end else None,
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "by_model": model_rows,
+        "by_day": daily_rows,
+        "recent_calls": [
+            {
+                "model": r.model,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "estimated_cost_usd": float(r.estimated_cost_usd),
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in records[:25]
+        ],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 async def handle_webhook_event(payload: bytes, sig_header: str, db: AsyncSession) -> None:
     """Process a Stripe webhook event."""
     stripe.api_key = settings.stripe_secret_key
@@ -110,10 +213,9 @@ async def _handle_checkout_completed(data: dict, db: AsyncSession) -> None:
         stripe.api_key = settings.stripe_secret_key
         stripe_sub = stripe.Subscription.retrieve(subscription_id)
         price_id = stripe_sub["items"]["data"][0]["price"]["id"] if stripe_sub["items"]["data"] else None
-        if price_id == settings.stripe_starter_price_id:
-            sub.tier = "starter"
-        elif price_id == settings.stripe_pro_price_id:
-            sub.tier = "pro"
+        mapped_tier = _tier_from_stripe_price(price_id)
+        if mapped_tier:
+            sub.tier = mapped_tier
         sub.status = "active"
         from datetime import datetime, timezone
         sub.current_period_start = datetime.fromtimestamp(stripe_sub["current_period_start"], tz=timezone.utc)
@@ -130,10 +232,9 @@ async def _handle_subscription_updated(data: dict, db: AsyncSession) -> None:
     if not sub:
         return
     price_id = data["items"]["data"][0]["price"]["id"] if data.get("items", {}).get("data") else None
-    if price_id == settings.stripe_starter_price_id:
-        sub.tier = "starter"
-    elif price_id == settings.stripe_pro_price_id:
-        sub.tier = "pro"
+    mapped_tier = _tier_from_stripe_price(price_id)
+    if mapped_tier:
+        sub.tier = mapped_tier
     status = data.get("status", "active")
     sub.status = "active" if status == "active" else ("past_due" if status == "past_due" else status)
     from datetime import datetime, timezone
