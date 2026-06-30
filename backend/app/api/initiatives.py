@@ -12,6 +12,9 @@ from sqlalchemy import select, update
 from app.config import get_settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
+from app.core.billing_guard import require_ai_access
+
+ai_access = require_ai_access()
 from app.core.permissions import (
     ensure_user_exists,
     get_initiative_with_role,
@@ -432,7 +435,7 @@ async def update_initiative(
 async def generate_overview(
     initiative_id: str,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(ai_access),
 ):
     """Generate or refresh the stored initiative overview description."""
     await ensure_user_exists(db, user)

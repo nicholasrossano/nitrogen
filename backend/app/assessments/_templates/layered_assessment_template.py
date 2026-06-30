@@ -109,6 +109,7 @@ class ExampleLayeredAssessment(BaseAssessment):
                 system=(
                     "Generate 5–6 relevant categories for the given project. "
                     "Return JSON with key 'categories', a list of objects with 'label' and 'description'."
+                context=context,
                 ),
                 user_msg=f"Project: {context.get('project_title', '')}\n{context.get('project_description', '')}",
             )
@@ -124,6 +125,7 @@ class ExampleLayeredAssessment(BaseAssessment):
                 system=(
                     "For each category, generate 3–4 items. "
                     "Return JSON with key 'items', a list of objects with 'name', 'category', 'summary'."
+                context=context,
                 ),
                 user_msg=f"Categories: {', '.join(cat_labels)}\nProject: {context.get('project_title', '')}",
             )

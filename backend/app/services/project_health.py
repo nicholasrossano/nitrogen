@@ -573,6 +573,9 @@ async def _llm_dimension_result(
     dimension: Any,
     guardrails: dict[str, Any],
     retrieved_context: dict[str, Any],
+    *,
+    user_id: str | None = None,
+    db: AsyncSession | None = None,
 ) -> dict[str, Any]:
     user_msg = json.dumps(
         {
@@ -641,7 +644,12 @@ async def _llm_dimension_result(
         "Do not mention status constraints, internal checks, or policy terms explicitly in rationale text. "
         "Do not overstate certainty."
     )
-    llm_result = await llm_json(system=system, user_msg=user_msg)
+    llm_result = await llm_json(
+        system=system,
+        user_msg=user_msg,
+        user_id=user_id,
+        db=db,
+    )
     if not llm_result:
         generated = _fallback_dimension_result(dimension, guardrails, context)
         generated["supporting_signals"] = {
@@ -714,7 +722,15 @@ async def refresh_project_health(
     for dimension in definition.dimensions:
         guardrails = _guardrails_for_dimension(context, dimension)
         retrieved_context = await _retrieve_dimension_context(db, initiative, dimension, user_id=user_id)
-        generated = await _llm_dimension_result(context, definition, dimension, guardrails, retrieved_context)
+        generated = await _llm_dimension_result(
+            context,
+            definition,
+            dimension,
+            guardrails,
+            retrieved_context,
+            user_id=user_id,
+            db=db,
+        )
         row = by_dimension.get(dimension.id)
         if row is None:
             row = ProjectHealthResult(

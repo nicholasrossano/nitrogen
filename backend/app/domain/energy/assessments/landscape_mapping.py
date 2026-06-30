@@ -215,6 +215,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                 "  • Strategic Implications and Recommendations\n\n"
                 "Return JSON with keys: title, executive_summary, "
                 "sections (list of {heading, body}), strategic_implications, recommendations"
+            context=context,
             ),
             user_msg=(
                 f"Project: Region={region}, Type={sector}\n\n"
@@ -246,6 +247,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                 "You are a landscape analysis expert. Generate 5–8 high-level categories or dimensions "
                 "for a landscape mapping assessment. Return JSON with key 'categories', a list of objects "
                 "with 'label' (no descriptions needed)."
+            context=context,
             ),
             user_msg=(
                 f"Region: {context.get('geography', '')}\n"
@@ -274,6 +276,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                 "'name' and 'category' (exactly matching one category label). "
                 "Do not skip categories. Ensure every category has at least 3 items. "
                 "Return JSON with key 'entities', a flat list."
+            context=context,
             ),
             user_msg=(
                 f"Region: {context.get('geography', '')}\n"
@@ -300,6 +303,7 @@ class LandscapeMappingAssessment(BaseAssessment):
                     "You are a landscape researcher. Fill only missing entities for underfilled categories. "
                     "Return JSON with key 'entities' as a flat list of objects with 'name' and 'category'. "
                     "Category values must exactly match one listed category."
+                context=context,
                 ),
                 user_msg=(
                     f"Region: {context.get('geography', '')}\n"

@@ -16,6 +16,9 @@ from app.core.database import get_db
 from app.core.execution_context import build_context
 from app.core.auth import get_current_user, AuthUser, MockUser
 from app.core.billing_guard import require_ai_access
+
+chat_ai_access = require_ai_access(count_message=True)
+ai_access = require_ai_access()
 from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
@@ -601,7 +604,7 @@ async def chat_stream(
     request: Request,
     data: ChatStreamRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(chat_ai_access),
 ):
     """
     Standalone compliance chat with SSE streaming.
@@ -1286,7 +1289,7 @@ async def update_chat_title(
 async def generate_chat_title(
     data: TitleRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(chat_ai_access),
 ):
     """Generate a brief 3-5 word title for a chat based on the first message."""
     client, is_byok = await get_openai_client(user.uid, db)

@@ -287,6 +287,7 @@ class RiskAssessment(BaseAssessment):
                 "adapt categories to the project's geography, sector, delivery model, technology, "
                 "beneficiaries, financing, and available evidence. Do not invent facts. Return JSON "
                 "with key categories: objects with label, description, why_it_matters, status, note."
+            context=context,
             ),
             user_msg=_project_context_text(context) + evidence_block,
             model=settings.openai_orchestration_model,
@@ -348,6 +349,7 @@ class RiskAssessment(BaseAssessment):
                 "Return JSON only with key risks. Each risk object must include exactly these keys: "
                 "title, category, affected_components, why_it_matters, evidence_basis, "
                 "missing_information, evidence_status."
+            context=context,
             ),
             model=settings.openai_orchestration_model,
         )
@@ -385,6 +387,7 @@ class RiskAssessment(BaseAssessment):
                 "specific risk. Avoid vague statements like 'monitor closely'. Return JSON with "
                 "keys mitigation, owner, timing, remaining_issue, status. Status must be one of "
                 "Adequate, Insufficient, Needs validation."
+            context=context,
             ),
             user_msg=(
                 f"{_project_context_text(context)}\n\n"
@@ -442,6 +445,7 @@ class RiskAssessment(BaseAssessment):
                 "the concrete mechanism, owner, and timing. Do not invent unsupported institutional facts. "
                 "Return JSON only with key mitigations: objects with source_item_id, mitigation, owner, timing, "
                 "remaining_issue, status. Status must be Adequate, Insufficient, or Needs validation."
+            context=context,
             ),
             user_msg=(
                 f"{_project_context_text(context)}\n\n"
@@ -486,6 +490,7 @@ class RiskAssessment(BaseAssessment):
                 "Return JSON with keys category_ratings, risk_register, top_risks, unresolved_issues. "
                 "For each risk_register row include risk_id, inherent_rating, residual_rating, "
                 "rating_rationale, basis_evidence, missing_information."
+            context=context,
             ),
             user_msg=(
                 f"{_project_context_text(context)}\n\n"

@@ -263,6 +263,7 @@ class ImplementationPlanAssessment(BaseAssessment):
             system=(
                 CATEGORY_PROPOSAL_SYSTEM_PROMPT
                 + "\n\nReturn valid JSON with key 'categories'."
+            context=context,
             ),
             user_msg=(
                 f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -331,6 +332,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                 "item_type (deliverable|assessment), classification (required|optional|unknown), "
                 "status (not_started|in_progress|complete), and optional phase and phase_order. "
                 "Descriptions should explain why the activity is needed for this specific project."
+            context=context,
             ),
             user_msg=(
                 f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -363,6 +365,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                     "Return JSON with key 'activities' as a flat list. "
                     "Each activity must include name, category, description, item_type, classification, and status. "
                     "Category must exactly match one listed category. Avoid generic boilerplate."
+                context=context,
                 ),
                 user_msg=(
                     f"Project: {context.get('project_title', 'Unknown')}\n"
