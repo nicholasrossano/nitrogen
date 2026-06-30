@@ -290,6 +290,7 @@ class RiskAssessment(BaseAssessment):
             ),
             user_msg=_project_context_text(context) + evidence_block,
             model=settings.openai_orchestration_model,
+            context=context,
         )
         categories = data.get("categories") or []
         if not categories:
@@ -350,6 +351,7 @@ class RiskAssessment(BaseAssessment):
                 "missing_information, evidence_status."
             ),
             model=settings.openai_orchestration_model,
+            context=context,
         )
         risks = _usable_risks(data.get("risks") or [], context)
         risks = _ensure_category_risk_depth(risks, categories, context, minimum_per_category=2, maximum_per_category=4)
@@ -396,6 +398,7 @@ class RiskAssessment(BaseAssessment):
                 f"{evidence_block}"
             ),
             model=settings.openai_orchestration_model,
+            context=context,
         )
         return {
             "mitigation": data.get("mitigation", existing_record.get("mitigation", "")),
@@ -449,6 +452,7 @@ class RiskAssessment(BaseAssessment):
                 f"{evidence_block}"
             ),
             model=settings.openai_orchestration_model,
+            context=context,
         )
         by_id = {
             str(item.get("source_item_id", "")): item
@@ -493,6 +497,7 @@ class RiskAssessment(BaseAssessment):
                 f"Draft register:\n{_jsonish(draft_register)}"
             ),
             model=settings.openai_orchestration_model,
+            context=context,
         )
         return data or {}
 

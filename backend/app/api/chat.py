@@ -33,6 +33,8 @@ from app.api.chat_constants import (
     SKIP_EXTRACTION_MESSAGES as _SKIP_EXTRACTION_MESSAGES,
 )
 
+chat_ai_access = require_ai_access(count_message=True)
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -601,7 +603,7 @@ async def chat_stream(
     request: Request,
     data: ChatStreamRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(chat_ai_access),
 ):
     """
     Standalone compliance chat with SSE streaming.
@@ -1286,7 +1288,7 @@ async def update_chat_title(
 async def generate_chat_title(
     data: TitleRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(chat_ai_access),
 ):
     """Generate a brief 3-5 word title for a chat based on the first message."""
     client, is_byok = await get_openai_client(user.uid, db)

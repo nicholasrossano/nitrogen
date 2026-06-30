@@ -198,6 +198,28 @@ async def process_evidence_doc(
             await _mark_failed(db, doc, f"Parsing failed: {exc}")
             return
 
+        # --- Full indexing (skip embeddings when AI budget is exhausted) ---
+        from app.config import get_settings
+        from app.core.llm_client import check_usage_budget
+
+        billing_settings = get_settings()
+        skip_embedding = False
+        if billing_settings.billing_enabled and user_id:
+            budget = await check_usage_budget(user_id, db)
+            skip_embedding = not budget.get("allowed", True)
+
+        if skip_embedding:
+            logger.info(
+                "Skipping embedding for evidence doc %s — user %s over AI budget",
+                doc_id,
+                user_id,
+            )
+            doc.processing_status = EvidenceDocStatus.LIGHTWEIGHT_READY.value
+            doc.processing_completed_at = datetime.now(timezone.utc)
+            doc.processing_error = "Indexing skipped: AI usage limit reached"
+            await db.commit()
+            return
+
         try:
             embeddings_service = EmbeddingsService(user_id=user_id, db=db)
             plain_texts = [payload.content for payload in chunk_payloads]

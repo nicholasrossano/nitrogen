@@ -271,6 +271,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                 f"Description: {context.get('project_description', '')}\n\n"
                 f"Existing framework (if any):\n{framework_outline}"
             ),
+            context=context,
         )
         categories = data.get("categories", [])
         output = []
@@ -343,6 +344,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                 f"{evidence_block}\n\n"
                 "Provide 2-6 activities per category."
             ),
+            context=context,
         )
 
         activities_by_category = self._bucket_activities(data.get("activities", []), categories)
@@ -375,6 +377,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                     f"Existing activities by category:\n{existing}\n\n"
                     f"Underfilled categories:\n{missing}"
                 ),
+                context=context,
             )
             refill_bucket = self._bucket_activities(refill.get("activities", []), categories)
             for category in categories:

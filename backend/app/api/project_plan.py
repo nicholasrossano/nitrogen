@@ -15,6 +15,8 @@ from app.core.database import get_db
 from app.plans.registry import get_plan_registry
 from app.services.deep_dive import DeepDiveService
 
+ai_access = require_ai_access()
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ async def get_project_plan(
 async def generate_project_plan(
     initiative_id: str,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(ai_access),
 ):
     """Generate a new project plan (or refresh the existing one)."""
     initiative = await require_editor(db, initiative_id, user)
@@ -303,7 +305,7 @@ async def deep_dive_plan_item(
     item_id: str,
     body: DeepDiveRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_ai_access),
+    user: AuthUser = Depends(ai_access),
 ):
     """Run a targeted research deep dive on a specific project plan sub-item.
 
