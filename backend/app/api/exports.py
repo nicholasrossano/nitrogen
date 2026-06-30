@@ -8,7 +8,7 @@ import re
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
-from app.core.permissions import require_viewer
+from app.core.permissions import require_project_viewer
 from app.core.storage import get_storage
 from app.core.filename_utils import safe_content_disposition
 from app.models.chat import CoreChat, CoreChatMessage
@@ -20,9 +20,9 @@ from app.domain.registry import build_export_handlers
 router = APIRouter()
 
 
-@router.post("/initiatives/{initiative_id}/export", response_model=ExportResponse)
+@router.post("/projects/{project_id}/export", response_model=ExportResponse)
 async def export_memo(
-    initiative_id: str,
+    project_id: str,
     data: ExportRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -32,22 +32,22 @@ async def export_memo(
     logger = logging.getLogger(__name__)
     
     try:
-        logger.info(f"Export request for initiative {initiative_id} by user {user.uid}")
+        logger.info(f"Export request for initiative {project_id} by user {user.uid}")
         
-        initiative = await require_viewer(db, initiative_id, user)
+        initiative = await require_project_viewer(db, project_id, user)
         
         # Get memo version
         if data.memo_version_id:
             memo_result = await db.execute(
                 select(MemoVersion).where(
                     MemoVersion.id == data.memo_version_id,
-                    MemoVersion.initiative_id == initiative.id,
+                    MemoVersion.project_id == initiative.id,
                 )
             )
         else:
             memo_result = await db.execute(
                 select(MemoVersion)
-                .where(MemoVersion.initiative_id == initiative.id)
+                .where(MemoVersion.project_id == initiative.id)
                 .order_by(MemoVersion.created_at.desc())
                 .limit(1)
             )
@@ -55,7 +55,7 @@ async def export_memo(
         memo = memo_result.scalar_one_or_none()
         
         if not memo:
-            logger.warning(f"No memo found for initiative {initiative_id}")
+            logger.warning(f"No memo found for initiative {project_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No memo found to export",
@@ -71,14 +71,14 @@ async def export_memo(
             logger.info("Memo uses new sections format, generating with sections")
             docx_bytes = exporter.generate_from_sections(
                 memo_content=memo.content,
-                initiative_title=initiative.title or "Untitled Initiative",
+                initiative_title=initiative.title or "Untitled Project",
             )
         else:
             logger.info("Memo uses legacy format, generating with MemoContent schema")
             memo_content = MemoContent(**memo.content)
             docx_bytes = exporter.generate(
                 memo_content=memo_content,
-                initiative_title=initiative.title or "Untitled Initiative",
+                initiative_title=initiative.title or "Untitled Project",
             )
         
         logger.info(f"DOCX generated ({len(docx_bytes)} bytes), saving to storage...")
@@ -108,7 +108,7 @@ async def export_memo(
         raise
     except Exception as e:
         # Log and wrap unexpected errors
-        logger.error(f"Export failed for initiative {initiative_id}: {str(e)}", exc_info=True)
+        logger.error(f"Export failed for initiative {project_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Export failed. Please try again.",
@@ -134,7 +134,7 @@ async def download_export(
             detail="Export not found",
         )
     
-    initiative = await require_viewer(db, memo.initiative_id, user)
+    initiative = await require_project_viewer(db, memo.project_id, user)
     
     if not memo.export_path:
         raise HTTPException(
@@ -160,10 +160,10 @@ async def download_export(
 
 
 
-async def _handle_memo_export(content, safe_title, initiative, initiative_id, db, user):
+async def _handle_memo_export(content, safe_title, initiative, project_id, db, user):
     memo_res = await db.execute(
         select(MemoVersion)
-        .where(MemoVersion.initiative_id == initiative.id)
+        .where(MemoVersion.project_id == initiative.id)
         .order_by(MemoVersion.created_at.desc())
         .limit(1)
     )
@@ -199,11 +199,11 @@ async def _handle_memo_export(content, safe_title, initiative, initiative_id, db
 
 
 
-async def _handle_lcoe_export(content, safe_title, initiative, initiative_id, db, user):
+async def _handle_lcoe_export(content, safe_title, initiative, project_id, db, user):
     from app.domain.energy.api.lcoe import export_lcoe_excel, RecalculateRequest as LCOEReq
     inputs: dict[str, Any] = content.get("inputs") or {}
     if not inputs:
-        inputs = await _recover_model_inputs(db, initiative_id, ("lcoe_output", "lcoe_inputs"))
+        inputs = await _recover_model_inputs(db, project_id, ("lcoe_output", "lcoe_inputs"))
     if not inputs:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -213,11 +213,11 @@ async def _handle_lcoe_export(content, safe_title, initiative, initiative_id, db
     return await export_lcoe_excel(data=LCOEReq(inputs=inputs), user=user)
 
 
-async def _handle_carbon_export(content, safe_title, initiative, initiative_id, db, user):
+async def _handle_carbon_export(content, safe_title, initiative, project_id, db, user):
     from app.domain.energy.api.carbon import export_carbon_excel, RecalculateRequest as CarbonReq
     inputs: dict[str, Any] = content.get("inputs") or {}
     if not inputs:
-        inputs = await _recover_model_inputs(db, initiative_id, ("carbon_output", "carbon_inputs"))
+        inputs = await _recover_model_inputs(db, project_id, ("carbon_output", "carbon_inputs"))
     if not inputs:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,7 +227,7 @@ async def _handle_carbon_export(content, safe_title, initiative, initiative_id, 
     return await export_carbon_excel(data=CarbonReq(inputs=inputs), user=user)
 
 
-async def _handle_solar_export(content, safe_title, initiative, initiative_id, db, user):
+async def _handle_solar_export(content, safe_title, initiative, project_id, db, user):
     from app.domain.energy.api.pvwatts import export_solar_excel, ExportRequest as SolarReq
     inputs: dict[str, Any] = content.get("inputs") or {}
     result: dict[str, Any] = content.get("result") or {}
@@ -240,7 +240,7 @@ async def _handle_solar_export(content, safe_title, initiative, initiative_id, d
     return await export_solar_excel(data=SolarReq(inputs=inputs, result=result), user=user)
 
 
-async def _handle_template_export(content, safe_title, initiative, initiative_id, db, user):
+async def _handle_template_export(content, safe_title, initiative, project_id, db, user):
     from app.models.project_material import ProjectMaterial
     material_id = content.get("material_id") if isinstance(content, dict) else None
     if not material_id:
@@ -251,7 +251,7 @@ async def _handle_template_export(content, safe_title, initiative, initiative_id
     mat_result = await db.execute(
         select(ProjectMaterial).where(
             ProjectMaterial.id == UUID(material_id),
-            ProjectMaterial.initiative_id == initiative.id,
+            ProjectMaterial.project_id == initiative.id,
         )
     )
     material = mat_result.scalar_one_or_none()
@@ -282,9 +282,9 @@ _EXPORT_HANDLERS: dict[str, Any] = build_export_handlers({
 })
 
 
-@router.get("/initiatives/{initiative_id}/deliverables/{tool_id}/export")
+@router.get("/projects/{project_id}/deliverables/{tool_id}/export")
 async def export_deliverable(
-    initiative_id: str,
+    project_id: str,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -294,7 +294,7 @@ async def export_deliverable(
     Reads content directly from the DB so the frontend never needs to send
     input data back — avoids round-trip serialisation bugs.
     """
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
 
     deliverables: dict[str, Any] = initiative.get_deliverables_dict()
     data = deliverables.get(tool_id)
@@ -306,7 +306,7 @@ async def export_deliverable(
             memo_res = await db.execute(
                 select(MemoVersion).where(
                     MemoVersion.id == memo_uuid,
-                    MemoVersion.initiative_id == initiative.id,
+                    MemoVersion.project_id == initiative.id,
                 )
             )
             memo = memo_res.scalar_one_or_none()
@@ -336,7 +336,7 @@ async def export_deliverable(
 
 async def _recover_model_inputs(
     db: AsyncSession,
-    initiative_id: UUID,
+    project_id: UUID,
     widget_types: tuple[str, ...],
 ) -> dict[str, Any]:
     """Scan chat messages to find the most recent computable model inputs.
@@ -349,7 +349,7 @@ async def _recover_model_inputs(
         .join(CoreChat, CoreChat.id == CoreChatMessage.chat_id)
         .where(
             and_(
-                CoreChat.project_id == initiative_id,
+                CoreChat.project_id == project_id,
                 CoreChatMessage.widget_type.in_(widget_types),
             )
         )

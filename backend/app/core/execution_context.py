@@ -14,7 +14,7 @@ class ExecutionContext:
 
     user_id: str
     user_email: str | None
-    initiative_id: UUID | None
+    project_id: UUID | None
     initiative_role: str | None  # "owner" | "editor" | "viewer"
     ai_access_granted: bool
     is_byok: bool
@@ -25,24 +25,24 @@ class ExecutionContext:
 async def build_context(
     db: AsyncSession,
     user: AuthUser,
-    initiative_id: UUID | None = None,
+    project_id: UUID | None = None,
 ) -> ExecutionContext:
     """Build an ExecutionContext from the current request state.
 
     Sources:
     - AuthUser → uid, email
-    - get_initiative_with_role → role
+    - get_project_with_role → role
     - check_usage_budget → ai_access_granted, is_byok
     """
     from app.core.llm_client import check_usage_budget
 
     role: str | None = None
-    if initiative_id:
-        from app.core.permissions import get_initiative_with_role
+    if project_id:
+        from app.core.permissions import get_project_with_role
 
         try:
-            _initiative, role = await get_initiative_with_role(
-                db, initiative_id, user
+            _initiative, role = await get_project_with_role(
+                db, project_id, user
             )
         except Exception:
             pass
@@ -54,7 +54,7 @@ async def build_context(
     return ExecutionContext(
         user_id=user.uid,
         user_email=user.email,
-        initiative_id=initiative_id,
+        project_id=project_id,
         initiative_role=role,
         ai_access_granted=ai_access_granted,
         is_byok=is_byok,

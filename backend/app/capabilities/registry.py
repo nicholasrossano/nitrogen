@@ -23,7 +23,7 @@ class CapabilityToolContext:
     """Typed context for selecting OpenAI-callable tools."""
 
     route: CapabilityRoute
-    initiative_id: str | None = None
+    project_id: str | None = None
     onboarding_mode: bool = False
     has_field_context: bool = False
     has_assessment_context: bool = False
@@ -74,7 +74,7 @@ class CapabilityRegistry:
         return [
             e.openai_tool_def
             for e in self.list_for_route(context.route)
-            if (not e.requires_initiative or context.initiative_id is not None)
+            if (not e.requires_initiative or context.project_id is not None)
             and (not e.onboarding_only or context.onboarding_mode)
             and (not e.requires_field_context or context.has_field_context)
             and (not e.requires_assessment_context or context.has_assessment_context)
@@ -92,11 +92,11 @@ class CapabilityRegistry:
                 "orchestration": CapabilityRoute.PROJECT_ORCHESTRATION,
             }
             route_enum = route_aliases[route] if route in route_aliases else CapabilityRoute(route)
-        initiative_id = "context" if route_enum != CapabilityRoute.STANDALONE_CHAT else None
+        project_id = "context" if route_enum != CapabilityRoute.STANDALONE_CHAT else None
         return self.tools_for(
             CapabilityToolContext(
                 route=route_enum,
-                initiative_id=initiative_id,
+                project_id=project_id,
                 onboarding_mode=route_enum == CapabilityRoute.PROJECT_ORCHESTRATION,
             )
         )

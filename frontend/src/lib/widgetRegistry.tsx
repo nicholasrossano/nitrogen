@@ -28,7 +28,7 @@ export interface WorkspaceWidgetFooterState {
 
 export interface WorkspaceWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   instanceId?: string;
   workflowVersion?: number;
   onWorkflowUpdated?: () => void;

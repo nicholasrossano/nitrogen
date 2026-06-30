@@ -61,7 +61,7 @@ class AssumptionUpdate(BaseModel):
 
 class AssumptionResponse(AssumptionBase):
     id: UUID
-    initiative_id: UUID
+    project_id: UUID
     created_by_email: str | None = None
     last_updated_by_email: str | None = None
     created_at: datetime
@@ -112,7 +112,7 @@ class AssumptionCommentCreate(BaseModel):
 class AssumptionCommentResponse(BaseModel):
     id: UUID = Field(description="Assumption comment id.")
     assumption_id: UUID = Field(description="Assumption this comment belongs to.")
-    initiative_id: UUID = Field(description="Project this comment belongs to.")
+    project_id: UUID = Field(description="Project this comment belongs to.")
     body: str = Field(description="Comment body.")
     created_by_email: str | None = Field(default=None, description="Readable author email.")
     created_at: datetime = Field(description="Comment creation timestamp.")

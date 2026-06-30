@@ -27,7 +27,7 @@ function formatEmail(email: string | null, fallback: string): string {
 }
 
 interface OpenAssessmentBrowserProps {
-  initiativeId: string;
+  projectId: string;
   onSelect: (instance: AssessmentInstance) => void;
 }
 
@@ -56,7 +56,7 @@ function enrich(instances: AssessmentInstance[]): EnrichedInstance[] {
   });
 }
 
-export function OpenAssessmentBrowser({ initiativeId, onSelect }: OpenAssessmentBrowserProps) {
+export function OpenAssessmentBrowser({ projectId, onSelect }: OpenAssessmentBrowserProps) {
   const showBetaAssessments = useFeatureFlag('beta_assessments');
   const [instances, setInstances] = useState<AssessmentInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,14 +66,14 @@ export function OpenAssessmentBrowser({ initiativeId, onSelect }: OpenAssessment
   const load = useCallback(async (archived: boolean) => {
     setLoading(true);
     try {
-      const data = await api.listAssessmentInstances(initiativeId, { archived });
+      const data = await api.listAssessmentInstances(projectId, { archived });
       setInstances(data);
     } catch {
       setInstances([]);
     } finally {
       setLoading(false);
     }
-  }, [initiativeId]);
+  }, [projectId]);
 
   useEffect(() => {
     load(isTrashView);
@@ -86,22 +86,22 @@ export function OpenAssessmentBrowser({ initiativeId, onSelect }: OpenAssessment
 
   const handleArchive = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await api.deleteAssessmentInstance(initiativeId, id);
+    await api.deleteAssessmentInstance(projectId, id);
     setInstances((prev) => prev.filter((i) => i.id !== id));
-  }, [initiativeId]);
+  }, [projectId]);
 
   const handleRestore = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await api.restoreAssessmentInstance(initiativeId, id);
+    await api.restoreAssessmentInstance(projectId, id);
     setInstances((prev) => prev.filter((i) => i.id !== id));
-  }, [initiativeId]);
+  }, [projectId]);
 
   const handlePermanentDelete = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await api.permanentlyDeleteAssessmentInstance(initiativeId, id);
+    await api.permanentlyDeleteAssessmentInstance(projectId, id);
     setInstances((prev) => prev.filter((i) => i.id !== id));
     setConfirmDeleteId(null);
-  }, [initiativeId]);
+  }, [projectId]);
 
   const visibleInstances = useMemo(
     () => instances.filter((instance) => {
@@ -132,7 +132,7 @@ export function OpenAssessmentBrowser({ initiativeId, onSelect }: OpenAssessment
           </button>
           {!isTrashView && enriched.length > 0 && (
             <Link
-              href={`/initiatives/${initiativeId}?view=framework`}
+              href={`/projects/${projectId}?view=framework`}
               className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
             >
               View Framework Plan
@@ -156,7 +156,7 @@ export function OpenAssessmentBrowser({ initiativeId, onSelect }: OpenAssessment
                 <p className="text-xs text-text-tertiary mt-1">Use &quot;New Assessment&quot; to begin.</p>
                 <div className="mt-4 flex justify-center">
                   <Link
-                    href={`/initiatives/${initiativeId}?view=framework`}
+                    href={`/projects/${projectId}?view=framework`}
                     className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
                   >
                     View Framework Plan

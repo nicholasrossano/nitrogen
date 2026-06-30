@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { 
   Download, 
   Loader2, 
@@ -17,7 +17,7 @@ import { PanelHeader } from '@/components/ui';
 
 interface MemoViewerWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
 }
 
@@ -29,9 +29,9 @@ function formatHeaderDate(isoDate: string): string {
   });
 }
 
-export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoViewerWidgetProps) {
+export function MemoViewerWidget({ data, projectId, isActive = true }: MemoViewerWidgetProps) {
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
-  const { exportMemo, loading, initiative } = useInitiativeStore();
+  const { exportMemo, loading, project } = useProjectStore();
 
   // State for editable content and headers
   const [editableContent, setEditableContent] = useState<Record<string, string>>(() => {
@@ -80,12 +80,12 @@ export function MemoViewerWidget({ data, initiativeId, isActive = true }: MemoVi
 
   const content = data.content as MemoContent;
   const projectName =
-    initiative?.title ??
+    project?.title ??
     (content.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
     'Project';
 
   const handleExport = async () => {
-    await exportMemo(initiativeId);
+    await exportMemo(projectId);
   };
 
   const RecommendationBadge = () => {

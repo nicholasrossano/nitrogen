@@ -45,7 +45,7 @@ import {
 } from '@/lib/fileUtils';
 
 interface ProjectFilesViewProps {
-  initiativeId?: string;
+  projectId?: string;
   scope?: 'project' | 'workspace';
   title?: string;
   description?: string;
@@ -104,7 +104,7 @@ function formatDate(dateStr: string | null): string {
 }
 
 export function ProjectFilesView({
-  initiativeId,
+  projectId,
   scope = 'project',
   title,
   description,
@@ -150,20 +150,20 @@ export function ProjectFilesView({
   const PAGE_SIZE = 20;
 
   const loadFiles = useCallback(async () => {
-    if (scope === 'workspace' || !initiativeId) {
+    if (scope === 'workspace' || !projectId) {
       setGeneratedFiles([]);
       setLoading(false);
       return;
     }
     try {
-      const response: ProjectFilesResponse = await api.getProjectFiles(initiativeId);
+      const response: ProjectFilesResponse = await api.getProjectFiles(projectId);
       setGeneratedFiles(response.generated);
     } catch (err) {
       console.error('Failed to load project files:', err);
     } finally {
       setLoading(false);
     }
-  }, [initiativeId, scope]);
+  }, [projectId, scope]);
 
   useEffect(() => {
     loadFiles();
@@ -188,12 +188,12 @@ export function ProjectFilesView({
     `${title.replace(/[^a-z0-9_\-. ]/gi, '_').replace(/\s+/g, '_')}.${ext}`;
 
   const handleDownloadGenerated = async (file: GeneratedFile) => {
-    if (!file.exportable || !initiativeId) return;
+    if (!file.exportable || !projectId) return;
     setDownloadingId(file.id);
     try {
       const ext = file.export_format ?? 'docx';
       const filename = safeFilename(file.title, ext);
-      await api.downloadDeliverable(initiativeId, file.id, filename);
+      await api.downloadDeliverable(projectId, file.id, filename);
       // If this was an unexported memo, refresh so the row shows "Exported"
       if (file.output_type === 'memo' && !file.exported) loadFiles();
     } catch (err) {
@@ -204,12 +204,12 @@ export function ProjectFilesView({
   };
 
   const handleDeleteGenerated = async (file: GeneratedFile) => {
-    if (!initiativeId) return;
+    if (!projectId) return;
     setDeletingId(file.id);
     // Optimistic removal
     setGeneratedFiles((prev) => prev.filter((f) => f.id !== file.id));
     try {
-      await api.deleteGeneratedFile(initiativeId, file.id);
+      await api.deleteGeneratedFile(projectId, file.id);
     } catch (err) {
       console.error('Delete failed:', err);
       // Rollback

@@ -16,12 +16,12 @@ def _request(headers: dict[str, str]) -> SimpleNamespace:
     return SimpleNamespace(headers=headers)
 
 
-def _ctx(initiative_id=None) -> ExecutionContext:
+def _ctx(project_id=None) -> ExecutionContext:
     return ExecutionContext(
         user_id="mcp-user",
         user_email="mcp@example.com",
-        initiative_id=initiative_id,
-        initiative_role="owner" if initiative_id else None,
+        project_id=project_id,
+        initiative_role="owner" if project_id else None,
         ai_access_granted=True,
         is_byok=False,
         request_id="mcp-test-request",
@@ -37,18 +37,18 @@ async def test_http_mcp_context_requires_bearer_auth() -> None:
 @pytest.mark.asyncio
 async def test_internal_tools_are_not_callable_over_mcp() -> None:
     with pytest.raises(ValueError, match="not exposed"):
-        await mcp_server.call_exposed_tool("memo_generation", {"initiative_id": str(uuid4())})
+        await mcp_server.call_exposed_tool("memo_generation", {"project_id": str(uuid4())})
 
 
 @pytest.mark.asyncio
-async def test_initiative_scoped_tools_require_initiative_id() -> None:
-    with pytest.raises(ValueError, match="requires initiative_id"):
+async def test_project_scoped_tools_require_initiative_id() -> None:
+    with pytest.raises(ValueError, match="requires project_id"):
         await mcp_server.call_exposed_tool("rag", {"query": "cookstove adoption"})
 
 
 @pytest.mark.asyncio
 async def test_internal_resources_are_hidden_from_mcp() -> None:
-    uri = f"nitrogen://initiatives/{uuid4()}/assessments/{uuid4()}"
+    uri = f"nitrogen://projects/{uuid4()}/assessments/{uuid4()}"
     with pytest.raises(ValueError, match="not exposed"):
         await mcp_server.read_exposed_resource(uri)
 
@@ -67,12 +67,12 @@ async def test_http_context_propagates_initiative_access_failures(
         raise AssertionError("build_context should not run when access is denied")
 
     monkeypatch.setattr(mcp_server, "authenticate_bearer_token", _fake_auth)
-    monkeypatch.setattr(mcp_server, "get_initiative_with_role", _deny_access)
+    monkeypatch.setattr(mcp_server, "get_project_with_role", _deny_access)
     monkeypatch.setattr(mcp_server, "build_context", _unused_build_context)
 
     with pytest.raises(HTTPException, match="Forbidden"):
         await mcp_server.build_mcp_context(
-            {"initiative_id": str(uuid4())},
+            {"project_id": str(uuid4())},
             request=_request({"authorization": "Bearer test-token"}),
         )
 
@@ -84,9 +84,9 @@ async def test_http_tool_calls_use_authenticated_user(
     async def _fake_auth(_token: str) -> AuthUser:
         return AuthUser(uid="http-user", email="http@example.com")
 
-    async def _fake_build_context(_db, user, initiative_id=None) -> ExecutionContext:
+    async def _fake_build_context(_db, user, project_id=None) -> ExecutionContext:
         assert user.uid == "http-user"
-        return _ctx(initiative_id)
+        return _ctx(project_id)
 
     monkeypatch.setattr(mcp_server, "authenticate_bearer_token", _fake_auth)
     monkeypatch.setattr(mcp_server, "build_context", _fake_build_context)

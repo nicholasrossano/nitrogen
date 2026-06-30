@@ -33,7 +33,7 @@ function formatAssumptionValue(
 }
 
 interface AssumptionsChatPanelProps {
-  initiativeId: string;
+  projectId: string;
   focusAssumptionId?: string | null;
   createNew?: boolean;
   collapsed?: boolean;
@@ -75,14 +75,14 @@ function parseDraftValue(raw: string): {
 }
 
 export function AssumptionsChatPanel({
-  initiativeId,
+  projectId,
   focusAssumptionId = null,
   createNew = false,
   collapsed = false,
   layoutMode = 'inline',
   onCollapsedChange,
 }: AssumptionsChatPanelProps) {
-  const initialCacheKey = focusAssumptionId ? `${initiativeId}:${focusAssumptionId}` : null;
+  const initialCacheKey = focusAssumptionId ? `${projectId}:${focusAssumptionId}` : null;
   const initialCached = initialCacheKey ? assumptionCache.get(initialCacheKey) ?? null : null;
   const initialCreateMode = createNew && !focusAssumptionId;
   const [selected, setSelected] = useState<Assumption | null>(initialCached);
@@ -109,7 +109,7 @@ export function AssumptionsChatPanel({
     }
 
     let cancelled = false;
-    const cacheKey = `${initiativeId}:${focusAssumptionId}`;
+    const cacheKey = `${projectId}:${focusAssumptionId}`;
     const cached = assumptionCache.get(cacheKey);
     if (cached) {
       setSelected(cached);
@@ -142,15 +142,15 @@ export function AssumptionsChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [focusAssumptionId, initiativeId, initialCreateMode]);
+  }, [focusAssumptionId, projectId, initialCreateMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleAssumptionUpdated = (event: Event) => {
       const customEvent = event as CustomEvent<Assumption>;
       const updated = customEvent.detail;
-      if (!updated || updated.initiative_id !== initiativeId) return;
-      const cacheKey = `${initiativeId}:${updated.id}`;
+      if (!updated || updated.project_id !== projectId) return;
+      const cacheKey = `${projectId}:${updated.id}`;
       assumptionCache.set(cacheKey, updated);
       if (focusAssumptionId === updated.id) {
         setSelected(updated);
@@ -163,7 +163,7 @@ export function AssumptionsChatPanel({
     return () => {
       window.removeEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
     };
-  }, [focusAssumptionId, initiativeId]);
+  }, [focusAssumptionId, projectId]);
 
   const selectedValueText = selected ? formatAssumptionValue(selected.value, null, selected.value_type) : '';
   const showCreateForm = initialCreateMode && !selected;
@@ -201,7 +201,7 @@ export function AssumptionsChatPanel({
         unit: draftUnit || null,
         status: 'validated',
       });
-      assumptionCache.set(`${initiativeId}:${updated.id}`, updated);
+      assumptionCache.set(`${projectId}:${updated.id}`, updated);
       setSelected(updated);
       setDraftValue(formatAssumptionValue(updated.value, null, updated.value_type));
       setDraftUnit(updated.unit ?? '');
@@ -215,7 +215,7 @@ export function AssumptionsChatPanel({
     } finally {
       setSaving(false);
     }
-  }, [draftUnit, draftValue, initiativeId, selected]);
+  }, [draftUnit, draftValue, projectId, selected]);
 
   const handleDelete = useCallback(async () => {
     if (!selected) return;
@@ -224,7 +224,7 @@ export function AssumptionsChatPanel({
     try {
       const deletedId = selected.id;
       await api.deleteAssumption(deletedId);
-      assumptionCache.delete(`${initiativeId}:${deletedId}`);
+      assumptionCache.delete(`${projectId}:${deletedId}`);
       setSelected(null);
       setDraftLabel('');
       setDraftValue('');
@@ -232,7 +232,7 @@ export function AssumptionsChatPanel({
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent(ASSUMPTION_DELETED_EVENT, {
-            detail: { assumptionId: deletedId, initiativeId },
+            detail: { assumptionId: deletedId, projectId },
           }),
         );
       }
@@ -241,7 +241,7 @@ export function AssumptionsChatPanel({
     } finally {
       setSaving(false);
     }
-  }, [initiativeId, selected]);
+  }, [projectId, selected]);
 
   const handleCreate = useCallback(async () => {
     const key = normalizeAssumptionKey(draftLabel);
@@ -253,7 +253,7 @@ export function AssumptionsChatPanel({
     setSaving(true);
     setError(null);
     try {
-      const created = await api.createAssumption(initiativeId, {
+      const created = await api.createAssumption(projectId, {
         key,
         label,
         value: parsed.value,
@@ -262,7 +262,7 @@ export function AssumptionsChatPanel({
         source_type: 'user_input',
         status: parsed.status,
       });
-      assumptionCache.set(`${initiativeId}:${created.id}`, created);
+      assumptionCache.set(`${projectId}:${created.id}`, created);
       setSelected(created);
       setDraftValue(formatAssumptionValue(created.value, null, created.value_type));
       setDraftUnit(created.unit ?? '');
@@ -276,7 +276,7 @@ export function AssumptionsChatPanel({
     } finally {
       setSaving(false);
     }
-  }, [draftLabel, draftUnit, draftValue, initiativeId]);
+  }, [draftLabel, draftUnit, draftValue, projectId]);
 
   const handleCreateCancel = useCallback(() => {
     setDraftLabel('');

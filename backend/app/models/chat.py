@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
@@ -24,7 +24,6 @@ class CoreChat(Base):
         nullable=True,
         index=True,
     )
-    initiative_id = synonym("project_id")
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="SET NULL"),
@@ -39,7 +38,6 @@ class CoreChat(Base):
     )
 
     compare_project_ids: Mapped[list | None] = mapped_column(JSONB)
-    compare_initiative_ids = synonym("compare_project_ids")
 
     messages: Mapped[list["CoreChatMessage"]] = relationship(
         back_populates="chat", cascade="all, delete-orphan", order_by="CoreChatMessage.created_at"

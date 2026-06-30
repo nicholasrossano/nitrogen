@@ -114,7 +114,7 @@ class ProjectChatRouter:
             api_messages.append({"role": msg.role, "content": msg.content})
 
         tools = self.chat_service._get_tool_list(
-            initiative_id=str(initiative.id) if getattr(initiative, "id", None) else None,
+            project_id=str(initiative.id) if getattr(initiative, "id", None) else None,
             onboarding_mode=onboarding_mode,
             orchestration_mode=True,
             field_context=field_context,

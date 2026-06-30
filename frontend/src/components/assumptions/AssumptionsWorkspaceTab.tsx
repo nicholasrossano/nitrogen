@@ -20,7 +20,7 @@ const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
 const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
 
 interface AssumptionsWorkspaceTabProps {
-  initiativeId: string;
+  projectId: string;
   embedded?: boolean;
   showDetailPanel?: boolean;
   focusAssumptionId?: string | null;
@@ -186,7 +186,7 @@ const STATUS_STYLES: Record<AssumptionStatus, { bg: string; text: string; label:
 };
 
 export function AssumptionsWorkspaceTab({
-  initiativeId,
+  projectId,
   embedded = false,
   showDetailPanel = true,
   focusAssumptionId = null,
@@ -208,7 +208,7 @@ export function AssumptionsWorkspaceTab({
     setLoading(true);
     setError(null);
     try {
-      const next = await api.listAssumptions(initiativeId, {
+      const next = await api.listAssumptions(projectId, {
         status,
         source_type: sourceType,
         assessment: assessmentFilter.trim(),
@@ -220,7 +220,7 @@ export function AssumptionsWorkspaceTab({
     } finally {
       setLoading(false);
     }
-  }, [initiativeId, assessmentFilter, sourceType, status]);
+  }, [projectId, assessmentFilter, sourceType, status]);
 
   useEffect(() => {
     loadRows();
@@ -252,7 +252,7 @@ export function AssumptionsWorkspaceTab({
     const handleAssumptionUpdated = (event: Event) => {
       const customEvent = event as CustomEvent<Assumption>;
       const updated = customEvent.detail;
-      if (!updated || updated.initiative_id !== initiativeId) return;
+      if (!updated || updated.project_id !== projectId) return;
 
       const includeInTable = matchesActiveFilters(updated);
       setRows((prev) => {
@@ -270,10 +270,10 @@ export function AssumptionsWorkspaceTab({
       });
     };
     const handleAssumptionDeleted = (event: Event) => {
-      const customEvent = event as CustomEvent<{ assumptionId?: string; initiativeId?: string }>;
+      const customEvent = event as CustomEvent<{ assumptionId?: string; projectId?: string }>;
       const assumptionId = customEvent.detail?.assumptionId;
-      const deletedInitiativeId = customEvent.detail?.initiativeId;
-      if (!assumptionId || deletedInitiativeId !== initiativeId) return;
+      const deletedInitiativeId = customEvent.detail?.projectId;
+      if (!assumptionId || deletedInitiativeId !== projectId) return;
       setRows((prev) => prev.filter((row) => row.id !== assumptionId));
       setSelected((current) => (current?.id === assumptionId ? null : current));
     };
@@ -284,7 +284,7 @@ export function AssumptionsWorkspaceTab({
       window.removeEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
       window.removeEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
     };
-  }, [initiativeId, matchesActiveFilters]);
+  }, [projectId, matchesActiveFilters]);
 
   const assessmentOptions = useMemo(() => {
     const assessments = new Set<string>();

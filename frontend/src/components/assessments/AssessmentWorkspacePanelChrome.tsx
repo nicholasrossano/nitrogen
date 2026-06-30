@@ -10,7 +10,7 @@ import { useRegisterEditorPanelChrome } from '@/components/editor/EditorPanelChr
 interface AssessmentWorkspacePanelChromeProps {
   title: string;
   exportFormat?: string | null;
-  initiativeId?: string;
+  projectId?: string;
   decisionMenuRef: RefObject<HTMLDivElement>;
   decisionMenuOpen: boolean;
   onDecisionMenuToggle: () => void;
@@ -28,7 +28,7 @@ interface AssessmentWorkspacePanelChromeProps {
 export function AssessmentWorkspacePanelChrome({
   title,
   exportFormat,
-  initiativeId,
+  projectId,
   decisionMenuRef,
   decisionMenuOpen,
   onDecisionMenuToggle,
@@ -43,7 +43,7 @@ export function AssessmentWorkspacePanelChrome({
   isApprovingFinal,
 }: AssessmentWorkspacePanelChromeProps) {
   const actions = useMemo(() => {
-    if (!initiativeId) return null;
+    if (!projectId) return null;
 
     return (
       <>
@@ -112,7 +112,7 @@ export function AssessmentWorkspacePanelChrome({
       </>
     );
   }, [
-    initiativeId,
+    projectId,
     decisionMenuRef,
     decisionMenuOpen,
     onDecisionMenuToggle,

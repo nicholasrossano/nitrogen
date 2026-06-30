@@ -13,8 +13,7 @@ export interface ChatListItem {
   id: string;
   title: string | null;
   updated_at: string | null;
-  initiative_id: string | null;
-  project_id?: string | null;
+  project_id: string | null;
 }
 
 interface DrawerChatTreeProps {
@@ -136,7 +135,7 @@ export function DrawerChatTree({
     const buckets = new Map<string, ChatListItem[]>();
     for (const p of projects) buckets.set(p.id, []);
     for (const chat of chats) {
-      const key = chat.project_id || chat.initiative_id;
+      const key = chat.project_id || chat.project_id;
       if (!key || !buckets.has(key)) continue;
       buckets.get(key)!.push(chat);
     }

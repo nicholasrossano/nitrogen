@@ -575,14 +575,14 @@ of the sources that support that item. Required items MUST cite at least one sou
                     rationale=item.get("rationale", ""),
                 ).model_dump()
 
-    async def _gather_evidence_text(self, initiative_id: UUID) -> str:
+    async def _gather_evidence_text(self, project_id: UUID) -> str:
         """Collect text from all uploaded evidence documents, truncated per doc."""
         MAX_CHARS_PER_DOC = 6000
         MAX_TOTAL_CHARS = 30000
 
         result = await self.db.execute(
             select(EvidenceDoc)
-            .where(EvidenceDoc.initiative_id == initiative_id)
+            .where(EvidenceDoc.project_id == project_id)
             .order_by(EvidenceDoc.created_at)
         )
         docs = result.scalars().all()

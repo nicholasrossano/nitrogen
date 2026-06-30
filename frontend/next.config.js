@@ -37,6 +37,15 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/initiatives/:id',
+        destination: '/projects/:id',
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

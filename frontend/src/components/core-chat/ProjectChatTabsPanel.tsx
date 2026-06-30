@@ -54,7 +54,7 @@ interface PendingAssessmentActivityLogContext {
 }
 
 interface ProjectChatTabsPanelProps {
-  initiativeId: string;
+  projectId: string;
   researchMode?: boolean;
   sessionStorageKey?: string;
   resetToLandingSignal?: number;
@@ -293,7 +293,7 @@ function formatDeepDiveProjectContext(state: PlanWorkspaceInspectorState): strin
 }
 
 export function ProjectChatTabsPanel({
-  initiativeId,
+  projectId,
   researchMode = false,
   sessionStorageKey,
   resetToLandingSignal = 0,
@@ -422,10 +422,10 @@ export function ProjectChatTabsPanel({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleAssumptionDeleted = (event: Event) => {
-      const customEvent = event as CustomEvent<{ assumptionId?: string; initiativeId?: string }>;
+      const customEvent = event as CustomEvent<{ assumptionId?: string; projectId?: string }>;
       const assumptionId = customEvent.detail?.assumptionId;
-      const deletedInitiativeId = customEvent.detail?.initiativeId;
-      if (!assumptionId || deletedInitiativeId !== initiativeId) return;
+      const deletedInitiativeId = customEvent.detail?.projectId;
+      if (!assumptionId || deletedInitiativeId !== projectId) return;
 
       setAssumptionsByTabId((prev) => {
         let changed = false;
@@ -451,7 +451,7 @@ export function ProjectChatTabsPanel({
     return () => {
       window.removeEventListener(ASSUMPTION_DELETED_EVENT, handleAssumptionDeleted as EventListener);
     };
-  }, [initiativeId]);
+  }, [projectId]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -782,7 +782,7 @@ export function ProjectChatTabsPanel({
 
   const loadSessions = useCallback(async () => {
     try {
-      const { chats: raw } = await api.getChats(initiativeId);
+      const { chats: raw } = await api.getChats(projectId);
       setSessions(
         raw.map((session) => ({
           id: session.id,
@@ -795,7 +795,7 @@ export function ProjectChatTabsPanel({
     } catch (err) {
       console.warn('Failed to load chat sessions:', err);
     }
-  }, [initiativeId]);
+  }, [projectId]);
 
   useEffect(() => {
     loadSessions();
@@ -1267,7 +1267,7 @@ export function ProjectChatTabsPanel({
             />
           ) : assumptions ? (
             <AssumptionsChatPanel
-              initiativeId={initiativeId}
+              projectId={projectId}
               focusAssumptionId={assumptions.focusAssumptionId ?? null}
               createNew={assumptions.createNew ?? false}
               collapsed={assumptions.collapsed ?? false}
@@ -1297,7 +1297,7 @@ export function ProjectChatTabsPanel({
                 />
               ) : (
                 <ProjectChatSurface
-                  initiativeId={initiativeId}
+                  projectId={projectId}
                   hideTiles={researchMode}
                   useLandingWhenEmpty={researchMode && tab.isLanding}
                   initialChatId={tab.chatId}

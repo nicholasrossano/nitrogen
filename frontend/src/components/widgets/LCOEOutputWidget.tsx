@@ -16,7 +16,7 @@ import { ModelInputsTable } from './shared/ModelInputsTable';
 
 interface LCOEOutputWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
   messageId?: string;
 }
@@ -40,7 +40,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function LCOEOutputWidget({
   data: initialData,
-  initiativeId,
+  projectId,
   isActive = true,
   messageId,
 }: LCOEOutputWidgetProps) {
@@ -60,10 +60,10 @@ export function LCOEOutputWidget({
   useEffect(() => { setMounted(true); }, []);
 
   const persistWidget = useCallback((widgetData: Record<string, any>) => {
-    if (messageId && initiativeId) {
-      api.updateMessageWidget(initiativeId, messageId, widgetData).catch(() => {});
+    if (messageId && projectId) {
+      api.updateMessageWidget(projectId, messageId, widgetData).catch(() => {});
     }
-  }, [messageId, initiativeId]);
+  }, [messageId, projectId]);
 
   const result = data?.result;
   const inputs = useMemo(() => data?.inputs || {}, [data]);

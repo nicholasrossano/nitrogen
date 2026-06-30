@@ -15,7 +15,7 @@ class ShareUpdate(BaseModel):
 
 class ShareResponse(BaseModel):
     id: UUID
-    initiative_id: UUID
+    project_id: UUID
     user_id: Optional[str] = None
     user_email: Optional[str] = None
     user_display_name: Optional[str] = None
