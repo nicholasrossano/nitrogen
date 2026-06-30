@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
 from sqlalchemy import String, DateTime, ForeignKey, Index, Integer
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
@@ -57,7 +57,6 @@ class AssessmentInstance(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id = synonym("project_id")
     assessment_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="started")
     title: Mapped[str | None] = mapped_column(String(255))

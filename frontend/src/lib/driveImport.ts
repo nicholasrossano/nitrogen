@@ -2,11 +2,11 @@ import { openGooglePicker } from '@/lib/googlePicker';
 import type { DriveImportResult } from '@/lib/api';
 
 interface ImportFromDriveViaPickerArgs {
-  initiativeId: string;
+  projectId: string;
   driveConnected: boolean;
-  connectDrive: (initiativeId: string) => Promise<void>;
+  connectDrive: (projectId: string) => Promise<void>;
   getDriveAccessToken: () => Promise<string>;
-  importFromDrive: (initiativeId: string, fileIds: string[]) => Promise<DriveImportResult>;
+  importFromDrive: (projectId: string, fileIds: string[]) => Promise<DriveImportResult>;
 }
 
 interface ImportFromDriveViaPickerResult {
@@ -16,14 +16,14 @@ interface ImportFromDriveViaPickerResult {
 }
 
 export async function importFromDriveViaPicker({
-  initiativeId,
+  projectId,
   driveConnected,
   connectDrive,
   getDriveAccessToken,
   importFromDrive,
 }: ImportFromDriveViaPickerArgs): Promise<ImportFromDriveViaPickerResult> {
   if (!driveConnected) {
-    await connectDrive(initiativeId);
+    await connectDrive(projectId);
     return { importedCount: 0, errorCount: 0, firstError: null };
   }
 
@@ -38,7 +38,7 @@ export async function importFromDriveViaPicker({
         }
         try {
           const result = await importFromDrive(
-            initiativeId,
+            projectId,
             files.map((file) => file.id),
           );
           resolve({

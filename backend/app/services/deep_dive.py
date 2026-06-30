@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.services.rag import RAGService
 from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
@@ -456,7 +456,7 @@ class DeepDiveService:
 
     async def generate(
         self,
-        initiative: Initiative,
+        initiative: Project,
         item_id: str,
         item_title: str,
         item_classification: str,
@@ -506,7 +506,7 @@ class DeepDiveService:
         overview_coro = self._generate_overview_with_web_search(search_prompt)
         evidence_coro = self.rag.retrieve(
             query=rag_query,
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             sources=["evidence"],
             evidence_top_k=3,
             corpus_top_k=0,
@@ -826,7 +826,7 @@ class DeepDiveService:
 
     async def get_evidence_sources(
         self,
-        initiative: Initiative,
+        initiative: Project,
         item_title: str,
         item_rationale: str,
     ) -> list[DeepDiveSource]:
@@ -841,7 +841,7 @@ class DeepDiveService:
         try:
             chunks = await self.rag.retrieve(
                 query=rag_query,
-                initiative_id=initiative.id,
+                project_id=initiative.id,
                 sources=["evidence"],
                 evidence_top_k=5,
                 corpus_top_k=0,

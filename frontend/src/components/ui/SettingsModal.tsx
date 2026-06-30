@@ -289,7 +289,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           if (pathname.startsWith('/chat') || pathname === '/') {
             router.replace(buildChatPath(pathname, searchParams, nextProjectId));
           } else if (/^\/initiatives\/[^/]+/.test(pathname)) {
-            router.replace(`/initiatives/${nextProjectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+            router.replace(`/projects/${nextProjectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
           }
           return;
         }
@@ -334,17 +334,17 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     let cancelled = false;
     setProjectSettingsLoading(true);
     setProjectError('');
-    Promise.all([api.getInitiative(settingsProjectId), api.getShares(settingsProjectId)])
-      .then(([initiative, shares]) => {
+    Promise.all([api.getProject(settingsProjectId), api.getShares(settingsProjectId)])
+      .then(([project, shares]) => {
         if (cancelled) return;
-        setProjectWorkspaceId(initiative.workspace_id);
-        setInitialProjectWorkspaceId(initiative.workspace_id);
-        setProjectRole((initiative.shared_role as 'editor' | 'viewer' | null) ?? 'owner');
-        setProjectOwnerEmail(initiative.owner_email ?? null);
+        setProjectWorkspaceId(project.workspace_id);
+        setInitialProjectWorkspaceId(project.workspace_id);
+        setProjectRole((project.shared_role as 'editor' | 'viewer' | null) ?? 'owner');
+        setProjectOwnerEmail(project.owner_email ?? null);
         setProjectShares(shares);
         const listedProject = projects.find((project) => project.id === settingsProjectId);
-        setProjectName(initiative.title ?? listedProject?.name ?? 'Project');
-        setProjectIcon(initiative.icon ?? listedProject?.icon ?? 'FolderOpen');
+        setProjectName(project.title ?? listedProject?.name ?? 'Project');
+        setProjectIcon(project.icon ?? listedProject?.icon ?? 'FolderOpen');
         setProjectSettingsLoadedForId(settingsProjectId);
       })
       .catch((error) => {
@@ -411,7 +411,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setProjectNameSaving(true);
     setProjectError('');
     try {
-      await api.updateInitiative(settingsProjectId, { title: trimmed });
+      await api.updateProject(settingsProjectId, { title: trimmed });
       setProjectName(trimmed);
       setProjects((prev) => prev.map((project) => (
         project.id === settingsProjectId ? { ...project, name: trimmed } : project
@@ -430,7 +430,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setProjectIconSaving(true);
     setProjectError('');
     try {
-      await api.updateInitiative(settingsProjectId, { icon: iconName });
+      await api.updateProject(settingsProjectId, { icon: iconName });
       setProjects((prev) => prev.map((project) => (
         project.id === settingsProjectId ? { ...project, icon: iconName } : project
       )));
@@ -494,7 +494,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     if (pathname.startsWith('/chat') || pathname === '/') {
       router.replace(buildChatPath(pathname, searchParams, projectId));
     } else if (/^\/initiatives\/[^/]+/.test(pathname)) {
-      router.replace(`/initiatives/${projectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+      router.replace(`/projects/${projectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
     }
     setProjectSwitching(false);
   };
@@ -528,7 +528,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setProjectDeleting(true);
     setProjectError('');
     try {
-      await api.deleteInitiative(deletedProjectId);
+      await api.deleteProject(deletedProjectId);
       const remaining = projects.filter((project) => project.id !== deletedProjectId);
       setProjects(remaining);
       setProjectSettingsLoadedForId(null);
@@ -557,7 +557,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setProjectWorkspaceSaving(true);
     setProjectError('');
     try {
-      await api.updateInitiative(settingsProjectId, { workspace_id: projectWorkspaceId });
+      await api.updateProject(settingsProjectId, { workspace_id: projectWorkspaceId });
       setInitialProjectWorkspaceId(projectWorkspaceId);
       if (activeWorkspace?.id !== projectWorkspaceId) {
         await setActiveWorkspace(projectWorkspaceId);

@@ -27,7 +27,7 @@ describe('ConversationView', () => {
         messageFeedback={{}}
         onSetFeedback={jest.fn()}
         retryingMessageId={null}
-        initiativeId="initiative-1"
+        projectId="initiative-1"
       />,
     );
 

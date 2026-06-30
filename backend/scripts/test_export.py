@@ -62,7 +62,7 @@ async def test_export():
         print("Generating DOCX...")
         docx_bytes = exporter.generate(
             memo_content=memo_content,
-            initiative_title="Test Initiative",
+            initiative_title="Test Project",
         )
         print(f"✓ DOCX generated successfully ({len(docx_bytes)} bytes)")
         print()

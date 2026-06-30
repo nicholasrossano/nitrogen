@@ -12,7 +12,7 @@ import {
   Loader2 
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { PanelHeader } from '@/components/ui';
 
 interface ChecklistItem {
@@ -29,7 +29,7 @@ interface ChecklistCategory {
 
 interface ChecklistViewerWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
 }
 
@@ -139,12 +139,12 @@ interface ChecklistContent {
   next_steps: string[];
 }
 
-export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: ChecklistViewerWidgetProps) {
-  const initiative = useInitiativeStore((s) => s.initiative);
+export function ChecklistViewerWidget({ data, projectId, isActive = true }: ChecklistViewerWidgetProps) {
+  const project = useProjectStore((s) => s.project);
   const content = data.content as ChecklistContent | undefined;
   const [exporting, setExporting] = useState(false);
   const projectName =
-    initiative?.title ??
+    project?.title ??
     (content?.title?.includes(': ') ? content.title.split(': ').slice(1).join(': ') : undefined) ??
     'Project';
 
@@ -186,7 +186,7 @@ export function ChecklistViewerWidget({ data, initiativeId, isActive = true }: C
   const handleExport = async () => {
     setExporting(true);
     try {
-      await api.exportChecklist(initiativeId, content);
+      await api.exportChecklist(projectId, content);
     } catch (error) {
       console.error('Export failed:', error);
     } finally {

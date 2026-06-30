@@ -1,6 +1,6 @@
 """
 Diagnostic script to check RAG system for a specific initiative.
-Run with: python debug_rag.py <initiative_id>
+Run with: python debug_rag.py <project_id>
 """
 
 import asyncio
@@ -8,39 +8,39 @@ import sys
 from uuid import UUID
 from sqlalchemy import select, func, text
 from app.core.database import AsyncSessionLocal
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.memo import MemoVersion
 from app.services.rag import RAGService
 
 
-async def diagnose_rag(initiative_id_str: str):
+async def diagnose_rag(project_id_str: str):
     """Diagnose RAG for an initiative"""
     try:
-        initiative_id = UUID(initiative_id_str)
+        project_id = UUID(project_id_str)
     except ValueError:
-        print(f"❌ Invalid UUID: {initiative_id_str}")
+        print(f"❌ Invalid UUID: {project_id_str}")
         return
     
     async with AsyncSessionLocal() as db:
         # 1. Check initiative exists
         result = await db.execute(
-            select(Initiative).where(Initiative.id == initiative_id)
+            select(Project).where(Project.id == project_id)
         )
         initiative = result.scalar_one_or_none()
         
         if not initiative:
-            print(f"❌ Initiative {initiative_id} not found")
+            print(f"❌ Project {project_id} not found")
             return
         
-        print(f"✅ Initiative: {initiative.title or 'Untitled'}")
+        print(f"✅ Project: {initiative.title or 'Untitled'}")
         print(f"   Description: {(initiative.project_description or 'None')[:100]}...")
         print(f"   Evidence ready: {initiative.evidence_ready}")
         print()
         
         # 2. Check evidence documents
         docs_result = await db.execute(
-            select(EvidenceDoc).where(EvidenceDoc.initiative_id == initiative_id)
+            select(EvidenceDoc).where(EvidenceDoc.project_id == project_id)
         )
         docs = docs_result.scalars().all()
         
@@ -70,7 +70,7 @@ async def diagnose_rag(initiative_id_str: str):
                 print(f"\n   Query: '{query}'")
                 chunks = await rag.retrieve(
                     query=query,
-                    initiative_id=initiative_id,
+                    project_id=project_id,
                     sources=["evidence", "corpus"],
                     evidence_top_k=3,
                     corpus_top_k=5,
@@ -92,7 +92,7 @@ async def diagnose_rag(initiative_id_str: str):
         # 4. Check memo versions
         memo_result = await db.execute(
             select(MemoVersion)
-            .where(MemoVersion.initiative_id == initiative_id)
+            .where(MemoVersion.project_id == project_id)
             .order_by(MemoVersion.created_at.desc())
         )
         memos = memo_result.scalars().all()
@@ -171,8 +171,8 @@ async def list_recent_initiatives():
     """List recent initiatives to help find the right ID"""
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(Initiative)
-            .order_by(Initiative.updated_at.desc())
+            select(Project)
+            .order_by(Project.updated_at.desc())
             .limit(10)
         )
         initiatives = result.scalars().all()
@@ -187,7 +187,7 @@ async def list_recent_initiatives():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python debug_rag.py <initiative_id>")
+        print("Usage: python debug_rag.py <project_id>")
         print("Or: python debug_rag.py --list")
         sys.exit(1)
     

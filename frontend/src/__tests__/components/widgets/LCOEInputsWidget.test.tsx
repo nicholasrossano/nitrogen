@@ -11,7 +11,7 @@ describe('LCOEInputsWidget', () => {
   it('treats only validated values as confirmed', () => {
     render(
       <LCOEInputsWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         data={{
           inputs: {
             capacity_factor: {
@@ -58,7 +58,7 @@ describe('LCOEInputsWidget', () => {
 
     render(
       <LCOEInputsWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         data={{
           inputs: {
             capacity_factor: {

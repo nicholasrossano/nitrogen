@@ -7,14 +7,14 @@ import { type AssessmentInstance } from '@/lib/api';
 export type WorkspaceLaunchMode = 'idle' | 'open';
 
 interface WorkspaceHubProps {
-  initiativeId: string;
+  projectId: string;
   launchMode?: WorkspaceLaunchMode;
   onLaunchModeHandled?: () => void;
   onSelectExisting: (instance: AssessmentInstance) => void;
 }
 
 export function WorkspaceHub({
-  initiativeId,
+  projectId,
   launchMode = 'idle',
   onLaunchModeHandled,
   onSelectExisting,
@@ -30,7 +30,7 @@ export function WorkspaceHub({
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8">
           <OpenAssessmentBrowser
-            initiativeId={initiativeId}
+            projectId={projectId}
             onSelect={onSelectExisting}
           />
         </div>

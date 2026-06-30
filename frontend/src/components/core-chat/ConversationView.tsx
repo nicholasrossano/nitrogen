@@ -49,7 +49,7 @@ export interface ConversationViewProps {
   onSetFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) => void;
   retryingMessageId: string | null;
   /** Required for rendering initiative-specific widgets (alignment, etc.) */
-  initiativeId?: string;
+  projectId?: string;
   /** Called when user opens an internal citation document */
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   /** Extra action buttons rendered in the composer toolbar (before paperclip) */
@@ -111,7 +111,7 @@ export function ConversationView({
   messageFeedback,
   onSetFeedback,
   retryingMessageId,
-  initiativeId,
+  projectId,
   onOpenDocument,
   extraInputActions,
   trailingInputActions,
@@ -448,7 +448,7 @@ export function ConversationView({
                 message={msg}
                 animate={idx >= messages.length - 2}
                 isLatest={idx === messages.length - 1}
-                initiativeId={initiativeId}
+                projectId={projectId}
                 feedback={messageFeedback[msg.id] ?? null}
                 onFeedback={(f) => onSetFeedback(msg.id, f)}
                 onRetry={() => onRetryMessage(groupRetryId)}
@@ -501,13 +501,13 @@ export function ConversationView({
         </div>
       </div>
 
-      {showDocumentRequest && latestMessage?.widget_data && initiativeId && (
+      {showDocumentRequest && latestMessage?.widget_data && projectId && (
         <div className="flex-shrink-0 px-4 pb-4">
           <div className="max-w-[52rem] mx-auto w-full">
             <ChatWidgetRenderer
               type={latestMessage.widget_type!}
               data={latestMessage.widget_data}
-              initiativeId={initiativeId}
+              projectId={projectId}
               messageId={latestMessage.id}
               isActive={true}
               onDocumentRequestMessage={(content) => onSendMessage(content)}
@@ -917,7 +917,7 @@ function MessageBubble({
   message,
   animate,
   isLatest,
-  initiativeId,
+  projectId,
   feedback,
   onFeedback,
   onRetry,
@@ -931,7 +931,7 @@ function MessageBubble({
   message: CoreChatMessage;
   animate: boolean;
   isLatest?: boolean;
-  initiativeId?: string;
+  projectId?: string;
   feedback: 'like' | 'dislike' | null;
   onFeedback: (f: 'like' | 'dislike' | null) => void;
   onRetry: () => void;
@@ -1033,7 +1033,7 @@ function MessageBubble({
               type={message.widget_type}
               data={message.widget_data}
               messageId={message.id}
-              initiativeId={initiativeId}
+              projectId={projectId}
               isActive={isLatest}
               onSendMessage={(content) => onSendMessage(content)}
               onApplyProposedValue={onApplyProposedValue}
@@ -1050,7 +1050,7 @@ function ChatWidget({
   type,
   data,
   messageId,
-  initiativeId,
+  projectId,
   isActive,
   onSendMessage,
   onApplyProposedValue,
@@ -1058,7 +1058,7 @@ function ChatWidget({
   type: string;
   data: Record<string, any>;
   messageId?: string;
-  initiativeId?: string;
+  projectId?: string;
   isActive?: boolean;
   onSendMessage?: (content: string) => void | Promise<void>;
   onApplyProposedValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
@@ -1068,7 +1068,7 @@ function ChatWidget({
       type={type}
       data={data}
       messageId={messageId}
-      initiativeId={initiativeId}
+      projectId={projectId}
       isActive={isActive}
       onSendMessage={onSendMessage}
       onApplyProposedValue={onApplyProposedValue}

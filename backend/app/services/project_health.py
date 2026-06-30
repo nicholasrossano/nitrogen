@@ -12,7 +12,7 @@ from app.assessments.utils import llm_json
 from app.domain.registry import get_project_health_definition
 from app.models.assumption import Assumption
 from app.models.evidence import EvidenceDoc, EvidenceDocStatus
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.project_health import ProjectHealthOverride, ProjectHealthResult
 from app.models.project_material import ProjectMaterial
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
@@ -126,7 +126,7 @@ def _dedupe_facts(facts: list[RetrievedFact]) -> list[RetrievedFact]:
 
 async def _retrieve_dimension_context(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     dimension: Any,
     *,
     user_id: str | None = None,
@@ -170,7 +170,7 @@ async def _retrieve_dimension_context(
     existing_titles = {fact.source_title.strip().lower() for fact in top_facts if fact.source_title}
     material_rows = await db.execute(
         select(ProjectMaterial.filename, ProjectMaterial.content_text)
-        .where(ProjectMaterial.initiative_id == initiative.id)
+        .where(ProjectMaterial.project_id == initiative.id)
         .order_by(ProjectMaterial.created_at.desc())
         .limit(4)
     )
@@ -286,7 +286,7 @@ def _extract_risk_counts(payload: Any) -> tuple[int, int]:
     return high_severity, unresolved
 
 
-async def _collect_health_signal_context(db: AsyncSession, initiative: Initiative) -> dict[str, Any]:
+async def _collect_health_signal_context(db: AsyncSession, initiative: Project) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     stale_before = now - STALE_ANALYSIS_WINDOW
 
@@ -336,7 +336,7 @@ async def _collect_health_signal_context(db: AsyncSession, initiative: Initiativ
             func.sum(case((Assumption.status == "extracted", 1), else_=0)),
             func.sum(case((Assumption.status == "assumed", 1), else_=0)),
             func.sum(case((Assumption.status == "missing", 1), else_=0)),
-        ).where(Assumption.initiative_id == initiative.id)
+        ).where(Assumption.project_id == initiative.id)
     )
     assumption_counts = assumptions_result.one()
     assumptions_total = int(assumption_counts[0] or 0)
@@ -347,7 +347,7 @@ async def _collect_health_signal_context(db: AsyncSession, initiative: Initiativ
 
     assumptions_rows = await db.execute(
         select(Assumption.label, Assumption.status, Assumption.value, Assumption.notes)
-        .where(Assumption.initiative_id == initiative.id)
+        .where(Assumption.project_id == initiative.id)
         .order_by(Assumption.updated_at.desc())
         .limit(14)
     )
@@ -366,7 +366,7 @@ async def _collect_health_signal_context(db: AsyncSession, initiative: Initiativ
             func.count(EvidenceDoc.id),
             func.sum(case((EvidenceDoc.processing_status == EvidenceDocStatus.INDEXED.value, 1), else_=0)),
             func.sum(case((EvidenceDoc.processing_status == EvidenceDocStatus.FAILED.value, 1), else_=0)),
-        ).where(EvidenceDoc.initiative_id == initiative.id)
+        ).where(EvidenceDoc.project_id == initiative.id)
     )
     evidence_counts = evidence_result.one()
     evidence_total = int(evidence_counts[0] or 0)
@@ -375,7 +375,7 @@ async def _collect_health_signal_context(db: AsyncSession, initiative: Initiativ
 
     evidence_rows = await db.execute(
         select(EvidenceDoc.filename, EvidenceDoc.processing_status, EvidenceDoc.preview_text)
-        .where(EvidenceDoc.initiative_id == initiative.id)
+        .where(EvidenceDoc.project_id == initiative.id)
         .order_by(EvidenceDoc.created_at.desc())
         .limit(8)
     )
@@ -389,13 +389,13 @@ async def _collect_health_signal_context(db: AsyncSession, initiative: Initiativ
     ]
 
     materials_result = await db.execute(
-        select(func.count(ProjectMaterial.id)).where(ProjectMaterial.initiative_id == initiative.id)
+        select(func.count(ProjectMaterial.id)).where(ProjectMaterial.project_id == initiative.id)
     )
     materials_total = int(materials_result.scalar_one() or 0)
 
     material_rows = await db.execute(
         select(ProjectMaterial.filename, ProjectMaterial.file_type, ProjectMaterial.content_text)
-        .where(ProjectMaterial.initiative_id == initiative.id)
+        .where(ProjectMaterial.project_id == initiative.id)
         .order_by(ProjectMaterial.created_at.desc())
         .limit(6)
     )
@@ -701,7 +701,7 @@ async def _llm_dimension_result(
 
 async def refresh_project_health(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     *,
     source: str = "manual_refresh",
     user_id: str | None = None,
@@ -713,7 +713,7 @@ async def refresh_project_health(
     fingerprint = collected["fingerprint"]
 
     existing_result_rows = await db.execute(
-        select(ProjectHealthResult).where(ProjectHealthResult.initiative_id == initiative.id)
+        select(ProjectHealthResult).where(ProjectHealthResult.project_id == initiative.id)
     )
     by_dimension = {row.dimension_id: row for row in existing_result_rows.scalars().all()}
 
@@ -734,7 +734,7 @@ async def refresh_project_health(
         row = by_dimension.get(dimension.id)
         if row is None:
             row = ProjectHealthResult(
-                initiative_id=initiative.id,
+                project_id=initiative.id,
                 domain=definition.domain,
                 dimension_id=dimension.id,
                 dimension_label=dimension.label,
@@ -764,12 +764,12 @@ async def refresh_project_health(
 
 async def list_project_health(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
 ) -> tuple[list[ProjectHealthResult], dict[str, list[ProjectHealthOverride]], str]:
     """Fetch persisted health rows and override history grouped by dimension."""
     definition = get_project_health_definition()
     rows_result = await db.execute(
-        select(ProjectHealthResult).where(ProjectHealthResult.initiative_id == initiative.id)
+        select(ProjectHealthResult).where(ProjectHealthResult.project_id == initiative.id)
     )
     rows = rows_result.scalars().all()
     if not rows:
@@ -782,7 +782,7 @@ async def list_project_health(
 
     override_result = await db.execute(
         select(ProjectHealthOverride)
-        .where(ProjectHealthOverride.initiative_id == initiative.id)
+        .where(ProjectHealthOverride.project_id == initiative.id)
         .order_by(ProjectHealthOverride.created_at.desc())
     )
     overrides_by_dimension: dict[str, list[ProjectHealthOverride]] = {}
@@ -794,7 +794,7 @@ async def list_project_health(
 
 async def apply_project_health_override(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     *,
     dimension_id: str,
     override_status: str,
@@ -805,7 +805,7 @@ async def apply_project_health_override(
     """Persist an override event for one project-health dimension."""
     row_result = await db.execute(
         select(ProjectHealthResult).where(
-            ProjectHealthResult.initiative_id == initiative.id,
+            ProjectHealthResult.project_id == initiative.id,
             ProjectHealthResult.dimension_id == dimension_id,
         )
     )
@@ -813,7 +813,7 @@ async def apply_project_health_override(
     prior_status = row.status if row else None
 
     override = ProjectHealthOverride(
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         dimension_id=dimension_id,
         prior_system_status=_clamp_status(prior_status, fallback="unknown") if prior_status else None,
         override_status=_clamp_status(override_status),

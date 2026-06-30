@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.core.permissions import ensure_user_exists, get_project_with_role, require_project_editor
 from app.models.chat import CoreChatMessage
 from app.models.finding import Finding
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.user import User
 from app.schemas.finding import FindingPromoteRequest, FindingResponse
 from app.services.assumptions import AssumptionActor, extract_assumptions_from_finding
@@ -77,7 +77,7 @@ async def promote_finding(
     db.add(finding)
     await db.flush()
 
-    initiative = await db.get(Initiative, data.project_id)
+    initiative = await db.get(Project, data.project_id)
     if initiative is not None:
         try:
             await extract_assumptions_from_finding(

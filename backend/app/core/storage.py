@@ -70,7 +70,7 @@ class FirebaseStorage(StorageBackend):
 
     Files are stored privately in your Firebase project's Storage bucket.
     The backend is the only accessor; users never get direct bucket URLs.
-    Per-user access control is enforced at the API layer (require_viewer).
+    Per-user access control is enforced at the API layer (require_project_viewer).
     """
 
     def __init__(self, bucket_name: str):

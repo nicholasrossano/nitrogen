@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser
-from app.models.project import Initiative, Project
+from app.models.project import Project
 from app.models.project_share import ProjectShare
 from app.models.user import User
 from app.models.workspace import WorkspaceRole
@@ -62,27 +62,27 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
         await db.commit()
 
 
-async def _get_role_for_initiative(
+async def _get_role_for_project(
     db: AsyncSession,
-    initiative: Initiative,
+    project: Project,
     user: AuthUser,
 ) -> str | None:
-    """Resolve the current user's role for a concrete initiative."""
-    if initiative.workspace_id:
+    """Resolve the current user's role for a concrete project."""
+    if project.workspace_id:
         membership = await get_workspace_membership(
-            db, initiative.workspace_id, user.uid
+            db, project.workspace_id, user.uid
         )
         if membership:
             if membership.role == WorkspaceRole.OWNER.value:
                 return "owner"
             return "editor"
 
-    if initiative.user_id == user.uid:
+    if project.user_id == user.uid:
         return "owner"
 
     share_result = await db.execute(
         select(ProjectShare).where(
-            ProjectShare.project_id == initiative.id,
+            ProjectShare.project_id == project.id,
             ProjectShare.user_id == user.uid,
         )
     )
@@ -93,44 +93,12 @@ async def _get_role_for_initiative(
     return None
 
 
-async def get_initiative_with_role(
-    db: AsyncSession,
-    initiative_id: uuid.UUID | str,
-    user: AuthUser,
-) -> tuple[Initiative, str]:
-    """Return (initiative, role) where role is 'owner', 'editor', or 'viewer'.
-
-    Accepts only canonical UUID initiative identifiers.
-    Raises 404 if the user has no access.
-    """
-    try:
-        uid = uuid.UUID(str(initiative_id))
-    except (ValueError, AttributeError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found"
-        )
-
-    result = await db.execute(select(Initiative).where(Initiative.id == uid))
-    initiative = result.scalar_one_or_none()
-    if initiative is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found"
-        )
-
-    role = await _get_role_for_initiative(db, initiative, user)
-    if role:
-        return initiative, role
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND, detail="Initiative not found"
-    )
-
-
 async def get_project_with_role(
     db: AsyncSession,
     project_id: uuid.UUID | str,
     user: AuthUser,
 ) -> tuple[Project, str]:
-    """Return (project, role) for a canonical project UUID."""
+    """Return (project, role) where role is 'owner', 'editor', or 'viewer."""
     try:
         uid = uuid.UUID(str(project_id))
     except (ValueError, AttributeError):
@@ -145,7 +113,7 @@ async def get_project_with_role(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    role = await _get_role_for_initiative(db, project, user)
+    role = await _get_role_for_project(db, project, user)
     if role:
         return project, role
     raise HTTPException(
@@ -158,6 +126,7 @@ async def require_project_editor(
     project_id: uuid.UUID | str,
     user: AuthUser,
 ) -> Project:
+    """Return project if the user is owner or editor, else 403."""
     project, role = await get_project_with_role(db, project_id, user)
     if role == "viewer":
         raise HTTPException(
@@ -169,47 +138,38 @@ async def require_project_editor(
 
 async def require_owner(
     db: AsyncSession,
-    initiative_id: uuid.UUID | str,
+    project_id: uuid.UUID | str,
     user: AuthUser,
-) -> Initiative:
-    """Return initiative if the user can manage project-level destructive actions."""
-    initiative, role = await get_initiative_with_role(db, initiative_id, user)
+) -> Project:
+    """Return project if the user can manage project-level destructive actions."""
+    project, role = await get_project_with_role(db, project_id, user)
     if role == "owner":
-        return initiative
-    if role == "editor" and initiative.workspace_id:
+        return project
+    if role == "editor" and project.workspace_id:
         membership = await get_workspace_membership(
-            db, initiative.workspace_id, user.uid
+            db, project.workspace_id, user.uid
         )
         if membership:
-            return initiative
+            return project
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail="You cannot manage this project"
     )
 
 
-async def require_editor(
+async def require_project_viewer(
     db: AsyncSession,
-    initiative_id: uuid.UUID | str,
+    project_id: uuid.UUID | str,
     user: AuthUser,
-) -> Initiative:
-    """Return initiative if the user is owner or editor, else 403."""
-    initiative, role = await get_initiative_with_role(db, initiative_id, user)
-    if role == "viewer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Viewers cannot modify this project",
-        )
-    return initiative
+) -> Project:
+    """Return project if the user has any access (owner/editor/viewer)."""
+    project, _role = await get_project_with_role(db, project_id, user)
+    return project
 
 
-async def require_viewer(
-    db: AsyncSession,
-    initiative_id: uuid.UUID | str,
-    user: AuthUser,
-) -> Initiative:
-    """Return initiative if the user has any access (owner/editor/viewer)."""
-    initiative, _role = await get_initiative_with_role(db, initiative_id, user)
-    return initiative
+# Deprecated aliases — remove after frontend cutover completes.
+get_initiative_with_role = get_project_with_role
+require_editor = require_project_editor
+require_viewer = require_project_viewer
 
 
 async def require_workspace_member(

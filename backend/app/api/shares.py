@@ -10,8 +10,8 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, get_current_user, _init_firebase
 from app.core.permissions import (
     ensure_user_exists,
-    get_initiative_with_role,
-    require_editor,
+    get_project_with_role,
+    require_project_editor,
     require_owner,
 )
 from app.models.pending_invitation import ProjectShareInvitation
@@ -61,19 +61,19 @@ async def _resolve_user_by_email(db: AsyncSession, email: str) -> User | None:
 
 
 @router.post(
-    "/initiatives/{initiative_id}/shares",
+    "/projects/{project_id}/shares",
     response_model=ShareResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_share(
-    initiative_id: str,
+    project_id: str,
     body: ShareCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Share a project with another user. Owner or editor."""
     await ensure_user_exists(db, user)
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     invite_email = normalize_invite_email(body.email)
     if user.email and invite_email == normalize_invite_email(user.email):
@@ -97,7 +97,7 @@ async def create_share(
         existing = (
             await db.execute(
                 select(ProjectShare).where(
-                    ProjectShare.initiative_id == initiative.id,
+                    ProjectShare.project_id == initiative.id,
                     ProjectShare.user_id == target_user.id,
                 )
             )
@@ -109,7 +109,7 @@ async def create_share(
             )
 
         share = ProjectShare(
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             user_id=target_user.id,
             role=body.role,
             shared_by=user.uid,
@@ -120,7 +120,7 @@ async def create_share(
 
         return ShareResponse(
             id=share.id,
-            initiative_id=share.initiative_id,
+            project_id=share.project_id,
             user_id=share.user_id,
             user_email=target_user.email,
             user_display_name=target_user.display_name,
@@ -132,7 +132,7 @@ async def create_share(
     pending_existing = (
         await db.execute(
             select(ProjectShareInvitation).where(
-                ProjectShareInvitation.initiative_id == initiative.id,
+                ProjectShareInvitation.project_id == initiative.id,
                 ProjectShareInvitation.email == invite_email,
             )
         )
@@ -144,7 +144,7 @@ async def create_share(
         )
 
     invitation = ProjectShareInvitation(
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         email=invite_email,
         role=body.role,
         shared_by=user.uid,
@@ -155,7 +155,7 @@ async def create_share(
 
     return ShareResponse(
         id=invitation.id,
-        initiative_id=invitation.initiative_id,
+        project_id=invitation.project_id,
         user_id=None,
         user_email=invitation.email,
         user_display_name=None,
@@ -166,28 +166,28 @@ async def create_share(
 
 
 @router.get(
-    "/initiatives/{initiative_id}/shares",
+    "/projects/{project_id}/shares",
     response_model=list[ShareResponse],
 )
 async def list_shares(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all shares for a project. Any user with access can view."""
     await ensure_user_exists(db, user)
-    initiative, _role = await get_initiative_with_role(db, initiative_id, user)
+    initiative, _role = await get_project_with_role(db, project_id, user)
 
     result = await db.execute(
         select(ProjectShare)
-        .where(ProjectShare.initiative_id == initiative.id)
+        .where(ProjectShare.project_id == initiative.id)
         .order_by(ProjectShare.created_at)
     )
     shares = result.scalars().all()
 
     inv_result = await db.execute(
         select(ProjectShareInvitation)
-        .where(ProjectShareInvitation.initiative_id == initiative.id)
+        .where(ProjectShareInvitation.project_id == initiative.id)
         .order_by(ProjectShareInvitation.created_at)
     )
     invitations = inv_result.scalars().all()
@@ -195,7 +195,7 @@ async def list_shares(
     rows: list[ShareResponse] = [
         ShareResponse(
             id=s.id,
-            initiative_id=s.initiative_id,
+            project_id=s.project_id,
             user_id=s.user_id,
             user_email=s.user.email if s.user else None,
             user_display_name=s.user.display_name if s.user else None,
@@ -208,7 +208,7 @@ async def list_shares(
     rows.extend(
         ShareResponse(
             id=inv.id,
-            initiative_id=inv.initiative_id,
+            project_id=inv.project_id,
             user_id=None,
             user_email=inv.email,
             user_display_name=None,
@@ -223,11 +223,11 @@ async def list_shares(
 
 
 @router.patch(
-    "/initiatives/{initiative_id}/shares/{share_id}",
+    "/projects/{project_id}/shares/{share_id}",
     response_model=ShareResponse,
 )
 async def update_share(
-    initiative_id: str,
+    project_id: str,
     share_id: uuid.UUID,
     body: ShareUpdate,
     db: AsyncSession = Depends(get_db),
@@ -235,12 +235,12 @@ async def update_share(
 ):
     """Update a share's role. Owner-only."""
     await ensure_user_exists(db, user)
-    initiative = await require_owner(db, initiative_id, user)
+    initiative = await require_owner(db, project_id, user)
 
     result = await db.execute(
         select(ProjectShare).where(
             ProjectShare.id == share_id,
-            ProjectShare.initiative_id == initiative.id,
+            ProjectShare.project_id == initiative.id,
         )
     )
     share = result.scalar_one_or_none()
@@ -251,7 +251,7 @@ async def update_share(
 
         return ShareResponse(
             id=share.id,
-            initiative_id=share.initiative_id,
+            project_id=share.project_id,
             user_id=share.user_id,
             user_email=share.user.email if share.user else None,
             user_display_name=share.user.display_name if share.user else None,
@@ -261,7 +261,7 @@ async def update_share(
         )
 
     invitation = await db.get(ProjectShareInvitation, share_id)
-    if invitation is None or invitation.initiative_id != initiative.id:
+    if invitation is None or invitation.project_id != initiative.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Share not found"
         )
@@ -272,7 +272,7 @@ async def update_share(
 
     return ShareResponse(
         id=invitation.id,
-        initiative_id=invitation.initiative_id,
+        project_id=invitation.project_id,
         user_id=None,
         user_email=invitation.email,
         user_display_name=None,
@@ -283,23 +283,23 @@ async def update_share(
 
 
 @router.delete(
-    "/initiatives/{initiative_id}/shares/{share_id}",
+    "/projects/{project_id}/shares/{share_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_share(
-    initiative_id: str,
+    project_id: str,
     share_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove a share. Owner can remove anyone; shared user can remove themselves."""
     await ensure_user_exists(db, user)
-    initiative, role = await get_initiative_with_role(db, initiative_id, user)
+    initiative, role = await get_project_with_role(db, project_id, user)
 
     result = await db.execute(
         select(ProjectShare).where(
             ProjectShare.id == share_id,
-            ProjectShare.initiative_id == initiative.id,
+            ProjectShare.project_id == initiative.id,
         )
     )
     share = result.scalar_one_or_none()
@@ -317,7 +317,7 @@ async def delete_share(
         return
 
     invitation = await db.get(ProjectShareInvitation, share_id)
-    if invitation is None or invitation.initiative_id != initiative.id:
+    if invitation is None or invitation.project_id != initiative.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Share not found"
         )

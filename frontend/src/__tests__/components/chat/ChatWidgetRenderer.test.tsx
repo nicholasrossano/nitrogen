@@ -31,7 +31,7 @@ describe('ChatWidgetRenderer', () => {
       <ChatWidgetRenderer
         type="confirmation"
         data={{}}
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         onSendMessage={onSendMessage}
       />,
     );
@@ -47,7 +47,7 @@ describe('ChatWidgetRenderer', () => {
       <ChatWidgetRenderer
         type="deliverables_overview"
         data={{}}
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         onSendMessage={onSendMessage}
       />,
     );

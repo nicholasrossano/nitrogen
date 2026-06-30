@@ -12,7 +12,7 @@ Use this file only when the task needs domain-specific policy not covered by `AG
 
 - For schema/ORM renames, use expand/contract: add compatible fields first, remove legacy names later.
 - Do not merge backend model changes that assume DB columns/tables absent in production.
-- Before finalizing schema-sensitive backend changes, smoke-check initiative detail, chat history, evidence, and project materials flows.
+- Before finalizing schema-sensitive backend changes, smoke-check project detail, chat history, evidence, and project materials flows.
 - If a production hotfix is needed during feature-branch schema work, patch `main` minimally and backport intentionally.
 
 ## Documentation Maintenance

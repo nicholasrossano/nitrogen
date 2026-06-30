@@ -8,7 +8,7 @@ import { ChangeProjectSelect } from '@/components/chat-shell/ChangeProjectSelect
 import { resolveActiveProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { api, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 type FilesScope = 'company' | 'project';
 
@@ -25,7 +25,7 @@ function FilesPageContent() {
   const [projectMaterials, setProjectMaterials] = useState<ProjectMaterial[]>([]);
   const [knowledgeBanks, setKnowledgeBanks] = useState<WorkspaceKnowledgeBank[]>([]);
 
-  const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+  const uploadMaterial = useProjectStore((s) => s.uploadMaterial);
 
   useEffect(() => {
     if (!activeWorkspace) void loadWorkspaces();
@@ -155,7 +155,7 @@ function FilesPageContent() {
         ) : effectiveProjectId ? (
           <ProjectFilesView
             scope="project"
-            initiativeId={effectiveProjectId}
+            projectId={effectiveProjectId}
             title={`${selectedProject?.name ?? 'Project'} files`}
             materials={projectMaterials}
             onUploadFile={async (file) => {

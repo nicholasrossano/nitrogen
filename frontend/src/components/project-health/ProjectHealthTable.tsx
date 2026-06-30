@@ -184,7 +184,7 @@ function HealthSourcesMenu({
 }
 
 interface ProjectHealthTableProps {
-  initiativeId: string;
+  projectId: string;
   readOnly?: boolean;
   hideRefreshButton?: boolean;
   refreshToken?: number;
@@ -197,7 +197,7 @@ interface ProjectHealthTableProps {
 }
 
 export function ProjectHealthTable({
-  initiativeId,
+  projectId,
   readOnly = false,
   hideRefreshButton = false,
   refreshToken = 0,
@@ -213,14 +213,14 @@ export function ProjectHealthTable({
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.getProjectHealth(initiativeId);
+      const response = await api.getProjectHealth(projectId);
       setHealth(response);
     } catch {
       setError('Unable to load health overview right now.');
     } finally {
       setIsLoading(false);
     }
-  }, [initiativeId]);
+  }, [projectId]);
 
   useEffect(() => {
     void loadHealth();
@@ -230,14 +230,14 @@ export function ProjectHealthTable({
     setIsRefreshing(true);
     setError(null);
     try {
-      const response = await api.refreshProjectHealth(initiativeId, 'manual_refresh');
+      const response = await api.refreshProjectHealth(projectId, 'manual_refresh');
       setHealth(response);
     } catch {
       setError('Refresh failed. Please try again.');
     } finally {
       setIsRefreshing(false);
     }
-  }, [initiativeId]);
+  }, [projectId]);
 
   useEffect(() => {
     if (refreshToken <= 0) return;

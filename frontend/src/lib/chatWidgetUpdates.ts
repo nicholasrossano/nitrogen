@@ -1,12 +1,12 @@
 import { api } from '@/lib/api';
 
 export async function persistChatWidgetUpdate({
-  initiativeId,
+  projectId,
   messageId,
   widgetData,
   source,
 }: {
-  initiativeId?: string;
+  projectId?: string;
   messageId?: string;
   widgetData: Record<string, any>;
   source: string;
@@ -14,7 +14,7 @@ export async function persistChatWidgetUpdate({
   if (!messageId) return true;
 
   try {
-    await api.updateMessageWidget(initiativeId, messageId, widgetData);
+    await api.updateMessageWidget(projectId, messageId, widgetData);
     window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
       detail: { messageId, widgetData },
     }));

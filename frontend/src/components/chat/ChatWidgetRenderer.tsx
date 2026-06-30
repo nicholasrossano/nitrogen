@@ -16,7 +16,7 @@ export const ABOVE_INPUT_WIDGET_TYPE = 'document_request';
 interface ChatWidgetRendererProps {
   type: string;
   data: Record<string, any>;
-  initiativeId?: string;
+  projectId?: string;
   messageId?: string;
   isActive?: boolean;
   onSendMessage?: (content: string) => void | Promise<void>;
@@ -27,7 +27,7 @@ interface ChatWidgetRendererProps {
 export function ChatWidgetRenderer({
   type,
   data,
-  initiativeId,
+  projectId,
   messageId,
   isActive = true,
   onSendMessage,
@@ -36,43 +36,43 @@ export function ChatWidgetRenderer({
 }: ChatWidgetRendererProps) {
   switch (type) {
     case 'confirmation':
-      return initiativeId ? (
+      return projectId ? (
         <ErrorBoundary>
           <ConfirmationWidget
             data={data}
-            initiativeId={initiativeId}
+            projectId={projectId}
             isActive={isActive}
             onSendMessage={onSendMessage}
           />
         </ErrorBoundary>
       ) : null;
     case 'evidence_input':
-      return initiativeId ? (
+      return projectId ? (
         <ErrorBoundary>
-          <EvidenceInputWidget initiativeId={initiativeId} isActive={isActive} />
+          <EvidenceInputWidget projectId={projectId} isActive={isActive} />
         </ErrorBoundary>
       ) : null;
     case 'tool_checklist':
-      return initiativeId ? (
+      return projectId ? (
         <ErrorBoundary>
-          <AssessmentChecklistWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <AssessmentChecklistWidget data={data} projectId={projectId} isActive={isActive} />
         </ErrorBoundary>
       ) : null;
     case 'deliverables_overview':
-      return initiativeId ? (
+      return projectId ? (
         <ErrorBoundary>
           <DeliverablesOverviewWidget
             data={data}
-            initiativeId={initiativeId}
+            projectId={projectId}
             isActive={isActive}
             onSendMessage={onSendMessage}
           />
         </ErrorBoundary>
       ) : null;
     case 'project_plan':
-      return initiativeId ? (
+      return projectId ? (
         <ErrorBoundary>
-          <ProjectPlanWidget data={data} initiativeId={initiativeId} isActive={isActive} />
+          <ProjectPlanWidget data={data} projectId={projectId} isActive={isActive} />
         </ErrorBoundary>
       ) : null;
     case 'plan_summary':
@@ -86,7 +86,7 @@ export function ChatWidgetRenderer({
         <ErrorBoundary>
           <ProposedValueWidget
             data={data as any}
-            initiativeId={initiativeId}
+            projectId={projectId}
             messageId={messageId}
             onApplyValue={onApplyProposedValue}
           />
@@ -95,14 +95,14 @@ export function ChatWidgetRenderer({
     case 'template_proposed_value':
       return (
         <ErrorBoundary>
-          <TemplateProposedValueWidget data={data as any} initiativeId={initiativeId} messageId={messageId} />
+          <TemplateProposedValueWidget data={data as any} projectId={projectId} messageId={messageId} />
         </ErrorBoundary>
       );
     case ABOVE_INPUT_WIDGET_TYPE:
-      return initiativeId ? (
+      return projectId ? (
         <ErrorBoundary>
           <DocumentRequestWidget
-            initiativeId={initiativeId}
+            projectId={projectId}
             isActive={isActive}
             data={data as any}
             onSendMessage={onDocumentRequestMessage}

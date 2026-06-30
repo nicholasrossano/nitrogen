@@ -1,4 +1,4 @@
-from app.models.project import Initiative, InitiativeStage, Project
+from app.models.project import Project, ProjectStage
 from app.models.evidence import EvidenceDoc, EvidenceChunk, EvidenceDocStatus
 from app.models.memo import MemoVersion, Citation
 from app.models.corpus import CorpusDocument, CorpusChunk
@@ -24,8 +24,7 @@ from app.models.workspace_knowledge import (
 
 __all__ = [
     "Project",
-    "Initiative",
-    "InitiativeStage",
+    "ProjectStage",
     "Finding",
     "EvidenceDoc",
     "EvidenceChunk",

@@ -13,7 +13,7 @@ from app.core import google_oauth
 from app.core.auth import AuthUser, get_current_user, get_optional_user
 from app.core.database import get_db
 from app.core.log_sanitizer import sanitize_exception
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_project_editor, require_project_viewer
 from app.core.storage import get_uploads_storage
 from app.models.evidence import EvidenceDoc, EvidenceChunk
 from app.models.google_drive import DriveLinkedFile, UserGoogleConnection
@@ -75,7 +75,7 @@ async def _get_valid_access_token(
 # ── OAuth flow ────────────────────────────────────────────────────────────────
 
 class ConnectRequest(BaseModel):
-    initiative_id: str
+    project_id: str
 
 
 @router.post("/google/connect")
@@ -89,7 +89,7 @@ async def start_google_connect(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Google Drive integration is not configured",
         )
-    state = google_oauth.create_oauth_state(user.uid, body.initiative_id)
+    state = google_oauth.create_oauth_state(user.uid, body.project_id)
     return {"auth_url": google_oauth.build_auth_url(state)}
 
 
@@ -110,7 +110,7 @@ async def google_oauth_callback(
         return RedirectResponse(url=f"{frontend_url}?drive_error=access_denied")
 
     try:
-        user_id, initiative_id = google_oauth.verify_oauth_state(state)
+        user_id, project_id = google_oauth.verify_oauth_state(state)
     except ValueError:
         return RedirectResponse(url=f"{frontend_url}?drive_error=invalid_state")
 
@@ -151,7 +151,7 @@ async def google_oauth_callback(
 
     await db.commit()
     return RedirectResponse(
-        url=f"{frontend_url}/initiatives/{initiative_id}?drive_connected=true"
+        url=f"{frontend_url}/projects/{project_id}?drive_connected=true"
     )
 
 
@@ -217,9 +217,9 @@ class DriveImportRequest(BaseModel):
     file_ids: list[str]
 
 
-@router.post("/initiatives/{initiative_id}/drive/import")
+@router.post("/projects/{project_id}/drive/import")
 async def import_from_drive(
-    initiative_id: str,
+    project_id: str,
     body: DriveImportRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -230,7 +230,7 @@ async def import_from_drive(
     if len(body.file_ids) > 20:
         raise HTTPException(status_code=400, detail="Cannot import more than 20 files at once")
 
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     connection = await _get_connection(db, user.uid)
     if not connection:
@@ -284,7 +284,7 @@ async def import_from_drive(
             existing = await db.execute(
                 select(DriveLinkedFile).where(
                     DriveLinkedFile.drive_file_id == file_id,
-                    DriveLinkedFile.initiative_id == initiative.id,
+                    DriveLinkedFile.project_id == initiative.id,
                 )
             )
             if existing.scalar_one_or_none():
@@ -326,7 +326,7 @@ async def import_from_drive(
                 else datetime.now(timezone.utc)
             )
             link = DriveLinkedFile(
-                initiative_id=initiative.id,
+                project_id=initiative.id,
                 workspace_id=initiative.workspace_id,
                 evidence_doc_id=evidence_doc.id,
                 user_id=user.uid,
@@ -473,16 +473,16 @@ async def import_workspace_from_drive(
 
 # ── Linked files ──────────────────────────────────────────────────────────────
 
-@router.get("/initiatives/{initiative_id}/drive/linked")
+@router.get("/projects/{project_id}/drive/linked")
 async def list_drive_linked_files(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all Drive-linked files for an initiative."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     result = await db.execute(
-        select(DriveLinkedFile).where(DriveLinkedFile.initiative_id == initiative.id)
+        select(DriveLinkedFile).where(DriveLinkedFile.project_id == initiative.id)
     )
     links = result.scalars().all()
     return [
@@ -499,19 +499,19 @@ async def list_drive_linked_files(
     ]
 
 
-@router.delete("/initiatives/{initiative_id}/drive/linked/{linked_id}")
+@router.delete("/projects/{project_id}/drive/linked/{linked_id}")
 async def unlink_drive_file(
-    initiative_id: str,
+    project_id: str,
     linked_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove the Drive link record (keeps the underlying evidence doc)."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     result = await db.execute(
         select(DriveLinkedFile).where(
             DriveLinkedFile.id == linked_id,
-            DriveLinkedFile.initiative_id == initiative.id,
+            DriveLinkedFile.project_id == initiative.id,
         )
     )
     link = result.scalar_one_or_none()
@@ -524,9 +524,9 @@ async def unlink_drive_file(
 
 # ── Sync ──────────────────────────────────────────────────────────────────────
 
-@router.post("/initiatives/{initiative_id}/drive/sync")
+@router.post("/projects/{project_id}/drive/sync")
 async def sync_drive_files(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
@@ -534,7 +534,7 @@ async def sync_drive_files(
     Check all Drive-linked files in this initiative for remote changes.
     Re-downloads and re-indexes any files whose modifiedTime has advanced.
     """
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     connection = await _get_connection(db, user.uid)
     if not connection:
@@ -546,7 +546,7 @@ async def sync_drive_files(
 
     result = await db.execute(
         select(DriveLinkedFile).where(
-            DriveLinkedFile.initiative_id == initiative.id,
+            DriveLinkedFile.project_id == initiative.id,
             DriveLinkedFile.user_id == user.uid,
         )
     )

@@ -19,7 +19,7 @@ describe('ImplementationPlanWidget', () => {
 
     render(
       <ImplementationPlanWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         data={{
           groups: [
             {

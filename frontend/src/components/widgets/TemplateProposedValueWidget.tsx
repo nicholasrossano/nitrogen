@@ -15,7 +15,7 @@ interface TemplateProposedValueWidgetProps {
     confirmed?: boolean;
     dismissed?: boolean;
   };
-  initiativeId?: string;
+  projectId?: string;
   messageId?: string;
 }
 
@@ -31,7 +31,7 @@ function ConfidenceIcon({ confidence, className }: { confidence: string; classNa
   return <Sparkles className={className} />;
 }
 
-export function TemplateProposedValueWidget({ data, initiativeId, messageId }: TemplateProposedValueWidgetProps) {
+export function TemplateProposedValueWidget({ data, projectId, messageId }: TemplateProposedValueWidgetProps) {
   const initialStatus = data.confirmed ? 'confirmed' : data.dismissed ? 'dismissed' : 'pending';
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'dismissed'>(initialStatus);
   const confStyle = CONFIDENCE_STYLES[data.confidence] || CONFIDENCE_STYLES.moderate;
@@ -40,7 +40,7 @@ export function TemplateProposedValueWidget({ data, initiativeId, messageId }: T
   const handleConfirm = useCallback(async () => {
     const newData = { ...data, confirmed: true, dismissed: false };
     const persisted = await persistChatWidgetUpdate({
-      initiativeId,
+      projectId,
       messageId,
       widgetData: newData,
       source: 'TemplateProposedValueWidget',
@@ -54,12 +54,12 @@ export function TemplateProposedValueWidget({ data, initiativeId, messageId }: T
         value: data.proposed_value,
       },
     }));
-  }, [data, initiativeId, messageId]);
+  }, [data, projectId, messageId]);
 
   const handleDismiss = useCallback(async () => {
     const newData = { ...data, dismissed: true, confirmed: false };
     const persisted = await persistChatWidgetUpdate({
-      initiativeId,
+      projectId,
       messageId,
       widgetData: newData,
       source: 'TemplateProposedValueWidget',
@@ -67,7 +67,7 @@ export function TemplateProposedValueWidget({ data, initiativeId, messageId }: T
     if (!persisted) return;
 
     setStatus('dismissed');
-  }, [data, initiativeId, messageId]);
+  }, [data, projectId, messageId]);
 
   if (status === 'dismissed') {
     return (

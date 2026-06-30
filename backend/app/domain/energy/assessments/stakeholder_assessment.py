@@ -284,7 +284,7 @@ class StakeholderAssessment(BaseAssessment):
         existing_record: dict[str, Any],
         context: dict[str, Any],
         db: AsyncSession | None = None,
-        initiative_id: UUID | None = None,
+        project_id: UUID | None = None,
     ) -> dict[str, Any]:
         """Run a deep dive for one stakeholder and return normalized detail fields."""
         return await self._enrich_stakeholder_detail(
@@ -292,7 +292,7 @@ class StakeholderAssessment(BaseAssessment):
             existing_record,
             context,
             db=db,
-            initiative_id=initiative_id,
+            project_id=project_id,
         )
 
     async def ensure_all_stakeholder_details(
@@ -301,7 +301,7 @@ class StakeholderAssessment(BaseAssessment):
         existing_records: dict[str, dict[str, Any]],
         context: dict[str, Any],
         db: AsyncSession | None = None,
-        initiative_id: UUID | None = None,
+        project_id: UUID | None = None,
     ) -> tuple[dict[str, dict[str, Any]], bool]:
         """Ensure every stakeholder has a deep-dive record before write-up export."""
         records: dict[str, dict[str, Any]] = dict(existing_records or {})
@@ -318,7 +318,7 @@ class StakeholderAssessment(BaseAssessment):
                 current,
                 context,
                 db=db,
-                initiative_id=initiative_id,
+                project_id=project_id,
             )
             records[item_id] = enriched
             changed = True
@@ -476,7 +476,7 @@ class StakeholderAssessment(BaseAssessment):
         existing_record: dict,
         context: dict,
         db: AsyncSession | None = None,
-        initiative_id: UUID | None = None,
+        project_id: UUID | None = None,
     ) -> dict:
         stakeholder_name = item_content.get("name", "")
         category = item_content.get("category", "")
@@ -486,7 +486,7 @@ class StakeholderAssessment(BaseAssessment):
 
         evidence_block = ""
         citations: list[dict[str, Any]] = []
-        if db is not None and initiative_id is not None:
+        if db is not None and project_id is not None:
             queries = [
                 " ".join(
                     part for part in [
@@ -509,7 +509,7 @@ class StakeholderAssessment(BaseAssessment):
             queries = [query for query in queries if query]
             if queries:
                 try:
-                    context_str, citations = await retrieve_evidence(queries, db, initiative_id, max_facts=8)
+                    context_str, citations = await retrieve_evidence(queries, db, project_id, max_facts=8)
                     if context_str:
                         evidence_block = (
                             "\n\nRetrieved evidence (cite [n] references when grounding your assessment):\n"

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import String, DateTime, Integer, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, synonym
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
@@ -30,7 +30,6 @@ class ProvenanceTrace(Base):
         nullable=True,
         index=True,
     )
-    initiative_id = synonym("project_id")
     chat_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("core_chats.id", ondelete="CASCADE"),

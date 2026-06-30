@@ -7,7 +7,7 @@ import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_project_editor, require_project_viewer
 from app.core.storage import get_uploads_storage, load_upload
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.core.upload_types import (
@@ -55,12 +55,12 @@ def _resolve_material_file_type(content_type: str | None, filename: str | None) 
     return resolve_document_file_type(content_type, filename)
 
 
-async def _repair_project_file_workspace_ids(db: AsyncSession, initiative_id, workspace_id) -> None:
+async def _repair_project_file_workspace_ids(db: AsyncSession, project_id, workspace_id) -> None:
     """Keep project-scoped files aligned after a project moves workspaces."""
     repaired = False
     material_result = await db.execute(
         select(ProjectMaterial).where(
-            ProjectMaterial.initiative_id == initiative_id,
+            ProjectMaterial.project_id == project_id,
             ProjectMaterial.workspace_id != workspace_id,
         )
     )
@@ -70,7 +70,7 @@ async def _repair_project_file_workspace_ids(db: AsyncSession, initiative_id, wo
 
     evidence_result = await db.execute(
         select(EvidenceDoc).where(
-            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.project_id == project_id,
             EvidenceDoc.workspace_id != workspace_id,
         )
     )
@@ -80,7 +80,7 @@ async def _repair_project_file_workspace_ids(db: AsyncSession, initiative_id, wo
 
     drive_result = await db.execute(
         select(DriveLinkedFile).where(
-            DriveLinkedFile.initiative_id == initiative_id,
+            DriveLinkedFile.project_id == project_id,
             DriveLinkedFile.workspace_id != workspace_id,
         )
     )
@@ -93,19 +93,19 @@ async def _repair_project_file_workspace_ids(db: AsyncSession, initiative_id, wo
 
 
 @router.post(
-    "/initiatives/{initiative_id}/materials",
+    "/projects/{project_id}/materials",
     response_model=ProjectMaterialUploadResponse,
 )
 @limiter.limit("120/minute")
 async def upload_material(
     request: Request,
-    initiative_id: str,
+    project_id: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Upload a file as project-level context material."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     file_type = _resolve_material_file_type(file.content_type, file.filename)
     if not file_type:
@@ -161,7 +161,7 @@ async def upload_material(
     )
 
     material = ProjectMaterial(
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         workspace_id=initiative.workspace_id,
         filename=unique_filename,
         file_type=prepared.file_type,
@@ -198,29 +198,29 @@ async def upload_material(
 
 
 @router.get(
-    "/initiatives/{initiative_id}/materials",
+    "/projects/{project_id}/materials",
     response_model=list[ProjectMaterialResponse],
 )
 async def list_materials(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all uploaded files for an initiative — materials and evidence docs combined."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     await _repair_project_file_workspace_ids(db, initiative.id, initiative.workspace_id)
 
     mat_result = await db.execute(
         select(ProjectMaterial)
         .where(
-            ProjectMaterial.initiative_id == initiative.id,
+            ProjectMaterial.project_id == initiative.id,
         )
         .order_by(ProjectMaterial.created_at.desc())
     )
     ev_result = await db.execute(
         select(EvidenceDoc)
         .where(
-            EvidenceDoc.initiative_id == initiative.id,
+            EvidenceDoc.project_id == initiative.id,
             EvidenceDoc.storage_path.isnot(None),  # exclude text-paste entries
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -269,7 +269,7 @@ async def delete_material(
             detail="Material not found",
         )
 
-    await require_editor(db, material.initiative_id, user)
+    await require_project_editor(db, material.project_id, user)
 
     if material.storage_path:
         storage = get_uploads_storage()
@@ -295,30 +295,30 @@ def _resolve_tool(tool_id: str, output_type: str):
 
 
 @router.get(
-    "/initiatives/{initiative_id}/files",
+    "/projects/{project_id}/files",
     response_model=ProjectFilesResponse,
 )
 async def list_project_files(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List all project files: uploaded materials + generated outputs."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     await _repair_project_file_workspace_ids(db, initiative.id, initiative.workspace_id)
 
     # Uploaded materials (project_materials + evidence_docs with files)
     mat_result = await db.execute(
         select(ProjectMaterial)
         .where(
-            ProjectMaterial.initiative_id == initiative.id,
+            ProjectMaterial.project_id == initiative.id,
         )
         .order_by(ProjectMaterial.created_at.desc())
     )
     ev_result = await db.execute(
         select(EvidenceDoc)
         .where(
-            EvidenceDoc.initiative_id == initiative.id,
+            EvidenceDoc.project_id == initiative.id,
             EvidenceDoc.storage_path.isnot(None),
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -352,7 +352,7 @@ async def list_project_files(
 
     memo_result = await db.execute(
         select(MemoVersion)
-        .where(MemoVersion.initiative_id == initiative.id)
+        .where(MemoVersion.project_id == initiative.id)
         .order_by(MemoVersion.created_at.desc())
         .limit(1)
     )
@@ -406,15 +406,15 @@ async def list_project_files(
     return ProjectFilesResponse(uploaded=uploaded, generated=generated)
 
 
-@router.delete("/initiatives/{initiative_id}/deliverables/{tool_id}")
+@router.delete("/projects/{project_id}/deliverables/{tool_id}")
 async def delete_deliverable(
-    initiative_id: str,
+    project_id: str,
     tool_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove a generated deliverable from the project."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     removed = await assessment_service.remove_instance_by_tool(db, initiative.id, tool_id)
     if removed:
@@ -427,7 +427,7 @@ async def delete_deliverable(
             memo_result = await db.execute(
                 select(MemoVersion).where(
                     MemoVersion.id == memo_uuid,
-                    MemoVersion.initiative_id == initiative.id,
+                    MemoVersion.project_id == initiative.id,
                 )
             )
             memo = memo_result.scalar_one_or_none()
@@ -464,7 +464,7 @@ async def download_material(
             detail="Material not found",
         )
 
-    await require_viewer(db, material.initiative_id, user)
+    await require_project_viewer(db, material.project_id, user)
 
     if not material.storage_path:
         raise HTTPException(

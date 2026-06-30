@@ -40,7 +40,7 @@ describe('ProposedValueWidget', () => {
 
     render(
       <ProposedValueWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         messageId="message-1"
         data={{
           field_name: 'discount_rate',
@@ -77,7 +77,7 @@ describe('ProposedValueWidget', () => {
 
     render(
       <ProposedValueWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         messageId="message-1"
         onApplyValue={applyValue}
         data={{
