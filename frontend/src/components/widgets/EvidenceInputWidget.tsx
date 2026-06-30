@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { Upload, FileText, Loader2, ClipboardPaste } from 'lucide-react';
 import { PanelHeader } from '@/components/ui';
 import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
@@ -16,18 +16,18 @@ import {
 } from '@/lib/fileUtils';
 
 interface EvidenceInputWidgetProps {
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
 }
 
-export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceInputWidgetProps) {
+export function EvidenceInputWidget({ projectId, isActive = true }: EvidenceInputWidgetProps) {
   const [mode, setMode] = useState<'upload' | 'paste'>('upload');
   const [pasteText, setPasteText] = useState('');
   const [pasteTitle, setPasteTitle] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const { uploadEvidence, pasteEvidence, loading, projectMaterials } = useInitiativeStore();
+  const { uploadEvidence, pasteEvidence, loading, projectMaterials } = useProjectStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
@@ -41,13 +41,13 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
       DEFAULT_UPLOAD_CONCURRENCY,
       async (file) => {
         try {
-          await uploadEvidence(initiativeId, file);
+          await uploadEvidence(projectId, file);
         } catch (err) {
           console.error('Failed to upload evidence:', file.name, err);
         }
       },
     );
-  }, [initiativeId, uploadEvidence]);
+  }, [projectId, uploadEvidence]);
 
   const handleFiles = async (files: File[]) => {
     const { accepted, rejected } = filterSupportedFiles(files);
@@ -85,7 +85,7 @@ export function EvidenceInputWidget({ initiativeId, isActive = true }: EvidenceI
 
   const handlePasteSubmit = async () => {
     if (!pasteText.trim()) return;
-    await pasteEvidence(initiativeId, pasteText, pasteTitle || undefined);
+    await pasteEvidence(projectId, pasteText, pasteTitle || undefined);
   };
 
   return (

@@ -36,11 +36,11 @@ export function isAssessmentUserEngaged(instance: AssessmentInstance): boolean {
 }
 
 export async function discardEphemeralAssessmentInstance(
-  initiativeId: string,
+  projectId: string,
   instanceId: string,
 ): Promise<void> {
   try {
-    await api.permanentlyDeleteAssessmentInstance(initiativeId, instanceId);
+    await api.permanentlyDeleteAssessmentInstance(projectId, instanceId);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('nitrogen:assessment-workflow-updated'));
     }

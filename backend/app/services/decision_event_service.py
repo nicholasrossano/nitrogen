@@ -30,7 +30,7 @@ async def append_decision_event(
         )
     )
     event = DecisionEvent(
-        initiative_id=inst.initiative_id,
+        project_id=inst.project_id,
         assessment_instance_id=inst.id,
         assessment_id=inst.assessment_id,
         stage_id=stage_id,

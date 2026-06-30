@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
@@ -20,7 +20,6 @@ class MemoVersion(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         index=True,
     )
-    initiative_id = synonym("project_id")
     
     # Memo content (structured JSON)
     content: Mapped[dict] = mapped_column(JSONB, nullable=False)

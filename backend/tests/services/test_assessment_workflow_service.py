@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.assessment_instance import AssessmentInstance
 from app.domain.energy.assessments.lcoe_assessment import LCOETool
 from app.domain.energy.assessments.stakeholder_assessment import StakeholderAssessment
@@ -42,11 +42,11 @@ class FakeDB:
         return None
 
 
-def _make_instance(assessment_id: str, initiative_id=None) -> AssessmentInstance:
-    iid = initiative_id or uuid4()
+def _make_instance(assessment_id: str, project_id=None) -> AssessmentInstance:
+    iid = project_id or uuid4()
     return AssessmentInstance(
         id=uuid4(),
-        initiative_id=iid,
+        project_id=iid,
         assessment_id=assessment_id,
         instance_number=1,
         status="started",
@@ -54,9 +54,9 @@ def _make_instance(assessment_id: str, initiative_id=None) -> AssessmentInstance
     )
 
 
-def _make_initiative(initiative_id=None, **kwargs) -> SimpleNamespace:
+def _make_initiative(project_id=None, **kwargs) -> SimpleNamespace:
     defaults = dict(
-        id=initiative_id or uuid4(),
+        id=project_id or uuid4(),
         title="Test Project",
         geography="Kenya",
         project_type="solar_pv",
@@ -108,9 +108,9 @@ def test_initial_workflow_state_for_assessment_assessment():
 @pytest.mark.asyncio
 async def test_build_workflow_state_fresh_instance_lcoe():
     iid = uuid4()
-    initiative = _make_initiative(initiative_id=iid)
+    initiative = _make_initiative(project_id=iid)
     inst = _make_instance("lcoe_model", iid)
-    db = FakeDB({(Initiative, iid): initiative})
+    db = FakeDB({(Project, iid): initiative})
 
     state = await build_workflow_state(db, inst, LCOETool())
 
@@ -123,9 +123,9 @@ async def test_build_workflow_state_fresh_instance_lcoe():
 @pytest.mark.asyncio
 async def test_build_workflow_state_fresh_instance_assessment():
     iid = uuid4()
-    initiative = _make_initiative(initiative_id=iid)
+    initiative = _make_initiative(project_id=iid)
     inst = _make_instance("stakeholder_assessment", iid)
-    db = FakeDB({(Initiative, iid): initiative})
+    db = FakeDB({(Project, iid): initiative})
 
     state = await build_workflow_state(db, inst, StakeholderAssessment())
 

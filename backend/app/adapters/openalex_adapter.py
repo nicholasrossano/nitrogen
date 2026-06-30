@@ -51,7 +51,7 @@ class OpenAlexAdapter(BaseAdapter):
                     },
                 },
             },
-            initiative_scope_required=False,
+            project_scope_required=False,
             visibility=adapter_visibility("openalex", "exposed"),
             capabilities=["async"],
         )

@@ -12,7 +12,7 @@ import { SettingsModal } from './SettingsModal';
 import { UploadToast, UploadItem } from './UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from './DuplicateFileDialog';
 import { ShellNavContext, useChatSidebar } from './ShellContext';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -30,7 +30,7 @@ import {
 } from './chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
-export type NavItem = 'portfolio' | 'trash' | 'plan' | 'assumptions' | 'files' | 'chat' | 'research' | 'workspace';
+export type NavItem = 'portfolio' | 'plan' | 'assumptions' | 'files' | 'chat' | 'research' | 'workspace';
 
 interface NavItemConfig {
   key: NavItem;
@@ -54,7 +54,7 @@ const PROJECT_ITEMS: NavItemConfig[] = [
   { key: 'assumptions', label: PROJECT_VARIABLES.title, Icon: ListChecks },
 ];
 
-const INITIATIVE_RE = /^\/initiatives\/([^/]+)/;
+const PROJECT_RE = /^\/projects\/([^/]+)/;
 
 const NAV_LABEL_CLASS = 'whitespace-nowrap';
 
@@ -102,8 +102,8 @@ export function SideDrawer() {
   const { chatSidebarCollapsed, toggleChatSidebar } = useChatSidebar();
   const isChatShell = pathname.startsWith('/chat') || pathname === '/';
 
-  const initiativeId = useMemo(() => {
-    const m = INITIATIVE_RE.exec(pathname);
+  const projectId = useMemo(() => {
+    const m = PROJECT_RE.exec(pathname);
     return m ? m[1] : undefined;
   }, [pathname]);
 
@@ -112,7 +112,7 @@ export function SideDrawer() {
       if (pathname.startsWith('/chat/files')) return 'files';
       return 'chat';
     }
-    if (!initiativeId) return searchParams.get('view') === 'files' ? 'files' : 'portfolio';
+    if (!projectId) return searchParams.get('view') === 'files' ? 'files' : 'portfolio';
     const view = searchParams.get('view');
     if (view === 'research' || view === 'explore') return 'research';
     if (view === 'plan' || view === 'framework') return 'plan';
@@ -120,17 +120,17 @@ export function SideDrawer() {
     if (view === 'workspace' || view === 'assessments') return 'workspace';
     if (view === 'files') return 'files';
     return 'research';
-  }, [initiativeId, isChatShell, pathname, searchParams]);
+  }, [projectId, isChatShell, pathname, searchParams]);
 
-  const hasProject = !!initiativeId;
-  const initiative = useInitiativeStore((s) => s.initiative);
-  const projectPlan = useInitiativeStore((s) => s.projectPlan);
-  const isViewer = initiative?.shared_role === 'viewer';
+  const hasProject = !!projectId;
+  const project = useProjectStore((s) => s.project);
+  const projectPlan = useProjectStore((s) => s.projectPlan);
+  const isViewer = project?.shared_role === 'viewer';
   const hasFrameworkSelection = Boolean(
-    (initiative?.selected_tools?.length ?? 0) > 0 || projectPlan || initiative?.project_plan,
+    (project?.selected_tools?.length ?? 0) > 0 || projectPlan || project?.project_plan,
   );
-  const isOnboarding = Boolean(hasProject && initiative && !hasFrameworkSelection && !isViewer);
-  const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
+  const isOnboarding = Boolean(hasProject && project && !hasFrameworkSelection && !isViewer);
+  const uploadMaterial = useProjectStore((s) => s.uploadMaterial);
   const {
     workspaces,
     activeWorkspace,
@@ -194,15 +194,15 @@ export function SideDrawer() {
       router.push('/chat/files');
       return;
     }
-    if (item === 'files' && hasProject && initiativeId) {
-      router.replace(`/initiatives/${initiativeId}?view=files`);
+    if (item === 'files' && hasProject && projectId) {
+      router.replace(`/projects/${projectId}?view=files`);
       return;
     }
     if (item === 'portfolio') {
       router.push(isChatShell ? (chatProjectId ? `/chat?project=${chatProjectId}` : '/chat') : '/');
       return;
     }
-  }, [chatProjectId, hasProject, initiativeId, isChatShell, navHandlerRef, router]);
+  }, [chatProjectId, hasProject, projectId, isChatShell, navHandlerRef, router]);
 
   const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
     <button
@@ -266,9 +266,9 @@ export function SideDrawer() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
+  const projectMaterials = useProjectStore((s) => s.projectMaterials);
   const [workspaceMaterials, setWorkspaceMaterials] = useState<ProjectMaterial[]>([]);
-  const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
+  const importFromDrive = useProjectStore((s) => s.importFromDrive);
 
   const driveConnected = useGoogleDriveStore((s) => s.connected);
   const driveEmail = useGoogleDriveStore((s) => s.email);
@@ -322,12 +322,12 @@ export function SideDrawer() {
   }, [checkDriveStatus]);
 
   const handleDriveConnect = useCallback(() => {
-    if (!initiativeId) return;
-    connectDrive(initiativeId);
-  }, [initiativeId, connectDrive]);
+    if (!projectId) return;
+    connectDrive(projectId);
+  }, [projectId, connectDrive]);
 
   const handleDriveImport = useCallback(async () => {
-    if (!initiativeId) return;
+    if (!projectId) return;
     setDriveImportError(null);
     try {
       const accessToken = await getDriveAccessToken();
@@ -338,7 +338,7 @@ export function SideDrawer() {
           setDriveImporting(true);
           try {
             const fileIds = files.map((f) => f.id);
-            await importFromDrive(initiativeId, fileIds);
+            await importFromDrive(projectId, fileIds);
           } catch (err) {
             setDriveImportError(err instanceof Error ? err.message : 'Import failed');
           } finally {
@@ -349,7 +349,7 @@ export function SideDrawer() {
     } catch (err) {
       setDriveImportError(err instanceof Error ? err.message : 'Could not open Drive picker');
     }
-  }, [initiativeId, getDriveAccessToken, importFromDrive]);
+  }, [projectId, getDriveAccessToken, importFromDrive]);
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
@@ -393,7 +393,7 @@ export function SideDrawer() {
   const uploading = toastItems.some((i) => i.status === 'uploading');
 
   const doUpload = useCallback(async (filesToUpload: File[]) => {
-    if (fileScope === 'project' && !initiativeId) return;
+    if (fileScope === 'project' && !projectId) return;
     if (fileScope === 'workspace' && !activeWorkspace) return;
 
     const initial: UploadItem[] = filesToUpload.map((f) => ({
@@ -411,8 +411,8 @@ export function SideDrawer() {
         if (fileScope === 'workspace' && activeWorkspace) {
           const response = await api.uploadWorkspaceEvidence(activeWorkspace.id, file);
           setWorkspaceMaterials((prev) => [evidenceToMaterial(response.document), ...prev]);
-        } else if (initiativeId) {
-          await uploadMaterial(initiativeId, file);
+        } else if (projectId) {
+          await uploadMaterial(projectId, file);
         }
         setToastItems((prev) =>
           prev.map((t) => t.id === item.id ? { ...t, status: 'done' } : t)
@@ -432,10 +432,10 @@ export function SideDrawer() {
         loadWorkspaceFiles().catch(() => {});
       }, 1500);
     }
-  }, [activeWorkspace, evidenceToMaterial, fileScope, initiativeId, loadWorkspaceFiles, uploadMaterial]);
+  }, [activeWorkspace, evidenceToMaterial, fileScope, projectId, loadWorkspaceFiles, uploadMaterial]);
 
   const handleUpload = useCallback(async (files: FileList | File[]) => {
-    if (fileScope === 'project' && !initiativeId) return;
+    if (fileScope === 'project' && !projectId) return;
     if (fileScope === 'workspace' && !activeWorkspace) return;
     const fileArray = Array.from(files);
     const existingNames = (fileScope === 'workspace' ? workspaceMaterials : projectMaterials)
@@ -458,7 +458,7 @@ export function SideDrawer() {
     } else {
       doUpload(fileArray);
     }
-  }, [activeWorkspace, doUpload, fileScope, initiativeId, projectMaterials, workspaceMaterials]);
+  }, [activeWorkspace, doUpload, fileScope, projectId, projectMaterials, workspaceMaterials]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -570,7 +570,7 @@ export function SideDrawer() {
           </div>
         )}
 
-        {/* Legacy initiative project nav */}
+        {/* Project nav */}
         {!isChatShell && (
         <div className={`${gridCollapse} ${hasProject ? gridOpen : gridClosed}`}>
           <div className="overflow-hidden">
@@ -673,7 +673,7 @@ export function SideDrawer() {
                 ) : (
                   <button
                     onClick={handleDriveConnect}
-                    disabled={!initiativeId}
+                    disabled={!projectId}
                     className="flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-text-secondary bg-black/[0.04] enabled:hover:bg-black/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     <HardDriveDownload className="w-3.5 h-3.5 flex-shrink-0" />

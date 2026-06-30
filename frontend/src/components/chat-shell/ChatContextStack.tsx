@@ -18,7 +18,7 @@ import {
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { api, type Assumption, type Project, type ProjectMaterial } from '@/lib/api';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 
@@ -125,8 +125,8 @@ export function ChatContextStack({
 }: ChatContextStackProps) {
   const { renderedWidget, visible } = useExpandedPanelVisibility(expandedWidget);
   const [shellMotion, setShellMotion] = useState<ContextPanelExpandMotion>('stack');
-  const uploadMaterial = useInitiativeStore((state) => state.uploadMaterial);
-  const deleteMaterial = useInitiativeStore((state) => state.deleteMaterial);
+  const uploadMaterial = useProjectStore((state) => state.uploadMaterial);
+  const deleteMaterial = useProjectStore((state) => state.deleteMaterial);
   const [projectMaterials, setProjectMaterials] = useState<ProjectMaterial[]>([]);
   const [overviewShareModalOpen, setOverviewShareModalOpen] = useState(false);
 
@@ -286,7 +286,7 @@ export function ChatContextStack({
           onClose={handleCloseExpanded}
         >
           <AssumptionsWorkspaceTab
-            initiativeId={projectId}
+            projectId={projectId}
             embedded
             showDetailPanel
             focusAssumptionId={variablesFocusId}
@@ -305,7 +305,7 @@ export function ChatContextStack({
         >
           <ProjectFilesView
             scope="project"
-            initiativeId={projectId}
+            projectId={projectId}
             title={`${project?.name ?? 'Project'} files`}
             materials={projectMaterials}
             onUploadFile={async (file) => {

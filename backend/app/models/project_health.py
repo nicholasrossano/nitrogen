@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, synonym
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
@@ -25,7 +25,6 @@ class ProjectHealthResult(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id = synonym("project_id")
     domain: Mapped[str] = mapped_column(String(64), nullable=False, default="energy")
     dimension_id: Mapped[str] = mapped_column(String(120), nullable=False)
     dimension_label: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -77,7 +76,6 @@ class ProjectHealthOverride(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id = synonym("project_id")
     dimension_id: Mapped[str] = mapped_column(String(120), nullable=False)
     prior_system_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
     override_status: Mapped[str] = mapped_column(String(24), nullable=False)

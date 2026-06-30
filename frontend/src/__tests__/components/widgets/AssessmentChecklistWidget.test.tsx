@@ -3,7 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AssessmentChecklistWidget } from '@/components/widgets/AssessmentChecklistWidget';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 const replace = jest.fn();
@@ -18,8 +18,8 @@ describe('AssessmentChecklistWidget', () => {
   beforeEach(() => {
     replace.mockReset();
     useSettingsStore.setState({ devMode: false });
-    useInitiativeStore.setState({
-      initiative: { id: 'initiative-123', selected_tools: null } as any,
+    useProjectStore.setState({
+      project: { id: 'initiative-123', selected_tools: null } as any,
       projectPlan: null,
       error: null,
       selectTools: async () => undefined,
@@ -29,17 +29,17 @@ describe('AssessmentChecklistWidget', () => {
 
   it('groups recommended assessments by framework category and confirms the selection', async () => {
     const selectTools = jest.fn().mockImplementation(async () => {
-      useInitiativeStore.setState({
+      useProjectStore.setState({
         error: null,
-        initiative: {
+        project: {
           id: 'initiative-123',
           selected_tools: ['landscape_mapping'],
         } as any,
       });
     });
 
-    useInitiativeStore.setState({
-      initiative: { id: 'initiative-123', selected_tools: null } as any,
+    useProjectStore.setState({
+      project: { id: 'initiative-123', selected_tools: null } as any,
       projectPlan: null,
       error: null,
       selectTools,
@@ -47,7 +47,7 @@ describe('AssessmentChecklistWidget', () => {
 
     render(
       <AssessmentChecklistWidget
-        initiativeId="initiative-123"
+        projectId="initiative-123"
         isActive
         data={{
           title: 'Recommended Framework Assessments',
@@ -89,7 +89,7 @@ describe('AssessmentChecklistWidget', () => {
 
     await waitFor(() => {
       expect(selectTools).toHaveBeenCalledWith('initiative-123', ['landscape_mapping']);
-      expect(replace).toHaveBeenCalledWith('/initiatives/initiative-123?view=framework');
+      expect(replace).toHaveBeenCalledWith('/projects/initiative-123?view=framework');
     });
   });
 });

@@ -1,26 +1,26 @@
 'use client';
 
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { Edit2, MapPin, Users, Target, DollarSign, Clock, AlertCircle, Flame, ClipboardList } from 'lucide-react';
 import { ConfirmButton, PanelHeader } from '@/components/ui';
 
 interface ConfirmationWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
   onSendMessage?: (content: string) => Promise<void> | void;
 }
 
 export function ConfirmationWidget({
   data,
-  initiativeId,
+  projectId,
   isActive = true,
   onSendMessage,
 }: ConfirmationWidgetProps) {
-  const { confirmIntake, loading } = useInitiativeStore();
+  const { confirmIntake, loading } = useProjectStore();
 
   const handleConfirm = async () => {
-    await confirmIntake(initiativeId);
+    await confirmIntake(projectId);
   };
 
   const handleEdit = async () => {

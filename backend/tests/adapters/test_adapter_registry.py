@@ -9,7 +9,7 @@ def _ctx() -> ExecutionContext:
     return ExecutionContext(
         user_id="test-user",
         user_email="test@example.com",
-        initiative_id=None,
+        project_id=None,
         initiative_role=None,
         ai_access_granted=True,
         is_byok=False,

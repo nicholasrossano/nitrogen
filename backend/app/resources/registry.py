@@ -27,7 +27,7 @@ class ResourceDefinition:
     name: str
     description: str
     mime_type: str
-    initiative_scoped: bool
+    project_scoped: bool
     read_handler: ReadHandler
     visibility: Literal["internal", "exposed"] = "internal"
 
@@ -113,10 +113,6 @@ class ResourceRegistry:
         uris.extend(f"nitrogen://corpus/{doc_id}" for doc_id in corpus_docs)
 
         return uris
-
-    async def list_for_initiative(self, initiative_id: UUID, db: AsyncSession) -> list[str]:
-        """Backward-compatible alias — initiative IDs are project IDs after contract migration."""
-        return await self.list_for_project(initiative_id, db)
 
 
 _registry: ResourceRegistry | None = None

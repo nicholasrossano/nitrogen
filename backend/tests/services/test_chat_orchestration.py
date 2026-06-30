@@ -27,7 +27,7 @@ def _build_ctx():
     return ExecutionContext(
         user_id="user-1",
         user_email="test@example.com",
-        initiative_id=None,
+        project_id=None,
         initiative_role="editor",
         ai_access_granted=True,
         is_byok=False,
@@ -178,7 +178,7 @@ async def test_plan_tool_calls_returns_llm_tool_calls(monkeypatch: pytest.Monkey
     result = await service._plan_tool_calls(
         user_message="What is a typical solar capacity factor in Kenya?",
         history=[],
-        initiative_id=str(uuid4()),
+        project_id=str(uuid4()),
     )
 
     assert result == tool_calls

@@ -10,7 +10,7 @@ def test_resource_registry_contains_required_baseline_resource_types() -> None:
     resource_types = {definition.resource_type for definition in registry.list_definitions()}
     # Baseline resources required for architecture migration phases.
     assert {
-        "initiative",
+        "project",
         "evidence_doc",
         "evidence_chunk",
         "corpus_doc",
@@ -25,14 +25,14 @@ def test_resource_registry_contains_required_baseline_resource_types() -> None:
 @pytest.mark.parametrize(
     "uri,resource_type",
     [
-        (f"nitrogen://initiatives/{uuid4()}", "initiative"),
-        (f"nitrogen://initiatives/{uuid4()}/evidence/docs/{uuid4()}", "evidence_doc"),
-        (f"nitrogen://initiatives/{uuid4()}/evidence/chunks/{uuid4()}", "evidence_chunk"),
+        (f"nitrogen://projects/{uuid4()}", "project"),
+        (f"nitrogen://projects/{uuid4()}/evidence/docs/{uuid4()}", "evidence_doc"),
+        (f"nitrogen://projects/{uuid4()}/evidence/chunks/{uuid4()}", "evidence_chunk"),
         (f"nitrogen://corpus/{uuid4()}", "corpus_doc"),
-        (f"nitrogen://initiatives/{uuid4()}/materials/{uuid4()}", "project_material"),
-        (f"nitrogen://initiatives/{uuid4()}/memos/{uuid4()}", "memo_version"),
-        (f"nitrogen://initiatives/{uuid4()}/assessments/{uuid4()}", "assessment_instance"),
-        (f"nitrogen://initiatives/{uuid4()}/artifacts/{uuid4()}", "artifact"),
+        (f"nitrogen://projects/{uuid4()}/materials/{uuid4()}", "project_material"),
+        (f"nitrogen://projects/{uuid4()}/memos/{uuid4()}", "memo_version"),
+        (f"nitrogen://projects/{uuid4()}/assessments/{uuid4()}", "assessment_instance"),
+        (f"nitrogen://projects/{uuid4()}/artifacts/{uuid4()}", "artifact"),
     ],
 )
 def test_resource_registry_resolves_phase2_uri_patterns(uri: str, resource_type: str) -> None:

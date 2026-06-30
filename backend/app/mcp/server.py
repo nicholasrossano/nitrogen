@@ -23,14 +23,14 @@ from app.adapters.base import BaseAdapter
 from app.core.auth import AuthUser, authenticate_bearer_token
 from app.core.database import AsyncSessionLocal
 from app.core.execution_context import ExecutionContext, build_context
-from app.core.permissions import get_initiative_with_role
+from app.core.permissions import get_project_with_role
 from app.prompts.registry import PromptDefinition, get_prompt_registry
 from app.resources import get_resource_registry
 from app.resources.registry import ResourceDefinition
 
 STDIO_USER_ID_ENV = "MCP_STDIO_USER_ID"
 STDIO_USER_EMAIL_ENV = "MCP_STDIO_USER_EMAIL"
-STDIO_DEFAULT_INITIATIVE_ENV = "MCP_DEFAULT_INITIATIVE_ID"
+STDIO_DEFAULT_PROJECT_ENV = "MCP_DEFAULT_PROJECT_ID"
 HTTP_DEV_USER_ID_HEADER = "x-mcp-dev-user-id"
 HTTP_DEV_USER_EMAIL_HEADER = "x-mcp-dev-user-email"
 HTTP_DEV_BYPASS_ENV = "MCP_ALLOW_DEV_HTTP_AUTH"
@@ -164,18 +164,18 @@ def _request_from_context(server: Server[Any, Request]) -> Request | None:
         return None
 
 
-def _parse_initiative_id(arguments: Mapping[str, Any] | None = None, uri: str | None = None) -> UUID | None:
+def _parse_project_id(arguments: Mapping[str, Any] | None = None, uri: str | None = None) -> UUID | None:
     if arguments:
-        initiative_id = arguments.get("initiative_id")
-        if initiative_id:
-            return UUID(str(initiative_id))
+        project_id = arguments.get("project_id")
+        if project_id:
+            return UUID(str(project_id))
 
     if uri:
         definition, params = _get_resource_or_raise(uri)
-        if definition.initiative_scoped:
+        if definition.project_scoped:
             return UUID(params["id"])
 
-    default_initiative_id = os.getenv(STDIO_DEFAULT_INITIATIVE_ENV)
+    default_initiative_id = os.getenv(STDIO_DEFAULT_PROJECT_ENV)
     if default_initiative_id:
         return UUID(default_initiative_id)
 
@@ -215,13 +215,13 @@ async def build_mcp_context(
     uri: str | None = None,
     request: Request | None = None,
 ) -> ExecutionContext:
-    initiative_id = _parse_initiative_id(arguments, uri)
+    project_id = _parse_project_id(arguments, uri)
     user = await _resolve_request_user(request)
 
     async with AsyncSessionLocal() as db:
-        if initiative_id is not None:
-            await get_initiative_with_role(db, initiative_id, user)
-        return await build_context(db, user, initiative_id)
+        if project_id is not None:
+            await get_project_with_role(db, project_id, user)
+        return await build_context(db, user, project_id)
 
 
 async def call_exposed_tool(
@@ -233,8 +233,8 @@ async def call_exposed_tool(
     adapter = _get_adapter_or_raise(name)
     tool_arguments = dict(arguments or {})
 
-    if adapter.definition.initiative_scope_required and not tool_arguments.get("initiative_id"):
-        raise ValueError(f"MCP tool '{name}' requires initiative_id.")
+    if adapter.definition.project_scope_required and not tool_arguments.get("project_id"):
+        raise ValueError(f"MCP tool '{name}' requires project_id.")
 
     ctx = await build_mcp_context(tool_arguments, request=request)
     async with AsyncSessionLocal() as db:

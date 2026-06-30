@@ -27,7 +27,7 @@ interface LCOEInput {
 
 interface LCOEInputsWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
   hasOutputWidget?: boolean;
   messageId?: string;
@@ -48,7 +48,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function LCOEInputsWidget({
   data,
-  initiativeId,
+  projectId,
   isActive = true,
   hasOutputWidget = false,
   messageId,
@@ -58,10 +58,10 @@ export function LCOEInputsWidget({
   const inputsMap: Record<string, LCOEInput> = data?.inputs || {};
   const missingEssentials: string[] = data?.missing_essentials || [];
   const persistWidget = useCallback((widgetData: Record<string, any>) => {
-    if (messageId && initiativeId) {
-      api.updateMessageWidget(initiativeId, messageId, widgetData).catch(() => {});
+    if (messageId && projectId) {
+      api.updateMessageWidget(projectId, messageId, widgetData).catch(() => {});
     }
-  }, [messageId, initiativeId]);
+  }, [messageId, projectId]);
 
   const [localInputs, setLocalInputs] = useState<Record<string, any>>(
     data?.inputs || {}
@@ -102,11 +102,11 @@ export function LCOEInputsWidget({
       try {
         let assumptionId = localAssumptionId;
         if (!assumptionId) {
-          const resolved = await api.resolveAssumption(initiativeId, 'lcoe_model', fieldName);
+          const resolved = await api.resolveAssumption(projectId, 'lcoe_model', fieldName);
           assumptionId = resolved.found ? resolved.assumption?.id ?? null : null;
         }
         if (!assumptionId) {
-          const created = await api.createAssumption(initiativeId, {
+          const created = await api.createAssumption(projectId, {
             key: fieldName,
             label,
             value: input?.value ?? null,
@@ -150,7 +150,7 @@ export function LCOEInputsWidget({
         modelInputsContext: buildModelInputsContext('LCOE Model', localInputs, fieldContext),
       },
     }));
-  }, [initiativeId, localInputs]);
+  }, [projectId, localInputs]);
 
   const groupedInputs = CATEGORY_ORDER.map((cat) => ({
     category: cat,

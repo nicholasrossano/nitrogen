@@ -20,7 +20,7 @@ class AdapterDefinition:
     adapter_type: Literal["python", "api", "cli", "file", "mcp"]
     input_schema: dict
     output_schema: dict
-    initiative_scope_required: bool
+    project_scope_required: bool
     visibility: Literal["internal", "assessment_bound", "exposed"]
     capabilities: list[str] = field(default_factory=list)
 

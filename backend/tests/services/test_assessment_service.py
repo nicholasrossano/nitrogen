@@ -36,7 +36,7 @@ async def test_list_instances_includes_drafts_for_active_view():
 
     await assessment_service.list_instances(
         db,
-        initiative_id=uuid4(),
+        project_id=uuid4(),
         archived=False,
     )
 

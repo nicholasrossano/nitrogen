@@ -204,7 +204,7 @@ class PVWattsTool(BaseAssessment):
         ctx = ExecutionContext(
             user_id="system",
             user_email=None,
-            initiative_id=None,
+            project_id=None,
             initiative_role=None,
             ai_access_granted=True,
             is_byok=False,
@@ -325,7 +325,7 @@ class PVWattsTool(BaseAssessment):
         ctx = ExecutionContext(
             user_id="system",
             user_email=None,
-            initiative_id=None,
+            project_id=None,
             initiative_role=None,
             ai_access_granted=True,
             is_byok=False,
@@ -369,7 +369,7 @@ class PVWattsTool(BaseAssessment):
         ctx = ExecutionContext(
             user_id="system",
             user_email=None,
-            initiative_id=None,
+            project_id=None,
             initiative_role=None,
             ai_access_granted=True,
             is_byok=False,

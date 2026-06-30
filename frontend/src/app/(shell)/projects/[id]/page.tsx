@@ -33,157 +33,50 @@ import { importFromDriveViaPicker } from '@/lib/driveImport';
 import { filterVisibleAssessments } from '@/lib/featureFlags';
 import { useFeatureFlagContext } from '@/hooks/useFeatureFlag';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
+import {
+  inspectorRequestKey,
+  makeDocumentTabId,
+  MAX_CHAT_PANEL_PERCENT,
+  MIN_CHAT_PANEL_PERCENT,
+  viewFromSearchParam,
+  type PendingAssumptionsRequest,
+  type PendingDeepDiveRequest,
+  type ProjectView,
+} from './projectWorkspaceTypes';
+import { useProjectWorkspaceHeaderToggles, useProjectWorkspaceUi } from './useProjectWorkspaceUi';
 
 const ProjectFilesView = dynamic(() => import('@/components/files').then((m) => ({ default: m.ProjectFilesView })), { ssr: false });
-const MIN_CHAT_PANEL_PERCENT = 20;
-const MAX_CHAT_PANEL_PERCENT = 60;
-const DEFAULT_CHAT_PANEL_PERCENT = 30;
 
-type InitiativeView = 'overview' | 'assessments' | 'framework' | 'assumptions' | 'files';
-
-function viewFromSearchParam(viewParam: string | null): InitiativeView {
-  if (viewParam === 'overview' || viewParam === 'research' || viewParam === 'explore') return 'overview';
-  if (viewParam === 'framework' || viewParam === 'plan') return 'framework';
-  if (viewParam === 'workspace' || viewParam === 'assessments') return 'assessments';
-  if (viewParam === 'assumptions') return 'assumptions';
-  if (viewParam === 'files') return 'files';
-  return 'overview';
-}
-
-function makeDocumentTabId(citation: ResearchPanelCitation): string {
-  return `document-${citation.evidence_doc_id}`;
-}
-
-interface PendingDeepDiveRequest {
-  requestId: string;
-  state: PlanWorkspaceInspectorState;
-}
-
-interface PendingAssumptionsRequest {
-  requestId: string;
-  focusAssumptionId?: string | null;
-  createNew?: boolean;
-  title?: string | null;
-  forceNewTab?: boolean;
-  autoSend?: {
-    requestId: string;
-    content: string;
-    toolHint?: string;
-    fieldContext?: import('@/lib/api').FieldContext | null;
-    modelInputsContext?: string | null;
-    assumptionId?: string | null;
-  } | null;
-}
-
-interface StoredInitiativeWorkspaceUiState {
-  panelVisibility: {
-    overview: { workspace: boolean; chat: boolean };
-    assessments: { workspace: boolean; chat: boolean };
-    framework: { workspace: boolean; chat: boolean };
-    assumptions: { workspace: boolean; chat: boolean };
-  };
-  chatPanelWidthPercent: number;
-  workspaceTabs: WorkspacePanelTab[];
-  activeWorkspaceTabId: string | null;
-}
-
-const DEFAULT_PANEL_VISIBILITY: StoredInitiativeWorkspaceUiState['panelVisibility'] = {
-  overview: { workspace: true, chat: false },
-  assessments: { workspace: true, chat: false },
-  framework: { workspace: true, chat: false },
-  assumptions: { workspace: true, chat: false },
-};
-
-function readStoredWorkspaceUiState(storageKey: string): StoredInitiativeWorkspaceUiState | null {
-  if (typeof sessionStorage === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(storageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredInitiativeWorkspaceUiState>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!parsed.panelVisibility || !parsed.workspaceTabs) return null;
-
-    const tabs = Array.isArray(parsed.workspaceTabs)
-      ? parsed.workspaceTabs.filter(
-          (tab): tab is WorkspacePanelTab =>
-            Boolean(tab) &&
-            typeof tab === 'object' &&
-            typeof (tab as { id?: unknown }).id === 'string' &&
-            typeof (tab as { title?: unknown }).title === 'string' &&
-            typeof (tab as { kind?: unknown }).kind === 'string' &&
-            (tab as { kind?: unknown }).kind !== 'artifacts',
-        )
-      : [];
-
-    const parsedWidth = Number(parsed.chatPanelWidthPercent);
-    const clampedWidth = Number.isFinite(parsedWidth)
-      ? Math.min(MAX_CHAT_PANEL_PERCENT, Math.max(MIN_CHAT_PANEL_PERCENT, parsedWidth))
-      : DEFAULT_CHAT_PANEL_PERCENT;
-
-    const activeWorkspaceTabId =
-      typeof parsed.activeWorkspaceTabId === 'string' &&
-      tabs.some((tab) => tab.id === parsed.activeWorkspaceTabId)
-        ? parsed.activeWorkspaceTabId
-        : null;
-    const rawPanelVisibility = parsed.panelVisibility as Partial<StoredInitiativeWorkspaceUiState['panelVisibility']>;
-    const panelVisibility: StoredInitiativeWorkspaceUiState['panelVisibility'] = {
-      overview: rawPanelVisibility?.overview ?? DEFAULT_PANEL_VISIBILITY.overview,
-      assessments: rawPanelVisibility?.assessments ?? DEFAULT_PANEL_VISIBILITY.assessments,
-      framework: rawPanelVisibility?.framework ?? DEFAULT_PANEL_VISIBILITY.framework,
-      assumptions: rawPanelVisibility?.assumptions ?? DEFAULT_PANEL_VISIBILITY.assumptions,
-    };
-
-    return {
-      panelVisibility,
-      chatPanelWidthPercent: clampedWidth,
-      workspaceTabs: tabs,
-      activeWorkspaceTabId,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredWorkspaceUiState(storageKey: string, state: StoredInitiativeWorkspaceUiState) {
-  if (typeof sessionStorage === 'undefined') return;
-  try {
-    sessionStorage.setItem(storageKey, JSON.stringify(state));
-  } catch {
-    // Ignore private mode / quota errors.
-  }
-}
-
-function inspectorRequestKey(state: PlanWorkspaceInspectorState): string {
-  return `${state.groupName}::${state.item.id}`;
-}
-
-function InitiativePageContent() {
+function ProjectPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initiativeId = params.id as string;
-  const workspaceUiStorageKey = `nitrogen_initiative_workspace_ui_${initiativeId}`;
-  const frameworkChatTabsStorageKey = `nitrogen_framework_chat_tabs_${initiativeId}`;
+  const projectId = params.id as string;
+  const frameworkChatTabsStorageKey = `nitrogen_framework_chat_tabs_${projectId}`;
+
+  const {
+    workspaceUiStorageKey,
+    panelVisibility,
+    chatPanelWidthPercent,
+    setChatPanelWidthPercent,
+    isResizingChat,
+    setIsResizingChat,
+    workspaceTabs,
+    setWorkspaceTabs,
+    activeWorkspaceTabId,
+    setActiveWorkspaceTabId,
+    setPanelOpen,
+    restoreWorkspaceUiFromStorage,
+  } = useProjectWorkspaceUi(projectId);
 
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const chatSendRef = useRef<((content: string, toolHint?: string) => void) | null>(null);
 
   const viewParam = searchParams.get('view');
   const viewFromUrl = viewFromSearchParam(viewParam);
-  const initialWorkspaceUiRef = useRef<StoredInitiativeWorkspaceUiState | null>(null);
-  if (!initialWorkspaceUiRef.current) {
-    initialWorkspaceUiRef.current = readStoredWorkspaceUiState(workspaceUiStorageKey);
-  }
 
-  const [activeView, setActiveView] = useState<InitiativeView>(viewFromUrl);
-  const [panelVisibility, setPanelVisibility] = useState(
-    initialWorkspaceUiRef.current?.panelVisibility ?? DEFAULT_PANEL_VISIBILITY,
-  );
-  const [chatPanelWidthPercent, setChatPanelWidthPercent] = useState(
-    initialWorkspaceUiRef.current?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT,
-  );
-  const [isResizingChat, setIsResizingChat] = useState(false);
+  const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
 
   const [pageReady, setPageReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
@@ -199,12 +92,6 @@ function InitiativePageContent() {
     toolHint?: string;
   } | null>(null);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
-  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>(
-    initialWorkspaceUiRef.current?.workspaceTabs ?? [],
-  );
-  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(
-    initialWorkspaceUiRef.current?.activeWorkspaceTabId ?? null,
-  );
   const [frameworkAssessmentInstances, setFrameworkAssessmentInstances] = useState<AssessmentInstance[]>([]);
   const [frameworkPlannedAssessmentIds, setFrameworkPlannedAssessmentIds] = useState<string[]>([]);
   const [frameworkAssessmentsLoading, setFrameworkAssessmentsLoading] = useState(false);
@@ -212,17 +99,17 @@ function InitiativePageContent() {
   const assessmentsDeepDiveRef = useRef<{ key: string; requestId: string } | null>(null);
   const frameworkAssessmentsCacheRef = useRef<Map<string, AssessmentInstance[]>>(new Map());
   const frameworkAssessmentsRequestRef = useRef<Map<string, Promise<AssessmentInstance[]>>>(new Map());
-  const ephemeralAssessmentSessionsRef = useRef<Map<string, { initiativeId: string; engaged: boolean }>>(new Map());
+  const ephemeralAssessmentSessionsRef = useRef<Map<string, { projectId: string; engaged: boolean }>>(new Map());
 
   const {
-    initiative,
+    project,
     projectPlan,
     projectMaterials,
     driveLinkedFiles,
     loading,
     error,
-  } = useInitiativeStore(useShallow((s) => ({
-    initiative: s.initiative,
+  } = useProjectStore(useShallow((s) => ({
+    project: s.project,
     projectPlan: s.projectPlan,
     projectMaterials: s.projectMaterials,
     driveLinkedFiles: s.driveLinkedFiles,
@@ -230,18 +117,18 @@ function InitiativePageContent() {
     error: s.error,
   })));
 
-  const loadInitiative = useInitiativeStore((s) => s.loadInitiative);
-  const loadEvidence = useInitiativeStore((s) => s.loadEvidence);
-  const loadMaterials = useInitiativeStore((s) => s.loadMaterials);
-  const loadDriveLinkedFiles = useInitiativeStore((s) => s.loadDriveLinkedFiles);
-  const syncDriveFiles = useInitiativeStore((s) => s.syncDriveFiles);
-  const importFromDrive = useInitiativeStore((s) => s.importFromDrive);
-  const updateTitle = useInitiativeStore((s) => s.updateTitle);
-  const uploadMaterial = useInitiativeStore((s) => s.uploadMaterial);
-  const deleteMaterial = useInitiativeStore((s) => s.deleteMaterial);
-  const reset = useInitiativeStore((s) => s.reset);
+  const loadProject = useProjectStore((s) => s.loadProject);
+  const loadEvidence = useProjectStore((s) => s.loadEvidence);
+  const loadMaterials = useProjectStore((s) => s.loadMaterials);
+  const loadDriveLinkedFiles = useProjectStore((s) => s.loadDriveLinkedFiles);
+  const syncDriveFiles = useProjectStore((s) => s.syncDriveFiles);
+  const importFromDrive = useProjectStore((s) => s.importFromDrive);
+  const updateTitle = useProjectStore((s) => s.updateTitle);
+  const uploadMaterial = useProjectStore((s) => s.uploadMaterial);
+  const deleteMaterial = useProjectStore((s) => s.deleteMaterial);
+  const reset = useProjectStore((s) => s.reset);
 
-  const isViewer = initiative?.shared_role === 'viewer';
+  const isViewer = project?.shared_role === 'viewer';
   const getDriveAccessToken = useGoogleDriveStore((s) => s.getAccessToken);
   const driveConnected = useGoogleDriveStore((s) => s.connected);
   const connectDrive = useGoogleDriveStore((s) => s.connect);
@@ -265,7 +152,7 @@ function InitiativePageContent() {
     visibleFrameworkPlannedAssessmentIds.length > 0,
   );
   const isOnboarding = Boolean(
-    initiative &&
+    project &&
     !isViewer &&
     !hasFrameworkSelection,
   );
@@ -427,102 +314,16 @@ function InitiativePageContent() {
     ? (showPrimaryPanel ? Math.max(0, 100 - sideChatWidthPercent) : 0)
     : (showPrimaryPanel ? 100 : 0);
   const showChatResizeHandle = hasSideChatShell && showPrimaryPanel && sideChatOpen;
-  const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${initiativeId}`;
-  const isChatPrimaryMode = activeView === 'framework' && !hasFrameworkSelection;
-  const workspaceToggleEnabled = !isViewer && (
-    activeView === 'overview'
-    || activeView === 'framework'
-    || activeView === 'assessments'
-    || activeView === 'assumptions'
-  );
-  const chatToggleEnabled =
-    activeView === 'assessments'
-    || activeView === 'overview'
-    || activeView === 'framework'
-    || activeView === 'assumptions';
-  const workspaceToggleActive = isChatPrimaryMode ? false : workspaceOpen;
-  const chatToggleActive = isChatPrimaryMode ? true : chatOpen;
-  const workspaceToggleLocked = workspaceToggleActive && !chatToggleActive;
-  const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
-
-  const setPanelOpen = useCallback(
-    (view: 'overview' | 'assessments' | 'framework' | 'assumptions', panel: 'workspace' | 'chat', open: boolean) => {
-      setPanelVisibility((prev) => {
-        const current = prev[view];
-        const next = { ...current, [panel]: open };
-        if (!next.workspace && !next.chat) {
-          next[panel] = true;
-        }
-        return {
-          ...prev,
-          [view]: next,
-        };
-      });
-    },
-    [],
-  );
-
-  const workspaceHeaderToggle = {
-    active: workspaceToggleActive,
-    disabled: !workspaceToggleEnabled || workspaceToggleLocked,
-    onClick: () => {
-      if (!workspaceToggleEnabled || workspaceToggleLocked) return;
-      if (activeView === 'assessments') {
-        setPanelOpen('assessments', 'workspace', !panelVisibility.assessments.workspace);
-        return;
-      }
-      if (activeView === 'overview') {
-        setPanelOpen('overview', 'workspace', !panelVisibility.overview.workspace);
-        return;
-      }
-      if (activeView === 'framework' && hasFrameworkSelection) {
-        setPanelOpen('framework', 'workspace', !panelVisibility.framework.workspace);
-        return;
-      }
-      if (activeView === 'assumptions') {
-        setPanelOpen('assumptions', 'workspace', !panelVisibility.assumptions.workspace);
-      }
-    },
-    title: !workspaceToggleEnabled
-      ? 'Workspace unavailable'
-      : workspaceToggleLocked
-        ? 'Workspace must stay open'
-        : workspaceToggleActive
-          ? 'Hide workspace'
-          : 'Show workspace',
-    icon: 'workspace' as const,
-  };
-
-  const chatHeaderToggle = {
-    active: chatToggleActive,
-    disabled: !chatToggleEnabled || chatToggleLocked,
-    onClick: () => {
-      if (!chatToggleEnabled || chatToggleLocked) return;
-      if (activeView === 'assessments') {
-        setPanelOpen('assessments', 'chat', !panelVisibility.assessments.chat);
-        return;
-      }
-      if (activeView === 'overview') {
-        setPanelOpen('overview', 'chat', !panelVisibility.overview.chat);
-        return;
-      }
-      if (activeView === 'framework' && hasFrameworkSelection) {
-        setPanelOpen('framework', 'chat', !panelVisibility.framework.chat);
-        return;
-      }
-      if (activeView === 'assumptions') {
-        setPanelOpen('assumptions', 'chat', !panelVisibility.assumptions.chat);
-      }
-    },
-    title: !chatToggleEnabled
-      ? 'Chat unavailable'
-      : chatToggleLocked
-        ? 'Chat must stay open'
-        : chatToggleActive
-          ? 'Hide chat'
-          : 'Show chat',
-    icon: 'chat' as const,
-  };
+  const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${projectId}`;
+  const { isChatPrimaryMode, workspaceHeaderToggle, chatHeaderToggle } = useProjectWorkspaceHeaderToggles({
+    activeView,
+    hasFrameworkSelection,
+    isViewer,
+    panelVisibility,
+    workspaceOpen,
+    chatOpen,
+    setPanelOpen,
+  });
 
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
@@ -530,9 +331,9 @@ function InitiativePageContent() {
 
   useEffect(() => {
     if (viewParam === 'plan') {
-      router.replace(`/initiatives/${initiativeId}?view=framework`);
+      router.replace(`/projects/${projectId}?view=framework`);
     }
-  }, [viewParam, router, initiativeId]);
+  }, [viewParam, router, projectId]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -578,7 +379,7 @@ function InitiativePageContent() {
         setPanelOpen('assumptions', 'workspace', true);
         setPanelOpen('assumptions', 'chat', true);
         setActiveView('assumptions');
-        router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+        router.replace(`/projects/${projectId}?view=assumptions`);
       }
 
       setPendingAssumptionsRequest({
@@ -602,45 +403,45 @@ function InitiativePageContent() {
 
     window.addEventListener('nitrogen:open-assumption-chat', handler);
     return () => window.removeEventListener('nitrogen:open-assumption-chat', handler);
-  }, [activeView, initiativeId, router, setPanelOpen]);
+  }, [activeView, projectId, router, setPanelOpen]);
 
   const handleFilesViewDriveImport = useCallback(async () => {
     await importFromDriveViaPicker({
-      initiativeId,
+      projectId,
       driveConnected,
       connectDrive,
       getDriveAccessToken,
       importFromDrive,
     });
-  }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, initiativeId]);
+  }, [driveConnected, connectDrive, getDriveAccessToken, importFromDrive, projectId]);
 
   const loadFrameworkAssessmentInstances = useCallback(async (
-    targetInitiativeId: string,
+    targetProjectId: string,
     options?: { force?: boolean },
   ) => {
     const force = options?.force === true;
-    const cached = frameworkAssessmentsCacheRef.current.get(targetInitiativeId);
+    const cached = frameworkAssessmentsCacheRef.current.get(targetProjectId);
     if (cached && !force) {
       setFrameworkAssessmentInstances(cached);
       return;
     }
 
-    let request = frameworkAssessmentsRequestRef.current.get(targetInitiativeId);
+    let request = frameworkAssessmentsRequestRef.current.get(targetProjectId);
     if (!request || force) {
-      request = api.listAssessmentInstances(targetInitiativeId);
-      frameworkAssessmentsRequestRef.current.set(targetInitiativeId, request);
+      request = api.listAssessmentInstances(targetProjectId);
+      frameworkAssessmentsRequestRef.current.set(targetProjectId, request);
     }
 
     setFrameworkAssessmentsLoading(true);
     try {
       const instances = await request;
-      frameworkAssessmentsCacheRef.current.set(targetInitiativeId, instances);
+      frameworkAssessmentsCacheRef.current.set(targetProjectId, instances);
       setFrameworkAssessmentInstances(instances);
     } catch {
       setFrameworkAssessmentInstances([]);
     } finally {
-      if (frameworkAssessmentsRequestRef.current.get(targetInitiativeId) === request) {
-        frameworkAssessmentsRequestRef.current.delete(targetInitiativeId);
+      if (frameworkAssessmentsRequestRef.current.get(targetProjectId) === request) {
+        frameworkAssessmentsRequestRef.current.delete(targetProjectId);
       }
       setFrameworkAssessmentsLoading(false);
     }
@@ -657,7 +458,7 @@ function InitiativePageContent() {
       }
       setPanelOpen('overview', 'workspace', true);
       setActiveView('overview');
-      router.replace(`/initiatives/${initiativeId}?view=overview`);
+      router.replace(`/projects/${projectId}?view=overview`);
       return true;
     }
     if (item === 'workspace') {
@@ -666,46 +467,46 @@ function InitiativePageContent() {
       setWorkspaceLaunchMode('open');
       setActiveWorkspaceTabId(null);
       setActiveView('assessments');
-      router.replace(`/initiatives/${initiativeId}?view=assessments`);
+      router.replace(`/projects/${projectId}?view=assessments`);
       return true;
     }
     if (item === 'assumptions') {
       setWorkspaceLaunchMode('idle');
       setPanelOpen('assumptions', 'workspace', true);
       setActiveView('assumptions');
-      router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+      router.replace(`/projects/${projectId}?view=assumptions`);
       return true;
     }
     if (item === 'files') {
       setActiveView('files');
-      router.replace(`/initiatives/${initiativeId}?view=files`);
+      router.replace(`/projects/${projectId}?view=files`);
       return true;
     }
     if (item === 'plan') {
       setActiveView('framework');
-      router.replace(`/initiatives/${initiativeId}?view=framework`);
+      router.replace(`/projects/${projectId}?view=framework`);
       return true;
     }
     return false;
-  }, [router, initiativeId, activeView, setPanelOpen]));
+  }, [router, projectId, activeView, setPanelOpen]));
 
   useEffect(() => {
     if (isViewer && (activeView === 'overview' || activeView === 'assessments' || activeView === 'assumptions')) {
       setActiveView('framework');
-      router.replace(`/initiatives/${initiativeId}?view=framework`);
+      router.replace(`/projects/${projectId}?view=framework`);
     }
-  }, [isViewer, activeView, initiativeId, router]);
+  }, [isViewer, activeView, projectId, router]);
 
   useEffect(() => {
-    if (!initiative) return;
+    if (!project) return;
     if (isOnboarding && activeView !== 'overview') {
       setActiveView('overview');
-      router.replace(`/initiatives/${initiativeId}?view=overview`);
+      router.replace(`/projects/${projectId}?view=overview`);
     }
-  }, [initiative, isOnboarding, activeView, initiativeId, router]);
+  }, [project, isOnboarding, activeView, projectId, router]);
 
   useEffect(() => {
-    if (!initiative) return;
+    if (!project) return;
     if (isOnboarding) {
       onboardingSeenRef.current = true;
       return;
@@ -713,17 +514,13 @@ function InitiativePageContent() {
     if (!hasFrameworkSelection || !onboardingSeenRef.current || isViewer) return;
     onboardingSeenRef.current = false;
     setActiveView('framework');
-    router.replace(`/initiatives/${initiativeId}?view=framework`);
-  }, [initiative, hasFrameworkSelection, isOnboarding, isViewer, initiativeId, router]);
+    router.replace(`/projects/${projectId}?view=framework`);
+  }, [project, hasFrameworkSelection, isOnboarding, isViewer, projectId, router]);
 
   useEffect(() => {
-    if (!initiativeId) return;
-    const storedWorkspaceUi = readStoredWorkspaceUiState(workspaceUiStorageKey);
+    if (!projectId) return;
+    restoreWorkspaceUiFromStorage();
 
-    setPanelVisibility(storedWorkspaceUi?.panelVisibility ?? DEFAULT_PANEL_VISIBILITY);
-    setChatPanelWidthPercent(storedWorkspaceUi?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT);
-    setWorkspaceTabs(storedWorkspaceUi?.workspaceTabs ?? []);
-    setActiveWorkspaceTabId(storedWorkspaceUi?.activeWorkspaceTabId ?? null);
     setFrameworkAssessmentInstances([]);
     setFrameworkPlannedAssessmentIds([]);
     setFrameworkAssessmentsLoading(false);
@@ -739,50 +536,41 @@ function InitiativePageContent() {
     onboardingSeenRef.current = false;
 
     reset();
-    const initiativeLoad = loadInitiative(initiativeId);
-    initiativeLoad.finally(() => setChromeReady(true));
-    initiativeLoad.finally(() => setPageReady(true));
+    const projectLoad = loadProject(projectId);
+    projectLoad.finally(() => setChromeReady(true));
+    projectLoad.finally(() => setPageReady(true));
 
-    loadEvidence(initiativeId);
-    loadMaterials(initiativeId);
-    loadFrameworkAssessmentInstances(initiativeId);
-    loadDriveLinkedFiles(initiativeId).then(() => {
-      syncDriveFiles(initiativeId).catch(() => {});
+    loadEvidence(projectId);
+    loadMaterials(projectId);
+    loadFrameworkAssessmentInstances(projectId);
+    loadDriveLinkedFiles(projectId).then(() => {
+      syncDriveFiles(projectId).catch(() => {});
     });
-  }, [initiativeId, workspaceUiStorageKey, reset, loadInitiative, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkAssessmentInstances]);
+  }, [projectId, workspaceUiStorageKey, reset, loadProject, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkAssessmentInstances, restoreWorkspaceUiFromStorage]);
 
   useEffect(() => {
     if (activeView !== 'framework') return;
-    if (!initiativeId) return;
-    loadFrameworkAssessmentInstances(initiativeId);
-  }, [activeView, initiativeId, loadFrameworkAssessmentInstances]);
+    if (!projectId) return;
+    loadFrameworkAssessmentInstances(projectId);
+  }, [activeView, projectId, loadFrameworkAssessmentInstances]);
 
   useEffect(() => {
-    if (!initiative) return;
-    if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) {
-      setFrameworkPlannedAssessmentIds(Array.from(new Set(initiative.selected_tools)));
+    if (!project) return;
+    if (project.selected_tools !== null && project.selected_tools !== undefined) {
+      setFrameworkPlannedAssessmentIds(Array.from(new Set(project.selected_tools)));
       return;
     }
     setFrameworkPlannedAssessmentIds([]);
-  }, [initiativeId, initiative?.selected_tools]);
+  }, [projectId, project?.selected_tools]);
 
   useEffect(() => {
-    if (!initiative) return;
-    if (initiative.selected_tools !== null && initiative.selected_tools !== undefined) return;
+    if (!project) return;
+    if (project.selected_tools !== null && project.selected_tools !== undefined) return;
     if (frameworkPlannedAssessmentIds.length > 0) return;
     if (frameworkAssessmentInstances.length === 0) return;
     const inferred = Array.from(new Set(frameworkAssessmentInstances.map((instance) => instance.assessment_id)));
     setFrameworkPlannedAssessmentIds(inferred);
-  }, [initiative, frameworkAssessmentInstances, frameworkPlannedAssessmentIds.length]);
-
-  useEffect(() => {
-    writeStoredWorkspaceUiState(workspaceUiStorageKey, {
-      panelVisibility,
-      chatPanelWidthPercent,
-      workspaceTabs,
-      activeWorkspaceTabId,
-    });
-  }, [workspaceUiStorageKey, panelVisibility, chatPanelWidthPercent, workspaceTabs, activeWorkspaceTabId]);
+  }, [project, frameworkAssessmentInstances, frameworkPlannedAssessmentIds.length]);
 
   useEffect(() => {
     if (!pageReady) return;
@@ -833,14 +621,14 @@ function InitiativePageContent() {
       const openChatPanel = assessment.openChatPanel ?? true;
       if (assessment.pendingEngagement) {
         ephemeralAssessmentSessionsRef.current.set(assessment.instanceId, {
-          initiativeId,
+          projectId,
           engaged: false,
         });
       }
       setWorkspaceLaunchMode('idle');
       setPanelOpen('assessments', 'workspace', true);
       setPanelOpen('assessments', 'chat', openChatPanel);
-      loadFrameworkAssessmentInstances(initiativeId);
+      loadFrameworkAssessmentInstances(projectId);
       if (openChatPanel && assessment.chatId) {
         setPendingChatToOpen({
           chatId: assessment.chatId,
@@ -848,7 +636,7 @@ function InitiativePageContent() {
         });
       }
       setActiveView('assessments');
-      router.replace(`/initiatives/${initiativeId}?view=assessments`);
+      router.replace(`/projects/${projectId}?view=assessments`);
       openWorkspaceTab({
         id: `assessment-${assessment.instanceId}`,
         kind: 'assessment',
@@ -858,7 +646,7 @@ function InitiativePageContent() {
         pendingEngagement: assessment.pendingEngagement === true,
       });
     },
-    [initiativeId, openWorkspaceTab, router, setPanelOpen, loadFrameworkAssessmentInstances],
+    [projectId, openWorkspaceTab, router, setPanelOpen, loadFrameworkAssessmentInstances],
   );
 
   const handleAssessmentEngaged = useCallback((instanceId: string) => {
@@ -873,29 +661,29 @@ function InitiativePageContent() {
     setPanelOpen('assessments', 'workspace', true);
     setPanelOpen('assessments', 'chat', true);
     setActiveView('assessments');
-    router.replace(`/initiatives/${initiativeId}?view=assessments`);
+    router.replace(`/projects/${projectId}?view=assessments`);
     openWorkspaceTab({
       id: makeDocumentTabId(citation),
       kind: 'document',
       title: citation.source_title || 'Document',
       citation,
     });
-  }, [initiativeId, openWorkspaceTab, router, setPanelOpen]);
+  }, [projectId, openWorkspaceTab, router, setPanelOpen]);
 
   const openAssumptionsView = useCallback(() => {
     setWorkspaceLaunchMode('idle');
     setPanelOpen('assumptions', 'workspace', true);
     setPanelOpen('assumptions', 'chat', false);
     setActiveView('assumptions');
-    router.replace(`/initiatives/${initiativeId}?view=assumptions`);
-  }, [initiativeId, router, setPanelOpen]);
+    router.replace(`/projects/${projectId}?view=assumptions`);
+  }, [projectId, router, setPanelOpen]);
 
   const handleOpenAssumptionInChat = useCallback((assumption: Assumption) => {
     setWorkspaceLaunchMode('idle');
     setPanelOpen('assumptions', 'workspace', true);
     setPanelOpen('assumptions', 'chat', true);
     setActiveView('assumptions');
-    router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+    router.replace(`/projects/${projectId}?view=assumptions`);
     setPendingAssumptionsRequest({
       requestId: `assumption-${assumption.id}-${Date.now()}`,
       focusAssumptionId: assumption.id,
@@ -903,14 +691,14 @@ function InitiativePageContent() {
       title: assumption.label,
       forceNewTab: false,
     });
-  }, [initiativeId, router, setPanelOpen]);
+  }, [projectId, router, setPanelOpen]);
 
   const handleAddAssumptionInChat = useCallback(() => {
     setWorkspaceLaunchMode('idle');
     setPanelOpen('assumptions', 'workspace', true);
     setPanelOpen('assumptions', 'chat', true);
     setActiveView('assumptions');
-    router.replace(`/initiatives/${initiativeId}?view=assumptions`);
+    router.replace(`/projects/${projectId}?view=assumptions`);
     setPendingAssumptionsRequest({
       requestId: `assumption-new-${Date.now()}`,
       focusAssumptionId: null,
@@ -918,17 +706,17 @@ function InitiativePageContent() {
       title: `New ${PROJECT_VARIABLES.lowerSingular}`,
       forceNewTab: true,
     });
-  }, [initiativeId, router, setPanelOpen]);
+  }, [projectId, router, setPanelOpen]);
 
   const openAssessmentWorkspaceLogTab = useCallback(
     (tab: WorkspacePanelTab) => {
       setWorkspaceLaunchMode('idle');
       setPanelOpen('assessments', 'workspace', true);
       setActiveView('assessments');
-      router.replace(`/initiatives/${initiativeId}?view=assessments`);
+      router.replace(`/projects/${projectId}?view=assessments`);
       openWorkspaceTab(tab);
     },
-    [initiativeId, openWorkspaceTab, router, setPanelOpen],
+    [projectId, openWorkspaceTab, router, setPanelOpen],
   );
 
   const openDecisionLogTab = useCallback(
@@ -975,10 +763,10 @@ function InitiativePageContent() {
     assessmentId: string,
     assessmentName: string,
   ) => {
-    const instance = await api.createAssessmentInstance(initiativeId, assessmentId);
+    const instance = await api.createAssessmentInstance(projectId, assessmentId);
     setFrameworkAssessmentInstances((prev) => {
       const next = [...prev, instance];
-      frameworkAssessmentsCacheRef.current.set(initiativeId, next);
+      frameworkAssessmentsCacheRef.current.set(projectId, next);
       return next;
     });
     handleOpenWorkspaceAssessment({
@@ -988,7 +776,7 @@ function InitiativePageContent() {
       openChatPanel: false,
       pendingEngagement: true,
     });
-  }, [initiativeId, handleOpenWorkspaceAssessment]);
+  }, [projectId, handleOpenWorkspaceAssessment]);
 
   const handleOpenExistingAssessmentInstanceInAssessmentsView = useCallback(async (
     instance: AssessmentInstance,
@@ -1003,22 +791,22 @@ function InitiativePageContent() {
 
   const handleAddAssessmentToFrameworkPlan = useCallback(async (assessmentId: string) => {
     const next = Array.from(new Set([...frameworkPlannedAssessmentIds, assessmentId]));
-    const response = await api.selectTools(initiativeId, next);
+    const response = await api.selectTools(projectId, next);
     setFrameworkPlannedAssessmentIds(response.selected_tools);
-  }, [frameworkPlannedAssessmentIds, initiativeId]);
+  }, [frameworkPlannedAssessmentIds, projectId]);
 
   const handleRemoveAssessmentFromFrameworkPlan = useCallback(async (assessmentId: string) => {
     const next = frameworkPlannedAssessmentIds.filter((id) => id !== assessmentId);
-    const response = await api.selectTools(initiativeId, next);
+    const response = await api.selectTools(projectId, next);
     setFrameworkPlannedAssessmentIds(response.selected_tools);
-  }, [frameworkPlannedAssessmentIds, initiativeId]);
+  }, [frameworkPlannedAssessmentIds, projectId]);
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
     const closingTab = workspaceTabs.find((tab) => tab.id === tabId);
     if (closingTab?.kind === 'assessment') {
       const session = ephemeralAssessmentSessionsRef.current.get(closingTab.instanceId);
       if (session && !session.engaged) {
-        void discardEphemeralAssessmentInstance(session.initiativeId, closingTab.instanceId);
+        void discardEphemeralAssessmentInstance(session.projectId, closingTab.instanceId);
       }
       ephemeralAssessmentSessionsRef.current.delete(closingTab.instanceId);
     }
@@ -1090,21 +878,21 @@ function InitiativePageContent() {
   }, [setPanelOpen]);
 
   const handleTitleUpdate = useCallback((title: string) => {
-    updateTitle(initiativeId, title);
-  }, [initiativeId, updateTitle]);
+    updateTitle(projectId, title);
+  }, [projectId, updateTitle]);
 
   const primaryWorkspaceContent = (() => {
     if (activeView === 'files') {
       return (
         <ProjectFilesView
-          initiativeId={initiativeId}
+          projectId={projectId}
           materials={projectMaterials}
           onDeleteMaterial={isViewer ? undefined : deleteMaterial}
-          onUploadFile={isViewer ? undefined : (file) => uploadMaterial(initiativeId, file)}
+          onUploadFile={isViewer ? undefined : (file) => uploadMaterial(projectId, file)}
           onImportFromDrive={isViewer ? undefined : handleFilesViewDriveImport}
           driveLinkedFiles={driveLinkedFiles}
           onSyncDriveFiles={isViewer ? undefined : async () => {
-            await syncDriveFiles(initiativeId);
+            await syncDriveFiles(projectId);
           }}
         />
       );
@@ -1113,7 +901,7 @@ function InitiativePageContent() {
     if (showTabbedWorkspace) {
       return (
         <ProjectWorkspaceEditorPanel
-          initiativeId={initiativeId}
+          projectId={projectId}
           tabs={visibleWorkspaceTabs}
           activeTabId={visibleWorkspaceActiveTabId}
           onActiveTabChange={setActiveWorkspaceTabId}
@@ -1137,7 +925,7 @@ function InitiativePageContent() {
           onOpenDecisionLog={openDecisionLogTab}
           onExportDecisionLog={exportDecisionLog}
           onAssessmentInspectorStateChange={handleAssessmentInspectorStateChange}
-          onAssessmentApprovalChange={() => loadFrameworkAssessmentInstances(initiativeId, { force: true })}
+          onAssessmentApprovalChange={() => loadFrameworkAssessmentInstances(projectId, { force: true })}
           onAssessmentEngaged={handleAssessmentEngaged}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
@@ -1146,10 +934,10 @@ function InitiativePageContent() {
     }
 
     if (activeView === 'overview') {
-      if (isOnboarding && initiative) {
+      if (isOnboarding && project) {
         return (
           <ProjectChatSurface
-            initiativeId={initiativeId}
+            projectId={projectId}
             hideTiles={true}
             allowInitialProjectOnboarding={true}
             restoreLatestChatOnMount={true}
@@ -1158,7 +946,7 @@ function InitiativePageContent() {
             landingLayoutMode="overview"
             landingHeaderContent={(
               <ProjectOnboardingHeader
-                initiative={initiative}
+                project={project}
                 filesUploaded={projectMaterials.length}
               />
             )}
@@ -1173,7 +961,7 @@ function InitiativePageContent() {
       return (
         <ProjectChatSurface
           key={researchLandingResetSignal}
-          initiativeId={initiativeId}
+          projectId={projectId}
           hideTiles={true}
           allowInitialProjectOnboarding={false}
           useLandingWhenEmpty={true}
@@ -1200,7 +988,7 @@ function InitiativePageContent() {
     if (activeView === 'assumptions') {
       return (
         <AssumptionsWorkspaceTab
-          initiativeId={initiativeId}
+          projectId={projectId}
           showDetailPanel={false}
           onAssumptionSelectInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
@@ -1212,7 +1000,7 @@ function InitiativePageContent() {
       if (!hasFrameworkSelection && !isViewer) {
         return (
           <ProjectChatTabsPanel
-            initiativeId={initiativeId}
+            projectId={projectId}
             researchMode={false}
             sessionStorageKey={frameworkChatTabsStorageKey}
             onEditorWidgetsChange={handleChatEditorWidgetsChange}
@@ -1263,7 +1051,7 @@ function InitiativePageContent() {
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
-          initiativeId={initiativeId}
+          projectId={projectId}
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
@@ -1283,7 +1071,7 @@ function InitiativePageContent() {
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
-          initiativeId={initiativeId}
+          projectId={projectId}
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
@@ -1308,7 +1096,7 @@ function InitiativePageContent() {
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
-          initiativeId={initiativeId}
+          projectId={projectId}
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
@@ -1327,7 +1115,7 @@ function InitiativePageContent() {
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 min-w-0">
         <ProjectChatTabsPanel
-          initiativeId={initiativeId}
+          projectId={projectId}
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
@@ -1347,9 +1135,9 @@ function InitiativePageContent() {
   return (
     <>
       <ShellPageHeader chromeReady={chromeReady}>
-        {initiative && (
+        {project && (
           <ProjectHeader
-            initiative={initiative}
+            project={project}
             onTitleUpdate={isViewer ? undefined : handleTitleUpdate}
             readOnly={Boolean(isViewer)}
             leftToggle={chatHeaderToggle}
@@ -1368,11 +1156,11 @@ function InitiativePageContent() {
             </div>
           )}
 
-          {loading && !initiative ? (
+          {loading && !project ? (
             <div className="h-full flex items-center justify-center">
               <PageLoader label="" />
             </div>
-          ) : !initiative ? (
+          ) : !project ? (
             error ? (
               <div className="h-full flex flex-col items-center justify-center gap-4">
                 <div className="card p-8 text-center max-w-md">
@@ -1439,10 +1227,10 @@ function InitiativePageContent() {
   );
 }
 
-export default function InitiativePage() {
+export default function ProjectPage() {
   return (
     <ProtectedRoute>
-      <InitiativePageContent />
+      <ProjectPageContent />
     </ProtectedRoute>
   );
 }

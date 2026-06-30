@@ -29,13 +29,13 @@ async def search_users(
     await ensure_user_exists(db, user)
 
     my_projects = (
-        select(ProjectShare.initiative_id)
+        select(ProjectShare.project_id)
         .where(ProjectShare.user_id == user.uid)
     )
     collaborator_ids = (
         select(ProjectShare.user_id)
         .where(
-            ProjectShare.initiative_id.in_(my_projects),
+            ProjectShare.project_id.in_(my_projects),
             ProjectShare.user_id != user.uid,
         )
     )

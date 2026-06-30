@@ -69,13 +69,13 @@ describe('api', () => {
     jest.resetModules();
   });
 
-  describe('getInitiative', () => {
+  describe('getProject', () => {
     it('calls the correct URL', async () => {
       mockFetch.mockResolvedValueOnce(mockOk({ id: '1', title: 'Test' }));
       const { api } = await import('@/lib/api');
-      await api.getInitiative('1');
+      await api.getProject('1');
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/initiatives/1'),
+        expect.stringContaining('/api/v1/projects/1'),
         expect.any(Object),
       );
     });
@@ -83,37 +83,25 @@ describe('api', () => {
     it('returns the parsed response body', async () => {
       mockFetch.mockResolvedValueOnce(mockOk({ id: '1', title: 'Test' }));
       const { api } = await import('@/lib/api');
-      const result = await api.getInitiative('1');
+      const result = await api.getProject('1');
       expect(result).toEqual({ id: '1', title: 'Test' });
     });
 
     it('throws with the server detail on non-2xx', async () => {
       mockFetch.mockResolvedValueOnce(mockError(404, 'Not found'));
       const { api } = await import('@/lib/api');
-      await expect(api.getInitiative('bad-id')).rejects.toThrow('Not found');
+      await expect(api.getProject('bad-id')).rejects.toThrow('Not found');
     });
   });
 
-  describe('createInitiative', () => {
-    it('posts to the initiatives endpoint', async () => {
+  describe('createProject', () => {
+    it('posts to the projects endpoint', async () => {
       mockFetch.mockResolvedValueOnce(mockOk({ id: '2', title: 'New' }));
       const { api } = await import('@/lib/api');
-      await api.createInitiative('New Initiative');
+      await api.createProject('New Project');
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/initiatives'),
+        expect.stringContaining('/api/v1/projects'),
         expect.objectContaining({ method: 'POST' }),
-      );
-    });
-  });
-
-  describe('getChatHistory', () => {
-    it('calls the chat history endpoint', async () => {
-      mockFetch.mockResolvedValueOnce(mockOk([]));
-      const { api } = await import('@/lib/api');
-      await api.getChatHistory('init-1');
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/initiatives/init-1/chat'),
-        expect.any(Object),
       );
     });
   });
@@ -157,7 +145,7 @@ describe('api', () => {
         },
         '### LCOE Model Inputs\n- Capacity factor (field_name=capacity_factor): 0.3 % [assumed]',
         null,
-        'initiative-1',
+        'project-1',
       );
 
       const [, init] = mockFetch.mock.calls[0];
@@ -167,7 +155,7 @@ describe('api', () => {
         expect.objectContaining({ field_name: 'capacity_factor', model_type: 'lcoe' }),
       );
       expect(body.model_inputs_context).toContain('capacity_factor');
-      expect(body.initiative_id).toBe('initiative-1');
+      expect(body.project_id).toBe('project-1');
     });
   });
 });

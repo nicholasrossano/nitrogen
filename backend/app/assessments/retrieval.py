@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 async def retrieve_evidence(
     queries: list[str],
     db: AsyncSession,
-    initiative_id: UUID,
+    project_id: UUID,
     max_facts: int = 15,
 ) -> tuple[str, list[dict]]:
     """Run tiered retrieval (RAG + OpenAlex + web) for a list of queries.
@@ -32,11 +32,11 @@ async def retrieve_evidence(
     ctx = ExecutionContext(
         user_id="system",
         user_email=None,
-        initiative_id=initiative_id,
+        project_id=project_id,
         initiative_role=None,
         ai_access_granted=True,
         is_byok=False,
-        request_id=f"assessment-retrieval:{initiative_id}",
+        request_id=f"assessment-retrieval:{project_id}",
     )
     all_facts: list = []
     seen_titles: set[str] = set()
@@ -48,7 +48,7 @@ async def retrieve_evidence(
                 db,
                 {
                     "query": query,
-                    "initiative_id": str(initiative_id),
+                    "project_id": str(project_id),
                     "include_openalex": True,
                     "include_web_search": True,
                     "include_llm_fallback": False,

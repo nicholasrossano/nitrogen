@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 from app.core.storage import get_uploads_storage, load_upload
 from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
 from app.services.assumptions import AssumptionActor, extract_assumptions_from_sources
@@ -101,10 +101,10 @@ async def _load_doc(db: AsyncSession, doc_id: UUID) -> EvidenceDoc | None:
 
 
 async def _load_initiative(
-    db: AsyncSession, initiative_id: UUID
-) -> Initiative | None:
+    db: AsyncSession, project_id: UUID
+) -> Project | None:
     result = await db.execute(
-        select(Initiative).where(Initiative.id == initiative_id)
+        select(Project).where(Project.id == project_id)
     )
     return result.scalar_one_or_none()
 
@@ -141,10 +141,10 @@ async def process_evidence_doc(
             return
 
         initiative = None
-        if doc.initiative_id is not None:
-            initiative = await _load_initiative(db, doc.initiative_id)
+        if doc.project_id is not None:
+            initiative = await _load_initiative(db, doc.project_id)
             if initiative is None:
-                await _mark_failed(db, doc, "Initiative not found")
+                await _mark_failed(db, doc, "Project not found")
                 return
 
         doc.processing_status = EvidenceDocStatus.PROCESSING.value
@@ -298,7 +298,7 @@ def schedule_processing(
 
 
 async def _count_docs_by_state(
-    db: AsyncSession, initiative_id: UUID
+    db: AsyncSession, project_id: UUID
 ) -> tuple[int, int]:
     """Return (pending, lightweight_ready_or_better) doc counts for an initiative.
 
@@ -310,7 +310,7 @@ async def _count_docs_by_state(
 
     result = await db.execute(
         select(EvidenceDoc.processing_status, func.count()).where(
-            EvidenceDoc.initiative_id == initiative_id
+            EvidenceDoc.project_id == project_id
         ).group_by(EvidenceDoc.processing_status)
     )
     pending = 0
@@ -330,12 +330,12 @@ async def _count_docs_by_state(
 
 
 async def await_lightweight_readiness(
-    initiative_id: UUID,
+    project_id: UUID,
     *,
     timeout_seconds: float = LIGHTWEIGHT_READY_TIMEOUT_SECONDS,
     poll_seconds: float = LIGHTWEIGHT_READY_POLL_SECONDS,
 ) -> bool:
-    """Wait until at least one evidence doc for ``initiative_id`` is ready.
+    """Wait until at least one evidence doc for ``project_id`` is ready.
 
     "Ready" means :attr:`EvidenceDoc.processing_status` has reached the
     lightweight milestone (or full indexing).  Returns ``True`` if we saw a
@@ -351,7 +351,7 @@ async def await_lightweight_readiness(
 
     while True:
         async with AsyncSessionLocal() as db:
-            pending, ready = await _count_docs_by_state(db, initiative_id)
+            pending, ready = await _count_docs_by_state(db, project_id)
 
         if ready > 0:
             return True
@@ -362,7 +362,7 @@ async def await_lightweight_readiness(
             logger.warning(
                 "await_lightweight_readiness timed out for initiative %s "
                 "(pending=%d, ready=%d)",
-                initiative_id,
+                project_id,
                 pending,
                 ready,
             )

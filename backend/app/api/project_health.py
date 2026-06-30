@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthUser, get_current_user
 from app.core.billing_guard import require_ai_access
 from app.core.database import get_db
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_project_editor, require_project_viewer
 from app.domain.registry import get_project_health_definition
 from app.schemas.project_health import (
     ProjectHealthDimensionResponse,
@@ -140,16 +140,16 @@ def _serialize_dimension(
 
 
 @router.get(
-    "/initiatives/{initiative_id}/project-health",
+    "/projects/{project_id}/project-health",
     response_model=ProjectHealthResponse,
 )
 async def get_project_health(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Return persisted project health rows and override history for one initiative."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     definition = get_project_health_definition()
     dims_by_id = {d.id: {"label": d.label, "description": d.description} for d in definition.dimensions}
     rows, overrides_by_dimension, domain = await list_project_health(db, initiative)
@@ -187,7 +187,7 @@ async def get_project_health(
         ]
         return ProjectHealthResponse(
             domain=domain,
-            initiative_id=str(initiative.id),
+            project_id=str(initiative.id),
             stale=True,
             dimensions=placeholder_rows,
         )
@@ -203,43 +203,43 @@ async def get_project_health(
     response_rows.sort(key=lambda item: item.label.lower())
     return ProjectHealthResponse(
         domain=domain,
-        initiative_id=str(initiative.id),
+        project_id=str(initiative.id),
         stale=any(item.is_stale for item in response_rows),
         dimensions=response_rows,
     )
 
 
 @router.post(
-    "/initiatives/{initiative_id}/project-health/refresh",
+    "/projects/{project_id}/project-health/refresh",
     response_model=ProjectHealthResponse,
 )
 async def refresh_project_health_rows(
-    initiative_id: str,
+    project_id: str,
     body: ProjectHealthRefreshRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(ai_access),
 ):
     """Recompute and persist all project-health dimensions for one initiative."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     await refresh_project_health(db, initiative, source=body.source, user_id=user.uid)
     initiative.touch()
     await db.commit()
-    return await get_project_health(initiative_id=initiative_id, db=db, user=user)
+    return await get_project_health(project_id=project_id, db=db, user=user)
 
 
 @router.post(
-    "/initiatives/{initiative_id}/project-health/{dimension_id}/override",
+    "/projects/{project_id}/project-health/{dimension_id}/override",
     response_model=ProjectHealthResponse,
 )
 async def override_project_health_dimension(
-    initiative_id: str,
+    project_id: str,
     dimension_id: str,
     body: ProjectHealthOverrideRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Record a human override for a single project-health dimension."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     definition = get_project_health_definition()
     known_ids = {d.id for d in definition.dimensions}
     if dimension_id not in known_ids:
@@ -255,4 +255,4 @@ async def override_project_health_dimension(
     )
     initiative.touch()
     await db.commit()
-    return await get_project_health(initiative_id=initiative_id, db=db, user=user)
+    return await get_project_health(project_id=project_id, db=db, user=user)

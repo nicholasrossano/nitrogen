@@ -6,7 +6,6 @@ import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTab
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 import { api, type Project, type ProjectShare } from '@/lib/api';
-import { useInitiativeStore } from '@/stores/initiativeStore';
 import {
   buildCollaborators,
   CollaboratorRow,
@@ -33,7 +32,6 @@ export function ProjectOverviewExpandedPanel({
   onOpenDocument,
   onOpenWorkspaceAssessment,
 }: ProjectOverviewExpandedPanelProps) {
-  const initiative = useInitiativeStore((state) => state.initiative);
   const [shares, setShares] = useState<ProjectShare[]>([]);
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
   const [internalShareModalOpen, setInternalShareModalOpen] = useState(false);
@@ -70,11 +68,11 @@ export function ProjectOverviewExpandedPanel({
   );
 
   const overviewText =
-    initiative?.overview_description?.trim() ||
+    project?.overview_description?.trim() ||
     project.subject?.trim() ||
     null;
   const readOnly = project.shared_role === 'viewer';
-  const ownerEmail = project.owner_email ?? initiative?.owner_email ?? null;
+  const ownerEmail = project.owner_email ?? project?.owner_email ?? null;
 
   return (
     <>
@@ -106,7 +104,7 @@ export function ProjectOverviewExpandedPanel({
           </p>
           <div className="mt-2">
             <ProjectHealthTable
-              initiativeId={project.id}
+              projectId={project.id}
               readOnly={readOnly}
               refreshToken={refreshKey}
               onOpenDocument={onOpenDocument}
@@ -139,7 +137,7 @@ export function ProjectOverviewExpandedPanel({
 
     {showShareModal && (
       <ShareProjectModal
-        initiativeId={project.id}
+        projectId={project.id}
         ownerEmail={ownerEmail}
         onClose={handleCloseShareModal}
       />

@@ -11,7 +11,7 @@ describe('CarbonInputsWidget', () => {
   it('treats only validated values as confirmed', () => {
     render(
       <CarbonInputsWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         data={{
           inputs: {
             baseline_volume: {
@@ -60,7 +60,7 @@ describe('CarbonInputsWidget', () => {
 
     render(
       <CarbonInputsWidget
-        initiativeId="initiative-1"
+        projectId="initiative-1"
         data={{
           inputs: {
             baseline_volume: {

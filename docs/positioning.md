@@ -4,7 +4,7 @@ Nitrogen is a **domain-agnostic, chat-first diligence reference architecture** w
 
 ## What changed (contract cutover)
 
-The legacy **initiative** model and onboarding chat table are retired. **`projects`** is the canonical deal record; child tables scope to `project_id`. Personal work happens in **core chat**; shared curation crosses a single **promotion boundary** into project **findings** and structured **variables** (API: assumptions).
+The legacy **initiative** model, onboarding chat table, and `/initiatives/*` UI paths are retired (permanent redirect to `/projects/*`). **`projects`** is the canonical deal record; child tables scope to `project_id`. Personal work happens in **core chat**; shared curation crosses a single **promotion boundary** into project **findings** and structured **variables** (API: assumptions).
 
 Energy-specific calculators (carbon, LCOE, solar) remain as **signal providers** and assessment tooling inside the example domain pack — they are not the core abstraction.
 

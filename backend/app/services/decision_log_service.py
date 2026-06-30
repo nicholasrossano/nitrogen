@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.decision_event import DecisionEvent
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.assessment_instance import AssessmentInstance
 from app.assessments.base import DecisionLogAttribution
 from app.assessments.registry import get_assessment_registry
@@ -164,13 +164,13 @@ def build_assessment_decision_history_report(
 async def build_initiative_decision_log(
     db: AsyncSession,
     *,
-    initiative_id: UUID,
+    project_id: UUID,
     assessment_instance_id: UUID | None = None,
     assessment_id: str | None = None,
 ) -> dict[str, Any]:
-    initiative = await db.get(Initiative, initiative_id)
+    initiative = await db.get(Project, project_id)
     stmt = select(AssessmentInstance).where(
-        AssessmentInstance.initiative_id == initiative_id,
+        AssessmentInstance.project_id == project_id,
         AssessmentInstance.archived.is_(False),
     )
     if assessment_instance_id is not None:
@@ -210,7 +210,7 @@ async def build_initiative_decision_log(
     return {
         "metadata": {
             "project_title": initiative.title if initiative else "",
-            "initiative_id": str(initiative_id),
+            "project_id": str(project_id),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "current_row_count": len(current_rows),
             "history_row_count": len(history_rows),

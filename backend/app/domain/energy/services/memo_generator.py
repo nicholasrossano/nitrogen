@@ -7,7 +7,7 @@ import json
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.domain.resolver import get_domain_prompt_path
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.memo import Citation
 from app.schemas.memo import MemoContent, CitationResponse
 from app.services.rag import RAGService, RetrievedChunk
@@ -33,13 +33,13 @@ class MemoGeneratorService:
     
     async def generate(
         self,
-        initiative: Initiative,
+        initiative: Project,
         include_corpus: bool = True,
     ) -> tuple[MemoContent, list[Citation]]:
         """Generate a memo with RAG-grounded citations"""
         # Retrieve relevant chunks for each section
         section_chunks = await self.rag.retrieve_for_memo_sections(
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             include_corpus=include_corpus,
         )
         
@@ -92,7 +92,7 @@ class MemoGeneratorService:
     
     async def _generate_memo_content(
         self,
-        initiative: Initiative,
+        initiative: Project,
         section_chunks: dict[str, list[RetrievedChunk]],
         citation_map: dict,
     ) -> MemoContent:
@@ -102,7 +102,7 @@ class MemoGeneratorService:
         
         # Build initiative summary
         initiative_summary = f"""
-Initiative: {initiative.title}
+Project: {initiative.title}
 Sector: {initiative.sector}
 Geography: {initiative.geography}
 Target Population: {initiative.target_population}

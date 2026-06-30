@@ -21,7 +21,7 @@ from sqlalchemy import func, select, delete as sql_delete
 from app.core.database import AsyncSessionLocal
 from app.core.storage import get_uploads_storage
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.user import User
 from app.services.embeddings import EmbeddingsService
 from app.services.pdf_visual_chunks import extract_pdf_visual_chunks
@@ -36,9 +36,9 @@ async def backfill_visual_chunks(email: str, *, force: bool = False) -> None:
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(EvidenceDoc, Initiative)
-            .join(Initiative, Initiative.id == EvidenceDoc.initiative_id)
-            .join(User, User.id == Initiative.user_id)
+            select(EvidenceDoc, Project)
+            .join(Project, Project.id == EvidenceDoc.project_id)
+            .join(User, User.id == Project.user_id)
             .where(
                 User.email == email,
                 EvidenceDoc.file_type == "pdf",

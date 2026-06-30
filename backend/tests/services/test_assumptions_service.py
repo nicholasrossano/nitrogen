@@ -226,7 +226,7 @@ async def test_sync_stage_assumptions_ignores_rows_without_field_name(
 
     touched, item_map = await assumptions_service.sync_stage_assumptions(
         SimpleNamespace(),
-        initiative_id=uuid4(),
+        project_id=uuid4(),
         assessment_id="landscape_mapping",
         stage_id="entities",
         stage_data={
@@ -268,7 +268,7 @@ async def test_sync_stage_assumptions_ignores_unmapped_field_name(
 
     touched, item_map = await assumptions_service.sync_stage_assumptions(
         SimpleNamespace(),
-        initiative_id=uuid4(),
+        project_id=uuid4(),
         assessment_id="landscape_mapping",
         stage_id="entities",
         stage_data={

@@ -68,7 +68,7 @@ class LCOEAdapter(BaseAdapter):
                     },
                 },
             },
-            initiative_scope_required=False,
+            project_scope_required=False,
             visibility=adapter_visibility("lcoe", "internal"),
             capabilities=["sync"],
         )

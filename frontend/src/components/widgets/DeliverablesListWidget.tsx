@@ -14,11 +14,11 @@ interface DeliverableItem {
 
 interface DeliverablesListWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
 }
 
-export function DeliverablesListWidget({ data, initiativeId, isActive = true }: DeliverablesListWidgetProps) {
+export function DeliverablesListWidget({ data, projectId, isActive = true }: DeliverablesListWidgetProps) {
   const deliverables = (data?.deliverables || []) as DeliverableItem[];
   
   if (deliverables.length === 0) {
@@ -38,7 +38,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
             <MemoViewerWidget
               key={idx}
               data={{ content: deliverable.content, memo_id: deliverable.assessment_id }}
-              initiativeId={initiativeId}
+              projectId={projectId}
               isActive={isActive}
             />
           );
@@ -47,7 +47,7 @@ export function DeliverablesListWidget({ data, initiativeId, isActive = true }: 
             <ChecklistViewerWidget
               key={idx}
               data={{ content: deliverable.content, assessment_name: deliverable.assessment_name }}
-              initiativeId={initiativeId}
+              projectId={projectId}
               isActive={isActive}
             />
           );

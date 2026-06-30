@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.services import initiative_overview
+from app.services import project_overview
 
 
 def _make_initiative(**overrides):
@@ -21,7 +21,7 @@ def _make_initiative(**overrides):
 
 def test_build_overview_prompt_includes_context_and_sources():
     initiative = _make_initiative()
-    system_prompt, user_prompt = initiative_overview._build_overview_prompt(
+    system_prompt, user_prompt = project_overview._build_overview_prompt(
         initiative,
         [
             {
@@ -40,16 +40,16 @@ def test_build_overview_prompt_includes_context_and_sources():
 
 
 @pytest.mark.asyncio
-async def test_generate_initiative_overview_requires_uploaded_files(monkeypatch: pytest.MonkeyPatch):
+async def test_generate_project_overview_requires_uploaded_files(monkeypatch: pytest.MonkeyPatch):
     initiative = _make_initiative()
 
     async def _no_sources(_db, _initiative_id):
         return []
 
-    monkeypatch.setattr(initiative_overview, "_load_source_summaries", _no_sources)
+    monkeypatch.setattr(project_overview, "_load_source_summaries", _no_sources)
 
     with pytest.raises(ValueError, match="Upload files to generate a project summary."):
-        await initiative_overview.generate_initiative_overview(
+        await project_overview.generate_project_overview(
             db=SimpleNamespace(),
             initiative=initiative,
             user_id="user-1",
@@ -57,7 +57,7 @@ async def test_generate_initiative_overview_requires_uploaded_files(monkeypatch:
 
 
 @pytest.mark.asyncio
-async def test_generate_initiative_overview_returns_llm_content(monkeypatch: pytest.MonkeyPatch):
+async def test_generate_project_overview_returns_llm_content(monkeypatch: pytest.MonkeyPatch):
     initiative = _make_initiative()
     recorded = {"called": False}
 
@@ -86,11 +86,11 @@ async def test_generate_initiative_overview_returns_llm_content(monkeypatch: pyt
     async def _fake_record_usage(*_args, **_kwargs):
         recorded["called"] = True
 
-    monkeypatch.setattr(initiative_overview, "_load_source_summaries", _fake_sources)
-    monkeypatch.setattr(initiative_overview, "get_openai_client", _fake_get_client)
-    monkeypatch.setattr(initiative_overview, "record_usage_from_response", _fake_record_usage)
+    monkeypatch.setattr(project_overview, "_load_source_summaries", _fake_sources)
+    monkeypatch.setattr(project_overview, "get_openai_client", _fake_get_client)
+    monkeypatch.setattr(project_overview, "record_usage_from_response", _fake_record_usage)
 
-    result = await initiative_overview.generate_initiative_overview(
+    result = await project_overview.generate_project_overview(
         db=SimpleNamespace(),
         initiative=initiative,
         user_id="user-1",

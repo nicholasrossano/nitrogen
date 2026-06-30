@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { FolderOpen } from 'lucide-react';
 import { UploadToast, UploadItem } from '@/components/ui/UploadToast';
 import { DuplicateFileDialog, DuplicateEntry } from '@/components/ui/DuplicateFileDialog';
@@ -16,7 +16,7 @@ import {
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
 
 interface DocumentRequestWidgetProps {
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
   onSendMessage?: (content: string) => void | Promise<void>;
   data?: {
@@ -25,7 +25,7 @@ interface DocumentRequestWidgetProps {
 }
 
 export function DocumentRequestWidget({ 
-  initiativeId, 
+  projectId, 
   isActive = true,
   onSendMessage,
   data 
@@ -37,7 +37,7 @@ export function DocumentRequestWidget({
   const [toastItems, setToastItems] = useState<UploadItem[]>([]);
   const [showToast, setShowToast] = useState(false);
 
-  const { uploadEvidence, projectMaterials, evidenceDocs } = useInitiativeStore();
+  const { uploadEvidence, projectMaterials, evidenceDocs } = useProjectStore();
 
   const [pendingDuplicates, setPendingDuplicates] = useState<{
     entries: DuplicateEntry[];
@@ -76,7 +76,7 @@ export function DocumentRequestWidget({
       async (file, i) => {
         const item = initial[i];
         try {
-          await uploadEvidence(initiativeId, file);
+          await uploadEvidence(projectId, file);
           successCount++;
           // Upload finished → backend is now processing in the background.
           // The effect below will flip this to 'done' once processing_status
@@ -105,7 +105,7 @@ export function DocumentRequestWidget({
     if (successCount > 0) {
       await sendProgressMessage("I've uploaded my documents.");
     }
-  }, [uploadEvidence, initiativeId, sendProgressMessage]);
+  }, [uploadEvidence, projectId, sendProgressMessage]);
 
   // Advance toast items from 'processing' to 'done'/'error' based on the
   // backend's per-doc lifecycle. We match by filename since the upload call

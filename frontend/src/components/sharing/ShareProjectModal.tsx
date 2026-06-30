@@ -9,12 +9,12 @@ import { EmailAddressField } from './EmailAddressField';
 import { RoleDropdown } from './RoleDropdown';
 
 interface ShareProjectModalProps {
-  initiativeId: string;
+  projectId: string;
   ownerEmail?: string | null;
   onClose: () => void;
 }
 
-export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: ShareProjectModalProps) {
+export function ShareProjectModal({ projectId, ownerEmail, onClose }: ShareProjectModalProps) {
   const [shares, setShares] = useState<ProjectShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
@@ -38,8 +38,8 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
   }, [onClose]);
 
   useEffect(() => {
-    api.getShares(initiativeId).then(setShares).catch(() => {}).finally(() => setLoading(false));
-  }, [initiativeId]);
+    api.getShares(projectId).then(setShares).catch(() => {}).finally(() => setLoading(false));
+  }, [projectId]);
 
   useEffect(() => {
     if (email.length < 2) {
@@ -75,7 +75,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
     setSubmitting(true);
     setError(null);
     try {
-      const share = await api.createShare(initiativeId, email.trim(), role);
+      const share = await api.createShare(projectId, email.trim(), role);
       setShares(prev => [...prev, share]);
       setEmail('');
       setSearchResults([]);
@@ -90,7 +90,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
 
   const handleRoleChange = async (shareId: string, newRole: 'editor' | 'viewer') => {
     try {
-      const updated = await api.updateShare(initiativeId, shareId, newRole);
+      const updated = await api.updateShare(projectId, shareId, newRole);
       setShares(prev => prev.map(s => s.id === shareId ? updated : s));
     } catch {
       setError('Failed to update role');
@@ -99,7 +99,7 @@ export function ShareProjectModal({ initiativeId, ownerEmail, onClose }: SharePr
 
   const handleRemove = async (shareId: string) => {
     try {
-      await api.deleteShare(initiativeId, shareId);
+      await api.deleteShare(projectId, shareId);
       setShares(prev => prev.filter(s => s.id !== shareId));
     } catch {
       setError('Failed to remove access');

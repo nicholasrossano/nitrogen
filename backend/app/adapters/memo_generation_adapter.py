@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.domain.energy.services.memo_generator import MemoGeneratorService
 
 
@@ -26,7 +26,7 @@ class MemoGenerationAdapter(BaseAdapter):
             input_schema={
                 "type": "object",
                 "properties": {
-                    "initiative_id": {"type": "string"},
+                    "project_id": {"type": "string"},
                     "include_corpus": {"type": "boolean"},
                 },
             },
@@ -37,7 +37,7 @@ class MemoGenerationAdapter(BaseAdapter):
                     "citations": {"type": "array", "items": {"type": "object"}},
                 },
             },
-            initiative_scope_required=True,
+            project_scope_required=True,
             visibility="assessment_bound",
             capabilities=["async"],
         )
@@ -50,15 +50,15 @@ class MemoGenerationAdapter(BaseAdapter):
     ) -> AdapterResult:
         started = time.perf_counter()
 
-        initiative_id = inputs.get("initiative_id") or (str(ctx.initiative_id) if ctx.initiative_id else None)
-        if initiative_id is None:
-            raise ValueError("memo_generation adapter requires initiative_id (input or context).")
+        project_id = inputs.get("project_id") or (str(ctx.project_id) if ctx.project_id else None)
+        if project_id is None:
+            raise ValueError("memo_generation adapter requires project_id (input or context).")
 
         initiative = (
-            await db.execute(select(Initiative).where(Initiative.id == UUID(initiative_id)))
+            await db.execute(select(Project).where(Project.id == UUID(project_id)))
         ).scalar_one_or_none()
         if initiative is None:
-            raise ValueError("Initiative not found for memo generation adapter.")
+            raise ValueError("Project not found for memo generation adapter.")
 
         service = MemoGeneratorService(db, user_id=ctx.user_id)
         memo, citations = await service.generate(

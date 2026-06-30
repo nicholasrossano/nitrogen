@@ -48,7 +48,7 @@ export interface EditorWidget {
 
 interface EditorSidePanelProps {
   widgets: EditorWidget[];
-  initiativeId?: string;
+  projectId?: string;
   onClose?: () => void;
   onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
@@ -80,7 +80,7 @@ const WIDGET_LABELS: Record<string, string> = {
 
 export function EditorSidePanel({
   widgets,
-  initiativeId = '',
+  projectId = '',
   onClose,
   onAssessmentEngaged,
   onOpenDecisionLog,
@@ -141,7 +141,7 @@ export function EditorSidePanel({
               key={widget.messageId}
               type={widget.type}
               data={widget.data}
-              initiativeId={initiativeId}
+              projectId={projectId}
               messageId={widget.messageId}
               onAssessmentEngaged={onAssessmentEngaged}
               onOpenDecisionLog={onOpenDecisionLog}
@@ -157,7 +157,7 @@ export function EditorSidePanel({
 function EditorWidgetRenderer({
   type,
   data,
-  initiativeId,
+  projectId,
   messageId,
   onAssessmentEngaged,
   onOpenDecisionLog,
@@ -165,7 +165,7 @@ function EditorWidgetRenderer({
 }: {
   type: string;
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   messageId: string;
   onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
@@ -174,26 +174,26 @@ function EditorWidgetRenderer({
   switch (type) {
     case 'lcoe_inputs':
     case 'lcoe_output':
-      return <LCOEModelWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
+      return <LCOEModelWidget data={data} projectId={projectId} messageId={messageId} isActive />;
     case 'carbon_inputs':
     case 'carbon_output':
-      return <CarbonModelWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
+      return <CarbonModelWidget data={data} projectId={projectId} messageId={messageId} isActive />;
     case 'solar_inputs':
     case 'solar_output':
-      return <SolarEstimateWidget data={data} initiativeId={initiativeId} messageId={messageId} isActive />;
+      return <SolarEstimateWidget data={data} projectId={projectId} messageId={messageId} isActive />;
     case 'memo_viewer':
-      return <MemoViewerWidget data={data} initiativeId={initiativeId} isActive />;
+      return <MemoViewerWidget data={data} projectId={projectId} isActive />;
     case 'checklist_viewer':
-      return <ChecklistViewerWidget data={data} initiativeId={initiativeId} isActive />;
+      return <ChecklistViewerWidget data={data} projectId={projectId} isActive />;
     case 'document_viewer':
-      return <DocumentViewerWidget data={data} initiativeId={initiativeId} isActive />;
+      return <DocumentViewerWidget data={data} projectId={projectId} isActive />;
     case 'assessment_workspace':
       return (
         <AssessmentWorkspace
           instanceId={data.instance_id}
           assessmentId={data.assessment_id}
           assessmentTitle={data.title}
-          initiativeId={initiativeId}
+          projectId={projectId}
           usePanelHeader
           deferAgentStart={data.pending_engagement === true}
           onUserEngaged={() => onAssessmentEngaged?.(data.instance_id)}

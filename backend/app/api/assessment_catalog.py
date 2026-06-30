@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
-from app.core.permissions import require_editor, require_viewer
-from app.models.initiative import InitiativeStage
+from app.core.permissions import require_project_editor, require_project_viewer
+from app.models.project import ProjectStage
 from app.assessments import get_assessment_registry
 from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_stage_assumptions
 from app.domain.energy.services.sdg_classifier import classify_sdg
@@ -130,14 +130,14 @@ async def list_tools(
     ]
 
 
-@router.get("/initiatives/{initiative_id}/recommended-tools", response_model=AssessmentRecommendationsResponse)
+@router.get("/projects/{project_id}/recommended-tools", response_model=AssessmentRecommendationsResponse)
 async def get_recommended_tools(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Get tool recommendations for an initiative based on its description."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     if not initiative.project_description:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -171,16 +171,16 @@ async def get_recommended_tools(
     )
 
 
-@router.post("/initiatives/{initiative_id}/select-tools")
+@router.post("/projects/{project_id}/select-tools")
 async def select_tools(
-    initiative_id: str,
+    project_id: str,
     data: SelectAssessmentsRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Select tools for an initiative."""
 
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     # Validate tool IDs
     registry = get_assessment_registry()
     valid_tools = []
@@ -197,7 +197,7 @@ async def select_tools(
     
     # Update initiative
     initiative.selected_tools = valid_tools
-    initiative.stage = InitiativeStage.GATHER_INPUTS.value
+    initiative.stage = ProjectStage.GATHER_INPUTS.value
     
     # Initialize tool_inputs from existing initiative data
     tool_inputs = initiative.tool_inputs or {}
@@ -227,7 +227,7 @@ async def select_tools(
     tool_names = [registry.get_assessment(tid).definition.name for tid in valid_tools]
     
     if not missing:
-        initiative.stage = InitiativeStage.REVIEW.value
+        initiative.stage = ProjectStage.REVIEW.value
         await db.commit()
         await db.refresh(initiative)
 
@@ -260,14 +260,14 @@ async def select_tools(
     }
 
 
-@router.get("/initiatives/{initiative_id}/tool-inputs", response_model=list[AssessmentInputsResponse])
+@router.get("/projects/{project_id}/tool-inputs", response_model=list[AssessmentInputsResponse])
 async def get_tool_inputs(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Get input requirements for selected tools."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     if not initiative.selected_tools:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -307,15 +307,15 @@ async def get_tool_inputs(
     return responses
 
 
-@router.post("/initiatives/{initiative_id}/update-inputs")
+@router.post("/projects/{project_id}/update-inputs")
 async def update_tool_inputs(
-    initiative_id: str,
+    project_id: str,
     inputs: dict,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Update tool inputs for an initiative."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     # Merge with existing inputs
     current_inputs = initiative.tool_inputs or {}
     current_inputs.update(inputs)
@@ -343,7 +343,7 @@ async def update_tool_inputs(
     for tool_id in initiative.selected_tools or []:
         await sync_stage_assumptions(
             db,
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             assessment_id=tool_id,
             stage_id="tool_inputs",
             stage_data=stage_data,
@@ -364,16 +364,16 @@ async def update_tool_inputs(
     }
 
 
-@router.post("/initiatives/{initiative_id}/proceed-to-review")
+@router.post("/projects/{project_id}/proceed-to-review")
 async def proceed_to_review(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Move initiative to review stage."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     # Update stage
-    initiative.stage = InitiativeStage.REVIEW.value
+    initiative.stage = ProjectStage.REVIEW.value
     initiative.stage_1_complete = True  # Legacy compatibility
     
     await db.commit()
