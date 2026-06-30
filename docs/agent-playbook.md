@@ -50,10 +50,10 @@ Use this file only when the task needs domain-specific policy not covered by `AG
 
 Gitignored root `.env` is often absent on cloud VMs. Worktrees do not share `.env` (`CLAUDE.md`).
 
-1. Run `bash scripts/check_dev_env.sh` when `.env` exists; fix symlink warnings with `bash scripts/worktree_setup.sh`.
-2. If `.env` is missing, stop and ask the user for their real `.env` (Firebase + DATABASE_URL). **Never** start local dev without Firebase — mock auth was removed.
-3. **Never** `cp .env.example .env` over a real env file.
-4. **Firebase required locally:** `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and `NITROGEN_FIREBASE_CREDENTIALS` must be set.
+1. Prefer `bash scripts/dev_daemon.sh start` — persistent tmux + auto-restart (do not use bare `&` background processes).
+2. Env resolution (`scripts/materialize_dev_env.sh`): existing `.env` → `NITROGEN_ENV_FILE` symlink → whitelisted Cursor/process secrets. **Never** `cp .env.example .env`.
+3. If materialization fails, add Cursor secrets (same names as `.env.example` keys) or ask the user for a real `.env`. **Never** start local dev without Firebase — mock auth was removed.
+4. **Firebase required locally:** `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`) must be set.
 
 ## UI and Loading Art Guidance
 
