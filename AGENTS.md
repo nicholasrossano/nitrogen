@@ -64,6 +64,8 @@ cd backend && python3 -m alembic upgrade head
 | Safe token/repo audit | `npm run cursor:audit` |
 | Full backend regression | `cd backend && python3 -m pytest tests/ -q` |
 | Full frontend regression (final) | `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build` |
+| Dev simulator (start everything) | `bash scripts/setup.sh` |
+| Dev simulator status | `bash scripts/setup.sh --status` |
 
 More examples and wrappers: `docs/testing.md`.
 
@@ -88,13 +90,35 @@ This reads secrets injected by Cursor Secrets, syncs them to Vercel, and writes 
 
 ## Local emulator and cloud agents (auth)
 
-Recurring failure mode: overwriting root `.env` from `.env.example` (empty Firebase → login broken).
+**Three dev paths — do not conflate them:**
 
-- **Never** run `cp .env.example .env` over an existing `.env` or invent secrets.
-- Before starting: `bash scripts/worktree_setup.sh` then `bash scripts/check_dev_env.sh`.
-- Start both servers: `bash scripts/start_emulator.sh` (requires root `.env` with Firebase + DATABASE_URL).
-- **Firebase mode (required locally):** `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` + service account credentials must all be set.
-- **Never** start local dev without Firebase — mock auth was removed to avoid signing in as the wrong user.
+| Path | Who | How |
+|---|---|---|
+| **Native dev (default)** | You locally, cloud agents | `bash scripts/dev_daemon.sh start` — Python + Node on host, Neon or local Postgres |
+| **Docker (optional)** | OSS self-hosters who want local Postgres in a container | `docker compose up -d` — see README § Docker |
+| **Deployed** | Production | Vercel + Railway env dashboards |
+
+Cloud agent VMs **do not have Docker** and **do not use `docker compose`**. Never suggest Docker as a fix on a cloud VM. The default stack is always `dev_daemon.sh`.
+
+**Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the running app:
+
+```bash
+bash scripts/setup.sh --status || bash scripts/setup.sh
+```
+
+**Local `.env` does not sync to cloud VMs.** The user's laptop `.env` is gitignored and never cloned. Vercel/Railway dashboard vars apply to deployed apps only. Cloud agents need Cursor secrets (see `docs/self-hosting.md`) or `bootstrap_env_from_production.sh` fallback.
+
+**Verification tiers on cloud VMs (report honestly):**
+
+| Tier | What's running | What you can verify |
+|---|---|---|
+| Frontend only | `:3000` up, API hits production Railway | UI, routing, Firebase login screen, static flows |
+| Full local stack | `:3000` + `:8000` with `DATABASE_URL` + Firebase creds in Cursor secrets | Login with data, chat, uploads, assessments |
+
+If only tier 1 is available, say so — do not claim you verified authenticated data flows. Do not blame Docker; the gap is missing secrets on the VM.
+
+- **Never** `cp .env.example .env` over a real env file — it breaks Firebase login.
+- **Firebase required:** `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and a service account must be configured for full stack.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
 
 ## Specialized Guidance (Read Only When Relevant)
