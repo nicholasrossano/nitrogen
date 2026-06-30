@@ -12,6 +12,7 @@ import { api, type Project, type ProjectShare } from '@/lib/api';
 import { ModalShell } from '@/components/ui/ModalShell';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { BillingOptionsPanel } from '@/components/ui/BillingOptionsPanel';
+import { UsageDashboard } from '@/components/ui/UsageDashboard';
 import { AccessMemberRow } from '@/components/sharing/AccessMemberRow';
 import { EmailAddressField } from '@/components/sharing/EmailAddressField';
 import { RoleDropdown } from '@/components/sharing/RoleDropdown';
@@ -89,6 +90,7 @@ function SettingsRow({
 
 const TIER_LABELS: Record<string, string> = {
   trial: 'Free Trial',
+  individual: 'Individual',
   starter: 'Starter',
   pro: 'Pro',
   byok: 'BYOK',
@@ -104,7 +106,8 @@ function PlanBillingSection() {
 
   if (!loaded) return null;
 
-  const isStripeManagedTier = tier === 'starter' || tier === 'pro';
+  const isStripeManagedTier =
+    tier === 'individual' || tier === 'starter' || tier === 'pro';
 
   const handleManageSubscription = async () => {
     if (!isStripeManagedTier) {
@@ -163,6 +166,10 @@ function PlanBillingSection() {
 
           {showManageOptions && <BillingOptionsPanel />}
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="Usage">
+        <UsageDashboard />
       </SettingsSection>
     </>
   );

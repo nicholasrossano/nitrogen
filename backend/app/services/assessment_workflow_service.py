@@ -437,6 +437,7 @@ async def populate_stage(
 
     context = await get_initiative_context(db, inst.project_id)
     context["_db"] = db
+    context["user_id"] = inst.started_by
 
     # Mark as populating
     state["stages"][stage_id]["status"] = "populating"
@@ -762,6 +763,7 @@ async def enrich_record_item(
     existing_record = records.get(item_id, {})
     context = await get_initiative_context(db, inst.project_id)
     context["_db"] = db
+    context["user_id"] = inst.started_by
 
     enriched = await assessment.enrich_record(stage_id, item_content, existing_record, context)
     records[item_id] = enriched

@@ -41,7 +41,7 @@
     "recharts": "^3.8.1",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
-    "tailwind-merge": "^2.2.1",
+    "tailwind-merge": "^3.6.0",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.14"
   },
@@ -52,7 +52,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/jest": "^29.5.14",
     "@types/leaflet": "^1.9.21",
-    "@types/node": "^25.5.0",
+    "@types/node": "^26.0.0",
     "@types/react": "^18.2.52",
     "@types/react-dom": "^18.2.18",
     "autoprefixer": "^10.4.17",

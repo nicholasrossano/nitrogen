@@ -271,6 +271,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"{evidence_block}"
             ),
             model="gpt-4.1",
+            context=context,
         )
         result = result or {"title": "Stakeholder Assessment"}
         if citations:
@@ -348,6 +349,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"Project type: {context.get('project_type', '')}\n"
                 f"Description: {context.get('project_description', '')}"
             ),
+            context=context,
         )
         return [
             {
@@ -381,6 +383,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"Project type: {context.get('project_type', '')}\n"
                 f"Stakeholder categories:\n{categories_list}"
             ),
+            context=context,
         )
         stakeholders_by_category = self._bucket_stakeholders(data.get("stakeholders", []), categories)
 
@@ -409,6 +412,7 @@ class StakeholderAssessment(BaseAssessment):
                     f"Existing stakeholders by category:\n{existing}\n\n"
                     f"Underfilled categories:\n{shortfalls}"
                 ),
+                context=context,
             )
             refill_bucket = self._bucket_stakeholders(refill.get("stakeholders", []), categories)
             for category in categories:
@@ -529,6 +533,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"Geography: {context.get('geography', '')}"
                 f"{evidence_block}"
             ),
+            context=context,
         )
         normalized_sources = [
             {

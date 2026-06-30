@@ -8,6 +8,10 @@ const DEFAULT_FEATURE_FLAG_CONTEXT: FeatureFlagContext = {
   devMode: false,
 };
 
+const BILLING_ENABLED_IN_PROD =
+  typeof process !== 'undefined' &&
+  process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true';
+
 const FEATURE_FLAG_DEFINITIONS = {
   art_lab: {
     description: 'Access to the loading art lab page.',
@@ -19,7 +23,7 @@ const FEATURE_FLAG_DEFINITIONS = {
   },
   billing_features: {
     description: 'Billing surfaces and billing sync behavior.',
-    isEnabled: (context: FeatureFlagContext) => context.devMode,
+    isEnabled: (context: FeatureFlagContext) => BILLING_ENABLED_IN_PROD || context.devMode,
   },
   billing_test_headers: {
     description: 'Include billing test header in API requests.',
@@ -31,7 +35,7 @@ const FEATURE_FLAG_DEFINITIONS = {
   },
   paywall_modal: {
     description: 'Render paywall modal in app providers.',
-    isEnabled: (context: FeatureFlagContext) => context.devMode,
+    isEnabled: (context: FeatureFlagContext) => BILLING_ENABLED_IN_PROD || context.devMode,
   },
 } as const;
 

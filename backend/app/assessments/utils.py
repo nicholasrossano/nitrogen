@@ -25,15 +25,35 @@ def layers_as_dict(build: dict) -> dict[str, dict]:
     }
 
 
+def _resolve_billing_context(
+    *,
+    user_id: str | None,
+    db,
+    context: dict | None,
+) -> tuple[str | None, object | None]:
+    """Resolve user_id/db for usage tracking from explicit args or workflow context."""
+    resolved_user_id = user_id or ((context or {}).get("user_id"))
+    resolved_db = db or ((context or {}).get("_db"))
+    return resolved_user_id, resolved_db
+
+
 async def llm_json(
     system: str,
     user_msg: str,
     model: str = "gpt-4.1-mini",
+    *,
+    user_id: str | None = None,
+    db=None,
+    context: dict | None = None,
 ) -> dict:
-    """Call the platform OpenAI client and return parsed JSON. Returns {} on any error."""
-    from app.core.llm_client import get_openai_client
+    """Call OpenAI and return parsed JSON. Records usage when user_id/db are available."""
+    from app.core.llm_client import get_openai_client, record_usage_from_response
+
+    resolved_user_id, resolved_db = _resolve_billing_context(
+        user_id=user_id, db=db, context=context
+    )
     try:
-        client, _is_byok = await get_openai_client(None, None)
+        client, is_byok = await get_openai_client(resolved_user_id, resolved_db)
         response = await client.chat.completions.create(
             model=model,
             messages=[
@@ -42,6 +62,14 @@ async def llm_json(
             ],
             response_format={"type": "json_object"},
         )
+        if resolved_user_id and resolved_db:
+            await record_usage_from_response(
+                resolved_user_id,
+                model,
+                response,
+                resolved_db,
+                is_byok=is_byok,
+            )
         return json.loads(response.choices[0].message.content)
     except Exception as exc:
         logger.error("LLM JSON call failed: %s", exc)
