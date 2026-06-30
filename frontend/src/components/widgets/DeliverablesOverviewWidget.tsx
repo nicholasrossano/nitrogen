@@ -23,7 +23,7 @@ interface SDGInfo {
 
 interface DeliverablesOverviewWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
   onSendMessage?: (content: string) => Promise<void> | void;
 }

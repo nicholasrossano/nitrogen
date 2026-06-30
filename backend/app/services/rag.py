@@ -34,7 +34,7 @@ class RAGService:
     async def retrieve(
         self,
         query: str,
-        initiative_id: UUID | None,
+        project_id: UUID | None,
         workspace_id: UUID | None = None,
         sources: list[str] = ["evidence", "corpus"],
         evidence_top_k: int = 3,
@@ -47,7 +47,7 @@ class RAGService:
         
         Args:
             query: The query to search for
-            initiative_id: The initiative ID (for project evidence filtering)
+            project_id: The initiative ID (for project evidence filtering)
             workspace_id: Workspace ID for workspace-level evidence filtering
             sources: Which sources to search ("evidence", "workspace_evidence", "corpus")
             evidence_top_k: Number of chunks to retrieve from evidence
@@ -64,8 +64,8 @@ class RAGService:
         # yet provisioned its first connection (which happens in compare mode where
         # each project search gets a brand-new AsyncSessionLocal()).
         results = []
-        if "evidence" in sources and initiative_id is not None:
-            results.extend(await self._search_evidence(query_embedding, initiative_id, evidence_top_k))
+        if "evidence" in sources and project_id is not None:
+            results.extend(await self._search_evidence(query_embedding, project_id, evidence_top_k))
         if "workspace_evidence" in sources and workspace_id is not None:
             results.extend(
                 await self._search_workspace_evidence(
@@ -86,13 +86,13 @@ class RAGService:
     async def _search_evidence(
         self,
         query_embedding: list[float],
-        initiative_id: UUID,
+        project_id: UUID,
         top_k: int,
     ) -> list[RetrievedChunk]:
         """Search evidence chunks for an initiative"""
         # Get evidence doc IDs for this initiative
         docs_result = await self.db.execute(
-            select(EvidenceDoc).where(EvidenceDoc.initiative_id == initiative_id)
+            select(EvidenceDoc).where(EvidenceDoc.project_id == project_id)
         )
         docs = {doc.id: doc for doc in docs_result.scalars().all()}
         
@@ -151,7 +151,7 @@ class RAGService:
         """Search workspace-level evidence chunks without crossing project scopes."""
         stmt = select(EvidenceDoc).where(
             EvidenceDoc.workspace_id == workspace_id,
-            EvidenceDoc.initiative_id.is_(None),
+            EvidenceDoc.project_id.is_(None),
         )
         if workspace_file_ids:
             stmt = stmt.where(EvidenceDoc.id.in_(workspace_file_ids))
@@ -241,7 +241,7 @@ class RAGService:
     
     async def retrieve_for_memo_sections(
         self,
-        initiative_id: UUID,
+        project_id: UUID,
         include_corpus: bool = True,
     ) -> dict[str, list[RetrievedChunk]]:
         """
@@ -266,7 +266,7 @@ class RAGService:
         async def _fetch_section(section: str, query: str) -> tuple[str, list[RetrievedChunk]]:
             chunks = await self.retrieve(
                 query=query,
-                initiative_id=initiative_id,
+                project_id=project_id,
                 sources=sources,
                 evidence_top_k=3,
                 corpus_top_k=4 if include_corpus else 0,

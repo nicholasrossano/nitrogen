@@ -28,7 +28,7 @@ from app.domain.registry import get_retrieval_connectors
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
 from app.services.workspace_knowledge import WorkspaceKnowledgeService
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.project_material import ProjectMaterial
 from app.models.evidence import EvidenceDoc
 
@@ -191,7 +191,7 @@ class TieredRetrievalService:
     async def retrieve(
         self,
         query: str,
-        initiative_id: UUID | None = None,
+        project_id: UUID | None = None,
         include_openalex: bool = False,
         include_web_search: bool = True,
         include_llm_fallback: bool = True,
@@ -211,7 +211,7 @@ class TieredRetrievalService:
                 return []
             if on_stage:
                 await on_stage("retrieve_corpus", "running", None)
-            facts = await self.search_corpus(query, initiative_id)
+            facts = await self.search_corpus(query, project_id)
             if on_stage:
                 msg = f"Found {len(facts)} results" if facts else "No matches"
                 await on_stage("retrieve_corpus", "done", msg)
@@ -277,20 +277,20 @@ class TieredRetrievalService:
     async def search_corpus(
         self,
         query: str,
-        initiative_id: UUID | None,
+        project_id: UUID | None,
         *,
         corpus_top_k: int = 5,
         evidence_top_k: int | None = None,
     ) -> list[RetrievedFact]:
         """Search corpus and evidence using existing RAG service."""
         try:
-            search_id = initiative_id or UUID('00000000-0000-0000-0000-000000000000')
-            ev_k = evidence_top_k if evidence_top_k is not None else (corpus_top_k if initiative_id else 0)
+            search_id = project_id or UUID('00000000-0000-0000-0000-000000000000')
+            ev_k = evidence_top_k if evidence_top_k is not None else (corpus_top_k if project_id else 0)
 
             chunks = await self.rag.retrieve(
                 query=query,
-                initiative_id=search_id,
-                sources=["corpus"] if not initiative_id else ["corpus", "evidence"],
+                project_id=search_id,
+                sources=["corpus"] if not project_id else ["corpus", "evidence"],
                 corpus_top_k=corpus_top_k,
                 evidence_top_k=ev_k,
             )
@@ -339,7 +339,7 @@ class TieredRetrievalService:
         try:
             chunks = await self.rag.retrieve(
                 query=query,
-                initiative_id=None,
+                project_id=None,
                 workspace_id=workspace_id,
                 sources=["workspace_evidence"],
                 workspace_top_k=workspace_top_k,
@@ -389,7 +389,7 @@ class TieredRetrievalService:
     async def search_project_materials(
         self,
         query: str,
-        initiative_id: UUID,
+        project_id: UUID,
         max_results: int = 5,
         max_snippet_len: int = 500,
     ) -> list[RetrievedFact]:
@@ -397,7 +397,7 @@ class TieredRetrievalService:
         try:
             result = await self.db.execute(
                 select(ProjectMaterial).where(
-                    ProjectMaterial.initiative_id == initiative_id,
+                    ProjectMaterial.project_id == project_id,
                     ProjectMaterial.content_text.isnot(None),
                     ProjectMaterial.content_text != "",
                 )
@@ -749,7 +749,7 @@ class TieredRetrievalService:
     
     async def retrieve_for_context(
         self,
-        initiative: Initiative,
+        initiative: Project,
     ) -> dict[str, RetrievalResult]:
         """
         Retrieve contextual facts based on project state.
@@ -760,26 +760,26 @@ class TieredRetrievalService:
         if initiative.geography:
             results["regional_context"] = await self.retrieve(
                 query=f"Development projects market conditions economic context {initiative.geography}",
-                initiative_id=initiative.id,
+                project_id=initiative.id,
             )
             
             if initiative.project_type in ["energy_access", "clean_cooking"]:
                 results["energy_context"] = await self.retrieve(
                     query=f"Electricity costs grid tariff energy prices {initiative.geography}",
-                    initiative_id=initiative.id,
+                    project_id=initiative.id,
                 )
         
         if initiative.project_description:
             results["similar_projects"] = await self.retrieve(
                 query=f"Similar development projects case studies: {initiative.project_description[:200]}",
-                initiative_id=initiative.id,
+                project_id=initiative.id,
             )
         
         if initiative.selected_tools:
             tool_context_query = f"Best practices requirements for {', '.join(initiative.selected_tools)} analysis"
             results["tool_context"] = await self.retrieve(
                 query=tool_context_query,
-                initiative_id=initiative.id,
+                project_id=initiative.id,
                 include_web_search=False,
             )
         

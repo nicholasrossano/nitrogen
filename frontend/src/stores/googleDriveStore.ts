@@ -7,7 +7,7 @@ interface GoogleDriveState {
   statusChecked: boolean;
 
   checkStatus: () => Promise<void>;
-  connect: (initiativeId: string) => Promise<void>;
+  connect: (projectId: string) => Promise<void>;
   disconnect: () => Promise<void>;
   getAccessToken: () => Promise<string>;
 }
@@ -26,8 +26,8 @@ export const useGoogleDriveStore = create<GoogleDriveState>((set) => ({
     }
   },
 
-  connect: async (initiativeId: string) => {
-    const { auth_url } = await api.getGoogleAuthUrl(initiativeId);
+  connect: async (projectId: string) => {
+    const { auth_url } = await api.getGoogleAuthUrl(projectId);
     window.location.href = auth_url;
   },
 

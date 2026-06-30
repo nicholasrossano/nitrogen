@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthUser, get_current_user
 from app.core.database import get_db
 from app.models.chat import CoreChat
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_project_editor, require_project_viewer
 from app.schemas.assumption import (
     AssumptionCommentCreate,
     AssumptionCommentResponse,
@@ -41,25 +41,25 @@ def _actor_from_user(user: AuthUser) -> AssumptionActor:
 
 
 @router.get(
-    "/initiatives/{initiative_id}/assumptions/summary",
+    "/projects/{project_id}/assumptions/summary",
     response_model=AssumptionSummary,
 )
 async def get_assumptions_summary(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Return project-level assumptions summary counts and attention items."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     return await build_summary(db, initiative.id)
 
 
 @router.get(
-    "/initiatives/{initiative_id}/assumptions",
+    "/projects/{project_id}/assumptions",
     response_model=list[AssumptionResponse],
 )
 async def get_assumptions(
-    initiative_id: str,
+    project_id: str,
     status_filter: str | None = Query(default=None, alias="status"),
     source_type: str | None = None,
     assessment: str | None = None,
@@ -67,7 +67,7 @@ async def get_assumptions(
     user: AuthUser = Depends(get_current_user),
 ):
     """List project assumptions with optional filters."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     return await list_assumptions(
         db,
         initiative.id,
@@ -78,11 +78,11 @@ async def get_assumptions(
 
 
 @router.get(
-    "/initiatives/{initiative_id}/assumptions/resolve",
+    "/projects/{project_id}/assumptions/resolve",
     response_model=AssumptionResolveResponse,
 )
 async def resolve_assumption(
-    initiative_id: str,
+    project_id: str,
     assessment_id: str = Query(..., description="Assessment id for lookup context."),
     field_name: str = Query(..., description="Variable field_name from input rows."),
     assessment_instance_id: UUID | None = Query(default=None, description="Optional assessment instance scope."),
@@ -90,10 +90,10 @@ async def resolve_assumption(
     user: AuthUser = Depends(get_current_user),
 ):
     """Resolve the project assumption currently backing one assessment variable."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     assumption = await resolve_assumption_for_assessment_field(
         db,
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         assessment_id=assessment_id,
         field_name=field_name,
         assessment_instance_id=assessment_instance_id,
@@ -102,21 +102,21 @@ async def resolve_assumption(
 
 
 @router.post(
-    "/initiatives/{initiative_id}/assumptions",
+    "/projects/{project_id}/assumptions",
     response_model=AssumptionResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_assumption(
-    initiative_id: str,
+    project_id: str,
     data: AssumptionCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Create or replace a project assumption."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
     assumption, _created = await upsert_assumption(
         db,
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         key=data.key,
         value=data.value,
         label=data.label,
@@ -137,16 +137,16 @@ async def create_assumption(
 
 
 @router.post(
-    "/initiatives/{initiative_id}/assumptions/refresh",
+    "/projects/{project_id}/assumptions/refresh",
     response_model=AssumptionRefreshResponse,
 )
 async def refresh_assumptions(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Legacy bulk extraction — disabled; new assumptions come from finding promotion."""
-    await require_editor(db, initiative_id, user)
+    await require_project_editor(db, project_id, user)
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
         detail="Assumption refresh is retired. Promote chat messages to project findings to extract new assumptions.",
@@ -163,7 +163,7 @@ async def get_assumption_detail(
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
         raise HTTPException(status_code=404, detail="Assumption not found")
-    await require_viewer(db, assumption.initiative_id, user)
+    await require_project_viewer(db, assumption.project_id, user)
     return assumption
 
 
@@ -178,7 +178,7 @@ async def patch_assumption(
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
         raise HTTPException(status_code=404, detail="Assumption not found")
-    initiative = await require_editor(db, assumption.initiative_id, user)
+    initiative = await require_project_editor(db, assumption.project_id, user)
     updates = data.model_dump(exclude_unset=True)
     updated = await update_assumption(db, assumption, updates, actor=_actor_from_user(user))
     initiative.touch()
@@ -197,10 +197,10 @@ async def remove_assumption(
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
         raise HTTPException(status_code=404, detail="Assumption not found")
-    initiative = await require_editor(db, assumption.initiative_id, user)
+    initiative = await require_project_editor(db, assumption.project_id, user)
     chats_result = await db.execute(
         select(CoreChat).where(
-            CoreChat.initiative_id == assumption.initiative_id,
+            CoreChat.project_id == assumption.project_id,
             CoreChat.assumption_id == assumption.id,
         )
     )
@@ -225,7 +225,7 @@ async def get_assumption_comments(
     assumption = await get_assumption(db, assumption_id)
     if assumption is None:
         raise HTTPException(status_code=404, detail="Assumption not found")
-    await require_viewer(db, assumption.initiative_id, user)
+    await require_project_viewer(db, assumption.project_id, user)
     return await list_assumption_comments(db, assumption.id)
 
 
@@ -246,7 +246,7 @@ async def post_assumption_comment(
         raise HTTPException(status_code=404, detail="Assumption not found")
     if not data.body.strip():
         raise HTTPException(status_code=400, detail="Comment body is required")
-    initiative = await require_editor(db, assumption.initiative_id, user)
+    initiative = await require_project_editor(db, assumption.project_id, user)
     comment = await create_assumption_comment(
         db,
         assumption,

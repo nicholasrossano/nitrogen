@@ -37,7 +37,7 @@ from app.services import evidence_processor
 def test_evidence_doc_status_properties(status, expected_light, expected_indexed):
     doc = EvidenceDoc(
         id=uuid.uuid4(),
-        initiative_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
         filename="x.pdf",
         file_type="pdf",
         storage_path="/tmp/x",

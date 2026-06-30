@@ -1,8 +1,8 @@
-from app.schemas.initiative import (
-    InitiativeCreate,
-    InitiativeUpdate,
-    InitiativeResponse,
-    InitiativeSummary,
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectResponse,
+    ProjectSummary,
 )
 from app.schemas.chat import (
     ChatMessageCreate,
@@ -29,10 +29,10 @@ from app.schemas.project_material import (
 )
 
 __all__ = [
-    "InitiativeCreate",
-    "InitiativeUpdate",
-    "InitiativeResponse",
-    "InitiativeSummary",
+    "ProjectCreate",
+    "ProjectUpdate",
+    "ProjectResponse",
+    "ProjectSummary",
     "ChatMessageCreate",
     "ChatMessageResponse",
     "ChatResponse",

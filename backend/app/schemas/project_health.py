@@ -68,7 +68,7 @@ class ProjectHealthDimensionResponse(BaseModel):
 
 class ProjectHealthResponse(BaseModel):
     domain: str = Field(description="Active domain key used for health dimensions.")
-    initiative_id: str = Field(description="Project identifier.")
+    project_id: str = Field(description="Project identifier.")
     stale: bool = Field(description="Whether any returned dimension result is stale.")
     dimensions: list[ProjectHealthDimensionResponse] = Field(description="Health rows for configured dimensions.")
 

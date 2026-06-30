@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 # Add parent directory to path to import app assessments
 sys.path.insert(0, '.')
 
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.config import get_settings
 
 SHARED_USER_ID = "shared-user"
@@ -46,7 +46,7 @@ async def migrate_initiatives():
     async with async_session() as session:
         # Count total initiatives
         result = await session.execute(
-            select(Initiative).where(Initiative.user_id != SHARED_USER_ID)
+            select(Project).where(Project.user_id != SHARED_USER_ID)
         )
         initiatives = result.scalars().all()
         
@@ -63,8 +63,8 @@ async def migrate_initiatives():
         
         # Update all initiatives
         await session.execute(
-            update(Initiative)
-            .where(Initiative.user_id != SHARED_USER_ID)
+            update(Project)
+            .where(Project.user_id != SHARED_USER_ID)
             .values(user_id=SHARED_USER_ID)
         )
         
@@ -72,7 +72,7 @@ async def migrate_initiatives():
         
         # Verify
         result = await session.execute(
-            select(Initiative).where(Initiative.user_id == SHARED_USER_ID)
+            select(Project).where(Project.user_id == SHARED_USER_ID)
         )
         migrated = result.scalars().all()
         

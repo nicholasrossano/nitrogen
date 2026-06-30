@@ -100,7 +100,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=...
 
 **Debug steps**:
 1. Check Railway logs for detailed error message
-2. Test memo exists: `GET /api/v1/initiatives/{id}/memo`
+2. Test memo exists: `GET /api/v1/projects/{id}/memo`
 3. Verify exports directory created in Dockerfile
 4. Test with a simple memo first
 

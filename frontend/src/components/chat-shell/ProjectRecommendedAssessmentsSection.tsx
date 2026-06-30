@@ -12,7 +12,7 @@ import { useFeatureFlag, useFeatureFlagContext, useVisibleAssessments } from '@/
 import { api, type AssessmentInstance } from '@/lib/api';
 import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
 import { filterVisibleAssessments } from '@/lib/featureFlags';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 interface ProjectRecommendedAssessmentsSectionProps {
   projectId: string;
@@ -32,7 +32,7 @@ export function ProjectRecommendedAssessmentsSection({
 }: ProjectRecommendedAssessmentsSectionProps) {
   const showBetaAssessments = useFeatureFlag('beta_assessments');
   const featureFlagContext = useFeatureFlagContext();
-  const initiative = useInitiativeStore((state) => state.initiative);
+  const project = useProjectStore((state) => state.project);
   const visibleModules = useVisibleAssessments(ALL_MODULES);
   const visibleModuleIds = useMemo(
     () => new Set(visibleModules.map((module) => module.id)),
@@ -58,14 +58,14 @@ export function ProjectRecommendedAssessmentsSection({
     try {
       const [instanceData, recommendedTools] = await Promise.all([
         api.listAssessmentInstances(projectId),
-        initiative?.selected_tools?.length
+        project?.selected_tools?.length
           ? Promise.resolve(null)
           : api.getRecommendedTools(projectId).catch(() => null),
       ]);
 
       setInstances(instanceData);
 
-      const selectedTools = initiative?.selected_tools;
+      const selectedTools = project?.selected_tools;
       if (selectedTools && selectedTools.length > 0) {
         setRecommendedAssessmentIds(Array.from(new Set(selectedTools)));
       } else if (recommendedTools?.recommendations?.length) {
@@ -86,7 +86,7 @@ export function ProjectRecommendedAssessmentsSection({
     } finally {
       setLoading(false);
     }
-  }, [initiative?.selected_tools, projectId]);
+  }, [project?.selected_tools, projectId]);
 
   useEffect(() => {
     void load();

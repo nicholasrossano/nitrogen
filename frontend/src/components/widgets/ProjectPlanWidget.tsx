@@ -7,7 +7,7 @@ import { PlanSummaryWidget } from './PlanSummaryWidget';
 
 interface ProjectPlanWidgetProps {
   data: Record<string, unknown>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
 }
 

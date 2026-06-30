@@ -13,7 +13,7 @@ import {
   Users,
   MessageSquare,
 } from 'lucide-react';
-import { api, Initiative } from '@/lib/api';
+import { api, Project } from '@/lib/api';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 
 type HeaderIcon = 'panel-left' | 'panel-right' | 'chat' | 'workspace';
@@ -27,7 +27,7 @@ interface PanelToggle {
 }
 
 interface ProjectHeaderProps {
-  initiative: Initiative;
+  project: Project;
   onTitleUpdate?: (title: string) => void;
   /** PanelLeft button — shown on the right side when provided */
   leftToggle?: PanelToggle;
@@ -44,7 +44,7 @@ interface ProjectHeaderProps {
 }
 
 export function ProjectHeader({
-  initiative,
+  project,
   onTitleUpdate,
   leftToggle,
   rightToggle,
@@ -54,16 +54,16 @@ export function ProjectHeader({
   readOnly = false,
 }: ProjectHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [title, setTitle] = useState(initiative.title || 'New Project');
+  const [title, setTitle] = useState(project.title || 'New Project');
   const [saving, setSaving] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isOwner = !initiative.shared_role;
-  const canShare = isOwner || initiative.shared_role === 'editor';
+  const isOwner = !project.shared_role;
+  const canShare = isOwner || project.shared_role === 'editor';
 
   useEffect(() => {
-    setTitle(initiative.title || 'New Project');
-  }, [initiative.id, initiative.title]);
+    setTitle(project.title || 'New Project');
+  }, [project.id, project.title]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -74,17 +74,17 @@ export function ProjectHeader({
 
   const handleSave = async () => {
     if (!title.trim()) {
-      setTitle(initiative.title || 'New Project');
+      setTitle(project.title || 'New Project');
       setIsEditing(false);
       return;
     }
     setSaving(true);
     try {
-      await api.updateInitiative(initiative.id, { title: title.trim() });
+      await api.updateProject(project.id, { title: title.trim() });
       onTitleUpdate?.(title.trim());
     } catch (error) {
       console.error('Failed to update title:', error);
-      setTitle(initiative.title || 'New Project');
+      setTitle(project.title || 'New Project');
     } finally {
       setSaving(false);
       setIsEditing(false);
@@ -92,7 +92,7 @@ export function ProjectHeader({
   };
 
   const handleCancel = () => {
-    setTitle(initiative.title || 'New Project');
+    setTitle(project.title || 'New Project');
     setIsEditing(false);
   };
 
@@ -117,7 +117,7 @@ export function ProjectHeader({
     }
   };
 
-  const hasRightControls = onNewChat || leftToggle || rightToggle || canShare || initiative.shared_role;
+  const hasRightControls = onNewChat || leftToggle || rightToggle || canShare || project.shared_role;
 
   return (
     <div className="h-full flex-shrink-0">
@@ -177,7 +177,7 @@ export function ProjectHeader({
                     <Pencil className="w-3 h-3" />
                   </button>
                 )}
-                {initiative.shared_role === 'viewer' && (
+                {project.shared_role === 'viewer' && (
                   <span className="ml-1 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-text-tertiary bg-surface-subtle rounded">
                     View only
                   </span>
@@ -250,8 +250,8 @@ export function ProjectHeader({
 
       {showShareModal && (
         <ShareProjectModal
-          initiativeId={initiative.id}
-          ownerEmail={initiative.owner_email}
+          projectId={project.id}
+          ownerEmail={project.owner_email}
           onClose={() => setShowShareModal(false)}
         />
       )}

@@ -24,7 +24,7 @@ def _ctx() -> ExecutionContext:
     return ExecutionContext(
         user_id="transport-user",
         user_email="transport@example.com",
-        initiative_id=None,
+        project_id=None,
         initiative_role=None,
         ai_access_granted=True,
         is_byok=False,
@@ -69,7 +69,7 @@ async def test_mcp_http_transport_smoke(monkeypatch: pytest.MonkeyPatch) -> None
     async def _fake_auth(_token: str) -> AuthUser:
         return AuthUser(uid="http-user", email="http@example.com")
 
-    async def _fake_build_context(_db, user, initiative_id=None) -> ExecutionContext:
+    async def _fake_build_context(_db, user, project_id=None) -> ExecutionContext:
         assert user.uid == "http-user"
         return _ctx()
 

@@ -23,7 +23,7 @@ from sqlalchemy import select
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.core.database import AsyncSessionLocal  # noqa: E402
-from app.models.initiative import Initiative  # noqa: E402
+from app.models.project import Project  # noqa: E402
 from app.models.assessment_instance import AssessmentInstance  # noqa: E402
 from app.domain.energy.assessments.implementation_plan import ImplementationPlanAssessment  # noqa: E402
 from app.assessments.utils import infer_category_icon, make_build_item  # noqa: E402
@@ -195,7 +195,7 @@ async def run_backfill(*, apply: bool) -> BackfillStats:
     assessment = ImplementationPlanAssessment()
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Initiative))
+        result = await db.execute(select(Project))
         initiatives = result.scalars().all()
         stats.total_initiatives = len(initiatives)
         print(f"Scanning {stats.total_initiatives} initiatives...")
@@ -213,7 +213,7 @@ async def run_backfill(*, apply: bool) -> BackfillStats:
 
                 existing_result = await db.execute(
                     select(AssessmentInstance).where(
-                        AssessmentInstance.initiative_id == initiative.id,
+                        AssessmentInstance.project_id == initiative.id,
                         AssessmentInstance.assessment_id == IMPLEMENTATION_MODULE_ID,
                         AssessmentInstance.archived.is_(False),
                     )
@@ -236,7 +236,7 @@ async def run_backfill(*, apply: bool) -> BackfillStats:
                 title = (initiative.title or "").strip() or "Implementation Plan"
                 if apply:
                     inst = AssessmentInstance(
-                        initiative_id=initiative.id,
+                        project_id=initiative.id,
                         assessment_id=IMPLEMENTATION_MODULE_ID,
                         instance_number=1,
                         status="ready",

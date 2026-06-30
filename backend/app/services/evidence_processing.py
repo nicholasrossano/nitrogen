@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.filename_utils import deduplicate_filename
 from app.core.storage import StorageBackend
 from app.models.evidence import EvidenceChunk, EvidenceDoc, EvidenceDocStatus
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.services.document_parser import DocumentParserService
 from app.services.embeddings import EmbeddingsService
 from app.services.pdf_visual_chunks import extract_pdf_visual_chunks
@@ -106,7 +106,7 @@ async def parse_file_to_chunk_payloads(
 async def create_uploaded_doc(
     db: AsyncSession,
     *,
-    initiative: Initiative | None = None,
+    initiative: Project | None = None,
     workspace_id: uuid.UUID | None = None,
     filename: str,
     file_type: str,
@@ -131,7 +131,7 @@ async def create_uploaded_doc(
     )
 
     evidence_doc = EvidenceDoc(
-        initiative_id=initiative.id if initiative is not None else None,
+        project_id=initiative.id if initiative is not None else None,
         workspace_id=resolved_workspace_id,
         filename=filename,
         file_type=file_type,
@@ -150,7 +150,7 @@ async def create_uploaded_doc(
 
 async def store_evidence_doc(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     file_bytes: bytes,
     filename: str,
     file_type: str,
@@ -181,7 +181,7 @@ async def store_evidence_doc(
     filename = await deduplicate_filename(db, initiative.id, filename or "Untitled")
 
     evidence_doc = EvidenceDoc(
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         workspace_id=initiative.workspace_id,
         filename=filename,
         file_type=file_type,

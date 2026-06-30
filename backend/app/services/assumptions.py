@@ -21,7 +21,7 @@ from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.domain.resolver import get_active_domain
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.project_material import ProjectMaterial
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ def _definition_for_assessment_field(field_key: str, assessment_id: str) -> Assu
     return None
 
 
-def _assessment_ids_from_initiative(initiative: Initiative) -> list[str]:
+def _assessment_ids_from_initiative(initiative: Project) -> list[str]:
     # Drive assumption requirements from active assessment instances, not planned tools.
     # This prevents static required placeholders from appearing before a assessment exists.
     assessments: set[str] = set()
@@ -232,7 +232,7 @@ def build_chat_assumption_candidate(
     }
 
 
-def _initiative_relevance_context(initiative: Initiative) -> dict[str, Any]:
+def _initiative_relevance_context(initiative: Project) -> dict[str, Any]:
     return {
         "title": getattr(initiative, "title", None),
         "geography": getattr(initiative, "geography", None),
@@ -245,7 +245,7 @@ def _initiative_relevance_context(initiative: Initiative) -> dict[str, Any]:
 
 async def _should_log_chat_assumption(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     candidate: dict[str, Any],
     *,
     actor: AssumptionActor,
@@ -313,7 +313,7 @@ async def _should_log_chat_assumption(
 
 async def extract_assumptions_from_cited_chat_sources(
     db: AsyncSession,
-    initiative: Initiative | None,
+    initiative: Project | None,
     cited_sources: list[Any],
     *,
     answer_content: str,
@@ -354,7 +354,7 @@ async def extract_assumptions_from_cited_chat_sources(
         }
         assumption, _created = await upsert_assumption(
             db,
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             key=candidate["key"],
             value=candidate["value"],
             label=candidate["label"],
@@ -488,7 +488,7 @@ def infer_assumption_value_type(value: Any) -> str:
 
 async def list_assumptions(
     db: AsyncSession,
-    initiative_id: UUID,
+    project_id: UUID,
     *,
     status: str | None = None,
     source_type: str | None = None,
@@ -496,7 +496,7 @@ async def list_assumptions(
 ) -> list[Assumption]:
     normalized_status_filter = normalize_assumption_status(status, default="")
     stmt = select(Assumption).where(
-        Assumption.initiative_id == initiative_id,
+        Assumption.project_id == project_id,
         Assumption.status != "rejected",
     )
     if normalized_status_filter:
@@ -545,7 +545,7 @@ async def create_assumption_comment(
 ) -> AssumptionComment:
     comment = AssumptionComment(
         assumption_id=assumption.id,
-        initiative_id=assumption.initiative_id,
+        project_id=assumption.project_id,
         body=body.strip(),
         created_by_user_id=actor.user_id,
         created_by_email=actor.email,
@@ -559,7 +559,7 @@ async def create_assumption_comment(
 async def upsert_assumption(
     db: AsyncSession,
     *,
-    initiative_id: UUID,
+    project_id: UUID,
     key: str,
     value: Any = None,
     label: str | None = None,
@@ -579,7 +579,7 @@ async def upsert_assumption(
     result = await db.execute(
         select(Assumption)
         .where(
-            Assumption.initiative_id == initiative_id,
+            Assumption.project_id == project_id,
             Assumption.key == normalized_key,
             Assumption.status != "rejected",
         )
@@ -617,7 +617,7 @@ async def upsert_assumption(
         return existing, False
 
     assumption = Assumption(
-        initiative_id=initiative_id,
+        project_id=project_id,
         key=normalized_key,
         label=label or (definition.label if definition else normalized_key.replace("_", " ").title()),
         value=normalized_value,
@@ -686,7 +686,7 @@ async def delete_assumption(
 
 async def ensure_expected_assumptions(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     *,
     assessment_ids: list[str] | None = None,
     actor: AssumptionActor | None = None,
@@ -745,7 +745,7 @@ def apply_assumptions_to_items(
 async def sync_stage_assumptions(
     db: AsyncSession,
     *,
-    initiative_id: UUID,
+    project_id: UUID,
     assessment_id: str,
     assessment_instance_id: UUID | None = None,
     stage_id: str,
@@ -788,7 +788,7 @@ async def sync_stage_assumptions(
         value_type = definition.value_type
         assumption, _created = await upsert_assumption(
             db,
-            initiative_id=initiative_id,
+            project_id=project_id,
             key=key,
             value=value,
             label=label,
@@ -811,7 +811,7 @@ async def sync_stage_assumptions(
             continue
         binding = await upsert_assumption_binding(
             db,
-            initiative_id=initiative_id,
+            project_id=project_id,
             assumption_id=assumption.id,
             assessment_id=assessment_id,
             assessment_instance_id=assessment_instance_id,
@@ -833,7 +833,7 @@ async def sync_stage_assumptions(
 async def sync_widget_assumptions(
     db: AsyncSession,
     *,
-    initiative_id: UUID,
+    project_id: UUID,
     assessment_id: str,
     assessment_instance_id: UUID | None = None,
     widget_data: dict[str, Any],
@@ -867,7 +867,7 @@ async def sync_widget_assumptions(
         )
     return await sync_stage_assumptions(
         db,
-        initiative_id=initiative_id,
+        project_id=project_id,
         assessment_id=assessment_id,
         assessment_instance_id=assessment_instance_id,
         stage_id="widget_state",
@@ -880,7 +880,7 @@ async def sync_widget_assumptions(
 async def upsert_assumption_binding(
     db: AsyncSession,
     *,
-    initiative_id: UUID,
+    project_id: UUID,
     assumption_id: UUID,
     assessment_id: str,
     assessment_instance_id: UUID | None,
@@ -892,7 +892,7 @@ async def upsert_assumption_binding(
     metadata: dict[str, Any] | None = None,
 ) -> AssumptionBinding:
     stmt = select(AssumptionBinding).where(
-        AssumptionBinding.initiative_id == initiative_id,
+        AssumptionBinding.project_id == project_id,
         AssumptionBinding.assessment_id == assessment_id,
         AssumptionBinding.field_name == normalize_assumption_key(field_name),
         AssumptionBinding.stage_id == stage_id,
@@ -911,7 +911,7 @@ async def upsert_assumption_binding(
         return existing
 
     binding = AssumptionBinding(
-        initiative_id=initiative_id,
+        project_id=project_id,
         assumption_id=assumption_id,
         assessment_id=assessment_id,
         assessment_instance_id=assessment_instance_id,
@@ -930,7 +930,7 @@ async def upsert_assumption_binding(
 async def resolve_assumption_for_assessment_field(
     db: AsyncSession,
     *,
-    initiative_id: UUID,
+    project_id: UUID,
     assessment_id: str,
     field_name: str,
     assessment_instance_id: UUID | None = None,
@@ -942,7 +942,7 @@ async def resolve_assumption_for_assessment_field(
     binding_stmt = (
         select(AssumptionBinding)
         .where(
-            AssumptionBinding.initiative_id == initiative_id,
+            AssumptionBinding.project_id == project_id,
             AssumptionBinding.assessment_id == assessment_id,
             AssumptionBinding.field_name == normalized_field,
         )
@@ -956,11 +956,11 @@ async def resolve_assumption_for_assessment_field(
         )
         if preferred is not None:
             assumption = await get_assumption(db, preferred.assumption_id)
-            if assumption and assumption.initiative_id == initiative_id:
+            if assumption and assumption.project_id == project_id:
                 return assumption
     if bindings:
         assumption = await get_assumption(db, bindings[0].assumption_id)
-        if assumption and assumption.initiative_id == initiative_id:
+        if assumption and assumption.project_id == project_id:
             return assumption
 
     definition = _definition_for_assessment_field(normalized_field, assessment_id)
@@ -968,7 +968,7 @@ async def resolve_assumption_for_assessment_field(
     stmt = (
         select(Assumption)
         .where(
-            Assumption.initiative_id == initiative_id,
+            Assumption.project_id == project_id,
             Assumption.key == assumption_key,
             Assumption.status != "rejected",
         )
@@ -981,8 +981,8 @@ async def resolve_assumption_for_assessment_field(
     return assumption
 
 
-async def build_summary(db: AsyncSession, initiative_id: UUID) -> dict[str, Any]:
-    rows = await list_assumptions(db, initiative_id)
+async def build_summary(db: AsyncSession, project_id: UUID) -> dict[str, Any]:
+    rows = await list_assumptions(db, project_id)
     active_rows = [row for row in rows if normalize_assumption_status(row.status) in ACTIVE_STATUSES]
     status_counts = {"validated": 0, "extracted": 0, "assumed": 0, "missing": 0}
     for row in active_rows:
@@ -1031,13 +1031,13 @@ def format_assumptions_for_prompt(assumptions: list[Assumption]) -> str:
     return "\n".join(parts)
 
 
-async def format_assumptions_for_initiative_prompt(db: AsyncSession, initiative_id: UUID) -> str:
-    rows = await list_assumptions(db, initiative_id)
+async def format_assumptions_for_initiative_prompt(db: AsyncSession, project_id: UUID) -> str:
+    rows = await list_assumptions(db, project_id)
     return format_assumptions_for_prompt(rows)
 
 
-async def assumptions_as_context(db: AsyncSession, initiative_id: UUID) -> list[dict[str, Any]]:
-    rows = await list_assumptions(db, initiative_id)
+async def assumptions_as_context(db: AsyncSession, project_id: UUID) -> list[dict[str, Any]]:
+    rows = await list_assumptions(db, project_id)
     return [
         {
             "id": str(row.id),
@@ -1056,12 +1056,12 @@ async def assumptions_as_context(db: AsyncSession, initiative_id: UUID) -> list[
     ]
 
 
-async def _load_extraction_text(db: AsyncSession, initiative_id: UUID) -> tuple[str, list[dict[str, Any]]]:
+async def _load_extraction_text(db: AsyncSession, project_id: UUID) -> tuple[str, list[dict[str, Any]]]:
     source_refs: list[dict[str, Any]] = []
     chunks: list[str] = []
     material_result = await db.execute(
         select(ProjectMaterial)
-        .where(ProjectMaterial.initiative_id == initiative_id)
+        .where(ProjectMaterial.project_id == project_id)
         .order_by(ProjectMaterial.created_at.desc())
         .limit(8)
     )
@@ -1073,7 +1073,7 @@ async def _load_extraction_text(db: AsyncSession, initiative_id: UUID) -> tuple[
 
     evidence_result = await db.execute(
         select(EvidenceDoc)
-        .where(EvidenceDoc.initiative_id == initiative_id, EvidenceDoc.storage_path.isnot(None))
+        .where(EvidenceDoc.project_id == project_id, EvidenceDoc.storage_path.isnot(None))
         .order_by(EvidenceDoc.created_at.desc())
         .limit(6)
     )
@@ -1094,7 +1094,7 @@ async def _load_extraction_text(db: AsyncSession, initiative_id: UUID) -> tuple[
 
 async def extract_assumptions_from_sources(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     *,
     actor: AssumptionActor,
     assessment_ids: list[str] | None = None,
@@ -1182,7 +1182,7 @@ async def extract_assumptions_from_sources(
             continue
         assumption, created = await upsert_assumption(
             db,
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             key=key,
             value=value,
             label=definition.label,
@@ -1211,7 +1211,7 @@ async def extract_assumptions_from_sources(
 
 async def extract_assumptions_from_finding(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     *,
     finding_id: UUID,
     body: str,
@@ -1295,7 +1295,7 @@ async def extract_assumptions_from_finding(
             continue
         assumption, _created = await upsert_assumption(
             db,
-            initiative_id=initiative.id,
+            project_id=initiative.id,
             key=key,
             value=value,
             label=definition.label,
