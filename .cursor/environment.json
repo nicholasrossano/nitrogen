@@ -1,0 +1,4 @@
+{
+  "install": "bash scripts/setup.sh",
+  "start": "bash scripts/dev_daemon.sh start"
+}
