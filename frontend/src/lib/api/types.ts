@@ -679,13 +679,46 @@ export interface ProjectFilesResponse {
 
 export interface BillingStatus {
   allowed: boolean;
-  tier: 'trial' | 'starter' | 'pro' | 'byok' | 'none' | 'unlimited';
+  tier: 'trial' | 'individual' | 'starter' | 'pro' | 'byok' | 'none' | 'unlimited';
   used_usd: number;
   limit_usd: number;
   trial_messages_remaining?: number | null;
   access_code_redeemed?: boolean;
   access_code_available?: boolean;
   status?: string;
+  byok_providers?: string[];
+  period_start?: string | null;
+  period_end?: string | null;
+}
+
+export interface UsageModelBreakdown {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  call_count: number;
+}
+
+export interface UsageDayBreakdown {
+  date: string;
+  estimated_cost_usd: number;
+}
+
+export interface UsageRecentCall {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  created_at: string;
+}
+
+export interface BillingUsageSummary extends BillingStatus {
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  by_model: UsageModelBreakdown[];
+  by_day: UsageDayBreakdown[];
+  recent_calls: UsageRecentCall[];
+  generated_at?: string;
 }
 
 export interface DriveLinkedFile {

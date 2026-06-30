@@ -8,13 +8,14 @@ import {
 } from './client';
 import type {
   BillingStatus,
+  BillingUsageSummary,
 } from './types';
-
-
 
 export const billingApi = {
   getBillingStatus: () =>
     fetchApi<BillingStatus>('/api/v1/billing/status'),
+  getBillingUsage: () =>
+    fetchApi<BillingUsageSummary>('/api/v1/billing/usage'),
   createCheckout: (priceId: string, successUrl: string, cancelUrl: string) =>
     fetchApi<{ url: string }>('/api/v1/billing/checkout', {
       method: 'POST',
