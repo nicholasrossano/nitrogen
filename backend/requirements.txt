@@ -23,7 +23,7 @@ openpyxl>=3.1.5
 mammoth>=1.6.0
 
 # Auth
-[REDACTED]-admin>=6.4.0
+firebase-admin>=6.4.0  # pragma: allowlist secret
 python-jose[cryptography]>=3.5.0
 
 # Billing
