@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID
 
-from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -421,15 +420,7 @@ class ProjectPlanService:
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
         self.user_id = user_id
-        self._client: AsyncOpenAI | None = None
-        self._is_byok: bool = False
-        self.model = settings.openai_orchestration_model
         self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
-
-    async def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
-        return self._client
 
     async def generate(
         self,

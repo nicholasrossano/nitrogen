@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_client import get_openai_client
 from app.domain.registry import get_retrieval_connectors
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService

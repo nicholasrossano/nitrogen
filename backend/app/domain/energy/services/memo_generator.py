@@ -1,10 +1,8 @@
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date
 from pathlib import Path
 import json
 
-from app.config import get_settings
 from app.core.llm_invoke import acompletion
 from app.core.model_catalog import Complexity, ModelRole
 from app.domain.resolver import get_domain_prompt_path
@@ -13,25 +11,14 @@ from app.models.memo import Citation
 from app.schemas.memo import MemoContent, CitationResponse
 from app.services.rag import RAGService, RetrievedChunk
 
-settings = get_settings()
-
-
 class MemoGeneratorService:
     """Service for generating investment memos using RAG"""
     
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
         self.user_id = user_id
-        self._client: AsyncOpenAI | None = None
-        self._is_byok: bool = False
-        self.model = settings.openai_model
         self.rag = RAGService(db, user_id=user_id)
 
-    async def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
-        return self._client
-    
     async def generate(
         self,
         initiative: Project,

@@ -800,7 +800,6 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
             "technology": {"type": "string", "description": "Specific technology if mentioned (e.g. crystalline silicon PV, biomass gasifier)"},
         }
         try:
-            client = await self._get_client()
             response = await self._acomplete(
                 ModelRole.ORCHESTRATION,
                 Complexity.STANDARD,
