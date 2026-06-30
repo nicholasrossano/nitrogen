@@ -128,6 +128,10 @@ for key in NEXT_PUBLIC_FIREBASE_API_KEY FIREBASE_PROJECT_ID; do
 done
 
 if [[ ${#missing[@]} -gt 0 ]]; then
+  # Last resort: pull PUBLIC config from the deployed Vercel app (no secrets needed).
+  if bash "$ROOT/scripts/bootstrap_env_from_production.sh" 2>/dev/null && [[ -f "$ENV_FILE" ]]; then
+    exit 0
+  fi
   cat >&2 <<EOF
 ❌ Cannot configure .env — no usable secret source found.
    Missing: ${missing[*]}
