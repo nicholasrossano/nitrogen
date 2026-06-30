@@ -127,7 +127,7 @@ export const projectsApi = {
   getMemo: (projectId: string) =>
     fetchApi<MemoResponse>(`/api/v1/projects/${projectId}/memo`),
 
-  // Export
+  // Export,
   exportMemo: (projectId: string, memoVersionId?: string) =>
     fetchApi<{ success: boolean; export_id: string; download_url: string; filename: string }>(
       `/api/v1/projects/${projectId}/export`,
@@ -182,7 +182,7 @@ export const projectsApi = {
       }
     ),
 
-  // ── Assessment Workflow ──────────────────────────────────────────
+  // ── Assessment Workflow ──────────────────────────────────────────,
   getProjectPlan: (projectId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
       `/api/v1/projects/${projectId}/project-plan`
@@ -243,7 +243,7 @@ export const projectsApi = {
       { method: 'DELETE' }
     ),
 
-  // Project plan deep dive
+  // Project plan deep dive,
   deepDiveItem: (
     projectId: string,
     itemId: string,
@@ -264,5 +264,5 @@ export const projectsApi = {
       30000,
     ),
 
-  // Chat sessions — optionally scoped to a single project
+  // Chat sessions — optionally scoped to a single project,
 };

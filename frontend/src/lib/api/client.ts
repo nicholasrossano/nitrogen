@@ -2,6 +2,10 @@ import { isStoredFeatureFlagEnabled } from '@/lib/featureFlags';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Get the current user's ID token for API requests.
+// Uses authStateReady() so calls made immediately after a page load/redirect
+// (e.g. the OAuth callback redirect) still get a token once Firebase has
+// restored the session — without blocking after auth state is already known.
 export async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
@@ -23,6 +27,7 @@ export async function fetchApi<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const url = `${API_URL}${endpoint}`;
+
   const token = await getAuthToken();
   const useBillingTestHeaders = isStoredFeatureFlagEnabled('billing_test_headers');
 
@@ -32,7 +37,7 @@ export async function fetchApi<T>(
   };
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token}`;
   }
   if (useBillingTestHeaders) {
     headers['X-Billing-Test'] = 'true';
@@ -77,9 +82,7 @@ export async function fetchApiWithTimeout<T>(
   }
 }
 
-export function workflowVersionHeaders(
-  workflowVersion?: number,
-): Record<string, string> | undefined {
+export function workflowVersionHeaders(workflowVersion?: number): Record<string, string> | undefined {
   if (workflowVersion === undefined || workflowVersion === null) return undefined;
   return { 'X-Workflow-Version': String(workflowVersion) };
 }

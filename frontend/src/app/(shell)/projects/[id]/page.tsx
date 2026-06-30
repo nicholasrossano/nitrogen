@@ -34,156 +34,49 @@ import { filterVisibleAssessments } from '@/lib/featureFlags';
 import { useFeatureFlagContext } from '@/hooks/useFeatureFlag';
 import { useGoogleDriveStore } from '@/stores/googleDriveStore';
 import { useProjectStore } from '@/stores/projectStore';
+import {
+  inspectorRequestKey,
+  makeDocumentTabId,
+  MAX_CHAT_PANEL_PERCENT,
+  MIN_CHAT_PANEL_PERCENT,
+  viewFromSearchParam,
+  type PendingAssumptionsRequest,
+  type PendingDeepDiveRequest,
+  type ProjectView,
+} from './projectWorkspaceTypes';
+import { useProjectWorkspaceHeaderToggles, useProjectWorkspaceUi } from './useProjectWorkspaceUi';
 
 const ProjectFilesView = dynamic(() => import('@/components/files').then((m) => ({ default: m.ProjectFilesView })), { ssr: false });
-const MIN_CHAT_PANEL_PERCENT = 20;
-const MAX_CHAT_PANEL_PERCENT = 60;
-const DEFAULT_CHAT_PANEL_PERCENT = 30;
-
-type ProjectView = 'overview' | 'assessments' | 'framework' | 'assumptions' | 'files';
-
-function viewFromSearchParam(viewParam: string | null): ProjectView {
-  if (viewParam === 'overview' || viewParam === 'research' || viewParam === 'explore') return 'overview';
-  if (viewParam === 'framework' || viewParam === 'plan') return 'framework';
-  if (viewParam === 'workspace' || viewParam === 'assessments') return 'assessments';
-  if (viewParam === 'assumptions') return 'assumptions';
-  if (viewParam === 'files') return 'files';
-  return 'overview';
-}
-
-function makeDocumentTabId(citation: ResearchPanelCitation): string {
-  return `document-${citation.evidence_doc_id}`;
-}
-
-interface PendingDeepDiveRequest {
-  requestId: string;
-  state: PlanWorkspaceInspectorState;
-}
-
-interface PendingAssumptionsRequest {
-  requestId: string;
-  focusAssumptionId?: string | null;
-  createNew?: boolean;
-  title?: string | null;
-  forceNewTab?: boolean;
-  autoSend?: {
-    requestId: string;
-    content: string;
-    toolHint?: string;
-    fieldContext?: import('@/lib/api').FieldContext | null;
-    modelInputsContext?: string | null;
-    assumptionId?: string | null;
-  } | null;
-}
-
-interface StoredProjectWorkspaceUiState {
-  panelVisibility: {
-    overview: { workspace: boolean; chat: boolean };
-    assessments: { workspace: boolean; chat: boolean };
-    framework: { workspace: boolean; chat: boolean };
-    assumptions: { workspace: boolean; chat: boolean };
-  };
-  chatPanelWidthPercent: number;
-  workspaceTabs: WorkspacePanelTab[];
-  activeWorkspaceTabId: string | null;
-}
-
-const DEFAULT_PANEL_VISIBILITY: StoredProjectWorkspaceUiState['panelVisibility'] = {
-  overview: { workspace: true, chat: false },
-  assessments: { workspace: true, chat: false },
-  framework: { workspace: true, chat: false },
-  assumptions: { workspace: true, chat: false },
-};
-
-function readStoredWorkspaceUiState(storageKey: string): StoredProjectWorkspaceUiState | null {
-  if (typeof sessionStorage === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(storageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredProjectWorkspaceUiState>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!parsed.panelVisibility || !parsed.workspaceTabs) return null;
-
-    const tabs = Array.isArray(parsed.workspaceTabs)
-      ? parsed.workspaceTabs.filter(
-          (tab): tab is WorkspacePanelTab =>
-            Boolean(tab) &&
-            typeof tab === 'object' &&
-            typeof (tab as { id?: unknown }).id === 'string' &&
-            typeof (tab as { title?: unknown }).title === 'string' &&
-            typeof (tab as { kind?: unknown }).kind === 'string' &&
-            (tab as { kind?: unknown }).kind !== 'artifacts',
-        )
-      : [];
-
-    const parsedWidth = Number(parsed.chatPanelWidthPercent);
-    const clampedWidth = Number.isFinite(parsedWidth)
-      ? Math.min(MAX_CHAT_PANEL_PERCENT, Math.max(MIN_CHAT_PANEL_PERCENT, parsedWidth))
-      : DEFAULT_CHAT_PANEL_PERCENT;
-
-    const activeWorkspaceTabId =
-      typeof parsed.activeWorkspaceTabId === 'string' &&
-      tabs.some((tab) => tab.id === parsed.activeWorkspaceTabId)
-        ? parsed.activeWorkspaceTabId
-        : null;
-    const rawPanelVisibility = parsed.panelVisibility as Partial<StoredProjectWorkspaceUiState['panelVisibility']>;
-    const panelVisibility: StoredProjectWorkspaceUiState['panelVisibility'] = {
-      overview: rawPanelVisibility?.overview ?? DEFAULT_PANEL_VISIBILITY.overview,
-      assessments: rawPanelVisibility?.assessments ?? DEFAULT_PANEL_VISIBILITY.assessments,
-      framework: rawPanelVisibility?.framework ?? DEFAULT_PANEL_VISIBILITY.framework,
-      assumptions: rawPanelVisibility?.assumptions ?? DEFAULT_PANEL_VISIBILITY.assumptions,
-    };
-
-    return {
-      panelVisibility,
-      chatPanelWidthPercent: clampedWidth,
-      workspaceTabs: tabs,
-      activeWorkspaceTabId,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredWorkspaceUiState(storageKey: string, state: StoredProjectWorkspaceUiState) {
-  if (typeof sessionStorage === 'undefined') return;
-  try {
-    sessionStorage.setItem(storageKey, JSON.stringify(state));
-  } catch {
-    // Ignore private mode / quota errors.
-  }
-}
-
-function inspectorRequestKey(state: PlanWorkspaceInspectorState): string {
-  return `${state.groupName}::${state.item.id}`;
-}
 
 function ProjectPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = params.id as string;
-  const workspaceUiStorageKey = `nitrogen_project_workspace_ui_${projectId}`;
   const frameworkChatTabsStorageKey = `nitrogen_framework_chat_tabs_${projectId}`;
+
+  const {
+    workspaceUiStorageKey,
+    panelVisibility,
+    chatPanelWidthPercent,
+    setChatPanelWidthPercent,
+    isResizingChat,
+    setIsResizingChat,
+    workspaceTabs,
+    setWorkspaceTabs,
+    activeWorkspaceTabId,
+    setActiveWorkspaceTabId,
+    setPanelOpen,
+    restoreWorkspaceUiFromStorage,
+  } = useProjectWorkspaceUi(projectId);
 
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const chatSendRef = useRef<((content: string, toolHint?: string) => void) | null>(null);
 
   const viewParam = searchParams.get('view');
   const viewFromUrl = viewFromSearchParam(viewParam);
-  const initialWorkspaceUiRef = useRef<StoredProjectWorkspaceUiState | null>(null);
-  if (!initialWorkspaceUiRef.current) {
-    initialWorkspaceUiRef.current = readStoredWorkspaceUiState(workspaceUiStorageKey);
-  }
 
   const [activeView, setActiveView] = useState<ProjectView>(viewFromUrl);
-  const [panelVisibility, setPanelVisibility] = useState(
-    initialWorkspaceUiRef.current?.panelVisibility ?? DEFAULT_PANEL_VISIBILITY,
-  );
-  const [chatPanelWidthPercent, setChatPanelWidthPercent] = useState(
-    initialWorkspaceUiRef.current?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT,
-  );
-  const [isResizingChat, setIsResizingChat] = useState(false);
 
   const [pageReady, setPageReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
@@ -199,12 +92,6 @@ function ProjectPageContent() {
     toolHint?: string;
   } | null>(null);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
-  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePanelTab[]>(
-    initialWorkspaceUiRef.current?.workspaceTabs ?? [],
-  );
-  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(
-    initialWorkspaceUiRef.current?.activeWorkspaceTabId ?? null,
-  );
   const [frameworkAssessmentInstances, setFrameworkAssessmentInstances] = useState<AssessmentInstance[]>([]);
   const [frameworkPlannedAssessmentIds, setFrameworkPlannedAssessmentIds] = useState<string[]>([]);
   const [frameworkAssessmentsLoading, setFrameworkAssessmentsLoading] = useState(false);
@@ -428,101 +315,15 @@ function ProjectPageContent() {
     : (showPrimaryPanel ? 100 : 0);
   const showChatResizeHandle = hasSideChatShell && showPrimaryPanel && sideChatOpen;
   const sideChatTabsStorageKey = `nitrogen_side_chat_tabs_${projectId}`;
-  const isChatPrimaryMode = activeView === 'framework' && !hasFrameworkSelection;
-  const workspaceToggleEnabled = !isViewer && (
-    activeView === 'overview'
-    || activeView === 'framework'
-    || activeView === 'assessments'
-    || activeView === 'assumptions'
-  );
-  const chatToggleEnabled =
-    activeView === 'assessments'
-    || activeView === 'overview'
-    || activeView === 'framework'
-    || activeView === 'assumptions';
-  const workspaceToggleActive = isChatPrimaryMode ? false : workspaceOpen;
-  const chatToggleActive = isChatPrimaryMode ? true : chatOpen;
-  const workspaceToggleLocked = workspaceToggleActive && !chatToggleActive;
-  const chatToggleLocked = chatToggleActive && !workspaceToggleActive;
-
-  const setPanelOpen = useCallback(
-    (view: 'overview' | 'assessments' | 'framework' | 'assumptions', panel: 'workspace' | 'chat', open: boolean) => {
-      setPanelVisibility((prev) => {
-        const current = prev[view];
-        const next = { ...current, [panel]: open };
-        if (!next.workspace && !next.chat) {
-          next[panel] = true;
-        }
-        return {
-          ...prev,
-          [view]: next,
-        };
-      });
-    },
-    [],
-  );
-
-  const workspaceHeaderToggle = {
-    active: workspaceToggleActive,
-    disabled: !workspaceToggleEnabled || workspaceToggleLocked,
-    onClick: () => {
-      if (!workspaceToggleEnabled || workspaceToggleLocked) return;
-      if (activeView === 'assessments') {
-        setPanelOpen('assessments', 'workspace', !panelVisibility.assessments.workspace);
-        return;
-      }
-      if (activeView === 'overview') {
-        setPanelOpen('overview', 'workspace', !panelVisibility.overview.workspace);
-        return;
-      }
-      if (activeView === 'framework' && hasFrameworkSelection) {
-        setPanelOpen('framework', 'workspace', !panelVisibility.framework.workspace);
-        return;
-      }
-      if (activeView === 'assumptions') {
-        setPanelOpen('assumptions', 'workspace', !panelVisibility.assumptions.workspace);
-      }
-    },
-    title: !workspaceToggleEnabled
-      ? 'Workspace unavailable'
-      : workspaceToggleLocked
-        ? 'Workspace must stay open'
-        : workspaceToggleActive
-          ? 'Hide workspace'
-          : 'Show workspace',
-    icon: 'workspace' as const,
-  };
-
-  const chatHeaderToggle = {
-    active: chatToggleActive,
-    disabled: !chatToggleEnabled || chatToggleLocked,
-    onClick: () => {
-      if (!chatToggleEnabled || chatToggleLocked) return;
-      if (activeView === 'assessments') {
-        setPanelOpen('assessments', 'chat', !panelVisibility.assessments.chat);
-        return;
-      }
-      if (activeView === 'overview') {
-        setPanelOpen('overview', 'chat', !panelVisibility.overview.chat);
-        return;
-      }
-      if (activeView === 'framework' && hasFrameworkSelection) {
-        setPanelOpen('framework', 'chat', !panelVisibility.framework.chat);
-        return;
-      }
-      if (activeView === 'assumptions') {
-        setPanelOpen('assumptions', 'chat', !panelVisibility.assumptions.chat);
-      }
-    },
-    title: !chatToggleEnabled
-      ? 'Chat unavailable'
-      : chatToggleLocked
-        ? 'Chat must stay open'
-        : chatToggleActive
-          ? 'Hide chat'
-          : 'Show chat',
-    icon: 'chat' as const,
-  };
+  const { isChatPrimaryMode, workspaceHeaderToggle, chatHeaderToggle } = useProjectWorkspaceHeaderToggles({
+    activeView,
+    hasFrameworkSelection,
+    isViewer,
+    panelVisibility,
+    workspaceOpen,
+    chatOpen,
+    setPanelOpen,
+  });
 
   useEffect(() => {
     setActiveView((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
@@ -718,12 +519,8 @@ function ProjectPageContent() {
 
   useEffect(() => {
     if (!projectId) return;
-    const storedWorkspaceUi = readStoredWorkspaceUiState(workspaceUiStorageKey);
+    restoreWorkspaceUiFromStorage();
 
-    setPanelVisibility(storedWorkspaceUi?.panelVisibility ?? DEFAULT_PANEL_VISIBILITY);
-    setChatPanelWidthPercent(storedWorkspaceUi?.chatPanelWidthPercent ?? DEFAULT_CHAT_PANEL_PERCENT);
-    setWorkspaceTabs(storedWorkspaceUi?.workspaceTabs ?? []);
-    setActiveWorkspaceTabId(storedWorkspaceUi?.activeWorkspaceTabId ?? null);
     setFrameworkAssessmentInstances([]);
     setFrameworkPlannedAssessmentIds([]);
     setFrameworkAssessmentsLoading(false);
@@ -749,7 +546,7 @@ function ProjectPageContent() {
     loadDriveLinkedFiles(projectId).then(() => {
       syncDriveFiles(projectId).catch(() => {});
     });
-  }, [projectId, workspaceUiStorageKey, reset, loadProject, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkAssessmentInstances]);
+  }, [projectId, workspaceUiStorageKey, reset, loadProject, loadEvidence, loadMaterials, loadDriveLinkedFiles, syncDriveFiles, loadFrameworkAssessmentInstances, restoreWorkspaceUiFromStorage]);
 
   useEffect(() => {
     if (activeView !== 'framework') return;
@@ -774,15 +571,6 @@ function ProjectPageContent() {
     const inferred = Array.from(new Set(frameworkAssessmentInstances.map((instance) => instance.assessment_id)));
     setFrameworkPlannedAssessmentIds(inferred);
   }, [project, frameworkAssessmentInstances, frameworkPlannedAssessmentIds.length]);
-
-  useEffect(() => {
-    writeStoredWorkspaceUiState(workspaceUiStorageKey, {
-      panelVisibility,
-      chatPanelWidthPercent,
-      workspaceTabs,
-      activeWorkspaceTabId,
-    });
-  }, [workspaceUiStorageKey, panelVisibility, chatPanelWidthPercent, workspaceTabs, activeWorkspaceTabId]);
 
   useEffect(() => {
     if (!pageReady) return;
