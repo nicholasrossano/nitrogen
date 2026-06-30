@@ -79,6 +79,16 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 
 ## Local emulator and cloud agents (auth)
 
+**Three dev paths — do not conflate them:**
+
+| Path | Who | How |
+|---|---|---|
+| **Native dev (default)** | You locally, cloud agents | `bash scripts/dev_daemon.sh start` — Python + Node on host, Neon or local Postgres |
+| **Docker (optional)** | OSS self-hosters who want local Postgres in a container | `docker compose up -d` — see README § Docker |
+| **Deployed** | Production | Vercel + Railway env dashboards |
+
+Cloud agent VMs **do not have Docker** and **do not use `docker compose`**. Never suggest Docker as a fix on a cloud VM. The default stack is always `dev_daemon.sh`.
+
 **Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the running app, automatically run:
 
 ```bash
@@ -87,12 +97,19 @@ bash scripts/dev_daemon.sh status || bash scripts/dev_daemon.sh start
 
 If ports are unhealthy after starting, run `bash scripts/dev_daemon.sh restart`. Never use one-shot `&` background processes — they die when the session ends.
 
-**Why this sometimes fails on a fresh VM:** Cloud agent VMs are ephemeral. Your local `.env` and Vercel/Railway dashboard vars are not available here unless you configure Cursor secrets. This is standard for all cloud CI/CD — configure once, works forever. See `docs/self-hosting.md` for the one-time setup.
+**Local `.env` does not sync to cloud VMs.** The user's laptop `.env` is gitignored and never cloned. Vercel/Railway dashboard vars apply to deployed apps only. Cloud agents need Cursor secrets (see `docs/self-hosting.md`) or `bootstrap_env_from_production.sh` fallback.
 
-**If the stack won't fully start:** the daemon still brings up the frontend so `localhost:3000` is reachable. Report the exact error from `materialize_dev_env.sh` and the missing secret names. Do not stub `.env` from `.env.example`.
+**Verification tiers on cloud VMs (report honestly):**
+
+| Tier | What's running | What you can verify |
+|---|---|---|
+| Frontend only | `:3000` up, API hits production Railway | UI, routing, Firebase login screen, static flows |
+| Full local stack | `:3000` + `:8000` with `DATABASE_URL` + Firebase creds in Cursor secrets | Login with data, chat, uploads, assessments |
+
+If only tier 1 is available, say so — do not claim you verified authenticated data flows. Do not blame Docker; the gap is missing secrets on the VM.
 
 - **Never** `cp .env.example .env` over a real env file — it breaks Firebase login.
-- **Firebase required:** `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and a service account must be configured.
+- **Firebase required:** `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and a service account must be configured for full stack.
 - Art Lab (`/art-lab`) also needs **Developer Mode** in Settings.
 
 ## Specialized Guidance (Read Only When Relevant)

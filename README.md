@@ -85,12 +85,16 @@ cd frontend && npm run dev
 - Backend API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 
-## Docker (Optional)
+## Docker (Optional — for local Postgres only)
+
+For contributors who want a **local Postgres** without installing it natively. This is **not** the default dev path and **not** used by cloud agents.
 
 ```bash
 docker compose up -d
 docker compose exec backend alembic upgrade head
 ```
+
+Default local dev (including cloud agents): `bash scripts/dev_daemon.sh start` with root `.env` pointing at Neon or another Postgres host.
 
 ## Contributing
 
