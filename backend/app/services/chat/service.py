@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import re
 import time
 from typing import Any, TYPE_CHECKING
 
@@ -15,15 +14,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
-from app.services.tiered_retrieval import (
-    RetrievedFact,
-    SourceType,
-    TieredRetrievalService,
-)
 from app.services.assumptions import (
     AssumptionActor,
     extract_assumptions_from_cited_chat_sources,
     format_assumptions_for_initiative_prompt,
+)
+from app.services.chat.generation import ChatGenerationMixin
+from app.services.chat.planning import ChatPlanningMixin
+from app.services.chat.types import ChatResponse, ResearchStepCallback, ThinkingCallback
+from app.services.tiered_retrieval import (
+    RetrievedFact,
+    SourceType,
+    TieredRetrievalService,
 )
 
 settings = get_settings()
@@ -33,11 +35,6 @@ logger = logging.getLogger(__name__)
 def _log_proposal_debug(event: str, **fields: Any) -> None:
     serialized = " ".join(f"{key}={value!r}" for key, value in fields.items())
     logger.info("[proposal-debug] %s %s", event, serialized)
-
-
-from app.services.chat.generation import ChatGenerationMixin
-from app.services.chat.planning import ChatPlanningMixin
-from app.services.chat.types import ChatResponse, ResearchStepCallback, ThinkingCallback
 
 
 class ChatService(ChatPlanningMixin, ChatGenerationMixin):

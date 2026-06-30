@@ -173,7 +173,7 @@ async def test_list_findings_returns_project_findings(
     def execute_handler(_statement):
         return FakeExecuteResult([finding])
 
-    fake_db = override_db(
+    override_db(
         get_map={
             (User.__name__, "user-1"): promoter,
         },
