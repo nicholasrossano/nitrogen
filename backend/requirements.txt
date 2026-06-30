@@ -18,7 +18,7 @@ pdfplumber>=0.10.3
 PyMuPDF>=1.27.2.3
 python-docx>=1.2.0
 python-pptx>=1.0.2
-docxtpl>=0.16.7
+docxtpl>=0.20.2
 openpyxl>=3.1.5
 mammoth>=1.6.0
 
