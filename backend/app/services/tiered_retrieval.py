@@ -17,13 +17,11 @@ from typing import Callable, Optional, Awaitable
 from uuid import UUID
 import logging
 
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client
 from app.domain.registry import get_retrieval_connectors
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
@@ -171,8 +169,6 @@ class TieredRetrievalService:
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
         self.user_id = user_id
-        self._client: AsyncOpenAI | None = None
-        self._is_byok: bool = False
         self.rag = RAGService(db, user_id=user_id)
         self.workspace_knowledge = WorkspaceKnowledgeService(db, user_id=user_id)
         self.openalex = OpenAlexService()
@@ -182,11 +178,6 @@ class TieredRetrievalService:
         if self._retrieval_connectors is None:
             self._retrieval_connectors = get_retrieval_connectors()
         return self._retrieval_connectors
-
-    async def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
-        return self._client
     
     async def retrieve(
         self,
@@ -665,7 +656,6 @@ class TieredRetrievalService:
                 self.db,
                 query,
                 search_context_size=search_context_size,
-                is_byok=self._is_byok,
             )
 
             facts: list[RetrievedFact] = []

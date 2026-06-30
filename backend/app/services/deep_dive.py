@@ -16,11 +16,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
+from app.core.web_search import run_web_search
 from app.models.project import Project
 from app.services.rag import RAGService
 from app.services.assumptions import format_assumptions_for_initiative_prompt
@@ -444,15 +445,8 @@ class DeepDiveService:
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
         self.user_id = user_id
-        self._client: AsyncOpenAI | None = None
-        self._is_byok: bool = False
         self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
         self.rag = RAGService(db, user_id=self.user_id)
-
-    async def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
-        return self._client
 
     async def generate(
         self,
@@ -599,49 +593,43 @@ class DeepDiveService:
         )
 
     async def _generate_overview_with_web_search(self, prompt: str) -> dict:
-        client = await self._get_client()
-        resp = await asyncio.wait_for(
-            client.responses.create(
-                model=settings.openai_orchestration_model,
-                tools=[{"type": "web_search", "search_context_size": "low"}],
-                input=prompt,
-            ),
-            timeout=self.STRUCTURED_TIMEOUT_SECONDS,
-        )
-        await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
+        try:
+            overview_text, citations = await asyncio.wait_for(
+                run_web_search(
+                    self.user_id,
+                    self.db,
+                    query="",
+                    input_text=prompt,
+                    search_context_size="low",
+                ),
+                timeout=self.STRUCTURED_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Deep dive overview web search timed out after %.1fs",
+                self.STRUCTURED_TIMEOUT_SECONDS,
+            )
+            return {"summary_items": [], "sources": []}
 
-        text_parts: list[str] = []
         sources: list[DeepDiveSource] = []
-        url_to_citation: dict[str, int] = {}
-
-        for item in resp.output:
-            if getattr(item, "type", None) != "message":
+        for citation in citations:
+            url = citation.get("url", "") or ""
+            if not url:
                 continue
-            for block in item.content:
-                text = getattr(block, "text", "") or ""
-                if text:
-                    text_parts.append(text.strip())
-                for ann in getattr(block, "annotations", []) or []:
-                    if getattr(ann, "type", None) != "url_citation":
-                        continue
-                    url = getattr(ann, "url", "") or ""
-                    if not url or url in url_to_citation:
-                        continue
-                    title = getattr(ann, "title", "") or "Web Source"
-                    publisher = None
-                    try:
-                        publisher = urlparse(url).netloc.lstrip("www.") or None
-                    except Exception:
-                        pass
-                    sources.append(DeepDiveSource(
-                        title=title,
-                        url=url,
-                        source_type="web",
-                        publisher=publisher,
-                    ))
-                    url_to_citation[url] = len(sources)
+            title = citation.get("title", "") or "Web Source"
+            publisher = None
+            try:
+                publisher = urlparse(url).netloc.lstrip("www.") or None
+            except Exception:
+                pass
+            sources.append(DeepDiveSource(
+                title=title,
+                url=url,
+                source_type="web",
+                publisher=publisher,
+            ))
 
-        overview_text = _clean_overview_text(" ".join(part for part in text_parts if part))
+        overview_text = _clean_overview_text(overview_text)
         sentences = [
             sentence.strip()
             for sentence in overview_text.replace("\n", " ").split(". ")
@@ -681,10 +669,12 @@ class DeepDiveService:
         )
 
         try:
-            client = await self._get_client()
             resp = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model="gpt-4o-mini",
+                acompletion(
+                    self.user_id,
+                    self.db,
+                    role=ModelRole.ORCHESTRATION,
+                    complexity=Complexity.LIGHT,
                     messages=[
                         {"role": "system", "content": QUERY_GEN_SYSTEM_PROMPT},
                         {"role": "user", "content": user_message},
@@ -696,7 +686,6 @@ class DeepDiveService:
                 ),
                 timeout=self.QUERY_GEN_TIMEOUT_SECONDS,
             )
-            await record_usage_from_response(self.user_id, "gpt-4o-mini", resp, self.db, is_byok=self._is_byok)
             tool_calls = resp.choices[0].message.tool_calls
             if tool_calls:
                 data = json.loads(tool_calls[0].function.arguments)
@@ -792,11 +781,13 @@ class DeepDiveService:
             {"role": "user", "content": user_message},
         ]
 
-        client = await self._get_client()
         try:
             resp = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model=settings.openai_orchestration_model,
+                acompletion(
+                    self.user_id,
+                    self.db,
+                    role=ModelRole.ORCHESTRATION,
+                    complexity=Complexity.HEAVY,
                     messages=messages,
                     tools=[DEEP_DIVE_FUNCTION],
                     tool_choice={"type": "function", "function": {"name": "produce_deep_dive"}},
@@ -811,7 +802,6 @@ class DeepDiveService:
                 self.STRUCTURED_TIMEOUT_SECONDS,
             )
             return {"what_this_is": [], "elements": [], "dependencies": []}
-        await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
         tool_calls = resp.choices[0].message.tool_calls
         if not tool_calls:

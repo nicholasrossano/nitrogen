@@ -9,11 +9,9 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from app.core.execution_context import ExecutionContext
 
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client
 from app.core.model_catalog import Complexity, ModelRole
 from app.core.llm_invoke import acompletion
 from app.services.assumptions import (
@@ -59,19 +57,12 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
             raise ValueError("ChatService requires ExecutionContext")
         self.user_id = ctx.user_id
         self.ctx = ctx
-        self._client: AsyncOpenAI | None = None
-        self._is_byok: bool = False
         self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
         from app.services.project_chat_router import ProjectChatRouter
         from app.services.project_tool_executor import ProjectToolExecutor
 
         self.project_router = ProjectChatRouter(self)
         self.project_tool_executor = ProjectToolExecutor(self)
-
-    async def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
-        return self._client
 
     async def _acomplete(
         self,

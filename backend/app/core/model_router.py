@@ -72,7 +72,7 @@ async def resolve_provider_route(
                 base = settings.openrouter_base_url if provider == "openrouter" else None
                 return provider, True, key, base
 
-    if settings.model_routing_enabled and settings.openrouter_api_key:
+    if settings.openrouter_api_key:
         return "openrouter", False, settings.openrouter_api_key, settings.openrouter_base_url
 
     return "openai", False, settings.openai_api_key, None

@@ -44,10 +44,10 @@ def _build_service():
 async def test_get_next_action_short_circuits_for_tool_hint(monkeypatch: pytest.MonkeyPatch):
     service = _build_service()
 
-    async def fail_get_client():
+    async def fail_acomplete(*_args, **_kwargs):
         raise AssertionError("tool hint short-circuit should not call the LLM")
 
-    monkeypatch.setattr(service, "_get_client", fail_get_client)
+    monkeypatch.setattr(service, "_acomplete", fail_acomplete)
 
     result = await service.project_router.get_next_action(
         messages=[],
@@ -65,10 +65,10 @@ async def test_get_next_action_short_circuits_for_tool_hint(monkeypatch: pytest.
 async def test_get_next_action_short_circuits_for_field_context(monkeypatch: pytest.MonkeyPatch):
     service = _build_service()
 
-    async def fail_get_client():
+    async def fail_acomplete(*_args, **_kwargs):
         raise AssertionError("field-context short-circuit should not call the LLM")
 
-    monkeypatch.setattr(service, "_get_client", fail_get_client)
+    monkeypatch.setattr(service, "_acomplete", fail_acomplete)
 
     result = await service.project_router.get_next_action(
         messages=[],

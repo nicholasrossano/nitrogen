@@ -20,8 +20,7 @@ def test_catalog_openrouter_embedding():
 
 
 @pytest.mark.asyncio
-async def test_resolve_platform_openrouter_when_routing_enabled(monkeypatch):
-    monkeypatch.setattr("app.core.model_router.settings.model_routing_enabled", True)
+async def test_resolve_platform_openrouter(monkeypatch):
     monkeypatch.setattr("app.core.model_router.settings.openrouter_api_key", "sk-or-platform")
     monkeypatch.setattr(
         "app.core.model_router.settings.openrouter_base_url",

@@ -20,7 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters import get_adapter_registry
 from app.config import get_settings
 from app.core.execution_context import ExecutionContext
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
 from app.assessments.base import (
     BaseAssessment,
     DecisionLogAttribution,
@@ -282,10 +283,12 @@ class PVWattsTool(BaseAssessment):
         user_id: str | None = None,
         db: AsyncSession | None = None,
     ) -> dict[str, Any]:
-        client, is_byok = await get_openai_client(user_id, db)
         try:
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            resp = await acompletion(
+                user_id,
+                db,
+                role=ModelRole.ORCHESTRATION,
+                complexity=Complexity.STANDARD,
                 messages=[
                     {
                         "role": "system",
@@ -309,8 +312,6 @@ class PVWattsTool(BaseAssessment):
                 tool_choice={"type": "function", "function": {"name": "extract_solar_inputs"}},
                 temperature=0,
             )
-            if user_id and db:
-                await record_usage_from_response(user_id, settings.openai_orchestration_model, resp, db, is_byok=is_byok)
             tool_call = resp.choices[0].message.tool_calls[0]
             extracted = json.loads(tool_call.function.arguments)
             return {k: v for k, v in extracted.items() if v is not None}

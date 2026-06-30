@@ -1,11 +1,8 @@
 """
 Centralized OpenAI client factory with per-user key resolution and usage tracking.
 
-All services/tools should use `get_openai_client()` instead of instantiating
-AsyncOpenAI directly. This enables:
-  - BYOK: users who store their own API key bypass the platform key
-  - Usage tracking: every platform-key call is recorded for billing
-  - Self-hosted passthrough: when billing is disabled, behaves like a plain client
+Prefer `app.core.llm_invoke.acompletion` / `aembedding` / `run_web_search` for LLM calls.
+This module remains for BYOK key management, usage recording, and budget checks.
 """
 
 import logging
@@ -137,7 +134,7 @@ async def get_openai_client(
                     provider,
                 )
 
-    if settings.model_routing_enabled and settings.openrouter_api_key:
+    if settings.openrouter_api_key:
         return (
             AsyncOpenAI(
                 api_key=settings.openrouter_api_key,
