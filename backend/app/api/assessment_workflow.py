@@ -24,8 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
-
-ai_access = require_ai_access()
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.filename_utils import safe_content_disposition
 from app.core.permissions import require_viewer, require_editor
@@ -63,6 +61,8 @@ from app.services.decision_log_service import (
 )
 from app.services.agent_runner_service import derive_assessment_run_state, run_assessment_agent_loop
 from app.services.assumptions import AssumptionActor, sync_stage_assumptions, sync_widget_assumptions
+
+ai_access = require_ai_access()
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

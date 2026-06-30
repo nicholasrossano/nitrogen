@@ -263,7 +263,6 @@ class ImplementationPlanAssessment(BaseAssessment):
             system=(
                 CATEGORY_PROPOSAL_SYSTEM_PROMPT
                 + "\n\nReturn valid JSON with key 'categories'."
-            context=context,
             ),
             user_msg=(
                 f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -272,6 +271,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                 f"Description: {context.get('project_description', '')}\n\n"
                 f"Existing framework (if any):\n{framework_outline}"
             ),
+            context=context,
         )
         categories = data.get("categories", [])
         output = []
@@ -332,7 +332,6 @@ class ImplementationPlanAssessment(BaseAssessment):
                 "item_type (deliverable|assessment), classification (required|optional|unknown), "
                 "status (not_started|in_progress|complete), and optional phase and phase_order. "
                 "Descriptions should explain why the activity is needed for this specific project."
-            context=context,
             ),
             user_msg=(
                 f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -345,6 +344,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                 f"{evidence_block}\n\n"
                 "Provide 2-6 activities per category."
             ),
+            context=context,
         )
 
         activities_by_category = self._bucket_activities(data.get("activities", []), categories)
@@ -365,7 +365,6 @@ class ImplementationPlanAssessment(BaseAssessment):
                     "Return JSON with key 'activities' as a flat list. "
                     "Each activity must include name, category, description, item_type, classification, and status. "
                     "Category must exactly match one listed category. Avoid generic boilerplate."
-                context=context,
                 ),
                 user_msg=(
                     f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -378,6 +377,7 @@ class ImplementationPlanAssessment(BaseAssessment):
                     f"Existing activities by category:\n{existing}\n\n"
                     f"Underfilled categories:\n{missing}"
                 ),
+                context=context,
             )
             refill_bucket = self._bucket_activities(refill.get("activities", []), categories)
             for category in categories:

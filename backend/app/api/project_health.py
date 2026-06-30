@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser, get_current_user
 from app.core.billing_guard import require_ai_access
-
-ai_access = require_ai_access()
 from app.core.database import get_db
 from app.core.permissions import require_editor, require_viewer
 from app.domain.registry import get_project_health_definition
@@ -20,6 +18,8 @@ from app.schemas.project_health import (
     ProjectHealthResponse,
 )
 from app.services.project_health import apply_project_health_override, list_project_health, refresh_project_health
+
+ai_access = require_ai_access()
 
 router = APIRouter()
 

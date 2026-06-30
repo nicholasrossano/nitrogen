@@ -16,9 +16,6 @@ from app.core.database import get_db
 from app.core.execution_context import build_context
 from app.core.auth import get_current_user, AuthUser, MockUser
 from app.core.billing_guard import require_ai_access
-
-chat_ai_access = require_ai_access(count_message=True)
-ai_access = require_ai_access()
 from app.core.permissions import get_initiative_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
@@ -35,6 +32,8 @@ from app.api.chat_constants import (
     INITIAL_ONBOARDING_DOCUMENT_PROMPT,
     SKIP_EXTRACTION_MESSAGES as _SKIP_EXTRACTION_MESSAGES,
 )
+
+chat_ai_access = require_ai_access(count_message=True)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

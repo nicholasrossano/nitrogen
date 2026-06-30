@@ -13,8 +13,6 @@ from app.config import get_settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
-
-ai_access = require_ai_access()
 from app.core.permissions import (
     ensure_user_exists,
     get_initiative_with_role,
@@ -43,6 +41,8 @@ from app.services.assumptions import AssumptionActor, ensure_expected_assumption
 from app.services.assessment_workflow_service import is_instance_visible_in_lists
 from app.services.initiative_overview import generate_initiative_overview
 from app.services.workspaces import resolve_workspace_for_user
+
+ai_access = require_ai_access()
 
 logger = logging.getLogger(__name__)
 

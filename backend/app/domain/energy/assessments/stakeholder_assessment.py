@@ -264,7 +264,6 @@ class StakeholderAssessment(BaseAssessment):
                 "  • Risk Considerations\n\n"
                 "Return JSON with keys: title, executive_summary, sections (list of {heading, body}), "
                 "engagement_strategy, risk_considerations"
-            context=context,
             ),
             user_msg=(
                 f"Project: Geography={geography}, Type={project_type}\n\n"
@@ -272,6 +271,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"{evidence_block}"
             ),
             model="gpt-4.1",
+            context=context,
         )
         result = result or {"title": "Stakeholder Assessment"}
         if citations:
@@ -342,7 +342,6 @@ class StakeholderAssessment(BaseAssessment):
                 "You are an expert stakeholder analyst. Generate 5–8 stakeholder categories "
                 "for the given project. Each category is a distinct group of stakeholders. "
                 "Return JSON with key 'categories', a list of objects with 'label' and optional 'description'."
-            context=context,
             ),
             user_msg=(
                 f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -350,6 +349,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"Project type: {context.get('project_type', '')}\n"
                 f"Description: {context.get('project_description', '')}"
             ),
+            context=context,
         )
         return [
             {
@@ -376,7 +376,6 @@ class StakeholderAssessment(BaseAssessment):
                 "(exactly matching one category label), and 'why_they_matter'. "
                 "Do not skip categories. Ensure every category has at least 3 stakeholders. "
                 "Return JSON with key 'stakeholders', a flat list."
-            context=context,
             ),
             user_msg=(
                 f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -384,6 +383,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"Project type: {context.get('project_type', '')}\n"
                 f"Stakeholder categories:\n{categories_list}"
             ),
+            context=context,
         )
         stakeholders_by_category = self._bucket_stakeholders(data.get("stakeholders", []), categories)
 
@@ -403,7 +403,6 @@ class StakeholderAssessment(BaseAssessment):
                     "You are an expert stakeholder analyst. Fill only missing stakeholders for underfilled categories. "
                     "Return JSON with key 'stakeholders' as a flat list of objects with "
                     "'name', 'category', and 'why_they_matter'. Category values must exactly match one listed category."
-                context=context,
                 ),
                 user_msg=(
                     f"Project: {context.get('project_title', 'Unknown')}\n"
@@ -413,6 +412,7 @@ class StakeholderAssessment(BaseAssessment):
                     f"Existing stakeholders by category:\n{existing}\n\n"
                     f"Underfilled categories:\n{shortfalls}"
                 ),
+                context=context,
             )
             refill_bucket = self._bucket_stakeholders(refill.get("stakeholders", []), categories)
             for category in categories:
@@ -524,7 +524,6 @@ class StakeholderAssessment(BaseAssessment):
                 "Return JSON with keys: role_in_project, influence_level (Low/Medium/High), "
                 "impact_level (Low/Medium/High), engagement_priority (Monitor/Inform/Consult/Collaborate), "
                 "notes. Use retrieved evidence when available and avoid unsupported claims."
-            context=context,
             ),
             user_msg=(
                 f"Stakeholder: {stakeholder_name}\n"
@@ -534,6 +533,7 @@ class StakeholderAssessment(BaseAssessment):
                 f"Geography: {context.get('geography', '')}"
                 f"{evidence_block}"
             ),
+            context=context,
         )
         normalized_sources = [
             {

@@ -1,8 +1,7 @@
 """Billing: usage budget, BYOK providers, and Stripe tier mapping."""
 
 from datetime import datetime, timezone
-from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

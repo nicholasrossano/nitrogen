@@ -10,12 +10,12 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import AuthUser, get_current_user
 from app.core.billing_guard import require_ai_access
-
-ai_access = require_ai_access()
 from app.core.permissions import require_editor, require_viewer
 from app.core.database import get_db
 from app.plans.registry import get_plan_registry
 from app.services.deep_dive import DeepDiveService
+
+ai_access = require_ai_access()
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
