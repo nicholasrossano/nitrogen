@@ -28,7 +28,7 @@ function ViewerSkeleton() {
 
 interface DocumentViewerWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
   onClose?: () => void;
 }

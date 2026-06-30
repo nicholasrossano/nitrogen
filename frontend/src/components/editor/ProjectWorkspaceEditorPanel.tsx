@@ -44,7 +44,7 @@ export interface FrameworkPlanAssessmentOption {
 }
 
 interface ProjectWorkspaceEditorPanelProps {
-  initiativeId: string;
+  projectId: string;
   tabs: WorkspacePanelTab[];
   activeTabId: string | null;
   onActiveTabChange: (tabId: string | null) => void;
@@ -69,7 +69,7 @@ interface ProjectWorkspaceEditorPanelProps {
 }
 
 export function ProjectWorkspaceEditorPanel({
-  initiativeId,
+  projectId,
   tabs,
   activeTabId,
   onActiveTabChange,
@@ -139,7 +139,7 @@ export function ProjectWorkspaceEditorPanel({
       return (
         <EditorSidePanel
           widgets={chatWidgets}
-          initiativeId={initiativeId}
+          projectId={projectId}
           onOpenDecisionLog={onOpenDecisionLog}
           onExportDecisionLog={onExportDecisionLog}
         />
@@ -153,7 +153,7 @@ export function ProjectWorkspaceEditorPanel({
           assessmentId={tab.assessmentId}
           assessmentTitle={tab.title}
           isActive={isActive}
-          initiativeId={initiativeId}
+          projectId={projectId}
           deferAgentStart={tab.pendingEngagement === true}
           onUserEngaged={() => onAssessmentEngaged?.(tab.instanceId)}
           onAddToChat={(text) => onSendToChat?.(text, tab.assessmentId)}
@@ -193,7 +193,7 @@ export function ProjectWorkspaceEditorPanel({
     if (tab.kind === 'assumptions') {
       return (
         <AssumptionsWorkspaceTab
-          initiativeId={initiativeId}
+          projectId={projectId}
           showDetailPanel={false}
           onAssumptionSelectInChat={onOpenAssumptionInChat}
           onAddAssumptionInChat={onAddAssumptionInChat}
@@ -209,7 +209,7 @@ export function ProjectWorkspaceEditorPanel({
             chunk_id: tab.citation.chunk_id,
             source_title: tab.citation.source_title,
           }}
-          initiativeId={initiativeId}
+          projectId={projectId}
           isActive={isActive}
         />
       );
@@ -330,8 +330,8 @@ export function ProjectWorkspaceEditorPanel({
         {showWorkspaceHub && (
           <div className="absolute inset-0 z-10">
             <WorkspaceHub
-              key={initiativeId}
-              initiativeId={initiativeId}
+              key={projectId}
+              projectId={projectId}
               launchMode={effectiveWorkspaceLaunchMode}
               onLaunchModeHandled={() => {
                 onWorkspaceLaunchModeHandled();

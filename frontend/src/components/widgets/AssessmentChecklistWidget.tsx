@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ALL_MODULES, MODULE_CATEGORIES } from '@/components/chat/AssessmentPicker';
 import { ConfirmButton } from '@/components/ui';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 interface AssessmentRecommendation {
   tool: {
@@ -24,11 +24,11 @@ interface AssessmentRecommendation {
 
 interface AssessmentChecklistWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   isActive?: boolean;
 }
 
-export function AssessmentChecklistWidget({ data, initiativeId, isActive = true }: AssessmentChecklistWidgetProps) {
+export function AssessmentChecklistWidget({ data, projectId, isActive = true }: AssessmentChecklistWidgetProps) {
   const router = useRouter();
   const recommendations = useMemo(
     () => ((data?.recommendations || []) as AssessmentRecommendation[])
@@ -36,8 +36,8 @@ export function AssessmentChecklistWidget({ data, initiativeId, isActive = true 
     [data],
   );
   const showBetaAssessments = useFeatureFlag('beta_assessments');
-  const initiative = useInitiativeStore((s) => s.initiative);
-  const selectTools = useInitiativeStore((s) => s.selectTools);
+  const project = useProjectStore((s) => s.project);
+  const selectTools = useProjectStore((s) => s.selectTools);
   const [confirmedLocal, setConfirmedLocal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +111,7 @@ export function AssessmentChecklistWidget({ data, initiativeId, isActive = true 
 
   const confirmed =
     confirmedLocal ||
-    Boolean(initiative?.selected_tools && initiative.selected_tools.length > 0);
+    Boolean(project?.selected_tools && project.selected_tools.length > 0);
   const canInteract = isActive && !confirmed && !submitting;
 
   if (!visibleRecommendations.length) {
@@ -141,12 +141,12 @@ export function AssessmentChecklistWidget({ data, initiativeId, isActive = true 
       const selectedIds = visibleRecommendations
         .map((recommendation) => recommendation.tool.id)
         .filter((assessmentId) => selectedAssessments.has(assessmentId));
-      await selectTools(initiativeId, selectedIds);
-      const afterSelect = useInitiativeStore.getState();
+      await selectTools(projectId, selectedIds);
+      const afterSelect = useProjectStore.getState();
       if (afterSelect.error) {
         throw new Error(afterSelect.error);
       }
-      router.replace(`/initiatives/${initiativeId}?view=framework`);
+      router.replace(`/projects/${projectId}?view=framework`);
     } catch (nextError) {
       setConfirmedLocal(false);
       setError(nextError instanceof Error ? nextError.message : 'Failed to confirm framework.');

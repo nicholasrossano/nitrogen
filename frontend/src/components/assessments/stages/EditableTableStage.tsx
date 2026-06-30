@@ -18,7 +18,7 @@ import {
 } from '@/domain/energy/modelInputs';
 
 interface Props {
-  initiativeId?: string;
+  projectId?: string;
   instanceId: string;
   assessmentId: string;
   stageId: string;
@@ -319,7 +319,7 @@ function AddRowForm({
 // ── Main component ────────────────────────────────────────────────────────
 
 export function EditableTableStage({
-  initiativeId,
+  projectId,
   instanceId,
   assessmentId,
   stageId,
@@ -641,17 +641,17 @@ export function EditableTableStage({
         typeof rowAssumptionId === 'string' && rowAssumptionId.trim().length > 0
           ? rowAssumptionId
           : null;
-      if (!resolvedAssumptionId && initiativeId) {
+      if (!resolvedAssumptionId && projectId) {
         try {
-          const resolved = await api.resolveAssumption(initiativeId, assessmentId, fieldName, instanceId);
+          const resolved = await api.resolveAssumption(projectId, assessmentId, fieldName, instanceId);
           resolvedAssumptionId = resolved.found ? resolved.assumption?.id ?? null : null;
         } catch {
           resolvedAssumptionId = null;
         }
       }
-      if (!resolvedAssumptionId && initiativeId) {
+      if (!resolvedAssumptionId && projectId) {
         try {
-          const created = await api.createAssumption(initiativeId, {
+          const created = await api.createAssumption(projectId, {
             key: fieldName,
             label,
             value: currentValue ?? null,
@@ -696,7 +696,7 @@ export function EditableTableStage({
         },
       }));
     },
-    [initiativeId, instanceId, modelInputs, assessmentId, proposalModelType],
+    [projectId, instanceId, modelInputs, assessmentId, proposalModelType],
   );
 
   const handleDelete = useCallback(

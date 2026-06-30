@@ -92,7 +92,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 - Backend uses FastAPI with async SQLAlchemy
 - Frontend uses Next.js 14 App Router with Zustand for state
-- Chat orchestration is LLM-driven (see backend/app/services/orchestration.py)
+- Project chat routing is LLM-driven (see backend/app/services/project_chat_router.py)
 - RAG uses tiered retrieval: corpus → web search → LLM fallback
 
 ## Cloud agents — never stub `.env`

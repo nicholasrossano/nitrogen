@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Scale, Search, X, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { Initiative } from '@/lib/api';
+import type { Project } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_SHADOW } from '@/components/ui/chatSidebarLayout';
 
 export interface CompareProject {
@@ -27,7 +27,7 @@ export function CompareProjectPicker({
   disabled = false,
 }: CompareProjectPickerProps) {
   const [open, setOpen] = useState(false);
-  const [projects, setProjects] = useState<Initiative[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
@@ -38,7 +38,7 @@ export function CompareProjectPicker({
   const fetchProjects = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.listInitiatives(50, 0, false);
+      const data = await api.listProjects(50, 0, false);
       setProjects(data.filter((p) => p.id !== currentProjectId));
     } catch {
       setProjects([]);
@@ -106,7 +106,7 @@ export function CompareProjectPicker({
     (p) => (p.title ?? 'Untitled').toLowerCase().includes(search.toLowerCase()),
   );
 
-  const handleSelect = (project: Initiative) => {
+  const handleSelect = (project: Project) => {
     onSelect({ id: project.id, title: project.title ?? 'Untitled' });
     setOpen(false);
   };

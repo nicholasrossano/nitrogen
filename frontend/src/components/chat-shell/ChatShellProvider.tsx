@@ -37,7 +37,7 @@ export function resolveActiveProjectId(
   projectParam: string | null,
   projects: Project[] = [],
 ): string | null {
-  const initiativeMatch = /^\/initiatives\/([^/]+)/.exec(pathname);
+  const initiativeMatch = /^\/projects\/([^/]+)/.exec(pathname);
   const fromRoute = initiativeMatch?.[1] ?? projectParam;
   if (fromRoute && (projects.length === 0 || projects.some((project) => project.id === fromRoute))) {
     return fromRoute;

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { AccessMemberRow } from '@/components/sharing/AccessMemberRow';
 import { api, type AssumptionComment } from '@/lib/api';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 interface AssumptionCommentsThreadProps {
   assumptionId: string;
@@ -23,7 +23,7 @@ function formatCommentTime(value: string): string {
 }
 
 export function AssumptionCommentsThread({ assumptionId }: AssumptionCommentsThreadProps) {
-  const isViewer = useInitiativeStore((state) => state.initiative?.shared_role === 'viewer');
+  const isViewer = useProjectStore((state) => state.project?.shared_role === 'viewer');
   const [comments, setComments] = useState<AssumptionComment[]>([]);
   const [draftComment, setDraftComment] = useState('');
   const [loading, setLoading] = useState(true);

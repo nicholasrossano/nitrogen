@@ -22,7 +22,7 @@ interface ProposedValueWidgetProps {
     confirmed?: boolean;
     dismissed?: boolean;
   };
-  initiativeId?: string;
+  projectId?: string;
   messageId?: string;
   onApplyValue?: (request: ProposedValueApplyRequest) => boolean | Promise<boolean>;
   onConfirmed?: (fieldName: string, value: number, modelType: string) => void;
@@ -56,7 +56,7 @@ function formatValue(value: number, unit?: string): string {
 
 export function ProposedValueWidget({
   data,
-  initiativeId,
+  projectId,
   messageId,
   onApplyValue,
   onConfirmed,
@@ -78,7 +78,7 @@ export function ProposedValueWidget({
 
     const newData = { ...data, confirmed: true, dismissed: false };
     const persisted = await persistChatWidgetUpdate({
-      initiativeId,
+      projectId,
       messageId,
       widgetData: newData,
       source: 'ProposedValueWidget',
@@ -96,12 +96,12 @@ export function ProposedValueWidget({
       }));
     }
     onConfirmed?.(data.field_name, data.proposed_value, data.model_type);
-  }, [data, initiativeId, messageId, onApplyValue, onConfirmed]);
+  }, [data, projectId, messageId, onApplyValue, onConfirmed]);
 
   const handleDismiss = useCallback(async () => {
     const newData = { ...data, dismissed: true, confirmed: false };
     const persisted = await persistChatWidgetUpdate({
-      initiativeId,
+      projectId,
       messageId,
       widgetData: newData,
       source: 'ProposedValueWidget',
@@ -109,7 +109,7 @@ export function ProposedValueWidget({
     if (!persisted) return;
 
     setStatus('dismissed');
-  }, [data, initiativeId, messageId]);
+  }, [data, projectId, messageId]);
 
   if (status === 'dismissed') {
     return (

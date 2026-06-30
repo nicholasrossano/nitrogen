@@ -34,7 +34,7 @@ const SolarLocationMap = lazy(() => import('./solar/SolarLocationMap'));
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 async function persistWidgetToDb(
-  initiativeId: string,
+  projectId: string,
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
@@ -45,7 +45,7 @@ async function persistWidgetToDb(
       await api.persistAssessmentWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
-    await api.updateMessageWidget(initiativeId, messageId, widgetData);
+    await api.updateMessageWidget(projectId, messageId, widgetData);
     window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
       detail: { messageId, widgetData },
     }));
@@ -58,7 +58,7 @@ async function persistWidgetToDb(
 
 interface SolarEstimateWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   messageId?: string;
   instanceId?: string;
   workflowVersion?: number;
@@ -138,7 +138,7 @@ function formatValue(fieldName: string, value: any): string {
 
 export function SolarEstimateWidget({
   data: initialData,
-  initiativeId,
+  projectId,
   messageId,
   instanceId,
   workflowVersion,
@@ -152,11 +152,11 @@ export function SolarEstimateWidget({
   const setData = useCallback((newData: any) => {
     setDataRaw(newData);
     if (messageId || instanceId) {
-      persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion).then((persisted) => {
+      persistWidgetToDb(projectId, messageId ?? '', instanceId, newData, workflowVersion).then((persisted) => {
         if (persisted && instanceId) onWorkflowUpdated?.();
       });
     }
-  }, [initiativeId, messageId, instanceId, onWorkflowUpdated, workflowVersion]);
+  }, [projectId, messageId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   useEffect(() => { setDataRaw(initialData); }, [initialData]);
 

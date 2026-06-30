@@ -29,7 +29,7 @@ import {
 } from '@/lib/openProjectFileInEditor';
 import { api, type Project, type ProjectMaterial } from '@/lib/api';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
-import { useInitiativeStore } from '@/stores/initiativeStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import {
   CHAT_CONTEXT_STACK_GUTTER,
@@ -63,7 +63,7 @@ function ChatWorkbenchContent() {
   const [editorPanelWidthPx, setEditorPanelWidthPx] = useState(readChatEditorPanelWidth);
   const [isResizingEditorPanel, setIsResizingEditorPanel] = useState(false);
   const wasOnLandingRef = useRef(true);
-  const ephemeralAssessmentSessionsRef = useRef<Map<string, { initiativeId: string; engaged: boolean }>>(new Map());
+  const ephemeralAssessmentSessionsRef = useRef<Map<string, { projectId: string; engaged: boolean }>>(new Map());
 
   const selectedProjectId = searchParams.get('project');
   const activeChatId = searchParams.get('chat');
@@ -133,8 +133,8 @@ function ChatWorkbenchContent() {
 
   useEffect(() => {
     if (effectiveProjectId) {
-      void useInitiativeStore.getState().loadInitiative(effectiveProjectId);
-      void useInitiativeStore.getState().loadMaterials(effectiveProjectId);
+      void useProjectStore.getState().loadProject(effectiveProjectId);
+      void useProjectStore.getState().loadMaterials(effectiveProjectId);
       writeLastProjectId(effectiveProjectId);
     }
   }, [effectiveProjectId]);
@@ -175,20 +175,20 @@ function ChatWorkbenchContent() {
     [projects, effectiveProjectId],
   );
 
-  const initiative = useInitiativeStore((s) => s.initiative);
-  const projectPlan = useInitiativeStore((s) => s.projectPlan);
-  const projectMaterials = useInitiativeStore((s) => s.projectMaterials);
+  const project = useProjectStore((s) => s.project);
+  const projectPlan = useProjectStore((s) => s.projectPlan);
+  const projectMaterials = useProjectStore((s) => s.projectMaterials);
 
   const isOnboarding = useMemo(() => {
-    if (!effectiveProjectId || !initiative || initiative.id !== effectiveProjectId) return false;
-    if (initiative.shared_role === 'viewer') return false;
+    if (!effectiveProjectId || !project || project.id !== effectiveProjectId) return false;
+    if (project.shared_role === 'viewer') return false;
     const hasFrameworkSelection = Boolean(
       projectPlan ||
-      (initiative.selected_tools?.length ?? 0) > 0 ||
-      initiative.project_plan,
+      (project.selected_tools?.length ?? 0) > 0 ||
+      project.project_plan,
     );
     return !hasFrameworkSelection;
-  }, [effectiveProjectId, initiative, projectPlan]);
+  }, [effectiveProjectId, project, projectPlan]);
 
   const effectiveEditorWidgets = pinnedEditorWidgets ?? editorWidgets;
   const showContextStack = Boolean(effectiveProjectId) && (!hasMessages || panelParam != null || expandedContextWidget != null);
@@ -257,7 +257,7 @@ function ChatWorkbenchContent() {
     const instanceId = activeWidget.data.instance_id;
     const session = ephemeralAssessmentSessionsRef.current.get(instanceId);
     if (session && !session.engaged) {
-      void discardEphemeralAssessmentInstance(session.initiativeId, instanceId);
+      void discardEphemeralAssessmentInstance(session.projectId, instanceId);
     }
     ephemeralAssessmentSessionsRef.current.delete(instanceId);
   }, [effectiveProjectId]);
@@ -304,7 +304,7 @@ function ChatWorkbenchContent() {
       setHasMessages(true);
       if (assessment.pendingEngagement && effectiveProjectId) {
         ephemeralAssessmentSessionsRef.current.set(assessment.instanceId, {
-          initiativeId: effectiveProjectId,
+          projectId: effectiveProjectId,
           engaged: false,
         });
       }
@@ -439,7 +439,7 @@ function ChatWorkbenchContent() {
           {effectiveProjectId ? (
             <ProjectChatSurface
               key={chatSurfaceKey}
-              initiativeId={effectiveProjectId}
+              projectId={effectiveProjectId}
               initialChatId={activeChatId}
               useLandingWhenEmpty={!isOnboarding}
               hideTiles
@@ -523,7 +523,7 @@ function ChatWorkbenchContent() {
           </div>
           <EditorSidePanel
             widgets={effectiveEditorWidgets}
-            initiativeId={effectiveProjectId}
+            projectId={effectiveProjectId}
             onClose={handleCloseEditorPanel}
             onAssessmentEngaged={handleAssessmentEngaged}
           />

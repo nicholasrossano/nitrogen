@@ -24,7 +24,7 @@ import { ModelInputsTable } from './shared/ModelInputsTable';
  * Returns true if the DB write succeeded.
  */
 async function persistWidgetToDb(
-  initiativeId: string,
+  projectId: string,
   messageId: string,
   instanceId: string | undefined,
   widgetData: Record<string, any>,
@@ -35,7 +35,7 @@ async function persistWidgetToDb(
       await api.persistAssessmentWorkflowWidget(instanceId, widgetData, workflowVersion);
       return true;
     }
-    await api.updateMessageWidget(initiativeId, messageId, widgetData);
+    await api.updateMessageWidget(projectId, messageId, widgetData);
     window.dispatchEvent(new CustomEvent('nitrogen:chat-widget-updated', {
       detail: { messageId, widgetData },
     }));
@@ -48,7 +48,7 @@ async function persistWidgetToDb(
 
 interface LCOEModelWidgetProps {
   data: Record<string, any>;
-  initiativeId: string;
+  projectId: string;
   messageId?: string;
   instanceId?: string;
   workflowVersion?: number;
@@ -82,7 +82,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function LCOEModelWidget({
   data: initialData,
-  initiativeId,
+  projectId,
   messageId,
   instanceId,
   workflowVersion,
@@ -130,8 +130,8 @@ export function LCOEModelWidget({
         try {
           const newData = await api.updateLCOEInput(inputs, fieldName, value, 'validated');
           setData(newData);
-          if ((messageId && initiativeId) || instanceId) {
-            const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
+          if ((messageId && projectId) || instanceId) {
+            const persisted = await persistWidgetToDb(projectId, messageId ?? '', instanceId, newData, workflowVersion);
             if (persisted && instanceId) onWorkflowUpdated?.();
           }
         } catch { /* keep old */ }
@@ -140,7 +140,7 @@ export function LCOEModelWidget({
     };
     window.addEventListener('nitrogen:input-confirmed', handler);
     return () => window.removeEventListener('nitrogen:input-confirmed', handler);
-  }, [inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
+  }, [inputs, setData, messageId, projectId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared callbacks                                                   */
@@ -180,8 +180,8 @@ export function LCOEModelWidget({
     try {
       const newData = await api.updateLCOEInput(inputs, editingField, parsed);
       setData(newData);
-      if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
+      if ((messageId && projectId) || instanceId) {
+        const persisted = await persistWidgetToDb(projectId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -191,7 +191,7 @@ export function LCOEModelWidget({
       setEditValue('');
       setIsRecalculating(false);
     }
-  }, [editingField, editValue, inputs, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
+  }, [editingField, editValue, inputs, setData, messageId, projectId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -248,8 +248,8 @@ export function LCOEModelWidget({
     try {
       const newData = await api.updateLCOEInput(inputs, fieldName, currentValue, newStatus);
       setData(newData);
-      if ((messageId && initiativeId) || instanceId) {
-        const persisted = await persistWidgetToDb(initiativeId, messageId ?? '', instanceId, newData, workflowVersion);
+      if ((messageId && projectId) || instanceId) {
+        const persisted = await persistWidgetToDb(projectId, messageId ?? '', instanceId, newData, workflowVersion);
         if (persisted && instanceId) onWorkflowUpdated?.();
       }
     } catch {
@@ -263,7 +263,7 @@ export function LCOEModelWidget({
     } finally {
       setConfirmingFields(prev => { const s = new Set(prev); s.delete(fieldName); return s; });
     }
-  }, [inputs, preConfirmStatuses, setData, messageId, initiativeId, instanceId, onWorkflowUpdated, workflowVersion]);
+  }, [inputs, preConfirmStatuses, setData, messageId, projectId, instanceId, onWorkflowUpdated, workflowVersion]);
 
   /* ------------------------------------------------------------------ */
   /*  Shared derived data                                                */

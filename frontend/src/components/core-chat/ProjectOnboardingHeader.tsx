@@ -2,10 +2,10 @@
 
 import { FileUp, Map, MessageSquare } from 'lucide-react';
 
-import type { Initiative } from '@/lib/api';
+import type { Project } from '@/lib/api';
 
 interface ProjectOnboardingHeaderProps {
-  initiative: Initiative;
+  project: Project;
   filesUploaded: number;
 }
 
@@ -32,8 +32,8 @@ function StepRow({
 }
 
 export function ProjectOnboardingHeader({
-  initiative: _initiative,
-  filesUploaded: _filesUploaded,
+  project,
+  filesUploaded,
 }: ProjectOnboardingHeaderProps) {
   return (
     <div className="w-full">

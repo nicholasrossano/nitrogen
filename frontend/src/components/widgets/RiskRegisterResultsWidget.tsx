@@ -144,7 +144,7 @@ function EditableText({
 
 export function RiskRegisterResultsWidget({
   data: initialData,
-  initiativeId,
+  projectId,
   instanceId,
   workflowVersion,
   onWorkflowUpdated,

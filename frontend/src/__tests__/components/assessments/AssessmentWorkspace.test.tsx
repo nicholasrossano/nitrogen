@@ -262,7 +262,7 @@ describe('AssessmentWorkspace', () => {
       },
     }) as any);
 
-    render(<AssessmentWorkspace instanceId="instance-1" assessmentId="implementation_plan" initiativeId="initiative-1" />);
+    render(<AssessmentWorkspace instanceId="instance-1" assessmentId="implementation_plan" projectId="initiative-1" />);
 
     await screen.findByText('Implementation plan widget');
 

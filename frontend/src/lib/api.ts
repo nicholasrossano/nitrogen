@@ -23,12 +23,14 @@ async function getAuthToken(): Promise<string | null> {
   }
 }
 
-export interface Initiative {
+export interface Project {
   id: string;
   slug: string;
   user_id: string;
   workspace_id: string;
   title: string | null;
+  name: string;
+  subject: string | null;
   icon: string | null;
   sector: string;
   geography: string | null;
@@ -41,9 +43,9 @@ export interface Initiative {
   stage_1_complete: boolean;
   evidence_ready: boolean;
   archived: boolean;
+  created_by: string;
   created_at: string;
   updated_at: string;
-  // Tool-based fields
   project_description: string | null;
   project_type: string | null;
   overview_description: string | null;
@@ -54,24 +56,7 @@ export interface Initiative {
   project_plan: ProjectPlan | null;
   assessment_instances: AssessmentInstance[] | null;
   assessment_instances_count?: number;
-  /** Non-archived assessment instances with status complete + deliverable (grid tile). */
   generated_assessments_count?: number;
-  // Sharing fields
-  shared_role?: 'editor' | 'viewer' | null;
-  owner_email?: string | null;
-}
-
-export interface Project {
-  id: string;
-  workspace_id: string;
-  name: string;
-  subject: string | null;
-  slug: string;
-  icon?: string | null;
-  created_by: string;
-  archived: boolean;
-  created_at: string;
-  updated_at: string;
   shared_role?: 'editor' | 'viewer' | null;
   owner_email?: string | null;
 }
@@ -117,7 +102,7 @@ export interface ChatAssessmentSummary {
 
 export interface ProjectShare {
   id: string;
-  initiative_id: string;
+  project_id: string;
   user_id: string | null;
   user_email: string | null;
   user_display_name: string | null;
@@ -218,12 +203,6 @@ export interface BuildStage {
   widget_data?: Record<string, any> | null;
   items?: BuildItem[] | null;
   view_config?: Record<string, any>;
-}
-
-/** @deprecated Use BuildStage instead */
-export interface BuildLayer {
-  status: 'pending' | 'generating' | 'in_progress' | 'validated' | 'error';
-  items: BuildItem[];
 }
 
 export interface WorkflowSetup {
@@ -428,7 +407,7 @@ export type AssumptionSourceType =
 
 export interface Assumption {
   id: string;
-  initiative_id: string;
+  project_id: string;
   key: string;
   label: string;
   value: any;
@@ -512,7 +491,7 @@ export interface ProjectHealthDimension {
 
 export interface ProjectHealthResponse {
   domain: string;
-  initiative_id: string;
+  project_id: string;
   stale: boolean;
   dimensions: ProjectHealthDimension[];
 }
@@ -545,7 +524,7 @@ export interface AssumptionUpdateInput {
 export interface AssumptionComment {
   id: string;
   assumption_id: string;
-  initiative_id: string;
+  project_id: string;
   body: string;
   created_by_email: string | null;
   created_at: string;
@@ -667,7 +646,7 @@ export interface Citation {
 
 export interface MemoResponse {
   id: string;
-  initiative_id: string;
+  project_id: string;
   content: MemoContent;
   created_at: string;
 }
@@ -907,23 +886,7 @@ function workflowVersionHeaders(workflowVersion?: number): Record<string, string
 }
 
 export const api = {
-  // Initiatives
-  listInitiatives: (limit: number = 20, offset: number = 0, archived: boolean = false, workspaceId?: string | null) => {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-      archived: String(archived),
-    });
-    if (workspaceId) params.set('workspace_id', workspaceId);
-    return fetchApi<Initiative[]>(`/api/v1/initiatives?${params.toString()}`);
-  },
-
-  createInitiative: (title?: string, workspaceId?: string | null) =>
-    fetchApi<Initiative>('/api/v1/initiatives', {
-      method: 'POST',
-      body: JSON.stringify({ title, workspace_id: workspaceId ?? undefined }),
-    }),
-
+  // Projects
   listProjects: (limit: number = 50, offset: number = 0, archived: boolean = false, workspaceId?: string | null) => {
     const params = new URLSearchParams({
       limit: String(limit),
@@ -1023,52 +986,52 @@ export const api = {
       method: 'DELETE',
     }),
 
-  getInitiative: (id: string) =>
-    fetchApi<Initiative>(`/api/v1/initiatives/${id}`),
+  getProject: (id: string) =>
+    fetchApi<Project>(`/api/v1/projects/${id}`),
 
-  listAssessmentInstances: (initiativeId: string, options?: { archived?: boolean }) => {
+  listAssessmentInstances: (projectId: string, options?: { archived?: boolean }) => {
     const params = new URLSearchParams();
     if (options?.archived) params.set('archived', 'true');
     const query = params.toString();
     return fetchApi<AssessmentInstance[]>(
-      `/api/v1/initiatives/${initiativeId}/assessments${query ? `?${query}` : ''}`
+      `/api/v1/projects/${projectId}/assessments${query ? `?${query}` : ''}`
     );
   },
 
-  createAssessmentInstance: (initiativeId: string, assessmentId: string) =>
-    fetchApi<AssessmentInstance>(`/api/v1/initiatives/${initiativeId}/assessments`, {
+  createAssessmentInstance: (projectId: string, assessmentId: string) =>
+    fetchApi<AssessmentInstance>(`/api/v1/projects/${projectId}/assessments`, {
       method: 'POST',
       body: JSON.stringify({ assessment_id: assessmentId }),
     }),
 
-  deleteAssessmentInstance: (initiativeId: string, instanceId: string) =>
-    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/assessments/${instanceId}`, {
+  deleteAssessmentInstance: (projectId: string, instanceId: string) =>
+    fetchApi<void>(`/api/v1/projects/${projectId}/assessments/${instanceId}`, {
       method: 'DELETE',
     }),
 
-  restoreAssessmentInstance: (initiativeId: string, instanceId: string) =>
-    fetchApi<AssessmentInstance>(`/api/v1/initiatives/${initiativeId}/assessments/${instanceId}/restore`, {
+  restoreAssessmentInstance: (projectId: string, instanceId: string) =>
+    fetchApi<AssessmentInstance>(`/api/v1/projects/${projectId}/assessments/${instanceId}/restore`, {
       method: 'POST',
     }),
 
-  permanentlyDeleteAssessmentInstance: (initiativeId: string, instanceId: string) =>
-    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/assessments/${instanceId}/permanent`, {
+  permanentlyDeleteAssessmentInstance: (projectId: string, instanceId: string) =>
+    fetchApi<void>(`/api/v1/projects/${projectId}/assessments/${instanceId}/permanent`, {
       method: 'DELETE',
     }),
 
-  updateInitiative: (id: string, data: { title?: string; icon?: string; workspace_id?: string }) =>
-    fetchApi<Initiative>(`/api/v1/initiatives/${id}`, {
+  updateProject: (id: string, data: { title?: string; icon?: string; workspace_id?: string }) =>
+    fetchApi<Project>(`/api/v1/projects/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
-  generateInitiativeOverview: (id: string) =>
-    fetchApi<Initiative>(`/api/v1/initiatives/${id}/overview`, {
+  generateProjectOverview: (id: string) =>
+    fetchApi<Project>(`/api/v1/projects/${id}/overview`, {
       method: 'POST',
     }),
 
-  deleteInitiative: async (id: string) => {
-    const url = `${API_URL}/api/v1/initiatives/${id}`;
+  deleteProject: async (id: string) => {
+    const url = `${API_URL}/api/v1/projects/${id}`;
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
@@ -1084,8 +1047,8 @@ export const api = {
     }
   },
 
-  permanentlyDeleteInitiative: async (id: string) => {
-    const url = `${API_URL}/api/v1/initiatives/${id}/permanent`;
+  permanentlyDeleteProject: async (id: string) => {
+    const url = `${API_URL}/api/v1/projects/${id}/permanent`;
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
@@ -1101,77 +1064,22 @@ export const api = {
     }
   },
 
-  restoreInitiative: (id: string) =>
-    fetchApi<Initiative>(`/api/v1/initiatives/${id}/restore`, {
+  restoreProject: (id: string) =>
+    fetchApi<Project>(`/api/v1/projects/${id}/restore`, {
       method: 'POST',
     }),
 
-  confirmInitiative: (id: string) =>
+  confirmProject: (id: string) =>
     fetchApi<{ success: boolean; stage: string; message: string }>(
-      `/api/v1/initiatives/${id}/confirm`,
+      `/api/v1/projects/${id}/confirm`,
       { method: 'POST' }
     ),
 
-  // Chat
-  getChatHistory: (initiativeId: string) =>
-    fetchApi<{ messages: ChatMessage[]; stage_status: StageStatus }>(
-      `/api/v1/initiatives/${initiativeId}/chat`
-    ),
-
-  sendMessage: (initiativeId: string, content: string, toolHint?: string, fieldContext?: FieldContext | null) =>
-    fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
-      method: 'POST',
-      body: JSON.stringify({
-        content,
-        tool_hint: toolHint ?? null,
-        field_context: fieldContext ?? null,
-      }),
-    }),
-
-  sendMessageStream: async (
-    initiativeId: string,
-    content: string,
-    onWord: (word: string) => void,
-    onComplete: (message: ChatMessage, stageStatus: any) => void,
-    toolHint?: string,
-    fieldContext?: FieldContext | null,
-  ) => {
-    // Call the regular API since backend doesn't support streaming yet
-    const response = await fetchApi<ChatResponse>(`/api/v1/initiatives/${initiativeId}/chat`, {
-      method: 'POST',
-      body: JSON.stringify({
-        content,
-        tool_hint: toolHint ?? null,
-        field_context: fieldContext ?? null,
-      }),
-    });
-
-    // Simulate word-by-word streaming for better UX
-    const words = response.message.content.split(' ');
-    for (let i = 0; i < words.length; i++) {
-      onWord(words[i]);
-      // Small delay between words for streaming effect
-      await new Promise(resolve => setTimeout(resolve, 30));
-    }
-
-    // Call completion callback
-    onComplete(response.message, response.stage_status);
-  },
-
-  setMessageFeedback: (initiativeId: string, messageId: string, feedback: 'like' | 'dislike' | null) =>
-    fetchApi<{ message_id: string; feedback: string | null }>(
-      `/api/v1/initiatives/${initiativeId}/chat/${messageId}/feedback`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ feedback }),
-      }
-    ),
-
-  updateMessageWidget: async (initiativeId: string | undefined, messageId: string, widgetData: Record<string, any>) => {
-    if (initiativeId) {
+  updateMessageWidget: async (projectId: string | undefined, messageId: string, widgetData: Record<string, any>) => {
+    if (projectId) {
       try {
         return await fetchApi<{ message_id: string; updated: boolean }>(
-          `/api/v1/initiatives/${initiativeId}/chat/${messageId}/widget`,
+          `/api/v1/projects/${projectId}/chat/${messageId}/widget`,
           {
             method: 'PATCH',
             body: JSON.stringify({ widget_data: widgetData }),
@@ -1191,17 +1099,8 @@ export const api = {
     );
   },
 
-  truncateChatFrom: (initiativeId: string, fromMessageId: string) =>
-    fetchApi<{ deleted_count: number; messages: ChatMessage[] }>(
-      `/api/v1/initiatives/${initiativeId}/chat/truncate`,
-      {
-        method: 'DELETE',
-        body: JSON.stringify({ from_message_id: fromMessageId }),
-      }
-    ),
-
   // Evidence
-  uploadEvidence: async (initiativeId: string, file: File) => {
+  uploadEvidence: async (projectId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     
@@ -1213,7 +1112,7 @@ export const api = {
 
     try {
       const response = await fetch(
-        `${API_URL}/api/v1/initiatives/${initiativeId}/evidence`,
+        `${API_URL}/api/v1/projects/${projectId}/evidence`,
         {
           method: 'POST',
           headers,
@@ -1260,22 +1159,22 @@ export const api = {
     return response.json() as Promise<{ success: boolean; document: EvidenceDoc; stage: string }>;
   },
 
-  pasteEvidence: (initiativeId: string, content: string, title?: string) =>
+  pasteEvidence: (projectId: string, content: string, title?: string) =>
     fetchApi<{ success: boolean; document: EvidenceDoc; stage: string }>(
-      `/api/v1/initiatives/${initiativeId}/evidence/text`,
+      `/api/v1/projects/${projectId}/evidence/text`,
       {
         method: 'POST',
         body: JSON.stringify({ content, title }),
       }
     ),
 
-  getMemo: (initiativeId: string) =>
-    fetchApi<MemoResponse>(`/api/v1/initiatives/${initiativeId}/memo`),
+  getMemo: (projectId: string) =>
+    fetchApi<MemoResponse>(`/api/v1/projects/${projectId}/memo`),
 
   // Export
-  exportMemo: (initiativeId: string, memoVersionId?: string) =>
+  exportMemo: (projectId: string, memoVersionId?: string) =>
     fetchApi<{ success: boolean; export_id: string; download_url: string; filename: string }>(
-      `/api/v1/initiatives/${initiativeId}/export`,
+      `/api/v1/projects/${projectId}/export`,
       {
         method: 'POST',
         body: JSON.stringify({ memo_version_id: memoVersionId }),
@@ -1316,8 +1215,8 @@ export const api = {
     document.body.removeChild(a);
   },
 
-  getEvidence: (initiativeId: string) =>
-    fetchApi<EvidenceDoc[]>(`/api/v1/initiatives/${initiativeId}/evidence`),
+  getEvidence: (projectId: string) =>
+    fetchApi<EvidenceDoc[]>(`/api/v1/projects/${projectId}/evidence`),
 
   getWorkspaceEvidence: (workspaceId: string) =>
     fetchApi<EvidenceDoc[]>(`/api/v1/workspaces/${workspaceId}/evidence`),
@@ -1366,8 +1265,8 @@ export const api = {
 
   // --- Project Materials ---
 
-  getMaterials: (initiativeId: string) =>
-    fetchApi<ProjectMaterial[]>(`/api/v1/initiatives/${initiativeId}/materials`),
+  getMaterials: (projectId: string) =>
+    fetchApi<ProjectMaterial[]>(`/api/v1/projects/${projectId}/materials`),
 
   deleteMaterial: async (materialId: string) => {
     const token = await getAuthToken();
@@ -1384,15 +1283,15 @@ export const api = {
     return response.json();
   },
 
-  getProjectFiles: (initiativeId: string) =>
-    fetchApi<ProjectFilesResponse>(`/api/v1/initiatives/${initiativeId}/files`),
+  getProjectFiles: (projectId: string) =>
+    fetchApi<ProjectFilesResponse>(`/api/v1/projects/${projectId}/files`),
 
-  downloadDeliverable: async (initiativeId: string, toolId: string, filename: string) => {
+  downloadDeliverable: async (projectId: string, toolId: string, filename: string) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const response = await fetch(
-      `${API_URL}/api/v1/initiatives/${initiativeId}/deliverables/${toolId}/export`,
+      `${API_URL}/api/v1/projects/${projectId}/deliverables/${toolId}/export`,
       { headers }
     );
     if (!response.ok) {
@@ -1410,12 +1309,12 @@ export const api = {
     document.body.removeChild(a);
   },
 
-  deleteGeneratedFile: async (initiativeId: string, toolId: string) => {
+  deleteGeneratedFile: async (projectId: string, toolId: string) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const response = await fetch(
-      `${API_URL}/api/v1/initiatives/${initiativeId}/deliverables/${toolId}`,
+      `${API_URL}/api/v1/projects/${projectId}/deliverables/${toolId}`,
       { method: 'DELETE', headers }
     );
     if (!response.ok) {
@@ -1519,14 +1418,14 @@ export const api = {
     return response.arrayBuffer();
   },
 
-  exportChecklist: async (initiativeId: string, content: any) => {
+  exportChecklist: async (projectId: string, content: any) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(
-      `${API_URL}/api/v1/initiatives/${initiativeId}/export-checklist`,
+      `${API_URL}/api/v1/projects/${projectId}/export-checklist`,
       {
         method: 'POST',
         headers,
@@ -1554,24 +1453,24 @@ export const api = {
   getTools: () =>
     fetchApi<AssessmentDefinition[]>('/api/v1/tools'),
 
-  getRecommendedTools: (initiativeId: string) =>
+  getRecommendedTools: (projectId: string) =>
     fetchApi<{
       recommendations: { tool: AssessmentDefinition; confidence: number; recommended: boolean }[];
       project_type: string | null;
-    }>(`/api/v1/initiatives/${initiativeId}/recommended-tools`),
+    }>(`/api/v1/projects/${projectId}/recommended-tools`),
 
-  selectTools: (initiativeId: string, toolIds: string[]) =>
+  selectTools: (projectId: string, toolIds: string[]) =>
     fetchApi<{ success: boolean; selected_tools: string[]; stage: string }>(
-      `/api/v1/initiatives/${initiativeId}/select-tools`,
+      `/api/v1/projects/${projectId}/select-tools`,
       {
         method: 'POST',
         body: JSON.stringify({ tool_ids: toolIds }),
       }
     ),
 
-  updateToolInputs: (initiativeId: string, inputs: Record<string, any>) =>
+  updateToolInputs: (projectId: string, inputs: Record<string, any>) =>
     fetchApi<{ success: boolean; inputs: Record<string, any>; missing_inputs: Record<string, string[]>; ready_to_generate: boolean }>(
-      `/api/v1/initiatives/${initiativeId}/update-inputs`,
+      `/api/v1/projects/${projectId}/update-inputs`,
       {
         method: 'POST',
         body: JSON.stringify(inputs),
@@ -1851,11 +1750,11 @@ export const api = {
     return fetchApi<AssessmentDecisionLogReport>(`/api/v1/assessment-workflow/${instanceId}/decision-log`);
   },
 
-  getAssumptionsSummary: (initiativeId: string) =>
-    fetchApi<AssumptionSummary>(`/api/v1/initiatives/${initiativeId}/assumptions/summary`),
+  getAssumptionsSummary: (projectId: string) =>
+    fetchApi<AssumptionSummary>(`/api/v1/projects/${projectId}/assumptions/summary`),
 
   listAssumptions: (
-    initiativeId: string,
+    projectId: string,
     filters?: { status?: AssumptionStatus | ''; source_type?: AssumptionSourceType | ''; assessment?: string },
   ) => {
     const params = new URLSearchParams();
@@ -1864,12 +1763,12 @@ export const api = {
     if (filters?.assessment) params.set('assessment', filters.assessment);
     const query = params.toString();
     return fetchApi<Assumption[]>(
-      `/api/v1/initiatives/${initiativeId}/assumptions${query ? `?${query}` : ''}`,
+      `/api/v1/projects/${projectId}/assumptions${query ? `?${query}` : ''}`,
     );
   },
 
   resolveAssumption: (
-    initiativeId: string,
+    projectId: string,
     assessmentId: string,
     fieldName: string,
     assessmentInstanceId?: string | null,
@@ -1880,12 +1779,12 @@ export const api = {
     });
     if (assessmentInstanceId) params.set('assessment_instance_id', assessmentInstanceId);
     return fetchApi<{ found: boolean; assumption: Assumption | null }>(
-      `/api/v1/initiatives/${initiativeId}/assumptions/resolve?${params.toString()}`,
+      `/api/v1/projects/${projectId}/assumptions/resolve?${params.toString()}`,
     );
   },
 
-  createAssumption: (initiativeId: string, data: AssumptionCreateInput) =>
-    fetchApi<Assumption>(`/api/v1/initiatives/${initiativeId}/assumptions`, {
+  createAssumption: (projectId: string, data: AssumptionCreateInput) =>
+    fetchApi<Assumption>(`/api/v1/projects/${projectId}/assumptions`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -1913,9 +1812,9 @@ export const api = {
       body: JSON.stringify({ body }),
     }),
 
-  refreshAssumptions: (initiativeId: string) =>
+  refreshAssumptions: (projectId: string) =>
     fetchApi<{ created: number; updated: number; assumptions: Assumption[] }>(
-      `/api/v1/initiatives/${initiativeId}/assumptions/refresh`,
+      `/api/v1/projects/${projectId}/assumptions/refresh`,
       { method: 'POST' },
     ),
 
@@ -1936,77 +1835,77 @@ export const api = {
   },
 
   // Project Plan
-  getProjectPlan: (initiativeId: string) =>
+  getProjectPlan: (projectId: string) =>
     fetchApi<{ project_plan: ProjectPlan | null }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan`
+      `/api/v1/projects/${projectId}/project-plan`
     ),
 
-  getProjectHealth: (initiativeId: string) =>
-    fetchApi<ProjectHealthResponse>(`/api/v1/initiatives/${initiativeId}/project-health`),
+  getProjectHealth: (projectId: string) =>
+    fetchApi<ProjectHealthResponse>(`/api/v1/projects/${projectId}/project-health`),
 
-  refreshProjectHealth: (initiativeId: string, source: string = 'manual_refresh') =>
-    fetchApi<ProjectHealthResponse>(`/api/v1/initiatives/${initiativeId}/project-health/refresh`, {
+  refreshProjectHealth: (projectId: string, source: string = 'manual_refresh') =>
+    fetchApi<ProjectHealthResponse>(`/api/v1/projects/${projectId}/project-health/refresh`, {
       method: 'POST',
       body: JSON.stringify({ source }),
     }),
 
   overrideProjectHealthDimension: (
-    initiativeId: string,
+    projectId: string,
     dimensionId: string,
     status: ProjectHealthStatus,
     explanation?: string,
   ) =>
     fetchApi<ProjectHealthResponse>(
-      `/api/v1/initiatives/${initiativeId}/project-health/${dimensionId}/override`,
+      `/api/v1/projects/${projectId}/project-health/${dimensionId}/override`,
       {
         method: 'POST',
         body: JSON.stringify({ status, explanation: explanation || null }),
       },
     ),
 
-  generateProjectPlan: (initiativeId: string) =>
+  generateProjectPlan: (projectId: string) =>
     fetchApi<{ project_plan: ProjectPlan }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan`,
+      `/api/v1/projects/${projectId}/project-plan`,
       { method: 'POST' }
     ),
 
   updatePlanItemStatus: (
-    initiativeId: string,
+    projectId: string,
     itemId: string,
     status: 'not_started' | 'in_progress' | 'complete',
   ) =>
     fetchApi<{ success: boolean; item_id: string; status: string }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/status`,
+      `/api/v1/projects/${projectId}/project-plan/items/${itemId}/status`,
       {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       }
     ),
 
-  addPlanItem: (initiativeId: string, pillarId: string, title: string, itemType: 'deliverable' | 'assessment' = 'deliverable', phaseId?: string) =>
+  addPlanItem: (projectId: string, pillarId: string, title: string, itemType: 'deliverable' | 'assessment' = 'deliverable', phaseId?: string) =>
     fetchApi<{ success: boolean; item: ProjectPlanItem }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/pillars/${pillarId}/items`,
+      `/api/v1/projects/${projectId}/project-plan/pillars/${pillarId}/items`,
       {
         method: 'POST',
         body: JSON.stringify({ title, item_type: itemType, ...(phaseId ? { phase_id: phaseId } : {}) }),
       }
     ),
 
-  deletePlanItem: (initiativeId: string, itemId: string) =>
+  deletePlanItem: (projectId: string, itemId: string) =>
     fetchApi<{ success: boolean; item_id: string }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}`,
+      `/api/v1/projects/${projectId}/project-plan/items/${itemId}`,
       { method: 'DELETE' }
     ),
 
-  deletePlanElement: (initiativeId: string, itemId: string, elementIndex: number) =>
+  deletePlanElement: (projectId: string, itemId: string, elementIndex: number) =>
     fetchApi<{ success: boolean; item_id: string; element_index: number }>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/elements/${elementIndex}`,
+      `/api/v1/projects/${projectId}/project-plan/items/${itemId}/elements/${elementIndex}`,
       { method: 'DELETE' }
     ),
 
   // Project plan deep dive
   deepDiveItem: (
-    initiativeId: string,
+    projectId: string,
     itemId: string,
     body: {
       item_title: string;
@@ -2017,7 +1916,7 @@ export const api = {
     }
   ) =>
     fetchApiWithTimeout<DeepDiveResult>(
-      `/api/v1/initiatives/${initiativeId}/project-plan/items/${itemId}/deep-dive`,
+      `/api/v1/projects/${projectId}/project-plan/items/${itemId}/deep-dive`,
       {
         method: 'POST',
         body: JSON.stringify(body),
@@ -2026,7 +1925,7 @@ export const api = {
     ),
 
   // Chat sessions — optionally scoped to a single project
-  getChats: (initiativeId?: string, projectId?: string) =>
+  getChats: (projectId?: string) =>
     fetchApi<{
       chats: {
         id: string;
@@ -2034,15 +1933,13 @@ export const api = {
         created_at: string | null;
         updated_at: string | null;
         message_count: number;
-        compare_initiative_ids: string[] | null;
-        initiative_id: string | null;
-        project_id?: string | null;
+        compare_project_ids: string[] | null;
+        project_id: string | null;
         assumption_id: string | null;
       }[];
     }>(
       (() => {
         const params = new URLSearchParams();
-        if (initiativeId) params.set('initiative_id', initiativeId);
         if (projectId) params.set('project_id', projectId);
         const qs = params.toString();
         return qs ? `/api/v1/chats?${qs}` : '/api/v1/chats';
@@ -2093,13 +1990,13 @@ export const api = {
   saveChatFromMessages: (
     messages: { role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; sources?: any[] | null; completion_meta?: Record<string, any> | null }[],
     title?: string,
-    initiativeId?: string,
+    projectId?: string,
   ) =>
     fetchApi<{ chat_id: string; title: string | null }>(
       '/api/v1/chats/save',
       {
         method: 'POST',
-        body: JSON.stringify({ title, messages, initiative_id: initiativeId }),
+        body: JSON.stringify({ title, messages, project_id: projectId }),
       }
     ),
 
@@ -2128,10 +2025,10 @@ export const api = {
     fieldContext?: FieldContext | null,
     modelInputsContext?: string | null,
     assessmentContext?: { instance_id: string; assessment_id: string; title?: string | null } | null,
-    initiativeId?: string | null,
+    projectId?: string | null,
     assumptionId?: string | null,
     onResearchStep?: (step: ResearchStep) => void,
-    compareInitiativeIds?: string[] | null,
+    compareProjectIds?: string[] | null,
     allowInitialProjectOnboarding?: boolean,
     activeEditorContext?: ActiveEditorContext | null,
   ) => {
@@ -2153,9 +2050,9 @@ export const api = {
       model_type: fieldContext?.model_type ?? null,
       has_model_inputs_context: Boolean(modelInputsContext),
       has_assessment_context: Boolean(assessmentContext),
-      initiative_id: initiativeId ?? null,
+      project_id: projectId ?? null,
       assumption_id: assumptionId ?? null,
-      compare_mode: Boolean(compareInitiativeIds?.length),
+      compare_mode: Boolean(compareProjectIds?.length),
       allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
       has_active_editor_context: Boolean(activeEditorContext),
       active_editor_kind: activeEditorContext?.kind ?? null,
@@ -2173,9 +2070,9 @@ export const api = {
         field_context: fieldContext ?? null,
         model_inputs_context: modelInputsContext ?? null,
         assessment_context: assessmentContext ?? null,
-        initiative_id: initiativeId ?? null,
+        project_id: projectId ?? null,
         assumption_id: assumptionId ?? null,
-        compare_initiative_ids: compareInitiativeIds ?? null,
+        compare_project_ids: compareProjectIds ?? null,
         allow_initial_project_onboarding: Boolean(allowInitialProjectOnboarding),
         active_editor_context: activeEditorContext ?? null,
       }),
@@ -2434,32 +2331,32 @@ export const api = {
   searchUsers: (q: string): Promise<UserSearchResult[]> =>
     fetchApi<UserSearchResult[]>(`/api/v1/users/search?q=${encodeURIComponent(q)}`),
 
-  getShares: (initiativeId: string): Promise<ProjectShare[]> =>
-    fetchApi<ProjectShare[]>(`/api/v1/initiatives/${initiativeId}/shares`),
+  getShares: (projectId: string): Promise<ProjectShare[]> =>
+    fetchApi<ProjectShare[]>(`/api/v1/projects/${projectId}/shares`),
 
-  createShare: (initiativeId: string, email: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
-    fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares`, {
+  createShare: (projectId: string, email: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
+    fetchApi<ProjectShare>(`/api/v1/projects/${projectId}/shares`, {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     }),
 
-  updateShare: (initiativeId: string, shareId: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
-    fetchApi<ProjectShare>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
+  updateShare: (projectId: string, shareId: string, role: 'editor' | 'viewer'): Promise<ProjectShare> =>
+    fetchApi<ProjectShare>(`/api/v1/projects/${projectId}/shares/${shareId}`, {
       method: 'PATCH',
       body: JSON.stringify({ role }),
     }),
 
-  deleteShare: (initiativeId: string, shareId: string): Promise<void> =>
-    fetchApi<void>(`/api/v1/initiatives/${initiativeId}/shares/${shareId}`, {
+  deleteShare: (projectId: string, shareId: string): Promise<void> =>
+    fetchApi<void>(`/api/v1/projects/${projectId}/shares/${shareId}`, {
       method: 'DELETE',
     }),
 
   // ── Google Drive ────────────────────────────────────────────────────────────
 
-  getGoogleAuthUrl: (initiativeId: string) =>
+  getGoogleAuthUrl: (projectId: string) =>
     fetchApi<{ auth_url: string }>(
       '/api/v1/google/connect',
-      { method: 'POST', body: JSON.stringify({ initiative_id: initiativeId }) }
+      { method: 'POST', body: JSON.stringify({ project_id: projectId }) }
     ),
 
   getGoogleDriveStatus: () =>
@@ -2471,9 +2368,9 @@ export const api = {
   disconnectGoogleDrive: () =>
     fetchApi<{ success: boolean }>('/api/v1/google/disconnect', { method: 'DELETE' }),
 
-  importFromDrive: (initiativeId: string, fileIds: string[]) =>
+  importFromDrive: (projectId: string, fileIds: string[]) =>
     fetchApi<DriveImportResult>(
-      `/api/v1/initiatives/${initiativeId}/drive/import`,
+      `/api/v1/projects/${projectId}/drive/import`,
       { method: 'POST', body: JSON.stringify({ file_ids: fileIds }) }
     ),
 
@@ -2483,18 +2380,18 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ file_ids: fileIds }) }
     ),
 
-  getDriveLinkedFiles: (initiativeId: string) =>
-    fetchApi<DriveLinkedFile[]>(`/api/v1/initiatives/${initiativeId}/drive/linked`),
+  getDriveLinkedFiles: (projectId: string) =>
+    fetchApi<DriveLinkedFile[]>(`/api/v1/projects/${projectId}/drive/linked`),
 
-  syncDriveFiles: (initiativeId: string) =>
+  syncDriveFiles: (projectId: string) =>
     fetchApi<DriveSyncResult>(
-      `/api/v1/initiatives/${initiativeId}/drive/sync`,
+      `/api/v1/projects/${projectId}/drive/sync`,
       { method: 'POST' }
     ),
 
-  unlinkDriveFile: (initiativeId: string, linkedId: string) =>
+  unlinkDriveFile: (projectId: string, linkedId: string) =>
     fetchApi<{ success: boolean }>(
-      `/api/v1/initiatives/${initiativeId}/drive/linked/${linkedId}`,
+      `/api/v1/projects/${projectId}/drive/linked/${linkedId}`,
       { method: 'DELETE' }
     ),
 

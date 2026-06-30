@@ -2,11 +2,11 @@
 
 import { useState, useRef } from 'react';
 import { Plus, FileText, Upload, Loader2, Trash2, Map } from 'lucide-react';
-import { EvidenceDoc, Initiative } from '@/lib/api';
+import { EvidenceDoc, Project } from '@/lib/api';
 import { SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 
 interface InputOutputBarProps {
-  initiative: Initiative;
+  project: Project;
   evidenceDocs: EvidenceDoc[];
   selectedItemId: string | null;
   onSelectItem: (id: string, type: 'input' | 'output') => void;
@@ -18,7 +18,7 @@ interface InputOutputBarProps {
 }
 
 export function InputOutputBar({
-  initiative,
+  project,
   evidenceDocs,
   selectedItemId,
   onSelectItem,
@@ -64,8 +64,8 @@ export function InputOutputBar({
   };
 
   // Get outputs from deliverables
-  const outputs = initiative.deliverables 
-    ? Object.entries(initiative.deliverables).map(([id, data]: [string, any]) => ({
+  const outputs = project.deliverables 
+    ? Object.entries(project.deliverables).map(([id, data]: [string, any]) => ({
         id,
         name: data.title || data.name || id,
         type: data.widget_type || 'document',

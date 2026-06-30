@@ -276,7 +276,7 @@ interface AssessmentWorkspaceProps {
   assessmentId: string;
   assessmentTitle?: string;
   isActive?: boolean;
-  initiativeId?: string;
+  projectId?: string;
   onAddToChat?: (text: string) => void;
   onOpenActivityLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
   onOpenDecisionLog?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
@@ -296,7 +296,7 @@ export function AssessmentWorkspace({
   assessmentId,
   assessmentTitle,
   isActive = true,
-  initiativeId,
+  projectId,
   onAddToChat,
   onOpenActivityLog,
   onOpenDecisionLog,
@@ -510,7 +510,7 @@ export function AssessmentWorkspace({
         <Suspense fallback={<WorkspaceTabLoader />}>
           <Widget
             data={widgetData}
-            initiativeId={initiativeId ?? ''}
+            projectId={projectId ?? ''}
             instanceId={instanceId}
             workflowVersion={state?.workflow_version}
             onWorkflowUpdated={fetchState}
@@ -523,7 +523,7 @@ export function AssessmentWorkspace({
         </Suspense>
       );
     },
-    [fetchState, initiativeId, instanceId, isActive, onInspectorStateChange, state?.workflow_version]
+    [fetchState, projectId, instanceId, isActive, onInspectorStateChange, state?.workflow_version]
   );
 
   const handlePopulate = useCallback(async (stageId: string) => {
@@ -746,7 +746,7 @@ export function AssessmentWorkspace({
     if (component === 'table' && widget === 'editable_table') {
       return (
         <EditableTableStage
-          initiativeId={initiativeId}
+          projectId={projectId}
           instanceId={instanceId}
           assessmentId={assessmentId}
           stageId={stageId}
@@ -877,7 +877,7 @@ export function AssessmentWorkspace({
         <AssessmentWorkspacePanelChrome
           title={assessmentDisplayTitle}
           exportFormat={mod.export_format}
-          initiativeId={initiativeId}
+          projectId={projectId}
           decisionMenuRef={decisionMenuRef}
           decisionMenuOpen={decisionMenuOpen}
           onDecisionMenuToggle={() => setDecisionMenuOpen((prev) => !prev)}
@@ -919,7 +919,7 @@ export function AssessmentWorkspace({
             />
             {!usePanelHeader ? (
             <div className="flex items-center gap-2 shrink-0">
-              {initiativeId && (
+              {projectId && (
                 <div ref={decisionMenuRef} className="relative">
                   <button
                     onClick={() => setDecisionMenuOpen((prev) => !prev)}

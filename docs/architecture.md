@@ -2,7 +2,7 @@
 
 Nitrogen is a chat-first diligence workbench: **projects** hold shared deal state; **core chat** handles personal and project-scoped research; **findings** and **assumptions** capture promoted team knowledge. The backend is FastAPI + PostgreSQL/pgvector; the frontend is Next.js.
 
-Legacy `/api/v1/initiatives/*` routes remain as compatibility aliases — they operate on the `projects` table after migration `061`.
+Legacy `/api/v1/initiatives/*` routes and `/initiatives/:id` frontend paths remain as permanent redirects/aliases — canonical API is `/api/v1/projects/*` and UI routes are `/projects/:id`.
 
 ## Assessment workflow
 
@@ -129,7 +129,7 @@ The assessment owns:
 `assessment_workflow_service.py` owns generic lifecycle orchestration only:
 
 - initialize workflow state
-- merge initiative context into setup fields
+- merge project context into setup fields
 - persist stage transitions
 - persist widget state and deliverables
 - route layered vs widget-backed assessments using shared hooks

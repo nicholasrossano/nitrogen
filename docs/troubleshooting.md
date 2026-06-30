@@ -4,11 +4,11 @@
 
 ### Symptoms
 ```
-Access to fetch at 'https://your-app.up.railway.app/api/v1/initiatives/{id}/export' 
+Access to fetch at 'https://your-app.up.railway.app/api/v1/projects/{id}/export' 
 from origin 'https://your-domain.com' has been blocked by CORS policy: 
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 
-POST https://your-app.up.railway.app/api/v1/initiatives/{id}/export 
+POST https://your-app.up.railway.app/api/v1/projects/{id}/export 
 net::ERR_FAILED 500 (Internal Server Error)
 ```
 
@@ -28,7 +28,7 @@ Go to Railway dashboard → Your project → Logs
 
 Look for:
 ```
-ERROR:app.api.exports:Export failed for initiative {id}: {error message}
+ERROR:app.api.exports:Export failed for project {id}: {error message}
 ```
 
 Common errors:
@@ -54,10 +54,10 @@ curl https://your-app.up.railway.app/debug/config
 #### Step 3: Test Memo Exists
 
 ```bash
-# Get the memo (replace {id} with your initiative ID)
+# Get the memo (replace {id} with your project ID)
 # Use a Firebase ID token from a signed-in session (Authorization header in browser devtools)
 curl -H "Authorization: Bearer <firebase-id-token>" \
-  https://your-app.up.railway.app/api/v1/initiatives/{id}/memo
+  https://your-app.up.railway.app/api/v1/projects/{id}/memo
 ```
 
 If this returns 404, you need to generate a memo first.
@@ -153,7 +153,7 @@ The most common issue is invalid memo content. Check your memo has all required 
 - [ ] Railway environment variable `CORS_ORIGINS` includes your Vercel domain
 - [ ] Railway logs show what error is actually happening
 - [ ] `/debug/config` shows exports directory exists
-- [ ] Memo exists for the initiative (check `/api/v1/initiatives/{id}/memo`)
+- [ ] Memo exists for the initiative (check `/api/v1/projects/{id}/memo`)
 - [ ] Test export works locally (`python scripts/test_export.py`)
 - [ ] All required dependencies in `requirements.txt`
 - [ ] Dockerfile creates exports directory
@@ -163,7 +163,7 @@ The most common issue is invalid memo content. Check your memo has all required 
 If you've tried all the above:
 
 1. **Check specific error in Railway logs** - This will tell you exactly what's failing
-2. **Test with a fresh initiative** - Create new, generate memo, export
+2. **Test with a fresh project** - Create new, generate memo, export
 3. **Check Neon database** - Ensure memo_versions table has data
 4. **Verify file permissions** - Railway container should be able to write to /app/exports
 5. **Test DOCX generation locally** - Use `scripts/test_export.py`
@@ -173,7 +173,7 @@ If you've tried all the above:
 ```
 User clicks Export
     ↓
-Frontend sends POST to /api/v1/initiatives/{id}/export
+Frontend sends POST to /api/v1/projects/{id}/export
     ↓
 Backend receives request
     ↓
@@ -218,7 +218,7 @@ To avoid this in the future:
 ## What You're Seeing
 
 ```
-Access to fetch at 'https://your-app.up.railway.app/api/v1/initiatives/{id}/export' 
+Access to fetch at 'https://your-app.up.railway.app/api/v1/projects/{id}/export' 
 from origin 'https://your-domain.com' has been blocked by CORS policy: 
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 
@@ -237,9 +237,9 @@ POST .../export net::ERR_FAILED 500 (Internal Server Error)
 
 ## The Real Problem
 
-The export endpoint (`/api/v1/initiatives/{id}/export`) is throwing an exception. Common causes:
+The export endpoint (`/api/v1/projects/{id}/export`) is throwing an exception. Common causes:
 
-- **Missing memo**: No memo exists for this initiative
+- **Missing memo**: No memo exists for this project
 - **Invalid memo content**: Memo missing required fields
 - **File system issue**: Can't write to exports directory
 - **Missing dependency**: `python-docx`, `docxtpl`, or `openpyxl` not installed
@@ -252,7 +252,7 @@ The export endpoint (`/api/v1/initiatives/{id}/export`) is throwing an exception
 Go to Railway dashboard → Logs and look for the actual error:
 
 ```
-ERROR:app.api.exports:Export failed for initiative {id}: [THE REAL ERROR MESSAGE]
+ERROR:app.api.exports:Export failed for project {id}: [THE REAL ERROR MESSAGE]
 ```
 
 This will tell you **exactly** what's failing.
@@ -283,7 +283,7 @@ curl https://your-app.up.railway.app/debug/config
 # Check if memo exists (replace {id})
 # Use a Firebase ID token from a signed-in session (Authorization header in browser devtools)
 curl -H "Authorization: Bearer <firebase-id-token>" \
-  https://your-app.up.railway.app/api/v1/initiatives/{id}/memo
+  https://your-app.up.railway.app/api/v1/projects/{id}/memo
 ```
 
 ## What I've Fixed in the Code
@@ -292,7 +292,7 @@ curl -H "Authorization: Bearer <firebase-id-token>" \
 
 The export endpoint now logs every step:
 - When request starts
-- Initiative lookup
+- Project lookup
 - Memo lookup  
 - DOCX generation
 - File saving
@@ -428,7 +428,7 @@ EXPORTS_DIR=./exports
 GET /health                    # Basic health check
 GET /debug/cors                # CORS configuration
 GET /debug/config              # Full config including file system
-GET /api/v1/initiatives/{id}/memo  # Check memo exists
+GET /api/v1/projects/{id}/memo  # Check memo exists
 ```
 
 **Local Testing:**

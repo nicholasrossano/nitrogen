@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Calculator, Files, ListChecks, Loader2, MapPinned, Tag, Users } from 'lucide-react';
-import { api, type AssumptionSummary, type Initiative } from '@/lib/api';
+import { api, type AssumptionSummary, type Project } from '@/lib/api';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
 import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTable';
@@ -11,8 +11,8 @@ import type { ResearchPanelCitation } from './ResearchPanel';
 
 const collaboratorsCountCache = new Map<string, number>();
 
-interface InitiativeOverviewHeaderProps {
-  initiative: Initiative;
+interface ProjectOverviewHeaderProps {
+  project: Project;
   filesUploaded: number;
   assessmentsCreated: number | null;
   assessmentProgress?: AssessmentProgressData | null;
@@ -58,8 +58,8 @@ function FootprintBox({
   );
 }
 
-export function InitiativeOverviewHeader({
-  initiative,
+export function ProjectOverviewHeader({
+  project,
   filesUploaded,
   assessmentsCreated,
   assessmentProgress,
@@ -69,18 +69,18 @@ export function InitiativeOverviewHeader({
   healthRefreshToken = 0,
   onOpenDocument,
   onOpenWorkspaceAssessment,
-}: InitiativeOverviewHeaderProps) {
-  const title = initiative.title || 'Untitled initiative';
-  const projectType = formatProjectType(initiative.project_type);
+}: ProjectOverviewHeaderProps) {
+  const title = project.title || 'Untitled initiative';
+  const projectType = formatProjectType(project.project_type);
   const hasFiles = filesUploaded > 0;
-  const hasOverview = Boolean(initiative.overview_description?.trim());
+  const hasOverview = Boolean(project.overview_description?.trim());
   const [collaboratorsCount, setCollaboratorsCount] = useState<number | null>(
-    () => collaboratorsCountCache.get(initiative.id) ?? null,
+    () => collaboratorsCountCache.get(project.id) ?? null,
   );
   const [assumptionsSummary, setAssumptionsSummary] = useState<AssumptionSummary | null>(null);
 
   useEffect(() => {
-    const cachedCount = collaboratorsCountCache.get(initiative.id);
+    const cachedCount = collaboratorsCountCache.get(project.id);
     if (cachedCount !== undefined) {
       setCollaboratorsCount(cachedCount);
     } else {
@@ -91,18 +91,18 @@ export function InitiativeOverviewHeader({
 
     let cancelled = false;
 
-    api.getShares(initiative.id)
+    api.getShares(project.id)
       .then((shares) => {
         if (!cancelled) {
           const nextCount = 1 + shares.length;
-          collaboratorsCountCache.set(initiative.id, nextCount);
+          collaboratorsCountCache.set(project.id, nextCount);
           setCollaboratorsCount(nextCount);
         }
       })
       .catch(() => {
         if (!cancelled) {
           if (!hadCachedCount) {
-            collaboratorsCountCache.set(initiative.id, 1);
+            collaboratorsCountCache.set(project.id, 1);
             setCollaboratorsCount(1);
           }
         }
@@ -111,11 +111,11 @@ export function InitiativeOverviewHeader({
     return () => {
       cancelled = true;
     };
-  }, [initiative.id]);
+  }, [project.id]);
 
   useEffect(() => {
     let cancelled = false;
-    api.getAssumptionsSummary(initiative.id)
+    api.getAssumptionsSummary(project.id)
       .then((summary) => {
         if (!cancelled) setAssumptionsSummary(summary);
       })
@@ -125,7 +125,7 @@ export function InitiativeOverviewHeader({
     return () => {
       cancelled = true;
     };
-  }, [initiative.id, initiative.updated_at]);
+  }, [project.id, project.updated_at]);
 
   return (
     <div className="relative w-full">
@@ -134,12 +134,12 @@ export function InitiativeOverviewHeader({
         <h2 className="text-xl font-semibold text-text-primary">{title}</h2>
       </div>
 
-      {(initiative.geography || projectType) && (
+      {(project.geography || projectType) && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {initiative.geography && (
+          {project.geography && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-accent/20 bg-accent/10 text-xs font-medium text-accent leading-none">
               <MapPinned className="w-3 h-3" />
-              {initiative.geography}
+              {project.geography}
             </span>
           )}
           {projectType && (
@@ -170,8 +170,8 @@ export function InitiativeOverviewHeader({
       <section className="mt-8">
         <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Health Overview</p>
         <ProjectHealthTable
-          initiativeId={initiative.id}
-          readOnly={initiative.shared_role === 'viewer'}
+          projectId={project.id}
+          readOnly={project.shared_role === 'viewer'}
           hideRefreshButton={true}
           refreshToken={healthRefreshToken}
           onOpenDocument={onOpenDocument}
@@ -196,7 +196,7 @@ export function InitiativeOverviewHeader({
             <p className="mt-2 text-sm text-text-tertiary">Reviewing uploaded files and initiative context.</p>
           </div>
         ) : hasOverview ? (
-          <p className="text-sm leading-7 text-text-secondary whitespace-pre-wrap">{initiative.overview_description}</p>
+          <p className="text-sm leading-7 text-text-secondary whitespace-pre-wrap">{project.overview_description}</p>
         ) : (
           <div className="h-full flex flex-col items-start justify-center">
             <p className="text-sm font-medium text-text-primary">No overview yet</p>
