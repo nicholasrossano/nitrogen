@@ -1,12 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { Sparkles, Zap, Key, ChevronDown, Check, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Sparkles, Key, ChevronDown, Check, Loader2, Trash2 } from 'lucide-react';
 import { useBillingStore } from '@/stores/billingStore';
 import { api } from '@/lib/api';
 
-const STARTER_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID ?? '';
-const PRO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ?? '';
+const SUBSCRIPTION_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID ?? '';
+const SUBSCRIPTION_PRICE_LABEL = process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE_LABEL ?? '$20';
+const SUBSCRIPTION_USAGE_CAP_LABEL =
+  process.env.NEXT_PUBLIC_SUBSCRIPTION_USAGE_CAP_LABEL ?? '$20';
+
+type ByokProvider = 'openai' | 'openrouter';
+
+const BYOK_PROVIDERS: { id: ByokProvider; label: string; placeholder: string; hint: string }[] = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    placeholder: 'sk-...',
+    hint: 'Direct OpenAI API key (chat, analyses, embeddings).',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    placeholder: 'sk-or-...',
+    hint: 'OpenRouter key — OpenAI-compatible models and embeddings.',
+  },
+];
 
 interface BillingOptionsPanelProps {
   onByokSaved?: () => void;
@@ -14,48 +33,93 @@ interface BillingOptionsPanelProps {
 
 export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
   const { accessCodeAvailable, redeemAccessCode, fetchBillingStatus } = useBillingStore();
-  const [apiKey, setApiKey] = useState('');
+  const [apiKeys, setApiKeys] = useState<Record<ByokProvider, string>>({ openai: '', openrouter: '' });
+  const [savedProviders, setSavedProviders] = useState<Set<ByokProvider>>(new Set());
   const [accessCode, setAccessCode] = useState('');
   const [accessCodeOpen, setAccessCodeOpen] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
+  const [savingProvider, setSavingProvider] = useState<ByokProvider | null>(null);
+  const [deletingProvider, setDeletingProvider] = useState<ByokProvider | null>(null);
   const [redeemingCode, setRedeemingCode] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [keySaved, setKeySaved] = useState(false);
+  const [savedFlash, setSavedFlash] = useState<ByokProvider | null>(null);
 
-  const handleCheckout = async (priceId: string) => {
+  const loadStoredKeys = async () => {
+    try {
+      const keys = await api.listApiKeys();
+      const providers = new Set(
+        keys
+          .map((k) => k.provider)
+          .filter((p): p is ByokProvider => p === 'openai' || p === 'openrouter'),
+      );
+      setSavedProviders(providers);
+    } catch {
+      // non-fatal
+    }
+  };
+
+  useEffect(() => {
+    void loadStoredKeys();
+  }, []);
+
+  const handleCheckout = async () => {
+    if (!SUBSCRIPTION_PRICE_ID) {
+      setError('Subscription is not configured on this deployment.');
+      return;
+    }
     setError(null);
-    setCheckoutLoading(priceId);
+    setCheckoutLoading(true);
     try {
       const { url } = await api.createCheckout(
-        priceId,
+        SUBSCRIPTION_PRICE_ID,
         `${window.location.origin}/subscribe?success=true`,
         `${window.location.origin}/subscribe?canceled=true`,
       );
       window.location.href = url;
     } catch {
       setError('Could not start checkout. Please try again.');
-      setCheckoutLoading(null);
+      setCheckoutLoading(false);
     }
   };
 
-  const handleSaveKey = async () => {
-    if (!apiKey.trim()) return;
+  const handleSaveKey = async (provider: ByokProvider) => {
+    const apiKey = apiKeys[provider].trim();
+    if (!apiKey) return;
     setError(null);
-    setSavingKey(true);
+    setSavingProvider(provider);
     try {
-      await api.storeApiKey(apiKey.trim());
+      await api.storeApiKey(apiKey, provider);
       await fetchBillingStatus();
-      setKeySaved(true);
+      await loadStoredKeys();
+      setSavedFlash(provider);
+      setApiKeys((prev) => ({ ...prev, [provider]: '' }));
       setTimeout(() => {
-        setApiKey('');
-        setKeySaved(false);
+        setSavedFlash(null);
         onByokSaved?.();
       }, 600);
-    } catch {
-      setError('Could not save API key. Please check and try again.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not save API key.');
     } finally {
-      setSavingKey(false);
+      setSavingProvider(null);
+    }
+  };
+
+  const handleDeleteKey = async (provider: ByokProvider) => {
+    setError(null);
+    setDeletingProvider(provider);
+    try {
+      await api.deleteApiKey(provider);
+      await fetchBillingStatus();
+      await loadStoredKeys();
+      setSavedProviders((prev) => {
+        const next = new Set(prev);
+        next.delete(provider);
+        return next;
+      });
+    } catch {
+      setError('Could not remove API key.');
+    } finally {
+      setDeletingProvider(null);
     }
   };
 
@@ -80,68 +144,103 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <PlanCard
-          icon={<Sparkles className="w-4 h-4" />}
-          name="Starter"
-          price="$1"
-          period="/mo"
-          description="For getting started"
-          buttonLabel="Subscribe"
-          loading={checkoutLoading === STARTER_PRICE_ID}
-          disabled={!!checkoutLoading}
-          onAction={() => handleCheckout(STARTER_PRICE_ID)}
-        />
-
-        <PlanCard
-          icon={<Zap className="w-4 h-4" />}
-          name="Pro"
-          price="$2"
-          period="/mo"
-          description="For power users"
-          buttonLabel="Subscribe"
-          loading={checkoutLoading === PRO_PRICE_ID}
-          disabled={!!checkoutLoading}
-          highlighted
-          onAction={() => handleCheckout(PRO_PRICE_ID)}
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-accent/40 ring-1 ring-accent/20 p-4 flex flex-col">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-7 h-7 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <span className="text-sm font-semibold text-text-primary">Individual</span>
+          </div>
+          <p className="text-xs text-text-tertiary mb-1">Flat subscription with included AI usage</p>
+          <p className="text-lg font-semibold text-text-primary mb-1">
+            {SUBSCRIPTION_PRICE_LABEL}
+            <span className="text-xs font-normal text-text-tertiary">/mo</span>
+          </p>
+          <p className="text-[11px] text-text-tertiary mb-3">
+            Includes up to {SUBSCRIPTION_USAGE_CAP_LABEL} of platform AI usage per billing period.
+          </p>
+          <button
+            onClick={handleCheckout}
+            disabled={checkoutLoading || !SUBSCRIPTION_PRICE_ID}
+            className="mt-auto w-full text-xs font-medium rounded-lg px-3 py-2 bg-accent text-white enabled:hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+          >
+            {checkoutLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Subscribe
+          </button>
+        </div>
 
         <div className="rounded-xl border border-stroke-subtle p-4 flex flex-col">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-7 h-7 rounded-lg bg-surface-subtle flex items-center justify-center">
               <Key className="w-4 h-4 text-text-secondary" />
             </div>
-            <span className="text-sm font-semibold text-text-primary">BYOK</span>
+            <span className="text-sm font-semibold text-text-primary">Bring your own key</span>
           </div>
-          <p className="text-xs text-text-tertiary mb-1">Bring your own API key</p>
-          <p className="text-lg font-semibold text-text-primary mb-3">
-            Free
+          <p className="text-xs text-text-tertiary mb-3">
+            Use your OpenAI or OpenRouter API key. Unlimited usage on your account — no subscription required.
           </p>
-          <div className="mt-auto space-y-2">
-            <input
-              type="password"
-              placeholder="sk-..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSaveKey()}
-              className="w-full text-xs rounded-lg border border-stroke-subtle px-3 py-2 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <button
-              onClick={handleSaveKey}
-              disabled={!apiKey.trim() || savingKey}
-              className="w-full text-xs font-medium rounded-lg px-3 py-2 bg-surface-subtle text-text-primary enabled:hover:bg-surface-subtle/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
-            >
-              {savingKey ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : keySaved ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  Saved
-                </>
-              ) : (
-                'Use my key'
-              )}
-            </button>
+          <div className="space-y-3 mt-auto">
+            {BYOK_PROVIDERS.map((provider) => {
+              const isSaved = savedProviders.has(provider.id);
+              return (
+                <div key={provider.id} className="rounded-lg border border-stroke-subtle p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-text-primary">{provider.label}</span>
+                    {isSaved && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKey(provider.id)}
+                        disabled={deletingProvider === provider.id}
+                        className="text-[10px] text-text-tertiary hover:text-red-600 flex items-center gap-0.5 disabled:opacity-50"
+                      >
+                        {deletingProvider === provider.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3 h-3" />
+                        )}
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-text-tertiary leading-snug">{provider.hint}</p>
+                  {!isSaved ? (
+                    <>
+                      <input
+                        type="password"
+                        placeholder={provider.placeholder}
+                        value={apiKeys[provider.id]}
+                        onChange={(e) =>
+                          setApiKeys((prev) => ({ ...prev, [provider.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveKey(provider.id)}
+                        className="w-full text-xs rounded-lg border border-stroke-subtle px-3 py-2 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent"
+                      />
+                      <button
+                        onClick={() => handleSaveKey(provider.id)}
+                        disabled={!apiKeys[provider.id].trim() || savingProvider === provider.id}
+                        className="w-full text-xs font-medium rounded-lg px-3 py-2 bg-surface-subtle text-text-primary enabled:hover:bg-surface-subtle/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        {savingProvider === provider.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : savedFlash === provider.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            Saved
+                          </>
+                        ) : (
+                          `Save ${provider.label} key`
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
+                      Key saved — AI usage bills to your {provider.label} account.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -181,68 +280,6 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function PlanCard({
-  icon,
-  name,
-  price,
-  period,
-  description,
-  buttonLabel,
-  loading,
-  disabled,
-  highlighted,
-  onAction,
-}: {
-  icon: React.ReactNode;
-  name: string;
-  price: string;
-  period: string;
-  description: string;
-  buttonLabel: string;
-  loading: boolean;
-  disabled: boolean;
-  highlighted?: boolean;
-  onAction: () => void;
-}) {
-  return (
-    <div
-      className={`rounded-xl border p-4 flex flex-col ${
-        highlighted
-          ? 'border-accent/40 ring-1 ring-accent/20'
-          : 'border-stroke-subtle'
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <div
-          className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-            highlighted ? 'bg-accent/10 text-accent' : 'bg-surface-subtle text-text-secondary'
-          }`}
-        >
-          {icon}
-        </div>
-        <span className="text-sm font-semibold text-text-primary">{name}</span>
-      </div>
-      <p className="text-xs text-text-tertiary mb-1">{description}</p>
-      <p className="text-lg font-semibold text-text-primary mb-3">
-        {price}
-        <span className="text-xs font-normal text-text-tertiary">{period}</span>
-      </p>
-      <button
-        onClick={onAction}
-        disabled={disabled}
-        className={`mt-auto w-full text-xs font-medium rounded-lg px-3 py-2 transition-colors flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${
-          highlighted
-            ? 'bg-accent text-white enabled:hover:bg-accent/90 disabled:opacity-60'
-            : 'bg-surface-subtle text-text-primary enabled:hover:bg-surface-subtle/80 disabled:opacity-50'
-        }`}
-      >
-        {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-        {buttonLabel}
-      </button>
     </div>
   );
 }

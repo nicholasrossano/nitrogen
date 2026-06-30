@@ -147,7 +147,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
         )
 
     app.dependency_overrides[chat_api.get_db] = override_db
-    app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
+    app.dependency_overrides[chat_api.chat_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
     monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
@@ -261,7 +261,7 @@ async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monk
         )
 
     app.dependency_overrides[chat_api.get_db] = override_db
-    app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
+    app.dependency_overrides[chat_api.chat_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
     monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
@@ -354,7 +354,7 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
         raise AssertionError("research pipeline should be skipped for scripted initial onboarding")
 
     app.dependency_overrides[chat_api.get_db] = override_db
-    app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
+    app.dependency_overrides[chat_api.chat_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
     monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
@@ -445,7 +445,7 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
         raise AssertionError("research pipeline should be skipped for first-turn onboarding prompt")
 
     app.dependency_overrides[chat_api.get_db] = override_db
-    app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
+    app.dependency_overrides[chat_api.chat_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
     monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)

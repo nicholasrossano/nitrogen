@@ -21,6 +21,13 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# BYOK providers supported in billing v1 (OpenAI-compatible embeddings).
+# Anthropic/Gemini direct keys are deferred until embedding strategy changes.
+BYOK_SUPPORTED_PROVIDERS: frozenset[str] = frozenset({"openai", "openrouter"})
+BYOK_PROVIDER_PRIORITY: tuple[str, ...] = ("openai", "openrouter")
+
+PAID_SUBSCRIPTION_TIERS: frozenset[str] = frozenset({"individual", "starter", "pro"})
+
 # ── Model pricing (per 1M tokens, USD) ─────────────────────────
 MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-4o":                  {"input": 2.50,  "output": 10.00},
@@ -62,6 +69,31 @@ def encrypt_api_key(raw_key: str) -> str:
 
 # ── Client factory ──────────────────────────────────────────────
 
+async def user_has_byok(user_id: str, db: AsyncSession) -> bool:
+    """True when the user has a stored OpenAI or OpenRouter API key."""
+    from app.models.subscription import UserApiKey
+
+    result = await db.execute(
+        select(UserApiKey.id).where(
+            UserApiKey.user_id == user_id,
+            UserApiKey.provider.in_(BYOK_SUPPORTED_PROVIDERS),
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def get_user_byok_providers(user_id: str, db: AsyncSession) -> list[str]:
+    from app.models.subscription import UserApiKey
+
+    result = await db.execute(
+        select(UserApiKey.provider).where(
+            UserApiKey.user_id == user_id,
+            UserApiKey.provider.in_(BYOK_SUPPORTED_PROVIDERS),
+        )
+    )
+    return sorted({row for row in result.scalars().all()})
+
+
 async def get_openai_client(
     user_id: Optional[str],
     db: Optional[AsyncSession],
@@ -70,24 +102,40 @@ async def get_openai_client(
     Returns (client, is_byok).
 
     Resolution order:
-      1. If user has a stored BYOK key → use it, is_byok=True
-      2. Otherwise → platform key, is_byok=False
+      1. User's OpenAI BYOK key (direct OpenAI API)
+      2. User's OpenRouter BYOK key (OpenAI-compatible base URL)
+      3. Platform OpenAI key
     """
     if user_id and db and settings.api_key_encryption_key:
         from app.models.subscription import UserApiKey
-        result = await db.execute(
-            select(UserApiKey.encrypted_key).where(
-                UserApiKey.user_id == user_id,
-                UserApiKey.provider == "openai",
+
+        for provider in BYOK_PROVIDER_PRIORITY:
+            result = await db.execute(
+                select(UserApiKey.encrypted_key).where(
+                    UserApiKey.user_id == user_id,
+                    UserApiKey.provider == provider,
+                )
             )
-        )
-        row = result.scalar_one_or_none()
-        if row:
+            row = result.scalar_one_or_none()
+            if not row:
+                continue
             try:
                 decrypted = _decrypt_api_key(row)
+                if provider == "openrouter":
+                    return (
+                        AsyncOpenAI(
+                            api_key=decrypted,
+                            base_url=settings.openrouter_base_url,
+                        ),
+                        True,
+                    )
                 return AsyncOpenAI(api_key=decrypted), True
             except Exception:
-                logger.warning("Failed to decrypt BYOK key for user %s, falling back to platform key", user_id)
+                logger.warning(
+                    "Failed to decrypt BYOK key for user %s provider %s, trying next",
+                    user_id,
+                    provider,
+                )
 
     return AsyncOpenAI(api_key=settings.openai_api_key), False
 
@@ -161,17 +209,17 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
     if not settings.billing_enabled:
         return {"allowed": True, "tier": "unlimited", "used_usd": 0, "limit_usd": 0}
 
-    from app.models.subscription import Subscription, UsageRecord, UserApiKey
+    from app.models.subscription import Subscription, UsageRecord
 
-    # Check for BYOK first
-    byok_result = await db.execute(
-        select(UserApiKey.id).where(
-            UserApiKey.user_id == user_id,
-            UserApiKey.provider == "openai",
-        )
-    )
-    if byok_result.scalar_one_or_none():
-        return {"allowed": True, "tier": "byok", "used_usd": 0, "limit_usd": 0}
+    if await user_has_byok(user_id, db):
+        providers = await get_user_byok_providers(user_id, db)
+        return {
+            "allowed": True,
+            "tier": "byok",
+            "used_usd": 0,
+            "limit_usd": 0,
+            "byok_providers": providers,
+        }
 
     result = await db.execute(
         select(Subscription).where(Subscription.user_id == user_id)
@@ -192,7 +240,7 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
 
     if tier == "trial":
         if sub.access_code_redeemed:
-            limit = Decimal(str(settings.starter_usage_limit_usd))
+            limit = Decimal(str(settings.subscription_usage_limit_usd))
         else:
             limit = Decimal(str(settings.trial_cost_limit_usd))
         used = sub.trial_cost_used or Decimal("0")
@@ -212,7 +260,7 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
             "status": sub.status,
         }
 
-    if tier in ("starter", "pro"):
+    if tier in PAID_SUBSCRIPTION_TIERS:
         if sub.status not in ("active", "trialing"):
             return {
                 "allowed": False,
@@ -222,10 +270,13 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
                 "status": sub.status,
                 "access_code_available": access_code_available,
             }
-        limit_usd = (
-            settings.starter_usage_limit_usd if tier == "starter"
-            else settings.pro_usage_limit_usd
-        )
+        if tier in ("starter", "pro"):
+            limit_usd = (
+                settings.starter_usage_limit_usd if tier == "starter"
+                else settings.pro_usage_limit_usd
+            )
+        else:
+            limit_usd = settings.subscription_usage_limit_usd
         period_start = sub.current_period_start
         if period_start:
             usage_result = await db.execute(
@@ -244,6 +295,8 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
             "limit_usd": limit_usd,
             "status": sub.status,
             "access_code_available": access_code_available,
+            "period_start": period_start.isoformat() if period_start else None,
+            "period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
         }
 
     return {"allowed": True, "tier": tier, "used_usd": 0, "limit_usd": 0}
