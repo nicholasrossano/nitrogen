@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 
@@ -47,33 +46,27 @@ async def llm_json(
     context: dict | None = None,
 ) -> dict:
     """Call OpenAI and return parsed JSON. Records usage when user_id/db are available."""
-    from app.core.llm_client import get_openai_client, record_usage_from_response
+    from app.core.llm_invoke import acompletion_json
+    from app.core.model_catalog import Complexity, ModelRole
 
     resolved_user_id, resolved_db = _resolve_billing_context(
         user_id=user_id, db=db, context=context
     )
-    try:
-        client, is_byok = await get_openai_client(resolved_user_id, resolved_db)
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-            response_format={"type": "json_object"},
-        )
-        if resolved_user_id and resolved_db:
-            await record_usage_from_response(
-                resolved_user_id,
-                model,
-                response,
-                resolved_db,
-                is_byok=is_byok,
-            )
-        return json.loads(response.choices[0].message.content)
-    except Exception as exc:
-        logger.error("LLM JSON call failed: %s", exc)
-        return {}
+    role = (
+        ModelRole.ASSESSMENT_WRITEUP
+        if model in ("gpt-4.1", "gpt-4.1-mini")
+        else ModelRole.ORCHESTRATION
+    )
+    complexity = Complexity.HEAVY if model == "gpt-4.1" else Complexity.STANDARD
+    return await acompletion_json(
+        resolved_user_id,
+        resolved_db,
+        role=role,
+        complexity=complexity,
+        model=model,
+        system=system,
+        user_msg=user_msg,
+    )
 
 
 def make_build_item(content: dict, derivation: str = "inferred", sources: list[dict] | None = None, rationale: str = "") -> dict:

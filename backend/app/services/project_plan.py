@@ -12,7 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.schemas.provenance import (
     Derivation,
@@ -485,9 +486,11 @@ For each plan item, include a "source_indices" array listing the 1-based numbers
 of the sources that support that item. Required items MUST cite at least one source.
 """
 
-        client = await self._get_client()
-        response = await client.chat.completions.create(
-            model=self.model,
+        response = await acompletion(
+            self.user_id,
+            self.db,
+            role=ModelRole.ORCHESTRATION,
+            complexity=Complexity.HEAVY,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user_content},
@@ -496,7 +499,6 @@ of the sources that support that item. Required items MUST cite at least one sou
             tool_choice={"type": "function", "function": {"name": "produce_project_plan"}},
             temperature=0.4,
         )
-        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         plan_data = json.loads(tool_call.function.arguments)

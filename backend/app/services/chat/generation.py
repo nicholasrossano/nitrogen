@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 from app.config import get_settings
-from app.core.llm_client import record_usage_from_response
+from app.core.model_catalog import Complexity, ModelRole
 from app.services.chat.types import ChatResponse, ResearchStepCallback, ThinkingCallback
 from app.services.tiered_retrieval import RetrievedFact, SourceType, TieredRetrievalService
 
@@ -386,14 +386,13 @@ class ChatGenerationMixin:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
 
-        client = await self._get_client()
-        resp = await client.chat.completions.create(
-            model=settings.openai_generation_model,
+        resp = await self._acomplete(
+            ModelRole.GENERATION,
+            Complexity.HEAVY,
             messages=messages,
             temperature=0.4,
             max_tokens=3200,
         )
-        await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
         return resp.choices[0].message.content or ""
 
     # -----------------------------------------------------------------------
@@ -473,14 +472,13 @@ class ChatGenerationMixin:
         messages.append({"role": "assistant", "content": carbon_context})
 
         try:
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_generation_model,
+            resp = await self._acomplete(
+                ModelRole.GENERATION,
+                Complexity.STANDARD,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=400,
             )
-            await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content or carbon_context
         except Exception:
             return carbon_context
@@ -560,14 +558,13 @@ class ChatGenerationMixin:
         messages.append({"role": "assistant", "content": lcoe_context})
 
         try:
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_generation_model,
+            resp = await self._acomplete(
+                ModelRole.GENERATION,
+                Complexity.STANDARD,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=400,
             )
-            await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content or lcoe_context
         except Exception:
             return lcoe_context
@@ -829,21 +826,14 @@ class ChatGenerationMixin:
         }
 
         try:
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            resp = await self._acomplete(
+                ModelRole.ORCHESTRATION,
+                Complexity.STANDARD,
                 messages=[{"role": "user", "content": prompt}],
                 tools=[tool_def],
                 tool_choice={"type": "function", "function": {"name": "propose_value"}},
                 temperature=0,
                 max_tokens=320,
-            )
-            await record_usage_from_response(
-                self.user_id,
-                settings.openai_orchestration_model,
-                resp,
-                self.db,
-                is_byok=self._is_byok,
             )
             tool_calls = resp.choices[0].message.tool_calls
             if not tool_calls:
@@ -947,16 +937,15 @@ class ChatGenerationMixin:
             extraction_prompt += f"\n\nHint: the field being investigated is likely '{hint_field_name}' ({hint_model_type} model)."
 
         try:
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            resp = await self._acomplete(
+                ModelRole.ORCHESTRATION,
+                Complexity.STANDARD,
                 messages=[{"role": "user", "content": extraction_prompt}],
                 tools=[tool_def],
                 tool_choice={"type": "function", "function": {"name": "extract_proposal"}},
                 temperature=0,
                 max_tokens=300,
             )
-            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
             tool_calls = resp.choices[0].message.tool_calls
             if not tool_calls:
                 return None
@@ -1064,20 +1053,13 @@ class ChatGenerationMixin:
         messages.append({"role": "user", "content": user_message})
 
         try:
-            client = await self._get_client()
             async def _generate(curr_messages: list[dict[str, str]]) -> str:
-                resp = await client.chat.completions.create(
-                    model=settings.openai_generation_model,
+                resp = await self._acomplete(
+                    ModelRole.GENERATION,
+                    Complexity.STANDARD,
                     messages=curr_messages,
                     temperature=0.2,
                     max_tokens=260,
-                )
-                await record_usage_from_response(
-                    self.user_id,
-                    settings.openai_generation_model,
-                    resp,
-                    self.db,
-                    is_byok=self._is_byok,
                 )
                 return resp.choices[0].message.content or ""
 
@@ -1163,14 +1145,13 @@ class ChatGenerationMixin:
         messages.append({"role": "user", "content": user_message})
 
         try:
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_generation_model,
+            resp = await self._acomplete(
+                ModelRole.GENERATION,
+                Complexity.STANDARD,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=800,
             )
-            await record_usage_from_response(self.user_id, settings.openai_generation_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"Template investigate answer failed: {e}", exc_info=True)
@@ -1266,21 +1247,13 @@ class ChatGenerationMixin:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
 
-        client = await self._get_client()
-
         async def _generate(curr_messages: list[dict[str, str]]) -> str:
-            resp = await client.chat.completions.create(
-                model=settings.openai_generation_model,
+            resp = await self._acomplete(
+                ModelRole.GENERATION,
+                Complexity.STANDARD,
                 messages=curr_messages,
                 temperature=0.4,
                 max_tokens=1200,
-            )
-            await record_usage_from_response(
-                self.user_id,
-                settings.openai_generation_model,
-                resp,
-                self.db,
-                is_byok=self._is_byok,
             )
             return resp.choices[0].message.content or ""
 

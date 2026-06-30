@@ -90,21 +90,10 @@ async def test_user_has_byok_filters_providers():
 async def test_llm_json_records_usage(monkeypatch):
     from app.assessments.utils import llm_json
 
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock(message=MagicMock(content='{"ok": true}'))]
-    mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
-
-    mock_client = AsyncMock()
-    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-
-    record_mock = AsyncMock()
-    monkeypatch.setattr(
-        "app.core.llm_client.get_openai_client",
-        AsyncMock(return_value=(mock_client, False)),
-    )
-    monkeypatch.setattr("app.core.llm_client.record_usage_from_response", record_mock)
+    acompletion_json_mock = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr("app.core.llm_invoke.acompletion_json", acompletion_json_mock)
 
     db = AsyncMock()
     result = await llm_json("sys", "user", user_id="u1", db=db)
     assert result == {"ok": True}
-    record_mock.assert_awaited_once()
+    acompletion_json_mock.assert_awaited_once()

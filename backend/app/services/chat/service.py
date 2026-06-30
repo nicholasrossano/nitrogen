@@ -13,7 +13,9 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_client import get_openai_client
+from app.core.model_catalog import Complexity, ModelRole
+from app.core.llm_invoke import acompletion
 from app.services.assumptions import (
     AssumptionActor,
     extract_assumptions_from_cited_chat_sources,
@@ -70,6 +72,22 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
         if self._client is None:
             self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
         return self._client
+
+    async def _acomplete(
+        self,
+        role: ModelRole,
+        complexity: Complexity,
+        messages: list,
+        **kwargs: Any,
+    ):
+        return await acompletion(
+            self.user_id,
+            self.db,
+            role=role,
+            complexity=complexity,
+            messages=messages,
+            **kwargs,
+        )
 
     def _build_tool_context(
         self,
@@ -783,8 +801,9 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
         }
         try:
             client = await self._get_client()
-            response = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            response = await self._acomplete(
+                ModelRole.ORCHESTRATION,
+                Complexity.STANDARD,
                 messages=[
                     {
                         "role": "system",
@@ -804,10 +823,6 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
                     },
                 }],
                 tool_choice={"type": "function", "function": {"name": "extract_inputs"}},
-            )
-            await record_usage_from_response(
-                self.user_id, settings.openai_orchestration_model, response,
-                self.db, is_byok=self._is_byok,
             )
             tool_call = response.choices[0].message.tool_calls[0]
             extracted = json.loads(tool_call.function.arguments)

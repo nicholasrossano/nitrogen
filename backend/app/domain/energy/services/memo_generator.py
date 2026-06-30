@@ -5,7 +5,8 @@ from pathlib import Path
 import json
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
 from app.domain.resolver import get_domain_prompt_path
 from app.models.project import Project
 from app.models.memo import Citation
@@ -24,7 +25,7 @@ class MemoGeneratorService:
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
         self.model = settings.openai_model
-        self.rag = RAGService(db)
+        self.rag = RAGService(db, user_id=user_id)
 
     async def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -114,9 +115,11 @@ Constraints: {', '.join(initiative.constraints) if initiative.constraints else '
         
         system_prompt = self._load_generation_prompt()
         
-        client = await self._get_client()
-        response = await client.chat.completions.create(
-            model=self.model,
+        response = await acompletion(
+            self.user_id,
+            self.db,
+            role=ModelRole.GENERATION,
+            complexity=Complexity.HEAVY,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -175,7 +178,6 @@ Generate a structured memo with the following sections. Use citation numbers [1]
             tool_choice={"type": "function", "function": {"name": "generate_memo"}},
             temperature=0.7,
         )
-        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
         
         # Parse response
         tool_call = response.choices[0].message.tool_calls[0]

@@ -98,9 +98,10 @@ class Settings(BaseSettings):
     starter_usage_limit_usd: float = 14.0
     pro_usage_limit_usd: float = 42.0
 
-    # OpenRouter (platform routing — used when model_routing_enabled ships)
+    # OpenRouter (platform routing when model_routing_enabled)
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    model_routing_enabled: bool = False
 
     # Encryption key for BYOK API keys at rest (Fernet key)
     api_key_encryption_key: str = ""

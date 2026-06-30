@@ -173,7 +173,7 @@ class TieredRetrievalService:
         self.user_id = user_id
         self._client: AsyncOpenAI | None = None
         self._is_byok: bool = False
-        self.rag = RAGService(db)
+        self.rag = RAGService(db, user_id=user_id)
         self.workspace_knowledge = WorkspaceKnowledgeService(db, user_id=user_id)
         self.openalex = OpenAlexService()
         self._retrieval_connectors = None
@@ -653,88 +653,65 @@ class TieredRetrievalService:
         search_context_size: str = "medium",
     ) -> list[RetrievedFact]:
         """
-        Search the web using OpenAI's built-in web_search tool.
-
-        Makes a Responses API call with web_search enabled, then extracts
-        cited sources as RetrievedFact objects for the evidence pipeline.
+        Search the web using the active provider's native search (OpenAI Responses or OpenRouter :online).
         """
         try:
             from urllib.parse import urlparse
 
-            client = await self._get_client()
-            resp = await asyncio.wait_for(
-                client.responses.create(
-                    model=settings.openai_orchestration_model,
-                    tools=[{"type": "web_search", "search_context_size": search_context_size}],
-                    input=(
-                        f"Search the web for the most relevant and authoritative information about: {query}\n\n"
-                        "Summarize the most relevant findings, citing authoritative sources."
-                    ),
-                ),
-                timeout=self.WEB_SEARCH_TIMEOUT_SECONDS,
+            from app.core.web_search import run_web_search
+
+            summary, citations = await run_web_search(
+                self.user_id,
+                self.db,
+                query,
+                search_context_size=search_context_size,
+                is_byok=self._is_byok,
             )
-            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
 
             facts: list[RetrievedFact] = []
             seen_urls: set[str] = set()
-            total_annotations = 0
-            total_url_citations = 0
 
-            for item in resp.output:
-                if getattr(item, "type", None) != "message":
+            for cite in citations:
+                url = cite.get("url", "")
+                title = cite.get("title", "") or "Web Source"
+                if not url or url in seen_urls:
                     continue
-                for block in item.content:
-                    text = getattr(block, "text", "") or ""
-                    annotations = getattr(block, "annotations", []) or []
-                    total_annotations += len(annotations)
-                    for ann in annotations:
-                        if getattr(ann, "type", None) != "url_citation":
-                            continue
-                        total_url_citations += 1
-                        url = getattr(ann, "url", "") or ""
-                        title = getattr(ann, "title", "") or "Web Source"
-                        if not url or url in seen_urls:
-                            continue
-                        seen_urls.add(url)
-
-                        start = getattr(ann, "start_index", 0)
-                        end = getattr(ann, "end_index", start)
-                        snippet_start = text.rfind(".", 0, max(0, start - 300))
-                        snippet_start = snippet_start + 1 if snippet_start >= 0 else max(0, start - 300)
-                        snippet_end = text.find(".", end, end + 300)
-                        snippet_end = snippet_end + 1 if snippet_end >= 0 else min(len(text), end + 300)
-                        snippet = text[snippet_start:snippet_end].strip()
-
-                        domain: str | None = None
-                        try:
-                            domain = urlparse(url).netloc.lstrip("www.") or None
-                        except Exception:
-                            pass
-
-                        facts.append(
-                            RetrievedFact(
-                                content=snippet[:max_content_length] if snippet else title,
-                                source_type=SourceType.WEB,
-                                source_title=title,
-                                source_url=url,
-                                confidence=0.7,
-                                publisher=domain,
-                            )
-                        )
-
-            facts = [f for f in facts if len(f.content) >= 50]
-
-            logger.info(
-                "search_web query=%r  annotations=%d  url_citations=%d  unique_facts=%d",
-                query[:80], total_annotations, total_url_citations, len(facts),
-            )
-            if not facts:
-                output_types = [getattr(item, "type", "unknown") for item in resp.output]
-                logger.warning(
-                    "search_web returned 0 facts for query=%r  output_types=%r",
-                    query[:80], output_types,
+                seen_urls.add(url)
+                snippet = cite.get("snippet") or summary[:max_content_length]
+                domain: str | None = None
+                try:
+                    domain = urlparse(url).netloc.lstrip("www.") or None
+                except Exception:
+                    pass
+                facts.append(
+                    RetrievedFact(
+                        content=snippet[:max_content_length] if snippet else title,
+                        source_type=SourceType.WEB,
+                        source_title=title,
+                        source_url=url,
+                        confidence=0.7,
+                        publisher=domain,
+                    )
                 )
 
+            if not facts and summary:
+                facts.append(
+                    RetrievedFact(
+                        content=summary[:max_content_length],
+                        source_type=SourceType.WEB,
+                        source_title="Web search summary",
+                        source_url="",
+                        confidence=0.6,
+                    )
+                )
+
+            facts = [f for f in facts if len(f.content) >= 50 or not f.source_url]
+
+            logger.info(
+                "search_web query=%r unique_facts=%d",
+                query[:80],
+                len(facts),
+            )
             return facts[:max_results]
         except TimeoutError:
             logger.warning(

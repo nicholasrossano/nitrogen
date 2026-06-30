@@ -137,6 +137,15 @@ async def get_openai_client(
                     provider,
                 )
 
+    if settings.model_routing_enabled and settings.openrouter_api_key:
+        return (
+            AsyncOpenAI(
+                api_key=settings.openrouter_api_key,
+                base_url=settings.openrouter_base_url,
+            ),
+            False,
+        )
+
     return AsyncOpenAI(api_key=settings.openai_api_key), False
 
 
