@@ -31,7 +31,7 @@ stripe>=15.1.0
 cryptography>=42.0.0
 
 # Rate limiting
-slowapi>=0.1.9
+slowapi>=0.1.10
 
 # Utilities
 pydantic>=2.5.3
