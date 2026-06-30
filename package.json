@@ -10,7 +10,9 @@
     "scan:largest": "scripts/largest_files.sh",
     "security:check": "scripts/security_check.sh",
     "security:release": "scripts/oss_pre_release.sh",
+    "dev:setup": "scripts/setup.sh",
     "dev:check-env": "scripts/check_dev_env.sh",
+    "dev:daemon": "scripts/dev_daemon.sh",
     "dev:emulator": "scripts/start_emulator.sh"
   },
   "devDependencies": {
