@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.auth import AuthUser, get_current_user
 from app.core.billing_guard import require_ai_access
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_project_editor, require_project_viewer
 from app.core.database import get_db
 from app.plans.registry import get_plan_registry
 from app.services.deep_dive import DeepDiveService
@@ -52,25 +52,25 @@ class AddPlanItemRequest(BaseModel):
     phase_id: str | None = None
 
 
-@router.get("/initiatives/{initiative_id}/project-plan")
+@router.get("/projects/{project_id}/project-plan")
 async def get_project_plan(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Return the cached project plan, or null if none exists."""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
     return {"project_plan": _ensure_plan_metadata(db, user.uid, initiative.project_plan)}
 
 
-@router.post("/initiatives/{initiative_id}/project-plan")
+@router.post("/projects/{project_id}/project-plan")
 async def generate_project_plan(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(require_ai_access),
 ):
     """Generate a new project plan (or refresh the existing one)."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     if not initiative.project_description and not initiative.title:
         raise HTTPException(
@@ -87,7 +87,7 @@ async def generate_project_plan(
             existing_plan=existing_plan,
         )
     except Exception:
-        logger.exception("Project plan generation failed for %s", initiative_id)
+        logger.exception("Project plan generation failed for %s", project_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Plan generation failed. Please try again.",
@@ -101,9 +101,9 @@ async def generate_project_plan(
     return {"project_plan": plan}
 
 
-@router.patch("/initiatives/{initiative_id}/project-plan/items/{item_id}/status")
+@router.patch("/projects/{project_id}/project-plan/items/{item_id}/status")
 async def update_plan_item_status(
-    initiative_id: str,
+    project_id: str,
     item_id: str,
     body: StatusUpdate,
     db: AsyncSession = Depends(get_db),
@@ -117,7 +117,7 @@ async def update_plan_item_status(
             detail=f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
         )
 
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -183,15 +183,15 @@ def _serialize_deep_dive(result) -> dict:
     }
 
 
-@router.delete("/initiatives/{initiative_id}/project-plan/items/{item_id}")
+@router.delete("/projects/{project_id}/project-plan/items/{item_id}")
 async def delete_plan_item(
-    initiative_id: str,
+    project_id: str,
     item_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove a single item from the project plan."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -215,16 +215,16 @@ async def delete_plan_item(
     return {"success": True, "item_id": item_id}
 
 
-@router.delete("/initiatives/{initiative_id}/project-plan/items/{item_id}/elements/{element_index}")
+@router.delete("/projects/{project_id}/project-plan/items/{item_id}/elements/{element_index}")
 async def delete_plan_element(
-    initiative_id: str,
+    project_id: str,
     item_id: str,
     element_index: int,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Remove an element by index from a deep-dive result cached in the project plan."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -247,16 +247,16 @@ async def delete_plan_element(
     return {"success": True, "item_id": item_id, "element_index": element_index}
 
 
-@router.post("/initiatives/{initiative_id}/project-plan/pillars/{pillar_id}/items")
+@router.post("/projects/{project_id}/project-plan/pillars/{pillar_id}/items")
 async def add_plan_item(
-    initiative_id: str,
+    project_id: str,
     pillar_id: str,
     body: AddPlanItemRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Add a new item to a specific pillar in the project plan."""
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     if not initiative.project_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No project plan exists")
@@ -297,9 +297,9 @@ async def add_plan_item(
     return {"success": True, "item": new_item}
 
 
-@router.post("/initiatives/{initiative_id}/project-plan/items/{item_id}/deep-dive")
+@router.post("/projects/{project_id}/project-plan/items/{item_id}/deep-dive")
 async def deep_dive_plan_item(
-    initiative_id: str,
+    project_id: str,
     item_id: str,
     body: DeepDiveRequest,
     db: AsyncSession = Depends(get_db),
@@ -310,7 +310,7 @@ async def deep_dive_plan_item(
     Results are cached inside project_plan.deep_dives[item_id] so subsequent
     requests for the same item are returned instantly without re-running research.
     """
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     service = DeepDiveService(db, user_id=user.uid)
 
@@ -336,7 +336,7 @@ async def deep_dive_plan_item(
             )
         except Exception:
             logger.exception(
-                "Deep dive failed for item %s in initiative %s", item_id, initiative_id
+                "Deep dive failed for item %s in initiative %s", item_id, project_id
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -37,7 +37,7 @@ class MemoContent(BaseModel):
 class MemoResponse(BaseModel):
     """Response containing the generated memo"""
     id: UUID
-    initiative_id: UUID
+    project_id: UUID
     content: MemoContent
     created_at: datetime
     

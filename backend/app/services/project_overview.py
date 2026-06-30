@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.project_material import ProjectMaterial
 
 settings = get_settings()
@@ -33,7 +33,7 @@ def _format_project_type(value: str | None) -> str | None:
 
 
 def _build_overview_prompt(
-    initiative: Initiative,
+    initiative: Project,
     source_summaries: list[dict[str, str]],
 ) -> tuple[str, str]:
     metadata_lines = [
@@ -71,10 +71,10 @@ def _build_overview_prompt(
     return system_prompt, user_prompt
 
 
-async def _load_source_summaries(db: AsyncSession, initiative_id) -> list[dict[str, str]]:
+async def _load_source_summaries(db: AsyncSession, project_id) -> list[dict[str, str]]:
     material_result = await db.execute(
         select(ProjectMaterial)
-        .where(ProjectMaterial.initiative_id == initiative_id)
+        .where(ProjectMaterial.project_id == project_id)
         .order_by(ProjectMaterial.created_at.desc())
     )
     materials = material_result.scalars().all()
@@ -82,7 +82,7 @@ async def _load_source_summaries(db: AsyncSession, initiative_id) -> list[dict[s
     evidence_result = await db.execute(
         select(EvidenceDoc)
         .where(
-            EvidenceDoc.initiative_id == initiative_id,
+            EvidenceDoc.project_id == project_id,
             EvidenceDoc.storage_path.isnot(None),
         )
         .order_by(EvidenceDoc.created_at.desc())
@@ -126,9 +126,9 @@ async def _load_source_summaries(db: AsyncSession, initiative_id) -> list[dict[s
     return trimmed[:MAX_SOURCES]
 
 
-async def generate_initiative_overview(
+async def generate_project_overview(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     user_id: str | None,
 ) -> str:
     source_summaries = await _load_source_summaries(db, initiative.id)

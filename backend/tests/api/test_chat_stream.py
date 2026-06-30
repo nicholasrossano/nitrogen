@@ -77,12 +77,12 @@ def _get_complete_event(response):
 @pytest.mark.asyncio
 async def test_chat_stream_returns_proposed_value_widget_for_project_route(monkeypatch: pytest.MonkeyPatch):
     fake_db = _FakeDbSession()
-    initiative_id = uuid.uuid4()
+    project_id = uuid.uuid4()
     chat_id = uuid.uuid4()
     assumption_id = uuid.uuid4()
     fake_db.assumptions[assumption_id] = SimpleNamespace(
         id=assumption_id,
-        initiative_id=initiative_id,
+        project_id=project_id,
         label="Capacity factor",
         key="capacity_factor",
         status="assumed",
@@ -97,18 +97,18 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, project_id=None, assumption_id=None):
         assert assumption_id is not None
         return SimpleNamespace(
             id=chat_id,
-            initiative_id=initiative_id,
-            compare_initiative_ids=None,
+            project_id=project_id,
+            compare_project_ids=None,
             assumption_id=assumption_id,
         )
 
-    async def fake_get_initiative_with_role(_db, _initiative_id, _user):
+    async def fake_get_project_with_role(_db, _initiative_id, _user):
         initiative = SimpleNamespace(
-            id=initiative_id,
+            id=project_id,
             title="Test project",
             project_type="solar",
             project_description="A test project",
@@ -129,7 +129,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
         **kwargs,
     ):
         assert user_message == "Please investigate capacity factor."
-        assert kwargs["initiative_id"] == str(initiative_id)
+        assert kwargs["project_id"] == str(project_id)
         assert kwargs["field_context"]["field_name"] == "capacity_factor"
         return chat_api.ServiceChatResponse(
             content="Try 42%.",
@@ -149,7 +149,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
     app.dependency_overrides[chat_api.get_db] = override_db
     app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
-    monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
+    monkeypatch.setattr(chat_api, "get_project_with_role", fake_get_project_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
     monkeypatch.setattr(chat_api.ChatService, "generate_response", fake_generate_response)
 
@@ -163,7 +163,7 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
                 json={
                     "content": "Please investigate capacity factor.",
                     "history": [],
-                    "initiative_id": str(initiative_id),
+                    "project_id": str(project_id),
                     "field_context": {
                         "field_name": "capacity_factor",
                         "label": "Capacity factor",
@@ -193,12 +193,12 @@ async def test_chat_stream_returns_proposed_value_widget_for_project_route(monke
 async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monkeypatch: pytest.MonkeyPatch):
     """tool_hint matches a workspace-flow assessment, but assumption-scoped sends must not reopen the module."""
     fake_db = _FakeDbSession()
-    initiative_id = uuid.uuid4()
+    project_id = uuid.uuid4()
     chat_id = uuid.uuid4()
     assumption_id = uuid.uuid4()
     fake_db.assumptions[assumption_id] = SimpleNamespace(
         id=assumption_id,
-        initiative_id=initiative_id,
+        project_id=project_id,
         label="Fuel savings %",
         key="fuel_savings_pct",
         status="assumed",
@@ -213,18 +213,18 @@ async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monk
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, project_id=None, assumption_id=None):
         assert assumption_id is not None
         return SimpleNamespace(
             id=chat_id,
-            initiative_id=initiative_id,
-            compare_initiative_ids=None,
+            project_id=project_id,
+            compare_project_ids=None,
             assumption_id=assumption_id,
         )
 
-    async def fake_get_initiative_with_role(_db, _initiative_id, _user):
+    async def fake_get_project_with_role(_db, _initiative_id, _user):
         initiative = SimpleNamespace(
-            id=initiative_id,
+            id=project_id,
             title="Test project",
             project_type="solar",
             project_description="A test project",
@@ -263,7 +263,7 @@ async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monk
     app.dependency_overrides[chat_api.get_db] = override_db
     app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
-    monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
+    monkeypatch.setattr(chat_api, "get_project_with_role", fake_get_project_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
     monkeypatch.setattr(chat_api.ChatService, "generate_response", fake_generate_response)
 
@@ -277,7 +277,7 @@ async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monk
                 json={
                     "content": "Can you investigate and propose a value for Fuel savings %?",
                     "history": [],
-                    "initiative_id": str(initiative_id),
+                    "project_id": str(project_id),
                     "tool_hint": "carbon_model",
                     "field_context": {
                         "field_name": "fuel_savings_pct",
@@ -304,7 +304,7 @@ async def test_chat_stream_assumption_investigate_skips_workspace_tool_hint(monk
 @pytest.mark.asyncio
 async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypatch: pytest.MonkeyPatch):
     fake_db = _FakeDbSession()
-    initiative_id = uuid.uuid4()
+    project_id = uuid.uuid4()
     chat_id = uuid.uuid4()
 
     async def override_db():
@@ -313,17 +313,17 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, project_id=None, assumption_id=None):
         return SimpleNamespace(
             id=chat_id,
-            initiative_id=initiative_id,
-            compare_initiative_ids=None,
+            project_id=project_id,
+            compare_project_ids=None,
             assumption_id=None,
         )
 
-    async def fake_get_initiative_with_role(_db, _initiative_id, _user):
+    async def fake_get_project_with_role(_db, _initiative_id, _user):
         initiative = SimpleNamespace(
-            id=initiative_id,
+            id=project_id,
             title=None,
             project_type=None,
             project_description=None,
@@ -340,7 +340,7 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
 
     async def fake_should_trigger_initial_project_onboarding(_db, *, user_id, initiative, current_user_message_id):
         assert user_id == "user-1"
-        assert initiative.id == initiative_id
+        assert initiative.id == project_id
         assert current_user_message_id is not None
         return True
 
@@ -356,7 +356,7 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
     app.dependency_overrides[chat_api.get_db] = override_db
     app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
-    monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
+    monkeypatch.setattr(chat_api, "get_project_with_role", fake_get_project_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
     monkeypatch.setattr(
         chat_api,
@@ -376,7 +376,7 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
                 json={
                     "content": "Testing",
                     "history": [],
-                    "initiative_id": str(initiative_id),
+                    "project_id": str(project_id),
                     "allow_initial_project_onboarding": True,
                 },
             )
@@ -389,13 +389,13 @@ async def test_chat_stream_short_circuits_to_initial_project_onboarding(monkeypa
 
     assert complete_event["widget_type"] == "document_request"
     assert complete_event["content"].startswith("Please upload any relevant project materials")
-    assert extract_calls == [("Testing", initiative_id)]
+    assert extract_calls == [("Testing", project_id)]
 
 
 @pytest.mark.asyncio
 async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_false(monkeypatch: pytest.MonkeyPatch):
     fake_db = _FakeDbSession()
-    initiative_id = uuid.uuid4()
+    project_id = uuid.uuid4()
     chat_id = uuid.uuid4()
 
     async def override_db():
@@ -404,17 +404,17 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
     async def override_ai_access():
         return SimpleNamespace(uid="user-1", id="user-1", email="test@example.com")
 
-    async def fake_get_or_create_chat(_db, _user_id, _chat_id, initiative_id=None, assumption_id=None):
+    async def fake_get_or_create_chat(_db, _user_id, _chat_id, project_id=None, assumption_id=None):
         return SimpleNamespace(
             id=chat_id,
-            initiative_id=initiative_id,
-            compare_initiative_ids=None,
+            project_id=project_id,
+            compare_project_ids=None,
             assumption_id=None,
         )
 
-    async def fake_get_initiative_with_role(_db, _initiative_id, _user):
+    async def fake_get_project_with_role(_db, _initiative_id, _user):
         initiative = SimpleNamespace(
-            id=initiative_id,
+            id=project_id,
             title=None,
             project_type=None,
             project_description=None,
@@ -431,7 +431,7 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
 
     async def fake_should_trigger_initial_project_onboarding(_db, *, user_id, initiative, current_user_message_id):
         assert user_id == "user-1"
-        assert initiative.id == initiative_id
+        assert initiative.id == project_id
         assert current_user_message_id is not None
         return False
 
@@ -447,7 +447,7 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
     app.dependency_overrides[chat_api.get_db] = override_db
     app.dependency_overrides[chat_api.require_ai_access] = override_ai_access
     monkeypatch.setattr(chat_api, "_get_or_create_chat", fake_get_or_create_chat)
-    monkeypatch.setattr(chat_api, "get_initiative_with_role", fake_get_initiative_with_role)
+    monkeypatch.setattr(chat_api, "get_project_with_role", fake_get_project_with_role)
     monkeypatch.setattr(chat_api, "build_context", fake_build_context)
     monkeypatch.setattr(
         chat_api,
@@ -467,7 +467,7 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
                 json={
                     "content": "Testing",
                     "history": [],
-                    "initiative_id": str(initiative_id),
+                    "project_id": str(project_id),
                     "allow_initial_project_onboarding": True,
                 },
             )
@@ -480,4 +480,4 @@ async def test_chat_stream_short_circuits_for_first_turn_even_if_global_guard_fa
 
     assert complete_event["widget_type"] == "document_request"
     assert complete_event["content"].startswith("Please upload any relevant project materials")
-    assert extract_calls == [("Testing", initiative_id)]
+    assert extract_calls == [("Testing", project_id)]

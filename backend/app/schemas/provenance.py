@@ -80,7 +80,7 @@ class ItemProvenance(BaseModel):
 class ProvenanceTraceCreate(BaseModel):
     """Schema for writing a new provenance trace row."""
 
-    initiative_id: Optional[UUID] = None
+    project_id: Optional[UUID] = None
     chat_id: Optional[UUID] = Field(
         None, description="Core-chat ID when not tied to an initiative"
     )
@@ -109,7 +109,7 @@ class ProvenanceTraceResponse(BaseModel):
     """Read-only representation of a stored trace."""
 
     id: UUID
-    initiative_id: Optional[UUID] = None
+    project_id: Optional[UUID] = None
     chat_id: Optional[UUID] = None
     trigger: str
     trigger_ref: Optional[str] = None

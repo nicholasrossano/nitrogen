@@ -776,7 +776,7 @@ def _register_resources(registry: CapabilityRegistry) -> None:
                         CapabilityRoute.PROJECT_CHAT,
                         CapabilityRoute.PROJECT_ORCHESTRATION,
                     ],
-                    visibility="internal" if definition.initiative_scoped else "public",
+                    visibility="internal" if definition.project_scoped else "public",
                 )
             )
     except Exception:

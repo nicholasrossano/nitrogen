@@ -6,10 +6,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 
-from app.api import initiatives as initiatives_api
+from app.api import projects as projects_api
 from app.core.auth import AuthUser
 from app.main import app
-from app.models.initiative import Initiative
+from app.models.project import Project
 
 
 class _FakeScalarResult:
@@ -28,7 +28,7 @@ class _FakeExecuteResult:
         return _FakeScalarResult(self._items)
 
 
-class _FakeInitiativeCreateDb:
+class _FakeProjectCreateDb:
     """Fake enough DB behavior to catch slug/constraint mismatches."""
 
     def __init__(self):
@@ -45,7 +45,7 @@ class _FakeInitiativeCreateDb:
     def add(self, obj):
         if getattr(obj, "id", None) is None:
             obj.id = uuid.uuid4()
-        if isinstance(obj, Initiative):
+        if isinstance(obj, Project):
             obj.sector = obj.sector or "general"
             obj.stage = obj.stage or "describe"
             obj.stage_1_complete = bool(obj.stage_1_complete)
@@ -58,7 +58,7 @@ class _FakeInitiativeCreateDb:
         self.added.append(obj)
 
     async def commit(self):
-        created = next((obj for obj in self.added if isinstance(obj, Initiative)), None)
+        created = next((obj for obj in self.added if isinstance(obj, Project)), None)
         if created and created.slug == "project":
             raise IntegrityError(
                 "insert initiative",
@@ -78,7 +78,7 @@ async def test_create_initiative_uses_user_scoped_slug_for_cross_workspace_dupli
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Creating a blank project in another workspace must not reuse a user's existing slug."""
-    fake_db = _FakeInitiativeCreateDb()
+    fake_db = _FakeProjectCreateDb()
     user = AuthUser(uid="user-1", email="owner@example.com")
     team_workspace = SimpleNamespace(id=uuid.uuid4())
 
@@ -95,7 +95,7 @@ async def test_create_initiative_uses_user_scoped_slug_for_cross_workspace_dupli
         assert workspace_id == team_workspace.id
         return team_workspace, SimpleNamespace(role="owner")
 
-    def fake_initiative_to_response(initiative, *, shared_role=None, owner_email=None):
+    def fake_project_to_response(initiative, *, shared_role=None, owner_email=None):
         return {
             "id": initiative.id,
             "slug": initiative.slug,
@@ -132,11 +132,11 @@ async def test_create_initiative_uses_user_scoped_slug_for_cross_workspace_dupli
             "owner_email": owner_email,
         }
 
-    app.dependency_overrides[initiatives_api.get_db] = override_db
-    app.dependency_overrides[initiatives_api.get_current_user] = override_user
-    monkeypatch.setattr(initiatives_api, "ensure_user_exists", fake_ensure_user_exists)
-    monkeypatch.setattr(initiatives_api, "resolve_workspace_for_user", fake_resolve_workspace_for_user)
-    monkeypatch.setattr(initiatives_api, "_initiative_to_response", fake_initiative_to_response)
+    app.dependency_overrides[projects_api.get_db] = override_db
+    app.dependency_overrides[projects_api.get_current_user] = override_user
+    monkeypatch.setattr(projects_api, "ensure_user_exists", fake_ensure_user_exists)
+    monkeypatch.setattr(projects_api, "resolve_workspace_for_user", fake_resolve_workspace_for_user)
+    monkeypatch.setattr(projects_api, "_project_to_response", fake_project_to_response)
 
     try:
         async with AsyncClient(

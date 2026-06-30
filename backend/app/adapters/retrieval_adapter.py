@@ -32,9 +32,9 @@ class RetrievalAdapter(BaseAdapter):
                         "type": "string",
                         "description": "Research question or retrieval query to execute.",
                     },
-                    "initiative_id": {
+                    "project_id": {
                         "type": "string",
-                        "description": "Initiative UUID used to scope project evidence and permissions.",
+                        "description": "Project UUID used to scope project evidence and permissions.",
                     },
                     "include_openalex": {
                         "type": "boolean",
@@ -53,7 +53,7 @@ class RetrievalAdapter(BaseAdapter):
                         "description": "Whether to require citation-backed facts in the final result.",
                     },
                 },
-                "required": ["query", "initiative_id"],
+                "required": ["query", "project_id"],
             },
             output_schema={
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -77,7 +77,7 @@ class RetrievalAdapter(BaseAdapter):
                     },
                 },
             },
-            initiative_scope_required=True,
+            project_scope_required=True,
             visibility=adapter_visibility("retrieval", "internal"),
             capabilities=["async"],
         )
@@ -91,14 +91,14 @@ class RetrievalAdapter(BaseAdapter):
         started = time.perf_counter()
         service = TieredRetrievalService(db, user_id=ctx.user_id)
 
-        initiative_id = inputs.get("initiative_id")
-        if initiative_id is None and ctx.initiative_id is not None:
-            initiative_id = str(ctx.initiative_id)
-        initiative_uuid = UUID(initiative_id) if initiative_id else None
+        project_id = inputs.get("project_id")
+        if project_id is None and ctx.project_id is not None:
+            project_id = str(ctx.project_id)
+        initiative_uuid = UUID(project_id) if project_id else None
 
         result = await service.retrieve(
             query=inputs["query"],
-            initiative_id=initiative_uuid,
+            project_id=initiative_uuid,
             include_openalex=inputs.get("include_openalex", False),
             include_web_search=inputs.get("include_web_search", True),
             include_llm_fallback=inputs.get("include_llm_fallback", True),

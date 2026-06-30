@@ -124,7 +124,7 @@ class ProjectToolExecutor:
                 yield_msg = params.get("message", "Building your LCOE model…")
                 tool_output = await lcoe_tool.execute(
                     db=self.chat_service.db,
-                    initiative_id=initiative.id,
+                    project_id=initiative.id,
                     inputs=initiative.tool_inputs or {},
                 )
                 content = tool_output.content
@@ -185,7 +185,7 @@ class ProjectToolExecutor:
                 yield_msg = params.get("message", "Building your carbon emissions model…")
                 tool_output = await carbon_tool.execute(
                     db=self.chat_service.db,
-                    initiative_id=initiative.id,
+                    project_id=initiative.id,
                     inputs=initiative.tool_inputs or {},
                 )
                 content = tool_output.content

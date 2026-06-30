@@ -8,7 +8,7 @@ from app.services.agent_runner_service import _find_next_pending_stage, derive_a
 def _make_instance() -> AssessmentInstance:
     return AssessmentInstance(
         id=uuid4(),
-        initiative_id=uuid4(),
+        project_id=uuid4(),
         assessment_id="lcoe_model",
         instance_number=1,
         status="started",

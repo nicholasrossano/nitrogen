@@ -16,7 +16,7 @@ from app.core.database import get_db
 from app.core.execution_context import build_context
 from app.core.auth import get_current_user, AuthUser, MockUser
 from app.core.billing_guard import require_ai_access
-from app.core.permissions import get_initiative_with_role
+from app.core.permissions import get_project_with_role
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
 from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
@@ -24,7 +24,7 @@ from app.services.assumptions import format_assumptions_for_initiative_prompt
 from app.services import assessment_service
 from app.models.assumption import Assumption
 from app.models.chat import CoreChat, CoreChatMessage
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.project_material import ProjectMaterial
 from app.core.rate_limit import limiter
 from app.schemas.chat import FieldContext
@@ -42,7 +42,7 @@ def _log_chat_stream_debug(event: str, **fields) -> None:
     logger.info("[chat-stream-debug] %s %s", event, serialized)
 
 
-def _build_project_context(initiative: Initiative, assumptions_text: str | None = None) -> str:
+def _build_project_context(initiative: Project, assumptions_text: str | None = None) -> str:
     """Build a project context string to inject into the research assistant."""
     parts = []
     if initiative.title:
@@ -181,7 +181,7 @@ def _to_title_case(text: str) -> str:
 
 async def _update_initiative_from_inputs(
     db: AsyncSession,
-    initiative: Initiative,
+    initiative: Project,
     extracted: dict,
 ) -> bool:
     """Persist extracted initiative context fields when currently unset."""
@@ -225,7 +225,7 @@ async def _should_trigger_initial_project_onboarding(
     db: AsyncSession,
     *,
     user_id: str,
-    initiative: Initiative,
+    initiative: Project,
     current_user_message_id: uuid.UUID,
 ) -> bool:
     """Only show the upload-documents onboarding widget for the first project chat."""
@@ -242,7 +242,7 @@ async def _should_trigger_initial_project_onboarding(
         .join(CoreChat, CoreChatMessage.chat_id == CoreChat.id)
         .where(
             CoreChat.user_id == user_id,
-            CoreChat.initiative_id == initiative.id,
+            CoreChat.project_id == initiative.id,
             CoreChatMessage.id != current_user_message_id,
         )
     )
@@ -255,7 +255,7 @@ async def _should_trigger_initial_project_onboarding(
 
     evidence_doc_count = await db.scalar(
         select(func.count(EvidenceDoc.id)).where(
-            EvidenceDoc.initiative_id == initiative.id,
+            EvidenceDoc.project_id == initiative.id,
         )
     )
     if (evidence_doc_count or 0) > 0:
@@ -263,7 +263,7 @@ async def _should_trigger_initial_project_onboarding(
 
     uploaded_material_count = await db.scalar(
         select(func.count(ProjectMaterial.id)).where(
-            ProjectMaterial.initiative_id == initiative.id,
+            ProjectMaterial.project_id == initiative.id,
         )
     )
     return (uploaded_material_count or 0) == 0
@@ -297,8 +297,8 @@ class ChatStreamRequest(BaseModel):
     field_context: Optional[FieldContext] = None
     model_inputs_context: Optional[str] = Field(default=None, max_length=20000)
     assessment_context: Optional[dict] = None
-    initiative_id: Optional[str] = None
-    compare_initiative_ids: Optional[list[str]] = None
+    project_id: Optional[str] = None
+    compare_project_ids: Optional[list[str]] = None
     allow_initial_project_onboarding: bool = False
     assumption_id: Optional[str] = None
     active_editor_context: Optional[dict] = None
@@ -316,7 +316,7 @@ async def _get_or_create_chat(
     db: AsyncSession,
     user_id: str,
     chat_id: Optional[str],
-    initiative_id: Optional[uuid.UUID] = None,
+    project_id: Optional[uuid.UUID] = None,
     assumption_id: Optional[uuid.UUID] = None,
 ) -> CoreChat:
     """Return an existing chat or create a new one."""
@@ -334,8 +334,8 @@ async def _get_or_create_chat(
         chat = result.scalar_one_or_none()
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
-        if initiative_id and not chat.initiative_id:
-            chat.initiative_id = initiative_id
+        if project_id and not chat.project_id:
+            chat.project_id = project_id
         if assumption_id:
             if chat.assumption_id and chat.assumption_id != assumption_id:
                 raise HTTPException(
@@ -347,7 +347,7 @@ async def _get_or_create_chat(
         await db.flush()
         return chat
 
-    chat = CoreChat(user_id=user_id, initiative_id=initiative_id, assumption_id=assumption_id)
+    chat = CoreChat(user_id=user_id, project_id=project_id, assumption_id=assumption_id)
     db.add(chat)
     await db.flush()
     return chat
@@ -355,14 +355,13 @@ async def _get_or_create_chat(
 
 @router.get("/chats")
 async def list_chats(
-    initiative_id: Optional[str] = None,
     project_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: MockUser = Depends(get_current_user),
 ):
     """Return core chats for the current user, most recent first.
 
-    When initiative_id is provided, only sessions scoped to that project are
+    When project_id is provided, only sessions scoped to that project are
     returned.  When omitted, all sessions (including unscoped ones) are returned.
     """
     from sqlalchemy import func
@@ -373,8 +372,7 @@ async def list_chats(
             CoreChat.title,
             CoreChat.created_at,
             CoreChat.updated_at,
-            CoreChat.compare_initiative_ids,
-            CoreChat.initiative_id,
+            CoreChat.compare_project_ids,
             CoreChat.project_id,
             CoreChat.assumption_id,
             func.count(CoreChatMessage.id).label("message_count"),
@@ -385,13 +383,6 @@ async def list_chats(
         .order_by(CoreChat.updated_at.desc())
         .limit(50)
     )
-
-    if initiative_id:
-        try:
-            init_uuid = uuid.UUID(initiative_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid initiative_id")
-        query = query.where(CoreChat.initiative_id == init_uuid)
 
     if project_id:
         try:
@@ -411,9 +402,8 @@ async def list_chats(
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                 "message_count": r.message_count,
-                "compare_initiative_ids": r.compare_initiative_ids,
-                "initiative_id": str(r.initiative_id) if r.initiative_id else None,
-                "project_id": str(r.project_id) if getattr(r, "project_id", None) else None,
+                "compare_project_ids": r.compare_project_ids,
+                "project_id": str(r.project_id) if r.project_id else None,
                 "assumption_id": str(r.assumption_id) if r.assumption_id else None,
             }
             for r in rows
@@ -552,7 +542,7 @@ async def associate_chat_assessment(
     if instance is None:
         raise HTTPException(status_code=404, detail="Assessment instance not found")
 
-    if chat.initiative_id and instance.initiative_id != chat.initiative_id:
+    if chat.project_id and instance.project_id != chat.project_id:
         raise HTTPException(
             status_code=400,
             detail="Assessment instance belongs to a different initiative",
@@ -614,14 +604,14 @@ async def chat_stream(
 
     async def generate():
         try:
-            # Resolve initiative_id for chat scoping.
+            # Resolve project_id for chat scoping.
             resolved_initiative_id: uuid.UUID | None = None
             requested_assumption_id: uuid.UUID | None = None
             focused_assumption: Assumption | None = None
-            if data.initiative_id:
+            if data.project_id:
                 try:
-                    resolved_initiative, _ = await get_initiative_with_role(
-                        db, data.initiative_id, user
+                    resolved_initiative, _ = await get_project_with_role(
+                        db, data.project_id, user
                     )
                     resolved_initiative_id = resolved_initiative.id
                 except HTTPException:
@@ -638,7 +628,7 @@ async def chat_stream(
                 focused_assumption = await db.get(Assumption, requested_assumption_id)
                 if focused_assumption is None:
                     raise HTTPException(status_code=404, detail="Assumption not found")
-                if resolved_initiative_id and focused_assumption.initiative_id != resolved_initiative_id:
+                if resolved_initiative_id and focused_assumption.project_id != resolved_initiative_id:
                     raise HTTPException(
                         status_code=400,
                         detail="Assumption does not belong to the selected initiative.",
@@ -649,15 +639,15 @@ async def chat_stream(
                 db,
                 user.uid,
                 data.chat_id,
-                initiative_id=resolved_initiative_id,
+                project_id=resolved_initiative_id,
                 assumption_id=requested_assumption_id,
             )
             if chat.assumption_id and focused_assumption is None:
                 focused_assumption = await db.get(Assumption, chat.assumption_id)
             if (
                 focused_assumption is not None
-                and chat.initiative_id is not None
-                and focused_assumption.initiative_id != chat.initiative_id
+                and chat.project_id is not None
+                and focused_assumption.project_id != chat.project_id
             ):
                 raise HTTPException(
                     status_code=400,
@@ -697,15 +687,15 @@ async def chat_stream(
             ctx = await build_context(db, user, resolved_initiative_id)
             ctx.chat_id = chat.id
 
-            verified_initiative: Initiative | None = None
+            verified_initiative: Project | None = None
             project_context: str | None = None
             field_context = data.field_context.model_dump() if data.field_context else None
 
             _log_chat_stream_debug(
                 "request",
                 chat_id=str(chat.id),
-                initiative_id=data.initiative_id,
-                compare=bool(data.compare_initiative_ids),
+                project_id=data.project_id,
+                compare=bool(data.compare_project_ids),
                 tool_hint=data.tool_hint,
                 field_name=(field_context or {}).get("field_name"),
                 has_field_context=bool(field_context),
@@ -719,14 +709,14 @@ async def chat_stream(
 
             # --- Compare mode ---
             compare_contexts: list[dict] | None = None
-            if data.compare_initiative_ids and len(data.compare_initiative_ids) == 2:
+            if data.compare_project_ids and len(data.compare_project_ids) == 2:
                 compare_contexts = []
-                for cid in data.compare_initiative_ids:
+                for cid in data.compare_project_ids:
                     try:
-                        initiative, _role = await get_initiative_with_role(db, cid, user)
+                        initiative, _role = await get_project_with_role(db, cid, user)
                         assumptions_text = await format_assumptions_for_initiative_prompt(db, initiative.id)
                         compare_contexts.append({
-                            "initiative_id": str(initiative.id),
+                            "project_id": str(initiative.id),
                             "project_context": _build_project_context(initiative, assumptions_text),
                             "title": initiative.title or "Untitled Project",
                         })
@@ -737,9 +727,9 @@ async def chat_stream(
 
                 if compare_contexts:
                     service = ChatService(db, ctx=ctx)
-                    # Persist compare_initiative_ids on the chat
-                    if not chat.compare_initiative_ids:
-                        chat.compare_initiative_ids = data.compare_initiative_ids
+                    # Persist compare_project_ids on the chat
+                    if not chat.compare_project_ids:
+                        chat.compare_project_ids = data.compare_project_ids
                         await db.flush()
 
                     generation_task = asyncio.create_task(
@@ -757,10 +747,10 @@ async def chat_stream(
 
             # --- Single project / normal mode ---
             if not compare_contexts:
-                if data.initiative_id:
+                if data.project_id:
                     try:
-                        verified_initiative, _role = await get_initiative_with_role(
-                            db, data.initiative_id, user
+                        verified_initiative, _role = await get_project_with_role(
+                            db, data.project_id, user
                         )
                         assumptions_text = await format_assumptions_for_initiative_prompt(db, verified_initiative.id)
                         project_context = _build_project_context(verified_initiative, assumptions_text)
@@ -869,7 +859,7 @@ async def chat_stream(
 
             if not compare_contexts:
                 _tool_hint = data.tool_hint or ""
-                if _tool_hint and data.initiative_id:
+                if _tool_hint and data.project_id:
                     from app.assessments import get_assessment_registry as _get_registry
                     from app.services.chat import ChatResponse
                     from app.services.assessment_workflow_service import (
@@ -885,7 +875,7 @@ async def chat_stream(
 
                 if (
                     _workflow_assessment
-                    and data.initiative_id
+                    and data.project_id
                     and uses_workspace_flow(_workflow_assessment)
                     and focused_assumption is None
                     and not field_context
@@ -948,7 +938,7 @@ async def chat_stream(
                             _log_chat_stream_debug(
                                 "response",
                                 chat_id=str(chat.id),
-                                initiative_id=data.initiative_id,
+                                project_id=data.project_id,
                                 widget_type=result.widget_type,
                                 has_widget_data=bool(result.widget_data),
                                 citation_count=0,
@@ -1076,7 +1066,7 @@ async def chat_stream(
                                     assessment_context=data.assessment_context or None,
                                     project_context=project_context,
                                     on_research_step=on_research_step,
-                                    initiative_id=str(verified_initiative.id),
+                                    project_id=str(verified_initiative.id),
                                     initiative=verified_initiative,
                                     active_editor_doc=active_editor_doc,
                                 )
@@ -1093,7 +1083,7 @@ async def chat_stream(
                                 assessment_context=data.assessment_context or None,
                                 project_context=project_context,
                                 on_research_step=on_research_step,
-                                initiative_id=data.initiative_id if verified_initiative else None,
+                                project_id=data.project_id if verified_initiative else None,
                                 active_editor_doc=active_editor_doc,
                             )
                         )
@@ -1113,7 +1103,7 @@ async def chat_stream(
             _log_chat_stream_debug(
                 "response",
                 chat_id=str(chat.id),
-                initiative_id=data.initiative_id,
+                project_id=data.project_id,
                 widget_type=result.widget_type,
                 has_widget_data=bool(result.widget_data),
                 citation_count=len([s for s in result.sources if s.source_type.value != "llm_estimate"]),
@@ -1326,7 +1316,7 @@ class SaveChatMessage(BaseModel):
 
 class SaveChatRequest(BaseModel):
     title: Optional[str] = None
-    initiative_id: Optional[str] = None
+    project_id: Optional[str] = None
     messages: list[SaveChatMessage]
 
 
@@ -1341,16 +1331,16 @@ async def save_chat_from_messages(
         raise HTTPException(status_code=400, detail="No messages provided")
 
     init_uuid: uuid.UUID | None = None
-    if data.initiative_id:
+    if data.project_id:
         try:
-            init_uuid = uuid.UUID(data.initiative_id)
-            await get_initiative_with_role(db, init_uuid, user)
+            init_uuid = uuid.UUID(data.project_id)
+            await get_project_with_role(db, init_uuid, user)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid initiative_id")
+            raise HTTPException(status_code=400, detail="Invalid project_id")
         except HTTPException:
             raise
 
-    chat = CoreChat(user_id=user.uid, title=data.title, initiative_id=init_uuid)
+    chat = CoreChat(user_id=user.uid, title=data.title, project_id=init_uuid)
     db.add(chat)
     await db.flush()
 

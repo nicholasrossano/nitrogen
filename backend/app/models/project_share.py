@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -25,7 +25,6 @@ class ProjectShare(Base):
         nullable=False,
         index=True,
     )
-    initiative_id = synonym("project_id")
     user_id: Mapped[str] = mapped_column(
         String(255),
         ForeignKey("users.id", ondelete="CASCADE"),

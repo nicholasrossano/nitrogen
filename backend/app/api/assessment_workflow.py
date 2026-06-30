@@ -26,8 +26,8 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.billing_guard import require_ai_access
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.filename_utils import safe_content_disposition
-from app.core.permissions import require_viewer, require_editor
-from app.models.initiative import Initiative
+from app.core.permissions import require_project_viewer, require_project_editor
+from app.models.project import Project
 from app.models.assessment_instance import (
     AssessmentAgentLoopState,
     AssessmentInstance,
@@ -106,7 +106,7 @@ async def _get_workflow_instance(
     if inst is None:
         raise HTTPException(status_code=404, detail="Assessment instance not found")
 
-    await require_viewer(db, inst.initiative_id, user)
+    await require_project_viewer(db, inst.project_id, user)
 
     registry = get_assessment_registry()
     assessment = registry.get_assessment(inst.assessment_id)
@@ -127,7 +127,7 @@ async def _get_editable_workflow_instance(
     if inst is None:
         raise HTTPException(status_code=404, detail="Assessment instance not found")
 
-    await require_editor(db, inst.initiative_id, user)
+    await require_project_editor(db, inst.project_id, user)
 
     registry = get_assessment_registry()
     assessment = registry.get_assessment(inst.assessment_id)
@@ -758,7 +758,7 @@ async def edit_item(
     stage_state["data"] = stage_data
     await sync_stage_assumptions(
         db,
-        initiative_id=inst.initiative_id,
+        project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         stage_id=stage_id,
@@ -821,7 +821,7 @@ async def add_item(
     stage_state["data"] = stage_data
     await sync_stage_assumptions(
         db,
-        initiative_id=inst.initiative_id,
+        project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         stage_id=stage_id,
@@ -1052,7 +1052,7 @@ async def enrich_stakeholder_from_map(
     if source_item is None:
         raise HTTPException(status_code=404, detail=f"Stakeholder '{item_id}' not found")
 
-    context = await get_initiative_context(db, inst.initiative_id)
+    context = await get_initiative_context(db, inst.project_id)
     records = _stakeholder_detail_records(state)
     existing = records.get(item_id) or {}
     enriched = await assessment.enrich_stakeholder_detail(
@@ -1060,7 +1060,7 @@ async def enrich_stakeholder_from_map(
         existing,
         context,
         db=db,
-        initiative_id=inst.initiative_id,
+        project_id=inst.project_id,
     )
     records[item_id] = enriched
     state["stakeholder_details"] = records
@@ -1120,9 +1120,9 @@ async def deep_dive_implementation_item(
     if cached:
         serialized = cached
     else:
-        initiative = await db.get(Initiative, inst.initiative_id)
+        initiative = await db.get(Project, inst.project_id)
         if initiative is None:
-            raise HTTPException(status_code=404, detail="Initiative not found")
+            raise HTTPException(status_code=404, detail="Project not found")
         try:
             generated = await service.generate(
                 initiative=initiative,
@@ -1169,9 +1169,9 @@ async def deep_dive_map_item(
     if cached:
         serialized = cached
     else:
-        initiative = await db.get(Initiative, inst.initiative_id)
+        initiative = await db.get(Project, inst.project_id)
         if initiative is None:
-            raise HTTPException(status_code=404, detail="Initiative not found")
+            raise HTTPException(status_code=404, detail="Project not found")
         try:
             generated = await service.generate(
                 initiative=initiative,
@@ -1352,7 +1352,7 @@ async def persist_widget_state(
     stage_state["data"] = stage_data
     await sync_widget_assumptions(
         db,
-        initiative_id=inst.initiative_id,
+        project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         widget_data=data.widget_data,
@@ -1524,7 +1524,7 @@ async def export_assessment_output(
         raise HTTPException(status_code=400, detail="This assessment does not support export")
 
     state = await ensure_workflow_state(db, inst, assessment)
-    context = await get_initiative_context(db, inst.initiative_id)
+    context = await get_initiative_context(db, inst.project_id)
 
     # Build confirmed_stages snapshot
     confirmed_stages: dict[str, Any] = {
@@ -1614,7 +1614,7 @@ async def export_writeup(
     state = await ensure_workflow_state(db, inst, assessment)
     cached_exports = state.get("cached_exports") or {}
     cached_writeup = cached_exports.get("writeup") or {}
-    context = await get_initiative_context(db, inst.initiative_id)
+    context = await get_initiative_context(db, inst.project_id)
 
     confirmed_stages: dict[str, Any] = _build_confirmed_stages_snapshot(state)
     if not confirmed_stages:
@@ -1632,7 +1632,7 @@ async def export_writeup(
                 existing_records=existing_records,
                 context=context,
                 db=db,
-                initiative_id=inst.initiative_id,
+                project_id=inst.project_id,
             )
             if changed:
                 state["stakeholder_details"] = records

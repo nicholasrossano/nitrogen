@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.core.auth import AuthUser
-from app.core.permissions import get_initiative_with_role
-from app.models.initiative import Initiative
+from app.core.permissions import get_project_with_role
+from app.models.project import Project
 
 
 class _FakeResult:
@@ -20,12 +20,12 @@ class _FakeResult:
 @pytest.mark.asyncio
 async def test_uuid_lookup_returns_owned_initiative():
     user = AuthUser(uid="owner-1", email="owner@example.com")
-    owned = Initiative(id=uuid.uuid4(), user_id=user.uid)
+    owned = Project(id=uuid.uuid4(), user_id=user.uid)
 
     db = AsyncMock()
     db.execute.side_effect = [_FakeResult(scalar=owned)]
 
-    initiative, role = await get_initiative_with_role(db, str(owned.id), user)
+    initiative, role = await get_project_with_role(db, str(owned.id), user)
 
     assert initiative is owned
     assert role == "owner"
@@ -34,7 +34,7 @@ async def test_uuid_lookup_returns_owned_initiative():
 @pytest.mark.asyncio
 async def test_uuid_lookup_returns_shared_initiative_role():
     user = AuthUser(uid="viewer-1", email="viewer@example.com")
-    shared = Initiative(id=uuid.uuid4(), user_id="owner-2")
+    shared = Project(id=uuid.uuid4(), user_id="owner-2")
 
     db = AsyncMock()
     db.execute.side_effect = [
@@ -42,7 +42,7 @@ async def test_uuid_lookup_returns_shared_initiative_role():
         _FakeResult(scalar=SimpleNamespace(role="viewer")),
     ]
 
-    initiative, role = await get_initiative_with_role(db, str(shared.id), user)
+    initiative, role = await get_project_with_role(db, str(shared.id), user)
 
     assert initiative is shared
     assert role == "viewer"
@@ -54,7 +54,7 @@ async def test_invalid_uuid_raises_not_found():
     db = AsyncMock()
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_initiative_with_role(db, "project-2", user)
+        await get_project_with_role(db, "project-2", user)
 
     assert exc_info.value.status_code == 404
-    assert exc_info.value.detail == "Initiative not found"
+    assert exc_info.value.detail == "Project not found"

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.assessments import get_assessment_registry
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.chat import CoreChatMessage
 
 ChatMessage = CoreChatMessage
@@ -32,7 +32,7 @@ class ChatAgentService:
             self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
         return self._client
     
-    def _get_system_prompt(self, initiative: Initiative, widget_type: str | None = None) -> str:
+    def _get_system_prompt(self, initiative: Project, widget_type: str | None = None) -> str:
         """Get system prompt based on current context."""
         
         # If we're showing a widget, use context-specific prompts
@@ -88,7 +88,7 @@ RULES:
 
 If tools are selected and you notice missing required inputs, gently ask about them one at a time - but ONLY if they seem ready to proceed, not if they're just asking questions."""
     
-    def _build_context(self, initiative: Initiative) -> str:
+    def _build_context(self, initiative: Project) -> str:
         """Build context string from initiative state."""
         parts = []
         
@@ -140,7 +140,7 @@ If tools are selected and you notice missing required inputs, gently ask about t
     def _build_messages(
         self, 
         chat_history: list[ChatMessage],
-        initiative: Initiative,
+        initiative: Project,
         widget_type: str | None = None,
     ) -> list[dict]:
         """Build message list for OpenAI API."""
@@ -159,7 +159,7 @@ If tools are selected and you notice missing required inputs, gently ask about t
     async def generate_response(
         self,
         messages: list[ChatMessage],
-        initiative: Initiative,
+        initiative: Project,
         widget_type: str | None = None,
     ) -> str:
         """Generate assistant response based on conversation."""
@@ -182,7 +182,7 @@ If tools are selected and you notice missing required inputs, gently ask about t
     async def analyze_intent(
         self,
         messages: list[ChatMessage],
-        initiative: Initiative,
+        initiative: Project,
     ) -> dict:
         """Analyze what the user is trying to do and what info they're providing."""
         

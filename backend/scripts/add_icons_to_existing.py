@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.services.chat_agent import ChatAgentService
 
 
@@ -18,10 +18,10 @@ async def add_icons_to_existing_projects():
     async with AsyncSessionLocal() as db:
         # Get all projects without icons
         result = await db.execute(
-            select(Initiative).where(
-                Initiative.icon.is_(None),
-                Initiative.title.isnot(None),
-                not Initiative.archived
+            select(Project).where(
+                Project.icon.is_(None),
+                Project.title.isnot(None),
+                not Project.archived
             )
         )
         initiatives = result.scalars().all()

@@ -10,33 +10,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthUser
 from app.core.execution_context import ExecutionContext
-from app.core.permissions import get_initiative_with_role
+from app.core.permissions import get_project_with_role
 from app.mcp.exposure_policy import resource_visibility
 from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
-from app.models.project import Initiative
+from app.models.project import Project
 from app.models.memo import MemoVersion
 from app.models.assessment_instance import AssessmentInstance
 from app.models.project_material import ProjectMaterial
 from app.resources.registry import ResourceDefinition, ResourceRegistry, get_resource_registry
 
 
-async def _ensure_initiative_access(
+async def _ensure_project_access(
     db: AsyncSession,
     ctx: ExecutionContext,
-    initiative_id: UUID,
-) -> Initiative:
+    project_id: UUID,
+) -> Project:
     user = AuthUser(uid=ctx.user_id, email=ctx.user_email)
-    initiative, _role = await get_initiative_with_role(db, initiative_id, user)
+    initiative, _role = await get_project_with_role(db, project_id, user)
     return initiative
 
 
-async def _read_initiative(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    initiative_id = UUID(uri.rsplit("/", 1)[-1])
-    initiative = await _ensure_initiative_access(db, ctx, initiative_id)
+async def _read_project(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
+    project_id = UUID(uri.rsplit("/", 1)[-1])
+    initiative = await _ensure_project_access(db, ctx, project_id)
     return {
         "uri": uri,
-        "resource_type": "initiative",
+        "resource_type": "project",
         "data": {
             "id": str(initiative.id),
             "title": initiative.title,
@@ -57,17 +57,13 @@ def _project_id_from_uri(uri: str) -> UUID:
     return UUID(segments[0])
 
 
-def _initiative_id_from_uri(uri: str) -> UUID:
-    return _project_id_from_uri(uri)
-
-
 async def _read_evidence_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    initiative_id = _initiative_id_from_uri(uri)
+    project_id = _project_id_from_uri(uri)
     doc_id = UUID(uri.rsplit("/", 1)[-1])
-    await _ensure_initiative_access(db, ctx, initiative_id)
+    await _ensure_project_access(db, ctx, project_id)
     doc = (
         await db.execute(
-            select(EvidenceDoc).where(EvidenceDoc.id == doc_id, EvidenceDoc.initiative_id == initiative_id)
+            select(EvidenceDoc).where(EvidenceDoc.id == doc_id, EvidenceDoc.project_id == project_id)
         )
     ).scalar_one_or_none()
     if doc is None:
@@ -77,7 +73,7 @@ async def _read_evidence_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) 
         "resource_type": "evidence_doc",
         "data": {
             "id": str(doc.id),
-            "initiative_id": str(doc.initiative_id),
+            "project_id": str(doc.project_id),
             "filename": doc.filename,
             "file_type": doc.file_type,
             "storage_path": doc.storage_path,
@@ -87,14 +83,14 @@ async def _read_evidence_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) 
 
 
 async def _read_evidence_chunk(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    initiative_id = _initiative_id_from_uri(uri)
+    project_id = _project_id_from_uri(uri)
     chunk_id = UUID(uri.rsplit("/", 1)[-1])
-    await _ensure_initiative_access(db, ctx, initiative_id)
+    await _ensure_project_access(db, ctx, project_id)
     chunk = (
         await db.execute(
             select(EvidenceChunk)
             .join(EvidenceDoc, EvidenceDoc.id == EvidenceChunk.evidence_doc_id)
-            .where(EvidenceChunk.id == chunk_id, EvidenceDoc.initiative_id == initiative_id)
+            .where(EvidenceChunk.id == chunk_id, EvidenceDoc.project_id == project_id)
         )
     ).scalar_one_or_none()
     if chunk is None:
@@ -133,14 +129,14 @@ async def _read_corpus_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) ->
 
 
 async def _read_project_material(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    initiative_id = _initiative_id_from_uri(uri)
+    project_id = _project_id_from_uri(uri)
     material_id = UUID(uri.rsplit("/", 1)[-1])
-    await _ensure_initiative_access(db, ctx, initiative_id)
+    await _ensure_project_access(db, ctx, project_id)
     material = (
         await db.execute(
             select(ProjectMaterial).where(
                 ProjectMaterial.id == material_id,
-                ProjectMaterial.initiative_id == initiative_id,
+                ProjectMaterial.project_id == project_id,
             )
         )
     ).scalar_one_or_none()
@@ -151,7 +147,7 @@ async def _read_project_material(uri: str, db: AsyncSession, ctx: ExecutionConte
         "resource_type": "project_material",
         "data": {
             "id": str(material.id),
-            "initiative_id": str(material.initiative_id),
+            "project_id": str(material.project_id),
             "filename": material.filename,
             "file_type": material.file_type,
             "content_text": material.content_text,
@@ -161,14 +157,14 @@ async def _read_project_material(uri: str, db: AsyncSession, ctx: ExecutionConte
 
 
 async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    initiative_id = _initiative_id_from_uri(uri)
+    project_id = _project_id_from_uri(uri)
     version_id = UUID(uri.rsplit("/", 1)[-1])
-    await _ensure_initiative_access(db, ctx, initiative_id)
+    await _ensure_project_access(db, ctx, project_id)
     memo = (
         await db.execute(
             select(MemoVersion).where(
                 MemoVersion.id == version_id,
-                MemoVersion.initiative_id == initiative_id,
+                MemoVersion.project_id == project_id,
             )
         )
     ).scalar_one_or_none()
@@ -179,7 +175,7 @@ async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) 
         "resource_type": "memo_version",
         "data": {
             "id": str(memo.id),
-            "initiative_id": str(memo.initiative_id),
+            "project_id": str(memo.project_id),
             "content": memo.content,
             "export_path": memo.export_path,
             "created_at": memo.created_at.isoformat() if memo.created_at else None,
@@ -188,14 +184,14 @@ async def _read_memo_version(uri: str, db: AsyncSession, ctx: ExecutionContext) 
 
 
 async def _read_assessment_instance(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    initiative_id = _initiative_id_from_uri(uri)
+    project_id = _project_id_from_uri(uri)
     instance_id = UUID(uri.rsplit("/", 1)[-1])
-    await _ensure_initiative_access(db, ctx, initiative_id)
+    await _ensure_project_access(db, ctx, project_id)
     instance = (
         await db.execute(
             select(AssessmentInstance).where(
                 AssessmentInstance.id == instance_id,
-                AssessmentInstance.initiative_id == initiative_id,
+                AssessmentInstance.project_id == project_id,
             )
         )
     ).scalar_one_or_none()
@@ -206,7 +202,7 @@ async def _read_assessment_instance(uri: str, db: AsyncSession, ctx: ExecutionCo
         "resource_type": "assessment_instance",
         "data": {
             "id": str(instance.id),
-            "initiative_id": str(instance.initiative_id),
+            "project_id": str(instance.project_id),
             "assessment_id": instance.assessment_id,
             "status": instance.status,
             "alignment": instance.alignment,
@@ -242,43 +238,31 @@ def register_all(registry: ResourceRegistry) -> None:
             name="Project",
             description="Top-level project metadata.",
             mime_type="application/json",
-            initiative_scoped=True,
-            read_handler=_read_initiative,
+            project_scoped=True,
+            read_handler=_read_project,
             visibility=resource_visibility("initiative"),
         )
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}",
-            resource_type="initiative",
-            name="Initiative",
-            description="Top-level initiative/project metadata.",
-            mime_type="application/json",
-            initiative_scoped=True,
-            read_handler=_read_initiative,
-            visibility=resource_visibility("initiative"),
-        )
-    )
-    registry.register(
-        ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/evidence/docs/{doc_id}",
+            uri_pattern="nitrogen://projects/{id}/evidence/docs/{doc_id}",
             resource_type="evidence_doc",
             name="Evidence Document",
             description="Uploaded evidence document metadata.",
             mime_type="application/json",
-            initiative_scoped=True,
+            project_scoped=True,
             read_handler=_read_evidence_doc,
             visibility=resource_visibility("evidence_doc"),
         )
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/evidence/chunks/{chunk_id}",
+            uri_pattern="nitrogen://projects/{id}/evidence/chunks/{chunk_id}",
             resource_type="evidence_chunk",
             name="Evidence Chunk",
             description="Chunked text content from uploaded evidence docs.",
             mime_type="application/json",
-            initiative_scoped=True,
+            project_scoped=True,
             read_handler=_read_evidence_chunk,
             visibility=resource_visibility("evidence_chunk"),
         )
@@ -290,55 +274,55 @@ def register_all(registry: ResourceRegistry) -> None:
             name="Corpus Document",
             description="Global corpus document metadata.",
             mime_type="application/json",
-            initiative_scoped=False,
+            project_scoped=False,
             read_handler=_read_corpus_doc,
             visibility=resource_visibility("corpus_doc"),
         )
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/materials/{material_id}",
+            uri_pattern="nitrogen://projects/{id}/materials/{material_id}",
             resource_type="project_material",
             name="Project Material",
             description="Project material file metadata and extracted text.",
             mime_type="application/json",
-            initiative_scoped=True,
+            project_scoped=True,
             read_handler=_read_project_material,
             visibility=resource_visibility("project_material"),
         )
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/memos/{version_id}",
+            uri_pattern="nitrogen://projects/{id}/memos/{version_id}",
             resource_type="memo_version",
             name="Memo Version",
             description="Generated memo version and export metadata.",
             mime_type="application/json",
-            initiative_scoped=True,
+            project_scoped=True,
             read_handler=_read_memo_version,
             visibility=resource_visibility("memo_version"),
         )
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/assessments/{instance_id}",
+            uri_pattern="nitrogen://projects/{id}/assessments/{instance_id}",
             resource_type="assessment_instance",
             name="Assessment Instance",
             description="Saved assessment instance state and output data.",
             mime_type="application/json",
-            initiative_scoped=True,
+            project_scoped=True,
             read_handler=_read_assessment_instance,
             visibility=resource_visibility("assessment_instance"),
         )
     )
     registry.register(
         ResourceDefinition(
-            uri_pattern="nitrogen://initiatives/{id}/artifacts/{artifact_id}",
+            uri_pattern="nitrogen://projects/{id}/artifacts/{artifact_id}",
             resource_type="artifact",
             name="Artifact",
             description="Generated artifact data from a assessment instance deliverable.",
             mime_type="application/json",
-            initiative_scoped=True,
+            project_scoped=True,
             read_handler=_read_artifact,
             visibility=resource_visibility("artifact"),
         )

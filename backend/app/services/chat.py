@@ -271,7 +271,7 @@ class ChatService:
     def _build_tool_context(
         self,
         *,
-        initiative_id: str | None = None,
+        project_id: str | None = None,
         onboarding_mode: bool = False,
         orchestration_mode: bool = False,
         field_context: dict[str, Any] | None = None,
@@ -281,14 +281,14 @@ class ChatService:
 
         if orchestration_mode:
             route = CapabilityRoute.PROJECT_ORCHESTRATION
-        elif initiative_id:
+        elif project_id:
             route = CapabilityRoute.PROJECT_CHAT
         else:
             route = CapabilityRoute.STANDALONE_CHAT
 
         return CapabilityToolContext(
             route=route,
-            initiative_id=initiative_id,
+            project_id=project_id,
             onboarding_mode=onboarding_mode,
             has_field_context=bool(field_context),
             has_assessment_context=bool(assessment_context),
@@ -297,7 +297,7 @@ class ChatService:
     def _get_tool_list(
         self,
         *,
-        initiative_id: str | None = None,
+        project_id: str | None = None,
         onboarding_mode: bool = False,
         orchestration_mode: bool = False,
         field_context: dict[str, Any] | None = None,
@@ -308,7 +308,7 @@ class ChatService:
 
         return get_capability_registry().tools_for(
             self._build_tool_context(
-                initiative_id=initiative_id,
+                project_id=project_id,
                 onboarding_mode=onboarding_mode,
                 orchestration_mode=orchestration_mode,
                 field_context=field_context,
@@ -328,7 +328,7 @@ class ChatService:
         assessment_context: dict[str, Any] | None = None,
         field_context: dict[str, Any] | None = None,
         on_research_step: ResearchStepCallback | None = None,
-        initiative_id: str | None = None,
+        project_id: str | None = None,
         initiative: Any | None = None,
         compare_contexts: list[dict] | None = None,
         active_editor_doc: dict[str, Any] | None = None,
@@ -350,13 +350,13 @@ class ChatService:
 
         _log_proposal_debug(
             "generate-response-start",
-            chat_scope="project" if initiative_id else "standalone",
+            chat_scope="project" if project_id else "standalone",
             field_name=(field_context or {}).get("field_name"),
             has_field_context=bool(field_context),
             has_model_inputs_context=bool(model_inputs_context),
             has_assessment_context=bool(assessment_context),
             tool_hint=tool_hint,
-            initiative_id=initiative_id,
+            project_id=project_id,
         )
 
         async def _think(text: str) -> None:
@@ -377,10 +377,10 @@ class ChatService:
         should_run_scholarly = self._should_run_scholarly_search(field_context)
 
         async def _corpus_search() -> list[RetrievedFact]:
-            if initiative_id:
+            if project_id:
                 from uuid import UUID as _UUID
                 try:
-                    return await self.retrieval.search_corpus(search_query, _UUID(initiative_id))
+                    return await self.retrieval.search_corpus(search_query, _UUID(project_id))
                 except ValueError:
                     pass
             if not settings.enable_corpus_rag:
@@ -389,11 +389,11 @@ class ChatService:
 
         # Search project materials when inside a workspace
         async def _material_search() -> list[RetrievedFact]:
-            if not initiative_id:
+            if not project_id:
                 return []
             from uuid import UUID as _UUID
             try:
-                iid = _UUID(initiative_id)
+                iid = _UUID(project_id)
             except ValueError:
                 return []
             return await self.retrieval.search_project_materials(search_query, iid)
@@ -405,7 +405,7 @@ class ChatService:
             model_inputs_context=model_inputs_context,
             assessment_context=assessment_context,
             project_context=project_context,
-            initiative_id=initiative_id,
+            project_id=project_id,
         )
         await _step("plan_tools", "Evidence retrieval plan ready", "done")
 
@@ -551,7 +551,7 @@ class ChatService:
             await _step("scan_docs", "Scanning project documents", "running")
             await _think("Scanning project documents for relevant sections...")
             corpus_facts = await _corpus_search()
-            if not corpus_facts and initiative_id:
+            if not corpus_facts and project_id:
                 corpus_facts = await _material_search()
             if corpus_facts:
                 await _think(f"Found {len(corpus_facts)} relevant sections in project documents")
@@ -980,7 +980,7 @@ class ChatService:
 
         async def _search_project(ctx: dict, label: str) -> list[RetrievedFact]:
             """Search a single project using its own DB session for isolation."""
-            iid = _UUID(ctx["initiative_id"])
+            iid = _UUID(ctx["project_id"])
             async with AsyncSessionLocal() as session:
                 retrieval = TieredRetrievalService(session)
                 corpus_facts = await retrieval.search_corpus(
@@ -1384,7 +1384,7 @@ class ChatService:
         model_inputs_context: str | None = None,
         assessment_context: dict[str, Any] | None = None,
         project_context: str | None = None,
-        initiative_id: str | None = None,
+        project_id: str | None = None,
     ) -> list:
         """
         Ask a fast LLM which search tools (if any) to invoke.
@@ -1441,7 +1441,7 @@ class ChatService:
                 model=settings.openai_orchestration_model,
                 messages=messages,
                 tools=self._get_tool_list(
-                    initiative_id=initiative_id,
+                    project_id=project_id,
                     assessment_context=assessment_context,
                 ),
                 tool_choice="auto",

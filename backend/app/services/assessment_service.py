@@ -1,7 +1,7 @@
 """Centralized service for AssessmentInstance CRUD.
 
 All assessment lifecycle writes go through here — this is the single source
-of truth.  The old Initiative JSONB fields (deliverables, tool_alignments)
+of truth.  The old Project JSONB fields (deliverables, tool_alignments)
 are no longer written to by application code.
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment_instance import AssessmentInstance, AssessmentInstanceStatus
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_widget_assumptions
 
 
@@ -21,13 +21,13 @@ from app.services.assumptions import AssumptionActor, ensure_expected_assumption
 
 async def _next_instance_number(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     assessment_id: str,
 ) -> int:
     result = await db.execute(
         select(func.coalesce(func.max(AssessmentInstance.instance_number), 0))
         .where(
-            AssessmentInstance.initiative_id == initiative_id,
+            AssessmentInstance.project_id == project_id,
             AssessmentInstance.assessment_id == assessment_id,
         )
     )
@@ -36,7 +36,7 @@ async def _next_instance_number(
 
 async def _resolve_instance(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     tool_id: str,
     *,
     instance_id: uuid.UUID | None = None,
@@ -47,7 +47,7 @@ async def _resolve_instance(
 
     Resolution order:
     1. Explicit instance_id → fetch that row.
-    2. chat_id → find by (initiative_id, chat_id, tool_id), or create.
+    2. chat_id → find by (project_id, chat_id, tool_id), or create.
     3. Otherwise → create a brand-new instance.
     """
     if instance_id:
@@ -60,7 +60,7 @@ async def _resolve_instance(
         stmt = (
             select(AssessmentInstance)
             .where(
-                AssessmentInstance.initiative_id == initiative_id,
+                AssessmentInstance.project_id == project_id,
                 AssessmentInstance.chat_id == chat_id,
                 AssessmentInstance.assessment_id == tool_id,
             )
@@ -75,9 +75,9 @@ async def _resolve_instance(
         raise ValueError("user_id is required when creating a new AssessmentInstance")
 
     inst = AssessmentInstance(
-        initiative_id=initiative_id,
+        project_id=project_id,
         assessment_id=tool_id,
-        instance_number=await _next_instance_number(db, initiative_id, tool_id),
+        instance_number=await _next_instance_number(db, project_id, tool_id),
         status="draft",
         started_by=user_id,
         chat_id=chat_id,
@@ -91,17 +91,17 @@ async def _resolve_instance(
 
 async def get_or_create_instance(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     tool_id: str,
     user_id: str,
     chat_id: uuid.UUID | None = None,
 ) -> AssessmentInstance:
     """Ensure a assessment instance exists for this (initiative, tool, chat)."""
     inst = await _resolve_instance(
-        db, initiative_id, tool_id,
+        db, project_id, tool_id,
         chat_id=chat_id, user_id=user_id,
     )
-    initiative = await db.get(Initiative, initiative_id)
+    initiative = await db.get(Project, project_id)
     if initiative is not None:
         await ensure_expected_assumptions(
             db,
@@ -114,7 +114,7 @@ async def get_or_create_instance(
 
 async def save_deliverable(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     tool_id: str,
     title: str,
     output_type: str,
@@ -126,7 +126,7 @@ async def save_deliverable(
 ) -> AssessmentInstance:
     """Write deliverable output to an instance and mark complete."""
     inst = await _resolve_instance(
-        db, initiative_id, tool_id,
+        db, project_id, tool_id,
         instance_id=instance_id, chat_id=chat_id, user_id=user_id,
     )
     inst.deliverable = {
@@ -141,7 +141,7 @@ async def save_deliverable(
     if isinstance(content, dict):
         await sync_widget_assumptions(
             db,
-            initiative_id=initiative_id,
+            project_id=project_id,
             assessment_id=tool_id,
             assessment_instance_id=inst.id,
             widget_data=content,
@@ -153,7 +153,7 @@ async def save_deliverable(
 
 async def set_instance_error(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     tool_id: str,
     error_message: str,
     user_id: str,
@@ -163,7 +163,7 @@ async def set_instance_error(
 ) -> AssessmentInstance:
     """Mark an instance as errored."""
     inst = await _resolve_instance(
-        db, initiative_id, tool_id,
+        db, project_id, tool_id,
         instance_id=instance_id, chat_id=chat_id, user_id=user_id,
     )
     inst.status = "error"
@@ -188,14 +188,14 @@ async def remove_instance(
 
 async def remove_instance_by_tool(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     tool_id: str,
 ) -> bool:
     """Delete the latest instance for a tool_id. Returns True if it existed."""
     stmt = (
         select(AssessmentInstance)
         .where(
-            AssessmentInstance.initiative_id == initiative_id,
+            AssessmentInstance.project_id == project_id,
             AssessmentInstance.assessment_id == tool_id,
         )
         .order_by(AssessmentInstance.updated_at.desc())
@@ -212,7 +212,7 @@ async def remove_instance_by_tool(
 
 async def list_instances(
     db: AsyncSession,
-    initiative_id: uuid.UUID,
+    project_id: uuid.UUID,
     *,
     archived: bool = False,
 ) -> list[AssessmentInstance]:
@@ -223,7 +223,7 @@ async def list_instances(
     stmt = (
         select(AssessmentInstance)
         .where(
-            AssessmentInstance.initiative_id == initiative_id,
+            AssessmentInstance.project_id == project_id,
             AssessmentInstance.archived == archived,
         )
         .order_by(AssessmentInstance.started_at.desc())

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class InitiativeStage(str, enum.Enum):
+class ProjectStage(str, enum.Enum):
     """Stages of the project workflow."""
 
     DESCRIBE = "describe"
@@ -69,7 +69,7 @@ class Project(Base):
     project_plan: Mapped[dict | None] = mapped_column(JSONB)
     overview_description: Mapped[str | None] = mapped_column(Text)
     overview_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    stage: Mapped[str] = mapped_column(String(20), default=InitiativeStage.DESCRIBE.value)
+    stage: Mapped[str] = mapped_column(String(20), default=ProjectStage.DESCRIBE.value)
     stage_1_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     evidence_ready: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -218,6 +218,3 @@ class Project(Base):
             "tool_inputs": self.tool_inputs or {},
         }
 
-
-# Backward-compatible alias used across the codebase during the contract cutover.
-Initiative = Project

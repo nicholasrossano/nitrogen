@@ -44,7 +44,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.models.initiative import Initiative
+from app.models.project import Project
 from app.models.assessment_instance import AssessmentInstance
 from app.assessments.base import BaseAssessment, StageDef
 from app.assessments.utils import make_build_item
@@ -161,15 +161,15 @@ def build_deliverable_title(assessment: BaseAssessment, content: dict[str, Any] 
 
 
 # ---------------------------------------------------------------------------
-# Initiative context helpers
+# Project context helpers
 # ---------------------------------------------------------------------------
 
-async def get_initiative_context(db: AsyncSession, initiative_id: Any) -> dict[str, Any]:
-    initiative = await db.get(Initiative, initiative_id)
+async def get_initiative_context(db: AsyncSession, project_id: Any) -> dict[str, Any]:
+    initiative = await db.get(Project, project_id)
     if initiative is None:
         return {}
     return {
-        "initiative_id": str(initiative_id),
+        "project_id": str(project_id),
         "project_title": initiative.title or "",
         "project_description": initiative.project_description or initiative.goal or "",
         "geography": initiative.geography or "",
@@ -435,7 +435,7 @@ async def populate_stage(
     if stage_def is None:
         raise ValueError(f"Stage '{stage_id}' not found in stage_defs for '{assessment.definition.id}'")
 
-    context = await get_initiative_context(db, inst.initiative_id)
+    context = await get_initiative_context(db, inst.project_id)
     context["_db"] = db
 
     # Mark as populating
@@ -655,7 +655,7 @@ async def confirm_stage(
 
     await sync_stage_assumptions(
         db,
-        initiative_id=inst.initiative_id,
+        project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         stage_id=stage_id,
@@ -760,7 +760,7 @@ async def enrich_record_item(
 
     item_content = source_item.get("content", {})
     existing_record = records.get(item_id, {})
-    context = await get_initiative_context(db, inst.initiative_id)
+    context = await get_initiative_context(db, inst.project_id)
     context["_db"] = db
 
     enriched = await assessment.enrich_record(stage_id, item_content, existing_record, context)

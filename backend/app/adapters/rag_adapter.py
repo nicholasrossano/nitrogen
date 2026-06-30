@@ -32,9 +32,9 @@ class RAGAdapter(BaseAdapter):
                         "type": "string",
                         "description": "Similarity-search query to run over evidence and corpus content.",
                     },
-                    "initiative_id": {
+                    "project_id": {
                         "type": "string",
-                        "description": "Initiative UUID used to scope evidence access and permissions.",
+                        "description": "Project UUID used to scope evidence access and permissions.",
                     },
                     "sources": {
                         "type": "array",
@@ -50,7 +50,7 @@ class RAGAdapter(BaseAdapter):
                         "description": "Maximum number of corpus chunks to return.",
                     },
                 },
-                "required": ["query", "initiative_id"],
+                "required": ["query", "project_id"],
             },
             output_schema={
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -65,7 +65,7 @@ class RAGAdapter(BaseAdapter):
                     },
                 },
             },
-            initiative_scope_required=True,
+            project_scope_required=True,
             visibility=adapter_visibility("rag", "internal"),
             capabilities=["async"],
         )
@@ -79,13 +79,13 @@ class RAGAdapter(BaseAdapter):
         started = time.perf_counter()
         rag = RAGService(db)
 
-        initiative_id = inputs.get("initiative_id") or (str(ctx.initiative_id) if ctx.initiative_id else None)
-        if initiative_id is None:
-            raise ValueError("rag adapter requires initiative_id (input or context).")
+        project_id = inputs.get("project_id") or (str(ctx.project_id) if ctx.project_id else None)
+        if project_id is None:
+            raise ValueError("rag adapter requires project_id (input or context).")
 
         chunks = await rag.retrieve(
             query=inputs["query"],
-            initiative_id=UUID(initiative_id),
+            project_id=UUID(project_id),
             sources=inputs.get("sources", ["evidence", "corpus"]),
             evidence_top_k=inputs.get("evidence_top_k", 3),
             corpus_top_k=inputs.get("corpus_top_k", 5),

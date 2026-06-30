@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, synonym
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
@@ -27,7 +27,6 @@ class Assumption(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id = synonym("project_id")
     key: Mapped[str] = mapped_column(String(160), nullable=False)
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSONB)
@@ -78,7 +77,6 @@ class AssumptionComment(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id = synonym("project_id")
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_by_user_id: Mapped[str | None] = mapped_column(String(255))
     created_by_email: Mapped[str | None] = mapped_column(String(255))
@@ -113,7 +111,6 @@ class AssumptionBinding(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    initiative_id = synonym("project_id")
     assumption_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("assumptions.id", ondelete="CASCADE"),

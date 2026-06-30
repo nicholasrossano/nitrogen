@@ -8,7 +8,7 @@ import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, AuthUser
-from app.core.permissions import require_editor, require_viewer
+from app.core.permissions import require_project_editor, require_project_viewer
 from app.core.storage import get_uploads_storage, load_upload
 from app.core.filename_utils import deduplicate_filename, safe_content_disposition, validate_file_magic
 from app.core.upload_types import (
@@ -43,24 +43,24 @@ _UPLOAD_TYPE_LABEL = "PDF, DOCX, PPTX, Excel (XLSX/XLS), Pages, or Keynote"
 
 
 async def _require_evidence_viewer(db: AsyncSession, evidence_doc: EvidenceDoc, user: AuthUser) -> None:
-    if evidence_doc.initiative_id is not None:
-        await require_viewer(db, evidence_doc.initiative_id, user)
+    if evidence_doc.project_id is not None:
+        await require_project_viewer(db, evidence_doc.project_id, user)
         return
     await require_workspace_member(db, evidence_doc.workspace_id, user.uid)
 
 
 async def _require_evidence_editor(db: AsyncSession, evidence_doc: EvidenceDoc, user: AuthUser) -> None:
-    if evidence_doc.initiative_id is not None:
-        await require_editor(db, evidence_doc.initiative_id, user)
+    if evidence_doc.project_id is not None:
+        await require_project_editor(db, evidence_doc.project_id, user)
         return
     await require_workspace_member(db, evidence_doc.workspace_id, user.uid)
 
 
-@router.post("/initiatives/{initiative_id}/evidence", response_model=EvidenceUploadResponse)
+@router.post("/projects/{project_id}/evidence", response_model=EvidenceUploadResponse)
 @limiter.limit("120/minute")
 async def upload_evidence(
     request: Request,
-    initiative_id: str,
+    project_id: str,
     file: Optional[UploadFile] = File(None),
     text_content: Optional[str] = Form(None),
     text_title: Optional[str] = Form(None),
@@ -76,7 +76,7 @@ async def upload_evidence(
     ``lightweight_ready`` / ``indexed``.
     """
 
-    initiative = await require_editor(db, initiative_id, user)
+    initiative = await require_project_editor(db, project_id, user)
 
     if not file and not text_content:
         raise HTTPException(
@@ -166,7 +166,7 @@ async def upload_evidence(
     filename = await deduplicate_filename(db, initiative.id, filename)
 
     evidence_doc = EvidenceDoc(
-        initiative_id=initiative.id,
+        project_id=initiative.id,
         workspace_id=initiative.workspace_id,
         filename=filename,
         file_type=file_type,
@@ -229,10 +229,10 @@ async def upload_evidence(
     )
 
 
-@router.post("/initiatives/{initiative_id}/evidence/text", response_model=EvidenceUploadResponse)
+@router.post("/projects/{project_id}/evidence/text", response_model=EvidenceUploadResponse)
 async def paste_evidence_text(
     request: Request,
-    initiative_id: str,
+    project_id: str,
     data: EvidenceTextInput,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -241,7 +241,7 @@ async def paste_evidence_text(
     # Reuse upload endpoint logic with text
     return await upload_evidence(
         request=request,
-        initiative_id=initiative_id,
+        project_id=project_id,
         file=None,
         text_content=data.content,
         text_title=data.title,
@@ -340,7 +340,7 @@ async def list_workspace_evidence(
         .outerjoin(EvidenceChunk, EvidenceChunk.evidence_doc_id == EvidenceDoc.id)
         .where(
             EvidenceDoc.workspace_id == workspace_id,
-            EvidenceDoc.initiative_id.is_(None),
+            EvidenceDoc.project_id.is_(None),
         )
         .group_by(EvidenceDoc.id)
         .order_by(EvidenceDoc.created_at.desc())
@@ -361,14 +361,14 @@ async def list_workspace_evidence(
     ]
 
 
-@router.get("/initiatives/{initiative_id}/evidence", response_model=list[EvidenceDocResponse])
+@router.get("/projects/{project_id}/evidence", response_model=list[EvidenceDocResponse])
 async def list_evidence(
-    initiative_id: str,
+    project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List evidence documents for an initiative"""
-    initiative = await require_viewer(db, initiative_id, user)
+    initiative = await require_project_viewer(db, project_id, user)
 
     # Get evidence docs with chunk counts in a single query
     stmt = (
@@ -377,7 +377,7 @@ async def list_evidence(
             func.count(EvidenceChunk.id).label("chunk_count"),
         )
         .outerjoin(EvidenceChunk, EvidenceChunk.evidence_doc_id == EvidenceDoc.id)
-        .where(EvidenceDoc.initiative_id == initiative.id)
+        .where(EvidenceDoc.project_id == initiative.id)
         .group_by(EvidenceDoc.id)
     )
     rows = (await db.execute(stmt)).all()

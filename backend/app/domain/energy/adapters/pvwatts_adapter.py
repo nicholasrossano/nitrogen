@@ -70,7 +70,7 @@ class PVWattsAdapter(BaseAdapter):
                     },
                 },
             },
-            initiative_scope_required=False,
+            project_scope_required=False,
             visibility=adapter_visibility("pvwatts", "internal"),
             capabilities=["async"],
         )

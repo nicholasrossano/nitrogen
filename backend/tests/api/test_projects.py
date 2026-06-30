@@ -47,6 +47,8 @@ async def test_list_projects_returns_workspace_rows_without_per_row_permission_f
         archived=False,
         sector="general",
         stage="describe",
+        stage_1_complete=False,
+        evidence_ready=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -89,5 +91,5 @@ async def test_list_projects_returns_workspace_rows_without_per_row_permission_f
     )
 
     assert len(rows) == 1
-    assert rows[0]["name"] == "Core Deal"
+    assert rows[0]["title"] == "Core Deal"
     assert str(rows[0]["id"]) == str(project.id)

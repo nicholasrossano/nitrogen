@@ -92,7 +92,7 @@ async def redeem_pending_invitations(
         existing_share = (
             await db.execute(
                 select(ProjectShare).where(
-                    ProjectShare.initiative_id == inv.initiative_id,
+                    ProjectShare.project_id == inv.project_id,
                     ProjectShare.user_id == user_id,
                 )
             )
@@ -100,7 +100,7 @@ async def redeem_pending_invitations(
         if not existing_share:
             db.add(
                 ProjectShare(
-                    initiative_id=inv.initiative_id,
+                    project_id=inv.project_id,
                     user_id=user_id,
                     role=inv.role,
                     shared_by=inv.shared_by,
@@ -118,7 +118,7 @@ async def redeem_pending_invitations(
 def serialize_project_share_invitation(inv: ProjectShareInvitation) -> dict:
     return {
         "id": inv.id,
-        "initiative_id": inv.initiative_id,
+        "project_id": inv.project_id,
         "user_id": None,
         "user_email": inv.email,
         "user_display_name": None,
@@ -144,13 +144,13 @@ async def delete_workspace_invitations_for_email(
 
 async def delete_project_share_invitations_for_email(
     db: AsyncSession,
-    initiative_id: UUID,
+    project_id: UUID,
     email: str,
 ) -> None:
     norm = normalize_invite_email(email)
     await db.execute(
         delete(ProjectShareInvitation).where(
-            ProjectShareInvitation.initiative_id == initiative_id,
+            ProjectShareInvitation.project_id == project_id,
             ProjectShareInvitation.email == norm,
         )
     )
