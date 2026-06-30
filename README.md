@@ -46,44 +46,18 @@ The platform helps teams:
 git clone https://github.com/nicholasrossano/nitrogen.git
 cd nitrogen
 cp .env.example .env   # first-time template only — then keep your real .env
-bash scripts/worktree_setup.sh
-bash scripts/check_dev_env.sh
+# Edit .env: DATABASE_URL, OPENAI_API_KEY, Firebase vars (see below)
 ```
 
-**Authentication:** Nitrogen uses Firebase for sign-in in every environment (local and production). Mock auth was removed. Create a [Firebase project](https://console.firebase.google.com/) (free tier is fine), enable Email/Password and/or Google sign-in, then copy the Web app config into `NEXT_PUBLIC_FIREBASE_*` and set `FIREBASE_PROJECT_ID` plus a service account path in `NITROGEN_FIREBASE_CREDENTIALS` (see `.env.example`). `bash scripts/check_dev_env.sh` validates the minimum vars before you start.
+**Authentication:** Firebase is required. Copy Web app config into `NEXT_PUBLIC_FIREBASE_*`, set `FIREBASE_PROJECT_ID`, and `NITROGEN_FIREBASE_CREDENTIALS` (see `.env.example`). `bash scripts/setup.sh` validates and reports anything missing.
 
-For self-hosting, Firebase is the supported path today: you run Nitrogen's app and database yourself; Firebase handles identity. That keeps auth out of the critical path for a small team fork without maintaining a separate auth server. Alternative identity providers are not wired in yet.
-
-`backend/.env` and `frontend/.env.local` symlink to root `.env`. Quick start: `bash scripts/start_emulator.sh`.
-
-### 2) Migrate and optional demo seed
+### 2) Start the simulator
 
 ```bash
-cd backend
-pip install -r requirements.txt
-python3 -m alembic upgrade head
-python3 scripts/seed_demo_deal.py   # optional synthetic sample deal
+bash scripts/setup.sh
 ```
 
-### 3) Start servers
-
-```bash
-# from repo root
-bash scripts/start_emulator.sh
-```
-
-Or manually:
-
-```bash
-cd backend && python3 -m uvicorn app.main:app --reload --port 8000
-cd frontend && npm run dev
-```
-
-### 4) Open the app
-
-- Frontend: `http://localhost:3000` (redirects to `/chat`)
-- Backend API: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
+Open http://localhost:3000. For status only: `bash scripts/setup.sh --status`.
 
 ## Docker (Optional — for local Postgres only)
 

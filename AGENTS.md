@@ -64,7 +64,8 @@ cd backend && python3 -m alembic upgrade head
 | Safe token/repo audit | `npm run cursor:audit` |
 | Full backend regression | `cd backend && python3 -m pytest tests/ -q` |
 | Full frontend regression (final) | `cd frontend && npm run typecheck && npm run lint && npm run test:coverage && npm run build` |
-| Dev stack status / start / restart | `bash scripts/dev_daemon.sh [status\|start\|restart]` |
+| Dev simulator (start everything) | `bash scripts/setup.sh` |
+| Dev simulator status | `bash scripts/setup.sh --status` |
 
 More examples and wrappers: `docs/testing.md`.
 
@@ -89,13 +90,11 @@ Do not modify `ToolPicker.tsx` when the request is about generate-flow landing t
 
 Cloud agent VMs **do not have Docker** and **do not use `docker compose`**. Never suggest Docker as a fix on a cloud VM. The default stack is always `dev_daemon.sh`.
 
-**Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the running app, automatically run:
+**Agents own the dev stack — never ask the user to start servers.** At the start of any task that needs the running app:
 
 ```bash
-bash scripts/dev_daemon.sh status || bash scripts/dev_daemon.sh start
+bash scripts/setup.sh --status || bash scripts/setup.sh
 ```
-
-If ports are unhealthy after starting, run `bash scripts/dev_daemon.sh restart`. Never use one-shot `&` background processes — they die when the session ends.
 
 **Local `.env` does not sync to cloud VMs.** The user's laptop `.env` is gitignored and never cloned. Vercel/Railway dashboard vars apply to deployed apps only. Cloud agents need Cursor secrets (see `docs/self-hosting.md`) or `bootstrap_env_from_production.sh` fallback.
 

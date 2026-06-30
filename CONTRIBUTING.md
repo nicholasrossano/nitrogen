@@ -19,24 +19,18 @@ Only submit code, documentation, data, designs, or other assets that you have th
 ### Local Setup
 
 1. Fork and clone the repo
-2. Copy and fill the environment template:
+2. One command:
    ```bash
-   cp .env.example .env   # first-time only — never commit .env
-   # Edit .env: fill DATABASE_URL, OPENAI_API_KEY, Firebase vars (see docs/self-hosting.md)
+   cp .env.example .env   # first time only — fill DATABASE_URL, OPENAI_API_KEY, Firebase vars
+   bash scripts/setup.sh
    ```
-3. Install deps and start the full stack:
-   ```bash
-   pip install -r backend/requirements.txt
-   cd backend && alembic upgrade head && cd ..
-   bash scripts/dev_daemon.sh start
-   ```
-4. Open http://localhost:3000
+3. Open http://localhost:3000
 
-The daemon manages both servers with auto-restart. Use `bash scripts/dev_daemon.sh restart` / `stop` / `status`.
+`setup.sh` resolves env, runs migrations, starts the simulator, and tells you exactly what's missing if anything fails.
 
-**Using Cursor cloud agents?** See [docs/self-hosting.md](docs/self-hosting.md#2-cursor-cloud-agents-ai-assisted-development) for the one-time secrets setup — you won't need to run anything manually after that.
+**Using Cursor cloud agents?** Add your `.env` values as [Cursor Secrets](https://cursor.com/dashboard/cloud-agents) once (see `scripts/cursor_secrets_manifest.txt`). Cloud VMs don't get your laptop's `.env` automatically.
 
-See [docs/self-hosting.md](docs/self-hosting.md) for full setup details including Firebase config, self-hosting on your own infra, and all env var documentation.
+See [docs/self-hosting.md](docs/self-hosting.md) for Firebase config and self-hosting.
 
 ## Making Changes
 

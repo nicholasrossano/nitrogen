@@ -1,4 +1,4 @@
 {
-  "install": "pip install -r backend/requirements.txt && cd frontend && npm install --prefer-offline --no-audit --no-fund",
+  "install": "bash scripts/setup.sh",
   "start": "bash scripts/dev_daemon.sh start"
 }
