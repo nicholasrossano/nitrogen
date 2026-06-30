@@ -19,28 +19,18 @@ Only submit code, documentation, data, designs, or other assets that you have th
 ### Local Setup
 
 1. Fork and clone the repo
-2. Copy the environment template:
+2. One command:
    ```bash
-   cp .env.example .env   # first-time only; then keep your real .env
-   bash scripts/worktree_setup.sh && bash scripts/check_dev_env.sh
+   cp .env.example .env   # first time only — fill DATABASE_URL, OPENAI_API_KEY, Firebase vars
+   bash scripts/setup.sh
    ```
-3. Fill in your API keys and database URL in `.env`
-4. Start the backend:
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   alembic upgrade head
-   python -m uvicorn app.main:app --reload --port 8000
-   ```
-5. Start the frontend:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-6. Open http://localhost:3000
+3. Open http://localhost:3000
 
-See the [README](README.md) for Docker-based setup and more detail.
+`setup.sh` resolves env, runs migrations, starts the simulator, and tells you exactly what's missing if anything fails.
+
+**Using Cursor cloud agents?** Add your `.env` values as [Cursor Secrets](https://cursor.com/dashboard/cloud-agents) once (see `scripts/cursor_secrets_manifest.txt`). Cloud VMs don't get your laptop's `.env` automatically.
+
+See [docs/self-hosting.md](docs/self-hosting.md) for Firebase config and self-hosting.
 
 ## Making Changes
 

@@ -36,7 +36,7 @@ All three steps are required for the app to work (e.g. projects will not load wi
    ```
 3. **Browser**: open `http://localhost:3000` (e.g. `open http://localhost:3000` on macOS).
 
-When asked to "start the local emulator" or "run the app locally", start backend and frontend (both in background if appropriate), then open the app URL in the default browser.
+When asked to "start the local emulator" or "run the app locally", run `bash scripts/dev_daemon.sh start` (persistent tmux, auto-restart). Do **not** use one-shot `&` background processes — they die when the agent session ends.
 
 ## Starting Development Servers (reference)
 
@@ -98,5 +98,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ## Cloud agents — never stub `.env`
 
 - Do **not** run `cp .env.example .env` on cloud VMs; it wipes or replaces real secrets and breaks Firebase login.
-- If root `.env` is missing, stop and ask the user — gitignored env is not in the clone.
-- Run `bash scripts/worktree_setup.sh` only after `.env` exists, then start servers.
+- Start with `bash scripts/dev_daemon.sh start` — it runs `materialize_dev_env.sh` then validates via `check_dev_env.sh`.
+- Env resolution order: existing `.env` → `NITROGEN_ENV_FILE` mount → whitelisted Cursor secrets (same names as `.env.example`).
+- Required secrets: `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `NITROGEN_FIREBASE_CREDENTIALS` (or `FIREBASE_SERVICE_ACCOUNT_JSON`), all `NEXT_PUBLIC_FIREBASE_*`.
+- Status / restart: `bash scripts/dev_daemon.sh status` / `restart`.
