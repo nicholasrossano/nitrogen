@@ -3,7 +3,7 @@ title: 'Upload evidence to ground your AI outputs'
 description: 'Add PDFs, Word documents, or Excel files to your project so Nitrogen AI can retrieve relevant passages and cite your materials in every deliverable.'
 ---
 
-Evidence is the source material that powers everything Nitrogen AI generates for your project. When you upload a document, the platform reads it, splits it into passages, and indexes those passages for semantic search — so when you run a module, the AI retrieves the most relevant content from your files and cites it directly in the output. The quality and relevance of what you upload directly determines the quality of what comes out.
+Evidence is the source material that powers everything Nitrogen AI generates for your project. When you upload a document, the platform reads it, splits it into passages, and indexes those passages for semantic search — so when you run an assessment, the AI retrieves the most relevant content from your files and cites it directly in the output. The quality and relevance of what you upload directly determines the quality of what comes out.
 
 ## Supported file formats
 
@@ -17,20 +17,26 @@ Evidence is the source material that powers everything Nitrogen AI generates for
   <Card title="XLSX / XLS" icon="file-excel">
     Financial models, energy data, survey results, cost breakdowns. Up to 50 MB per file.
   </Card>
+  <Card title="PPTX" icon="file-powerpoint">
+    Investor decks, project overview presentations. Up to 50 MB per file.
+  </Card>
+  <Card title="Pages / Keynote" icon="file">
+    Apple Pages documents and Keynote presentations. Up to 50 MB per file.
+  </Card>
 </CardGroup>
 
 <Warning>
-  Only PDF, DOCX, XLSX, and XLS files are accepted for evidence. Files in other formats — including PNG, TXT, CSV, or HTML files renamed with a supported extension — will fail processing. If your content is in an unsupported format, convert it first or paste the text directly.
+  Only PDF, DOCX, PPTX, XLSX, XLS, Pages, and Keynote files are accepted for evidence. Files in other formats — including PNG, TXT, CSV, or HTML files renamed with a supported extension — will fail processing. If your content is in an unsupported format, convert it first or paste the text directly.
 </Warning>
 
 ## Upload a file to your project
 
 <Steps>
   <Step title="Open your project">
-    From your dashboard, click on the project you want to add evidence to. If you've just completed the intake, the chat will already be showing the evidence upload widget.
+    From your dashboard, click on the project you want to add evidence to.
   </Step>
-  <Step title="Go to the Evidence tab">
-    If the upload widget isn't visible in the chat, select the **Evidence** tab in the project navigation to open the evidence management area.
+  <Step title="Go to the Files view">
+    Open the **Files** view from the project navigation to reach the evidence upload area.
   </Step>
   <Step title="Upload your file">
     Drag a file onto the upload area, or click **Upload file** to browse and select one from your computer. You can upload multiple files — repeat this step for each document you want to add.
@@ -41,7 +47,7 @@ Evidence is the source material that powers everything Nitrogen AI generates for
 </Steps>
 
 <Note>
-  Evidence uploads are rate-limited to 10 per minute per project. If you're uploading a large batch of documents, space them out or upload in groups.
+  Evidence uploads are rate-limited to 120 per minute per user. If you're uploading a very large batch of documents, space them out or upload in groups.
 </Note>
 
 ## Paste text instead of uploading a file
@@ -62,7 +68,7 @@ If your content isn't in a file — notes from a field visit, excerpts from a we
 
 ## What to upload
 
-The modules you run will retrieve evidence that's relevant to the topics they cover. Uploading a mix of document types gives the AI a fuller picture of your project.
+The assessments you run will retrieve evidence that's relevant to the topics they cover. Uploading a mix of document types gives the AI a fuller picture of your project.
 
 <CardGroup cols={2}>
   <Card title="Feasibility studies" icon="magnifying-glass-chart">
@@ -75,7 +81,7 @@ The modules you run will retrieve evidence that's relevant to the topics they co
     Sector analyses, competitor landscapes, and market sizing reports that place your project in context.
   </Card>
   <Card title="Financial models" icon="table-cells">
-    Excel-based cash flow models, tariff analyses, and cost breakdowns. The LCOE and Carbon modules can draw on these directly.
+    Excel-based cash flow models, tariff analyses, and cost breakdowns. The LCOE and Carbon assessments can draw on these directly.
   </Card>
   <Card title="Previous project reports" icon="clock-rotate-left">
     Mid-term evaluations, completion reports, and lessons-learned documents from earlier phases or comparable projects.
@@ -86,7 +92,7 @@ The modules you run will retrieve evidence that's relevant to the topics they co
 </CardGroup>
 
 <Tip>
-  You don't need to upload a perfect set of documents before running modules. Start with what you have, generate a first version, and add more evidence over time to improve subsequent generations.
+  You don't need to upload a perfect set of documents before running assessments. Start with what you have, generate a first version, and add more evidence over time to improve subsequent generations.
 </Tip>
 
 ## Manage your evidence
@@ -96,18 +102,18 @@ All uploaded files and pasted text appear in the **Evidence** tab of your projec
 To remove a document, click the trash icon next to it. Deletion removes the document record and all of its indexed passages. This cannot be undone — if you need the content again, you will have to re-upload or re-paste it.
 
 <Warning>
-  Deleting evidence does not retroactively affect deliverables that have already been generated. It only prevents the deleted content from being used in future generation runs.
+  Deleting evidence does not retroactively affect assessment outputs that have already been generated. It only prevents the deleted content from being used in future generation runs.
 </Warning>
 
 ## What happens next
 
-Once you have at least one evidence document uploaded, you're ready to select modules and run your first assessment.
+Once you have at least one evidence document uploaded, you're ready to build your project plan and run your first assessment.
 
 <CardGroup cols={2}>
-  <Card title="Select and run modules" icon="list-check" href="/guides/run-assessments">
-    Choose from Nitrogen AI's module catalog and let the AI recommend the best tools for your project.
+  <Card title="Build your project plan" icon="list-check" href="/guides/build-project-plan">
+    Generate a structured plan and let Nitrogen AI recommend the right assessments for your project.
   </Card>
-  <Card title="Generate deliverables" icon="file-export" href="/guides/generate-documents">
-    Trigger generation and review your AI-powered outputs with inline citations.
+  <Card title="Run an assessment" icon="file-export" href="/guides/run-an-assessment">
+    Walk through an assessment's stages and review AI-powered outputs with inline citations.
   </Card>
 </CardGroup>

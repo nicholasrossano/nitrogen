@@ -1,0 +1,50 @@
+---
+title: "Assessments: how Nitrogen AI's analytical tools work"
+description: "Assessments are Nitrogen AI's purpose-built analytical tools — each one walks through a setup, build, and output lifecycle in a dedicated workspace and produces an exportable result."
+---
+
+An **assessment** is a purpose-built analytical tool that turns your project context and evidence into a structured, exportable output — a financial model, a risk register, or a written analysis. Every assessment follows the same lifecycle, rendered in a dedicated **assessment workspace** separate from chat.
+
+## Example assessments
+
+Nitrogen AI's assessment engine is domain-agnostic — any assessment plugs in by declaring a manifest, a set of stages, and an export format. The reference implementation ships seven assessments for the sustainable-development energy domain as worked examples of both families below. See [Example assessments](/example-assessments) for the full list with inputs and outputs.
+
+## The setup → build → output lifecycle
+
+Every assessment moves through the same shape, shown as a stage stepper in the assessment workspace. Depending on the assessment, stages take one of two forms:
+
+<Tabs>
+  <Tab title="Widget-backed assessments">
+    LCOE Model, Carbon Model, and Solar Estimate collect a table of inputs, then compute a live results widget. Edit any input and the results recalculate immediately — no need to re-run the whole assessment.
+  </Tab>
+  <Tab title="Layered assessments">
+    Stakeholder Assessment, Landscape Mapping, Risk Assessment, and Implementation Plan build up through several confirmable stages — categories, then items within those categories, then a synthesized final view. You review and confirm each stage before the next one populates.
+  </Tab>
+</Tabs>
+
+At each stage, Nitrogen AI proposes values from your project materials and evidence (citing its sources where relevant), and you confirm or edit before moving on. A stage only becomes accessible once the prior one is confirmed.
+
+<Info>
+  Assessments render exclusively in the assessment workspace — not in chat. Chat can start an assessment and show lightweight proposals, but the full stage stepper, tables, and results only appear once you open the workspace.
+</Info>
+
+## Investigating values from chat
+
+While working in chat, you can ask Nitrogen AI to look into a specific input or field. It responds with a small proposal widget rather than editing the assessment directly:
+
+- **Numeric fields** (calculator inputs like CAPEX or capacity factor) get a `proposed_value` widget with the suggested number, a confidence badge, and an explanation.
+- **Text or row-level fields** (like a risk register cell) get a `template_proposed_value` widget with the proposed text and confidence.
+
+Click **Accept** on either widget to patch the value directly into the live assessment; **Dismiss** to discard the suggestion and keep your own value.
+
+## Exporting a result
+
+Every exportable assessment requires a final confirmation step — the **final approval** gate — before the export button unlocks. This ensures every export reflects data you've explicitly reviewed, not an intermediate draft. Implementation Plan has no export; it's a working view synced from your project plan.
+
+## Decision log
+
+Every assessment instance keeps a **decision log** — a read-only, append-only record of every value, its source, and who confirmed it. Open it from the assessment workspace to review the full history, and export it as a single-sheet XLSX for your records.
+
+## Running the same assessment more than once
+
+Each time you launch an assessment, a new **assessment instance** is created with its own workflow state, inputs, and output. Prior instances remain accessible so you can compare runs — useful for sensitivity scenarios or revisiting an assessment after new evidence arrives.

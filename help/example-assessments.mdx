@@ -1,0 +1,37 @@
+---
+title: "Example assessments"
+description: "Nitrogen AI's assessment engine is domain-agnostic — these are the assessments shipped in the reference implementation, covering both assessment families."
+---
+
+Nitrogen AI's assessment framework isn't tied to a fixed catalog — it's a domain-agnostic engine that any assessment can plug into by declaring a manifest, a set of stages, and an export format. The assessments below are the ones shipped in the reference implementation (a sustainable-development energy pack), included here as **worked examples** of both assessment families rather than an exhaustive or permanent list. Expect this list to grow.
+
+See [Assessments](/concepts/assessments) for how the underlying setup → build → output lifecycle works for any assessment, regardless of domain.
+
+## Widget-backed examples
+
+These collect a table of inputs, then compute a live results widget that recalculates instantly as you edit values.
+
+| Assessment | Goal | Key inputs | Output | Export |
+|---|---|---|---|---|
+| **LCOE Model** | Levelized cost of energy and sensitivity range | Technology type, net capacity, CAPEX, OPEX, capacity factor, discount rate | Cost per kWh with sensitivity range | XLSX |
+| **Carbon Model** | Emission reductions across 7 clean energy/cooking methodologies | Method pack, devices/households, baseline vs. project fuel consumption, fNRB | Net annual emission reductions (tCO2e/yr) | XLSX |
+| **Solar Estimate** | Annual/monthly solar PV production via NREL PVWatts | System capacity, site coordinates (or address), tilt, azimuth | Year 1 AC energy, capacity factor, monthly breakdown | XLSX |
+
+<Info>
+  A completed Solar Estimate can feed directly into the LCOE Model as an input dependency for solar projects.
+</Info>
+
+## Layered examples
+
+These build up through confirmable stages — categories, then items within those categories, then a synthesized final view.
+
+| Assessment | Goal | Stages | Output | Export |
+|---|---|---|---|---|
+| **Stakeholder Assessment** | Map and profile project stakeholders with an engagement strategy | Categories → Stakeholders → Map | Categorized stakeholder map + written engagement strategy | DOCX |
+| **Landscape Mapping** | Map the ecosystem of actors, programs, and initiatives around a project | Categories → Entities → Map | Categorized ecosystem map + written strategic analysis | DOCX |
+| **Risk Assessment** | A project-specific risk register with mitigations and ratings | Categories → Risks → Mitigations → Results | Rated risk register, category rollups, top risks, unresolved issues | XLSX (multi-sheet) |
+| **Implementation Plan** | Convert the project plan into a workstream-grouped execution workflow | Categories → Activities → Plan | Workstream-grouped activities with status and dependencies | No export — a working view synced from the project plan |
+
+## Extending the catalog
+
+Because assessments are declared through a manifest rather than hardcoded into the platform, adding a new one — for a new domain, or a new analytical need within energy — doesn't require changing this document's structure, just adding a new row to the tables above once it ships.

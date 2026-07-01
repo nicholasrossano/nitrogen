@@ -1,103 +1,55 @@
 ---
-title: "Quickstart: from sign-up to your first deliverable"
-description: "Sign up, create a project, upload evidence, select modules, confirm the outline, and export your first AI-generated deliverable step by step."
+title: "Quickstart: from sign-up to your first assessment"
+description: "Sign up, describe your project, upload evidence, generate a project plan, and run your first assessment — step by step."
 ---
 
-This guide walks you through the complete Nitrogen AI workflow from first sign-up to your first exported deliverable. You'll create a project, upload supporting evidence, select a module, confirm the outline, generate your output, and export it — all in one session.
+This guide walks through the full Nitrogen AI workflow, from sign-up to your first exported assessment output.
 
 <Steps>
   <Step title="Sign up for Nitrogen AI">
-    Go to [app.the-nitrogen.ai](https://app.the-nitrogen.ai) and create your account using your email address.
+    Go to [app.the-nitrogen.ai](https://app.the-nitrogen.ai) and create your account with your email address.
 
-    After confirming your email, you'll land on the home screen. New accounts start on the **trial tier**, which lets you explore the platform before committing to a subscription or adding your own API key.
+    New accounts start on the **trial tier**, which gives you limited AI generation credits to explore the platform.
 
     <Tip>
-      If your organization already has a Nitrogen AI account, ask your admin to invite you directly rather than signing up separately. This keeps your projects under a shared workspace.
+      If your organization already uses Nitrogen AI, ask an existing member to invite you to their workspace instead of signing up separately — see [Workspaces](/concepts/workspaces).
     </Tip>
   </Step>
 
-  <Step title="Create a project">
-    From the home screen, click **New project**.
-
-    Describe your project in the chat using plain language — where it's located, what it aims to do, who it's for, and any relevant technical or financial details you already have. You don't need everything ready upfront.
+  <Step title="Describe your project">
+    Start a new chat and describe your project in plain language — location, technology, scale, target population, and what you're trying to achieve.
 
     ```text
-    Example: "We're developing a 5 MW solar-plus-storage mini-grid in rural Nigeria to 
-    serve 3,000 households and small businesses currently without reliable grid access. 
-    We're seeking development finance and need an investment memo and LCOE analysis."
+    Example: "We're developing a 5 MW solar-plus-storage mini-grid in rural Nigeria to
+    serve 3,000 households and small businesses currently without reliable grid access.
+    We're seeking development finance and need a project plan and an LCOE model."
     ```
 
-    Nitrogen AI uses your description to structure the project record and to recommend the most relevant modules for your project type.
-
-    <Tip>
-      Be as specific as you can about geography, technology type, scale, and the audience for your deliverables. The more context you give, the more targeted the module recommendations will be.
-    </Tip>
+    Nitrogen AI uses this description to create a project record and infer geography, sector, and target population.
   </Step>
 
-  <Step title="Upload evidence documents">
-    Go to the **Evidence** tab within your project and upload your supporting materials.
-
-    **Supported formats:** PDF, DOCX, XLSX — up to 50 MB per file.
-
-    Evidence can include feasibility studies, site reports, financial models, prior assessments, letters of support, grant agreements, or any other relevant materials. Nitrogen AI uses these documents to ground every assessment and deliverable in your actual project context, with traceable citations in each output.
+  <Step title="Upload evidence">
+    Open the project's **Files** view and upload supporting materials — feasibility studies, technical reports, financial models, or prior assessments.
 
     <Note>
-      You can upload evidence at any point — before or after selecting modules. Adding evidence before running an assessment gives the AI more material to work with and generally produces more accurate, specific outputs.
+      You can generate a project plan and run assessments without any evidence uploaded — Nitrogen AI will flag gaps and ask for the missing inputs conversationally. Uploading evidence first generally produces more specific, better-grounded results.
     </Note>
-
-    <Warning>
-      Do not upload documents containing personally identifiable information (PII) that is not relevant to the project assessment. Uploaded evidence is used to generate deliverables and may be referenced in citations.
-    </Warning>
   </Step>
 
-  <Step title="Select modules">
-    Go to the **Modules** tab. Nitrogen AI automatically surfaces modules relevant to your project based on your description.
+  <Step title="Generate your project plan">
+    Ask Nitrogen AI to build your project plan, or it will offer to generate one once your description has enough detail (at minimum, a description with identifiable geography and technology).
 
-    Review the recommended modules and select the ones you want to run. Common starting points include:
-
-    - **Investment memo** — a structured, investor-ready document covering project rationale, financials, risk, and impact
-    - **Due diligence checklist** — a gap analysis against standard criteria used by development finance institutions
-    - **LCOE model** — levelized cost of electricity calculation for renewable energy projects
-    - **Carbon model** — estimated greenhouse gas emission reductions with methodology grounding
-
-    You can run multiple modules on the same project. Each module draws on the same uploaded evidence and project details.
-
-    <Tip>
-      If you're unsure where to start, run the **Investment memo** module first. It produces a comprehensive overview that often informs which other modules to run next.
-    </Tip>
+    The plan organizes your work into pillars, each containing concrete items — some are assessments you can run directly, others are general deliverables to track manually.
   </Step>
 
-  <Step title="Review and confirm the outline">
-    Before Nitrogen AI begins generating the full deliverable, it presents a structured outline for your review — this is the **alignment step**.
+  <Step title="Run an assessment">
+    From the project plan (or by asking in chat), launch an assessment relevant to your project — for example, the LCOE Model for a solar project. Each assessment opens in a dedicated workspace with a setup → build → output flow.
 
-    The outline shows you the sections and key points the deliverable will cover, based on your project description and uploaded evidence. Review it carefully and confirm that it reflects your goals.
-
-    If something is missing or misaligned, you can provide feedback in the chat before confirming. Nitrogen AI will adjust the outline accordingly.
-
-    <Info>
-      Taking a moment to review the outline is the most effective way to shape the final output before generation runs. It's much easier to redirect the deliverable at this stage than to edit a completed document.
-    </Info>
+    Confirm each stage as you go; some steps auto-populate from your evidence and let you edit before confirming.
   </Step>
 
-  <Step title="Generate the deliverable">
-    Once you confirm the outline, click **Generate** to run the assessment.
-
-    Nitrogen AI processes your project information and uploaded evidence to produce the deliverable. Generation typically takes between a few seconds and a few minutes depending on the module and the volume of evidence.
-
-    Each output includes citations linking back to specific passages in your uploaded documents, so you can verify the reasoning behind any claim.
-
-    <Info>
-      If you haven't uploaded evidence yet, Nitrogen AI will still generate an output — but the content will draw on general precedent rather than your specific materials. Upload evidence first for the most accurate and defensible results.
-    </Info>
-  </Step>
-
-  <Step title="Export to DOCX">
-    Once generation is complete, click **Export** to download the deliverable.
-
-    - Text-based deliverables — investment memos, assessments, checklists — export as **DOCX**
-    - Financial models and data outputs export as **XLSX**
-
-    The exported file is formatted and ready to share with investors, donors, or your internal team. No additional formatting is required.
+  <Step title="Export your result">
+    Once the assessment reaches its final stage and you confirm it, click **Export** to download the result as DOCX or XLSX, ready to share with investors, donors, or your internal team.
   </Step>
 </Steps>
 
@@ -105,13 +57,13 @@ This guide walks you through the complete Nitrogen AI workflow from first sign-u
 
 <CardGroup cols={2}>
   <Card title="Core concepts" icon="lightbulb" href="/concepts/projects">
-    Learn how projects, modules, evidence, and deliverables relate to each other.
+    Learn how projects, the project plan, assessments, and status relate to each other.
   </Card>
   <Card title="Upload evidence" icon="file-lines" href="/guides/upload-evidence">
     Best practices for preparing and uploading supporting documents.
   </Card>
-  <Card title="Module catalog" icon="grid" href="/modules/investment-memo">
-    See everything available in the Nitrogen AI module library.
+  <Card title="Example assessments" icon="grid" href="/example-assessments">
+    See the example assessments shipped in the reference implementation.
   </Card>
   <Card title="Authentication" icon="lock" href="/authentication">
     Authenticate with the Nitrogen AI API and manage your API keys.
