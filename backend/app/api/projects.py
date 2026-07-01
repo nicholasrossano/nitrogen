@@ -15,6 +15,7 @@ from app.core.auth import get_current_user, AuthUser
 from app.core.permissions import (
     ensure_user_exists,
     get_project_with_role,
+    project_access_filter,
     require_project_editor,
     require_owner,
 )
@@ -252,7 +253,7 @@ async def create_project(
     initiative = Project(
         user_id=user.uid,
         workspace_id=workspace.id,
-        title=data.title,
+        title=data.title or "New Project",
         slug=slug,
     )
     db.add(initiative)
@@ -319,16 +320,23 @@ async def list_projects(
     archived: bool = False,
     workspace_id: str | None = None,
 ):
-    """List initiatives for the selected workspace."""
+    """List projects the user is on in the selected workspace (creator or share).
+
+    In ``SINGLE_ORG_MODE``, workspace members still see all projects in that workspace.
+    """
     await ensure_user_exists(db, user)
     workspace, _membership = await resolve_workspace_for_user(db, user.uid, workspace_id)
 
+    filters = [
+        Project.workspace_id == workspace.id,
+        Project.archived == archived,
+    ]
+    if not get_settings().single_org_mode:
+        filters.append(project_access_filter(user.uid))
+
     workspace_projects = await db.execute(
         select(Project)
-        .where(
-            Project.workspace_id == workspace.id,
-            Project.archived == archived,
-        )
+        .where(*filters)
         .order_by(Project.updated_at.desc(), Project.created_at.desc())
         .limit(limit)
         .offset(offset)

@@ -12,7 +12,6 @@ from app.core.auth import AuthUser
 from app.core.execution_context import ExecutionContext
 from app.core.permissions import get_project_with_role
 from app.mcp.exposure_policy import resource_visibility
-from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project import Project
 from app.models.memo import MemoVersion
@@ -105,25 +104,6 @@ async def _read_evidence_chunk(uri: str, db: AsyncSession, ctx: ExecutionContext
             "content": chunk.content,
             "page_number": chunk.page_number,
             "created_at": chunk.created_at.isoformat() if chunk.created_at else None,
-        },
-    }
-
-
-async def _read_corpus_doc(uri: str, db: AsyncSession, ctx: ExecutionContext) -> dict:
-    _ = ctx
-    doc_id = UUID(uri.rsplit("/", 1)[-1])
-    doc = (await db.execute(select(CorpusDocument).where(CorpusDocument.id == doc_id))).scalar_one_or_none()
-    if doc is None:
-        raise ValueError("CorpusDocument not found.")
-    return {
-        "uri": uri,
-        "resource_type": "corpus_doc",
-        "data": {
-            "id": str(doc.id),
-            "title": doc.title,
-            "source": doc.source,
-            "metadata": doc.doc_metadata,
-            "created_at": doc.created_at.isoformat() if doc.created_at else None,
         },
     }
 
@@ -265,18 +245,6 @@ def register_all(registry: ResourceRegistry) -> None:
             project_scoped=True,
             read_handler=_read_evidence_chunk,
             visibility=resource_visibility("evidence_chunk"),
-        )
-    )
-    registry.register(
-        ResourceDefinition(
-            uri_pattern="nitrogen://corpus/{doc_id}",
-            resource_type="corpus_doc",
-            name="Corpus Document",
-            description="Global corpus document metadata.",
-            mime_type="application/json",
-            project_scoped=False,
-            read_handler=_read_corpus_doc,
-            visibility=resource_visibility("corpus_doc"),
         )
     )
     registry.register(

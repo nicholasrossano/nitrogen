@@ -69,22 +69,28 @@ async def test_mcp_http_transport_smoke(monkeypatch: pytest.MonkeyPatch) -> None
     async def _fake_auth(_token: str) -> AuthUser:
         return AuthUser(uid="http-user", email="http@example.com")
 
+    async def _fake_get_project_with_role(_db, project_id, _user):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(id=project_id), "owner"
+
     async def _fake_build_context(_db, user, project_id=None) -> ExecutionContext:
         assert user.uid == "http-user"
         return _ctx()
 
-    async def _fake_corpus_reader(uri: str, _db, _ctx) -> dict:
-        return {"uri": uri, "resource_type": "corpus_doc", "data": {"title": "Test corpus doc"}}
+    async def _fake_evidence_reader(uri: str, _db, _ctx) -> dict:
+        return {"uri": uri, "resource_type": "evidence_doc", "data": {"filename": "Test evidence doc"}}
 
-    corpus_definition = next(
+    evidence_definition = next(
         definition
         for definition in get_resource_registry().list_definitions()
-        if definition.resource_type == "corpus_doc"
+        if definition.resource_type == "evidence_doc"
     )
 
     monkeypatch.setattr(mcp_server, "authenticate_bearer_token", _fake_auth)
+    monkeypatch.setattr(mcp_server, "get_project_with_role", _fake_get_project_with_role)
     monkeypatch.setattr(mcp_server, "build_context", _fake_build_context)
-    monkeypatch.setattr(corpus_definition, "read_handler", _fake_corpus_reader)
+    monkeypatch.setattr(evidence_definition, "read_handler", _fake_evidence_reader)
 
     http_app, manager = mcp_server.create_mcp_http_app()
 
@@ -109,7 +115,10 @@ async def test_mcp_http_transport_smoke(monkeypatch: pytest.MonkeyPatch) -> None
                     assert tool_result.isError is False
                     assert tool_result.structuredContent is not None
 
-                    resource_result = await session.read_resource(f"nitrogen://corpus/{uuid4()}")
+                    project_id = uuid4()
+                    resource_result = await session.read_resource(
+                        f"nitrogen://projects/{project_id}/evidence/docs/{uuid4()}"
+                    )
                     assert resource_result.contents
-                    assert "Test corpus doc" in resource_result.contents[0].text
+                    assert "Test evidence doc" in resource_result.contents[0].text
 

@@ -5,7 +5,7 @@ import { Calculator, Files, ListChecks, Loader2, MapPinned, Tag, Users } from 'l
 import { api, type AssumptionSummary, type Project } from '@/lib/api';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
-import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTable';
+import { StatusOverviewTable } from '@/components/project-status/StatusOverviewTable';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import type { ResearchPanelCitation } from './ResearchPanel';
 
@@ -168,9 +168,9 @@ export function ProjectOverviewHeader({
       )}
 
       <section className="mt-8">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Health Overview</p>
-        <ProjectHealthTable
-          projectId={project.id}
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Status Overview</p>
+        <StatusOverviewTable
+          initiativeId={project.id}
           readOnly={project.shared_role === 'viewer'}
           hideRefreshButton={true}
           refreshToken={healthRefreshToken}

@@ -178,16 +178,16 @@ class ChatGenerationMixin:
             iid = _UUID(ctx["project_id"])
             async with AsyncSessionLocal() as session:
                 retrieval = TieredRetrievalService(session)
-                corpus_facts = await retrieval.search_corpus(
-                    search_query, iid, corpus_top_k=12, evidence_top_k=12,
+                evidence_facts = await retrieval.search_evidence(
+                    search_query, iid, evidence_top_k=12,
                 )
-                if not corpus_facts:
-                    corpus_facts = await retrieval.search_project_materials(
+                if not evidence_facts:
+                    evidence_facts = await retrieval.search_project_materials(
                         search_query, iid, max_results=10,
                     )
-            for f in corpus_facts:
+            for f in evidence_facts:
                 f.project_label = label
-            return corpus_facts
+            return evidence_facts
 
         # Each project gets its own session, so parallel execution is safe.
         facts_a, facts_b = await asyncio.gather(
@@ -242,7 +242,7 @@ class ChatGenerationMixin:
         await _step("plan_tools", "Research plan ready", "done")
 
         shared_facts: list[RetrievedFact] = []
-        tiers_used = ["corpus"]
+        tiers_used = ["evidence"]
         if search_tasks:
             results = await asyncio.gather(*search_tasks)
             for label, facts_list in zip(search_labels, results):
@@ -1209,7 +1209,6 @@ class ChatGenerationMixin:
     def _rank_facts(self, facts: list[RetrievedFact]) -> list[RetrievedFact]:
         """Rank and deduplicate facts by source quality and confidence."""
         tier_order = {
-            SourceType.CORPUS: 0,
             SourceType.EVIDENCE: 0,
             SourceType.OPENALEX: 1,
             SourceType.WEB: 2,

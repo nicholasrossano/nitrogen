@@ -2,8 +2,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Cookie
+from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.core import google_oauth
 from app.core.auth import AuthUser, get_current_user, get_optional_user
 from app.core.database import get_db
+from app.core.field_encryption import decrypt_field, encrypt_field, encryption_configured
 from app.core.log_sanitizer import sanitize_exception
 from app.core.permissions import require_project_editor, require_project_viewer
 from app.core.storage import get_uploads_storage
@@ -40,6 +41,21 @@ _EXT_MAP = {"pdf": ".pdf", "docx": ".docx", "xlsx": ".xlsx", "pptx": ".pptx", "t
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+_OAUTH_UID_COOKIE = "nitrogen_oauth_uid"
+
+
+def _store_oauth_tokens(refresh_token: str, access_token: str) -> tuple[str, str]:
+    if encryption_configured():
+        return encrypt_field(refresh_token), encrypt_field(access_token)
+    return refresh_token, access_token
+
+
+def _read_oauth_token(stored: str | None) -> str:
+    if not stored:
+        return ""
+    return decrypt_field(stored)
+
+
 async def _get_connection(
     db: AsyncSession, user_id: str
 ) -> UserGoogleConnection | None:
@@ -61,15 +77,19 @@ async def _get_valid_access_token(
         and connection.token_expiry
         and connection.token_expiry > now + buffer
     ):
-        return connection.access_token
+        return _read_oauth_token(connection.access_token)
 
-    token_data = await google_oauth.refresh_access_token(connection.refresh_token)
-    connection.access_token = token_data["access_token"]
+    refresh_token = _read_oauth_token(connection.refresh_token)
+    token_data = await google_oauth.refresh_access_token(refresh_token)
+    plain_access = token_data["access_token"]
+    connection.access_token = (
+        encrypt_field(plain_access) if encryption_configured() else plain_access
+    )
     connection.token_expiry = now + timedelta(seconds=token_data.get("expires_in", 3600))
     connection.updated_at = now
     await db.commit()
     await db.refresh(connection)
-    return connection.access_token
+    return plain_access
 
 
 # ── OAuth flow ────────────────────────────────────────────────────────────────
@@ -84,13 +104,21 @@ async def start_google_connect(
     user: AuthUser = Depends(get_current_user),
 ):
     """Return the Google OAuth consent URL for the authenticated user."""
-    if not settings.google_client_id:
+    if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Google Drive integration is not configured",
         )
     state = google_oauth.create_oauth_state(user.uid, body.project_id)
-    return {"auth_url": google_oauth.build_auth_url(state)}
+    response = JSONResponse({"auth_url": google_oauth.build_auth_url(state)})
+    response.set_cookie(
+        _OAUTH_UID_COOKIE,
+        user.uid,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @router.get("/google/callback")
@@ -99,6 +127,7 @@ async def google_oauth_callback(
     state: str = Query(None),
     error: str = Query(None),
     db: AsyncSession = Depends(get_db),
+    oauth_uid: str | None = Cookie(None, alias=_OAUTH_UID_COOKIE),
 ):
     """
     Google OAuth callback — not called by the frontend directly.
@@ -112,6 +141,9 @@ async def google_oauth_callback(
     try:
         user_id, project_id = google_oauth.verify_oauth_state(state)
     except ValueError:
+        return RedirectResponse(url=f"{frontend_url}?drive_error=invalid_state")
+
+    if not oauth_uid or oauth_uid != user_id:
         return RedirectResponse(url=f"{frontend_url}?drive_error=invalid_state")
 
     try:
@@ -131,10 +163,12 @@ async def google_oauth_callback(
 
     google_email = await google_oauth.get_google_email(access_token)
 
+    stored_refresh, stored_access = _store_oauth_tokens(refresh_token, access_token)
+
     existing = await _get_connection(db, user_id)
     if existing:
-        existing.refresh_token = refresh_token
-        existing.access_token = access_token
+        existing.refresh_token = stored_refresh
+        existing.access_token = stored_access
         existing.token_expiry = token_expiry
         existing.google_email = google_email
         existing.updated_at = now
@@ -142,17 +176,19 @@ async def google_oauth_callback(
         db.add(
             UserGoogleConnection(
                 user_id=user_id,
-                refresh_token=refresh_token,
-                access_token=access_token,
+                refresh_token=stored_refresh,
+                access_token=stored_access,
                 token_expiry=token_expiry,
                 google_email=google_email,
             )
         )
 
     await db.commit()
-    return RedirectResponse(
+    response = RedirectResponse(
         url=f"{frontend_url}/projects/{project_id}?drive_connected=true"
     )
+    response.delete_cookie(_OAUTH_UID_COOKIE)
+    return response
 
 
 @router.get("/google/status")
@@ -203,7 +239,7 @@ async def disconnect_google_drive(
     if not connection:
         raise HTTPException(status_code=404, detail="No Google Drive connection found")
     try:
-        await google_oauth.revoke_token(connection.refresh_token)
+        await google_oauth.revoke_token(_read_oauth_token(connection.refresh_token))
     except Exception:
         pass
     await db.delete(connection)

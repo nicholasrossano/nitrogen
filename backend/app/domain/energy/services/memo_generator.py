@@ -34,13 +34,11 @@ class MemoGeneratorService:
     async def generate(
         self,
         initiative: Project,
-        include_corpus: bool = True,
     ) -> tuple[MemoContent, list[Citation]]:
         """Generate a memo with RAG-grounded citations"""
         # Retrieve relevant chunks for each section
         section_chunks = await self.rag.retrieve_for_memo_sections(
             project_id=initiative.id,
-            include_corpus=include_corpus,
         )
         
         # Build citation map (chunk_id -> citation number)
@@ -206,8 +204,7 @@ Generate a structured memo with the following sections. Use citation numbers [1]
                 section_context = f"\n--- Evidence for {section.replace('_', ' ').title()} ---\n"
                 for chunk in chunks:
                     citation_num = citation_map[chunk.chunk_id]
-                    source_label = f"[{chunk.source_type.upper()}]" if chunk.source_type == "corpus" else "[EVIDENCE]"
-                    section_context += f"\n[{citation_num}] {source_label} {chunk.source_title}:\n{chunk.content}\n"
+                    section_context += f"\n[{citation_num}] [EVIDENCE] {chunk.source_title}:\n{chunk.content}\n"
                 context_parts.append(section_context)
         
         return "\n".join(context_parts)
@@ -232,7 +229,7 @@ Your task is to generate a structured memo that:
 CITATION RULES:
 - Every factual claim should have a citation
 - Use the format [1], [2], etc. inline
-- Distinguish between user-provided evidence and case study corpus findings
+- Distinguish between user-provided evidence and other retrieved findings
 - If evidence is limited, acknowledge uncertainty
 
 TONE:
