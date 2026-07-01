@@ -31,11 +31,6 @@ from app.resources.registry import ResourceDefinition
 STDIO_USER_ID_ENV = "MCP_STDIO_USER_ID"
 STDIO_USER_EMAIL_ENV = "MCP_STDIO_USER_EMAIL"
 STDIO_DEFAULT_PROJECT_ENV = "MCP_DEFAULT_PROJECT_ID"
-HTTP_DEV_USER_ID_HEADER = "x-mcp-dev-user-id"
-HTTP_DEV_USER_EMAIL_HEADER = "x-mcp-dev-user-email"
-HTTP_DEV_BYPASS_ENV = "MCP_ALLOW_DEV_HTTP_AUTH"
-HTTP_DEV_USER_ID_ENV = "MCP_HTTP_DEV_USER_ID"
-HTTP_DEV_USER_EMAIL_ENV = "MCP_HTTP_DEV_USER_EMAIL"
 
 _server: Server[Any, Request] | None = None
 _http_app: Starlette | None = None
@@ -193,14 +188,6 @@ async def _resolve_request_user(request: Request | None) -> AuthUser:
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() == "bearer" and token:
         return await authenticate_bearer_token(token)
-
-    if os.getenv(HTTP_DEV_BYPASS_ENV, "").lower() in {"1", "true", "yes"}:
-        dev_user_id = request.headers.get(HTTP_DEV_USER_ID_HEADER) or os.getenv(HTTP_DEV_USER_ID_ENV)
-        if dev_user_id:
-            return AuthUser(
-                uid=dev_user_id,
-                email=request.headers.get(HTTP_DEV_USER_EMAIL_HEADER) or os.getenv(HTTP_DEV_USER_EMAIL_ENV),
-            )
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

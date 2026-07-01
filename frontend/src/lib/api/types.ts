@@ -471,6 +471,74 @@ export interface ProjectHealthResponse {
   dimensions: ProjectHealthDimension[];
 }
 
+// Project status (successor to project health)
+export type ProjectStatusLevel = ProjectHealthStatus;
+export type ProjectStatusConfidence = ProjectHealthConfidence;
+export type ProjectStatusOverride = ProjectHealthOverride & { category_key: string };
+export type ProjectStatusSourceReference = ProjectHealthSourceReference;
+export type ProjectStatusAssessmentReference = ProjectHealthAssessmentReference;
+
+export interface ProjectStatusCriterion {
+  id: string;
+  text: string;
+  type: 'qualitative' | 'indicator' | 'metric';
+  metric_hint?: string | null;
+}
+
+export interface ProjectStatusCriteria {
+  summary: string;
+  criteria: ProjectStatusCriterion[];
+  retrieval_focus: string[];
+  parse_warnings: string[];
+}
+
+export interface ProjectStatusCategoryConfig {
+  id: string;
+  category_key: string;
+  label: string;
+  definition_text: string;
+  criteria: ProjectStatusCriteria | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectStatusCategoryRow {
+  category_key: string;
+  label: string;
+  definition_text: string;
+  criteria_summary: string | null;
+  status: ProjectStatusLevel;
+  effective_status: ProjectStatusLevel;
+  confidence: ProjectStatusConfidence;
+  rationale: string;
+  critical_insight: string;
+  supporting_evidence: string[];
+  suggested_improvement: string | null;
+  retrieved_sources: ProjectStatusSourceReference[];
+  positive_drivers: string[];
+  negative_drivers: string[];
+  blockers: string[];
+  missing_items: string[];
+  relevant_modules: string[];
+  relevant_module_names: string[];
+  relevant_assessments: ProjectStatusAssessmentReference[];
+  improvement_actions: string[];
+  uncertainties: string[];
+  update_source: string;
+  last_updated_at: string;
+  is_stale: boolean;
+  has_override: boolean;
+  overrides: ProjectStatusOverride[];
+}
+
+export interface ProjectStatusResponse {
+  domain: string;
+  project_id: string;
+  stale: boolean;
+  categories: ProjectStatusCategoryRow[];
+}
+
 export interface AssumptionCreateInput {
   key: string;
   label?: string | null;

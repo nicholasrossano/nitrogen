@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Loader2 } from 'lucide-react';
 import { ZoomableContainer } from './ZoomableContainer';
 
@@ -35,6 +36,12 @@ export function DocxViewer({ fileData }: DocxViewerProps) {
           renderFooters: true,
           renderFootnotes: true,
           renderEndnotes: true,
+        });
+        if (cancelled) return;
+        container.innerHTML = DOMPurify.sanitize(container.innerHTML, {
+          USE_PROFILES: { html: true },
+          FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+          FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
         });
       } catch (e) {
         if (!cancelled) {
