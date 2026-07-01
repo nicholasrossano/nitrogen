@@ -25,10 +25,11 @@ class RetrievedChunk:
 
 class RAGService:
     """Service for retrieval-augmented generation"""
-    
-    def __init__(self, db: AsyncSession):
+
+    def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
-        self.embeddings = EmbeddingsService()
+        self.user_id = user_id
+        self.embeddings = EmbeddingsService(user_id=user_id, db=db)
         self.top_k = settings.retrieval_top_k
     
     async def retrieve(

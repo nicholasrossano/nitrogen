@@ -17,7 +17,6 @@ from app.core.execution_context import build_context
 from app.core.auth import get_current_user, AuthUser, MockUser
 from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_project_with_role
-from app.core.llm_client import get_openai_client, record_usage_from_response
 from app.config import get_settings
 from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
 from app.services.assumptions import format_assumptions_for_initiative_prompt
@@ -1281,10 +1280,15 @@ async def generate_chat_title(
     user: AuthUser = Depends(chat_ai_access),
 ):
     """Generate a brief 3-5 word title for a chat based on the first message."""
-    client, is_byok = await get_openai_client(user.uid, db)
+    from app.core.llm_invoke import acompletion
+    from app.core.model_catalog import Complexity, ModelRole
+
     try:
-        resp = await client.chat.completions.create(
-            model=settings.openai_orchestration_model,
+        resp = await acompletion(
+            user.uid,
+            db,
+            role=ModelRole.ORCHESTRATION,
+            complexity=Complexity.LIGHT,
             messages=[
                 {
                     "role": "system",
@@ -1299,7 +1303,6 @@ async def generate_chat_title(
             temperature=0,
             max_tokens=20,
         )
-        await record_usage_from_response(user.uid, settings.openai_orchestration_model, resp, db, is_byok=is_byok)
         title = (resp.choices[0].message.content or "").strip().strip('"').strip("'")
         return {"title": title or data.message[:40]}
     except Exception as e:

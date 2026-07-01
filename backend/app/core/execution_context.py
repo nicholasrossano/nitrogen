@@ -19,6 +19,7 @@ class ExecutionContext:
     ai_access_granted: bool
     is_byok: bool
     request_id: str
+    byok_providers: list[str] | None = None
     chat_id: UUID | None = None
 
 
@@ -50,6 +51,7 @@ async def build_context(
     budget = await check_usage_budget(user.uid, db)
     ai_access_granted = budget.get("allowed", True)
     is_byok = budget.get("tier") == "byok"
+    byok_providers = budget.get("byok_providers")
 
     return ExecutionContext(
         user_id=user.uid,
@@ -58,5 +60,6 @@ async def build_context(
         initiative_role=role,
         ai_access_granted=ai_access_granted,
         is_byok=is_byok,
+        byok_providers=byok_providers,
         request_id=str(uuid4()),
     )

@@ -165,7 +165,7 @@ async def store_evidence_doc(
     background processing instead.
     """
     parser = DocumentParserService()
-    embeddings_service = EmbeddingsService()
+    embeddings_service = EmbeddingsService(user_id=initiative.created_by, db=db)
 
     from app.core.storage import get_uploads_storage
 

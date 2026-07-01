@@ -75,6 +75,16 @@ async def store_api_key(
 
     encrypted = encrypt_api_key(body.api_key)
 
+    # One active BYOK key: replace the other provider when switching.
+    other_providers = [p for p in BYOK_SUPPORTED_PROVIDERS if p != body.provider]
+    if other_providers:
+        await db.execute(
+            delete(UserApiKey).where(
+                UserApiKey.user_id == user.uid,
+                UserApiKey.provider.in_(other_providers),
+            )
+        )
+
     result = await db.execute(
         select(UserApiKey).where(
             UserApiKey.user_id == user.uid,

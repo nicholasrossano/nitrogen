@@ -17,7 +17,8 @@ from app.assumptions.config import (
     expected_assumptions_for_assessments,
 )
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
 from app.domain.resolver import get_active_domain
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
 from app.models.evidence import EvidenceChunk, EvidenceDoc
@@ -285,21 +286,16 @@ async def _should_log_chat_assumption(
         },
     }
     try:
-        client, is_byok = await get_openai_client(actor.user_id, db)
-        resp = await client.chat.completions.create(
-            model=settings.openai_orchestration_model,
+        resp = await acompletion(
+            actor.user_id,
+            db,
+            role=ModelRole.ORCHESTRATION,
+            complexity=Complexity.STANDARD,
             messages=[{"role": "user", "content": prompt}],
             tools=[tool_def],
             tool_choice={"type": "function", "function": {"name": "classify_assumption_relevance"}},
             temperature=0,
             max_tokens=180,
-        )
-        await record_usage_from_response(
-            actor.user_id or SYSTEM_ACTOR,
-            settings.openai_orchestration_model,
-            resp,
-            db,
-            is_byok=is_byok,
         )
         tool_calls = resp.choices[0].message.tool_calls or []
         if not tool_calls:
@@ -1146,22 +1142,17 @@ async def extract_assumptions_from_sources(
         f"{text}"
     )
     try:
-        client, is_byok = await get_openai_client(actor.user_id, db)
-        response = await client.chat.completions.create(
-            model=settings.openai_generation_model,
+        response = await acompletion(
+            actor.user_id,
+            db,
+            role=ModelRole.GENERATION,
+            complexity=Complexity.STANDARD,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0,
-        )
-        await record_usage_from_response(
-            actor.user_id or "",
-            settings.openai_generation_model,
-            response,
-            db,
-            is_byok=is_byok,
         )
         payload = json.loads(response.choices[0].message.content or "{}")
     except Exception as exc:  # noqa: BLE001
@@ -1257,22 +1248,17 @@ async def extract_assumptions_from_finding(
         f"Cited sources (if any):\n{sources_blob}"
     )
     try:
-        client, is_byok = await get_openai_client(actor.user_id, db)
-        response = await client.chat.completions.create(
-            model=settings.openai_generation_model,
+        response = await acompletion(
+            actor.user_id,
+            db,
+            role=ModelRole.GENERATION,
+            complexity=Complexity.STANDARD,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0,
-        )
-        await record_usage_from_response(
-            actor.user_id or "",
-            settings.openai_generation_model,
-            response,
-            db,
-            is_byok=is_byok,
         )
         payload = json.loads(response.choices[0].message.content or "{}")
     except Exception as exc:  # noqa: BLE001

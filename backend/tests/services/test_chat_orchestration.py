@@ -44,10 +44,10 @@ def _build_service():
 async def test_get_next_action_short_circuits_for_tool_hint(monkeypatch: pytest.MonkeyPatch):
     service = _build_service()
 
-    async def fail_get_client():
+    async def fail_acomplete(*_args, **_kwargs):
         raise AssertionError("tool hint short-circuit should not call the LLM")
 
-    monkeypatch.setattr(service, "_get_client", fail_get_client)
+    monkeypatch.setattr(service, "_acomplete", fail_acomplete)
 
     result = await service.project_router.get_next_action(
         messages=[],
@@ -65,10 +65,10 @@ async def test_get_next_action_short_circuits_for_tool_hint(monkeypatch: pytest.
 async def test_get_next_action_short_circuits_for_field_context(monkeypatch: pytest.MonkeyPatch):
     service = _build_service()
 
-    async def fail_get_client():
+    async def fail_acomplete(*_args, **_kwargs):
         raise AssertionError("field-context short-circuit should not call the LLM")
 
-    monkeypatch.setattr(service, "_get_client", fail_get_client)
+    monkeypatch.setattr(service, "_acomplete", fail_acomplete)
 
     result = await service.project_router.get_next_action(
         messages=[],
@@ -100,23 +100,20 @@ async def test_get_next_action_returns_mocked_llm_tool_call(monkeypatch: pytest.
     response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call]))]
     )
-    fake_client = _FakeClient(response)
     service = _build_service()
+    acomplete_calls = []
 
-    async def fake_get_client():
-        return fake_client
-
-    async def fake_record_usage(*_args, **_kwargs):
-        return None
+    async def fake_acomplete(role, complexity, **kwargs):
+        acomplete_calls.append({"role": role, "complexity": complexity, **kwargs})
+        return response
 
     async def fake_retrieve_for_context(*_args, **_kwargs):
         return {}
 
-    monkeypatch.setattr(service, "_get_client", fake_get_client)
+    monkeypatch.setattr(service, "_acomplete", fake_acomplete)
     monkeypatch.setattr(service, "_get_tool_list", lambda *args, **kwargs: [{"function": {"name": "generate_project_plan"}}])
     monkeypatch.setattr(service.retrieval, "retrieve_for_context", fake_retrieve_for_context)
     monkeypatch.setattr(service.retrieval, "format_context_for_prompt", lambda *_args, **_kwargs: "")
-    monkeypatch.setattr("app.services.chat.record_usage_from_response", fake_record_usage)
 
     messages = [
         SimpleNamespace(role="user", content="We are building a solar mini-grid in Kenya.", widget_type=None)
@@ -138,7 +135,7 @@ async def test_get_next_action_returns_mocked_llm_tool_call(monkeypatch: pytest.
 
     assert result.action == "generate_project_plan"
     assert result.parameters == {"message": "Generating your project plan."}
-    create_kwargs = fake_client.chat.completions.calls[0]
+    create_kwargs = acomplete_calls[0]
     assert create_kwargs["tool_choice"] == "required"
     assert create_kwargs["temperature"] == 0.7
     assert create_kwargs["tools"] == [{"function": {"name": "generate_project_plan"}}]
@@ -162,18 +159,15 @@ async def test_plan_tool_calls_returns_llm_tool_calls(monkeypatch: pytest.Monkey
     response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=tool_calls))]
     )
-    fake_client = _FakeClient(response)
     service = _build_service()
+    acomplete_calls = []
 
-    async def fake_get_client():
-        return fake_client
+    async def fake_acomplete(role, complexity, **kwargs):
+        acomplete_calls.append(kwargs)
+        return response
 
-    async def fake_record_usage(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(service, "_get_client", fake_get_client)
+    monkeypatch.setattr(service, "_acomplete", fake_acomplete)
     monkeypatch.setattr(service, "_get_tool_list", lambda *args, **kwargs: [{"function": {"name": "search_web_sources"}}])
-    monkeypatch.setattr("app.services.chat.record_usage_from_response", fake_record_usage)
 
     result = await service._plan_tool_calls(
         user_message="What is a typical solar capacity factor in Kenya?",
@@ -182,7 +176,7 @@ async def test_plan_tool_calls_returns_llm_tool_calls(monkeypatch: pytest.Monkey
     )
 
     assert result == tool_calls
-    create_kwargs = fake_client.chat.completions.calls[0]
+    create_kwargs = acomplete_calls[0]
     assert create_kwargs["tool_choice"] == "auto"
     assert create_kwargs["temperature"] == 0
     assert create_kwargs["tools"] == [{"function": {"name": "search_web_sources"}}]
