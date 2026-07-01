@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from app.config import get_settings
-from app.core.llm_client import record_usage_from_response
+from app.core.model_catalog import Complexity, ModelRole
 from app.domain.registry import format_assessment_selection_context, get_tool_hint_action
 from app.services.project_chat_contract import ORCHESTRATION_SYSTEM_PROMPT, ProjectChatAction
 from app.services.assumptions import format_assumptions_for_initiative_prompt
@@ -121,20 +121,13 @@ class ProjectChatRouter:
         )
 
         try:
-            client = await self.chat_service._get_client()
-            response = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            response = await self.chat_service._acomplete(
+                ModelRole.ORCHESTRATION,
+                Complexity.STANDARD,
                 messages=api_messages,
                 tools=tools,
                 tool_choice="required",
                 temperature=0.7,
-            )
-            await record_usage_from_response(
-                self.chat_service.user_id,
-                settings.openai_orchestration_model,
-                response,
-                self.chat_service.db,
-                is_byok=self.chat_service._is_byok,
             )
             tool_call = response.choices[0].message.tool_calls[0]
             action = tool_call.function.name
