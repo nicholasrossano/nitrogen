@@ -7,12 +7,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID
 
-from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.schemas.provenance import (
     Derivation,
@@ -420,15 +420,7 @@ class ProjectPlanService:
     def __init__(self, db: AsyncSession, user_id: str | None = None):
         self.db = db
         self.user_id = user_id
-        self._client: AsyncOpenAI | None = None
-        self._is_byok: bool = False
-        self.model = settings.openai_orchestration_model
         self.retrieval = TieredRetrievalService(db, user_id=self.user_id)
-
-    async def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client, self._is_byok = await get_openai_client(self.user_id, self.db)
-        return self._client
 
     async def generate(
         self,
@@ -485,9 +477,11 @@ For each plan item, include a "source_indices" array listing the 1-based numbers
 of the sources that support that item. Required items MUST cite at least one source.
 """
 
-        client = await self._get_client()
-        response = await client.chat.completions.create(
-            model=self.model,
+        response = await acompletion(
+            self.user_id,
+            self.db,
+            role=ModelRole.ORCHESTRATION,
+            complexity=Complexity.HEAVY,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user_content},
@@ -496,7 +490,6 @@ of the sources that support that item. Required items MUST cite at least one sou
             tool_choice={"type": "function", "function": {"name": "produce_project_plan"}},
             temperature=0.4,
         )
-        await record_usage_from_response(self.user_id, self.model, response, self.db, is_byok=self._is_byok)
 
         tool_call = response.choices[0].message.tool_calls[0]
         plan_data = json.loads(tool_call.function.arguments)

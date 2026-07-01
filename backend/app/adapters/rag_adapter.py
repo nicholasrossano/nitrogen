@@ -73,7 +73,7 @@ class RAGAdapter(BaseAdapter):
         inputs: dict,
     ) -> AdapterResult:
         started = time.perf_counter()
-        rag = RAGService(db)
+        rag = RAGService(db, user_id=ctx.user_id)
 
         project_id = inputs.get("project_id") or (str(ctx.project_id) if ctx.project_id else None)
         if project_id is None:

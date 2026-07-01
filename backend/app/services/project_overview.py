@@ -7,7 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.llm_client import get_openai_client, record_usage_from_response
+from app.core.llm_invoke import acompletion
+from app.core.model_catalog import Complexity, ModelRole
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.project import Project
 from app.models.project_material import ProjectMaterial
@@ -136,20 +137,15 @@ async def generate_project_overview(
         raise ValueError("Upload files to generate a project summary.")
 
     system_prompt, user_prompt = _build_overview_prompt(initiative, source_summaries)
-    client, is_byok = await get_openai_client(user_id, db)
-    response = await client.chat.completions.create(
-        model=settings.openai_generation_model,
+    response = await acompletion(
+        user_id,
+        db,
+        role=ModelRole.GENERATION,
+        complexity=Complexity.STANDARD,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-    )
-    await record_usage_from_response(
-        user_id or "",
-        settings.openai_generation_model,
-        response,
-        db,
-        is_byok=is_byok,
     )
 
     content = (response.choices[0].message.content or "").strip()
