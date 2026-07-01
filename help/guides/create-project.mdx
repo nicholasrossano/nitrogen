@@ -1,76 +1,38 @@
 ---
-title: 'Create and set up a project in Nitrogen AI'
-description: 'Create a Nitrogen AI project by describing it in chat — Nitrogen AI extracts the structured project profile it needs to power your project plan and assessments.'
+title: 'Create a project in Nitrogen AI'
+description: 'Create a Nitrogen AI project by describing it in chat — no form, no fixed intake schema. Nitrogen AI infers what it can and asks for the rest conversationally.'
 ---
 
-Creating a project is how you tell Nitrogen AI what you're working on. There's no form to fill out — you describe your project in a chat message, and Nitrogen AI extracts the structured details it needs to recommend the right assessments and ground every output in your project's context.
-
-## What you'll need before you start
-
-You don't need any files ready before creating a project. That said, having these details in mind makes your opening description more useful:
-
-<CardGroup cols={2}>
-  <Card title="Geography" icon="map-pin">
-    The country or region where the project operates. Be as specific as you can — district or province level is more useful than a country name alone.
-  </Card>
-  <Card title="Target population" icon="users">
-    Who the project serves: households, smallholder farmers, health clinics, schools, and so on. Include an approximate number of beneficiaries if you have one.
-  </Card>
-  <Card title="Sector or technology" icon="solar-panel">
-    The technology or intervention at the center of the project — mini-grid electrification, clean cookstoves, solar irrigation, or climate adaptation, for example.
-  </Card>
-  <Card title="Goal" icon="bullseye">
-    What the project is trying to achieve.
-  </Card>
-</CardGroup>
-
-## Create a new project
+Creating a project is just describing it. There's no form and no required set of fields beyond a title — Nitrogen AI infers geography, sector, and other details directly from your description, and asks conversationally for anything important it's missing.
 
 <Steps>
   <Step title="Start a new chat">
-    From your dashboard, start a new chat. This creates a project record as soon as you send your first message.
-  </Step>
-  <Step title="Describe your project">
-    Write a plain-language description of what the project is and what it's trying to achieve.
+    From your dashboard, start a new chat and describe your project in plain language. This creates the project record immediately.
 
     ```text
-    Example: "A 500 kW solar mini-grid in rural northern Ghana serving 2,000
-    households and 40 anchor businesses currently off-grid."
+    "A community-scale biogas digester program for 40 dairy farms in western Kenya,
+    aimed at replacing charcoal cooking fuel and generating carbon credits."
+    ```
+
+    ```text
+    "A district water utility in Malawi upgrading 12 boreholes to solar-powered
+    pumping, serving roughly 18,000 people."
     ```
 
     <Tip>
-      Mention the technology, the geography, and who the project serves in your opening message. Nitrogen AI extracts geography, sector, and target population directly from this description — the more specific you are, the better the project plan and assessment recommendations will be.
+      The more specific your description — technology, geography, who it serves — the better Nitrogen AI's project plan and assessment recommendations will be. But there's no minimum: you can start vague and refine as you go.
     </Tip>
   </Step>
-  <Step title="Give your project a title">
-    Rename the project from its header at any time — for example, "Rural Mini-Grid Kenya Phase 2." Nitrogen AI generates a default title from your description if you don't set one.
-  </Step>
-  <Step title="Answer any follow-up questions">
-    If your description leaves out something Nitrogen AI needs — like geography or budget range — it asks conversationally. You can answer several fields in a single message; the AI extracts and confirms each one.
+  <Step title="Answer any follow-ups">
+    If something important is missing or ambiguous, Nitrogen AI asks conversationally rather than blocking you with a form. Answer what you know; leave the rest for later.
   </Step>
 </Steps>
 
 <Note>
-  All project fields — title, geography, sector, goal, budget range, and timeline — can be edited at any time. Open the project and click the field you want to change, or mention it in chat.
+  Every field — title, geography, sector, goal, budget range, timeline — can be edited at any time from the project, no matter how or when it was originally set.
 </Note>
 
-## Tips for a strong project description
-
-<Tip>
-  **Be specific about geography.** "Sub-Saharan Africa" is too broad. "Shire Highlands district, southern Malawi" lets the platform surface relevant policy context and comparable precedents.
-</Tip>
-
-<Tip>
-  **Quantify your beneficiaries.** "Rural households" is a start; "approximately 3,500 rural households in 12 villages" is better. Scale and reach details improve the quality of assessments.
-</Tip>
-
-<Tip>
-  **Name the technology.** Include the specific technology — solar home systems, biogas digesters, improved cookstoves, drip irrigation — rather than just the sector. This directly influences which assessments Nitrogen AI recommends.
-</Tip>
-
 ## What happens next
-
-Once your project has enough context, Nitrogen AI can generate a project plan and start recommending assessments.
 
 <CardGroup cols={2}>
   <Card title="Build your project plan" icon="list-check" href="/guides/build-project-plan">
