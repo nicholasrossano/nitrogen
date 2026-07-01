@@ -1,0 +1,73 @@
+---
+title: "Workspaces: personal and team collaboration"
+description: "A workspace is a collaboration tenant in Nitrogen AI — personal by default, or a shared company workspace for teams — separate from per-project sharing."
+---
+
+A **workspace** is the collaboration container above the level of an individual project. Every user has a **personal workspace** by default. Teams can also use a shared **company workspace**, where members automatically see each other's workspace-level resources.
+
+<Info>
+  Workspace membership is a different axis from project sharing. Being a member of a workspace does not automatically give you access to every project in it — project access is still controlled by project ownership or an explicit share. See [Share and collaborate](/guides/share-and-collaborate) for per-project access.
+</Info>
+
+## Personal vs. company workspace
+
+<CardGroup cols={2}>
+  <Card title="Personal workspace" icon="user">
+    Created automatically for every user. Projects you create here are private to you until you explicitly share them.
+  </Card>
+  <Card title="Company workspace" icon="building">
+    A shared team tenant. The first member becomes its owner; everyone you add afterward joins as a member. Use it when a whole team should share workspace-level resources like knowledge banks.
+  </Card>
+</CardGroup>
+
+Switch between workspaces from the workspace selector in the sidebar. Switching changes which projects appear in your drawer — projects live in whichever workspace they were created in.
+
+<Note>
+  When you're in your personal workspace, projects a teammate has shared with you appear separately under **Shared with you** — they still belong to the other person's workspace.
+</Note>
+
+## Workspace roles
+
+<CardGroup cols={2}>
+  <Card title="Owner" icon="crown">
+    Can add and remove workspace members, and administer workspace-level resources like knowledge banks.
+  </Card>
+  <Card title="Member" icon="user-group">
+    Can see and use workspace-level resources (like knowledge banks) but cannot manage membership.
+  </Card>
+</CardGroup>
+
+Workspace roles are separate from project roles (owner/editor/viewer). A workspace member does not automatically get editor access to every project in the workspace — see [Projects](/concepts/projects) for project-level roles.
+
+## Adding teammates to a workspace
+
+Workspace owners can invite teammates by email from **Settings → Team**. This is different from sharing a single project:
+
+| | Workspace invite | Project share |
+|---|---|---|
+| Scope | Every workspace-level resource (e.g. knowledge banks) | One specific project |
+| Who can invite | Workspace owner | Project owner or editor |
+| Where to manage it | Settings → Team | The project's Share panel |
+
+You can invite someone by email before they have an account — the invitation is redeemed automatically the first time they sign in. See [Manage workspace members](/settings/workspace-members).
+
+## Knowledge banks
+
+A **knowledge bank** is a workspace-scoped reference source, seeded from a URL (for example, a sector guidance hub). Nitrogen AI crawls and indexes content from that source so it's available as retrieval context across every project in the workspace — distinct from project-level evidence, which is scoped to a single project.
+
+<CardGroup cols={2}>
+  <Card title="Evidence" icon="file-lines">
+    Uploaded documents, scoped to a single project, retrieved only within that project.
+  </Card>
+  <Card title="Knowledge bank" icon="book-open">
+    Crawled web content, scoped to a workspace, available to every project any workspace member is working on.
+  </Card>
+</CardGroup>
+
+Manage knowledge banks from a project's **Files** view, under the workspace-scoped section. Only workspace members can see or use them — see [data isolation](/concepts/workspaces#who-can-see-what) below.
+
+## Who can see what
+
+- **Project evidence and materials** are visible only to users who can access that project (the creator, or an explicit project share).
+- **Workspace knowledge banks** are visible only to members of that workspace.
+- External collaborators added via a project share (without workspace membership) can access the shared project but do not see workspace-level knowledge banks or guidance.

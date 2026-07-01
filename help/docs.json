@@ -31,8 +31,10 @@
             "group": "Core Concepts",
             "pages": [
               "concepts/projects",
-              "concepts/modules",
-              "concepts/deliverables",
+              "concepts/workspaces",
+              "concepts/project-plan",
+              "concepts/assessments",
+              "concepts/project-status",
               "concepts/evidence"
             ]
           },
@@ -40,21 +42,18 @@
             "group": "Guides",
             "pages": [
               "guides/create-project",
+              "guides/build-project-plan",
+              "guides/run-an-assessment",
               "guides/upload-evidence",
-              "guides/run-assessments",
-              "guides/generate-documents",
-              "guides/export-share"
+              "guides/manage-project-status",
+              "guides/share-and-collaborate",
+              "guides/connect-google-drive"
             ]
           },
           {
-            "group": "Modules",
+            "group": "Example Assessments",
             "pages": [
-              "modules/investment-memo",
-              "modules/due-diligence-checklist",
-              "modules/lcoe-model",
-              "modules/carbon-model",
-              "modules/solar-estimate",
-              "modules/assessments"
+              "example-assessments"
             ]
           },
           {
@@ -62,7 +61,8 @@
             "pages": [
               "settings/billing",
               "settings/api-keys",
-              "settings/sharing"
+              "settings/sharing",
+              "settings/workspace-members"
             ]
           }
         ]

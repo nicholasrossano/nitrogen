@@ -1,97 +1,82 @@
 ---
 title: 'Create and set up a project in Nitrogen AI'
-description: 'Create a Nitrogen AI project through a guided conversational intake — capture title, geography, goal, and timeline before moving to evidence upload.'
+description: 'Create a Nitrogen AI project by describing it in chat — Nitrogen AI extracts the structured project profile it needs to power your project plan and assessments.'
 ---
 
-Creating a project is how you tell Nitrogen AI what you're working on. Instead of filling out a form, you have a short conversation — the platform asks you targeted questions and extracts the structured project profile it needs to power every assessment and document you generate. The whole intake takes a few minutes, and you can always refine your answers later.
+Creating a project is how you tell Nitrogen AI what you're working on. There's no form to fill out — you describe your project in a chat message, and Nitrogen AI extracts the structured details it needs to recommend the right assessments and ground every output in your project's context.
 
 ## What you'll need before you start
 
-You don't need any files ready before creating a project. The intake only requires information you already know about your work. That said, having these details at hand makes the conversation faster:
+You don't need any files ready before creating a project. That said, having these details in mind makes your opening description more useful:
 
 <CardGroup cols={2}>
-  <Card title="Project geography" icon="map-pin">
-    The country or region where the project operates. Be as specific as you can — district or province level is better than just a country name.
+  <Card title="Geography" icon="map-pin">
+    The country or region where the project operates. Be as specific as you can — district or province level is more useful than a country name alone.
   </Card>
   <Card title="Target population" icon="users">
     Who the project serves: households, smallholder farmers, health clinics, schools, and so on. Include an approximate number of beneficiaries if you have one.
   </Card>
-  <Card title="Budget range" icon="coins">
-    An approximate funding envelope. A range is fine — for example, $500K–$2M. You can update this after intake if figures change.
+  <Card title="Sector or technology" icon="solar-panel">
+    The technology or intervention at the center of the project — mini-grid electrification, clean cookstoves, solar irrigation, or climate adaptation, for example.
   </Card>
-  <Card title="Project type" icon="solar-panel">
-    The technology or intervention at the centre of the project, such as mini-grid electrification, clean cookstoves, solar irrigation, or climate adaptation.
+  <Card title="Goal" icon="bullseye">
+    What the project is trying to achieve.
   </Card>
 </CardGroup>
 
 ## Create a new project
 
 <Steps>
-  <Step title="Navigate to your dashboard">
-    Sign in to Nitrogen AI and go to your dashboard. You'll see all the projects you own or have been shared on.
-  </Step>
-  <Step title="Click New Project">
-    Click **New Project** in the top-right corner of the dashboard. A new project record is created immediately and the intake chat opens.
-  </Step>
-  <Step title="Give your project a title">
-    The platform prompts you to name your project. Enter a short, descriptive title — for example, "Rural Mini-Grid Kenya Phase 2" or "Solar Irrigation Burkina Faso". You can rename it at any time after creation.
+  <Step title="Start a new chat">
+    From your dashboard, start a new chat. This creates a project record as soon as you send your first message.
   </Step>
   <Step title="Describe your project">
-    The chat opens with the prompt: *"Briefly describe your project."* Write a plain-language description of what the project is and what it's trying to achieve. The more specific you are here, the better the module recommendations will be later.
+    Write a plain-language description of what the project is and what it's trying to achieve.
+
+    ```text
+    Example: "A 500 kW solar mini-grid in rural northern Ghana serving 2,000
+    households and 40 anchor businesses currently off-grid."
+    ```
 
     <Tip>
-      Mention the technology or intervention type, the geography, and who the project serves in your opening description. A sentence like "A 500 kW solar mini-grid in rural northern Ghana serving 2,000 households and 40 anchor businesses" gives the AI everything it needs to make strong recommendations.
+      Mention the technology, the geography, and who the project serves in your opening message. Nitrogen AI extracts geography, sector, and target population directly from this description — the more specific you are, the better the project plan and assessment recommendations will be.
     </Tip>
   </Step>
-  <Step title="Answer the intake questions">
-    Nitrogen AI guides you through a conversational intake to collect the following details:
-
-    | Field | What to provide |
-    |---|---|
-    | **Description** | What the project does and why |
-    | **Geography** | Country or sub-national region of operation |
-    | **Target population** | Communities or beneficiary groups the project serves |
-    | **Project goal** | Primary objective or intended outcome |
-    | **Budget range** | Approximate funding envelope |
-    | **Timeline** | Expected duration or key milestones |
-    | **Project type** | Technology, sector, or intervention category |
-
-    You can answer multiple fields in a single message — the AI extracts and confirms each one. If your answer is ambiguous, it will ask a follow-up question.
+  <Step title="Give your project a title">
+    Rename the project from its header at any time — for example, "Rural Mini-Grid Kenya Phase 2." Nitrogen AI generates a default title from your description if you don't set one.
   </Step>
-  <Step title="Confirm the intake">
-    Once all required fields are captured, the platform summarises the collected information and asks you to confirm. Review the summary for accuracy, then click **Confirm** (or type a confirmation in the chat).
-
-    Confirming the intake moves your project to the **evidence** stage. The chat displays an evidence upload widget so you can continue straight away.
+  <Step title="Answer any follow-up questions">
+    If your description leaves out something Nitrogen AI needs — like geography or budget range — it asks conversationally. You can answer several fields in a single message; the AI extracts and confirms each one.
   </Step>
 </Steps>
 
 <Note>
-  Your project title and all intake fields can be edited after creation. Open the project, click the title in the header to rename it, or return to the intake section of the chat to update individual fields.
+  All project fields — title, geography, sector, goal, budget range, and timeline — can be edited at any time. Open the project and click the field you want to change, or mention it in chat.
 </Note>
 
-## Tips for a strong intake
+## Tips for a strong project description
 
 <Tip>
-  **Be specific about geography.** "Sub-Saharan Africa" is too broad. "Shire Highlands district, southern Malawi" lets the platform surface relevant policy, grid data, and comparable precedents.
+  **Be specific about geography.** "Sub-Saharan Africa" is too broad. "Shire Highlands district, southern Malawi" lets the platform surface relevant policy context and comparable precedents.
 </Tip>
 
 <Tip>
-  **Quantify your beneficiaries.** "Rural households" is good; "approximately 3,500 rural households in 12 villages" is better. Scale and reach details improve the quality of financial models and impact assessments.
+  **Quantify your beneficiaries.** "Rural households" is a start; "approximately 3,500 rural households in 12 villages" is better. Scale and reach details improve the quality of assessments.
 </Tip>
 
 <Tip>
-  **Name the technology or intervention type.** Include the specific technology — solar home systems, biogas digesters, improved cookstoves, drip irrigation — rather than just the sector. This directly influences which modules Nitrogen AI recommends.
+  **Name the technology.** Include the specific technology — solar home systems, biogas digesters, improved cookstoves, drip irrigation — rather than just the sector. This directly influences which assessments Nitrogen AI recommends.
 </Tip>
 
 ## What happens next
 
-After confirming the intake, Nitrogen AI moves your project to the evidence stage. Upload your supporting documents — feasibility studies, technical reports, financial models — to ground every deliverable in your actual project data.
+Once your project has enough context, Nitrogen AI can generate a project plan and start recommending assessments.
 
 <CardGroup cols={2}>
-  <Card title="Upload evidence" icon="file-arrow-up" href="/guides/upload-evidence">
-    Add PDFs, spreadsheets, and reports so the AI can cite your project materials in every output.
+  <Card title="Build your project plan" icon="list-check" href="/guides/build-project-plan">
+    Generate a structured plan of pillars and work items for your project.
   </Card>
-  <Card title="Run assessments" icon="chart-bar" href="/guides/run-assessments">
-    Select modules and let Nitrogen AI recommend the right tools for your project type.
+  <Card title="Upload evidence" icon="file-arrow-up" href="/guides/upload-evidence">
+    Add supporting documents so the AI can cite your materials in every output.
   </Card>
 </CardGroup>

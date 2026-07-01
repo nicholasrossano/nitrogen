@@ -1,0 +1,144 @@
+---
+title: 'Share a project with your team'
+description: "Invite collaborators to a project by email — including people who don't have an account yet — and assign editor or viewer roles."
+---
+
+You can share any project you own or edit with other users, giving each person the access level their role allows. Project sharing is separate from [workspace membership](/concepts/workspaces) — sharing a project does not add someone to your workspace, and workspace membership does not automatically grant access to your projects.
+
+## Share a project
+
+<Steps>
+  <Step title="Open project settings">
+    Open your project and click **Share** in the project header.
+  </Step>
+  <Step title="Enter the teammate's email address">
+    Type the email address of the person you want to invite.
+  </Step>
+  <Step title="Choose a role">
+    Select **Editor** — can upload evidence, manage the project plan, run assessments, and export — or **Viewer** — read-only access to view content and download exports.
+  </Step>
+  <Step title="Click Share">
+    If the email belongs to an existing Nitrogen AI user, the project appears in their list immediately. If it doesn't, Nitrogen AI creates a **pending invitation** instead.
+  </Step>
+</Steps>
+
+<Info>
+  Unlike the older sharing behavior, the recipient does **not** need an existing account. If they haven't signed up yet, the invitation stays pending and is automatically redeemed — granting them access — the first time they sign in with a verified email matching the invited address.
+</Info>
+
+### Role permissions at a glance
+
+| Permission | Owner | Editor | Viewer |
+|---|---|---|---|
+| View project and outputs | Yes | Yes | Yes |
+| Download exports | Yes | Yes | Yes |
+| Upload evidence | Yes | Yes | No |
+| Edit the project plan | Yes | Yes | No |
+| Run assessments | Yes | Yes | No |
+| Edit project title and details | Yes | Yes | No |
+| Share the project with others | Yes | Yes | No |
+| Change a collaborator's role | Yes | No | No |
+| Archive or delete the project | Yes | No | No |
+
+## Update or remove access
+
+<Steps>
+  <Step title="Open the Share panel">
+    Click **Share** in the project header.
+  </Step>
+  <Step title="Find the collaborator">
+    The panel lists everyone with access or a pending invitation, along with their role.
+  </Step>
+  <Step title="Update or remove">
+    Change a role from the dropdown next to their name, or click remove to revoke access. A pending invitation can be cancelled the same way before it's redeemed.
+  </Step>
+</Steps>
+
+<Tip>
+  Collaborators can remove themselves from a project they no longer need access to, without requiring the owner to act.
+</Tip>
+
+<Warning>
+  Removing a collaborator's access is immediate. They lose access to the project and everything in it as soon as you confirm the removal.
+</Warning>
+
+## API reference
+
+All requests require a valid Firebase ID token — see [Authentication](/authentication).
+
+### Share a project
+
+```http
+POST /api/v1/projects/{project_id}/shares
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+<ParamField body="email" type="string" required>
+  The email address to invite. If it doesn't match an existing user, a pending invitation is created instead of a share.
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  The role to assign. Accepted values: `editor`, `viewer`.
+</ParamField>
+
+**Response** (`201 Created`) — an active share:
+
+```json
+{
+  "id": "a1b2c3d4-...",
+  "project_id": "proj_abc123",
+  "user_id": "uid_xyz",
+  "user_email": "teammate@example.com",
+  "user_display_name": "Alex Chen",
+  "role": "editor",
+  "created_at": "2026-01-15T10:30:00",
+  "pending": false
+}
+```
+
+If the email doesn't match an existing user, the response instead reflects a pending invitation with `"pending": true` and `"user_id": null`.
+
+### List shares
+
+```http
+GET /api/v1/projects/{project_id}/shares
+Authorization: Bearer <token>
+```
+
+Returns all active shares (and pending invitations) for the project. Any user with access can call this endpoint.
+
+### Update a collaborator's role
+
+```http
+PATCH /api/v1/projects/{project_id}/shares/{share_id}
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+<ParamField body="role" type="string" required>
+  The new role. Accepted values: `editor`, `viewer`.
+</ParamField>
+
+Only the project owner or an editor can update roles.
+
+### Remove a collaborator
+
+```http
+DELETE /api/v1/projects/{project_id}/shares/{share_id}
+Authorization: Bearer <token>
+```
+
+Returns `204 No Content` on success.
+
+<AccordionGroup>
+  <Accordion title="What if I invite someone who already has a pending invitation?">
+    You'll get a `409 Conflict` — only one pending invitation per email per project is allowed. Remove the existing invitation first if you need to change its role.
+  </Accordion>
+  <Accordion title="Can there be more than one owner on a project?">
+    No. Each project has exactly one owner — the user who created it. Ownership isn't transferred through sharing.
+  </Accordion>
+  <Accordion title="How is this different from adding someone to my workspace?">
+    A project share only grants access to that one project. Adding someone to your workspace (see [Manage workspace members](/settings/workspace-members)) gives them access to every project you explicitly share plus workspace-level resources like knowledge banks — it's a separate, broader kind of collaboration.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,51 @@
+---
+title: "Project plan: pillars, items, and deep dives"
+description: "The project plan is Nitrogen AI's structured roadmap for an initiative — organized into pillars of work items, each trackable and researchable in place."
+---
+
+The **project plan** is the central planning artifact for a project. Nitrogen AI generates it from your project description and organizes the work into **pillars** — thematic groupings — each containing concrete **items** you can track, research, and act on.
+
+## Generating a plan
+
+Nitrogen AI can generate a project plan once your project description has enough detail — at minimum, an identifiable geography and technology or project type. Ask for it directly in chat, or Nitrogen AI will offer to generate one automatically once enough context is available.
+
+Generating a plan again after one exists refreshes it, incorporating any new evidence or project details since the last generation.
+
+## Pillars and items
+
+Each pillar groups related work into a named theme (for example, "Technical Feasibility" or "Financing & Structuring"). Every item inside a pillar has:
+
+<CardGroup cols={2}>
+  <Card title="Item type" icon="tag">
+    `deliverable` — a general work product to track manually, or `assessment` — something you can launch directly as one of Nitrogen AI's built-in assessments.
+  </Card>
+  <Card title="Classification" icon="flag">
+    Whether the item is `required`, `optional`, or `unknown` for the project to move forward.
+  </Card>
+  <Card title="Status" icon="circle-check">
+    `not_started`, `in_progress`, or `complete`. You can update this manually at any time.
+  </Card>
+  <Card title="Rationale" icon="comment">
+    A short explanation of why this item matters for your specific project.
+  </Card>
+</CardGroup>
+
+## Deep dives
+
+For any plan item, you can request a **deep dive** — a targeted research pass that produces a structured breakdown (what the item is, its component elements, dependencies, and cited sources) without leaving the plan. Deep-dive results are cached per item, so revisiting one you've already researched returns instantly instead of re-running research.
+
+## Editing your plan
+
+You're not limited to what Nitrogen AI generates. You can:
+
+- **Add an item** to any pillar for something the AI didn't surface
+- **Update an item's status** as you make progress
+- **Remove an item** that isn't relevant to your project
+
+## How the plan relates to assessments
+
+Items with `item_type: assessment` map to one of Nitrogen AI's registered assessments (see [Assessments](/concepts/assessments)) — launching that item opens the corresponding assessment workspace. `deliverable` items are broader work products (partnership agreements, permits, financial close, and similar) that aren't produced by an assessment — you track their status manually as you complete the underlying work elsewhere.
+
+<Tip>
+  Use the project plan as your single source of truth for "what's left to do" on a project, and launch assessments directly from the items that need one.
+</Tip>

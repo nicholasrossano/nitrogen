@@ -1,0 +1,71 @@
+---
+title: 'Build and manage your project plan'
+description: 'Generate a structured project plan, add or remove items, run a deep dive on any item, and track status as you complete your work.'
+---
+
+The project plan is where Nitrogen AI turns your project description into an actionable roadmap. This guide walks through generating a plan, working with it, and keeping it current.
+
+## Generate your plan
+
+<Steps>
+  <Step title="Make sure your project has enough context">
+    Nitrogen AI needs at minimum a project description with an identifiable geography and technology or project type. If you're missing this, add more detail to your project description first.
+  </Step>
+  <Step title="Ask Nitrogen AI to build the plan">
+    Ask directly in chat (for example, "generate my project plan"), or accept the prompt Nitrogen AI shows once your project has enough context.
+  </Step>
+  <Step title="Review the pillars and items">
+    Nitrogen AI returns a plan organized into pillars, each with items marked as `required`, `optional`, or `unknown`, and typed as either a `deliverable` (a work product you track manually) or an `assessment` (something you can launch directly).
+  </Step>
+</Steps>
+
+<Tip>
+  If a project plan already exists, generating again refreshes it, incorporating any evidence or project details added since the last generation — it won't discard your manual status updates on unchanged items.
+</Tip>
+
+## Research a specific item
+
+Click **Deep dive** on any plan item to run a targeted research pass on it. Nitrogen AI returns a structured breakdown — what the item is, its component elements, dependencies, and cited sources — without leaving the plan.
+
+<Note>
+  Deep-dive results are cached per item. Revisiting an item you've already researched returns the cached result instantly; you won't be charged generation time twice for the same research.
+</Note>
+
+## Track progress
+
+Update any item's status directly from the plan:
+
+<CardGroup cols={3}>
+  <Card title="Not started" icon="circle">
+    The default status for a new item.
+  </Card>
+  <Card title="In progress" icon="clock">
+    Mark an item as underway once you start working on it.
+  </Card>
+  <Card title="Complete" icon="circle-check">
+    Mark an item done once the underlying work — or the assessment producing it — is finished.
+  </Card>
+</CardGroup>
+
+## Customize your plan
+
+Nitrogen AI's plan is a starting point, not a fixed structure:
+
+- **Add an item** to any pillar for work the AI didn't surface.
+- **Remove an item** that doesn't apply to your project.
+- **Run a deep dive** to get more context before deciding whether an item is relevant.
+
+## Launch an assessment from the plan
+
+Any item typed as an `assessment` can be launched directly from the plan — this opens that assessment's workspace with your project context already loaded. See [Run an assessment](/guides/run-an-assessment) for the full flow once you're inside.
+
+## What happens next
+
+<CardGroup cols={2}>
+  <Card title="Run an assessment" icon="chart-bar" href="/guides/run-an-assessment">
+    Walk through the setup, build, and output stages for any assessment.
+  </Card>
+  <Card title="Manage project status" icon="gauge" href="/guides/manage-project-status">
+    Track the project's overall health as you work through the plan.
+  </Card>
+</CardGroup>

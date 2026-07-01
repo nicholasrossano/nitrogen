@@ -1,0 +1,68 @@
+---
+title: 'Connect Google Drive and import files'
+description: 'Connect your Google account, import files or whole folders from Drive into a project as evidence, and keep them synced.'
+---
+
+Nitrogen AI can import files directly from Google Drive into a project's evidence, so you don't have to download and re-upload documents you already have there.
+
+## Connect your Google account
+
+<Steps>
+  <Step title="Start the connection">
+    From a project's Files view, choose **Connect Google Drive**.
+  </Step>
+  <Step title="Authorize access">
+    You're redirected to Google to sign in and grant Nitrogen AI read-only access to your Drive.
+  </Step>
+  <Step title="Return to your project">
+    After authorizing, you're redirected back to your project with the connection active.
+  </Step>
+</Steps>
+
+<Note>
+  The connection is read-only — Nitrogen AI can view and import files from your Drive but cannot modify or delete anything in it.
+</Note>
+
+## Import files or folders
+
+<Steps>
+  <Step title="Open the Drive picker">
+    From the Files view, choose to import from Drive.
+  </Step>
+  <Step title="Select files or a folder">
+    Pick individual files, or select a whole folder — Nitrogen AI recursively expands folders and imports every supported file inside.
+  </Step>
+  <Step title="Wait for import">
+    Each file is downloaded, converted if needed, and added to the project as evidence — the same processing pipeline as a direct upload.
+  </Step>
+</Steps>
+
+<Warning>
+  A single import is capped at 50 files, with a 50 MB limit per file. For larger batches, import in multiple passes.
+</Warning>
+
+You can also import into a **workspace** rather than a single project, for files you want available across every project you work on there.
+
+## Keep files in sync
+
+Files imported from Drive are tracked as **linked files**. If the source file changes in Drive, Nitrogen AI can detect the update and re-import it.
+
+<Steps>
+  <Step title="View linked files">
+    Open the project's Files view to see every file imported from Drive and its link status.
+  </Step>
+  <Step title="Sync changes">
+    Trigger a sync to check linked files for changes in Drive. Any file with a newer modification time is re-downloaded and re-indexed automatically.
+  </Step>
+  <Step title="Unlink a file">
+    Unlinking stops tracking a file for sync without deleting the evidence document already created from it.
+  </Step>
+</Steps>
+
+## Disconnect Google Drive
+
+Disconnect at any time from the same place you connected. This revokes Nitrogen AI's access and removes the stored connection; files already imported as evidence are unaffected.
+
+## Self-hosting note
+
+Google Drive import requires a Google Cloud OAuth client. If you're self-hosting, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` — see [Self-hosting](https://github.com/nicholasrossano/nitrogen/blob/main/docs/self-hosting.md) for the full environment variable reference.
