@@ -10,8 +10,8 @@
   },
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
-    "dev:clean": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev -p 3000",
+    "dev": "next dev -p 3000 -H 0.0.0.0",
+    "dev:clean": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev -p 3000 -H 0.0.0.0",
     "build": "bash scripts/next-build.sh",
     "vercel:ignore-build": "bash scripts/vercel-ignore-build.sh",
     "start": "NITROGEN_NEXT_DIST_DIR=.next-build next start",
