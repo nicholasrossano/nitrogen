@@ -509,7 +509,6 @@ class DeepDiveService:
             project_id=initiative.id,
             sources=["evidence"],
             evidence_top_k=3,
-            corpus_top_k=0,
         )
         overview_result, evidence_chunks_result = await asyncio.gather(
             overview_coro,
@@ -844,7 +843,6 @@ class DeepDiveService:
                 project_id=initiative.id,
                 sources=["evidence"],
                 evidence_top_k=5,
-                corpus_top_k=0,
             )
         except Exception as exc:
             logger.warning("Evidence RAG failed for deep dive: %s", exc)

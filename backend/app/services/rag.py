@@ -16,7 +16,7 @@ class RetrievedChunk:
     """A chunk retrieved from RAG"""
     chunk_id: UUID
     content: str
-    source_type: Literal["evidence", "workspace_evidence", "corpus"]
+    source_type: Literal["evidence", "workspace_evidence"]
     source_doc_id: UUID
     source_title: str
     similarity: float
@@ -36,10 +36,9 @@ class RAGService:
         query: str,
         project_id: UUID | None,
         workspace_id: UUID | None = None,
-        sources: list[str] = ["evidence", "corpus"],
+        sources: list[str] = ["evidence"],
         evidence_top_k: int = 3,
         workspace_top_k: int = 3,
-        corpus_top_k: int = 5,
         workspace_file_ids: list[UUID] | None = None,
     ) -> list[RetrievedChunk]:
         """
@@ -49,9 +48,8 @@ class RAGService:
             query: The query to search for
             project_id: The initiative ID (for project evidence filtering)
             workspace_id: Workspace ID for workspace-level evidence filtering
-            sources: Which sources to search ("evidence", "workspace_evidence", "corpus")
+            sources: Which sources to search ("evidence", "workspace_evidence")
             evidence_top_k: Number of chunks to retrieve from evidence
-            corpus_top_k: Number of chunks to retrieve from corpus
         
         Returns:
             List of retrieved chunks sorted by similarity
@@ -75,8 +73,6 @@ class RAGService:
                     workspace_file_ids=workspace_file_ids,
                 )
             )
-        if "corpus" in sources:
-            results.extend(await self._search_corpus(query_embedding, corpus_top_k))
         
         # Sort by similarity (descending) and deduplicate
         results.sort(key=lambda x: x.similarity, reverse=True)
@@ -195,54 +191,9 @@ class RAGService:
             for row in rows
         ]
     
-    async def _search_corpus(
-        self,
-        query_embedding: list[float],
-        top_k: int,
-    ) -> list[RetrievedChunk]:
-        """Search corpus chunks"""
-        # Vector similarity search
-        embedding_str = f"[{','.join(map(str, query_embedding))}]"
-        
-        query = text("""
-            SELECT 
-                c.id,
-                c.corpus_doc_id,
-                c.content,
-                1 - (c.embedding <=> CAST(:embedding AS vector)) as similarity,
-                d.title,
-                d.source
-            FROM corpus_chunks c
-            JOIN corpus_documents d ON c.corpus_doc_id = d.id
-            ORDER BY c.embedding <=> CAST(:embedding AS vector)
-            LIMIT :top_k
-        """)
-        
-        result = await self.db.execute(
-            query,
-            {
-                "embedding": embedding_str,
-                "top_k": top_k,
-            }
-        )
-        rows = result.fetchall()
-        
-        return [
-            RetrievedChunk(
-                chunk_id=row.id,
-                content=row.content,
-                source_type="corpus",
-                source_doc_id=row.corpus_doc_id,
-                source_title=f"{row.title}" + (f" ({row.source})" if row.source else ""),
-                similarity=row.similarity,
-            )
-            for row in rows
-        ]
-    
     async def retrieve_for_memo_sections(
         self,
         project_id: UUID,
-        include_corpus: bool = True,
     ) -> dict[str, list[RetrievedChunk]]:
         """
         Retrieve chunks for each memo section.
@@ -250,8 +201,6 @@ class RAGService:
         Returns a dict mapping section names to relevant chunks.
         """
         sources = ["evidence"]
-        if include_corpus:
-            sources.append("corpus")
         
         # Different queries for different sections
         section_queries = {
@@ -269,7 +218,6 @@ class RAGService:
                 project_id=project_id,
                 sources=sources,
                 evidence_top_k=3,
-                corpus_top_k=4 if include_corpus else 0,
             )
             return section, chunks
 

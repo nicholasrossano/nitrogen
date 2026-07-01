@@ -160,6 +160,16 @@ export function LandingInput({
 
   const contentMaxWidth = hideTiles ? 'max-w-3xl' : 'max-w-2xl';
   const showComposerTitle = Boolean(composerTitle?.trim());
+  const hasBelowComposerContent = Boolean(belowComposerContent);
+  const hiddenScrollbarClassName = 'overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
+
+  const renderComposerTitle = (className = 'mb-6 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl') => (
+    showComposerTitle ? (
+      <h1 className={className}>
+        {composerTitle}
+      </h1>
+    ) : null
+  );
 
   const renderComposer = (containerClassName?: string) => {
     const hasTray = Boolean(topComposerContent);
@@ -297,37 +307,76 @@ export function LandingInput({
 
   if (layoutMode === 'overview') {
     return (
-      <div className="relative h-full overflow-hidden">
+      <div className="relative h-full min-h-0 overflow-hidden">
         {topRightActions ? (
           <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
             {topRightActions}
           </div>
         ) : null}
-        <div className="absolute inset-0 overflow-y-scroll">
-          <div className={`pt-6 px-4 ${hideComposer ? 'pb-8' : 'pb-44'}`}>
+        <div className={`absolute inset-0 ${hiddenScrollbarClassName}`}>
+          <div className={`px-4 pt-6 pb-8 ${topRightActions ? 'pr-44 sm:pr-52' : ''}`}>
             {headerContent}
-          </div>
-        </div>
-        {!hideComposer && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
-            <div className="pointer-events-none mx-auto w-full max-w-[52rem] px-4">
-              <div className="pointer-events-none h-16 bg-gradient-to-t from-surface to-transparent" />
-              <div className="pointer-events-auto pb-4">
+            {!hideComposer ? (
+              <div className={headerContent ? 'mt-6' : undefined}>
+                {renderComposerTitle()}
                 {renderComposer('w-full')}
               </div>
-            </div>
+            ) : null}
+            {hasBelowComposerContent ? (
+              <div className="mt-6">
+                {belowComposerContent}
+              </div>
+            ) : null}
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  if (hasBelowComposerContent) {
+    return (
+      <div className="flex h-full min-h-0 flex-col items-center px-4">
+        <div className={`flex-1 min-h-0 w-full ${hiddenScrollbarClassName}`}>
+          <div className={`mx-auto w-full ${contentMaxWidth} pb-6 pt-28`}>
+            {headerContent}
+            {!hideTiles && (
+              <div className="mb-12 grid w-[70%] grid-cols-3 gap-3">
+                {visibleAssessments.map((assessment) => (
+                  <button
+                    key={assessment.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onSend(`Generate ${assessment.name}`, assessment.id)}
+                    className="relative flex items-center gap-3 border border-black/[0.04] px-4 py-3.5 card-interactive disabled:cursor-default disabled:opacity-40"
+                  >
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-accent-wash">
+                      <span className="text-accent [&>svg]:h-5 [&>svg]:w-5">{assessment.icon}</span>
+                    </div>
+                    <span className="text-left text-xs font-medium leading-snug text-text-secondary">
+                      {assessment.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {renderComposerTitle()}
+            {renderComposer('w-full')}
+            <div className="mt-6">
+              {belowComposerContent}
+            </div>
+            {renderHistory(undefined, true)}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center h-full px-4">
-      <div className={`flex-1 flex flex-col justify-end items-center w-full ${contentMaxWidth}`}>
+    <div className="flex h-full flex-col items-center px-4">
+      <div className={`flex flex-1 flex-col items-center justify-end w-full ${contentMaxWidth}`}>
         {headerContent}
         {!hideTiles && (
-        <div className="w-[70%] grid grid-cols-3 gap-3 mb-12">
+        <div className="mb-12 grid w-[70%] grid-cols-3 gap-3">
           {visibleAssessments.map((assessment) => {
             return (
               <button
@@ -349,19 +398,9 @@ export function LandingInput({
       </div>
 
       <div className={`relative w-full ${contentMaxWidth}`}>
-        {showComposerTitle ? (
-          <h1 className="absolute bottom-full left-0 mb-6 min-w-0 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl">
-            {composerTitle}
-          </h1>
-        ) : null}
+        {renderComposerTitle('absolute bottom-full left-0 mb-6 min-w-0 pl-6 text-left text-lg font-medium leading-tight tracking-tight text-text-primary sm:text-2xl')}
         {renderComposer('w-full')}
       </div>
-
-      {belowComposerContent ? (
-        <div className={`w-full overflow-visible ${contentMaxWidth} mt-6`}>
-          {belowComposerContent}
-        </div>
-      ) : null}
 
       {renderHistory()}
     </div>

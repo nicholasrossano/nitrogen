@@ -12,7 +12,6 @@ EXPOSED_ADAPTER_IDS = frozenset({
 EXPOSED_RESOURCE_TYPES = frozenset({
     "evidence_doc",
     "evidence_chunk",
-    "corpus_doc",
     "memo_version",
 })
 
