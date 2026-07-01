@@ -1,0 +1,72 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "luma",
+  "name": "Nitrogen AI",
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#198297",
+    "light": "#82bcc9",
+    "dark": "#cce3e7"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/nicholasrossano/nitrogen"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/projects",
+              "concepts/modules",
+              "concepts/deliverables",
+              "concepts/evidence"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/create-project",
+              "guides/upload-evidence",
+              "guides/run-assessments",
+              "guides/generate-documents",
+              "guides/export-share"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/investment-memo",
+              "modules/due-diligence-checklist",
+              "modules/lcoe-model",
+              "modules/carbon-model",
+              "modules/solar-estimate",
+              "modules/assessments"
+            ]
+          },
+          {
+            "group": "Account & Settings",
+            "pages": [
+              "settings/billing",
+              "settings/api-keys",
+              "settings/sharing"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
