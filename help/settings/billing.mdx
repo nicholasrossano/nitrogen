@@ -1,0 +1,78 @@
+---
+title: "Billing and subscription plans for Nitrogen AI"
+description: "Understand Nitrogen AI's billing tiers, how to subscribe to a paid plan, manage your subscription, and what happens when you reach your usage limit."
+---
+
+Nitrogen AI uses a tiered billing model so you can start for free and scale as your work grows. Every account starts on the trial tier. You can upgrade to a paid plan through Stripe or bring your own OpenAI API key to unlock unlimited AI access using your own credits.
+
+## Billing tiers
+
+<CardGroup cols={3}>
+  <Card title="Trial" icon="flask">
+    The default tier for new accounts. You get limited AI access to explore the platform before committing to a plan.
+  </Card>
+  <Card title="BYOK" icon="key">
+    Bring your own OpenAI API key. AI generation uses your own OpenAI credits with no usage cap from Nitrogen AI. See [API Keys](/settings/api-keys) to set this up.
+  </Card>
+  <Card title="Paid subscription" icon="credit-card">
+    Managed AI access billed through Stripe. Nitrogen AI handles the OpenAI costs on your behalf, up to your plan's monthly limit.
+  </Card>
+</CardGroup>
+
+## Subscribing to a paid plan
+
+<Steps>
+  <Step title="Open billing settings">
+    Go to **Settings → Billing**.
+  </Step>
+  <Step title="Choose a plan">
+    Review the available plans and click **Subscribe** on the one that fits your needs.
+  </Step>
+  <Step title="Complete checkout">
+    You'll be redirected to a Stripe-hosted checkout page. Enter your payment details and confirm. Once payment succeeds, your account is upgraded immediately.
+  </Step>
+</Steps>
+
+<Note>
+  You need an active Nitrogen AI account before subscribing. If you haven't signed up yet, go to [the-nitrogen.ai](https://the-nitrogen.ai) to create one.
+</Note>
+
+## Managing your subscription
+
+To update your payment method, view invoices, or cancel your plan, go to **Settings → Billing → Manage subscription**. This opens the Stripe Customer Portal, where you have full control over your billing details.
+
+<Tip>
+  If you cancel, your plan stays active until the end of the current billing period. You won't be charged again after that.
+</Tip>
+
+## Checking your usage
+
+Your current usage is always available in **Settings → Billing**. The billing status shows:
+
+| Field | Description |
+|---|---|
+| `allowed` | Whether AI features are currently available on your account |
+| `tier` | Your current billing tier (`trial`, `byok`, `starter`, `pro`) |
+| `used_usd` | AI spend so far in the current billing period (USD) |
+| `limit_usd` | The monthly spend cap for your plan |
+
+## Usage limits and blocked access
+
+When you reach your plan's monthly usage limit, AI features are blocked until the next billing cycle or until you take one of these actions:
+
+<CardGroup cols={2}>
+  <Card title="Upgrade your plan" icon="arrow-up" href="/settings/billing">
+    Move to a higher tier with a larger monthly limit via **Settings → Billing**.
+  </Card>
+  <Card title="Add a BYOK key" icon="key" href="/settings/api-keys">
+    Connect your own OpenAI API key to bypass Nitrogen AI usage limits entirely.
+  </Card>
+</CardGroup>
+
+<Warning>
+  While your account is blocked, you can still view existing projects, deliverables, and evidence — only AI generation is paused. No data is lost.
+</Warning>
+
+## Access codes
+
+If you received an access code from the Nitrogen AI team, you can redeem it in **Settings → Billing** to extend your trial access. Each code can only be redeemed once per account.

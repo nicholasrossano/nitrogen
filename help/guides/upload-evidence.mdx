@@ -1,0 +1,113 @@
+---
+title: 'Upload evidence to ground your AI outputs'
+description: 'Add PDFs, Word documents, or Excel files to your project so Nitrogen AI can retrieve relevant passages and cite your materials in every deliverable.'
+---
+
+Evidence is the source material that powers everything Nitrogen AI generates for your project. When you upload a document, the platform reads it, splits it into passages, and indexes those passages for semantic search — so when you run a module, the AI retrieves the most relevant content from your files and cites it directly in the output. The quality and relevance of what you upload directly determines the quality of what comes out.
+
+## Supported file formats
+
+<CardGroup cols={3}>
+  <Card title="PDF" icon="file-pdf">
+    Feasibility studies, technical reports, environmental assessments, policy documents. Up to 50 MB per file.
+  </Card>
+  <Card title="DOCX" icon="file-word">
+    Project proposals, narrative reports, due diligence write-ups, partner agreements. Up to 50 MB per file.
+  </Card>
+  <Card title="XLSX / XLS" icon="file-excel">
+    Financial models, energy data, survey results, cost breakdowns. Up to 50 MB per file.
+  </Card>
+</CardGroup>
+
+<Warning>
+  Only PDF, DOCX, XLSX, and XLS files are accepted for evidence. Files in other formats — including PNG, TXT, CSV, or HTML files renamed with a supported extension — will fail processing. If your content is in an unsupported format, convert it first or paste the text directly.
+</Warning>
+
+## Upload a file to your project
+
+<Steps>
+  <Step title="Open your project">
+    From your dashboard, click on the project you want to add evidence to. If you've just completed the intake, the chat will already be showing the evidence upload widget.
+  </Step>
+  <Step title="Go to the Evidence tab">
+    If the upload widget isn't visible in the chat, select the **Evidence** tab in the project navigation to open the evidence management area.
+  </Step>
+  <Step title="Upload your file">
+    Drag a file onto the upload area, or click **Upload file** to browse and select one from your computer. You can upload multiple files — repeat this step for each document you want to add.
+  </Step>
+  <Step title="Wait for processing">
+    After the file is accepted, Nitrogen AI reads and indexes the content for semantic search. Once processing is complete, the file appears in your evidence list confirming it's ready to use. Most files process in under a minute.
+  </Step>
+</Steps>
+
+<Note>
+  Evidence uploads are rate-limited to 10 per minute per project. If you're uploading a large batch of documents, space them out or upload in groups.
+</Note>
+
+## Paste text instead of uploading a file
+
+If your content isn't in a file — notes from a field visit, excerpts from a web source, or a short data summary — you can paste text directly into the evidence input. Pasted text is processed identically to an uploaded file: chunked, embedded, and made searchable.
+
+<Steps>
+  <Step title="Switch to the Paste text option">
+    In the evidence widget, click **Paste text** to switch from file upload to the text input.
+  </Step>
+  <Step title="Add a title">
+    Give the pasted content a descriptive title — for example, "Community baseline survey notes, March 2024". This makes it easy to identify in your evidence list and in citations.
+  </Step>
+  <Step title="Paste your text and submit">
+    Paste the content into the text field and click **Add**. The text is processed and added to your evidence list.
+  </Step>
+</Steps>
+
+## What to upload
+
+The modules you run will retrieve evidence that's relevant to the topics they cover. Uploading a mix of document types gives the AI a fuller picture of your project.
+
+<CardGroup cols={2}>
+  <Card title="Feasibility studies" icon="magnifying-glass-chart">
+    Pre-feasibility and full feasibility studies are the single most valuable evidence type. They typically contain technical, financial, and social data in one document.
+  </Card>
+  <Card title="Technical reports" icon="file-lines">
+    Engineering assessments, grid studies, energy audits, and resource assessments. Include any technical baseline data.
+  </Card>
+  <Card title="Market and landscape assessments" icon="chart-pie">
+    Sector analyses, competitor landscapes, and market sizing reports that place your project in context.
+  </Card>
+  <Card title="Financial models" icon="table-cells">
+    Excel-based cash flow models, tariff analyses, and cost breakdowns. The LCOE and Carbon modules can draw on these directly.
+  </Card>
+  <Card title="Previous project reports" icon="clock-rotate-left">
+    Mid-term evaluations, completion reports, and lessons-learned documents from earlier phases or comparable projects.
+  </Card>
+  <Card title="Stakeholder and social data" icon="people-group">
+    Community assessments, beneficiary surveys, and social baseline reports to ground stakeholder and impact deliverables.
+  </Card>
+</CardGroup>
+
+<Tip>
+  You don't need to upload a perfect set of documents before running modules. Start with what you have, generate a first version, and add more evidence over time to improve subsequent generations.
+</Tip>
+
+## Manage your evidence
+
+All uploaded files and pasted text appear in the **Evidence** tab of your project. Each entry shows the filename, file type, upload date, and the number of indexed chunks.
+
+To remove a document, click the trash icon next to it. Deletion removes the document record and all of its indexed passages. This cannot be undone — if you need the content again, you will have to re-upload or re-paste it.
+
+<Warning>
+  Deleting evidence does not retroactively affect deliverables that have already been generated. It only prevents the deleted content from being used in future generation runs.
+</Warning>
+
+## What happens next
+
+Once you have at least one evidence document uploaded, you're ready to select modules and run your first assessment.
+
+<CardGroup cols={2}>
+  <Card title="Select and run modules" icon="list-check" href="/guides/run-assessments">
+    Choose from Nitrogen AI's module catalog and let the AI recommend the best tools for your project.
+  </Card>
+  <Card title="Generate deliverables" icon="file-export" href="/guides/generate-documents">
+    Trigger generation and review your AI-powered outputs with inline citations.
+  </Card>
+</CardGroup>
