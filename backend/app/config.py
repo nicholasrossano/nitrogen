@@ -65,7 +65,6 @@ class Settings(BaseSettings):
     pvwatts_base_url: str = "https://developer.nlr.gov/api/pvwatts/v8.json"
 
     # RAG settings
-    enable_corpus_rag: bool = False
     chunk_size: int = 300
     chunk_overlap: int = 75
     retrieval_top_k: int = 5
@@ -91,6 +90,10 @@ class Settings(BaseSettings):
 
     # Access code — upgrades trial to subscription-equivalent budget (one-time)
     access_code: str = ""
+
+    # Self-host convenience: auto-join shared Company workspace and grant workspace
+    # members access to all projects in that workspace (legacy behavior).
+    single_org_mode: bool = False
 
     # Usage limits (estimated API cost in USD per billing period)
     subscription_usage_limit_usd: float = 20.0

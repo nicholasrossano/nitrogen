@@ -19,10 +19,6 @@ from app.schemas.memo import (
     CitationResponse,
     ExportResponse,
 )
-from app.schemas.corpus import (
-    CorpusDocumentCreate,
-    CorpusDocumentResponse,
-)
 from app.schemas.project_material import (
     ProjectMaterialResponse,
     ProjectMaterialUploadResponse,
@@ -42,8 +38,6 @@ __all__ = [
     "MemoResponse",
     "CitationResponse",
     "ExportResponse",
-    "CorpusDocumentCreate",
-    "CorpusDocumentResponse",
     "ProjectMaterialResponse",
     "ProjectMaterialUploadResponse",
 ]

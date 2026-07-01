@@ -50,13 +50,4 @@ async def search_users(
         .limit(10)
     )
     collaborators = result.scalars().all()
-
-    if not collaborators and "@" in q:
-        exact = await db.execute(
-            select(User).where(User.email == q, User.id != user.uid).limit(1)
-        )
-        exact_user = exact.scalar_one_or_none()
-        if exact_user:
-            return [exact_user]
-
     return collaborators
