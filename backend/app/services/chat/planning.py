@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from app.config import get_settings
-from app.core.llm_client import record_usage_from_response
+from app.core.model_catalog import Complexity, ModelRole
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -173,9 +173,10 @@ class ChatPlanningMixin:
         messages.append({"role": "user", "content": user_message})
 
         try:
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            complexity = Complexity.STANDARD
+            resp = await self._acomplete(
+                ModelRole.ORCHESTRATION,
+                complexity,
                 messages=messages,
                 tools=self._get_tool_list(
                     project_id=project_id,
@@ -185,7 +186,6 @@ class ChatPlanningMixin:
                 temperature=0,
                 max_tokens=200,
             )
-            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
             calls = resp.choices[0].message.tool_calls or []
             if calls:
                 names = [c.function.name for c in calls]
@@ -211,9 +211,9 @@ class ChatPlanningMixin:
         try:
             recent = history[-6:] if len(history) > 6 else history
             context = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            resp = await self._acomplete(
+                ModelRole.ORCHESTRATION,
+                Complexity.LIGHT,
                 messages=[
                     {
                         "role": "system",
@@ -236,7 +236,6 @@ class ChatPlanningMixin:
                 temperature=0,
                 max_tokens=60,
             )
-            await record_usage_from_response(self.user_id, settings.openai_orchestration_model, resp, self.db, is_byok=self._is_byok)
             return resp.choices[0].message.content.strip() or user_message
         except Exception as e:
             logger.warning(f"Query rewrite failed, using raw message: {e}")
@@ -362,9 +361,9 @@ class ChatPlanningMixin:
                     f"- field_name: {field_context.get('field_name')}\n"
                     f"- unit: {field_context.get('unit') or ''}\n"
                 )
-            client = await self._get_client()
-            resp = await client.chat.completions.create(
-                model=settings.openai_orchestration_model,
+            resp = await self._acomplete(
+                ModelRole.ORCHESTRATION,
+                Complexity.LIGHT,
                 messages=[
                     {
                         "role": "system",
@@ -389,13 +388,6 @@ class ChatPlanningMixin:
                 ],
                 temperature=0,
                 max_tokens=30,
-            )
-            await record_usage_from_response(
-                self.user_id,
-                settings.openai_orchestration_model,
-                resp,
-                self.db,
-                is_byok=self._is_byok,
             )
             candidate = (resp.choices[0].message.content or "").strip()
             return self._normalize_external_tool_query(candidate, fallback_query)

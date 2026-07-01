@@ -59,7 +59,6 @@ async def test_generate_project_overview_requires_uploaded_files(monkeypatch: py
 @pytest.mark.asyncio
 async def test_generate_project_overview_returns_llm_content(monkeypatch: pytest.MonkeyPatch):
     initiative = _make_initiative()
-    recorded = {"called": False}
 
     async def _fake_sources(_db, _initiative_id):
         return [
@@ -70,25 +69,14 @@ async def test_generate_project_overview_returns_llm_content(monkeypatch: pytest
             }
         ]
 
-    class _FakeCompletions:
-        async def create(self, **_kwargs):
-            return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="A short generated overview."))],
-                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
-            )
-
-    class _FakeClient:
-        chat = SimpleNamespace(completions=_FakeCompletions())
-
-    async def _fake_get_client(_user_id, _db):
-        return _FakeClient(), False
-
-    async def _fake_record_usage(*_args, **_kwargs):
-        recorded["called"] = True
+    async def _fake_acompletion(_user_id, _db, **_kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="A short generated overview."))],
+            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
+        )
 
     monkeypatch.setattr(project_overview, "_load_source_summaries", _fake_sources)
-    monkeypatch.setattr(project_overview, "get_openai_client", _fake_get_client)
-    monkeypatch.setattr(project_overview, "record_usage_from_response", _fake_record_usage)
+    monkeypatch.setattr(project_overview, "acompletion", _fake_acompletion)
 
     result = await project_overview.generate_project_overview(
         db=SimpleNamespace(),
@@ -97,4 +85,3 @@ async def test_generate_project_overview_returns_llm_content(monkeypatch: pytest
     )
 
     assert result == "A short generated overview."
-    assert recorded["called"] is True

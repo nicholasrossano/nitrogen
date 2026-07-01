@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     starter_usage_limit_usd: float = 14.0
     pro_usage_limit_usd: float = 42.0
 
-    # OpenRouter (platform routing — used when model_routing_enabled ships)
+    # OpenRouter (platform LLM routing — required for non-BYOK users)
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
