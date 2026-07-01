@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_user, AuthUser
 from app.core.database import get_db
 from app.config import get_settings
+from app.core.redirect_validation import validate_billing_redirect_url
 from app.services.billing import (
     create_checkout_session,
     create_portal_session,
@@ -79,13 +80,15 @@ async def checkout(
 ):
     if not settings.billing_enabled:
         raise HTTPException(status_code=503, detail="Billing is not configured")
+    success_url = validate_billing_redirect_url(body.success_url)
+    cancel_url = validate_billing_redirect_url(body.cancel_url)
     url = await create_checkout_session(
         user_id=user.uid,
         email=user.email,
         price_id=body.price_id,
         db=db,
-        success_url=body.success_url,
-        cancel_url=body.cancel_url,
+        success_url=success_url,
+        cancel_url=cancel_url,
     )
     await db.commit()
     return {"url": url}
@@ -99,11 +102,12 @@ async def portal(
 ):
     if not settings.billing_enabled:
         raise HTTPException(status_code=503, detail="Billing is not configured")
+    return_url = validate_billing_redirect_url(body.return_url)
     try:
         url = await create_portal_session(
             user_id=user.uid,
             db=db,
-            return_url=body.return_url,
+            return_url=return_url,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

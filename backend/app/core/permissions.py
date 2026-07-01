@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.auth import AuthUser
 from app.models.project import Project
 from app.models.project_share import ProjectShare
@@ -14,6 +15,7 @@ from app.models.workspace import WorkspaceRole
 from app.services.pending_invitations import redeem_pending_invitations
 from app.services.workspaces import (
     ensure_company_workspace,
+    ensure_personal_workspace,
     get_workspace_membership,
     require_workspace_member as _require_workspace_member,
     require_workspace_owner as _require_workspace_owner,
@@ -27,6 +29,7 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
     """Upsert the authenticated user into the users table."""
     if not user.uid or user.uid == "shared-user":
         return
+    settings = get_settings()
     existing = await db.get(User, user.uid)
     now = datetime.now(timezone.utc)
     if existing:
@@ -38,9 +41,14 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
             > _LAST_SEEN_THROTTLE_SECONDS
         ):
             existing.last_seen_at = now
-        await ensure_company_workspace(db, user.uid)
+        if settings.single_org_mode:
+            await ensure_company_workspace(db, user.uid)
+        else:
+            await ensure_personal_workspace(db, user.uid)
         redeem_email = user.email or existing.email
-        await redeem_pending_invitations(db, user.uid, redeem_email)
+        await redeem_pending_invitations(
+            db, user.uid, redeem_email, email_verified=user.email_verified
+        )
         await db.commit()
     else:
         db.add(
@@ -57,8 +65,13 @@ async def ensure_user_exists(db: AsyncSession, user: AuthUser) -> None:
             existing = await db.get(User, user.uid)
             if existing is None:
                 raise
-        await ensure_company_workspace(db, user.uid)
-        await redeem_pending_invitations(db, user.uid, user.email)
+        if settings.single_org_mode:
+            await ensure_company_workspace(db, user.uid)
+        else:
+            await ensure_personal_workspace(db, user.uid)
+        await redeem_pending_invitations(
+            db, user.uid, user.email, email_verified=user.email_verified
+        )
         await db.commit()
 
 
@@ -68,7 +81,8 @@ async def _get_role_for_project(
     user: AuthUser,
 ) -> str | None:
     """Resolve the current user's role for a concrete project."""
-    if project.workspace_id:
+    settings = get_settings()
+    if settings.single_org_mode and project.workspace_id:
         membership = await get_workspace_membership(
             db, project.workspace_id, user.uid
         )
@@ -77,7 +91,7 @@ async def _get_role_for_project(
                 return "owner"
             return "editor"
 
-    if project.user_id == user.uid:
+    if project.user_id == user.uid or project.created_by == user.uid:
         return "owner"
 
     share_result = await db.execute(
@@ -91,6 +105,17 @@ async def _get_role_for_project(
         return share.role
 
     return None
+
+
+def project_access_filter(user_id: str):
+    """SQLAlchemy filter: projects the user created or was explicitly shared into."""
+    shared_project_ids = select(ProjectShare.project_id).where(
+        ProjectShare.user_id == user_id
+    )
+    return or_(
+        Project.created_by == user_id,
+        Project.id.in_(shared_project_ids),
+    )
 
 
 async def get_project_with_role(
@@ -141,16 +166,10 @@ async def require_owner(
     project_id: uuid.UUID | str,
     user: AuthUser,
 ) -> Project:
-    """Return project if the user can manage project-level destructive actions."""
+    """Return project if the user is the project creator."""
     project, role = await get_project_with_role(db, project_id, user)
     if role == "owner":
         return project
-    if role == "editor" and project.workspace_id:
-        membership = await get_workspace_membership(
-            db, project.workspace_id, user.uid
-        )
-        if membership:
-            return project
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail="You cannot manage this project"
     )

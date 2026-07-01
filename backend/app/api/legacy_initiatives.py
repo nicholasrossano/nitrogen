@@ -10,7 +10,7 @@ from app.api import (
     evidence,
     exports,
     google_drive,
-    project_health,
+    project_status,
     project_materials,
     project_plan,
     projects,
@@ -134,16 +134,48 @@ _alias(
     ["POST"],
 )
 
-# Project health
-_alias("/initiatives/{project_id}/project-health", project_health.get_project_health, ["GET"])
+# Project status
+_alias("/initiatives/{project_id}/project-status", project_status.get_project_status, ["GET"])
 _alias(
-    "/initiatives/{project_id}/project-health/refresh",
-    project_health.refresh_project_health_rows,
+    "/initiatives/{project_id}/project-status/refresh",
+    project_status.refresh_project_status_rows,
     ["POST"],
 )
 _alias(
-    "/initiatives/{project_id}/project-health/{dimension_id}/override",
-    project_health.override_project_health_dimension,
+    "/initiatives/{project_id}/project-status/{category_key}/override",
+    project_status.override_project_status_category,
+    ["POST"],
+)
+_alias(
+    "/initiatives/{project_id}/project-status/categories",
+    project_status.list_status_categories,
+    ["GET"],
+)
+_alias(
+    "/initiatives/{project_id}/project-status/categories",
+    project_status.create_status_category_row,
+    ["POST"],
+)
+_alias(
+    "/initiatives/{project_id}/project-status/categories/{category_key}",
+    project_status.update_status_category_row,
+    ["PATCH"],
+)
+_alias(
+    "/initiatives/{project_id}/project-status/categories/{category_key}",
+    project_status.delete_status_category_row,
+    ["DELETE"],
+)
+_alias(
+    "/initiatives/{project_id}/project-status/categories/{category_key}/criteria/generate",
+    project_status.generate_status_category_criteria_row,
+    ["POST"],
+)
+# Legacy project-health aliases
+_alias("/initiatives/{project_id}/project-health", project_status.get_project_status, ["GET"])
+_alias(
+    "/initiatives/{project_id}/project-health/refresh",
+    project_status.refresh_project_status_rows,
     ["POST"],
 )
 

@@ -9,6 +9,7 @@ export interface ChatShellContextValue {
   activeContextWidget: ChatContextExpandedWidget | null;
   onSelectChat: (chatId: string, projectId?: string | null) => void;
   onNewChat: (projectId?: string | null) => void;
+  onNewProject?: () => Promise<void>;
   openProjectContextPanel: (projectId: string, widget: ChatContextExpandedWidget) => void;
   drawerRefreshKey: number;
   refreshDrawer: () => void;

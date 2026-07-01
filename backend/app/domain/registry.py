@@ -37,12 +37,12 @@ def _energy_mcp():
     return mcp
 
 
-def _energy_project_health():
+def get_default_status_categories():
     if get_active_domain() != "energy":
         raise ValueError(f"Unsupported ACTIVE_DOMAIN '{get_active_domain()}'")
-    from app.domain.energy import project_health
+    from app.domain.energy.status_defaults import get_default_status_categories as _get_defaults
 
-    return project_health
+    return _get_defaults()
 
 
 def register_assessments(registry) -> None:
@@ -75,10 +75,6 @@ def exposed_adapter_ids():
 
 def exposed_resource_types():
     return _energy_mcp().EXPOSED_RESOURCE_TYPES
-
-
-def get_project_health_definition():
-    return _energy_project_health().get_project_health_definition()
 
 
 def _optional_energy_retrieval():

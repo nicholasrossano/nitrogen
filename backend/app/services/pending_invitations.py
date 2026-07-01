@@ -33,10 +33,14 @@ def serialize_workspace_invitation(inv: WorkspaceInvitation) -> dict:
 
 
 async def redeem_pending_invitations(
-    db: AsyncSession, user_id: str, email: str | None
+    db: AsyncSession,
+    user_id: str,
+    email: str | None,
+    *,
+    email_verified: bool = True,
 ) -> None:
     """Create memberships and shares for any invitations matching this user's email."""
-    if not email:
+    if not email or not email_verified:
         return
     norm = normalize_invite_email(email)
     if not norm:

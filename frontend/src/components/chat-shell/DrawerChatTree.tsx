@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, FolderOpen, Home, ListChecks, Plus } from 'lucide-react';
+import { ChevronRight, FolderOpen, Home, ListChecks, Loader2, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, type Project } from '@/lib/api';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
@@ -54,6 +54,8 @@ export function DrawerChatTree({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [visibleCount, setVisibleCount] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
@@ -145,14 +147,31 @@ export function DrawerChatTree({
     return buckets;
   }, [chats, projects]);
 
-  const sections = useMemo(
-    () =>
-      projects.map((p) => ({
-        key: p.id,
-        name: p.name,
-      })),
-    [projects],
-  );
+  const { ownProjects, sharedProjects } = useMemo(() => {
+    const own: Project[] = [];
+    const shared: Project[] = [];
+    for (const project of projects) {
+      if (project.shared_role) {
+        shared.push(project);
+      } else {
+        own.push(project);
+      }
+    }
+    return { ownProjects: own, sharedProjects: shared };
+  }, [projects]);
+
+  const sectionGroups = useMemo(() => {
+    const groups: Array<{ label: string | null; projects: Project[] }> = [
+      { label: null, projects: ownProjects },
+    ];
+    if (
+      activeWorkspace?.workspace_type === 'personal' &&
+      sharedProjects.length > 0
+    ) {
+      groups.push({ label: 'Shared with you', projects: sharedProjects });
+    }
+    return groups;
+  }, [activeWorkspace?.workspace_type, ownProjects, sharedProjects]);
 
   const toggleChatHistoryExpanded = useCallback((projectKey: string, isOpen: boolean) => {
     if (isOpen) {
@@ -163,6 +182,35 @@ export function DrawerChatTree({
     }
     setExpanded((prev) => ({ ...prev, [projectKey]: !isOpen }));
   }, []);
+
+  const handleNewProject = useCallback(async () => {
+    if (!chatShell?.onNewProject || creatingProject) return;
+    setCreatingProject(true);
+    setCreateError(null);
+    try {
+      await chatShell.onNewProject();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create project');
+    } finally {
+      setCreatingProject(false);
+    }
+  }, [chatShell, creatingProject]);
+
+  const renderNewProjectButton = () => (
+    <button
+      type="button"
+      onClick={() => void handleNewProject()}
+      disabled={creatingProject || !activeWorkspace?.id}
+      className="mx-0.5 mb-2 flex w-[calc(100%-0.25rem)] items-center gap-2 rounded-lg border border-dashed border-stroke-subtle px-2.5 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:bg-accent/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {creatingProject ? (
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+      ) : (
+        <Plus className="h-3.5 w-3.5 shrink-0" />
+      )}
+      New Project
+    </button>
+  );
 
   const renderChatRow = (chat: ChatListItem, projectId: string | null) => {
     const label = chat.title?.trim() || 'Untitled chat';
@@ -288,9 +336,13 @@ export function DrawerChatTree({
 
   return (
     <div className="flex flex-col min-h-0 h-full px-1.5 pb-3">
-      {loading ? (
+      {renderNewProjectButton()}
+      {createError && (
+        <p className="px-2 pb-2 text-[11px] text-red-500">{createError}</p>
+      )}
+      {loading && projects.length === 0 ? (
         <p className="px-2 pt-2 text-[11px] text-text-tertiary">Loading…</p>
-      ) : loadError ? (
+      ) : loadError && projects.length === 0 ? (
         <p className="px-2 pt-2 text-[11px] text-red-500">{loadError}</p>
       ) : projects.length === 0 ? (
         <div className="px-2 pt-2">
@@ -300,7 +352,21 @@ export function DrawerChatTree({
         </div>
       ) : (
         <div className="flex flex-col gap-2 overflow-y-auto min-h-0 flex-1 pt-1">
-          {sections.map(renderSection)}
+          {loadError && (
+            <p className="px-0.5 text-[11px] text-red-500">{loadError}</p>
+          )}
+          {sectionGroups.map((group) => (
+            <div key={group.label ?? 'own'} className="flex flex-col gap-2">
+              {group.label && (
+                <p className="px-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+                  {group.label}
+                </p>
+              )}
+              {group.projects.map((project) =>
+                renderSection({ key: project.id, name: project.name }),
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

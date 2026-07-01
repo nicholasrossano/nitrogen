@@ -1,7 +1,6 @@
 from app.models.project import Project, ProjectStage
 from app.models.evidence import EvidenceDoc, EvidenceChunk, EvidenceDocStatus
 from app.models.memo import MemoVersion, Citation
-from app.models.corpus import CorpusDocument, CorpusChunk
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.provenance import ProvenanceTrace
 from app.models.project_material import ProjectMaterial
@@ -14,7 +13,12 @@ from app.models.assessment_instance import AssessmentInstance
 from app.models.decision_event import DecisionEvent
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
 from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
-from app.models.project_health import ProjectHealthResult, ProjectHealthOverride
+from app.models.project_status import (
+    ProjectStatusAssessmentHistory,
+    ProjectStatusCategory,
+    ProjectStatusOverride,
+    ProjectStatusResult,
+)
 from app.models.finding import Finding
 from app.models.workspace_knowledge import (
     WorkspaceKnowledgeBank,
@@ -31,8 +35,6 @@ __all__ = [
     "EvidenceDocStatus",
     "MemoVersion",
     "Citation",
-    "CorpusDocument",
-    "CorpusChunk",
     "CoreChat",
     "CoreChatMessage",
     "ProvenanceTrace",
@@ -58,6 +60,8 @@ __all__ = [
     "Assumption",
     "AssumptionBinding",
     "AssumptionComment",
-    "ProjectHealthResult",
-    "ProjectHealthOverride",
+    "ProjectStatusResult",
+    "ProjectStatusOverride",
+    "ProjectStatusCategory",
+    "ProjectStatusAssessmentHistory",
 ]
