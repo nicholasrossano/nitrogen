@@ -69,6 +69,11 @@ async def test_mcp_http_transport_smoke(monkeypatch: pytest.MonkeyPatch) -> None
     async def _fake_auth(_token: str) -> AuthUser:
         return AuthUser(uid="http-user", email="http@example.com")
 
+    async def _fake_get_project_with_role(_db, project_id, _user):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(id=project_id), "owner"
+
     async def _fake_build_context(_db, user, project_id=None) -> ExecutionContext:
         assert user.uid == "http-user"
         return _ctx()
@@ -83,6 +88,7 @@ async def test_mcp_http_transport_smoke(monkeypatch: pytest.MonkeyPatch) -> None
     )
 
     monkeypatch.setattr(mcp_server, "authenticate_bearer_token", _fake_auth)
+    monkeypatch.setattr(mcp_server, "get_project_with_role", _fake_get_project_with_role)
     monkeypatch.setattr(mcp_server, "build_context", _fake_build_context)
     monkeypatch.setattr(evidence_definition, "read_handler", _fake_evidence_reader)
 
