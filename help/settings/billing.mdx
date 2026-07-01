@@ -3,21 +3,25 @@ title: "Billing and subscription plans for Nitrogen AI"
 description: "Understand Nitrogen AI's billing tiers, how to subscribe to a paid plan, manage your subscription, and what happens when you reach your usage limit."
 ---
 
-Nitrogen AI uses a tiered billing model so you can start for free and scale as your work grows. Every account starts on the trial tier. You can upgrade to a paid plan through Stripe or bring your own OpenAI API key to unlock unlimited AI access using your own credits.
+Nitrogen AI uses a tiered billing model so you can start for free and scale as your work grows. Every account starts on the trial tier. You can upgrade to the Individual plan through Stripe or bring your own API key to unlock AI access billed directly by your provider.
 
 ## Billing tiers
 
 <CardGroup cols={3}>
   <Card title="Trial" icon="flask">
-    The default tier for new accounts. You get limited AI access to explore the platform before committing to a plan.
+    The default tier for new accounts. You get a limited number of messages and a small spend cap to explore the platform before committing to a plan.
   </Card>
   <Card title="BYOK" icon="key">
-    Bring your own OpenAI API key. AI generation uses your own OpenAI credits with no usage cap from Nitrogen AI. See [API Keys](/settings/api-keys) to set this up.
+    Bring your own OpenAI or OpenRouter API key. AI generation uses your own credits with no usage cap from Nitrogen AI. See [API Keys](/settings/api-keys) to set this up.
   </Card>
-  <Card title="Paid subscription" icon="credit-card">
-    Managed AI access billed through Stripe. Nitrogen AI handles the OpenAI costs on your behalf, up to your plan's monthly limit.
+  <Card title="Individual" icon="credit-card">
+    Managed AI access billed through Stripe. Nitrogen AI handles model costs on your behalf, up to your plan's monthly limit.
   </Card>
 </CardGroup>
+
+<Note>
+  Older "Starter" and "Pro" tiers are legacy — they're only visible to subscribers who joined before the current Individual plan. New subscriptions go through the Individual plan.
+</Note>
 
 ## Subscribing to a paid plan
 
@@ -52,7 +56,7 @@ Your current usage is always available in **Settings → Billing**. The billing 
 | Field | Description |
 |---|---|
 | `allowed` | Whether AI features are currently available on your account |
-| `tier` | Your current billing tier (`trial`, `byok`, `starter`, `pro`) |
+| `tier` | Your current billing tier (`trial`, `byok`, or `individual`; legacy accounts may show `starter` or `pro`) |
 | `used_usd` | AI spend so far in the current billing period (USD) |
 | `limit_usd` | The monthly spend cap for your plan |
 
@@ -65,12 +69,12 @@ When you reach your plan's monthly usage limit, AI features are blocked until th
     Move to a higher tier with a larger monthly limit via **Settings → Billing**.
   </Card>
   <Card title="Add a BYOK key" icon="key" href="/settings/api-keys">
-    Connect your own OpenAI API key to bypass Nitrogen AI usage limits entirely.
+    Connect your own OpenAI or OpenRouter API key to bypass Nitrogen AI usage limits entirely.
   </Card>
 </CardGroup>
 
 <Warning>
-  While your account is blocked, you can still view existing projects, deliverables, and evidence — only AI generation is paused. No data is lost.
+  While your account is blocked, you can still view existing projects, assessment outputs, and evidence — only AI generation is paused. No data is lost.
 </Warning>
 
 ## Access codes

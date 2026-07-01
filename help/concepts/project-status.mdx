@@ -1,0 +1,63 @@
+---
+title: "Project status: an AI-assessed health dashboard"
+description: "Project status tracks a project's health across editable categories — evidence quality, technical viability, funding, deployment readiness, and risk — each with an AI-computed status, confidence, and rationale."
+---
+
+**Project status** gives you an at-a-glance view of how healthy a project is, broken into categories you can customize. Each category is assessed by AI against your project's evidence, materials, and assessment outputs, and can be manually overridden when you know better than the model.
+
+## Default categories
+
+Every new project starts with five editable categories:
+
+<CardGroup cols={2}>
+  <Card title="Evidence & credibility" icon="file-shield">
+    Material claims are supported by traceable sources, assumptions are explicit, and there are no major contradictions between what the project asserts and what the record shows.
+  </Card>
+  <Card title="Technical viability" icon="gears">
+    The proposed design, sizing, and modeled outputs are coherent for the site and use case, and key technical inputs are present.
+  </Card>
+  <Card title="Funding & economics" icon="sack-dollar">
+    Cost, revenue, and funding logic hang together, and the economic case is directionally credible.
+  </Card>
+  <Card title="Deployment readiness" icon="road">
+    A credible path to build and operate — named owners, a realistic timeline, and no unresolved blockers to starting construction or operations.
+  </Card>
+  <Card title="Risk profile" icon="shield-halved">
+    Material risks and dependencies are identified, ownership is understood, and mitigation paths exist for the most important items.
+  </Card>
+</CardGroup>
+
+Each category has an editable **definition** — the text that describes what "healthy" means for that category on your project. You can edit this definition, or add and remove categories entirely, from the status panel.
+
+## Status and confidence
+
+Every category resolves to a **status** and a **confidence** level:
+
+| Status | Meaning |
+|---|---|
+| Green | Category is in good shape based on current evidence |
+| Yellow | Category has open questions or partial gaps |
+| Red | Category has significant gaps or unresolved blockers |
+| Unknown | Not enough information to assess yet |
+
+Confidence (`high`, `medium`, `low`, or `unknown`) reflects how much evidence Nitrogen AI had to work with — a green status with low confidence is a signal to add more evidence, not necessarily a problem.
+
+Each assessed category also includes:
+
+- **Rationale** — why the AI landed on this status
+- **Positive and negative drivers** — the specific factors pulling status up or down
+- **Blockers and missing items** — what's actively preventing a better status
+- **Improvement actions** — concrete next steps to move the needle
+- **Sources** — links back to the evidence documents or assessment instances the assessment drew on
+
+## Refreshing status
+
+Status doesn't update automatically on every change — refresh a category manually (or refresh all categories at once) when you want an up-to-date read after adding evidence or completing an assessment.
+
+## Overriding a status
+
+If you disagree with the system-computed status, you can override it with your own status and an explanation. Overrides always take precedence over the AI-computed value, and every override is recorded with who made it and why — so the history stays auditable even when a human has the final word.
+
+## Where it shows up
+
+Project status appears as a compact summary on the project overview, and as a full table with source links and edit controls in the expanded project view. See [Manage project status](/guides/manage-project-status) for how to edit categories and override a status.
