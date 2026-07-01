@@ -90,8 +90,9 @@ do_start() {
   be_loop=$(cat <<'SH'
 while true; do
   echo "[$(date -Iseconds)] backend starting…"
+  eval "$(bash "$ROOT/scripts/export_local_dev_env.sh")"
   cd "$ROOT/backend"
-  python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 \
+  python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 \
     2>&1 | tee -a "$BACKEND_LOG"
   echo "[$(date -Iseconds)] backend exited ($?), restarting in 3 s…"
   sleep 3
@@ -103,6 +104,7 @@ SH
   fe_loop=$(cat <<'SH'
 while true; do
   echo "[$(date -Iseconds)] frontend starting…"
+  eval "$(bash "$ROOT/scripts/export_local_dev_env.sh")"
   cd "$ROOT/frontend"
   npm run dev 2>&1 | tee -a "$FRONTEND_LOG"
   echo "[$(date -Iseconds)] frontend exited ($?), restarting in 3 s…"
