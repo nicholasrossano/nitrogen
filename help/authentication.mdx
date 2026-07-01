@@ -1,0 +1,122 @@
+---
+title: "Nitrogen AI: signing in, tokens, and API key setup"
+description: "Sign in with email or SSO, authenticate API requests with a Firebase Bearer token, bring your own OpenAI key, and understand the available billing tiers."
+---
+
+Nitrogen AI uses Firebase Authentication to manage user identity. When you sign in through the app, Firebase issues a short-lived ID token that you include in API requests. You can also bring your own OpenAI API key to unlock the BYOK tier, or upgrade to a paid subscription for full platform access.
+
+## Signing in
+
+Go to [app.the-nitrogen.ai](https://app.the-nitrogen.ai) and sign in with your email address and password. If your organization uses a supported identity provider, you can sign in through SSO instead.
+
+After signing in, the app manages your session automatically. You don't need to handle tokens manually when using the Nitrogen AI interface.
+
+## Authenticating API requests
+
+Every request to the Nitrogen AI API must include a valid Firebase ID token as a Bearer token in the `Authorization` header.
+
+```http
+Authorization: Bearer <your-firebase-id-token>
+```
+
+### Getting your token
+
+Your Firebase ID token is issued when you sign in. To retrieve it for direct API use, call the Firebase `getIdToken()` method from the Firebase client SDK after authenticating:
+
+```javascript
+import { getAuth } from "firebase/auth";
+
+const auth = getAuth();
+const user = auth.currentUser;
+
+if (user) {
+  const token = await user.getIdToken();
+  // Use token in your API requests
+}
+```
+
+### Making an authenticated request
+
+Include the token in the `Authorization` header for every API call:
+
+```http
+GET https://api.the-nitrogen.ai/api/v1/initiatives
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
+Content-Type: application/json
+```
+
+<Warning>
+  Firebase ID tokens expire after one hour. If you receive a `401 Unauthorized` response, your token has likely expired. Refresh it using `getIdToken(true)` to force a token refresh, then retry the request.
+</Warning>
+
+### Refreshing your token
+
+The Nitrogen AI web app handles token refresh automatically. If you're calling the API directly from your own integration, refresh the token before it expires:
+
+```javascript
+// Force a token refresh
+const freshToken = await user.getIdToken(true);
+```
+
+<Note>
+  Firebase refresh tokens do not expire by default. As long as the user's account is active and not revoked, you can obtain a new ID token at any time using the refresh token.
+</Note>
+
+## Bringing your own OpenAI API key (BYOK)
+
+If you want to use your own OpenAI API key instead of the platform default, you can add it in **Settings → API Keys**. Adding a key upgrades your account to the **byok tier**, which routes AI generation through your own OpenAI account.
+
+Your key is validated against OpenAI before being saved. If the key is invalid or has insufficient permissions, you'll see an error and the key will not be stored.
+
+### Adding your key in the app
+
+1. Go to **Settings → API Keys**
+2. Enter your OpenAI API key
+3. Click **Save**
+
+Nitrogen AI validates the key against OpenAI before saving it. Once saved, the platform displays only a masked preview (for example, `sk-pr...ab12`). Your key is stored encrypted and never exposed in plain text.
+
+### Adding your key via the API
+
+You can also store your key programmatically using the API:
+
+```http
+POST https://api.the-nitrogen.ai/api/v1/settings/api-keys
+Authorization: Bearer <your-firebase-id-token>
+Content-Type: application/json
+
+{
+  "api_key": "sk-...",
+  "provider": "openai"
+}
+```
+
+The endpoint validates your key against OpenAI before saving it. A successful response confirms the key was stored and your account is now on the byok tier.
+
+To remove a key, delete it from **Settings → API Keys** in the app. Your account reverts to the trial tier once all keys are removed.
+
+## Billing tiers
+
+Nitrogen AI offers three tiers:
+
+| Tier | Description |
+|---|---|
+| **Trial** | Default tier for new accounts. Lets you explore the platform with limited generation credits. No payment required. |
+| **BYOK** | Bring your own OpenAI API key. Generation is routed through your OpenAI account, so you pay OpenAI directly for usage. Unlocked by adding a key in Settings → API Keys. |
+| **Paid subscription** | Full platform access with Nitrogen AI-managed credits. Manage your subscription through **Settings → Billing**, powered by Stripe. |
+
+<Info>
+  If you're evaluating Nitrogen AI for a team or organization, start with the trial tier to explore the workflow, then add your OpenAI key or upgrade to a paid plan when you're ready to run production workloads.
+</Info>
+
+## Authentication errors
+
+| Status code | Meaning | What to do |
+|---|---|---|
+| `401 Unauthorized` | No token provided, or the token is invalid or expired | Refresh your Firebase ID token and retry the request |
+| `403 Forbidden` | Your account is authenticated but lacks permission for this resource | Check that you have the correct role on the project or resource |
+| `503 Service Unavailable` | The authentication service is temporarily unavailable | Wait a moment and retry |
+
+<Warning>
+  A `401` response almost always means your token has expired. Refresh your Firebase ID token and retry before investigating further.
+</Warning>
