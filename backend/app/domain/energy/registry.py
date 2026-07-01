@@ -29,9 +29,3 @@ def register_adapters(registry) -> None:
     registry.register(RAGAdapter())
     registry.register(MemoGenerationAdapter())
 
-
-def get_project_health_definition():
-    from app.domain.energy.project_health import get_project_health_definition as _get_definition
-
-    return _get_definition()
-

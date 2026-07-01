@@ -27,7 +27,6 @@ class MemoGenerationAdapter(BaseAdapter):
                 "type": "object",
                 "properties": {
                     "project_id": {"type": "string"},
-                    "include_corpus": {"type": "boolean"},
                 },
             },
             output_schema={
@@ -61,10 +60,7 @@ class MemoGenerationAdapter(BaseAdapter):
             raise ValueError("Project not found for memo generation adapter.")
 
         service = MemoGeneratorService(db, user_id=ctx.user_id)
-        memo, citations = await service.generate(
-            initiative=initiative,
-            include_corpus=inputs.get("include_corpus", True),
-        )
+        memo, citations = await service.generate(initiative=initiative)
         citations_payload = [
             {
                 "citation_number": c.citation_number,
@@ -82,4 +78,3 @@ class MemoGenerationAdapter(BaseAdapter):
             warnings=[],
             artifacts=None,
         )
-

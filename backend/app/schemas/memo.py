@@ -6,16 +6,13 @@ from uuid import UUID
 
 class MemoGenerateRequest(BaseModel):
     """Request to generate a memo"""
-    include_corpus: bool = Field(
-        default=True, 
-        description="Include case study corpus in RAG retrieval"
-    )
+    pass
 
 
 class CitationResponse(BaseModel):
     """A citation in the memo"""
     number: int
-    source_type: Literal["evidence", "corpus"]
+    source_type: Literal["evidence"]
     source_title: str
     excerpt: str
     chunk_id: UUID

@@ -19,7 +19,7 @@ class RetrievalAdapter(BaseAdapter):
         return AdapterDefinition(
             adapter_id="retrieval",
             name="Retrieval Adapter",
-            description="Run tiered retrieval across corpus, scholarly, web, and fallback tiers.",
+            description="Run tiered retrieval across evidence, scholarly, web, and fallback tiers.",
             provider="internal",
             adapter_type="python",
             input_schema={

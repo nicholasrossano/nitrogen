@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { ProjectHealthTable } from '@/components/project-health/ProjectHealthTable';
+import { StatusOverviewTable } from '@/components/project-status/StatusOverviewTable';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
 import { api, type Project, type ProjectShare } from '@/lib/api';
@@ -103,8 +103,8 @@ export function ProjectOverviewExpandedPanel({
             Status
           </p>
           <div className="mt-2">
-            <ProjectHealthTable
-              projectId={project.id}
+            <StatusOverviewTable
+              initiativeId={project.id}
               readOnly={readOnly}
               refreshToken={refreshKey}
               onOpenDocument={onOpenDocument}
