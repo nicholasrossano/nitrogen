@@ -9,10 +9,13 @@ from alembic import context
 
 # Import models to ensure they're registered with Base
 from app.models import (  # noqa: F401
-    Initiative, Project, Finding, EvidenceDoc, EvidenceChunk, MemoVersion, Citation,
-    CorpusDocument, CorpusChunk, CoreChat, CoreChatMessage, ProvenanceTrace,
+    Project, Finding, EvidenceDoc, EvidenceChunk, MemoVersion, Citation,
+    CoreChat, CoreChatMessage, ProvenanceTrace,
     ProjectMaterial, User, ProjectShare, ProjectShareInvitation, WorkspaceInvitation,
     AssessmentInstance, DecisionEvent,
+    Workspace, WorkspaceMembership,
+    ProjectStatusCategory, ProjectStatusResult, ProjectStatusOverride, ProjectStatusAssessmentHistory,
+    Subscription, UsageRecord, UserApiKey,
 )
 from app.core.database import Base
 from app.config import get_settings

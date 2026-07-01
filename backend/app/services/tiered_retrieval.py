@@ -2,7 +2,7 @@
 Tiered Retrieval Service
 
 Searches all available data sources in parallel for comprehensive results:
-- Corpus RAG (case studies, uploaded evidence)
+- Project evidence RAG (uploaded documents)
 - OpenAlex (scholarly works / academic research)
 - Web Search (authoritative institutional sources)
 - LLM Knowledge (training data fallback — only when nothing else found)
@@ -28,6 +28,7 @@ from app.domain.registry import get_retrieval_connectors
 from app.services.rag import RAGService
 from app.services.openalex import OpenAlexService
 from app.services.workspace_knowledge import WorkspaceKnowledgeService
+from app.services.workspaces import get_workspace_membership
 from app.models.project import Project
 from app.models.project_material import ProjectMaterial
 from app.models.evidence import EvidenceDoc
@@ -38,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 class SourceType(str, Enum):
     """Types of sources for retrieved facts."""
-    CORPUS = "corpus"
     EVIDENCE = "evidence"
     WORKSPACE_EVIDENCE = "workspace_evidence"
     WORKSPACE_KNOWLEDGE = "workspace_knowledge"
@@ -127,10 +127,9 @@ class RetrievalResult:
         return self.tiers_used[0] if self.tiers_used else "none"
     
     def has_verified_facts(self) -> bool:
-        """Check if we have facts from corpus, openalex, or web (not just LLM estimates)."""
+        """Check if we have facts from evidence, openalex, or web (not just LLM estimates)."""
         return any(
             f.source_type in [
-                SourceType.CORPUS,
                 SourceType.EVIDENCE,
                 SourceType.OPENALEX,
                 SourceType.WORKSPACE_EVIDENCE,
@@ -161,11 +160,11 @@ class RetrievalResult:
 class TieredRetrievalService:
     """
     Searches all available data sources in parallel for comprehensive results.
-    Corpus, OpenAlex, and web search all run concurrently; results are merged
+    Evidence, OpenAlex, and web search all run concurrently; results are merged
     and ranked. LLM fallback is only added when no other source returned data.
     """
     
-    CORPUS_RELEVANCE_THRESHOLD = 0.55
+    EVIDENCE_RELEVANCE_THRESHOLD = 0.55
     WEB_SEARCH_TIMEOUT_SECONDS = 12.0
     
     def __init__(self, db: AsyncSession, user_id: str | None = None):
@@ -206,17 +205,17 @@ class TieredRetrievalService:
         result = RetrievalResult(query=query)
 
         # Launch all enabled sources concurrently
-        async def _corpus() -> list[RetrievedFact]:
-            if not settings.enable_corpus_rag:
+        async def _evidence() -> list[RetrievedFact]:
+            if project_id is None:
                 return []
             if on_stage:
-                await on_stage("retrieve_corpus", "running", None)
-            facts = await self.search_corpus(query, project_id)
+                await on_stage("retrieve_evidence", "running", None)
+            facts = await self.search_evidence(query, project_id)
             if on_stage:
                 msg = f"Found {len(facts)} results" if facts else "No matches"
-                await on_stage("retrieve_corpus", "done", msg)
+                await on_stage("retrieve_evidence", "done", msg)
             if facts:
-                logger.info(f"Corpus hit for query: {query[:50]}...")
+                logger.info(f"Evidence hit for query: {query[:50]}...")
             return facts
 
         async def _openalex() -> list[RetrievedFact]:
@@ -245,13 +244,13 @@ class TieredRetrievalService:
                 logger.info(f"Web hit for query: {query[:50]}...")
             return facts
 
-        corpus_facts, openalex_facts, web_facts = await asyncio.gather(
-            _corpus(), _openalex(), _web()
+        evidence_facts, openalex_facts, web_facts = await asyncio.gather(
+            _evidence(), _openalex(), _web()
         )
 
-        if corpus_facts:
-            result.facts.extend(corpus_facts)
-            result.tiers_used.append("corpus")
+        if evidence_facts:
+            result.facts.extend(evidence_facts)
+            result.tiers_used.append("evidence")
         if openalex_facts:
             result.facts.extend(openalex_facts)
             result.tiers_used.append("openalex")
@@ -274,28 +273,23 @@ class TieredRetrievalService:
         
         return result
     
-    async def search_corpus(
+    async def search_evidence(
         self,
         query: str,
-        project_id: UUID | None,
+        project_id: UUID,
         *,
-        corpus_top_k: int = 5,
-        evidence_top_k: int | None = None,
+        evidence_top_k: int = 5,
     ) -> list[RetrievedFact]:
-        """Search corpus and evidence using existing RAG service."""
+        """Search project evidence using existing RAG service."""
         try:
-            search_id = project_id or UUID('00000000-0000-0000-0000-000000000000')
-            ev_k = evidence_top_k if evidence_top_k is not None else (corpus_top_k if project_id else 0)
-
             chunks = await self.rag.retrieve(
                 query=query,
-                project_id=search_id,
-                sources=["corpus"] if not project_id else ["corpus", "evidence"],
-                corpus_top_k=corpus_top_k,
-                evidence_top_k=ev_k,
+                project_id=project_id,
+                sources=["evidence"],
+                evidence_top_k=evidence_top_k,
             )
             
-            relevant_chunks = [c for c in chunks if c.similarity >= self.CORPUS_RELEVANCE_THRESHOLD]
+            relevant_chunks = [c for c in chunks if c.similarity >= self.EVIDENCE_RELEVANCE_THRESHOLD]
             
             if not relevant_chunks:
                 return []
@@ -307,8 +301,6 @@ class TieredRetrievalService:
                         SourceType.EVIDENCE
                         if chunk.source_type == "evidence"
                         else SourceType.WORKSPACE_EVIDENCE
-                        if chunk.source_type == "workspace_evidence"
-                        else SourceType.CORPUS
                     ),
                     source_title=chunk.source_title,
                     chunk_id=str(chunk.chunk_id),
@@ -319,22 +311,44 @@ class TieredRetrievalService:
                 for chunk in relevant_chunks
             ]
         except Exception as e:
-            logger.error(f"Corpus search failed: {e}")
+            logger.error(f"Evidence search failed: {e}")
             try:
                 await self.db.rollback()
             except Exception:
                 pass
             return []
 
+    async def search_corpus(
+        self,
+        query: str,
+        project_id: UUID | None,
+        *,
+        corpus_top_k: int = 5,
+        evidence_top_k: int | None = None,
+    ) -> list[RetrievedFact]:
+        """Backward-compatible alias for evidence-only project search."""
+        if project_id is None:
+            return []
+        top_k = evidence_top_k if evidence_top_k is not None else corpus_top_k
+        return await self.search_evidence(query, project_id, evidence_top_k=top_k)
+
     async def search_workspace_context(
         self,
         query: str,
         workspace_id: UUID,
         *,
+        user_id: str | None = None,
         workspace_top_k: int = 4,
         knowledge_top_k: int = 6,
     ) -> list[RetrievedFact]:
         """Search workspace-level context (workspace files + linked knowledge banks)."""
+        effective_user_id = user_id or self.user_id
+        if not effective_user_id:
+            return []
+        membership = await get_workspace_membership(self.db, workspace_id, effective_user_id)
+        if membership is None:
+            return []
+
         facts: list[RetrievedFact] = []
         try:
             chunks = await self.rag.retrieve(
@@ -344,7 +358,7 @@ class TieredRetrievalService:
                 sources=["workspace_evidence"],
                 workspace_top_k=workspace_top_k,
             )
-            relevant_chunks = [c for c in chunks if c.similarity >= self.CORPUS_RELEVANCE_THRESHOLD]
+            relevant_chunks = [c for c in chunks if c.similarity >= self.EVIDENCE_RELEVANCE_THRESHOLD]
             facts.extend(
                 [
                     RetrievedFact(
@@ -801,7 +815,7 @@ class TieredRetrievalService:
         for category, result in context_results.items():
             if result.facts and result.tier_used != "none":
                 category_name = category.replace("_", " ").title()
-                tier_label = f"(from {result.tier_used})" if result.tier_used != "corpus" else ""
+                tier_label = f"(from {result.tier_used})" if result.tier_used else ""
                 sections.append(f"\n### {category_name} {tier_label}")
                 sections.append(result.format_for_prompt(max_facts=3))
         

@@ -78,9 +78,16 @@ def _init_firebase():
 class AuthUser:
     """Authenticated user from Firebase."""
 
-    def __init__(self, uid: str, email: str | None = None):
+    def __init__(
+        self,
+        uid: str,
+        email: str | None = None,
+        *,
+        email_verified: bool = True,
+    ):
         self.uid = uid
         self.email = email
+        self.email_verified = email_verified
 
 
 def _require_firebase_configured() -> None:
@@ -109,6 +116,7 @@ async def authenticate_bearer_token(token: str) -> AuthUser:
         return AuthUser(
             uid=decoded_token["uid"],
             email=decoded_token.get("email"),
+            email_verified=bool(decoded_token.get("email_verified", False)),
         )
     except Exception as e:
         logger.warning("Token verification failed: %s", sanitize_exception(e))

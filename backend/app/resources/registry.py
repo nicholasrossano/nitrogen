@@ -11,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.execution_context import ExecutionContext
-from app.models.corpus import CorpusDocument
 from app.models.evidence import EvidenceChunk, EvidenceDoc
 from app.models.memo import MemoVersion
 from app.models.assessment_instance import AssessmentInstance
@@ -108,9 +107,6 @@ class ResourceRegistry:
             f"nitrogen://projects/{project_id}/artifacts/{instance_id}"
             for instance_id in instances
         )
-
-        corpus_docs = (await db.execute(select(CorpusDocument.id))).scalars().all()
-        uris.extend(f"nitrogen://corpus/{doc_id}" for doc_id in corpus_docs)
 
         return uris
 

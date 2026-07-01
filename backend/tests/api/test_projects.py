@@ -34,10 +34,10 @@ class _FakeExecuteResult:
 
 
 @pytest.mark.asyncio
-async def test_list_projects_returns_workspace_rows_without_per_row_permission_filter(
+async def test_list_projects_returns_accessible_rows_for_creator(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Regression: list_projects must not silently drop every row after the initiatives port."""
+    """Hosted mode: creators see projects they created in the workspace list."""
     workspace_id = uuid.uuid4()
     project = Project(
         id=uuid.uuid4(),
@@ -67,10 +67,10 @@ async def test_list_projects_returns_workspace_rows_without_per_row_permission_f
 
     async def fake_execute(statement, *_args, **_kwargs):
         statement_text = str(statement)
-        if "project_shares" in statement_text:
-            return _FakeExecuteResult([])
         if "FROM projects" in statement_text:
             return _FakeExecuteResult([project])
+        if "project_shares" in statement_text:
+            return _FakeExecuteResult([])
         return _FakeExecuteResult([])
 
     async def fake_get(_model, _id):
@@ -132,10 +132,10 @@ async def test_list_projects_http_returns_workspace_rows(
 
     def execute_handler(statement):
         statement_text = str(statement)
-        if "project_shares" in statement_text:
-            return FakeExecuteResult([])
         if "FROM projects" in statement_text:
             return FakeExecuteResult([project])
+        if "project_shares" in statement_text:
+            return FakeExecuteResult([])
         return FakeExecuteResult([])
 
     async def fake_get(_model, _id):

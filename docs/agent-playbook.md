@@ -22,6 +22,7 @@ Use this file only when the task needs domain-specific policy not covered by `AG
   - assessments authoring patterns: `docs/assessments/authoring-guide.md`
   - adapter contracts: `docs/adapters/authoring-guide.md`
   - setup/env/dev commands: `docs/setup.md`
+  - user-facing product docs (Mintlify): `help/` — see `help/README.md`
 - Every new FastAPI route should include a docstring.
 - Every new Pydantic field should include `Field(description="...")`.
 - Do not maintain static lists of capabilities in docs; prefer live capabilities endpoint references.

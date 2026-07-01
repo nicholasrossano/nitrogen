@@ -19,7 +19,7 @@ class RAGAdapter(BaseAdapter):
         return AdapterDefinition(
             adapter_id="rag",
             name="RAG Adapter",
-            description="Retrieve evidence/corpus chunks using vector similarity search.",
+            description="Retrieve evidence chunks using vector similarity search.",
             provider="internal",
             adapter_type="python",
             input_schema={
@@ -30,7 +30,7 @@ class RAGAdapter(BaseAdapter):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Similarity-search query to run over evidence and corpus content.",
+                        "description": "Similarity-search query to run over project evidence content.",
                     },
                     "project_id": {
                         "type": "string",
@@ -38,16 +38,12 @@ class RAGAdapter(BaseAdapter):
                     },
                     "sources": {
                         "type": "array",
-                        "description": "Source collections to search, typically evidence and/or corpus.",
+                        "description": "Source collections to search, typically evidence and/or workspace_evidence.",
                         "items": {"type": "string"},
                     },
                     "evidence_top_k": {
                         "type": "integer",
                         "description": "Maximum number of initiative evidence chunks to return.",
-                    },
-                    "corpus_top_k": {
-                        "type": "integer",
-                        "description": "Maximum number of corpus chunks to return.",
                     },
                 },
                 "required": ["query", "project_id"],
@@ -86,9 +82,8 @@ class RAGAdapter(BaseAdapter):
         chunks = await rag.retrieve(
             query=inputs["query"],
             project_id=UUID(project_id),
-            sources=inputs.get("sources", ["evidence", "corpus"]),
+            sources=inputs.get("sources", ["evidence"]),
             evidence_top_k=inputs.get("evidence_top_k", 3),
-            corpus_top_k=inputs.get("corpus_top_k", 5),
         )
         payload_chunks = [
             {
@@ -118,4 +113,3 @@ class RAGAdapter(BaseAdapter):
             warnings=[],
             artifacts=None,
         )
-
