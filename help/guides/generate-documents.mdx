@@ -1,0 +1,116 @@
+---
+title: 'Generate AI-powered deliverables from your project'
+description: 'Trigger generation for one module or all at once, then review AI-powered deliverables with traceable inline citations in your project chat.'
+---
+
+Once your modules are selected and any required alignments are confirmed, you're ready to generate your deliverables. Nitrogen AI uses retrieval-augmented generation (RAG) to write every section of every document — searching your uploaded evidence for the most relevant passages and grounding the output in your actual project materials. The result is a citable, evidence-backed deliverable, not a generic AI draft.
+
+## Trigger generation
+
+You can generate a single deliverable or all of your selected modules at once.
+
+<Steps>
+  <Step title="Confirm prerequisites">
+    Before generating, check that:
+
+    - At least one evidence document has been uploaded and processed.
+    - All required inputs for your selected modules are complete.
+    - Any modules that require alignment have had their outlines confirmed.
+
+    If any of these are missing, the **Generate** button will be disabled or will return an error.
+  </Step>
+  <Step title="Choose single or generate all">
+    - To generate a single module, open that module's panel in the chat and click **Generate**.
+    - To generate everything at once, click **Generate all** from the tools overview. Each module runs in sequence and saves as it completes — a failure on one tool doesn't block the others.
+  </Step>
+  <Step title="Wait for generation to complete">
+    Generation time varies by module and document length. Most deliverables complete in under two minutes. The chat shows a progress indicator while each module is running.
+  </Step>
+  <Step title="Review the output in the chat">
+    When generation completes, the deliverable appears as an interactive widget in the project chat. Document modules open in a document viewer with sectioned navigation; model modules display the calculated results in a model widget.
+  </Step>
+</Steps>
+
+## Include corpus option
+
+<Info>
+  When you trigger generation, you can toggle **Include corpus** to supplement your evidence with Nitrogen AI's curated dataset of precedent sustainable development projects. This is especially useful when your evidence is limited or when you want the AI to incorporate sector benchmarks and comparable project data alongside your own materials. Leave this option off if you want the deliverable to rely exclusively on the documents you uploaded.
+</Info>
+
+When corpus is included, citations in the deliverable identify whether each passage came from your own evidence or from the shared corpus — so you can always distinguish between your project materials and platform-level reference data.
+
+## How generation works
+
+For each section of a deliverable, Nitrogen AI follows the same process:
+
+1. Forms a retrieval query based on the section topic and your confirmed alignment outline.
+2. Performs a semantic search across your evidence (and corpus, if enabled) to find the most relevant passages.
+3. Passes the retrieved passages as context to the language model alongside your project inputs.
+4. Writes the section grounded in that source material and attaches citations linking back to the specific document and passage.
+
+For modules with a confirmed alignment, the outline structures the generation — each section is written to match the scope and intent you approved. This is why reviewing the alignment carefully before confirming is worth the time.
+
+## Review your deliverables
+
+Different module types produce different output widgets:
+
+<CardGroup cols={2}>
+  <Card title="Investment Memo" icon="file-invoice-dollar">
+    Displayed in a memo viewer with collapsible sections. Each section shows inline citations you can click to trace back to the source passage.
+  </Card>
+  <Card title="Due Diligence Checklist" icon="list-check">
+    Displayed in a checklist viewer. You can check off items as you review them. Each item includes the AI's finding and a citation.
+  </Card>
+  <Card title="Assessment documents" icon="file-lines">
+    ESMP, MEL Plan, Stakeholder Assessment, and Landscape Mapping open in a document viewer with section navigation. Citations appear throughout.
+  </Card>
+  <Card title="Quantitative models" icon="calculator">
+    LCOE, Carbon, and Solar models display an interactive model widget. Adjust inputs and click **Recalculate** to update the results before exporting.
+  </Card>
+</CardGroup>
+
+## Template fill
+
+If you selected the Template Fill module, upload your document template before triggering generation. Nitrogen AI reads the template structure and fills in values using your project data and evidence. The output preserves your template's layout — only the content is replaced.
+
+<Steps>
+  <Step title="Upload your template">
+    In the Template Fill module panel, click **Upload template** and select your DOCX or XLSX file. The template is stored as a project material and is not indexed as evidence.
+  </Step>
+  <Step title="Trigger generation">
+    Once the template is uploaded and all inputs are complete, click **Generate**. The AI fills the template and returns the completed document in the chat.
+  </Step>
+</Steps>
+
+## If generation fails
+
+If a module fails during generation, the chat shows an error message for that tool. Check for these common causes and resolve them before trying again:
+
+<CardGroup cols={3}>
+  <Card title="No evidence uploaded" icon="triangle-exclamation">
+    Upload at least one evidence document before generating. Paste text is also valid — the AI needs something to retrieve from.
+  </Card>
+  <Card title="Incomplete inputs" icon="circle-xmark">
+    Open the tool inputs panel and check for any blank required fields. Fill them in and then click Generate again.
+  </Card>
+  <Card title="Alignment not confirmed" icon="hourglass">
+    Document modules won't generate until the alignment is confirmed. Return to the chat, review the outline, and click Confirm.
+  </Card>
+</CardGroup>
+
+After addressing the issue, click **Generate** for the affected module. Previous successful deliverables in the same project are not affected.
+
+<Tip>
+  If a generated deliverable doesn't reflect your project well, check your evidence first. Adding a more targeted document — such as a feasibility study section that directly addresses the weak area — and regenerating will typically produce a noticeably better result.
+</Tip>
+
+## What happens next
+
+<CardGroup cols={2}>
+  <Card title="Export your deliverables" icon="file-arrow-down" href="/guides/export-share">
+    Download memos as DOCX and models as XLSX — ready for investors, donors, or internal review.
+  </Card>
+  <Card title="Share your project" icon="share-nodes" href="/guides/export-share">
+    Invite teammates with editor or viewer access to collaborate on the project.
+  </Card>
+</CardGroup>
