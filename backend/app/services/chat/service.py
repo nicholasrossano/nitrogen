@@ -179,19 +179,7 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
         )
         should_run_scholarly = self._should_run_scholarly_search(field_context)
 
-        async def _corpus_search() -> list[RetrievedFact]:
-            if project_id:
-                from uuid import UUID as _UUID
-                try:
-                    return await self.retrieval.search_corpus(search_query, _UUID(project_id))
-                except ValueError:
-                    pass
-            if not settings.enable_corpus_rag:
-                return []
-            return await self.retrieval.search_corpus(search_query, None)
-
-        # Search project materials when inside a workspace
-        async def _material_search() -> list[RetrievedFact]:
+        async def _evidence_search() -> list[RetrievedFact]:
             if not project_id:
                 return []
             from uuid import UUID as _UUID
@@ -199,7 +187,10 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
                 iid = _UUID(project_id)
             except ValueError:
                 return []
-            return await self.retrieval.search_project_materials(search_query, iid)
+            facts = await self.retrieval.search_evidence(search_query, iid, evidence_top_k=12)
+            if not facts:
+                facts = await self.retrieval.search_project_materials(search_query, iid)
+            return facts
 
         await _step("plan_tools", "Planning evidence retrieval", "running")
         tool_calls = await self._plan_tool_calls(
@@ -353,16 +344,14 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
         async def _run_project_documents(query: str) -> list[RetrievedFact]:
             await _step("scan_docs", "Scanning project documents", "running")
             await _think("Scanning project documents for relevant sections...")
-            corpus_facts = await _corpus_search()
-            if not corpus_facts and project_id:
-                corpus_facts = await _material_search()
-            if corpus_facts:
-                await _think(f"Found {len(corpus_facts)} relevant sections in project documents")
-                await _step("scan_docs", f"Found {len(corpus_facts)} relevant sections", "done")
+            doc_facts = await _evidence_search()
+            if doc_facts:
+                await _think(f"Found {len(doc_facts)} relevant sections in project documents")
+                await _step("scan_docs", f"Found {len(doc_facts)} relevant sections", "done")
             else:
                 await _think("No matching sections in project documents")
                 await _step("scan_docs", "No matching document sections", "done")
-            return corpus_facts
+            return doc_facts
 
         async def _run_workspace_context(query: str) -> list[RetrievedFact]:
             if initiative is None or not getattr(initiative, "workspace_id", None):
@@ -372,6 +361,7 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
             facts = await self.retrieval.search_workspace_context(
                 query=query,
                 workspace_id=initiative.workspace_id,
+                user_id=self.user_id,
             )
             if facts:
                 await _think(f"Found {len(facts)} workspace context sources")
@@ -443,7 +433,7 @@ class ChatService(ChatPlanningMixin, ChatGenerationMixin):
                 search_labels.append("openalex")
             elif fn_name == "search_project_documents":
                 search_tasks.append(_run_project_documents(tool_query))
-                search_labels.append("corpus")
+                search_labels.append("evidence")
             elif fn_name == "search_workspace_context":
                 search_tasks.append(_run_workspace_context(tool_query))
                 search_labels.append("workspace_context")

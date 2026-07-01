@@ -13,6 +13,11 @@ import type {
   AssessmentDefinition,
   ProjectHealthStatus,
   ProjectHealthResponse,
+  ProjectHealthDimension,
+  ProjectStatusLevel,
+  ProjectStatusResponse,
+  ProjectStatusCategoryConfig,
+  ProjectStatusCriteria,
   MemoResponse,
   ProjectPlanItem,
   ProjectPlan,
@@ -187,26 +192,128 @@ export const projectsApi = {
     fetchApi<{ project_plan: ProjectPlan | null }>(
       `/api/v1/projects/${projectId}/project-plan`
     ),
-  getProjectHealth: (projectId: string) =>
-    fetchApi<ProjectHealthResponse>(`/api/v1/projects/${projectId}/project-health`),
-  refreshProjectHealth: (projectId: string, source: string = 'manual_refresh') =>
-    fetchApi<ProjectHealthResponse>(`/api/v1/projects/${projectId}/project-health/refresh`, {
+  getProjectStatus: (projectId: string) =>
+    fetchApi<ProjectStatusResponse>(`/api/v1/projects/${projectId}/project-status`),
+  refreshProjectStatus: (projectId: string, source: string = 'manual_refresh') =>
+    fetchApi<ProjectStatusResponse>(`/api/v1/projects/${projectId}/project-status/refresh`, {
       method: 'POST',
       body: JSON.stringify({ source }),
     }),
-  overrideProjectHealthDimension: (
+  overrideProjectStatusCategory: (
     projectId: string,
-    dimensionId: string,
-    status: ProjectHealthStatus,
+    categoryKey: string,
+    status: ProjectStatusLevel,
     explanation?: string,
   ) =>
-    fetchApi<ProjectHealthResponse>(
-      `/api/v1/projects/${projectId}/project-health/${dimensionId}/override`,
+    fetchApi<ProjectStatusResponse>(
+      `/api/v1/projects/${projectId}/project-status/${categoryKey}/override`,
       {
         method: 'POST',
         body: JSON.stringify({ status, explanation: explanation || null }),
       },
     ),
+  listStatusCategories: (projectId: string) =>
+    fetchApi<ProjectStatusCategoryConfig[]>(
+      `/api/v1/projects/${projectId}/project-status/categories`,
+    ),
+  createStatusCategory: (
+    projectId: string,
+    body: { label: string; definition_text?: string; category_key?: string | null },
+  ) =>
+    fetchApi<ProjectStatusCategoryConfig>(
+      `/api/v1/projects/${projectId}/project-status/categories`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  updateStatusCategory: (
+    projectId: string,
+    categoryKey: string,
+    body: Partial<{
+      label: string;
+      definition_text: string;
+      criteria: ProjectStatusCriteria | null;
+      is_active: boolean;
+    }>,
+  ) =>
+    fetchApi<ProjectStatusCategoryConfig>(
+      `/api/v1/projects/${projectId}/project-status/categories/${categoryKey}`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
+  deleteStatusCategory: (projectId: string, categoryKey: string) =>
+    fetchApi<void>(`/api/v1/projects/${projectId}/project-status/categories/${categoryKey}`, {
+      method: 'DELETE',
+    }),
+  generateStatusCategoryCriteria: (
+    projectId: string,
+    categoryKey: string,
+    persist: boolean = true,
+  ) =>
+    fetchApi<ProjectStatusCriteria>(
+      `/api/v1/projects/${projectId}/project-status/categories/${categoryKey}/criteria/generate`,
+      { method: 'POST', body: JSON.stringify({ persist }) },
+    ),
+  /** @deprecated use getProjectStatus */
+  getProjectHealth: (projectId: string) =>
+    fetchApi<ProjectStatusResponse>(`/api/v1/projects/${projectId}/project-status`).then(
+      (res): ProjectHealthResponse => ({
+        domain: res.domain,
+        project_id: res.project_id,
+        stale: res.stale,
+        dimensions: res.categories.map((row) => ({
+          dimension_id: row.category_key,
+          label: row.label,
+          description: row.definition_text,
+          status: row.status,
+          effective_status: row.effective_status,
+          confidence: row.confidence,
+          rationale: row.rationale,
+          critical_insight: row.critical_insight,
+          supporting_evidence: row.supporting_evidence,
+          suggested_improvement: row.suggested_improvement,
+          retrieved_sources: row.retrieved_sources,
+          positive_drivers: row.positive_drivers,
+          negative_drivers: row.negative_drivers,
+          blockers: row.blockers,
+          missing_items: row.missing_items,
+          relevant_modules: row.relevant_modules,
+          relevant_module_names: row.relevant_module_names,
+          relevant_assessments: row.relevant_assessments,
+          improvement_actions: row.improvement_actions,
+          uncertainties: row.uncertainties,
+          update_source: row.update_source,
+          last_updated_at: row.last_updated_at,
+          is_stale: row.is_stale,
+          has_override: row.has_override,
+          overrides: row.overrides.map((o) => ({
+            ...o,
+            dimension_id: o.category_key,
+          })),
+        })),
+      }),
+    ),
+  /** @deprecated use refreshProjectStatus */
+  refreshProjectHealth: async (projectId: string, source: string = 'manual_refresh') => {
+    await fetchApi<ProjectStatusResponse>(
+      `/api/v1/projects/${projectId}/project-status/refresh`,
+      { method: 'POST', body: JSON.stringify({ source }) },
+    );
+    return projectsApi.getProjectHealth(projectId);
+  },
+  /** @deprecated use overrideProjectStatusCategory */
+  overrideProjectHealthDimension: async (
+    projectId: string,
+    dimensionId: string,
+    status: ProjectHealthStatus,
+    explanation?: string,
+  ) => {
+    await fetchApi<ProjectStatusResponse>(
+      `/api/v1/projects/${projectId}/project-status/${dimensionId}/override`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ status, explanation: explanation || null }),
+      },
+    );
+    return projectsApi.getProjectHealth(projectId);
+  },
   generateProjectPlan: (projectId: string) =>
     fetchApi<{ project_plan: ProjectPlan }>(
       `/api/v1/projects/${projectId}/project-plan`,
