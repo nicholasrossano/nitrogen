@@ -28,12 +28,18 @@ missing_vars() {
 }
 
 load_env() {
-  if [[ -f "$ROOT/.env" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$ROOT/.env"
-    set +a
+  # Don't `source .env` — bash treats $30 in price labels as positional params.
+  if [[ ! -f "$ROOT/.env" ]]; then
+    return 0
   fi
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    export "$key=$val"
+  done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$ROOT/.env" || true)
 }
 
 print_status() {
