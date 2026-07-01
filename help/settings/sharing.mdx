@@ -1,0 +1,149 @@
+---
+title: "Share projects with your team in Nitrogen AI"
+description: "Invite collaborators to any project you own, assign editor or viewer roles, and manage or revoke their access at any time from the share panel."
+---
+
+You can share any project you own with other Nitrogen AI users. Collaborators appear in your project list automatically and can work within the permissions their role allows. Sharing is managed per-project, so you have full control over who can access each initiative.
+
+## Roles
+
+Each collaborator is assigned one of three roles when you share a project with them.
+
+<CardGroup cols={3}>
+  <Card title="Owner" icon="crown">
+    Full control. Can add and remove collaborators, change roles, generate and export deliverables, and permanently delete the project. There is always exactly one owner per project.
+  </Card>
+  <Card title="Editor" icon="pen">
+    Can upload evidence, select modules, generate deliverables, and export. Cannot manage who has access to the project.
+  </Card>
+  <Card title="Viewer" icon="eye">
+    Read-only access. Can view deliverables and chat history. Cannot upload evidence, run assessments, or make any changes.
+  </Card>
+</CardGroup>
+
+## Sharing a project
+
+<Steps>
+  <Step title="Open the project">
+    Navigate to the project you want to share.
+  </Step>
+  <Step title="Open the share panel">
+    Click **Share** in the project toolbar.
+  </Step>
+  <Step title="Enter the collaborator's email">
+    Type the email address of the person you want to invite. They must already have a Nitrogen AI account — if they don't, ask them to sign up at [the-nitrogen.ai](https://the-nitrogen.ai) first.
+  </Step>
+  <Step title="Choose a role">
+    Select **Editor** or **Viewer** depending on what level of access they need.
+  </Step>
+  <Step title="Send the invitation">
+    Click **Share**. The project appears in their project list immediately.
+  </Step>
+</Steps>
+
+<Note>
+  The recipient must have an existing Nitrogen AI account. If you try to share with an email that isn't registered, you'll see an error asking them to sign up first.
+</Note>
+
+## Managing collaborators
+
+Once a project is shared, you can update or remove collaborators at any time from the **Share** panel.
+
+**To change a collaborator's role:**
+Open **Share**, find the person in the collaborator list, and select a new role from the dropdown. The change takes effect immediately.
+
+**To remove a collaborator:**
+Click **Remove** next to their name. They will lose access to the project right away.
+
+<Tip>
+  Collaborators can also remove themselves from a project they've been shared with. This is useful if they no longer need access without requiring action from the owner.
+</Tip>
+
+## How shared projects appear
+
+Shared projects appear in the collaborator's project list alongside their own projects. The owner's email address is shown so collaborators can tell whose project it is at a glance.
+
+## Permissions summary
+
+| Action | Owner | Editor | Viewer |
+|---|---|---|---|
+| View deliverables and chat history | Yes | Yes | Yes |
+| Upload evidence | Yes | Yes | No |
+| Select modules and generate deliverables | Yes | Yes | No |
+| Export deliverables | Yes | Yes | No |
+| Share with others / manage access | Yes | No | No |
+| Delete the project | Yes | No | No |
+
+## API reference
+
+If you're integrating sharing programmatically, use the endpoints below. All requests require a valid Firebase ID token — see [Authentication](/authentication) for details.
+
+### Share a project
+
+```http
+POST /api/v1/initiatives/{initiative_id}/shares
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+<ParamField body="email" type="string" required>
+  The email address of the Nitrogen AI user you want to share with. The user must already have an account.
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  The role to assign. Accepted values: `editor`, `viewer`.
+</ParamField>
+
+**Response** (`201 Created`):
+
+```json
+{
+  "id": "a1b2c3d4-...",
+  "initiative_id": "proj_abc123",
+  "user_id": "uid_xyz",
+  "user_email": "teammate@example.com",
+  "user_display_name": "Alex Chen",
+  "role": "editor",
+  "created_at": "2025-01-15T10:30:00"
+}
+```
+
+### List shares
+
+```http
+GET /api/v1/initiatives/{initiative_id}/shares
+Authorization: Bearer <token>
+```
+
+Returns all active shares for the project. Any user with access to the project (owner, editor, or viewer) can call this endpoint.
+
+### Update a collaborator's role
+
+```http
+PATCH /api/v1/initiatives/{initiative_id}/shares/{share_id}
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+<ParamField body="role" type="string" required>
+  The new role for the collaborator. Accepted values: `editor`, `viewer`.
+</ParamField>
+
+Only the project owner can update roles.
+
+### Remove a collaborator
+
+```http
+DELETE /api/v1/initiatives/{initiative_id}/shares/{share_id}
+Authorization: Bearer <token>
+```
+
+Returns `204 No Content` on success. The project owner can remove any collaborator. Collaborators can remove themselves.
+
+<Accordion title="Can I share a project with someone who isn't on Nitrogen AI yet?">
+  No. The recipient must already have a Nitrogen AI account before you can share with them. If they haven't signed up, send them to [the-nitrogen.ai](https://the-nitrogen.ai) to create an account, then share the project once they're registered.
+</Accordion>
+
+<Accordion title="Can there be more than one owner on a project?">
+  No. Each project has exactly one owner — the user who created it. Ownership cannot be transferred through the sharing flow.
+</Accordion>

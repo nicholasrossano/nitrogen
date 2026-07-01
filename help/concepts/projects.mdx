@@ -1,0 +1,136 @@
+---
+title: "Projects: Your sustainable development workspace"
+description: "A project is your central workspace in Nitrogen AI — housing evidence, deliverables, and collaborators for a single sustainable development initiative."
+---
+
+A project in Nitrogen AI is your primary workspace for a sustainable development initiative. Everything you do — uploading evidence, running analytical modules, generating deliverables, and collaborating with teammates — happens inside a project. Think of it as a dedicated folder for a single initiative, keeping all related work organized and traceable from intake through completion.
+
+## Project lifecycle
+
+Every project moves through a defined set of stages that reflect the natural progression of a development initiative. You can track where a project stands at any time from its dashboard.
+
+<Steps>
+  <Step title="Intake">
+    You define the initiative by filling in core details: title, geography, goal, target population, budget range, timeline, project description, and project type. Nitrogen AI uses this information to recommend the right modules and tailor generated outputs.
+  </Step>
+  <Step title="Evidence">
+    You upload source materials — reports, feasibility studies, financial models, policy documents — that ground the AI's outputs in real data. Evidence is stored at the project level and is accessible to every module you run.
+  </Step>
+  <Step title="Gather inputs">
+    Modules are configured and run. The AI searches your evidence, applies its analytical frameworks, and generates deliverables such as investment memos, LCOE models, and monitoring plans.
+  </Step>
+  <Step title="Review">
+    Generated deliverables are reviewed and refined. For modules that support the alignment step, you can examine and adjust the AI's proposed outline before the final document is produced.
+  </Step>
+  <Step title="Complete">
+    The initiative is marked complete. All deliverables remain accessible and exportable; the project is preserved as a record of the work done.
+  </Step>
+</Steps>
+
+## Project details
+
+When you create a project, you provide the following information. These fields shape how Nitrogen AI interprets your initiative and recommends tools.
+
+<CardGroup cols={2}>
+  <Card title="Title" icon="tag">
+    A short, descriptive name for the initiative. Used as the project's display name across the platform.
+  </Card>
+  <Card title="Geography" icon="globe">
+    The country, region, or area where the initiative is located. Informs location-specific analysis and regulatory context.
+  </Card>
+  <Card title="Goal" icon="bullseye">
+    The primary objective of the initiative — for example, expanding renewable energy access or reducing carbon emissions.
+  </Card>
+  <Card title="Target population" icon="users">
+    The community or group the initiative is designed to serve. Used in stakeholder and impact analyses.
+  </Card>
+  <Card title="Budget range" icon="circle-dollar-sign">
+    An estimated budget bracket for the initiative. Helps calibrate financial models and investment documents.
+  </Card>
+  <Card title="Timeline" icon="calendar">
+    The expected duration or key milestones for the initiative. Referenced in planning and MEL outputs.
+  </Card>
+  <Card title="Project description" icon="file-text">
+    A narrative overview of the initiative. This is the most important field — the AI reads it closely when recommending modules and generating content.
+  </Card>
+  <Card title="Project type" icon="layers">
+    The category of the initiative (e.g., solar energy, clean cookstoves, agroforestry). Guides module recommendations and sector-specific framing.
+  </Card>
+</CardGroup>
+
+## Project URL
+
+Each project has a unique URL generated from its title. Your project is accessible at a path like:
+
+```text
+/initiatives/my-solar-project
+```
+
+This URL is set when the project is created and remains stable even if you rename the project later. You can share it with collaborators who have been granted access.
+
+## Ownership and sharing
+
+Projects can be kept private or shared with teammates. Nitrogen AI supports two collaboration roles:
+
+<CardGroup cols={2}>
+  <Card title="Editor" icon="pencil">
+    Can upload evidence, run modules, generate deliverables, and modify project details. Editors have full access to the project's content.
+  </Card>
+  <Card title="Viewer" icon="eye">
+    Can read project content and export deliverables, but cannot run modules or make changes. Useful for stakeholders who need visibility without editing rights.
+  </Card>
+</CardGroup>
+
+<Info>
+  The person who creates a project is its owner. Owners can add and remove collaborators, change roles, and permanently delete the project.
+</Info>
+
+## Archiving and restoring projects
+
+Projects support soft deletion — when you trash a project, it moves to your archive rather than being permanently removed. This gives you a safety net if you archive something by mistake.
+
+<Steps>
+  <Step title="Trash a project">
+    From the project menu, select **Move to trash**. The project is removed from your active list and placed in the archive.
+  </Step>
+  <Step title="Restore a project">
+    Open your archive, find the project, and select **Restore**. The project and all its contents — evidence, deliverables, chat history — are fully reinstated.
+  </Step>
+  <Step title="Permanent deletion">
+    To permanently delete an archived project, select **Delete permanently** from the archive. This action cannot be undone.
+  </Step>
+</Steps>
+
+<Warning>
+  Permanent deletion removes all associated evidence, deliverables, and chat history. Restore the project first if you need to export anything before deleting.
+</Warning>
+
+## What lives inside a project
+
+Every piece of work in Nitrogen AI is scoped to a project. The following are all stored and accessible within the project:
+
+- **Evidence** — uploaded files and pasted text that the AI uses as source material
+- **Deliverables** — documents and models generated by modules
+- **Chat history** — the full conversation log, including deliverable widgets produced during chat
+- **Module instances** — each time you run a module, a distinct instance is created and tracked within the project
+
+<Tip>
+  Keep one initiative per project. Mixing unrelated initiatives in a single project can cause the AI to draw on irrelevant evidence when generating outputs.
+</Tip>
+
+## Frequently asked questions
+
+<AccordionGroup>
+  <Accordion title="Can I rename a project after creating it?">
+    Yes. You can edit the project title and other details at any time from the project settings. The project slug (used in the URL) is set at creation and does not change when you rename the project.
+  </Accordion>
+  <Accordion title="What happens to deliverables if I remove a collaborator?">
+    Deliverables generated by a collaborator remain in the project. Removing a collaborator revokes their future access but does not delete any content they created.
+  </Accordion>
+  <Accordion title="Is there a limit on the number of projects I can create?">
+    Project limits depend on your Nitrogen AI plan. Check your account settings or contact your account manager for details specific to your subscription.
+  </Accordion>
+  <Accordion title="Can I move evidence or deliverables between projects?">
+    Not directly. Evidence and deliverables are scoped to the project they were created in. To reuse evidence in a new project, upload it again to that project.
+  </Accordion>
+</AccordionGroup>
