@@ -11,6 +11,14 @@ Keep this file minimal and always-on. Put specialized guidance in `docs/agent-pl
 - Prefer extending existing utilities/components before introducing new abstractions.
 - Add concise "How to verify" steps with every substantive change.
 
+## Code comments
+
+- Prefer **why**, **invariants**, **business rules**, **edge cases**, and **risks** over narrating the code.
+- Do not add comments that only restate obvious control flow or identifiers.
+- Keep comments short and aligned with current behavior; fix or delete stale notes.
+- Avoid commented-out code and large pasted examples, logs, or payloads in source (point to tests/docs instead).
+- Preserve (but tighten) comments on auth, billing, security, migrations, data contracts, and non-obvious product policy.
+
 ## Routine response length
 
 - Keep routine replies short and direct; do not narrate obvious tool use or restate the full task unless it clarifies something.
