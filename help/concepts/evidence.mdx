@@ -3,7 +3,7 @@ title: "Evidence and project materials in Nitrogen AI"
 description: "Evidence files ground AI outputs in your project data. The platform uses RAG to search your documents and cite sources in every generated deliverable."
 ---
 
-**Evidence** refers to the documents you upload to a project to ground AI-generated outputs in your specific project data. When a module generates a deliverable, it searches across your evidence using semantic similarity — a technique called retrieval-augmented generation (RAG) — to find the most relevant passages and incorporate them into the output with traceable citations.
+**Evidence** refers to the documents you upload to a project to ground AI-generated outputs in your specific project data. When an assessment runs, it searches across your evidence using semantic similarity — a technique called retrieval-augmented generation (RAG) — to find the most relevant passages and incorporate them into the output with traceable citations.
 
 ## Supported formats for evidence
 
@@ -13,7 +13,10 @@ Evidence files must be one of the following formats:
 |---|---|
 | PDF | `.pdf` |
 | Word document | `.docx` |
+| PowerPoint | `.pptx` |
 | Excel spreadsheet | `.xlsx` or `.xls` |
+| Apple Pages | `.pages` |
+| Apple Keynote | `.key` |
 
 The maximum file size per upload is **50 MB**.
 
@@ -23,9 +26,9 @@ When you upload a file, the platform:
 
 1. Parses the document and splits it into passages.
 2. Indexes each passage for semantic search.
-3. Makes the indexed content available to all modules in the project.
+3. Makes the indexed content available to every assessment in the project.
 
-When a module runs, it searches your indexed evidence to find the passages most relevant to each section of the deliverable. The module uses those passages as context when writing the output and logs citations so you can trace every claim back to its source.
+When an assessment runs, it searches your indexed evidence to find the passages most relevant to each stage it's populating. It uses those passages as context and logs citations so you can trace every claim back to its source.
 
 <Info>
 PDF files are indexed page by page. DOCX and XLSX files are split into passages that preserve document structure, so tables and sections remain intact.
@@ -37,7 +40,7 @@ If you do not have a file to upload, you can paste text directly into the eviden
 
 ## Project materials
 
-**Project materials** are a separate category of files you can attach to a project. Unlike evidence, materials are not indexed for retrieval — they serve as general reference files associated with the project rather than sources that the AI actively reads when generating deliverables.
+**Project materials** are a separate category of files you can attach to a project. Unlike evidence, materials are not indexed for retrieval — they serve as general reference files associated with the project rather than sources that the AI actively reads when generating outputs.
 
 Materials support a broader set of file types:
 
@@ -45,9 +48,12 @@ Materials support a broader set of file types:
 |---|---|
 | PDF | `.pdf` |
 | Word document | `.docx` |
+| PowerPoint | `.pptx` |
 | Plain text | `.txt` |
 | CSV | `.csv` |
 | Excel spreadsheet | `.xlsx` or `.xls` |
+| Apple Pages | `.pages` |
+| Apple Keynote | `.key` |
 | Image | `.png` or `.jpg` |
 
 The maximum file size per material upload is also **50 MB**.
@@ -57,8 +63,8 @@ The maximum file size per material upload is also **50 MB**.
 | | Evidence | Project materials |
 |---|---|---|
 | Indexed for AI retrieval | Yes | No |
-| Cited in deliverables | Yes | No |
-| Accepted formats | PDF, DOCX, XLSX, XLS | PDF, DOCX, TXT, CSV, XLSX, XLS, PNG, JPG |
+| Cited in assessment outputs | Yes | No |
+| Accepted formats | PDF, DOCX, PPTX, XLSX, XLS, Pages, Keynote | PDF, DOCX, PPTX, TXT, CSV, XLSX, XLS, Pages, Keynote, PNG, JPG |
 | Text paste supported | Yes | No |
 | Primary purpose | Grounding AI outputs | General project reference |
 

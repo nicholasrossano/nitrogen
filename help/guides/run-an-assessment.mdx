@@ -1,0 +1,131 @@
+---
+title: 'Run an assessment from start to export'
+description: 'Launch an assessment, work through its setup, build, and output stages in the assessment workspace, and export the finished result.'
+---
+
+Every assessment follows the same setup → build → output lifecycle, but the two assessment families behave differently once you're inside. This guide covers launching an assessment, working through either type, and exporting the result.
+
+## Launch an assessment
+
+<Steps>
+  <Step title="Pick an assessment">
+    Launch an assessment from a project plan item, or ask for one directly in chat — for example, "run an LCOE model" or "build a risk register for this project."
+  </Step>
+  <Step title="Open the assessment workspace">
+    The assessment opens in a dedicated workspace alongside your project chat, showing a stage stepper across the top. A stage only becomes accessible once the one before it is confirmed.
+  </Step>
+</Steps>
+
+<Info>
+  Assessment recommendations are a starting point, not a constraint — you can launch any assessment from the catalog regardless of what's recommended for your project.
+</Info>
+
+## Widget-backed assessments (LCOE, Carbon, Solar)
+
+These assessments collect a table of inputs, then compute results live.
+
+<Steps>
+  <Step title="Review the Inputs stage">
+    Nitrogen AI pre-populates a table of inputs from technology defaults, then enriches it from your project materials. Each row shows a variable, its value, and its status (assumed, extracted, or confirmed).
+  </Step>
+  <Step title="Confirm your inputs">
+    Edit any value that doesn't match your project, then confirm the stage.
+  </Step>
+  <Step title="Review the Results stage">
+    Results compute automatically from your confirmed inputs. Adjust an input and the results widget recalculates immediately — no need to re-run the assessment.
+  </Step>
+</Steps>
+
+<Tip>
+  Use the live recalculation to run sensitivity scenarios — adjust your discount rate or CAPEX assumptions and watch the results update before you export.
+</Tip>
+
+## Layered assessments (Stakeholder, Landscape, Risk, Implementation Plan)
+
+These assessments build up through several confirmable stages, each populated from the one before it.
+
+<Steps>
+  <Step title="Confirm categories">
+    Nitrogen AI proposes a set of categories for your project (for example, risk categories or stakeholder groups). Review, edit, or add to the list, then confirm.
+  </Step>
+  <Step title="Confirm items within each category">
+    Nitrogen AI proposes specific items per category — stakeholders, entities, risks, or activities — grounded in your evidence where available. Review and confirm.
+  </Step>
+  <Step title="Confirm enrichment (Risk Assessment only)">
+    For risks specifically, Nitrogen AI proposes mitigations for each confirmed risk before the final register is built.
+  </Step>
+  <Step title="Review the final stage">
+    The last stage synthesizes everything you've confirmed into the finished output — a written report, a categorized map, or a rated register, depending on the assessment.
+  </Step>
+</Steps>
+
+## Investigate a value from chat
+
+While an assessment is open, you can ask chat to look into a specific field instead of editing it directly in the workspace. Chat responds with a small proposal card showing the suggested value and a confidence level.
+
+<Steps>
+  <Step title="Ask about a field">
+    For example: "What capacity factor should I use for this site?"
+  </Step>
+  <Step title="Review the proposal">
+    Chat shows a `proposed_value` (numeric fields) or `template_proposed_value` (text fields) widget with the suggestion and its reasoning.
+  </Step>
+  <Step title="Accept or dismiss">
+    Click **Accept** to patch the value directly into the open assessment, or **Dismiss** to keep your own value.
+  </Step>
+</Steps>
+
+## Review the decision log
+
+Every assessment instance keeps a decision log — a read-only history of every value, its source, and who confirmed it. Open it from the assessment workspace to review the full trail, or export it as a single-sheet XLSX.
+
+## Export your result
+
+Once the final stage is confirmed, the **Export** button unlocks. Click it to download the result:
+
+| Assessment | Export format |
+|---|---|
+| LCOE Model | XLSX |
+| Carbon Model | XLSX |
+| Solar Estimate | XLSX |
+| Stakeholder Assessment | DOCX |
+| Landscape Mapping | DOCX |
+| Risk Assessment | XLSX |
+| Implementation Plan | Not exportable — it's a working view synced from your project plan |
+
+<Warning>
+  Export stays locked until the final stage is confirmed. If it's grayed out, go back and confirm any pending stage first.
+</Warning>
+
+## If an assessment fails
+
+<CardGroup cols={3}>
+  <Card title="No evidence uploaded" icon="triangle-exclamation">
+    Some assessments run fine without evidence, but results will be generic. Upload at least one relevant document and re-run the stage for better grounding.
+  </Card>
+  <Card title="Incomplete inputs" icon="circle-xmark">
+    Check the Inputs stage for any blank required fields before generation can proceed.
+  </Card>
+  <Card title="Stage not confirmed" icon="hourglass">
+    Later stages won't populate until the prior stage is confirmed. Go back and confirm it.
+  </Card>
+</CardGroup>
+
+<Tip>
+  If a result doesn't reflect your project well, add a more targeted piece of evidence and re-run the affected stage — Nitrogen AI re-populates from your evidence each time a stage regenerates.
+</Tip>
+
+## Run it again
+
+Launching the same assessment again creates a new **assessment instance** with a fresh workflow — previous instances and their outputs remain accessible so you can compare runs.
+
+## What happens next
+
+<CardGroup cols={2}>
+  <Card title="Share your project" icon="share-nodes" href="/guides/share-and-collaborate">
+    Invite teammates to view or continue the work.
+  </Card>
+  <Card title="Example assessments" icon="grid" href="/example-assessments">
+    See detailed inputs and outputs for the shipped example assessments.
+  </Card>
+</CardGroup>
