@@ -36,7 +36,7 @@ slowapi>=0.1.10
 
 # Utilities
 pydantic>=2.5.3
-pydantic-settings>=2.14.0
+pydantic-settings>=2.14.2
 python-dotenv>=1.2.2
 httpx>=0.28.1
 aiofiles>=25.1.0
