@@ -3,7 +3,7 @@ title: 'Upload evidence to ground your AI outputs'
 description: 'Add PDFs, Word documents, or Excel files to your project so Nitrogen AI can retrieve relevant passages and cite your materials in every deliverable.'
 ---
 
-Evidence is the source material that powers everything Nitrogen AI generates for your project. When you upload a document, the platform reads it, splits it into passages, and indexes those passages for semantic search — so when you run an assessment, the AI retrieves the most relevant content from your files and cites it directly in the output. The quality and relevance of what you upload directly determines the quality of what comes out.
+Evidence is the source material that powers everything Nitrogen AI generates for your project. When you upload a document, the platform reads it, splits it into passages, and indexes those passages for semantic search. When you run an assessment, the AI retrieves the most relevant content from your files and cites it directly in the output.
 
 ## Supported file formats
 
@@ -26,7 +26,7 @@ Evidence is the source material that powers everything Nitrogen AI generates for
 </CardGroup>
 
 <Warning>
-  Only PDF, DOCX, PPTX, XLSX, XLS, Pages, and Keynote files are accepted for evidence. Files in other formats — including PNG, TXT, CSV, or HTML files renamed with a supported extension — will fail processing. If your content is in an unsupported format, convert it first or paste the text directly.
+  Only PDF, DOCX, PPTX, XLSX, XLS, Pages, and Keynote files are accepted for evidence. Files in other formats will fail processing. If your content is in an unsupported format, convert it first or paste the text directly.
 </Warning>
 
 ## Upload a file to your project
@@ -36,78 +36,46 @@ Evidence is the source material that powers everything Nitrogen AI generates for
     From your dashboard, click on the project you want to add evidence to.
   </Step>
   <Step title="Go to the Files view">
-    Open the **Files** view from the project navigation to reach the evidence upload area.
+    Open the **Files** view from the project navigation.
   </Step>
   <Step title="Upload your file">
-    Drag a file onto the upload area, or click **Upload file** to browse and select one from your computer. You can upload multiple files — repeat this step for each document you want to add.
+    Drag a file onto the upload area, or click **Upload file** to browse. You can upload multiple files — repeat for each document.
   </Step>
   <Step title="Wait for processing">
-    After the file is accepted, Nitrogen AI reads and indexes the content for semantic search. Once processing is complete, the file appears in your evidence list confirming it's ready to use. Most files process in under a minute.
+    After the file is accepted, Nitrogen AI indexes the content for semantic search. Most files process in under a minute.
   </Step>
 </Steps>
 
 <Note>
-  Evidence uploads are rate-limited to 120 per minute per user. If you're uploading a very large batch of documents, space them out or upload in groups.
+  Evidence uploads are rate-limited to 120 per minute per user.
 </Note>
 
 ## Paste text instead of uploading a file
 
-If your content isn't in a file — notes from a field visit, excerpts from a web source, or a short data summary — you can paste text directly into the evidence input. Pasted text is processed identically to an uploaded file: chunked, embedded, and made searchable.
-
-<Steps>
-  <Step title="Switch to the Paste text option">
-    In the evidence widget, click **Paste text** to switch from file upload to the text input.
-  </Step>
-  <Step title="Add a title">
-    Give the pasted content a descriptive title — for example, "Community baseline survey notes, March 2024". This makes it easy to identify in your evidence list and in citations.
-  </Step>
-  <Step title="Paste your text and submit">
-    Paste the content into the text field and click **Add**. The text is processed and added to your evidence list.
-  </Step>
-</Steps>
+If your content isn't in a file, click **Paste text** in the evidence widget, give it a descriptive title, paste the content, and click **Add**. Pasted text is processed identically to an uploaded file.
 
 ## What to upload
 
-The assessments you run will retrieve evidence that's relevant to the topics they cover. Uploading a mix of document types gives the AI a fuller picture of your project.
+Upload a mix of document types to give the AI a fuller picture of your project. The most valuable evidence types are:
 
-<CardGroup cols={2}>
-  <Card title="Feasibility studies" icon="magnifying-glass-chart">
-    Pre-feasibility and full feasibility studies are the single most valuable evidence type. They typically contain technical, financial, and social data in one document.
-  </Card>
-  <Card title="Technical reports" icon="file-lines">
-    Engineering assessments, grid studies, energy audits, and resource assessments. Include any technical baseline data.
-  </Card>
-  <Card title="Market and landscape assessments" icon="chart-pie">
-    Sector analyses, competitor landscapes, and market sizing reports that place your project in context.
-  </Card>
-  <Card title="Financial models" icon="table-cells">
-    Excel-based cash flow models, tariff analyses, and cost breakdowns. The LCOE and Carbon assessments can draw on these directly.
-  </Card>
-  <Card title="Previous project reports" icon="clock-rotate-left">
-    Mid-term evaluations, completion reports, and lessons-learned documents from earlier phases or comparable projects.
-  </Card>
-  <Card title="Stakeholder and social data" icon="people-group">
-    Community assessments, beneficiary surveys, and social baseline reports to ground stakeholder and impact deliverables.
-  </Card>
-</CardGroup>
+- **Feasibility studies** — pre-feasibility and full feasibility studies typically contain technical, financial, and social data in one document
+- **Technical reports** — engineering assessments, grid studies, energy audits, and resource assessments
+- **Financial models** — Excel-based cash flow models, tariff analyses, and cost breakdowns
+- **Stakeholder and social data** — community assessments, beneficiary surveys, and social baseline reports
 
 <Tip>
-  You don't need to upload a perfect set of documents before running assessments. Start with what you have, generate a first version, and add more evidence over time to improve subsequent generations.
+  You don't need a perfect set of documents before running assessments. Start with what you have and add more evidence over time to improve subsequent generations.
 </Tip>
 
 ## Manage your evidence
 
-All uploaded files and pasted text appear in the **Evidence** tab of your project. Each entry shows the filename, file type, upload date, and the number of indexed chunks.
-
-To remove a document, click the trash icon next to it. Deletion removes the document record and all of its indexed passages. This cannot be undone — if you need the content again, you will have to re-upload or re-paste it.
+All uploaded files and pasted text appear in the **Evidence** tab of your project. To remove a document, click the trash icon next to it. Deletion removes the document record and all of its indexed passages and cannot be undone.
 
 <Warning>
   Deleting evidence does not retroactively affect assessment outputs that have already been generated. It only prevents the deleted content from being used in future generation runs.
 </Warning>
 
 ## What happens next
-
-Once you have at least one evidence document uploaded, you're ready to build your project plan and run your first assessment.
 
 <CardGroup cols={2}>
   <Card title="Build your project plan" icon="list-check" href="/guides/build-project-plan">
