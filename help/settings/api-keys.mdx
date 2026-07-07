@@ -1,15 +1,15 @@
 ---
-title: "Bring your own API key to Nitrogen AI"
+title: "Bring your own API key"
 description: "Store your own OpenAI or OpenRouter API key in Nitrogen AI to use your own credits for AI generation. Keys are validated live, encrypted at rest, and never exposed in plain text."
 ---
 
-Nitrogen AI lets you connect your own API key so AI generation runs against your own provider account instead of the platform's managed credits. Once you add a key, your account moves to the BYOK tier and you have no Nitrogen AI usage cap — you pay your provider directly for what you use.
+Nitrogen AI lets you connect your own API key so AI generation runs against your own provider account instead of the platform's managed credits. Once you add a key, your account moves to the BYOK tier with no Nitrogen AI usage cap — you pay your provider directly for what you use.
 
 ## How it works
 
-When you save a key, Nitrogen AI validates it with a live call to the provider before storing it. If the key is invalid or lacks permission, you'll see an error and nothing will be saved. Valid keys are encrypted at rest — you can never retrieve the raw key through the platform. The UI shows only a masked preview, e.g. `sk-ab...xyz1`.
+When you save a key, Nitrogen AI validates it with a live call to the provider before storing it. If the key is invalid or lacks permission, you'll see an error and nothing will be saved. Valid keys are encrypted at rest. The UI shows only a masked preview, e.g. `sk-ab...xyz1`.
 
-Adding a key automatically upgrades your account from the trial tier to the BYOK tier. Removing your last remaining BYOK key reverts your account to the trial tier — unless you also have an active Stripe subscription, in which case your paid tier is preserved.
+Adding a key automatically upgrades your account from the trial tier to the BYOK tier. Removing your last remaining BYOK key reverts your account to the trial tier, unless you also have an active Stripe subscription.
 
 ## Adding an API key
 
@@ -21,34 +21,21 @@ Adding a key automatically upgrades your account from the trial tier to the BYOK
     Select **OpenAI** or **OpenRouter**, then paste your key into the input field.
   </Step>
   <Step title="Save the key">
-    Click **Save**. Nitrogen AI validates the key with a live call to the provider. If it passes, the key is encrypted and stored, and your account is upgraded to the BYOK tier.
+    Click **Save**. Nitrogen AI validates the key with a live call to the provider. If it passes, the key is encrypted and stored and your account is upgraded to the BYOK tier.
   </Step>
 </Steps>
 
 <Note>
-  Validation calls the provider's models endpoint. Make sure your key has at least read access there — keys with no permissions will fail validation.
+  Validation calls the provider's models endpoint. Make sure your key has at least read access — keys with no permissions will fail validation.
 </Note>
 
 ## Viewing stored keys
 
-Go to **Settings → API Keys** to see your stored keys. Each entry shows:
-
-- **Provider** — OpenAI or OpenRouter
-- **Masked key** — the first 5 and last 4 characters, e.g. `sk-ab...xyz1`
-- **Added on** — the date the key was saved
-
-The full key is never displayed after saving. If you need to rotate it, delete the existing entry and add the new key — you can have one stored key per provider.
+Go to **Settings → API Keys** to see your stored keys. Each entry shows the provider, a masked key preview, and the date it was saved. The full key is never displayed after saving. To rotate a key, delete the existing entry and add the new one. You can have one stored key per provider.
 
 ## Removing an API key
 
-<Steps>
-  <Step title="Open API key settings">
-    Go to **Settings → API Keys**.
-  </Step>
-  <Step title="Delete the key">
-    Click **Delete** next to the key you want to remove. This action cannot be undone.
-  </Step>
-</Steps>
+From **Settings → API Keys**, click **Delete** next to the key you want to remove. This action cannot be undone.
 
 <Warning>
   Removing your only remaining BYOK key reverts your account to the trial tier immediately, unless you have an active Stripe subscription. If you have keys stored for both supported providers, removing one leaves you on the BYOK tier as long as the other remains.
@@ -56,56 +43,8 @@ The full key is never displayed after saving. If you need to rotate it, delete t
 
 ## Supported providers
 
-Nitrogen AI currently supports **OpenAI** and **OpenRouter** as BYOK providers. Support for additional providers may be added in the future.
-
-## API reference
-
-If you're managing keys programmatically, use the endpoints below. All requests require a valid Firebase ID token — see [Authentication](/authentication) for details.
-
-### Store or update a key
-
-```http
-POST /api/v1/settings/api-keys/
-Content-Type: application/json
-Authorization: Bearer <token>
-```
-
-<ParamField body="api_key" type="string" required>
-  Your API key. It's validated against the provider before being saved.
-</ParamField>
-
-<ParamField body="provider" type="string" default="openai">
-  The provider this key belongs to. Accepted values: `openai`, `openrouter`.
-</ParamField>
-
-**Response:**
-
-```json
-{
-  "provider": "openai",
-  "masked_key": "sk-ab...xyz1",
-  "created_at": "2026-01-15T10:30:00"
-}
-```
-
-### List stored keys
-
-```http
-GET /api/v1/settings/api-keys/
-Authorization: Bearer <token>
-```
-
-Returns an array of stored keys for your account. Keys are masked — the raw value is never returned.
-
-### Delete a key
-
-```http
-DELETE /api/v1/settings/api-keys/{provider}
-Authorization: Bearer <token>
-```
-
-Replace `{provider}` with `openai` or `openrouter`. Returns `{"success": true}` on success.
+Nitrogen AI currently supports **OpenAI** and **OpenRouter** as BYOK providers.
 
 <Accordion title="What happens if I already have a Stripe subscription and add a BYOK key?">
-  Your Stripe subscription stays active. Adding a BYOK key doesn't cancel your paid plan — AI requests just route through your own key while it's present. If you later remove the key, your subscription tier is preserved.
+  Your Stripe subscription stays active. Adding a BYOK key doesn't cancel your paid plan. AI requests route through your own key while it's present. If you later remove the key, your subscription tier is preserved.
 </Accordion>
