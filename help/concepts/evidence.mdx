@@ -1,13 +1,11 @@
 ---
-title: "Evidence and project materials in Nitrogen AI"
+title: "Evidence and project materials"
 description: "Evidence files ground AI outputs in your project data. The platform uses RAG to search your documents and cite sources in every generated deliverable."
 ---
 
-**Evidence** refers to the documents you upload to a project to ground AI-generated outputs in your specific project data. When an assessment runs, it searches across your evidence using semantic similarity — a technique called retrieval-augmented generation (RAG) — to find the most relevant passages and incorporate them into the output with traceable citations.
+**Evidence** refers to the documents you upload to a project to ground AI-generated outputs in your specific project data. When an assessment runs, it searches across your evidence using semantic similarity to find the most relevant passages and incorporate them into the output with traceable citations.
 
 ## Supported formats for evidence
-
-Evidence files must be one of the following formats:
 
 | Format | Extension |
 |---|---|
@@ -18,29 +16,15 @@ Evidence files must be one of the following formats:
 | Apple Pages | `.pages` |
 | Apple Keynote | `.key` |
 
-The maximum file size per upload is **50 MB**.
-
-## How evidence is processed
-
-When you upload a file, the platform:
-
-1. Parses the document and splits it into passages.
-2. Indexes each passage for semantic search.
-3. Makes the indexed content available to every assessment in the project.
-
-When an assessment runs, it searches your indexed evidence to find the passages most relevant to each stage it's populating. It uses those passages as context and logs citations so you can trace every claim back to its source.
-
-<Info>
-PDF files are indexed page by page. DOCX and XLSX files are split into passages that preserve document structure, so tables and sections remain intact.
-</Info>
+The maximum file size per upload is **50 MB**. When you upload a file, the platform parses it, splits it into passages, and indexes each passage for semantic search. When an assessment runs, it retrieves the passages most relevant to each stage and logs citations so you can trace every claim back to its source.
 
 ## Pasting text instead of uploading a file
 
-If you do not have a file to upload, you can paste text directly into the evidence input. Pasted text is processed the same way as a file — it is chunked, embedded, and made available for retrieval. You can give pasted text a title to make it easier to identify in your evidence list.
+If you do not have a file to upload, you can paste text directly into the evidence input. Pasted text is processed the same way as a file and can be given a title to make it easier to identify in your evidence list.
 
 ## Project materials
 
-**Project materials** are a separate category of files you can attach to a project. Unlike evidence, materials are not indexed for retrieval — they serve as general reference files associated with the project rather than sources that the AI actively reads when generating outputs.
+**Project materials** are a separate category of files you can attach to a project. Unlike evidence, materials are not indexed for retrieval — they serve as general reference files associated with the project rather than sources the AI actively reads.
 
 Materials support a broader set of file types:
 
@@ -69,5 +53,5 @@ The maximum file size per material upload is also **50 MB**.
 | Primary purpose | Grounding AI outputs | General project reference |
 
 <Tip>
-Upload your most relevant technical reports, feasibility studies, and data sheets as evidence. Use project materials for supplementary files — like photos, templates, or raw data — that you want to keep organized with the project but do not need the AI to read.
+Upload your most relevant technical reports, feasibility studies, and data sheets as evidence. Use project materials for supplementary files — like photos, templates, or raw data — that you want to keep organized with the project but don't need the AI to read.
 </Tip>
