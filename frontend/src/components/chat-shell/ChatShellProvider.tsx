@@ -42,17 +42,10 @@ export function resolveActiveProjectId(
   if (fromRoute && (projects.length === 0 || projects.some((project) => project.id === fromRoute))) {
     return fromRoute;
   }
-  if (
-    fromRoute &&
-    projectParam === fromRoute &&
-    (pathname === '/chat' || pathname === '/' || pathname.startsWith('/chat/'))
-  ) {
-    return fromRoute;
-  }
   if (projects.length > 0) {
     return resolveDefaultProjectId(projects, fromRoute, readLastProjectId());
   }
-  return readLastProjectId();
+  return fromRoute ?? readLastProjectId();
 }
 
 export function buildChatPath(
