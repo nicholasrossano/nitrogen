@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     
     # PVWatts (NREL Solar Production Estimate)
     pvwatts_api_key: str = ""
-    pvwatts_base_url: str = "https://developer.nlr.gov/api/pvwatts/v8.json"
+    pvwatts_base_url: str = "https://developer.nrel.gov/api/pvwatts/v8.json"
 
     # RAG settings
     chunk_size: int = 300

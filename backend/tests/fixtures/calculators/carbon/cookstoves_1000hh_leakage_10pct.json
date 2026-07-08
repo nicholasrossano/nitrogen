@@ -1,0 +1,41 @@
+{
+  "id": "cookstoves_1000hh_leakage_10pct",
+  "assessment_id": "carbon_model",
+  "description": "Cookstoves with 10% leakage on gross ER; same fuel path as baseline cookstoves fixture",
+  "source": "hand_calculation_cookstoves_leakage",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e",
+    "leakage_formula": "gross_er = baseline - project; leakage = 0.10 × max(gross_er, 0); net = gross - leakage",
+    "hand_calc": "baseline=2201.472, project=733.824, gross=1467.648, leakage=146.7648, net=1320.8832"
+  },
+  "adapter_input": {
+    "method_pack": "cookstoves",
+    "known_values": {
+      "method_pack": "cookstoves",
+      "devices_households": 1000,
+      "baseline_fuel_consumption_kg_yr": 1800,
+      "emission_factor_kgco2_per_kg": 0,
+      "emission_factor_tco2_per_tj": 112.0,
+      "baseline_ncv_mj_kg": 15.6,
+      "project_ncv_mj_kg": 15.6,
+      "baseline_efficiency": 0.10,
+      "project_efficiency": 0.30,
+      "fnrb": 0.70,
+      "leakage_factor": 0.10,
+      "usage_rate": 1.0,
+      "adoption_rate": 1.0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 2201.472, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 733.824, "pct_tolerance": 0.00001 },
+      "leakage_tco2e": { "value": 146.7648, "pct_tolerance": 0.00001 },
+      "net_er_tco2e": { "value": 1320.8832, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}
