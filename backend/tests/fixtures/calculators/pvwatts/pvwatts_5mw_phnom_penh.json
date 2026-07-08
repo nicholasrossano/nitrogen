@@ -1,12 +1,12 @@
 {
   "id": "pvwatts_5mw_phnom_penh",
   "assessment_id": "solar_estimate",
-  "description": "5 MW open-rack utility-scale array near Phnom Penh; synthetic NREL PVWatts V8-format snapshot",
-  "source": "synthetic_nrel_pvwatts_v8_format_response",
-  "source_type": "synthetic_external_format_snapshot",
+  "description": "5 MW open-rack utility-scale array near Phnom Penh; recorded NREL PVWatts V8 response",
+  "source": "recorded_nrel_pvwatts_v8_response",
+  "source_type": "recorded_external_reference",
   "recorded_response": "recorded/pvwatts_5mw_phnom_penh_response.json",
   "methodology_notes": {
-    "reference_type": "synthetic_nrel_v8_format_snapshot",
+    "reference_type": "live_nrel_v8_api_response",
     "api_version": "PVWatts V8",
     "location": "Phnom Penh, Cambodia (11.5564, 104.9282)",
     "array_type": "0 = fixed open rack"
@@ -26,12 +26,28 @@
   "expect": {
     "computable": true,
     "result": {
-      "ac_annual": { "value": 8102850.4, "abs_tolerance": 0.05 },
-      "capacity_factor": { "value": 18.5, "abs_tolerance": 0.001 },
+      "ac_annual": {
+        "value": 7176409.4,
+        "abs_tolerance": 0.05
+      },
+      "capacity_factor": {
+        "value": 16.38,
+        "abs_tolerance": 0.001
+      },
       "ac_monthly": {
         "values": [
-          729256.5, 729256.5, 810285.0, 729256.5, 648228.0, 567199.5,
-          567199.5, 567199.5, 648228.0, 648228.0, 729256.5, 729256.5
+          643329.4,
+          674396.2,
+          738025.9,
+          631112.8,
+          613668.7,
+          536127.4,
+          554869.8,
+          556375.2,
+          547394.2,
+          603110.0,
+          515332.5,
+          562667.4
         ],
         "abs_tolerance": 0.05
       }
