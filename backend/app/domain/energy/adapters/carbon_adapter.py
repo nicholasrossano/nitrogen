@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.base import AdapterDefinition, AdapterResult, BaseAdapter
 from app.core.execution_context import ExecutionContext
 from app.mcp.exposure_policy import adapter_visibility
-from app.domain.energy.services.carbon_engine import CarbonEngine
+from app.domain.energy.services.carbon_engine import CarbonEngine, is_valid_method_pack
 
 
 class CarbonAdapter(BaseAdapter):
@@ -84,6 +84,20 @@ class CarbonAdapter(BaseAdapter):
 
         method_pack = inputs.get("method_pack")
         known_values = inputs.get("known_values", {})
+        warnings: list[str] = []
+        if method_pack is not None and not is_valid_method_pack(str(method_pack)):
+            return AdapterResult(
+                output={
+                    "inputs": {},
+                    "missing_essentials": [],
+                    "computable": False,
+                },
+                execution_meta={"duration_ms": int((time.perf_counter() - started) * 1000)},
+                provenance=[],
+                warnings=[f"Unknown method_pack: {method_pack}"],
+                artifacts=None,
+            )
+
         engine_inputs = CarbonEngine.build_default_inputs(
             method_pack=method_pack,
             known_values=known_values,
@@ -97,7 +111,6 @@ class CarbonAdapter(BaseAdapter):
             "missing_essentials": missing,
             "computable": computable,
         }
-        warnings: list[str] = []
         if computable:
             payload["result"] = CarbonEngine.calculate(engine_inputs).to_dict()
             payload["sensitivity"] = [p.to_dict() for p in CarbonEngine.run_sensitivity(engine_inputs)]

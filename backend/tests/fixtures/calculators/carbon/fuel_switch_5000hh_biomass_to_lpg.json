@@ -1,0 +1,45 @@
+{
+  "id": "fuel_switch_5000hh_biomass_to_lpg",
+  "assessment_id": "carbon_model",
+  "description": "Validated fuel-switch fixture using biomass baseline and LPG-like project fuel. fNRB applies to baseline biomass CO2 only, not project fossil fuel. Year-1 annual ER only.",
+  "source": "hand_calculation_fuel_switch_biomass_to_lpg",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e, not lifetime",
+    "fuel_basis": "baseline and project fuel consumption are per household/device",
+    "fnrb_application": "fNRB applied to baseline biomass CO2 term only; not applied to project fuel",
+    "project_fuel": "project_fuel_consumption_kg_yr supplied directly",
+    "leakage": "leakage_factor set to 0 for baseline validation fixture",
+    "adoption_usage": "adoption_rate and usage_rate both set to 1.0"
+  },
+  "adapter_input": {
+    "method_pack": "fuel_switch",
+    "known_values": {
+      "method_pack": "fuel_switch",
+      "devices_households": 5000,
+      "baseline_fuel_consumption_kg_yr": 2000,
+      "project_fuel_consumption_kg_yr": 600,
+      "baseline_ncv_mj_kg": 15.6,
+      "project_ncv_mj_kg": 47.3,
+      "bl_ef_co2_tco2_per_tj": 112.0,
+      "bl_ef_nonco2_tco2e_per_tj": 9.46,
+      "pj_ef_co2_tco2_per_tj": 63.1,
+      "pj_ef_nonco2_tco2e_per_tj": 0.0,
+      "fnrb": 0.70,
+      "leakage_factor": 0,
+      "usage_rate": 1.0,
+      "adoption_rate": 1.0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 13706.16, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 8953.89, "pct_tolerance": 0.00001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 4752.27, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

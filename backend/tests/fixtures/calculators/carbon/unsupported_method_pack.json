@@ -1,0 +1,15 @@
+{
+  "id": "unsupported_method_pack",
+  "assessment_id": "carbon_model",
+  "description": "Unknown method_pack rejected by adapter before calculation",
+  "source": "validation_negative_case",
+  "source_type": "validated_independent",
+  "adapter_input": {
+    "method_pack": "not_a_real_pack",
+    "known_values": {}
+  },
+  "expect": {
+    "computable": false,
+    "adapter_warnings_contains": ["Unknown method_pack"]
+  }
+}

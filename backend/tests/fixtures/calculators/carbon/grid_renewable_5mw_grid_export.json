@@ -1,0 +1,39 @@
+{
+  "id": "grid_renewable_5mw_grid_export",
+  "assessment_id": "carbon_model",
+  "description": "5 MW grid-connected solar; grid_export model; no T&D on export; year-1 annual ER",
+  "source": "hand_calculation_grid_renewable_grid_export",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e",
+    "generation_model": "grid_export — no T&D adjustment",
+    "gen_formula": "gen_mwh = installed_capacity_kw × capacity_factor × 8760 × (1 - auxiliary) × (1 - degradation)^(yr-1) / 1000",
+    "er_formula": "net_er = gen_mwh × grid_emission_factor",
+    "leakage": "leakage_factor set to 0"
+  },
+  "adapter_input": {
+    "method_pack": "grid_renewable",
+    "known_values": {
+      "method_pack": "grid_renewable",
+      "generation_model": "grid_export",
+      "installed_capacity_kw": 5000,
+      "capacity_factor": 0.25,
+      "annual_degradation": 0.005,
+      "auxiliary_consumption_pct": 0,
+      "grid_emission_factor": 0.45,
+      "td_losses_pct": 0.15,
+      "leakage_factor": 0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 4927.5, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 4927.5, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

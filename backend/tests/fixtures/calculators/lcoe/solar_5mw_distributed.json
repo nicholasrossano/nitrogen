@@ -1,0 +1,38 @@
+{
+  "id": "solar_5mw_distributed",
+  "assessment_id": "lcoe_model",
+  "description": "5 MW distributed solar; DCF LCOE; capex at t=0; 20 operating years",
+  "source": "hand_calculation_discounted_cash_flow_lcoe",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "capex_timing": "total_capex paid at t=0",
+    "project_life_definition": "project_life_years means operating years",
+    "degradation_timing": "year 1 production is undegraded; degradation starts after first operating year",
+    "annual_cost_timing": "opex/fuel/replacement paid at end of operating year",
+    "construction_treatment": "construction timing not modeled in this validation fixture"
+  },
+  "adapter_input": {
+    "tech_type": "solar_pv",
+    "known_values": {
+      "net_capacity_kw": 5000,
+      "capacity_factor": 0.18,
+      "total_capex": 5500000,
+      "annual_opex": 50000,
+      "discount_rate": 0.08,
+      "project_life_years": 20,
+      "degradation_rate": 0.005,
+      "annual_fuel_cost": 0,
+      "annual_replacement_cost": 0,
+      "currency": "USD"
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "lcoe": { "value": 0.0801446147, "abs_tolerance": 0.000001 },
+      "npv_total_costs": { "value": 5990907.3704, "pct_tolerance": 0.00001 },
+      "npv_total_energy": { "value": 74751213.1891, "pct_tolerance": 0.00001 },
+      "lifetime_energy_kwh": { "value": 150410194.7030, "pct_tolerance": 0.00001 }
+    }
+  }
+}
