@@ -162,6 +162,89 @@ async def _load_active_editor_document(
     }
 
 
+async def _load_active_editor_assessment_context(
+    db: AsyncSession,
+    user: AuthUser,
+    instance_id: str,
+) -> str | None:
+    """Load confirmed inputs/results from an assessment open in the editor."""
+    from app.core.permissions import require_project_viewer
+    from app.models.assessment_instance import AssessmentInstance
+    from app.services.chat.service import ChatService
+
+    try:
+        iid = uuid.UUID(instance_id)
+    except ValueError:
+        return None
+
+    inst = await db.get(AssessmentInstance, iid)
+    if inst is None:
+        return None
+
+    try:
+        await require_project_viewer(db, inst.project_id, user)
+    except HTTPException:
+        return None
+
+    workflow_state = inst.workflow_state if isinstance(inst.workflow_state, dict) else {}
+    stages = workflow_state.get("stages") if isinstance(workflow_state.get("stages"), dict) else {}
+
+    lines = [
+        "## Active Assessment Data",
+        "The user has this assessment open in the editor workspace.",
+        f"- title: {inst.title or 'Untitled'}",
+        f"- assessment_id: {inst.assessment_id}",
+        f"- instance_id: {instance_id}",
+    ]
+    if inst.status:
+        lines.append(f"- status: {inst.status}")
+
+    results_stage = stages.get("results") if isinstance(stages.get("results"), dict) else {}
+    results_data = results_stage.get("data") if isinstance(results_stage.get("data"), dict) else {}
+    widget_data = results_data.get("widget_data") if isinstance(results_data.get("widget_data"), dict) else None
+
+    if widget_data:
+        from types import SimpleNamespace
+
+        widget_type = {
+            "lcoe_model": "lcoe_output",
+            "carbon_model": "carbon_output",
+            "solar_estimate": "solar_output",
+        }.get(inst.assessment_id, "lcoe_output")
+        formatted = ChatService._format_model_inputs_from_messages(
+            [SimpleNamespace(widget_type=widget_type, widget_data=widget_data)],
+        )
+        if formatted:
+            lines.append(formatted)
+
+        result = widget_data.get("result")
+        if isinstance(result, dict):
+            currency = result.get("currency", "USD")
+            if result.get("lcoe") is not None:
+                lines.append(f"**Computed LCOE: {currency} {float(result['lcoe']):.4f}/kWh**")
+            elif result.get("total_emissions_tco2") is not None:
+                lines.append(f"**Total emissions: {float(result['total_emissions_tco2']):,.0f} tCO2**")
+            elif result.get("annual_kwh") is not None:
+                lines.append(f"**Annual generation: {float(result['annual_kwh']):,.0f} kWh/yr**")
+    else:
+        inputs_stage = stages.get("inputs") if isinstance(stages.get("inputs"), dict) else {}
+        inputs_data = inputs_stage.get("data") if isinstance(inputs_stage.get("data"), dict) else {}
+        items = inputs_data.get("items") if isinstance(inputs_data.get("items"), list) else []
+        if items:
+            lines.append("\n### Assessment Inputs (not yet computed)")
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                content = item.get("content") if isinstance(item.get("content"), dict) else {}
+                label = content.get("variable") or content.get("field_name") or "unknown"
+                val = content.get("value")
+                status = content.get("status", "unknown")
+                val_str = val if val is not None else "—"
+                lines.append(f"- {label}: {val_str} [{status}]")
+
+    return "\n".join(lines)
+
+
 def _to_title_case(text: str) -> str:
     """Convert extracted titles into consistent title case."""
     if not text:
@@ -847,6 +930,14 @@ async def chat_stream(
                     )
                 else:
                     view_block = _build_active_editor_view_context(editor_ctx)
+                    if editor_kind == "assessment" and editor_ctx.get("instance_id"):
+                        assessment_data_block = await _load_active_editor_assessment_context(
+                            db,
+                            user,
+                            str(editor_ctx["instance_id"]),
+                        )
+                        if assessment_data_block:
+                            view_block = f"{view_block}\n\n{assessment_data_block}"
                     project_context = (
                         f"{project_context}\n\n{view_block}" if project_context else view_block
                     )
