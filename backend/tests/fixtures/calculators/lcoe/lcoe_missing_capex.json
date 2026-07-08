@@ -1,0 +1,24 @@
+{
+  "id": "lcoe_missing_capex",
+  "assessment_id": "lcoe_model",
+  "description": "LCOE with total_capex omitted — must not compute with a silent default",
+  "source": "validation_negative_case",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "negative_case": "total_capex is essential; engine must leave it missing rather than assume a capex value"
+  },
+  "adapter_input": {
+    "tech_type": "solar_pv",
+    "known_values": {
+      "net_capacity_kw": 50000,
+      "annual_opex": 750000,
+      "capacity_factor": 0.22,
+      "discount_rate": 0.08,
+      "project_life_years": 25
+    }
+  },
+  "expect": {
+    "computable": false,
+    "missing_essentials": ["total_capex"]
+  }
+}
