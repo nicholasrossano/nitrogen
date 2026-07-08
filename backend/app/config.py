@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     chunk_overlap: int = 75
     retrieval_top_k: int = 5
 
+    # PDF parsing: prefer OpenDataLoader (structured, table-aware) over the
+    # legacy pdfplumber path. Falls back to pdfplumber automatically when the
+    # package or a JRE is unavailable; set False to force the legacy path.
+    pdf_use_opendataloader: bool = True
+
     # Google Drive OAuth
     google_client_id: str = ""
     google_client_secret: str = ""

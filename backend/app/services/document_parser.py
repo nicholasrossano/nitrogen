@@ -25,7 +25,21 @@ class DocumentParserService:
         return "\n\n".join(text for text, _ in self.parse_pdf_pages(content))
 
     def parse_pdf_pages(self, content: bytes) -> list[tuple[str, int]]:
-        """Parse PDF returning (text, page_number) pairs (1-indexed)."""
+        """Parse PDF returning (text, page_number) pairs (1-indexed).
+
+        Prefers OpenDataLoader (layout-aware: correct reading order, tables,
+        heading hierarchy). Falls back to pdfplumber when it is disabled or
+        unavailable (e.g. no JRE on the host). OpenDataLoader already filters
+        headers/footers/hidden text, so its output skips the pdfplumber-oriented
+        boilerplate cleanup.
+        """
+        if settings.pdf_use_opendataloader:
+            from app.services.pdf_structured import extract_pdf_pages_structured
+
+            structured = extract_pdf_pages_structured(content)
+            if structured is not None:
+                return structured
+
         import pdfplumber
 
         pages: list[tuple[str, int]] = []

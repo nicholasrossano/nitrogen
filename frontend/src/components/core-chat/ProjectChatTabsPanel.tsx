@@ -955,6 +955,7 @@ export function ProjectChatTabsPanel({
         [reusablePlaceholderTab.id]: pendingAutoSend,
       }));
       setActiveTabId(reusablePlaceholderTab.id);
+      onPendingAutoSendHandled?.();
       return;
     }
 
@@ -965,7 +966,8 @@ export function ProjectChatTabsPanel({
     }));
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
-  }, [pendingAutoSend]);
+    onPendingAutoSendHandled?.();
+  }, [onPendingAutoSendHandled, pendingAutoSend]);
 
   const handleTabAutoSendHandled = useCallback(
     (tabId: string, requestId: string) => {
