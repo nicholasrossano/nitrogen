@@ -27,6 +27,7 @@ import {
   editorWidgetForCitation,
   editorWidgetForProjectMaterial,
 } from '@/lib/openProjectFileInEditor';
+import { activeEditorContextFromWidget } from '@/lib/activeEditorContext';
 import { api, type Project, type ProjectMaterial } from '@/lib/api';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
@@ -192,6 +193,10 @@ function ChatWorkbenchContent() {
   }, [effectiveProjectId, project, projectPlan]);
 
   const effectiveEditorWidgets = pinnedEditorWidgets ?? editorWidgets;
+  const activeEditorContext = useMemo(
+    () => activeEditorContextFromWidget(effectiveEditorWidgets[effectiveEditorWidgets.length - 1]),
+    [effectiveEditorWidgets],
+  );
   const showContextStack = Boolean(effectiveProjectId) && (!hasMessages || panelParam != null || expandedContextWidget != null);
   const showEditorPanel = effectiveEditorWidgets.length > 0;
   const reserveRightSpace = (showContextStack && !expandedContextWidget) || showEditorPanel;
@@ -460,6 +465,7 @@ function ChatWorkbenchContent() {
                 wasOnLandingRef.current = onLanding;
               }}
               onEditorWidgetsChange={handleEditorWidgetsChange}
+              activeEditorContext={activeEditorContext}
               onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
               onOpenDocument={handleOpenDocument}
               onChatMetaChange={({ chatId }) => {
