@@ -350,7 +350,7 @@ async def list_projects(
         shared_result = await db.execute(
             select(ProjectShare, Project, User)
             .join(Project, ProjectShare.project_id == Project.id)
-            .outerjoin(User, Project.user_id == User.id)
+            .outerjoin(User, Project.created_by == User.id)
             .where(
                 ProjectShare.user_id == user.uid,
                 Project.archived == False,  # noqa: E712
