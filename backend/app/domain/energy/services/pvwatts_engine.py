@@ -276,6 +276,7 @@ class PVWattsEngine:
             "lat": _val("lat"),
             "lon": _val("lon"),
             "system_capacity": _val("system_capacity"),
+            "module_type": _int_val("module_type", 0),
             "assessment_type": _int_val("assessment_type", 0),
             "array_type": _int_val("array_type", 0),
             "tilt": _val("tilt"),
