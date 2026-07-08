@@ -108,7 +108,7 @@ class LCOEResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "lcoe": round(self.lcoe, 6),
+            "lcoe": round(self.lcoe, 10),
             "currency": self.currency,
             "npv_total_costs": round(self.npv_total_costs, 2),
             "npv_total_energy": round(self.npv_total_energy, 2),
@@ -244,7 +244,12 @@ class LCOEEngine:
         project_life = int(_val("project_life_years", 25))
         degradation = _val("degradation_rate", 0.005)
         annual_fuel = _val("annual_fuel_cost", 0.0)
-        construction_years = int(_val("construction_years", 0))
+        construction_inp = inputs.get("construction_years")
+        construction_years = (
+            int(float(construction_inp.value))
+            if construction_inp is not None and construction_inp.value is not None
+            else 0
+        )
         annual_replacement = _val("annual_replacement_cost", 0.0)
         currency = "USD"
         if "currency" in inputs and inputs["currency"].value:
@@ -255,11 +260,16 @@ class LCOEEngine:
         if project_life <= 0:
             raise ValueError("Project life must be > 0")
 
+        if construction_years < 0:
+            raise ValueError("Construction period cannot be negative")
+
         base_annual_energy = capacity_kw * capacity_factor * 8760  # kWh/yr
         assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
 
-        # Spread capex over construction period (simple equal split)
-        capex_per_year = total_capex / max(construction_years, 1)
+        def _discount_factor(year: int) -> float:
+            if discount_rate <= 0:
+                return 1.0
+            return 1.0 / ((1 + discount_rate) ** year)
 
         rows: list[CashFlowRow] = []
         npv_cost = 0.0
@@ -268,52 +278,107 @@ class LCOEEngine:
         sum_opex_disc = 0.0
         sum_fuel_disc = 0.0
         sum_repl_disc = 0.0
+        lifetime_energy = 0.0
+        annual_cost = annual_opex + annual_fuel + annual_replacement
 
-        total_years = construction_years + project_life
+        if construction_years == 0:
+            # DCF validation default: full capex at t=0; project_life_years = operating years only.
+            df0 = _discount_factor(0)
+            capex_disc = total_capex * df0
+            npv_cost += capex_disc
+            sum_capex_disc += capex_disc
+            rows.append(
+                CashFlowRow(
+                    year=0,
+                    capex=round(total_capex, 2),
+                    opex=0.0,
+                    fuel=0.0,
+                    replacement=0.0,
+                    total_cost=round(total_capex, 2),
+                    energy_kwh=0.0,
+                    discount_factor=round(df0, 6),
+                    discounted_cost=round(capex_disc, 2),
+                    discounted_energy=0.0,
+                )
+            )
 
-        for year in range(total_years):
-            df = 1.0 / ((1 + discount_rate) ** year) if discount_rate > 0 else 1.0
-
-            is_construction = year < construction_years
-            operational_year = year - construction_years  # 0-based operational year
-
-            if is_construction:
-                capex = capex_per_year
-                opex = 0.0
-                fuel = 0.0
-                replacement = 0.0
-                energy = 0.0
-            else:
-                capex = 0.0
-                opex = annual_opex
-                fuel = annual_fuel
-                replacement = annual_replacement
-                deg_factor = (1 - degradation) ** operational_year
+            for op_year in range(1, project_life + 1):
+                df = _discount_factor(op_year)
+                deg_factor = (1 - degradation) ** (op_year - 1)
                 energy = base_annual_energy * deg_factor
+                lifetime_energy += energy
+                disc_cost = annual_cost * df
+                disc_energy = energy * df
 
-            total_cost = capex + opex + fuel + replacement
-            disc_cost = total_cost * df
-            disc_energy = energy * df
+                npv_cost += disc_cost
+                npv_energy += disc_energy
+                sum_opex_disc += annual_opex * df
+                sum_fuel_disc += annual_fuel * df
+                sum_repl_disc += annual_replacement * df
 
-            npv_cost += disc_cost
-            npv_energy += disc_energy
-            sum_capex_disc += capex * df
-            sum_opex_disc += opex * df
-            sum_fuel_disc += fuel * df
-            sum_repl_disc += replacement * df
+                rows.append(
+                    CashFlowRow(
+                        year=op_year,
+                        capex=0.0,
+                        opex=round(annual_opex, 2),
+                        fuel=round(annual_fuel, 2),
+                        replacement=round(annual_replacement, 2),
+                        total_cost=round(annual_cost, 2),
+                        energy_kwh=round(energy, 2),
+                        discount_factor=round(df, 6),
+                        discounted_cost=round(disc_cost, 2),
+                        discounted_energy=round(disc_energy, 2),
+                    )
+                )
+        else:
+            capex_per_year = total_capex / construction_years
+            total_years = construction_years + project_life
 
-            rows.append(CashFlowRow(
-                year=year,
-                capex=round(capex, 2),
-                opex=round(opex, 2),
-                fuel=round(fuel, 2),
-                replacement=round(replacement, 2),
-                total_cost=round(total_cost, 2),
-                energy_kwh=round(energy, 2),
-                discount_factor=round(df, 6),
-                discounted_cost=round(disc_cost, 2),
-                discounted_energy=round(disc_energy, 2),
-            ))
+            for year in range(total_years):
+                df = _discount_factor(year)
+                is_construction = year < construction_years
+                operational_year = year - construction_years
+
+                if is_construction:
+                    capex = capex_per_year
+                    opex = 0.0
+                    fuel = 0.0
+                    replacement = 0.0
+                    energy = 0.0
+                else:
+                    capex = 0.0
+                    opex = annual_opex
+                    fuel = annual_fuel
+                    replacement = annual_replacement
+                    deg_factor = (1 - degradation) ** operational_year
+                    energy = base_annual_energy * deg_factor
+                    lifetime_energy += energy
+
+                total_cost = capex + opex + fuel + replacement
+                disc_cost = total_cost * df
+                disc_energy = energy * df
+
+                npv_cost += disc_cost
+                npv_energy += disc_energy
+                sum_capex_disc += capex * df
+                sum_opex_disc += opex * df
+                sum_fuel_disc += fuel * df
+                sum_repl_disc += replacement * df
+
+                rows.append(
+                    CashFlowRow(
+                        year=year,
+                        capex=round(capex, 2),
+                        opex=round(opex, 2),
+                        fuel=round(fuel, 2),
+                        replacement=round(replacement, 2),
+                        total_cost=round(total_cost, 2),
+                        energy_kwh=round(energy, 2),
+                        discount_factor=round(df, 6),
+                        discounted_cost=round(disc_cost, 2),
+                        discounted_energy=round(disc_energy, 2),
+                    )
+                )
 
         if npv_energy == 0:
             raise ValueError("Total discounted energy is zero — cannot compute LCOE")
@@ -335,7 +400,7 @@ class LCOEEngine:
             opex_share=sum_opex_disc / npv_cost if npv_cost else 0,
             fuel_share=sum_fuel_disc / npv_cost if npv_cost else 0,
             replacement_share=sum_repl_disc / npv_cost if npv_cost else 0,
-            lifetime_energy_kwh=sum(r.energy_kwh for r in rows),
+            lifetime_energy_kwh=lifetime_energy,
             assumption_count=assumption_count,
             quality_label=quality,
             cash_flows=rows,
@@ -442,7 +507,7 @@ class LCOEEngine:
             ("annual_replacement_cost", "Replacement Cost", 0.0, "USD/yr", "costs", "number", None),
             ("discount_rate", "Discount Rate (WACC)", defaults["discount_rate"], "", "finance", "number", None),
             ("project_life_years", "Project Lifetime", defaults["project_life_years"], "years", "finance", "number", None),
-            ("construction_years", "Construction Period", defaults["construction_years"], "years", "timing", "number", None),
+            ("construction_years", "Construction Period", None, "years", "timing", "number", None),
             ("currency", "Currency", "USD", "", "general", "text", None),
         ]
 

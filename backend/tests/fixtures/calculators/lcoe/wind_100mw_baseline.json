@@ -1,0 +1,38 @@
+{
+  "id": "wind_100mw_baseline",
+  "assessment_id": "lcoe_model",
+  "description": "100 MW wind; DCF LCOE; capex at t=0; 25 operating years",
+  "source": "hand_calculation_discounted_cash_flow_lcoe",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "capex_timing": "total_capex paid at t=0",
+    "project_life_definition": "project_life_years means operating years",
+    "degradation_timing": "year 1 production is undegraded; degradation starts after first operating year",
+    "annual_cost_timing": "opex/fuel/replacement paid at end of operating year",
+    "construction_treatment": "construction timing not modeled in this validation fixture"
+  },
+  "adapter_input": {
+    "tech_type": "wind",
+    "known_values": {
+      "net_capacity_kw": 100000,
+      "capacity_factor": 0.38,
+      "total_capex": 150000000,
+      "annual_opex": 3000000,
+      "discount_rate": 0.07,
+      "project_life_years": 25,
+      "degradation_rate": 0.002,
+      "annual_fuel_cost": 0,
+      "annual_replacement_cost": 0,
+      "currency": "USD"
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "lcoe": { "value": 0.0485069979, "abs_tolerance": 0.000001 },
+      "npv_total_costs": { "value": 184960749.5348, "pct_tolerance": 0.00001 },
+      "npv_total_energy": { "value": 3813073526.0024, "pct_tolerance": 0.00001 },
+      "lifetime_energy_kwh": { "value": 8125301089.6423, "pct_tolerance": 0.00001 }
+    }
+  }
+}
