@@ -236,8 +236,9 @@ export function SideDrawer() {
     try {
       await setActiveWorkspace(workspaceId);
       if (isChatShell) {
-        const lastProjectId = readLastProjectId();
-        router.replace(lastProjectId ? `/chat?project=${lastProjectId}` : '/chat');
+        // Drop ?project= on workspace switch — the prior lastProjectId may belong to
+        // another workspace and would 404 against the newly selected workspace list.
+        router.replace('/chat');
       }
     } finally {
       setWorkspaceSwitching(false);

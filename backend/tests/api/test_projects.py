@@ -161,6 +161,84 @@ async def test_list_projects_http_returns_workspace_rows(
 
 
 @pytest.mark.asyncio
+async def test_list_projects_personal_workspace_includes_shared_projects_query(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Personal workspace list must join project owners on created_by, not the ORM property."""
+    workspace_id = uuid.uuid4()
+    other_workspace_id = uuid.uuid4()
+    owned = Project(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        name="Owned Deal",
+        slug="owned-deal",
+        created_by="firebase-user-1",
+        archived=False,
+        sector="general",
+        stage="describe",
+        stage_1_complete=False,
+        evidence_ready=False,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    shared = Project(
+        id=uuid.uuid4(),
+        workspace_id=other_workspace_id,
+        name="Shared Deal",
+        slug="shared-deal",
+        created_by="other-user",
+        archived=False,
+        sector="general",
+        stage="describe",
+        stage_1_complete=False,
+        evidence_ready=False,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    workspace = SimpleNamespace(
+        id=workspace_id,
+        workspace_type=WorkspaceType.PERSONAL.value,
+    )
+    membership = SimpleNamespace(role="owner")
+    shared_rows = [(SimpleNamespace(role="viewer"), shared, SimpleNamespace(email="owner@example.com"))]
+
+    async def fake_ensure_user_exists(_db, _user):
+        return None
+
+    async def fake_resolve_workspace_for_user(_db, _uid, _workspace_id):
+        return workspace, membership
+
+    async def fake_execute(statement, *_args, **_kwargs):
+        statement_text = str(statement)
+        if "project_shares JOIN projects" in statement_text:
+            assert "projects.created_by" in statement_text
+            return _FakeExecuteResult(shared_rows)
+        if "FROM projects" in statement_text:
+            return _FakeExecuteResult([owned])
+        return _FakeExecuteResult([])
+
+    db = SimpleNamespace(execute=fake_execute, get=lambda _model, _id: SimpleNamespace(email="owner@example.com"))
+    user = AuthUser(uid="firebase-user-1", email="owner@example.com")
+
+    monkeypatch.setattr(projects_api, "ensure_user_exists", fake_ensure_user_exists)
+    monkeypatch.setattr(projects_api, "resolve_workspace_for_user", fake_resolve_workspace_for_user)
+
+    rows = await projects_api.list_projects(
+        limit=100,
+        offset=0,
+        archived=False,
+        workspace_id=str(workspace_id),
+        db=db,
+        user=user,
+    )
+
+    assert len(rows) == 2
+    by_title = {row["title"]: row for row in rows}
+    assert set(by_title) == {"Owned Deal", "Shared Deal"}
+    assert by_title["Shared Deal"]["shared_role"] == "viewer"
+
+
+@pytest.mark.asyncio
 async def test_create_project_http_returns_201(
     api_client,
     override_db,
