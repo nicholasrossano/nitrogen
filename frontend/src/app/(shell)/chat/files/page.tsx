@@ -7,6 +7,7 @@ import { ProjectFilesView } from '@/components/files';
 import { ChangeProjectSelect } from '@/components/chat-shell/ChangeProjectSelect';
 import { resolveActiveProjectId, writeLastProjectId } from '@/components/chat-shell/ChatShellProvider';
 import { api, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useProjectStore } from '@/stores/projectStore';
 
@@ -156,7 +157,7 @@ function FilesPageContent() {
           <ProjectFilesView
             scope="project"
             projectId={effectiveProjectId}
-            title={`${selectedProject?.name ?? 'Project'} files`}
+            title={`${projectDisplayName(selectedProject, 'Project')} files`}
             materials={projectMaterials}
             onUploadFile={async (file) => {
               await uploadMaterial(effectiveProjectId, file);
