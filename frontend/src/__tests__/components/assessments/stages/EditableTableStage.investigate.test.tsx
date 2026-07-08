@@ -2,12 +2,30 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { EditableTableStage } from '@/components/assessments/stages/EditableTableStage';
 import { api } from '@/lib/api';
+import type { BuildItem, FieldDef } from '@/lib/api/types';
 
-const baseFields = [
-  { name: 'variable', label: 'Variable', field_type: 'text' },
-  { name: 'value', label: 'Value', field_type: 'number' },
-  { name: 'unit', label: 'Unit', field_type: 'text' },
+const baseFields: FieldDef[] = [
+  { name: 'variable', label: 'Variable', field_type: 'text', required: false, options: null, placeholder: null },
+  { name: 'value', label: 'Value', field_type: 'number', required: false, options: null, placeholder: null },
+  { name: 'unit', label: 'Unit', field_type: 'text', required: false, options: null, placeholder: null },
 ];
+
+const baseItem: BuildItem = {
+  id: 'item-1',
+  origin: 'inferred',
+  provenance: { derivation: 'assumed', sources: [], rationale: 'Test fixture' },
+  confirmed: false,
+  confirmed_at: null,
+  removable: false,
+  content: {
+    variable: 'Capacity factor',
+    field_name: 'capacity_factor',
+    value: 0.32,
+    unit: '%',
+    status: 'assumed',
+    category: 'energy',
+  },
+};
 
 describe('EditableTableStage investigate', () => {
   afterEach(() => {
@@ -28,20 +46,7 @@ describe('EditableTableStage investigate', () => {
         assessmentId="lcoe_model"
         stageId="inputs"
         fields={baseFields}
-        items={[
-          {
-            id: 'item-1',
-            origin: 'inferred',
-            content: {
-              variable: 'Capacity factor',
-              field_name: 'capacity_factor',
-              value: 0.32,
-              unit: '%',
-              status: 'assumed',
-              category: 'energy',
-            },
-          },
-        ]}
+        items={[baseItem]}
         allowAddRows={false}
         onChanged={jest.fn()}
       />,
@@ -75,20 +80,7 @@ describe('EditableTableStage investigate', () => {
         assessmentId="lcoe_model"
         stageId="inputs"
         fields={baseFields}
-        items={[
-          {
-            id: 'item-1',
-            origin: 'inferred',
-            content: {
-              variable: 'Capacity factor',
-              field_name: 'capacity_factor',
-              value: 0.32,
-              unit: '%',
-              status: 'assumed',
-              category: 'energy',
-            },
-          },
-        ]}
+        items={[baseItem]}
         allowAddRows={false}
         onChanged={jest.fn()}
       />,
