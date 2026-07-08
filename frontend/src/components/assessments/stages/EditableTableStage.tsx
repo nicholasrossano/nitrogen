@@ -691,6 +691,7 @@ export function EditableTableStage({
           text,
           label,
           fieldName,
+          toolHint: assessmentId,
           fieldContext,
           modelInputsContext: buildModelInputsContext('Assessment', modelInputs, fieldContext),
         },
