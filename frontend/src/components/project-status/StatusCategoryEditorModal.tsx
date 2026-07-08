@@ -219,7 +219,12 @@ export function StatusCategoryEditorModal({
           <button type="button" onClick={handleClose} className="btn-compact-neutral">
             Cancel
           </button>
-          <button type="button" onClick={() => void onSave()} disabled={isSaving} className="btn-compact-primary">
+          <button
+            type="button"
+            onClick={() => void onSave()}
+            disabled={isSaving}
+            className="btn-primary !h-9 !px-4 !text-xs !rounded-lg"
+          >
             {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Save
           </button>
