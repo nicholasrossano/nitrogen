@@ -7,6 +7,7 @@ import { api, type Project } from '@/lib/api';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import type { ChatContextExpandedWidget } from '@/components/chat-shell/chatContextStackMotion';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export interface ChatListItem {
@@ -363,7 +364,7 @@ export function DrawerChatTree({
                 </p>
               )}
               {group.projects.map((project) =>
-                renderSection({ key: project.id, name: project.name }),
+                renderSection({ key: project.id, name: projectDisplayName(project) }),
               )}
             </div>
           ))}

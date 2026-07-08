@@ -28,6 +28,7 @@ import {
   editorWidgetForProjectMaterial,
 } from '@/lib/openProjectFileInEditor';
 import { api, type Project, type ProjectMaterial } from '@/lib/api';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { useProjectStore } from '@/stores/projectStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -446,7 +447,7 @@ function ChatWorkbenchContent() {
               allowInitialProjectOnboarding={isOnboarding}
               restoreLatestChatOnMount={isOnboarding}
               landingLayoutMode="default"
-              landingComposerTitle={isOnboarding ? undefined : selectedProject?.name}
+              landingComposerTitle={isOnboarding ? undefined : projectDisplayName(selectedProject)}
               landingHeaderContent={<></>}
               onLandingStateChange={(onLanding) => {
                 if (wasOnLandingRef.current && !onLanding && panelParam) {

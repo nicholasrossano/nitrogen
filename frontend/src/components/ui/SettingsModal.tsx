@@ -9,6 +9,7 @@ import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { api, type Project, type ProjectShare } from '@/lib/api';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import { ModalShell } from '@/components/ui/ModalShell';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { BillingOptionsPanel } from '@/components/ui/BillingOptionsPanel';
@@ -318,7 +319,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     if (!settingsProjectId) return;
     const fromList = projects.find((project) => project.id === settingsProjectId);
     if (!fromList || projectSettingsLoadedForId === settingsProjectId) return;
-    setProjectName(fromList.name);
+    setProjectName(projectDisplayName(fromList));
     setProjectIcon(fromList.icon ?? 'FolderOpen');
   }, [projectSettingsLoadedForId, projects, settingsProjectId]);
 
@@ -343,7 +344,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         setProjectOwnerEmail(project.owner_email ?? null);
         setProjectShares(shares);
         const listedProject = projects.find((project) => project.id === settingsProjectId);
-        setProjectName(project.title ?? listedProject?.name ?? 'Project');
+        setProjectName(projectDisplayName(project, projectDisplayName(listedProject)));
         setProjectIcon(project.icon ?? listedProject?.icon ?? 'FolderOpen');
         setProjectSettingsLoadedForId(settingsProjectId);
       })
@@ -814,7 +815,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       subtitle={projectRole === 'owner' ? 'Owner' : projectRole === 'editor' ? 'Editor' : 'Viewer'}
                       switchOptions={projects.map((project) => ({
                         id: project.id,
-                        label: project.name,
+                        label: projectDisplayName(project),
                         iconName: project.icon,
                       }))}
                       selectedSwitchId={settingsProjectId}

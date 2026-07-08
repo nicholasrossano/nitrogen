@@ -4,7 +4,7 @@ export interface Project {
   user_id: string;
   workspace_id: string;
   title: string | null;
-  name: string;
+  name?: string | null;
   subject: string | null;
   icon: string | null;
   sector: string;

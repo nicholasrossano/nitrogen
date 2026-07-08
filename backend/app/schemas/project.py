@@ -50,6 +50,7 @@ class ProjectResponse(BaseModel):
     user_id: str
     workspace_id: UUID
     title: Optional[str] = None
+    name: Optional[str] = None
     icon: Optional[str] = None
     sector: str
     geography: Optional[str] = None
