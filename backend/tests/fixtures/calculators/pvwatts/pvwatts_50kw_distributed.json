@@ -1,0 +1,40 @@
+{
+  "id": "pvwatts_50kw_distributed",
+  "assessment_id": "solar_estimate",
+  "description": "50 kW roof-mounted distributed array in New York City; synthetic NREL PVWatts V8-format snapshot",
+  "source": "synthetic_nrel_pvwatts_v8_format_response",
+  "source_type": "synthetic_external_format_snapshot",
+  "recorded_response": "recorded/pvwatts_50kw_distributed_response.json",
+  "methodology_notes": {
+    "reference_type": "synthetic_nrel_v8_format_snapshot",
+    "api_version": "PVWatts V8",
+    "location": "New York City, USA (40.7128, -74.0060)",
+    "array_type": "1 = fixed roof mounted"
+  },
+  "adapter_input": {
+    "known_values": {
+      "lat": 40.7128,
+      "lon": -74.0060,
+      "system_capacity": 50,
+      "array_type": 1,
+      "_source_tilt": "user",
+      "tilt": 41,
+      "_source_azimuth": "user",
+      "azimuth": 180
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "ac_annual": { "value": 56940.2, "abs_tolerance": 0.05 },
+      "capacity_factor": { "value": 13.0, "abs_tolerance": 0.001 },
+      "ac_monthly": {
+        "values": [
+          2847.0, 3416.4, 4555.2, 5124.6, 5694.0, 5694.0,
+          5694.0, 5694.0, 5124.6, 4555.2, 3985.8, 4555.2
+        ],
+        "abs_tolerance": 0.05
+      }
+    }
+  }
+}
