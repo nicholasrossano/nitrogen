@@ -1,0 +1,19 @@
+{
+  "id": "safe_water_missing_people_served",
+  "assessment_id": "carbon_model",
+  "description": "Safe water with people_served omitted — not computable",
+  "source": "validation_negative_case",
+  "source_type": "validated_independent",
+  "adapter_input": {
+    "method_pack": "safe_water",
+    "known_values": {
+      "method_pack": "safe_water",
+      "water_per_person_day": 4.0,
+      "operational_days_yr": 347
+    }
+  },
+  "expect": {
+    "computable": false,
+    "missing_essentials": ["people_served"]
+  }
+}

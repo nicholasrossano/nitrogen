@@ -46,4 +46,4 @@ This overwrites `recorded/*.json` and refreshes fixture `expect.result` from the
 - NREL V8 requires `module_type` (engine sends `0` = standard).
 - Lock tilt/azimuth with `_source_tilt: "user"` / `_source_azimuth: "user"` unless testing location-derived defaults.
 - Address geocoding uses Nominatim separately — not covered by these fixtures.
-- Production base URL uses `developer.nlr.gov` (configured in `app/config.py`).
+- Production base URL uses `developer.nrel.gov` (configured in `app/config.py`).
