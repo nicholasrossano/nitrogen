@@ -1,0 +1,41 @@
+{
+  "id": "cookstoves_1000hh_adoption_50pct_yr1",
+  "assessment_id": "carbon_model",
+  "description": "Cookstoves adoption ramp: 1000 HH at 50% adoption — year-1 active units = int(500)",
+  "source": "hand_calculation_cookstoves_adoption_ramp",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e only",
+    "adoption_formula": "yr_adopt = min(adoption_rate × yr, 1.0); active = int(devices × yr_adopt)",
+    "hand_calc": "yr1 active = int(1000 × 0.5) = 500; baseline=1100.736, project=366.912, net=733.824 (half of full-adoption fixture)"
+  },
+  "adapter_input": {
+    "method_pack": "cookstoves",
+    "known_values": {
+      "method_pack": "cookstoves",
+      "devices_households": 1000,
+      "baseline_fuel_consumption_kg_yr": 1800,
+      "emission_factor_kgco2_per_kg": 0,
+      "emission_factor_tco2_per_tj": 112.0,
+      "baseline_ncv_mj_kg": 15.6,
+      "project_ncv_mj_kg": 15.6,
+      "baseline_efficiency": 0.10,
+      "project_efficiency": 0.30,
+      "fnrb": 0.70,
+      "leakage_factor": 0,
+      "usage_rate": 1.0,
+      "adoption_rate": 0.5,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 1100.736, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 366.912, "pct_tolerance": 0.00001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 733.824, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

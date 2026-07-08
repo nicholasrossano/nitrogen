@@ -1,0 +1,24 @@
+{
+  "id": "lcoe_missing_net_capacity",
+  "assessment_id": "lcoe_model",
+  "description": "LCOE with net_capacity_kw omitted — must not compute with a silent default",
+  "source": "validation_negative_case",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "negative_case": "net_capacity_kw is essential; engine must leave it missing rather than assume a capacity value"
+  },
+  "adapter_input": {
+    "tech_type": "solar_pv",
+    "known_values": {
+      "total_capex": 45000000,
+      "annual_opex": 750000,
+      "capacity_factor": 0.22,
+      "discount_rate": 0.08,
+      "project_life_years": 25
+    }
+  },
+  "expect": {
+    "computable": false,
+    "missing_essentials": ["net_capacity_kw"]
+  }
+}

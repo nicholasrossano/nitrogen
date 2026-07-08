@@ -1,6 +1,14 @@
 # Calculator Golden Set Reference
 
-Validation-first golden tests for `lcoe_model` and `carbon_model`. Expected values come from documented methodology — **not** from running the current engine unless `source_type` is `regression_snapshot`.
+Validation-first golden tests for `lcoe_model`, `carbon_model`, and `solar_estimate` (PVWatts). Expected values come from documented methodology — **not** from running the current engine unless `source_type` is `regression_snapshot`.
+
+## Milestone status
+
+| Calculator | Validation fixtures | Notes |
+|---|---|---|
+| **LCOE** | 5 positive + 3 negatives | `lcoe_missing_capex`, `lcoe_missing_net_capacity`, `lcoe_zero_project_life` |
+| **Carbon** | 13 positive + 4 negatives | All 7 method packs; branch fixtures for end-use T&D, leakage, adoption |
+| **PVWatts** | 2 recorded external references | Live NREL V8 JSON + mocked HTTP — **not** hand-calculated validation |
 
 ## Core rules
 
@@ -9,7 +17,8 @@ Validation-first golden tests for `lcoe_model` and `carbon_model`. Expected valu
 | `validated_independent` | Hand calculation / external methodology formula | `lcoe/`, `carbon/` |
 | `validated_internal_methodology` | Hand calculation vs internal screening spec | `carbon/` (e.g. biodigester) |
 | `verified_spreadsheet` | Spreadsheet | `lcoe/`, `carbon/` |
-| `methodology_worksheet` | External methodology (e.g. NREL recorded response) | `pvwatts/` (future) |
+| `recorded_external_reference` | Live NREL PVWatts V8 API response (parsed output) | `pvwatts/` |
+| `synthetic_external_format_snapshot` | NREL-shaped JSON (pre-recording placeholder) | `pvwatts/` (deprecated once recorded) |
 | `regression_snapshot` | Engine output at capture time | `regression/lcoe/`, `regression/carbon/` |
 
 **Never** change validation `expect` values to make CI green when the engine diverges from methodology. Failures indicate engine/spec alignment gaps.
@@ -452,6 +461,40 @@ net_er_tco2e = NES_kwh × grid_emission_factor / 1000
 
 ---
 
+## Branch validation fixtures (Phase 4)
+
+### `grid_renewable_5mw_end_use_displacement`
+
+Same inputs as `grid_renewable_5mw_grid_export` except `generation_model: end_use_displacement`.
+
+```
+gen_mwh = 5000 × 0.25 × 8760 / 1000 = 10950
+baseline = 10950 × 0.45 × (1 + 0.15) = 5666.625 tCO₂e
+net_er = 5666.625 (leakage = 0)
+```
+
+### `cookstoves_1000hh_leakage_10pct`
+
+Same fuel path as baseline cookstoves; `leakage_factor = 0.10`.
+
+```
+baseline = 2201.472, project = 733.824
+gross_er = 1467.648
+leakage = 0.10 × 1467.648 = 146.7648
+net_er = 1320.8832
+```
+
+### `cookstoves_1000hh_adoption_50pct_yr1`
+
+1000 HH, `adoption_rate = 0.5` → year-1 `active = int(1000 × 0.5) = 500`.
+
+```
+baseline = 1100.736, project = 366.912, net_er = 733.824
+(half of full-adoption cookstoves fixture)
+```
+
+---
+
 ## Known engine gaps checklist
 
 | Gap | Status | Notes |
@@ -462,6 +505,9 @@ net_er_tco2e = NES_kwh × grid_emission_factor / 1000
 | LCOE degradation indexing | **Closed** | 0-based operational year; year 1 undegraded |
 | Carbon unknown `method_pack` | **Closed** | Adapter rejects unknown packs |
 | `grid_renewable` T&D on grid_export | **Closed** | T&D only when `generation_model=end_use_displacement` |
+| `grid_renewable` end_use_displacement validation | **Closed** | `grid_renewable_5mw_end_use_displacement.json` |
+| Cookstoves leakage branch | **Closed** | `cookstoves_1000hh_leakage_10pct.json` |
+| Cookstoves adoption ramp (yr-1) | **Closed** | `cookstoves_1000hh_adoption_50pct_yr1.json` |
 | `solar_home` displacement paths | **Closed** | `displacement_mode`; PV uses tCO₂/kWh |
 | `efficient_lighting` AMS-II.J | **Closed** | Validation uses current AMS-style engine |
 | `safe_water` energy chain | **Closed** | NCV not used; PE not scaled by adoption |
@@ -469,19 +515,30 @@ net_er_tco2e = NES_kwh × grid_emission_factor / 1000
 
 ---
 
-## PVWatts — deferred
+## PVWatts — recorded external reference
 
-See [`pvwatts/README.md`](pvwatts/README.md). Recorded NREL JSON + mocked HTTP; not hand-calculated validation.
+See [`pvwatts/README.md`](pvwatts/README.md).
+
+PVWatts golden tests use **live-recorded NREL V8 JSON** (`source_type: recorded_external_reference`), mocked via `httpx` in CI. They validate API response parsing and result serialization — **not** hand-calculated methodology like LCOE/carbon.
+
+| Fixture | Location | Capacity |
+|---|---|---|
+| `pvwatts_5mw_phnom_penh` | Phnom Penh | 5000 kW open rack |
+| `pvwatts_50kw_distributed` | New York City | 50 kW roof mount |
+
+NREL API base URL: `https://developer.nrel.gov/api/pvwatts/v8.json`
 
 ## Fixture layout
 
 ```
 fixtures/calculators/
-  lcoe/                 # LCOE validation fixtures
-  carbon/               # All 7 pack validation fixtures + negatives
-  regression/lcoe/      # LCOE regression_snapshot (optional)
-  regression/carbon/    # Optional engine snapshots (validation preferred)
-  pvwatts/              # PVWatts deferred
+  lcoe/                 # 5 positive + 3 negative LCOE validation fixtures
+  carbon/               # 13 positive + 4 negative carbon validation fixtures
+  regression/lcoe/      # LCOE regression_snapshot (optional, empty)
+  regression/carbon/    # Carbon regression_snapshot (optional, empty)
+  pvwatts/
+    recorded/           # Raw NREL V8 JSON snapshots
+    *.json              # Golden fixture envelopes
 ```
 
 ## Test modules
@@ -492,6 +549,12 @@ fixtures/calculators/
 | `test_lcoe_golden_regression.py` | LCOE regression snapshots |
 | `test_carbon_golden_validation.py` | Methodology-backed carbon fixtures |
 | `test_carbon_golden_regression.py` | Carbon regression snapshots |
+| `test_pvwatts_golden.py` | Recorded NREL PVWatts fixtures (mocked HTTP) |
+
+Run all calculator golden tests:
+```bash
+cd backend && python3 -m pytest tests/calculators/ -q
+```
 
 Run validation only:
 ```bash
@@ -507,5 +570,5 @@ cd backend && python3 -m pytest tests/calculators/test_*_regression.py -q
 
 ```bash
 cd backend && python3 -m pytest tests/calculators/ -q
-cd backend && ruff check tests/calculators/ app/domain/energy/services/lcoe_engine.py
+cd backend && ruff check tests/calculators/ app/domain/energy/services/
 ```

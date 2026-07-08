@@ -1,0 +1,19 @@
+{
+  "id": "grid_renewable_missing_grid_ef",
+  "assessment_id": "carbon_model",
+  "description": "Grid renewable with grid_emission_factor omitted — not computable",
+  "source": "validation_negative_case",
+  "source_type": "validated_independent",
+  "adapter_input": {
+    "method_pack": "grid_renewable",
+    "known_values": {
+      "method_pack": "grid_renewable",
+      "installed_capacity_kw": 5000,
+      "capacity_factor": 0.25
+    }
+  },
+  "expect": {
+    "computable": false,
+    "missing_essentials": ["grid_emission_factor"]
+  }
+}
