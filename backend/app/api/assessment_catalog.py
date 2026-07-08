@@ -139,11 +139,11 @@ async def get_recommended_tools(
     """Get tool recommendations for an initiative based on its description."""
     initiative = await require_project_viewer(db, project_id, user)
     if not initiative.project_description:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Project description required for recommendations"
+        return AssessmentRecommendationsResponse(
+            recommendations=[],
+            project_type=initiative.project_type,
         )
-    
+
     # Get recommendations
     registry = get_assessment_registry()
     recommendations = registry.recommend_assessments(
