@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import type { Project } from '@/lib/api';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 
 interface ChangeProjectSelectProps {
@@ -42,7 +43,7 @@ export function ChangeProjectSelect({
   menuPlacement = 'below',
 }: ChangeProjectSelectProps) {
   const options = useMemo(
-    () => projects.map((project) => ({ value: project.id, label: project.name })),
+    () => projects.map((project) => ({ value: project.id, label: projectDisplayName(project) })),
     [projects],
   );
 

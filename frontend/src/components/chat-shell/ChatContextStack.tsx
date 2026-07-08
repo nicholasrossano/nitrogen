@@ -17,6 +17,7 @@ import {
 } from '@/components/chat-shell/chatContextStackMotion';
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import { api, type Assumption, type Project, type ProjectMaterial } from '@/lib/api';
 import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
@@ -248,7 +249,7 @@ export function ChatContextStack({
         <ChatExpandablePanelShell
           widget="overview"
           title="Overview"
-          suffix={project.name}
+          suffix={projectDisplayName(project)}
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
@@ -280,7 +281,7 @@ export function ChatContextStack({
         <ChatExpandablePanelShell
           widget="variables"
           title={PROJECT_VARIABLES.title}
-          suffix={project?.name ?? null}
+          suffix={project ? projectDisplayName(project) : null}
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
@@ -298,7 +299,7 @@ export function ChatContextStack({
         <ChatExpandablePanelShell
           widget="files"
           title="Files"
-          suffix={project?.name ?? null}
+          suffix={project ? projectDisplayName(project) : null}
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
@@ -306,7 +307,7 @@ export function ChatContextStack({
           <ProjectFilesView
             scope="project"
             projectId={projectId}
-            title={`${project?.name ?? 'Project'} files`}
+            title={`${projectDisplayName(project)} files`}
             materials={projectMaterials}
             onUploadFile={async (file) => {
               await uploadMaterial(projectId, file);
