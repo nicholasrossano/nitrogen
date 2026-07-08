@@ -1,0 +1,37 @@
+{
+  "id": "solar_home_20000_kerosene_liters",
+  "assessment_id": "carbon_model",
+  "description": "20k SHS displacing kerosene liters per system; kerosene_liters displacement mode; year-1 annual ER",
+  "source": "hand_calculation_solar_home_kerosene",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e",
+    "displacement_mode": "kerosene_liters",
+    "fuel_basis": "baseline_fuel_consumption_l_yr is per system/year",
+    "formula": "net_er = num_systems × baseline_fuel_l_yr × baseline_fuel_ef_tco2_per_litre × usage_rate",
+    "leakage": "leakage_factor set to 0"
+  },
+  "adapter_input": {
+    "method_pack": "solar_home",
+    "known_values": {
+      "method_pack": "solar_home",
+      "displacement_mode": "kerosene_liters",
+      "num_systems": 20000,
+      "baseline_fuel_consumption_l_yr": 120,
+      "baseline_fuel_ef_tco2_per_litre": 0.00249,
+      "usage_rate": 1.0,
+      "leakage_factor": 0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 5976.0, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 5976.0, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

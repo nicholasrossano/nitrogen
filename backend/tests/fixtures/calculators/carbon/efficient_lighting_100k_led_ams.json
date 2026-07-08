@@ -1,0 +1,37 @@
+{
+  "id": "efficient_lighting_100k_led_ams",
+  "assessment_id": "carbon_model",
+  "description": "100k LED retrofit; AMS-II.J-style LFR/NTG/T&D; year-1 annual ER",
+  "source": "hand_calculation_efficient_lighting_ams_iij",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e",
+    "methodology": "AMS-II.J simplified with LFR, NTG, T&D, 5h/day operating cap",
+    "leakage": "leakage not modeled (0)"
+  },
+  "adapter_input": {
+    "method_pack": "efficient_lighting",
+    "known_values": {
+      "method_pack": "efficient_lighting",
+      "num_lamps": 100000,
+      "baseline_wattage": 60,
+      "project_wattage": 9,
+      "operating_hours_per_day": 3.5,
+      "rated_lamp_life_hours": 25000,
+      "grid_emission_factor": 0.45,
+      "td_losses_pct": 0.10,
+      "ntg_factor": 0.95,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 3015.6730471875, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 3015.6730471875, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "id": "safe_water_50000_ceramic_filter",
+  "assessment_id": "carbon_model",
+  "description": "50k people; energy-based boiling displacement (360.83 kJ/L); zero project electricity; year-1 annual ER",
+  "source": "hand_calculation_safe_water_energy_boiling",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e",
+    "baseline_path": "energy-based boiling displacement; baseline_ncv_mj_kg not used",
+    "water_cap": "water_per_person_day capped at 5.5 L/day",
+    "project_electricity": "0 kWh for baseline validation case",
+    "leakage": "leakage_factor set to 0"
+  },
+  "adapter_input": {
+    "method_pack": "safe_water",
+    "known_values": {
+      "method_pack": "safe_water",
+      "people_served": 50000,
+      "water_per_person_day": 4.0,
+      "operational_days_yr": 347,
+      "usage_rate": 1.0,
+      "adoption_rate": 1.0,
+      "baseline_stove_efficiency": 0.10,
+      "bl_ef_co2_tco2_per_tj": 112.0,
+      "bl_ef_nonco2_tco2e_per_tj": 9.46,
+      "fnrb": 0.70,
+      "proportion_already_safe": 0,
+      "proportion_still_boiling": 0,
+      "water_quality_modifier": 1.0,
+      "project_electricity_kwh_yr": 0,
+      "leakage_factor": 0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 22001.5515172, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 22001.5515172, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

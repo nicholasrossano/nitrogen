@@ -1,0 +1,17 @@
+{
+  "id": "missing_devices",
+  "assessment_id": "carbon_model",
+  "description": "Cookstoves with missing devices/households — not computable",
+  "source": "validation_negative_case",
+  "source_type": "validated_independent",
+  "adapter_input": {
+    "method_pack": "cookstoves",
+    "known_values": {
+      "method_pack": "cookstoves",
+      "baseline_fuel_consumption_kg_yr": 1800
+    }
+  },
+  "expect": {
+    "computable": false
+  }
+}

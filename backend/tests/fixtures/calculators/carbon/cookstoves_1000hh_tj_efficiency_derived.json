@@ -1,0 +1,45 @@
+{
+  "id": "cookstoves_1000hh_tj_efficiency_derived",
+  "assessment_id": "carbon_model",
+  "description": "Validated cookstoves fixture using TJ+NCV path with project fuel derived from stove efficiencies. fNRB on both baseline and project. Year-1 annual ER only.",
+  "source": "hand_calculation_cookstoves_tj_ncv",
+  "source_type": "validated_independent",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e, not lifetime",
+    "fuel_basis": "baseline and project fuel consumption are per household/device",
+    "emission_factor_path": "tCO2/TJ + NCV (emission_factor_kgco2_per_kg zeroed)",
+    "project_fuel": "derived from baseline_efficiency / project_efficiency when project fuel not supplied",
+    "fnrb_application": "fNRB applied to both baseline and project (biomass-to-biomass)",
+    "leakage": "leakage_factor set to 0 for baseline validation fixture",
+    "adoption_usage": "adoption_rate and usage_rate both set to 1.0"
+  },
+  "adapter_input": {
+    "method_pack": "cookstoves",
+    "known_values": {
+      "method_pack": "cookstoves",
+      "devices_households": 1000,
+      "baseline_fuel_consumption_kg_yr": 1800,
+      "emission_factor_kgco2_per_kg": 0,
+      "emission_factor_tco2_per_tj": 112.0,
+      "baseline_ncv_mj_kg": 15.6,
+      "project_ncv_mj_kg": 15.6,
+      "baseline_efficiency": 0.10,
+      "project_efficiency": 0.30,
+      "fnrb": 0.70,
+      "leakage_factor": 0,
+      "usage_rate": 1.0,
+      "adoption_rate": 1.0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 2201.472, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 733.824, "pct_tolerance": 0.00001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 1467.648, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}

@@ -176,6 +176,8 @@ PROJECT_FUEL_OPTIONS_SWITCH = ["lpg", "biogas", "ethanol"]
 WATER_TECH_OPTIONS = ["ceramic_filter", "biosand_filter", "chlorination", "uv_treatment", "boiling_with_improved_stove"]
 BASELINE_STOVE_OPTIONS = ["three_stone_fire", "conventional_stove", "improved_cookstove"]
 RENEWABLE_TECH_OPTIONS = ["solar_pv", "wind", "small_hydro", "geothermal"]
+GENERATION_MODEL_OPTIONS = ["grid_export", "end_use_displacement"]
+DISPLACEMENT_MODE_OPTIONS = ["kerosene_liters", "pv_kwh"]
 BASELINE_LAMP_OPTIONS = ["incandescent", "cfl", "halogen"]
 PROJECT_LAMP_OPTIONS = ["led", "cfl"]
 LIVESTOCK_OPTIONS = ["dairy_cattle", "other_cattle", "swine", "poultry", "buffalo", "sheep", "goats"]
@@ -215,13 +217,29 @@ LIVESTOCK_EF_CH4: dict[str, float] = {
 GWP_CH4_AR5 = 28.0
 
 
+VALID_METHOD_PACKS = frozenset(
+    {
+        "cookstoves",
+        "fuel_switch",
+        "safe_water",
+        "grid_renewable",
+        "solar_home",
+        "biodigester",
+        "efficient_lighting",
+    }
+)
+
+
+def is_valid_method_pack(method_pack: str | None) -> bool:
+    if not method_pack:
+        return False
+    key = method_pack.lower().replace(" ", "_").replace("-", "_")
+    return key in VALID_METHOD_PACKS
+
+
 def _resolve_pack(method_pack: str | None) -> str:
     key = (method_pack or "").lower().replace(" ", "_").replace("-", "_")
-    valid = {
-        "cookstoves", "fuel_switch", "safe_water",
-        "grid_renewable", "solar_home", "biodigester", "efficient_lighting",
-    }
-    return key if key in valid else "cookstoves"
+    return key if key in VALID_METHOD_PACKS else "cookstoves"
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +266,22 @@ class CarbonEngine:
         if inp is None or inp.value is None:
             return fallback
         return str(inp.value)
+
+    @staticmethod
+    def _normalize_generation_model(raw: str) -> str:
+        key = raw.lower().replace(" ", "_").replace("-", "_")
+        if key in {"grid_export", "export", "grid"}:
+            return "grid_export"
+        if key in {"end_use_displacement", "end_use", "end_use_displaced"}:
+            return "end_use_displacement"
+        return "grid_export"
+
+    @staticmethod
+    def _normalize_displacement_mode(raw: str) -> str:
+        key = raw.lower().replace(" ", "_").replace("-", "_")
+        if key in {"pv_kwh", "pv", "kwh"}:
+            return "pv_kwh"
+        return "kerosene_liters"
 
     @staticmethod
     def _build_result(
@@ -458,7 +492,7 @@ class CarbonEngine:
 
             q_y = active_people * water_per_person_day * operational_days * usage_rate
             yr_bl = ef_b_tco2_per_litre * behaviour_factor * q_y * water_quality_modifier
-            yr_pj = pe_electricity * yr_adopt
+            yr_pj = pe_electricity
             yr_lk = leakage_factor * max(yr_bl - yr_pj, 0)
             yr_net = yr_bl - yr_pj - yr_lk
 
@@ -468,13 +502,17 @@ class CarbonEngine:
 
     # -------------------------------------------------------------------
     #  Grid Renewable Energy — AMS-I.D
-    #  ER_y = EGPJ_y × EF_grid × (1 + TD_losses)
-    #  EGPJ_y = capacity_kW × CF × 8760 × (1−aux) × (1−degradation)^(y−1) / 1000  (MWh)
+    #  ER_y = EGPJ_y × EF_grid   (grid_export)
+    #  ER_y = EGPJ_y × EF_grid × (1 + TD)   (end_use_displacement only)
     # -------------------------------------------------------------------
 
     @staticmethod
     def _calculate_grid_renewable(inputs: dict[str, CarbonInput]) -> CarbonResult:
         _v = CarbonEngine._val
+
+        generation_model = CarbonEngine._normalize_generation_model(
+            CarbonEngine._str(inputs, "generation_model", "grid_export")
+        )
 
         capacity_kw = _v(inputs, "installed_capacity_kw")
         cf = _v(inputs, "capacity_factor", 0.18)
@@ -494,7 +532,10 @@ class CarbonEngine:
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             gen_mwh = capacity_kw * cf * 8760 * (1 - aux) * ((1 - degradation) ** (yr - 1)) / 1000
-            yr_bl = gen_mwh * grid_ef * (1 + td_losses)
+            if generation_model == "end_use_displacement":
+                yr_bl = gen_mwh * grid_ef * (1 + td_losses)
+            else:
+                yr_bl = gen_mwh * grid_ef
             yr_pj = 0.0
             yr_lk = leakage_factor * yr_bl
             schedule.append(ERScheduleRow(yr, 1, yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
@@ -514,14 +555,18 @@ class CarbonEngine:
     def _calculate_solar_home(inputs: dict[str, CarbonInput]) -> CarbonResult:
         _v = CarbonEngine._val
 
+        displacement_mode = CarbonEngine._normalize_displacement_mode(
+            CarbonEngine._str(inputs, "displacement_mode", "kerosene_liters")
+        )
+
         num_systems = _v(inputs, "num_systems")
         system_wp = _v(inputs, "system_capacity_wp", 50)
         peak_sun = _v(inputs, "peak_sun_hours", 4.5)
         sys_eff = _v(inputs, "system_efficiency", 0.70)
-        degradation = _v(inputs, "annual_degradation", 0.01)
         usage_rate = _v(inputs, "usage_rate", 1.0)
         bl_fuel_l_yr = _v(inputs, "baseline_fuel_consumption_l_yr", 0.0)
         bl_fuel_ef = _v(inputs, "baseline_fuel_ef_tco2_per_litre", 0.00249)
+        displaced_ef_kwh = _v(inputs, "displaced_ef_tco2_per_kwh", 0.001)
         leakage_factor = _v(inputs, "leakage_factor", 0.0)
         crediting_years = int(_v(inputs, "crediting_period_years", 10))
 
@@ -531,12 +576,13 @@ class CarbonEngine:
         assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
-            deg_factor = (1 - degradation) ** (yr - 1)
-            if bl_fuel_l_yr > 0:
-                yr_bl = num_systems * usage_rate * bl_fuel_l_yr * bl_fuel_ef * deg_factor
-            else:
+            if displacement_mode == "pv_kwh":
                 kwh_per_system = system_wp * peak_sun * 365 * sys_eff / 1000
-                yr_bl = num_systems * usage_rate * kwh_per_system * bl_fuel_ef * deg_factor
+                yr_bl = num_systems * usage_rate * kwh_per_system * displaced_ef_kwh
+            else:
+                if bl_fuel_l_yr <= 0:
+                    raise ValueError("Baseline fuel consumption (L/yr per system) required for kerosene displacement")
+                yr_bl = num_systems * usage_rate * bl_fuel_l_yr * bl_fuel_ef
             yr_pj = 0.0
             yr_lk = leakage_factor * yr_bl
             schedule.append(ERScheduleRow(yr, int(num_systems), yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
@@ -919,12 +965,13 @@ class CarbonEngine:
         return [
             ("method_pack", "Project Type", pack, "", "general", "general", "text", None),
             ("renewable_tech", "Renewable Technology", "solar_pv", "", "project", "project", "select", RENEWABLE_TECH_OPTIONS),
+            ("generation_model", "Generation Model", "grid_export", "", "project", "project", "select", GENERATION_MODEL_OPTIONS),
             ("installed_capacity_kw", "Installed Capacity", None, "kW", "activity", "general", "number", None),
             ("capacity_factor", "Capacity Factor", 0.18, "", "activity", "general", "number", None),
             ("annual_degradation", "Annual Degradation", 0.005, "", "activity", "general", "number", None),
             ("grid_emission_factor", "Grid Emission Factor", None, "tCO₂/MWh", "baseline", "baseline", "number", None),
             ("auxiliary_consumption_pct", "Auxiliary / Parasitic Consumption", 0.0, "", "project", "project", "number", None),
-            ("td_losses_pct", "T&D Losses (Avoided)", 0.0, "", "baseline", "baseline", "number", None),
+            ("td_losses_pct", "T&D Losses (end-use displacement only)", 0.0, "", "baseline", "baseline", "number", None),
             ("leakage_factor", "Leakage Factor", 0.0, "", "leakage", "leakage", "number", None),
             ("crediting_period_years", "Crediting Period", 10, "years", "general", "general", "number", None),
         ]
@@ -938,14 +985,15 @@ class CarbonEngine:
         return [
             ("method_pack", "Project Type", pack, "", "general", "general", "text", None),
             ("num_systems", "Number of SHS Deployed", None, "units", "activity", "general", "number", None),
+            ("displacement_mode", "Displacement Mode", "kerosene_liters", "", "project", "project", "select", DISPLACEMENT_MODE_OPTIONS),
             ("system_capacity_wp", "System Capacity", 50, "Wp", "activity", "general", "number", None),
             ("peak_sun_hours", "Peak Sun Hours", 4.5, "h/day", "activity", "general", "number", None),
             ("system_efficiency", "System Efficiency (battery+inverter)", 0.70, "", "activity", "general", "number", None),
-            ("annual_degradation", "Annual Degradation", 0.01, "", "activity", "general", "number", None),
             ("usage_rate", "Usage Rate", 1.0, "", "activity", "general", "number", None),
             ("baseline_fuel_type", "Baseline Fuel Displaced", "kerosene", "", "baseline", "baseline", "select", ["kerosene", "diesel"]),
-            ("baseline_fuel_consumption_l_yr", "Baseline Fuel Consumption", None, "L/yr per HH", "baseline", "baseline", "number", None),
+            ("baseline_fuel_consumption_l_yr", "Baseline Fuel Consumption", None, "L/yr per system", "baseline", "baseline", "number", None),
             ("baseline_fuel_ef_tco2_per_litre", "Baseline Fuel EF", 0.00249, "tCO₂/L", "baseline", "baseline", "number", None),
+            ("displaced_ef_tco2_per_kwh", "Displaced Grid/Fuel EF", 0.001, "tCO₂/kWh", "baseline", "baseline", "number", None),
             ("leakage_factor", "Leakage Factor", 0.0, "", "leakage", "leakage", "number", None),
             ("crediting_period_years", "Crediting Period", 10, "years", "general", "general", "number", None),
         ]
@@ -970,7 +1018,7 @@ class CarbonEngine:
             ("uf_b", "Model Uncertainty Factor (UF_b)", 0.89, "", "baseline", "baseline", "number", None),
             # Thermal (fuel displacement)
             ("baseline_fuel_type", "Baseline Fuel (cooking)", "wood", "", "baseline", "baseline", "select", BASELINE_FUEL_OPTIONS),
-            ("baseline_fuel_consumption_kg_yr", "Baseline Fuel per HH", None, "kg/yr", "baseline", "baseline", "number", None),
+            ("baseline_fuel_consumption_kg_yr", "Baseline Fuel per Digester", None, "kg/yr per digester", "baseline", "baseline", "number", None),
             ("baseline_ncv_mj_kg", "Baseline NCV", 15.6, "MJ/kg", "baseline", "baseline", "number", None),
             ("bl_ef_co2_tco2_per_tj", "Baseline CO₂ EF", 112.0, "tCO₂/TJ", "baseline", "baseline", "number", None),
             ("bl_ef_nonco2_tco2e_per_tj", "Baseline Non-CO₂ EF", 9.46, "tCO₂e/TJ", "baseline", "baseline", "number", None),

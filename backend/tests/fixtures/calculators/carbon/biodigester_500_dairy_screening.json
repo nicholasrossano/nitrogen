@@ -1,0 +1,43 @@
+{
+  "id": "biodigester_500_dairy_screening",
+  "assessment_id": "carbon_model",
+  "description": "500 digesters; dairy cattle screening estimate; AWMS + thermal displacement; year-1 annual ER",
+  "source": "hand_calculation_biodigester_screening_estimate",
+  "source_type": "validated_internal_methodology",
+  "methodology_notes": {
+    "headline_metric": "net_er_tco2e is year-1 annual tCO2e",
+    "methodology_level": "screening_estimate",
+    "limitations": "No volatile-solids model; Tier-1 AWMS proxy; 10% physical methane leakage hardcoded; num_animals per digester; thermal fuel per digester",
+    "gwp": "GWP_CH4_AR5 = 28",
+    "leakage": "leakage_thermal_factor set to 0"
+  },
+  "adapter_input": {
+    "method_pack": "biodigester",
+    "known_values": {
+      "method_pack": "biodigester",
+      "num_digesters": 500,
+      "num_animals": 4,
+      "livestock_type": "dairy_cattle",
+      "usage_rate": 0.90,
+      "adoption_rate": 1.0,
+      "uf_b": 0.89,
+      "baseline_fuel_consumption_kg_yr": 800,
+      "baseline_ncv_mj_kg": 15.6,
+      "bl_ef_co2_tco2_per_tj": 112.0,
+      "bl_ef_nonco2_tco2e_per_tj": 9.46,
+      "fnrb": 0.70,
+      "leakage_thermal_factor": 0,
+      "crediting_period_years": 10
+    }
+  },
+  "expect": {
+    "computable": true,
+    "result": {
+      "baseline_emissions_tco2e": { "value": 2701.3344, "pct_tolerance": 0.00001 },
+      "project_emissions_tco2e": { "value": 268.8, "pct_tolerance": 0.00001 },
+      "leakage_tco2e": { "value": 0.0, "abs_tolerance": 0.000001 },
+      "net_er_tco2e": { "value": 2432.5344, "pct_tolerance": 0.00001 },
+      "period": "annual"
+    }
+  }
+}
