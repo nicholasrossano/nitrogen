@@ -25,7 +25,7 @@ import { ShellPageHeader } from '@/components/ui';
 import { useShellNav } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
 import { PageLoader } from '@/components/ui/PageLoader';
-import { api, type Assumption, type AssessmentInstance } from '@/lib/api';
+import { api, type Assumption, type AssessmentInstance, type FieldContext } from '@/lib/api';
 import { discardEphemeralAssessmentInstance } from '@/lib/assessmentEngagement';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { DIAGRAM_ACCENT_COLOR } from '@/lib/diagramAccent';
@@ -90,6 +90,14 @@ function ProjectPageContent() {
     requestId: string;
     content: string;
     toolHint?: string;
+  } | null>(null);
+  const [pendingAssessmentsAutoSend, setPendingAssessmentsAutoSend] = useState<{
+    requestId: string;
+    content: string;
+    toolHint?: string;
+    fieldContext?: FieldContext | null;
+    modelInputsContext?: string | null;
+    assumptionId?: string | null;
   } | null>(null);
   const [researchLandingResetSignal, setResearchLandingResetSignal] = useState(0);
   const [frameworkAssessmentInstances, setFrameworkAssessmentInstances] = useState<AssessmentInstance[]>([]);
@@ -345,6 +353,21 @@ function ProjectPageContent() {
       if (!chatAlreadyOpen) {
         setPanelOpen('assessments', 'chat', true);
       }
+
+      const fieldContext = detail.fieldContext as FieldContext | null | undefined;
+      const text = typeof detail.text === 'string' ? detail.text : '';
+      if (fieldContext?.field_name && text) {
+        setPendingAssessmentsAutoSend({
+          requestId: `assessments-investigate-${fieldContext.field_name}-${Date.now()}`,
+          content: text,
+          toolHint: detail.toolHint ?? fieldContext.assessment_id ?? undefined,
+          fieldContext,
+          modelInputsContext: detail.modelInputsContext ?? null,
+          assumptionId: fieldContext.assumption_id ?? null,
+        });
+        return;
+      }
+
       window.setTimeout(() => {
         window.dispatchEvent(
           new CustomEvent('nitrogen:draft', {
@@ -1075,6 +1098,8 @@ function ProjectPageContent() {
           researchMode={false}
           sessionStorageKey={sideChatTabsStorageKey}
           pendingChatToOpen={pendingChatToOpen}
+          pendingAutoSend={pendingAssessmentsAutoSend}
+          onPendingAutoSendHandled={() => setPendingAssessmentsAutoSend(null)}
           activeAssessmentContext={activeAssessmentContext}
           activeEditorContext={activeEditorContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
