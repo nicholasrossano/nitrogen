@@ -2,10 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies (LibreOffice for iWork -> Office conversion)
+# Install system dependencies:
+# - LibreOffice: iWork -> Office conversion
+# - default-jre: required by opendataloader-pdf (Java CLI) for PDF extraction;
+#   without it the parser falls back to pdfplumber.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    default-jre \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \

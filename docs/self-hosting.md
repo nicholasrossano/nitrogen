@@ -8,6 +8,8 @@ There are three distinct ways to run Nitrogen. Pick the one that matches your si
 
 **Prerequisites:** Python 3.12+, Node 22+, PostgreSQL with pgvector (or a [Neon](https://neon.tech) cloud DB), OpenAI API key, Firebase project.
 
+> **Optional — Java 11+ (JRE):** PDF evidence parsing uses [OpenDataLoader PDF](https://github.com/opendataloader-project/opendataloader-pdf) for layout-aware extraction (tables, reading order, headings). It needs a JRE on `PATH` (`java -version`; install via `brew install --cask temurin`, `sudo apt install default-jre`, or [Adoptium](https://adoptium.net/)). If Java is absent the parser automatically falls back to `pdfplumber`, so the app still runs — you just get lower-fidelity PDF text. The Docker image already bundles a JRE.
+
 ```bash
 # First time only
 cp .env.example .env
@@ -98,6 +100,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Or use the provided `Dockerfile` and `railway.toml`.
+
+> **PDF parsing (Java):** the provided `Dockerfile` installs a JRE, so Docker/Railway hosts get high-fidelity PDF extraction out of the box. If you run the backend **natively** (bare `uvicorn`, no container), install Java 11+ (`java -version`) to enable it; otherwise PDF parsing falls back to `pdfplumber` automatically. Set `PDF_USE_OPENDATALOADER=false` to force the legacy parser.
 
 ### Frontend (any Node / static host)
 
