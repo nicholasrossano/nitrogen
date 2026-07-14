@@ -1,0 +1,28 @@
+{
+  "id": "negative_theme_only",
+  "source_type": "authored_labeled",
+  "description": "Themes without concrete parameter values must extract nothing.",
+  "input": {
+    "materials": [
+      {
+        "filename": "overview.txt",
+        "content_text": "This project focuses on rural electrification, community ownership models, and clean cooking transitions across East Africa. Stakeholders include NGOs, utilities, and donors."
+      }
+    ]
+  },
+  "recorded_llm": {
+    "assumptions": [
+      {
+        "key": "operator_model",
+        "label": "Operator model",
+        "value": "community ownership",
+        "value_type": "string",
+        "source_quote": "community ownership models"
+      }
+    ]
+  },
+  "expect": {
+    "assumptions": [],
+    "rejected": ["community ownership"]
+  }
+}

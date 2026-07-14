@@ -19,7 +19,6 @@ from app.models.project_status import (
     ProjectStatusOverride,
     ProjectStatusResult,
 )
-from app.models.finding import Finding
 from app.models.workspace_knowledge import (
     WorkspaceKnowledgeBank,
     WorkspaceKnowledgeBankStatus,
@@ -29,7 +28,6 @@ from app.models.workspace_knowledge import (
 __all__ = [
     "Project",
     "ProjectStage",
-    "Finding",
     "EvidenceDoc",
     "EvidenceChunk",
     "EvidenceDocStatus",

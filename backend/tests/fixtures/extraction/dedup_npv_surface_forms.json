@@ -1,0 +1,16 @@
+{
+  "id": "dedup_npv_surface_forms",
+  "source_type": "dedup",
+  "description": "Close NPV label forms + misspelling should collapse under fuzzy matching.",
+  "input": {
+    "surface_forms": [
+      { "key": "net_present_value", "label": "Net Present Value", "value": 95000, "unit": "USD" },
+      { "key": "net_present_value", "label": "net present value", "value": 95000, "unit": "USD" },
+      { "key": "net_present_vaule", "label": "Net Present Vaule", "value": 95000, "unit": "USD" }
+    ]
+  },
+  "expect": {
+    "canonical_count": 1,
+    "aliases_include": ["Net Present Value", "net present value", "Net Present Vaule"]
+  }
+}
