@@ -36,19 +36,6 @@ export interface Project {
   owner_email?: string | null;
 }
 
-export interface Finding {
-  id: string;
-  project_id: string;
-  body: string;
-  sources: Record<string, unknown>[] | null;
-  promoted_by: string;
-  source_chat_message_id: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  promoter_email?: string | null;
-}
-
 export interface AssessmentInstance {
   id: string;
   assessment_id: string;
@@ -375,6 +362,8 @@ export type AssumptionSourceType =
   | 'extraction'
   | 'user_input'
   | 'assessment'
+  | 'assessment_approval'
+  | 'chat_approval'
   | 'default'
   | 'missing_placeholder'
   | 'model_candidate'
@@ -390,6 +379,7 @@ export interface Assumption {
   value_type: 'number' | 'string' | 'boolean' | 'percent' | 'currency' | 'text';
   source_type: AssumptionSourceType;
   source_reference: Record<string, any> | null;
+  aliases?: string[] | null;
   status: AssumptionStatus;
   used_in_assessments: string[];
   notes: string | null;
