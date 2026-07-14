@@ -171,7 +171,7 @@ def test_extraction_quality_gate_accepts_explicit_string_assertion():
         "source_quote": "The panel supplier is XYZ Supplier for the first deployment phase.",
     }
 
-    assert assumptions_service._passes_extraction_quality_gate(raw, definition) is True
+    assert assumptions_service._passes_extraction_quality_gate(raw, definition=definition) is True
 
 
 def test_extraction_quality_gate_rejects_bare_entity_mention_for_string():
@@ -181,7 +181,7 @@ def test_extraction_quality_gate_rejects_bare_entity_mention_for_string():
         "source_quote": "OpenStreetMap Malawi Community",
     }
 
-    assert assumptions_service._passes_extraction_quality_gate(raw, definition) is False
+    assert assumptions_service._passes_extraction_quality_gate(raw, definition=definition) is False
 
 
 def test_extraction_quality_gate_rejects_numeric_without_numeric_evidence():
@@ -191,7 +191,7 @@ def test_extraction_quality_gate_rejects_numeric_without_numeric_evidence():
         "source_quote": "The financing assumptions are still under discussion.",
     }
 
-    assert assumptions_service._passes_extraction_quality_gate(raw, definition) is False
+    assert assumptions_service._passes_extraction_quality_gate(raw, definition=definition) is False
 
 
 @pytest.mark.asyncio
@@ -455,3 +455,89 @@ async def test_extract_assumptions_from_cited_chat_sources_persists_relevant_llm
     assert touched[0].key == "electricity_access_total"
     assert touched[0].value == 15.6
     assert touched[0].source_reference["relevance_reason"] == "The cited fact establishes a project baseline."
+
+
+@pytest.mark.asyncio
+async def test_extract_assumptions_from_assessment_promotes_field_rows(monkeypatch: pytest.MonkeyPatch):
+    from app.services.assumptions import extract_assumptions_from_assessment
+
+    project_id = uuid4()
+    project = SimpleNamespace(id=project_id)
+    inst = SimpleNamespace(
+        id=uuid4(),
+        assessment_id="lcoe_model",
+        workflow_state={
+            "stages": {
+                "inputs": {
+                    "items": [
+                        {
+                            "id": "1",
+                            "content": {
+                                "field_name": "total_capex",
+                                "variable": "Total CAPEX",
+                                "value": 180000,
+                                "unit": "USD",
+                            },
+                        }
+                    ]
+                }
+            },
+            "widget_state": {
+                "inputs": {
+                    "discount_rate": {"value": 0.08, "unit": "", "variable": "Discount rate"}
+                }
+            },
+        },
+    )
+
+    calls = []
+
+    async def fake_upsert(_db, **kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(id=uuid4(), **kwargs), True
+
+    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert)
+
+    touched = await extract_assumptions_from_assessment(
+        SimpleNamespace(),
+        project,
+        assessment_instance=inst,
+        actor=AssumptionActor(user_id="u1", email="a@b.com"),
+    )
+
+    assert len(touched) == 2
+    assert {c["source_type"] for c in calls} == {"assessment_approval"}
+    assert {c["key"] for c in calls} == {"total_capex", "discount_rate"}
+    assert all(c["status"] == "validated" for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_promote_chat_value_to_assumption_sets_chat_approval(monkeypatch: pytest.MonkeyPatch):
+    from app.services.assumptions import promote_chat_value_to_assumption
+
+    project = SimpleNamespace(id=uuid4())
+    captured = {}
+
+    async def fake_upsert(_db, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(id=uuid4(), **kwargs), True
+
+    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert)
+
+    result = await promote_chat_value_to_assumption(
+        SimpleNamespace(),
+        project,
+        key="comparable_project_npv",
+        value=95000,
+        label="Comparable project NPV",
+        unit="USD",
+        chat_id=uuid4(),
+        chat_message_id=uuid4(),
+        quote="NPV of $95,000",
+        actor=AssumptionActor(user_id="u1", email="a@b.com"),
+    )
+
+    assert result is not None
+    assert captured["source_type"] == "chat_approval"
+    assert captured["status"] == "validated"
+    assert captured["source_reference"]["quote"] == "NPV of $95,000"

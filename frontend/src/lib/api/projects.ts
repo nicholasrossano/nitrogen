@@ -8,7 +8,6 @@ import {
 } from './client';
 import type {
   Project,
-  Finding,
   AssessmentInstance,
   AssessmentDefinition,
   ProjectHealthStatus,
@@ -40,17 +39,6 @@ export const projectsApi = {
     fetchApi<Project>('/api/v1/projects', {
       method: 'POST',
       body: JSON.stringify({ title, workspace_id: workspaceId ?? undefined }),
-    }),
-  listProjectFindings: (projectId: string) =>
-    fetchApi<{ findings: Finding[] }>(`/api/v1/projects/${projectId}/findings`),
-  promoteFinding: (payload: {
-    chat_message_id: string;
-    project_id: string;
-    body?: string;
-  }) =>
-    fetchApi<Finding>('/api/v1/findings/promote', {
-      method: 'POST',
-      body: JSON.stringify(payload),
     }),
   getProject: (id: string) =>
     fetchApi<Project>(`/api/v1/projects/${id}`),

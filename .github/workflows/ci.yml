@@ -80,6 +80,12 @@ jobs:
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           OPENAI_API_KEY: "test-key-not-real"
           FIREBASE_PROJECT_ID: "test-project"
+      - name: Extraction golden tests
+        run: pytest tests/extraction/ -q
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          OPENAI_API_KEY: "test-key-not-real"
+          FIREBASE_PROJECT_ID: "test-project"
       - name: MCP smoke tests (stdio + mounted HTTP)
         run: pytest tests/mcp/test_mcp_transport.py -q
         env:

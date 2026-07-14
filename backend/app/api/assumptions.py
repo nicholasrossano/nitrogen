@@ -14,6 +14,7 @@ from app.schemas.assumption import (
     AssumptionCommentCreate,
     AssumptionCommentResponse,
     AssumptionCreate,
+    AssumptionFromChatRequest,
     AssumptionRefreshResponse,
     AssumptionResolveResponse,
     AssumptionResponse,
@@ -28,6 +29,7 @@ from app.services.assumptions import (
     get_assumption,
     list_assumption_comments,
     list_assumptions,
+    promote_chat_value_to_assumption,
     update_assumption,
     upsert_assumption,
     resolve_assumption_for_assessment_field,
@@ -99,6 +101,40 @@ async def resolve_assumption(
         assessment_instance_id=assessment_instance_id,
     )
     return {"found": assumption is not None, "assumption": assumption}
+
+
+@router.post(
+    "/projects/{project_id}/assumptions/from-chat",
+    response_model=AssumptionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_assumption_from_chat(
+    project_id: str,
+    data: AssumptionFromChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Scaffold: promote a chat-approved value into the shared assumption pool."""
+    initiative = await require_project_editor(db, project_id, user)
+    assumption = await promote_chat_value_to_assumption(
+        db,
+        initiative,
+        key=data.key,
+        value=data.value,
+        label=data.label,
+        unit=data.unit,
+        value_type=data.value_type,
+        chat_id=data.chat_id,
+        chat_message_id=data.chat_message_id,
+        quote=data.quote,
+        actor=_actor_from_user(user),
+    )
+    if assumption is None:
+        raise HTTPException(status_code=400, detail="Could not promote chat value to assumption")
+    initiative.touch()
+    await db.commit()
+    await db.refresh(assumption)
+    return assumption
 
 
 @router.post(
