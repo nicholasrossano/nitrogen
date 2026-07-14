@@ -1,0 +1,91 @@
+{
+  "id": "feasibility_memo_solar_kenya",
+  "source_type": "authored_labeled",
+  "description": "Multi-variable memo with known + open-vocab comparable NPV.",
+  "input": {
+    "materials": [
+      {
+        "filename": "memo.txt",
+        "content_text": "The proposed 50 kW solar mini-grid in Turkana, Kenya has a total capital cost of USD 180,000 and annual O&M of $12,000. We assume an 8% discount rate over a 20-year life. Baseline energy source is a diesel generator. A comparable project in Marsabit reached an NPV of $95,000."
+      }
+    ]
+  },
+  "recorded_llm": {
+    "assumptions": [
+      {
+        "key": "system_size_kw",
+        "label": "System size",
+        "value": 50,
+        "unit": "kW",
+        "value_type": "number",
+        "source_quote": "The proposed 50 kW solar mini-grid in Turkana, Kenya"
+      },
+      {
+        "key": "total_capex",
+        "label": "Total CAPEX",
+        "value": 180000,
+        "unit": "USD",
+        "value_type": "currency",
+        "source_quote": "total capital cost of USD 180,000"
+      },
+      {
+        "key": "annual_opex",
+        "label": "Annual OPEX",
+        "value": 12000,
+        "unit": "USD",
+        "value_type": "currency",
+        "source_quote": "annual O&M of $12,000"
+      },
+      {
+        "key": "discount_rate",
+        "label": "Discount rate",
+        "value": 8,
+        "unit": "%",
+        "value_type": "percent",
+        "source_quote": "We assume an 8% discount rate"
+      },
+      {
+        "key": "project_life_years",
+        "label": "Project lifetime",
+        "value": 20,
+        "unit": "years",
+        "value_type": "number",
+        "source_quote": "over a 20-year life"
+      },
+      {
+        "key": "baseline_energy_source",
+        "label": "Baseline energy source",
+        "value": "diesel generator",
+        "value_type": "string",
+        "source_quote": "Baseline energy source is a diesel generator"
+      },
+      {
+        "key": "comparable_project_npv",
+        "label": "Comparable project NPV",
+        "value": 95000,
+        "unit": "USD",
+        "value_type": "currency",
+        "source_quote": "A comparable project in Marsabit reached an NPV of $95,000"
+      },
+      {
+        "key": "bogus_entity",
+        "label": "Marsabit",
+        "value": "Marsabit",
+        "value_type": "string",
+        "source_quote": "Marsabit"
+      }
+    ]
+  },
+  "expect": {
+    "assumptions": [
+      { "label": "System size", "key": "system_size_kw", "value": 50, "quote_contains": "50 kW" },
+      { "label": "Total CAPEX", "key": "total_capex", "value": 180000, "quote_contains": "180,000" },
+      { "label": "Annual OPEX", "key": "annual_opex", "value": 12000, "quote_contains": "12,000" },
+      { "label": "Discount rate", "key": "discount_rate", "value": 8, "quote_contains": "8%" },
+      { "label": "Project lifetime", "key": "project_life_years", "value": 20, "quote_contains": "20-year" },
+      { "label": "Baseline energy source", "key": "baseline_energy_source", "value": "diesel generator", "quote_contains": "diesel generator" },
+      { "label": "Comparable project NPV", "key": "comparable_project_npv", "value": 95000, "quote_contains": "NPV of $95,000" }
+    ],
+    "rejected": ["Marsabit"]
+  }
+}
