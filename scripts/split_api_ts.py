@@ -12,7 +12,7 @@ OUT_DIR = ROOT / "frontend/src/lib/api"
 SOURCE = Path("/tmp/original_api.ts")
 
 PROJECT_METHODS = {
-    "listProjects", "createProject", "listProjectFindings", "promoteFinding", "getProject",
+    "listProjects", "createProject", "getProject",
     "listAssessmentInstances", "createAssessmentInstance", "deleteAssessmentInstance",
     "restoreAssessmentInstance", "permanentlyDeleteAssessmentInstance", "updateProject",
     "generateProjectOverview", "deleteProject", "permanentlyDeleteProject", "restoreProject",

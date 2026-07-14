@@ -56,8 +56,6 @@ class FakeDbSession:
             obj.stage_1_complete = bool(getattr(obj, "stage_1_complete", False))
             obj.evidence_ready = bool(getattr(obj, "evidence_ready", False))
             obj.archived = bool(getattr(obj, "archived", False))
-        if model_name == "Finding" and getattr(obj, "status", None) is None:
-            obj.status = "published"
         self.added.append(obj)
 
     async def flush(self):

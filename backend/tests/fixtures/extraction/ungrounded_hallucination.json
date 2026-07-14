@@ -1,0 +1,29 @@
+{
+  "id": "ungrounded_hallucination",
+  "source_type": "authored_labeled",
+  "description": "Values whose quotes are not in the source text must be dropped.",
+  "input": {
+    "materials": [
+      {
+        "filename": "brief.txt",
+        "content_text": "The team is still gathering capital cost quotes for the Kenya pilot."
+      }
+    ]
+  },
+  "recorded_llm": {
+    "assumptions": [
+      {
+        "key": "total_capex",
+        "label": "Total CAPEX",
+        "value": 250000,
+        "unit": "USD",
+        "value_type": "currency",
+        "source_quote": "Total CAPEX is USD 250,000"
+      }
+    ]
+  },
+  "expect": {
+    "assumptions": [],
+    "rejected": ["Total CAPEX"]
+  }
+}

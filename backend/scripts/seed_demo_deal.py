@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
-from app.models.finding import Finding
 from app.models.project import Project
 from app.models.user import User
 from app.services.workspaces import ensure_company_workspace
@@ -58,19 +57,6 @@ async def seed(session: AsyncSession) -> None:
         evidence_ready=True,
     )
     session.add(project)
-
-    session.add(
-        Finding(
-            project_id=project.id,
-            body=(
-                "Initial management deck claims 85% capacity factor on contracted C&I sites; "
-                "utility interconnection queue positions average 18 months in target ISOs. "
-                "Recommend validating offtake counterparty credit and curtailment clauses."
-            ),
-            promoted_by=DEMO_USER_ID,
-            sources=[],
-        )
-    )
 
     await session.commit()
     print(f"Seeded demo project {project.name} ({project.id}) in workspace {workspace.id}")
