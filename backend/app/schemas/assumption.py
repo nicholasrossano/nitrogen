@@ -10,6 +10,8 @@ AssumptionSourceType = Literal[
     "extraction",
     "user_input",
     "assessment",
+    "assessment_approval",
+    "chat_approval",
     "default",
     "missing_placeholder",
     "model_candidate",
@@ -28,6 +30,10 @@ class AssumptionBase(BaseModel):
     source_reference: dict[str, Any] | None = Field(
         default=None,
         description="Structured provenance such as material ids, assessment/stage fields, or extraction metadata.",
+    )
+    aliases: list[str] | None = Field(
+        default=None,
+        description="Observed surface forms merged into this canonical variable.",
     )
     status: AssumptionStatus = Field(description="Review lifecycle status.")
     used_in_assessments: list[str] = Field(default_factory=list, description="Assessment ids that use this assumption.")
@@ -107,6 +113,17 @@ class AssumptionResolveResponse(BaseModel):
 
 class AssumptionCommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=4000, description="Comment body.")
+
+
+class AssumptionFromChatRequest(BaseModel):
+    key: str = Field(description="Assumption key or label to promote.")
+    value: Any = Field(description="Approved value from chat.")
+    label: str | None = Field(default=None, description="Optional human label.")
+    unit: str | None = Field(default=None, description="Optional unit.")
+    value_type: AssumptionValueType | None = Field(default=None, description="Optional value type.")
+    chat_id: UUID | None = Field(default=None, description="Source chat id.")
+    chat_message_id: UUID | None = Field(default=None, description="Source chat message id.")
+    quote: str | None = Field(default=None, description="Optional supporting quote.")
 
 
 class AssumptionCommentResponse(BaseModel):

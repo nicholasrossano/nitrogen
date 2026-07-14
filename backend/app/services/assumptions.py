@@ -445,7 +445,12 @@ def _value_is_missing(value: Any) -> bool:
     return normalize_missing_value(value) is None
 
 
-def _passes_extraction_quality_gate(raw: dict[str, Any], definition: AssumptionDefinition) -> bool:
+def _passes_extraction_quality_gate(
+    raw: dict[str, Any],
+    *,
+    value_type: str | None = None,
+    definition: AssumptionDefinition | None = None,
+) -> bool:
     quote = str(raw.get("source_quote") or "").strip()
     if not quote:
         return False
@@ -454,9 +459,11 @@ def _passes_extraction_quality_gate(raw: dict[str, Any], definition: AssumptionD
     if value is None:
         return False
 
+    resolved_type = value_type or (definition.value_type if definition else infer_assumption_value_type(value))
+
     # For numeric/currency/percent assumptions, insist on explicit quantitative
     # evidence in the source quote to avoid entity/theme leakage.
-    if definition.value_type in {"number", "percent", "currency"}:
+    if resolved_type in {"number", "percent", "currency"}:
         if not re.search(r"-?\d", quote):
             return False
 
@@ -468,6 +475,38 @@ def _passes_extraction_quality_gate(raw: dict[str, Any], definition: AssumptionD
             return False
 
     return True
+
+
+SOURCE_TRUST: dict[str, int] = {
+    "user_input": 4,
+    "chat_approval": 4,
+    "assessment_approval": 3,
+    "assessment": 3,
+    "promotion": 2,
+    "extraction": 1,
+    "model_candidate": 1,
+    "default": 0,
+    "missing_placeholder": 0,
+}
+
+
+def _source_trust(source_type: str | None) -> int:
+    return SOURCE_TRUST.get(str(source_type or ""), 1)
+
+
+EXTRACTION_FEEDBACK_SOURCES = {
+    "extraction",
+    "model_candidate",
+    "assessment_approval",
+    "promotion",
+}
+
+
+def _stamp_outcome(source_reference: dict | None, outcome: str) -> dict:
+    ref = dict(source_reference or {})
+    ref["outcome"] = outcome
+    ref["outcome_at"] = datetime.now(timezone.utc).isoformat()
+    return ref
 
 
 def infer_assumption_value_type(value: Any) -> str:
@@ -570,19 +609,19 @@ async def upsert_assumption(
     replace_validated: bool = False,
     allow_create: bool = True,
 ) -> tuple[Assumption | None, bool]:
+    from app.services.assumption_dedup import merge_alias_list, resolve_canonical_assumption
+
     normalized_key = normalize_assumption_key(key)
     definition = _definition_for_key(normalized_key)
-    result = await db.execute(
-        select(Assumption)
-        .where(
-            Assumption.project_id == project_id,
-            Assumption.key == normalized_key,
-            Assumption.status != "rejected",
-        )
-        .order_by(Assumption.updated_at.desc())
-        .limit(1)
+    resolved_label = label or (definition.label if definition else normalized_key.replace("_", " ").title())
+
+    existing = await resolve_canonical_assumption(
+        db,
+        project_id,
+        key=normalized_key,
+        label=resolved_label,
     )
-    existing = result.scalar_one_or_none()
+
     assessments = _coerce_assessments(used_in_assessments, definition)
     normalized_value = normalize_missing_value(value)
     normalized_status = normalize_assumption_status(status)
@@ -590,18 +629,47 @@ async def upsert_assumption(
         normalized_status = "missing"
     now = datetime.now(timezone.utc)
 
+    # Fresh extraction proposals start with outcome=pending for later human feedback.
+    if source_type in EXTRACTION_FEEDBACK_SOURCES and isinstance(source_reference, dict):
+        source_reference = {
+            **source_reference,
+            "outcome": source_reference.get("outcome") or "pending",
+        }
+
     if existing is None and not allow_create:
         return None, False
 
     if existing:
-        if existing.status == "validated" and not replace_validated and source_type in {"extraction", "model_candidate"}:
+        # Prefer under-merge: fold surface forms into aliases even when value is kept.
+        existing.aliases = merge_alias_list(
+            existing.aliases,
+            resolved_label,
+            key,
+            normalized_key.replace("_", " "),
+        )
+
+        incoming_trust = _source_trust(source_type)
+        existing_trust = _source_trust(existing.source_type)
+        protected = (
+            existing.status == "validated"
+            and not replace_validated
+            and source_type in {"extraction", "model_candidate"}
+        ) or (
+            not replace_validated
+            and incoming_trust < existing_trust
+            and existing.status in {"validated", "extracted", "assumed"}
+            and not _value_is_missing(existing.value)
+        )
+        if protected:
             existing.used_in_assessments = sorted(set(existing.used_in_assessments or []) | set(assessments))
             existing.updated_at = now
             return existing, False
-        existing.label = label or existing.label or (definition.label if definition else normalized_key.replace("_", " ").title())
+
+        existing.label = resolved_label or existing.label
+        # Never rewrite the canonical key on a fuzzy/alias merge.
         existing.value = normalized_value
         existing.unit = unit if unit is not None else (existing.unit or (definition.unit if definition else None))
-        existing.value_type = value_type or existing.value_type or (definition.value_type if definition else "string")
+        existing.value_type = value_type or existing.value_type or (definition.value_type if definition else infer_assumption_value_type(normalized_value))
         existing.source_type = source_type
         existing.source_reference = source_reference
         existing.status = normalized_status
@@ -614,13 +682,14 @@ async def upsert_assumption(
 
     assumption = Assumption(
         project_id=project_id,
-        key=normalized_key,
-        label=label or (definition.label if definition else normalized_key.replace("_", " ").title()),
+        key=definition.key if definition else normalized_key,
+        label=resolved_label,
         value=normalized_value,
         unit=unit if unit is not None else (definition.unit if definition else None),
-        value_type=value_type or (definition.value_type if definition else "string"),
+        value_type=value_type or (definition.value_type if definition else infer_assumption_value_type(normalized_value)),
         source_type=source_type,
         source_reference=source_reference,
+        aliases=merge_alias_list(None, resolved_label, key),
         status=normalized_status,
         used_in_assessments=assessments,
         created_by_user_id=_actor_user_id(actor),
@@ -652,6 +721,17 @@ async def update_assumption(
             if "status" not in updates or updates.get("status") != "missing":
                 updates["status"] = "missing"
 
+    value_changed = "value" in updates and updates.get("value") != assumption.value
+    status_changed = "status" in updates and updates.get("status") != assumption.status
+    if (
+        (value_changed or status_changed)
+        and assumption.source_type in EXTRACTION_FEEDBACK_SOURCES
+    ):
+        updates["source_reference"] = _stamp_outcome(
+            updates.get("source_reference", assumption.source_reference),
+            "edited",
+        )
+
     for field in (
         "label",
         "value",
@@ -662,6 +742,7 @@ async def update_assumption(
         "status",
         "used_in_assessments",
         "notes",
+        "aliases",
     ):
         if field in updates:
             setattr(assumption, field, updates[field])
@@ -676,6 +757,10 @@ async def delete_assumption(
     db: AsyncSession,
     assumption: Assumption,
 ) -> None:
+    # Light feedback: stamp before hard delete so logs still see the last state if needed.
+    if assumption.source_type in EXTRACTION_FEEDBACK_SOURCES:
+        assumption.source_reference = _stamp_outcome(assumption.source_reference, "deleted")
+        await db.flush()
     await db.delete(assumption)
     await db.flush()
 
@@ -1053,8 +1138,62 @@ async def assumptions_as_context(db: AsyncSession, project_id: UUID) -> list[dic
 
 
 async def _load_extraction_text(db: AsyncSession, project_id: UUID) -> tuple[str, list[dict[str, Any]]]:
+    """Load project text for extraction, preferring relevance when embeddings are available."""
     source_refs: list[dict[str, Any]] = []
     chunks: list[str] = []
+
+    # Prefer RAG over evidence when possible; fall back to recency dump.
+    try:
+        from app.services.rag import RAGService
+
+        rag = RAGService(db)
+        retrieved = await rag.retrieve(
+            query=(
+                "project assumptions inputs parameters CAPEX OPEX capacity discount rate "
+                "system size location costs financials"
+            ),
+            project_id=project_id,
+            sources=["evidence"],
+            evidence_top_k=12,
+        )
+        for item in retrieved:
+            source_refs.append(
+                {
+                    "source_type": "evidence",
+                    "id": str(item.source_doc_id),
+                    "chunk_id": str(item.chunk_id),
+                    "title": item.source_title,
+                    "similarity": item.similarity,
+                }
+            )
+            chunks.append(
+                f"[evidence:{item.source_doc_id}:{item.chunk_index}]\n{(item.content or '')[:1200]}"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Assumption extraction RAG unavailable, using recency fallback: %s", exc)
+
+    if not chunks:
+        evidence_result = await db.execute(
+            select(EvidenceDoc)
+            .where(EvidenceDoc.project_id == project_id, EvidenceDoc.storage_path.isnot(None))
+            .order_by(EvidenceDoc.created_at.desc())
+            .limit(6)
+        )
+        evidence_docs = evidence_result.scalars().all()
+        evidence_ids = [doc.id for doc in evidence_docs]
+        if evidence_ids:
+            chunk_result = await db.execute(
+                select(EvidenceChunk)
+                .where(EvidenceChunk.evidence_doc_id.in_(evidence_ids))
+                .order_by(EvidenceChunk.evidence_doc_id, EvidenceChunk.chunk_index)
+                .limit(18)
+            )
+            for chunk in chunk_result.scalars().all():
+                source_refs.append(
+                    {"source_type": "evidence", "id": str(chunk.evidence_doc_id), "chunk_id": str(chunk.id)}
+                )
+                chunks.append(f"[evidence:{chunk.evidence_doc_id}:{chunk.chunk_index}]\n{chunk.content[:1200]}")
+
     material_result = await db.execute(
         select(ProjectMaterial)
         .where(ProjectMaterial.project_id == project_id)
@@ -1067,24 +1206,6 @@ async def _load_extraction_text(db: AsyncSession, project_id: UUID) -> tuple[str
         source_refs.append({"source_type": "material", "id": str(material.id), "title": material.filename})
         chunks.append(f"[material:{material.id}] {material.filename}\n{material.content_text[:2200]}")
 
-    evidence_result = await db.execute(
-        select(EvidenceDoc)
-        .where(EvidenceDoc.project_id == project_id, EvidenceDoc.storage_path.isnot(None))
-        .order_by(EvidenceDoc.created_at.desc())
-        .limit(6)
-    )
-    evidence_docs = evidence_result.scalars().all()
-    evidence_ids = [doc.id for doc in evidence_docs]
-    if evidence_ids:
-        chunk_result = await db.execute(
-            select(EvidenceChunk)
-            .where(EvidenceChunk.evidence_doc_id.in_(evidence_ids))
-            .order_by(EvidenceChunk.evidence_doc_id, EvidenceChunk.chunk_index)
-            .limit(18)
-        )
-        for chunk in chunk_result.scalars().all():
-            source_refs.append({"source_type": "evidence", "id": str(chunk.evidence_doc_id), "chunk_id": str(chunk.id)})
-            chunks.append(f"[evidence:{chunk.evidence_doc_id}:{chunk.chunk_index}]\n{chunk.content[:1200]}")
     return "\n\n".join(chunks)[:MAX_EXTRACTION_CHARS], source_refs
 
 
@@ -1095,19 +1216,15 @@ async def extract_assumptions_from_sources(
     actor: AssumptionActor,
     assessment_ids: list[str] | None = None,
 ) -> tuple[int, int, list[Assumption]]:
+    """Open-vocabulary extraction from project materials/evidence with quote grounding."""
     assessments = assessment_ids or _assessment_ids_from_initiative(initiative)
+    # Config is hints for the model + calculator binding seeds — not an allowlist.
     definitions = expected_assumptions_for_assessments(assessments)
     text, source_refs = await _load_extraction_text(db, initiative.id)
     touched: list[Assumption] = []
-    created_count, placeholders = await ensure_expected_assumptions(
-        db,
-        initiative,
-        assessment_ids=assessments,
-        actor=AssumptionActor.system(),
-    )
-    touched.extend(placeholders)
+    created_count = 0
     updated_count = 0
-    if not text.strip() or not definitions:
+    if not text.strip():
         return created_count, updated_count, touched
 
     schema_lines = [
@@ -1122,21 +1239,23 @@ async def extract_assumptions_from_sources(
         for d in definitions
     ]
     system_prompt = (
-        "Extract only explicit reusable project assumptions from project materials. "
-        "Be very conservative.\n\n"
-        "Include an assumption only when the source quote states a concrete value for one of the configured keys. "
-        "Do NOT extract mere entities, organizations, policies, technologies, headings, themes, or concept lists. "
-        "A named entity can be extracted only when the text explicitly asserts it as a project parameter "
-        "(for example: 'panel supplier is XYZ Supplier').\n\n"
+        "Extract reusable project assumptions / variables from project materials. "
+        "Be conservative but open-vocabulary: you may extract parameters that are NOT in the "
+        "known-keys list when the text states a concrete project value "
+        "(for example a comparable-project NPV, custom metric, or bespoke cost).\n\n"
+        "Include an assumption only when the source quote states a concrete value. "
+        "Do NOT extract mere entities, organizations, policies, technologies, headings, themes, or concept lists.\n\n"
         "Return JSON with an 'assumptions' array. Each item must include:\n"
-        "- key\n"
+        "- key (snake_case)\n"
+        "- label (human-readable)\n"
         "- value\n"
         "- optional unit\n"
+        "- optional value_type (number|percent|currency|string|boolean|text)\n"
         "- source_quote (verbatim evidence for that value)\n"
         "- status ('validated' for direct explicit statements, otherwise 'extracted')."
     )
     user_prompt = (
-        "Expected assumption config:\n"
+        "Known assumption keys (prefer these keys when they match; you may also invent new keys):\n"
         f"{json.dumps(schema_lines, indent=2)}\n\n"
         "Project materials:\n"
         f"{text}"
@@ -1162,33 +1281,43 @@ async def extract_assumptions_from_sources(
     for raw in payload.get("assumptions", []):
         if not isinstance(raw, dict):
             continue
-        key = normalize_assumption_key(str(raw.get("key") or ""))
-        definition = _definition_for_key(key)
-        if definition is None:
+        key = normalize_assumption_key(str(raw.get("key") or raw.get("label") or ""))
+        if not key:
             continue
+        definition = _definition_for_key(key)
         value = raw.get("value")
         if value in (None, ""):
             continue
-        if not _passes_extraction_quality_gate(raw, definition):
+        value_type = raw.get("value_type") or (definition.value_type if definition else infer_assumption_value_type(value))
+        if not _passes_extraction_quality_gate(raw, value_type=value_type, definition=definition):
             continue
+        # Require the quote to actually appear in retrieved text (grounding).
+        quote = str(raw.get("source_quote") or "").strip()
+        if quote and quote not in text and quote[:80] not in text:
+            # Soft check: allow minor whitespace differences
+            collapsed_quote = re.sub(r"\s+", " ", quote).lower()
+            collapsed_text = re.sub(r"\s+", " ", text).lower()
+            if collapsed_quote not in collapsed_text and collapsed_quote[:60] not in collapsed_text:
+                continue
         assumption, created = await upsert_assumption(
             db,
             project_id=initiative.id,
-            key=key,
+            key=definition.key if definition else key,
             value=value,
-            label=definition.label,
-            unit=raw.get("unit") or definition.unit,
-            value_type=definition.value_type,
+            label=str(raw.get("label") or (definition.label if definition else key.replace("_", " ").title())),
+            unit=raw.get("unit") or (definition.unit if definition else None),
+            value_type=value_type,
             source_type="extraction",
             source_reference={
                 "sources": source_refs[:8],
                 "quote": raw.get("source_quote"),
                 "extracted_at": datetime.now(timezone.utc).isoformat(),
+                "outcome": "pending",
             },
             status="extracted",
-            used_in_assessments=definition.used_in_assessments,
+            used_in_assessments=definition.used_in_assessments if definition else [],
             actor=actor if actor.email else AssumptionActor.system(),
-            allow_create=False,
+            allow_create=True,
         )
         if assumption is None:
             continue
@@ -1200,105 +1329,158 @@ async def extract_assumptions_from_sources(
     return created_count, updated_count, touched
 
 
-async def extract_assumptions_from_finding(
+async def extract_assumptions_from_assessment(
     db: AsyncSession,
-    initiative: Project,
+    project: Project,
     *,
-    finding_id: UUID,
-    body: str,
-    sources: list[Any] | None,
-    chat_message_id: UUID | None,
+    assessment_instance,
     actor: AssumptionActor,
 ) -> list[Assumption]:
-    """Extract structured assumptions when a chat message graduates to a project finding."""
-    assessments = _assessment_ids_from_initiative(initiative)
-    definitions = expected_assumptions_for_assessments(assessments)
-    text = (body or "").strip()
-    if not text or not definitions:
+    """Promote confirmed assessment inputs into the shared assumption pool on final approval."""
+    if assessment_instance is None or not hasattr(assessment_instance, "workflow_state"):
         return []
 
-    schema_lines = [
-        {
-            "key": d.key,
-            "label": d.label,
-            "value_type": d.value_type,
-            "unit": d.unit,
-            "aliases": d.aliases,
-            "examples": d.examples,
-        }
-        for d in definitions
-    ]
-    sources_blob = json.dumps(sources[:8], indent=2) if sources else "[]"
-    system_prompt = (
-        "Extract reusable project assumptions from a promoted team finding. "
-        "Be conservative.\n\n"
-        "Include an assumption only when the finding states a concrete value for one of the configured keys. "
-        "Do NOT extract mere entities, themes, or summaries without a parameter value.\n\n"
-        "Return JSON with an 'assumptions' array. Each item must include:\n"
-        "- key\n"
-        "- value\n"
-        "- optional unit\n"
-        "- source_quote (verbatim evidence from the finding)\n"
-        "- status ('validated' for direct explicit statements, otherwise 'extracted')."
-    )
-    user_prompt = (
-        "Expected assumption config:\n"
-        f"{json.dumps(schema_lines, indent=2)}\n\n"
-        f"Promoted finding:\n{text[:MAX_EXTRACTION_CHARS]}\n\n"
-        f"Cited sources (if any):\n{sources_blob}"
-    )
-    try:
-        response = await acompletion(
-            actor.user_id,
-            db,
-            role=ModelRole.GENERATION,
-            complexity=Complexity.STANDARD,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
-        )
-        payload = json.loads(response.choices[0].message.content or "{}")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Finding assumption extraction failed: %s", exc, exc_info=True)
-        payload = {}
-
+    state = assessment_instance.workflow_state if isinstance(assessment_instance.workflow_state, dict) else {}
+    stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
+    approved_at = datetime.now(timezone.utc).isoformat()
     touched: list[Assumption] = []
-    extracted_at = datetime.now(timezone.utc).isoformat()
-    for raw in payload.get("assumptions", []):
-        if not isinstance(raw, dict):
+    assessment_id = getattr(assessment_instance, "assessment_id", None) or ""
+
+    for stage_id, stage_data in stages.items():
+        if not isinstance(stage_data, dict):
             continue
-        key = normalize_assumption_key(str(raw.get("key") or ""))
-        definition = _definition_for_key(key)
-        if definition is None:
+        items = stage_data.get("items")
+        if not isinstance(items, list):
             continue
-        value = raw.get("value")
-        if value in (None, ""):
-            continue
-        if not _passes_extraction_quality_gate(raw, definition):
-            continue
-        assumption, _created = await upsert_assumption(
-            db,
-            project_id=initiative.id,
-            key=key,
-            value=value,
-            label=definition.label,
-            unit=raw.get("unit") or definition.unit,
-            value_type=definition.value_type,
-            source_type="promotion",
-            source_reference={
-                "finding_id": str(finding_id),
-                "chat_message_id": str(chat_message_id) if chat_message_id else None,
-                "quote": raw.get("source_quote"),
-                "extracted_at": extracted_at,
-            },
-            status=normalize_assumption_status(str(raw.get("status") or "extracted")),
-            used_in_assessments=definition.used_in_assessments,
-            actor=actor,
-            allow_create=True,
-        )
-        if assumption is not None:
-            touched.append(assumption)
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content") if isinstance(item.get("content"), dict) else None
+            if not isinstance(content, dict):
+                continue
+            # Same gate as sync_stage_assumptions: only explicit field_name rows.
+            field_name = str(content.get("field_name") or "").strip()
+            value = content.get("value")
+            if not field_name or value in (None, ""):
+                continue
+            definition = _definition_for_assessment_field(field_name, assessment_id)
+            key = definition.key if definition else normalize_assumption_key(field_name)
+            label = str(content.get("variable") or content.get("label") or field_name)
+            assumption, _ = await upsert_assumption(
+                db,
+                project_id=project.id,
+                key=key,
+                value=value,
+                label=label,
+                unit=content.get("unit") or (definition.unit if definition else None),
+                value_type=definition.value_type if definition else infer_assumption_value_type(value),
+                source_type="assessment_approval",
+                source_reference={
+                    "assessment_instance_id": str(assessment_instance.id),
+                    "assessment_id": assessment_id,
+                    "stage_id": stage_id,
+                    "field_name": field_name,
+                    "quote": str(content.get("rationale") or "")[:500] or None,
+                    "approved_at": approved_at,
+                    "outcome": "pending",
+                },
+                status="validated",
+                used_in_assessments=definition.used_in_assessments if definition else [assessment_id],
+                actor=actor,
+                allow_create=True,
+                replace_validated=True,
+            )
+            if assumption is not None:
+                touched.append(assumption)
+
+    # Calculator assessments persist under workflow_state.widget_state.inputs.
+    top_widget = state.get("widget_state")
+    if isinstance(top_widget, dict):
+        inputs = top_widget.get("inputs")
+        if not isinstance(inputs, dict):
+            nested = top_widget.get("widget_data")
+            inputs = nested.get("inputs") if isinstance(nested, dict) else None
+        if isinstance(inputs, dict):
+            for field_name, raw_value in inputs.items():
+                if isinstance(raw_value, dict) and "value" in raw_value:
+                    value = raw_value.get("value")
+                    unit = raw_value.get("unit")
+                    label = raw_value.get("label") or raw_value.get("variable") or field_name
+                else:
+                    value = raw_value
+                    unit = None
+                    label = field_name
+                if value in (None, "", [], {}) or not isinstance(value, (str, int, float, bool)):
+                    continue
+                definition = _definition_for_assessment_field(str(field_name), assessment_id)
+                key = definition.key if definition else normalize_assumption_key(str(field_name))
+                assumption, _ = await upsert_assumption(
+                    db,
+                    project_id=project.id,
+                    key=key,
+                    value=value,
+                    label=str(label),
+                    unit=unit or (definition.unit if definition else None),
+                    value_type=definition.value_type if definition else infer_assumption_value_type(value),
+                    source_type="assessment_approval",
+                    source_reference={
+                        "assessment_instance_id": str(assessment_instance.id),
+                        "assessment_id": assessment_id,
+                        "field_name": field_name,
+                        "approved_at": approved_at,
+                        "outcome": "pending",
+                    },
+                    status="validated",
+                    used_in_assessments=definition.used_in_assessments if definition else [assessment_id],
+                    actor=actor,
+                    allow_create=True,
+                    replace_validated=True,
+                )
+                if assumption is not None:
+                    touched.append(assumption)
+
     return touched
+
+
+async def promote_chat_value_to_assumption(
+    db: AsyncSession,
+    project: Project,
+    *,
+    key: str,
+    value: Any,
+    label: str | None = None,
+    unit: str | None = None,
+    value_type: str | None = None,
+    chat_id: UUID | None = None,
+    chat_message_id: UUID | None = None,
+    quote: str | None = None,
+    actor: AssumptionActor,
+) -> Assumption | None:
+    """Scaffold: promote a user-approved chat value into the shared assumption pool."""
+    normalized_key = normalize_assumption_key(key)
+    if not normalized_key:
+        return None
+    definition = _definition_for_key(normalized_key)
+    assumption, _ = await upsert_assumption(
+        db,
+        project_id=project.id,
+        key=definition.key if definition else normalized_key,
+        value=value,
+        label=label or (definition.label if definition else normalized_key.replace("_", " ").title()),
+        unit=unit if unit is not None else (definition.unit if definition else None),
+        value_type=value_type or (definition.value_type if definition else infer_assumption_value_type(value)),
+        source_type="chat_approval",
+        source_reference={
+            "chat_id": str(chat_id) if chat_id else None,
+            "chat_message_id": str(chat_message_id) if chat_message_id else None,
+            "quote": quote,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "outcome": "pending",
+        },
+        status="validated",
+        used_in_assessments=definition.used_in_assessments if definition else [],
+        actor=actor,
+        allow_create=True,
+        replace_validated=True,
+    )
+    return assumption
