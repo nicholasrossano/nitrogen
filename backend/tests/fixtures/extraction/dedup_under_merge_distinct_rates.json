@@ -1,0 +1,14 @@
+{
+  "id": "dedup_under_merge_distinct_rates",
+  "source_type": "dedup",
+  "description": "Discount rate and inflation must NOT merge (under-merge preference).",
+  "input": {
+    "surface_forms": [
+      { "key": "discount_rate", "label": "Discount rate", "value": 8, "unit": "%" },
+      { "key": "inflation", "label": "Inflation", "value": 5, "unit": "%" }
+    ]
+  },
+  "expect": {
+    "canonical_count": 2
+  }
+}

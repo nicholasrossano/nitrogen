@@ -41,9 +41,10 @@ const SOURCE_OPTIONS: Array<{ value: '' | AssumptionSourceType; label: string }>
   { value: 'extraction', label: 'Extraction' },
   { value: 'user_input', label: 'User input' },
   { value: 'assessment', label: 'Assessment' },
-  { value: 'default', label: 'Default' },
-  { value: 'missing_placeholder', label: 'Missing placeholder' },
+  { value: 'assessment_approval', label: 'Approved assessment' },
+  { value: 'chat_approval', label: 'Chat approval' },
   { value: 'model_candidate', label: 'Model candidate' },
+  { value: 'promotion', label: 'Legacy promotion' },
 ];
 
 function formatNumeric(value: number, valueType?: Assumption['value_type']): string {
@@ -334,7 +335,12 @@ export function AssumptionsWorkspaceTab({
             handleAssumptionOpen(row);
           }}
         >
-          {row.label}
+          <span className="block">{row.label}</span>
+          {Array.isArray(row.aliases) && row.aliases.some((a) => a && a !== row.label) ? (
+            <span className="mt-0.5 block text-[11px] font-normal text-text-secondary">
+              also: {row.aliases.filter((a) => a && a !== row.label).slice(0, 3).join(', ')}
+            </span>
+          ) : null}
         </button>
       ),
     },

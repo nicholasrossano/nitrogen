@@ -34,6 +34,8 @@ class Assumption(Base):
     value_type: Mapped[str] = mapped_column(String(40), nullable=False)
     source_type: Mapped[str] = mapped_column(String(80), nullable=False)
     source_reference: Mapped[dict | None] = mapped_column(JSONB)
+    # Observed surface forms merged into this canonical variable (e.g. NPV / net present value).
+    aliases: Mapped[list[str] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="assumed")
     used_in_assessments: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     created_by_user_id: Mapped[str | None] = mapped_column(String(255))
