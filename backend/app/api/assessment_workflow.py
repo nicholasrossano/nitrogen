@@ -1463,6 +1463,27 @@ async def approve_final_output(
         actor_email=user.email,
         payload=state["final_approval"],
     )
+
+    # Best-effort: promote assessment inputs into the shared assumption pool.
+    # Approval must never fail because of extraction. Revoke does not delete these.
+    try:
+        from app.models.project import Project
+        from app.services.assumptions import AssumptionActor, extract_assumptions_from_assessment
+
+        project = await db.get(Project, inst.project_id)
+        if project is not None:
+            await extract_assumptions_from_assessment(
+                db,
+                project,
+                assessment_instance=inst,
+                actor=AssumptionActor(user_id=user.uid, email=user.email),
+            )
+    except Exception:
+        logger.exception(
+            "Assumption extraction on final approval failed for instance %s",
+            instance_id,
+        )
+
     await db.commit()
 
     return {

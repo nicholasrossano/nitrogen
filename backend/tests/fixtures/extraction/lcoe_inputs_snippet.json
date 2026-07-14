@@ -1,0 +1,48 @@
+{
+  "id": "lcoe_inputs_snippet",
+  "source_type": "authored_labeled",
+  "description": "Classic LCOE inputs extract cleanly.",
+  "input": {
+    "materials": [
+      {
+        "filename": "inputs.txt",
+        "content_text": "Plant capacity factor equals 22%. Collection rate is 85%. Total CAPEX equals $180,000."
+      }
+    ]
+  },
+  "recorded_llm": {
+    "assumptions": [
+      {
+        "key": "capacity_factor",
+        "label": "Capacity factor",
+        "value": 22,
+        "unit": "%",
+        "value_type": "percent",
+        "source_quote": "Plant capacity factor equals 22%"
+      },
+      {
+        "key": "collection_rate",
+        "label": "Collection rate",
+        "value": 85,
+        "unit": "%",
+        "value_type": "percent",
+        "source_quote": "Collection rate is 85%"
+      },
+      {
+        "key": "total_capex",
+        "label": "Total CAPEX",
+        "value": 180000,
+        "unit": "USD",
+        "value_type": "currency",
+        "source_quote": "Total CAPEX equals $180,000"
+      }
+    ]
+  },
+  "expect": {
+    "assumptions": [
+      { "key": "capacity_factor", "label": "Capacity factor", "value": 22, "quote_contains": "22%" },
+      { "key": "collection_rate", "label": "Collection rate", "value": 85, "quote_contains": "85%" },
+      { "key": "total_capex", "label": "Total CAPEX", "value": 180000, "quote_contains": "180,000" }
+    ]
+  }
+}
