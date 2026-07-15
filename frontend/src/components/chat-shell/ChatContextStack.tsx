@@ -23,6 +23,7 @@ import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { FilesScopeToggle, type FilesScope } from '@/components/files';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 
 export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
 
@@ -248,7 +249,9 @@ export function ChatContextStack({
   return (
     <>
       {(shellMotion === 'stack' || !expandedWidget) && (
-      <div
+      <TourAnchor
+        id="welcome-context-stack"
+        as="div"
         className={`pointer-events-none absolute z-20 right-3 top-3 bottom-3 flex flex-col gap-3 ${contextStackTransitionClass}`}
         style={{ width: CHAT_CONTEXT_STACK_WIDTH }}
       >
@@ -294,7 +297,7 @@ export function ChatContextStack({
             onViewAll={handleExpandFiles}
           />
         </ContextStackWidgetSlot>
-      </div>
+      </TourAnchor>
       )}
 
       {renderedWidget === 'overview' && project && (
@@ -341,6 +344,7 @@ export function ChatContextStack({
           onClose={handleCloseExpanded}
           flushOnExpand
           rightInset={rightInset}
+          tourId="feature-variables"
         >
           <AssumptionsWorkspaceTab
             projectId={projectId}
@@ -370,6 +374,7 @@ export function ChatContextStack({
           onClose={handleCloseExpanded}
           flushOnExpand
           rightInset={rightInset}
+          tourId="feature-files"
           headerActions={
             <FilesScopeToggle value={filesScope} onChange={setFilesScope} />
           }

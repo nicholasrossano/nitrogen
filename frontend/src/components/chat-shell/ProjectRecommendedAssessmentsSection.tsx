@@ -8,6 +8,7 @@ import {
   groupAssessmentIdsByAnalysisType,
 } from '@/components/chat/AssessmentPicker';
 import { UniversalLoadingIcon } from '@/components/ui/PageLoader';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 import { useFeatureFlag, useFeatureFlagContext, useVisibleAssessments } from '@/hooks/useFeatureFlag';
 import { api, type AssessmentInstance } from '@/lib/api';
 import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
@@ -221,6 +222,7 @@ export function ProjectRecommendedAssessmentsSection({
   }
 
   return (
+    <TourAnchor id="welcome-recommended" as="div" className="w-full">
     <section className="w-full overflow-visible pb-2 pt-4">
       <div className="mb-3 flex items-center justify-between gap-3 pl-6 pr-6">
         <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
@@ -407,5 +409,6 @@ export function ProjectRecommendedAssessmentsSection({
         ) : null}
       </div>
     </section>
+    </TourAnchor>
   );
 }

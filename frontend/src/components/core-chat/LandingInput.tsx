@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, Loader2, MessageSquare, Trash2, Paperclip, X } from 'lucide-react';
 import type { ChatSession } from '@/types/chat';
 import { ALL_MODULES } from '@/components/chat/AssessmentPicker';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 import { useVisibleAssessments } from '@/hooks/useFeatureFlag';
 
 
@@ -263,18 +264,20 @@ export function LandingInput({
 
     return (
       <div className={containerClassName ?? `w-full ${contentMaxWidth}`}>
-        {hasTray ? (
-          <div className="chat-composer-stack">
-            {topComposerContent}
+        <TourAnchor id="welcome-composer" as="div" className="w-full">
+          {hasTray ? (
+            <div className="chat-composer-stack">
+              {topComposerContent}
+              <form onSubmit={handleSubmit} className="relative">
+                <div className={shellClassName}>{shellContent}</div>
+              </form>
+            </div>
+          ) : (
             <form onSubmit={handleSubmit} className="relative">
               <div className={shellClassName}>{shellContent}</div>
             </form>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="relative">
-            <div className={shellClassName}>{shellContent}</div>
-          </form>
-        )}
+          )}
+        </TourAnchor>
       </div>
     );
   };

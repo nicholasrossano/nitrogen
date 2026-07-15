@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { StatusOverviewTable } from '@/components/project-status/StatusOverviewTable';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { ShareProjectModal } from '@/components/sharing/ShareProjectModal';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 import { api, type Project, type ProjectShare } from '@/lib/api';
 import {
   buildCollaborators,
@@ -78,20 +79,22 @@ export function ProjectOverviewExpandedPanel({
     <>
     <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
       <div className="mx-auto w-full max-w-3xl space-y-8">
-        <section>
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-            Status
-          </p>
-          <div className="mt-2">
-            <StatusOverviewTable
-              initiativeId={project.id}
-              readOnly={readOnly}
-              refreshToken={refreshKey}
-              onOpenDocument={onOpenDocument}
-              onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
-            />
-          </div>
-        </section>
+        <TourAnchor id="feature-overview" as="div" className="w-full" surface="floor">
+          <section>
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+              Status
+            </p>
+            <div className="mt-2">
+              <StatusOverviewTable
+                initiativeId={project.id}
+                readOnly={readOnly}
+                refreshToken={refreshKey}
+                onOpenDocument={onOpenDocument}
+                onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
+              />
+            </div>
+          </section>
+        </TourAnchor>
 
         <section>
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">

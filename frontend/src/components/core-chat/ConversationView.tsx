@@ -28,6 +28,7 @@ import { debugChatFlow } from '@/lib/chatDebug';
 import { SnippetCard } from './ResearchPanel';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { CitationChip } from '@/components/ui/CitationChip';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 
 export interface ConversationViewProps {
   messages: CoreChatMessage[];
@@ -367,9 +368,11 @@ export function ConversationView({
   );
 
   const composerForm = (
-    <form onSubmit={handleSubmit} className="relative">
-      {composerShell}
-    </form>
+    <TourAnchor id="welcome-composer" as="div" className="w-full">
+      <form onSubmit={handleSubmit} className="relative">
+        {composerShell}
+      </form>
+    </TourAnchor>
   );
 
   const composer = !hideTextInput ? (
