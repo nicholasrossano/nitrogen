@@ -28,6 +28,20 @@ def test_tier_from_stripe_price_individual(monkeypatch):
     assert _tier_from_stripe_price("unknown") is None
 
 
+def test_subscription_usage_limit_derived_from_price_and_buffer(monkeypatch):
+    """$30 × (1 − 5%) → $28.50 when limit override is unset."""
+    from app.config import Settings
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/test")
+    monkeypatch.delenv("SUBSCRIPTION_USAGE_LIMIT_USD", raising=False)
+    monkeypatch.setenv("SUBSCRIPTION_PRICE_USD", "30.0")
+    monkeypatch.setenv("USAGE_BUDGET_BUFFER_PCT", "0.05")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.subscription_price_usd == 30.0
+    assert s.usage_budget_buffer_pct == 0.05
+    assert s.subscription_usage_limit_usd == 28.5
+
+
 @pytest.mark.asyncio
 async def test_check_usage_budget_byok_openrouter(monkeypatch):
     monkeypatch.setattr("app.core.llm_client.settings.stripe_secret_key", "sk_test")
