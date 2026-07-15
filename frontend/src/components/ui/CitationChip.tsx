@@ -52,14 +52,19 @@ export function CitationChip({
   );
 
   if (onActivate) {
+    const handleClick = (event: MouseEvent<HTMLSpanElement>) => {
+      event.stopPropagation();
+      onActivate();
+    };
     const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
+        event.stopPropagation();
         onActivate();
       }
     };
     return (
-      <span role="button" tabIndex={0} className="no-underline cursor-pointer" onClick={onActivate} onKeyDown={handleKeyDown}>
+      <span role="button" tabIndex={0} className="no-underline cursor-pointer" onClick={handleClick} onKeyDown={handleKeyDown}>
         {chip}
       </span>
     );

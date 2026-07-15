@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 import { useShallow } from 'zustand/react/shallow';
 
 import { ProjectHeader } from '@/components/editor';
-import type { EditorWidget, WorkspacePanelTab } from '@/components/editor';
+import type { FloatWidget, WorkspacePanelTab } from '@/components/editor';
 import { ProjectWorkspaceEditorPanel } from '@/components/editor/ProjectWorkspaceEditorPanel';
 import type { WorkspaceLaunchMode } from '@/components/editor/WorkspaceHub';
 import { ProjectOnboardingHeader } from '@/components/core-chat/ProjectOnboardingHeader';
@@ -83,7 +83,7 @@ function ProjectPageContent() {
   const [chromeReady, setChromeReady] = useState(false);
   const [assessmentsDeepDiveRequest, setAssessmentsDeepDiveRequest] = useState<PendingDeepDiveRequest | null>(null);
   const [pendingAssumptionsRequest, setPendingAssumptionsRequest] = useState<PendingAssumptionsRequest | null>(null);
-  const [chatEditorWidgets, setChatEditorWidgets] = useState<EditorWidget[]>([]);
+  const [chatEditorWidgets, setChatEditorWidgets] = useState<FloatWidget[]>([]);
   const [workspaceLaunchMode, setWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [pendingChatToOpen, setPendingChatToOpen] = useState<{ chatId: string; title?: string | null } | null>(null);
   const [pendingOverviewAutoSend, setPendingOverviewAutoSend] = useState<{
@@ -848,7 +848,7 @@ function ProjectPageContent() {
     });
   }, [activeView, workspaceTabs]);
 
-  const handleChatEditorWidgetsChange = useCallback((widgets: EditorWidget[]) => {
+  const handleChatEditorWidgetsChange = useCallback((widgets: FloatWidget[]) => {
     setChatEditorWidgets(widgets);
   }, []);
 
@@ -952,6 +952,7 @@ function ProjectPageContent() {
           onAssessmentEngaged={handleAssessmentEngaged}
           onOpenAssumptionInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
+          onOpenDocument={openWorkspaceDocument}
         />
       );
     }
@@ -973,7 +974,7 @@ function ProjectPageContent() {
                 filesUploaded={projectMaterials.length}
               />
             )}
-            onEditorWidgetsChange={handleChatEditorWidgetsChange}
+            onFloatWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
             onOpenAssumptions={openAssumptionsView}
@@ -1000,7 +1001,7 @@ function ProjectPageContent() {
               toolHint,
             });
           }}
-          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onFloatWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onOpenAssumptions={openAssumptionsView}
@@ -1015,6 +1016,7 @@ function ProjectPageContent() {
           showDetailPanel={false}
           onAssumptionSelectInChat={handleOpenAssumptionInChat}
           onAddAssumptionInChat={handleAddAssumptionInChat}
+          onOpenDocument={openWorkspaceDocument}
         />
       );
     }
@@ -1026,7 +1028,7 @@ function ProjectPageContent() {
             projectId={projectId}
             researchMode={false}
             sessionStorageKey={frameworkChatTabsStorageKey}
-            onEditorWidgetsChange={handleChatEditorWidgetsChange}
+            onFloatWidgetsChange={handleChatEditorWidgetsChange}
             onOpenDocument={openWorkspaceDocument}
             onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           pendingAssumptions={pendingAssumptionsRequest}
@@ -1081,7 +1083,7 @@ function ProjectPageContent() {
           pendingAutoSend={pendingOverviewAutoSend}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
           onPendingAutoSendHandled={() => setPendingOverviewAutoSend(null)}
-          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onFloatWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
@@ -1103,7 +1105,7 @@ function ProjectPageContent() {
           activeAssessmentContext={activeAssessmentContext}
           activeEditorContext={activeEditorContext}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
-          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onFloatWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
@@ -1127,7 +1129,7 @@ function ProjectPageContent() {
           pendingChatToOpen={pendingChatToOpen}
           activeAssessmentContext={null}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
-          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onFloatWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}
@@ -1146,7 +1148,7 @@ function ProjectPageContent() {
           pendingChatToOpen={pendingChatToOpen}
           activeAssessmentContext={null}
           onPendingSessionHandled={() => setPendingChatToOpen(null)}
-          onEditorWidgetsChange={handleChatEditorWidgetsChange}
+          onFloatWidgetsChange={handleChatEditorWidgetsChange}
           onOpenDocument={openWorkspaceDocument}
           onOpenWorkspaceAssessment={handleOpenWorkspaceAssessment}
           onSendRef={chatSendRef}

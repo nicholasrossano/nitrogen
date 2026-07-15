@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 
 type WidgetHeaderIconButtonOptions = {
   size?: 'sm' | 'md';
@@ -34,6 +34,8 @@ interface EditorPanelHeaderProps {
   suffix?: string | null;
   onClose?: () => void;
   actions?: ReactNode;
+  /** Render the close action as a back arrow (for a floor you navigate back out of, rather than a card you dismiss). */
+  backAction?: boolean;
 }
 
 export function EditorPanelHeader({
@@ -41,6 +43,7 @@ export function EditorPanelHeader({
   suffix,
   onClose,
   actions,
+  backAction = false,
 }: EditorPanelHeaderProps) {
   return (
     <header className="flex shrink-0 items-center gap-2.5 border-b border-divider bg-white px-3 py-2.5">
@@ -48,10 +51,10 @@ export function EditorPanelHeader({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close editor"
+          aria-label={backAction ? 'Back' : 'Close editor'}
           className={widgetHeaderIconButtonClassName({ bordered: true })}
         >
-          <X className="h-3.5 w-3.5" />
+          {backAction ? <ArrowLeft className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
         </button>
       ) : null}
       <div className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">

@@ -17,8 +17,7 @@ import { ProjectRecommendedAssessmentsSection } from '@/components/chat-shell/Pr
 import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
-import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
-import type { EditorWidget } from '@/components/editor/EditorSidePanel';
+import { FLOAT_WIDGET_TYPES, type FloatWidget } from '@/components/editor/FloatLayer';
 import type { CoreChatMessage, ChatSummary } from '@/types/chat';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { debugChatFlow } from '@/lib/chatDebug';
@@ -69,7 +68,7 @@ interface ProjectChatSurfaceProps {
   initialTitle?: string | null;
   onMessageSent?: () => void;
   /** Called whenever the set of editor widgets in local messages changes */
-  onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
+  onFloatWidgetsChange?: (widgets: FloatWidget[]) => void;
   /** Called when user opens an internal citation document */
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   /** Called when the active chat metadata changes */
@@ -170,7 +169,7 @@ export function ProjectChatSurface({
   initialChatId = null,
   initialTitle = null,
   onMessageSent,
-  onEditorWidgetsChange,
+  onFloatWidgetsChange,
   onOpenDocument,
   onChatMetaChange,
   onLandingStateChange,
@@ -390,18 +389,18 @@ export function ProjectChatSurface({
 
   // Notify parent about editor widgets whenever local messages change
   useEffect(() => {
-    if (!onEditorWidgetsChange) return;
-    const raw: EditorWidget[] = localMessages
+    if (!onFloatWidgetsChange) return;
+    const raw: FloatWidget[] = localMessages
       .filter(
         (m) =>
           m.widget_type &&
           m.widget_data &&
-          (EDITOR_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
+          (FLOAT_WIDGET_TYPES as readonly string[]).includes(m.widget_type),
       )
       .map((m) => ({ type: m.widget_type!, data: m.widget_data!, messageId: m.id }));
 
-    onEditorWidgetsChange(raw);
-  }, [localMessages, onEditorWidgetsChange]);
+    onFloatWidgetsChange(raw);
+  }, [localMessages, onFloatWidgetsChange]);
 
   useEffect(() => {
     const handler = (event: Event) => {

@@ -1,8 +1,8 @@
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
-import type { EditorWidget } from '@/components/editor/EditorSidePanel';
-import type { ProjectMaterial } from '@/lib/api';
+import type { FloatWidget } from '@/components/editor/FloatLayer';
+import type { Assumption, ProjectMaterial } from '@/lib/api';
 
-export function editorWidgetForCitation(citation: ResearchPanelCitation): EditorWidget {
+export function floatWidgetForCitation(citation: ResearchPanelCitation): FloatWidget {
   return {
     type: 'document_viewer',
     data: {
@@ -14,7 +14,7 @@ export function editorWidgetForCitation(citation: ResearchPanelCitation): Editor
   };
 }
 
-export function editorWidgetForProjectMaterial(file: ProjectMaterial): EditorWidget {
+export function floatWidgetForProjectMaterial(file: ProjectMaterial): FloatWidget {
   if (file.source === 'evidence') {
     return {
       type: 'document_viewer',
@@ -36,3 +36,21 @@ export function editorWidgetForProjectMaterial(file: ProjectMaterial): EditorWid
     messageId: `material-${file.id}`,
   };
 }
+
+export function floatWidgetForAssumption(assumption: Assumption): FloatWidget {
+  return {
+    type: 'variable_detail',
+    data: {
+      assumption,
+      title: assumption.label,
+    },
+    messageId: `variable-${assumption.id}`,
+  };
+}
+
+/** @deprecated Prefer floatWidgetForCitation. */
+export const editorWidgetForCitation = floatWidgetForCitation;
+/** @deprecated Prefer floatWidgetForProjectMaterial. */
+export const editorWidgetForProjectMaterial = floatWidgetForProjectMaterial;
+/** @deprecated Prefer floatWidgetForAssumption. */
+export const editorWidgetForAssumption = floatWidgetForAssumption;
