@@ -64,9 +64,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Minimal scrollbar - enterprise neutral */
+/* Minimal scrollbar — same thickness for vertical and horizontal */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 2px;
+  height: 2px;
 }
 
 ::-webkit-scrollbar-track {
@@ -80,6 +81,11 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-stroke-subtle);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-divider) transparent;
 }
 
 /* Side panel slide-in from right */

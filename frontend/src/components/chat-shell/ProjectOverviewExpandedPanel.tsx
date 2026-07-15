@@ -80,6 +80,21 @@ export function ProjectOverviewExpandedPanel({
       <div className="mx-auto w-full max-w-3xl space-y-8">
         <section>
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+            Status
+          </p>
+          <div className="mt-2">
+            <StatusOverviewTable
+              initiativeId={project.id}
+              readOnly={readOnly}
+              refreshToken={refreshKey}
+              onOpenDocument={onOpenDocument}
+              onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
+            />
+          </div>
+        </section>
+
+        <section>
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
             Description
           </p>
           <div className="mt-2">
@@ -95,21 +110,6 @@ export function ProjectOverviewExpandedPanel({
                 </p>
               </div>
             )}
-          </div>
-        </section>
-
-        <section>
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-            Status
-          </p>
-          <div className="mt-2">
-            <StatusOverviewTable
-              initiativeId={project.id}
-              readOnly={readOnly}
-              refreshToken={refreshKey}
-              onOpenDocument={onOpenDocument}
-              onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
-            />
           </div>
         </section>
 
