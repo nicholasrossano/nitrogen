@@ -20,7 +20,7 @@ tiktoken>=0.5.2
 # the package is unavailable we fall back to pdfplumber. Pin >=2.0 to stay on
 # the Apache-2.0 line (pre-2.0 was MPL-2.0).
 opendataloader-pdf>=2.0
-pdfplumber>=0.10.3
+pdfplumber>=0.10.4
 PyMuPDF>=1.27.2.3
 python-docx>=1.2.0
 python-pptx>=1.0.2
