@@ -21,6 +21,7 @@ import { api, type EvidenceDoc, type ProjectMaterial } from '@/lib/api';
 import { extractFilesFromDrop, filterSupportedFiles, checkDuplicates, SUPPORTED_EXTENSIONS } from '@/lib/fileUtils';
 import { openGooglePicker } from '@/lib/googlePicker';
 import { UploadActionButton, UploadDropzone } from '@/components/upload/UploadControls';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import {
   CHAT_FLOATING_PANEL_CHROME,
@@ -211,26 +212,44 @@ export function SideDrawer() {
     }
   }, [chatProjectId, hasProject, projectId, isChatShell, navHandlerRef, router]);
 
-  const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => (
-    <button
-      key={key}
-      onClick={() => {
-        if (disabled) return;
-        handleNav(key);
-      }}
-      disabled={disabled}
-      title={disabled ? disabledReason : undefined}
-      aria-disabled={disabled || undefined}
-      className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''} ${disabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
-    >
-      <Icon
-        className={`w-4 h-4 flex-shrink-0 ${activeItem === key ? '[&_*]:fill-current' : ''}`}
-      />
-      <span className={NAV_LABEL_CLASS}>
-        {label}
-      </span>
-    </button>
-  ), [activeItem, handleNav]);
+  const renderNavButton = useCallback(({ key, label, Icon, disabled, disabledReason }: NavRenderConfig) => {
+    // Only Framework / Assessments use deferred tips here — they appear when you open that
+    // project view. Ever-present chat chrome (Files, Help, etc.) lives in the welcome tour.
+    const tourId =
+      key === 'plan' ? 'feature-framework'
+      : key === 'workspace' ? 'feature-assessments'
+      : null;
+
+    const button = (
+      <button
+        onClick={() => {
+          if (disabled) return;
+          handleNav(key);
+        }}
+        disabled={disabled}
+        title={disabled ? disabledReason : undefined}
+        aria-disabled={disabled || undefined}
+        className={`nav-row w-full ${activeItem === key ? 'nav-row-active' : ''} ${disabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
+      >
+        <Icon
+          className={`w-4 h-4 flex-shrink-0 ${activeItem === key ? '[&_*]:fill-current' : ''}`}
+        />
+        <span className={NAV_LABEL_CLASS}>
+          {label}
+        </span>
+      </button>
+    );
+
+    if (!tourId) {
+      return <div key={key}>{button}</div>;
+    }
+
+    return (
+      <TourAnchor key={key} id={tourId} as="div" className="w-full">
+        {button}
+      </TourAnchor>
+    );
+  }, [activeItem, handleNav]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -252,12 +271,12 @@ export function SideDrawer() {
     }
   }, [activeWorkspace?.id, isChatShell, router, setActiveWorkspace, workspaceSwitching]);
 
-  const workspaceSwitcher = workspaces.length > 1 ? (
+  const workspaceSwitcher = workspaces.length > 0 ? (
     <ChangeWorkspaceSelect
       workspaces={workspaces}
       value={activeWorkspace?.id ?? null}
       onChange={(workspaceId) => void handleChangeWorkspace(workspaceId)}
-      disabled={workspaceSwitching}
+      disabled={workspaceSwitching || workspaces.length < 2}
       rootClassName="ml-auto min-w-0"
     />
   ) : null;
@@ -690,23 +709,25 @@ export function SideDrawer() {
       {/* Files — bottom of nav (chat shell + project context) */}
       <div className={`${gridCollapse} ${(hasProject || activeWorkspace || isChatShell) ? gridOpen : gridClosed}`}>
         <div className="overflow-hidden">
-          <button
-            onClick={() => {
-              if (filesDisabled) return;
-              handleNav('files');
-            }}
-            disabled={filesDisabled}
-            title={filesDisabled ? filesDisabledReason : undefined}
-            aria-disabled={filesDisabled || undefined}
-            className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''} ${filesDisabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
-          >
-            <FolderOpen
-              className={`w-4 h-4 flex-shrink-0 ${activeItem === 'files' ? '[&_*]:fill-current' : ''}`}
-            />
-            <span className={NAV_LABEL_CLASS}>
-              Files
-            </span>
-          </button>
+          <TourAnchor id="welcome-files" as="div" className="w-full">
+              <button
+                onClick={() => {
+                  if (filesDisabled) return;
+                  handleNav('files');
+                }}
+                disabled={filesDisabled}
+                title={filesDisabled ? filesDisabledReason : undefined}
+                aria-disabled={filesDisabled || undefined}
+                className={`nav-row w-full ${activeItem === 'files' ? 'nav-row-active' : ''} ${filesDisabled ? 'opacity-50 cursor-not-allowed hover:text-text-secondary' : ''}`}
+              >
+                <FolderOpen
+                  className={`w-4 h-4 flex-shrink-0 ${activeItem === 'files' ? '[&_*]:fill-current' : ''}`}
+                />
+                <span className={NAV_LABEL_CLASS}>
+                  Files
+                </span>
+              </button>
+          </TourAnchor>
         </div>
       </div>
 
@@ -722,18 +743,20 @@ export function SideDrawer() {
 
       <UsagePill />
 
-      <a
-        href="https://nitrogenai.mintlify.app/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="nav-row w-full"
-        title="Help"
-      >
-        <HelpCircle className="w-4 h-4 flex-shrink-0" />
-        <span className={NAV_LABEL_CLASS}>
-          Help
-        </span>
-      </a>
+      <TourAnchor id="welcome-help" as="div" className="w-full">
+        <a
+          href="https://nitrogenai.mintlify.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="nav-row w-full"
+          title="Help"
+        >
+          <HelpCircle className="w-4 h-4 flex-shrink-0" />
+          <span className={NAV_LABEL_CLASS}>
+            Help
+          </span>
+        </a>
+      </TourAnchor>
 
       <button
         onClick={() => setSettingsOpen(true)}

@@ -4,6 +4,7 @@ import 'katex/dist/katex.min.css';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { ChatShellProvider } from '@/components/chat-shell/ChatShellProvider';
+import { TourProvider } from '@/components/tour/TourProvider';
 import { SideDrawer } from '@/components/ui';
 import { ShellNavContext } from '@/components/ui/ShellContext';
 import type { NavItem } from '@/components/ui/SideDrawer';
@@ -13,12 +14,29 @@ import {
   writeChatSidebarCollapsed,
 } from '@/components/ui/chatSidebarLayout';
 
+function ShellTourProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={null}>
+      <TourProvider>{children}</TourProvider>
+    </Suspense>
+  );
+}
+
 function ChatShellFrame({ children }: { children: React.ReactNode }) {
   const navHandlerRef = useRef<((item: NavItem) => boolean) | null>(null);
   const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     setChatSidebarCollapsed(readChatSidebarCollapsed());
+  }, []);
+
+  useEffect(() => {
+    const expandForTour = () => {
+      setChatSidebarCollapsed(false);
+      writeChatSidebarCollapsed(false);
+    };
+    window.addEventListener('nitrogen:tour-expand-sidebar', expandForTour);
+    return () => window.removeEventListener('nitrogen:tour-expand-sidebar', expandForTour);
   }, []);
 
   const toggleChatSidebar = useCallback(() => {
@@ -61,22 +79,26 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
     return (
       <Suspense>
         <ChatShellProvider>
-          <ChatShellFrame>{children}</ChatShellFrame>
+          <ShellTourProvider>
+            <ChatShellFrame>{children}</ChatShellFrame>
+          </ShellTourProvider>
         </ChatShellProvider>
       </Suspense>
     );
   }
 
   return (
-    <ShellNavContext.Provider value={{ navHandlerRef, chatSidebarCollapsed: false, toggleChatSidebar: () => {} }}>
-      <div className="h-screen flex bg-background overflow-hidden">
-        <Suspense>
-          <SideDrawer />
-        </Suspense>
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          {children}
+    <ShellTourProvider>
+      <ShellNavContext.Provider value={{ navHandlerRef, chatSidebarCollapsed: false, toggleChatSidebar: () => {} }}>
+        <div className="h-screen flex bg-background overflow-hidden">
+          <Suspense>
+            <SideDrawer />
+          </Suspense>
+          <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {children}
+          </div>
         </div>
-      </div>
-    </ShellNavContext.Provider>
+      </ShellNavContext.Provider>
+    </ShellTourProvider>
   );
 }

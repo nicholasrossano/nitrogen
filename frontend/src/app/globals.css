@@ -965,3 +965,39 @@ textarea {
   color: var(--text-secondary, #5A5A60);
 }
 
+/* Product tour — small top-right pulse markers only (no target outlines) */
+@keyframes tour-pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 117, 140, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(0, 117, 140, 0);
+  }
+}
+
+@keyframes tour-pulse-dot-soft {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 117, 140, 0.28);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 117, 140, 0);
+  }
+}
+
+.tour-pulse-dot {
+  animation: tour-pulse-dot 2.2s ease-out infinite;
+}
+
+.tour-pulse-dot-soft {
+  animation: tour-pulse-dot-soft 2.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-pulse-dot,
+  .tour-pulse-dot-soft {
+    animation: none;
+  }
+}
+

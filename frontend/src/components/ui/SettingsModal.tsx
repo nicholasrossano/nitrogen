@@ -1,10 +1,11 @@
 'use client';
 
-import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown } from 'lucide-react';
+import { X, FlaskConical, CreditCard, Loader2, ExternalLink, UserPlus, Check, ChevronDown, CircleHelp, RotateCcw } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useTourStore } from '@/stores/tourStore';
 import { useBillingStore } from '@/stores/billingStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
@@ -222,7 +223,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [projectIcon, setProjectIcon] = useState('FolderOpen');
   const [projectNameSaving, setProjectNameSaving] = useState(false);
   const [projectIconSaving, setProjectIconSaving] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'workspace' | 'project' | 'billing' | 'developer'>('workspace');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'workspace' | 'project' | 'billing' | 'help' | 'developer'>('workspace');
+  const replayWelcome = useTourStore((s) => s.replayWelcome);
   const [projectWorkspaceDropdownOpen, setProjectWorkspaceDropdownOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
@@ -626,6 +628,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             { id: 'workspace' as const, label: 'Workspace', disabled: false, disabledReason: '' },
             { id: 'project' as const, label: 'Project', disabled: false, disabledReason: '' },
             ...(showBillingFeatures ? [{ id: 'billing' as const, label: 'Billing', disabled: false, disabledReason: '' }] : []),
+            { id: 'help' as const, label: 'Help', disabled: false, disabledReason: '' },
             { id: 'developer' as const, label: 'Developer', disabled: false, disabledReason: '' },
           ]).map((item) => {
             const button = (
@@ -999,6 +1002,44 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             ) : activeSettingsTab === 'billing' ? (
               <>
                 {showBillingFeatures && <PlanBillingSection />}
+              </>
+            ) : activeSettingsTab === 'help' ? (
+              <>
+                <SettingsSection title="Tutorial">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      replayWelcome();
+                      onClose();
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-subtle/60 transition-colors"
+                  >
+                    <AccentIconBadge icon={RotateCcw} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary">Replay tutorial</p>
+                      <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                        Walk through the main points of interest on the home screen again.
+                      </p>
+                    </div>
+                  </button>
+                </SettingsSection>
+                <SettingsSection title="Documentation">
+                  <a
+                    href="https://nitrogenai.mintlify.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-subtle/60 transition-colors"
+                  >
+                    <AccentIconBadge icon={CircleHelp} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary">Product docs</p>
+                      <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                        Open the full Nitrogen documentation in a new tab.
+                      </p>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0 text-text-tertiary" />
+                  </a>
+                </SettingsSection>
               </>
             ) : (
               <>
