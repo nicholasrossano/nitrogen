@@ -1,3 +1,4 @@
+/** Overlay floors promoted from the mini stack. Chat is the default floor when this is null. */
 export type ChatContextExpandedWidget = 'overview' | 'variables' | 'files';
 
 export type ContextPanelExpandMotion = 'stack' | 'center';
@@ -19,7 +20,21 @@ export const contextStackTransitionClass =
   'transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]';
 
 export const contextStackPanelTransitionClass =
-  'transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[transform,opacity]';
+  'transition-[transform,opacity,border-color,box-shadow,right] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[transform,opacity]';
+
+/**
+ * Chrome (border/shadow) for an expandable panel. When `flushOnExpand` is set, the
+ * floating-card chrome fades out as the panel becomes visible, so it settles as a flush
+ * "floor" surface instead of staying a floating card (used for widgets that become the
+ * primary work surface, e.g. Variables).
+ */
+export function contextStackExpandedPanelChromeClass(
+  visible: boolean,
+  flushOnExpand: boolean = false,
+): string {
+  if (flushOnExpand && visible) return 'border-transparent shadow-none';
+  return 'border-stroke-subtle shadow-floating-panel';
+}
 
 export function contextStackExpandOriginClass(
   widget: ChatContextExpandedWidget,

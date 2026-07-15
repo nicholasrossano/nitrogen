@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Plus, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, MessageSquare, Plus, Sparkles, X } from 'lucide-react';
 
 import { ReadOnlyDataTable, type ReadOnlyDataTableColumn } from '@/components/ui/ReadOnlyDataTable';
 import { WorkspaceTabLoader } from '@/components/ui';
@@ -11,9 +11,10 @@ import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import {
   api,
   type Assumption,
-  type AssumptionSourceType,
   type AssumptionStatus,
+  type ProjectMaterial,
 } from '@/lib/api';
+import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { AssumptionCommentsThread } from './AssumptionCommentsThread';
 
 const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
@@ -26,6 +27,8 @@ interface AssumptionsWorkspaceTabProps {
   focusAssumptionId?: string | null;
   onAssumptionSelectInChat?: (assumption: Assumption) => void;
   onAddAssumptionInChat?: () => void;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onOpenFile?: (file: ProjectMaterial) => void;
 }
 
 const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
@@ -34,17 +37,6 @@ const STATUS_OPTIONS: Array<{ value: '' | AssumptionStatus; label: string }> = [
   { value: 'extracted', label: 'Extracted' },
   { value: 'assumed', label: 'Assumed' },
   { value: 'missing', label: 'Missing' },
-];
-
-const SOURCE_OPTIONS: Array<{ value: '' | AssumptionSourceType; label: string }> = [
-  { value: '', label: 'All sources' },
-  { value: 'extraction', label: 'Extraction' },
-  { value: 'user_input', label: 'User input' },
-  { value: 'assessment', label: 'Assessment' },
-  { value: 'assessment_approval', label: 'Approved assessment' },
-  { value: 'chat_approval', label: 'Chat approval' },
-  { value: 'model_candidate', label: 'Model candidate' },
-  { value: 'promotion', label: 'Legacy promotion' },
 ];
 
 function formatNumeric(value: number, valueType?: Assumption['value_type']): string {
@@ -62,7 +54,7 @@ function isMissingValue(value: any): boolean {
   return value === null || value === undefined || value === '';
 }
 
-function formatValue(value: any, unit?: string | null, valueType?: Assumption['value_type']): string {
+export function formatValue(value: any, unit?: string | null, valueType?: Assumption['value_type']): string {
   if (isMissingValue(value)) return '';
   const formatted = typeof value === 'number'
     ? formatNumeric(value, valueType)
@@ -102,18 +94,45 @@ function sourceCitationFromAssumption(row: Assumption): {
   title: string;
   url: string | null;
   publisher: string | null;
+  evidenceDocId: string | null;
+  chunkId: string | null;
+  materialId: string | null;
 } | null {
   const ref = row.source_reference;
   const nested = firstReferenceSource(ref);
+  const evidenceSource = (() => {
+    const sources = Array.isArray(ref?.sources) ? ref.sources : [];
+    return (
+      sources.find((source) => {
+        if (!source || typeof source !== 'object') return false;
+        const sourceType = String(source.source_type || '').toLowerCase();
+        return (
+          sourceType === 'evidence'
+          || typeof source.evidence_doc_id === 'string'
+        );
+      }) ?? null
+    );
+  })();
+  const materialSource = (() => {
+    const sources = Array.isArray(ref?.sources) ? ref.sources : [];
+    return (
+      sources.find((source) => {
+        if (!source || typeof source !== 'object') return false;
+        return String(source.source_type || '').toLowerCase() === 'material' && typeof source.id === 'string';
+      }) ?? null
+    );
+  })();
   const title = (
     ref?.source_title ??
     ref?.title ??
     nested?.source_title ??
     nested?.title ??
     nested?.filename ??
+    evidenceSource?.title ??
+    evidenceSource?.source_title ??
+    materialSource?.title ??
     null
   );
-  if (!title || typeof title !== 'string') return null;
   const url = (
     ref?.source_url ??
     ref?.url ??
@@ -126,25 +145,94 @@ function sourceCitationFromAssumption(row: Assumption): {
     nested?.publisher ??
     (typeof url === 'string' ? hostnameFromUrl(url) : null)
   );
+  const evidenceDocId = (
+    (typeof ref?.evidence_doc_id === 'string' && ref.evidence_doc_id)
+    || (typeof evidenceSource?.evidence_doc_id === 'string' && evidenceSource.evidence_doc_id)
+    || (typeof evidenceSource?.id === 'string' && evidenceSource.id)
+    || (typeof nested?.evidence_doc_id === 'string' && nested.evidence_doc_id)
+    || (
+      String(nested?.source_type || '').toLowerCase() === 'evidence'
+      && typeof nested?.id === 'string'
+      && nested.id
+    )
+    || null
+  );
+  const chunkId = (
+    (typeof ref?.chunk_id === 'string' && ref.chunk_id)
+    || (typeof evidenceSource?.chunk_id === 'string' && evidenceSource.chunk_id)
+    || (typeof nested?.chunk_id === 'string' && nested.chunk_id)
+    || null
+  );
+  const materialId = (
+    (typeof ref?.project_material_id === 'string' && ref.project_material_id)
+    || (typeof materialSource?.id === 'string' && materialSource.id)
+    || (
+      String(nested?.source_type || '').toLowerCase() === 'material'
+      && typeof nested?.id === 'string'
+      && nested.id
+    )
+    || null
+  );
+  const resolvedTitle = typeof title === 'string' && title.trim()
+    ? title
+    : evidenceDocId || materialId
+      ? 'Document'
+      : null;
+  if (!resolvedTitle) return null;
   return {
-    title,
+    title: resolvedTitle,
     url: typeof url === 'string' && url.length > 0 ? url : null,
     publisher: typeof publisher === 'string' && publisher.length > 0 ? publisher : null,
+    evidenceDocId,
+    chunkId,
+    materialId,
   };
 }
 
-function SourceCell({ row }: { row: Assumption }) {
+function SourceCell({
+  row,
+  onOpenDocument,
+  onOpenFile,
+}: {
+  row: Assumption;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onOpenFile?: (file: ProjectMaterial) => void;
+}) {
   const citation = sourceCitationFromAssumption(row);
   if (!citation) {
     return <span className="text-text-secondary">{formatSourceType(row.source_type)}</span>;
   }
 
   const label = citation.publisher || citation.title;
+  const canOpenEvidence = Boolean(citation.evidenceDocId && onOpenDocument);
+  const canOpenMaterial = Boolean(!canOpenEvidence && citation.materialId && onOpenFile);
+  const openInternal = canOpenEvidence
+    ? () => {
+        onOpenDocument?.({
+          evidence_doc_id: citation.evidenceDocId!,
+          chunk_id: citation.chunkId,
+          source_title: citation.title,
+        });
+      }
+    : canOpenMaterial
+      ? () => {
+          onOpenFile?.({
+            id: citation.materialId!,
+            filename: citation.title,
+            file_type: 'text',
+            file_size: null,
+            created_at: '',
+            source: 'material',
+          });
+        }
+      : null;
+
   return (
     <CitationChip
       title={citation.title}
       size="compact"
-      href={citation.url}
+      href={openInternal ? null : citation.url}
+      onActivate={openInternal}
       onLinkClick={(event) => event.stopPropagation()}
       icon={row.source_type === 'model_candidate'
         ? <Globe className="h-2.5 w-2.5 shrink-0" />
@@ -152,14 +240,14 @@ function SourceCell({ row }: { row: Assumption }) {
       label={
         <>
           <span className="max-w-[220px] truncate">{label}</span>
-          {citation.url ? <ExternalLink className="h-2.5 w-2.5 shrink-0" /> : null}
+          {!openInternal && citation.url ? <ExternalLink className="h-2.5 w-2.5 shrink-0" /> : null}
         </>
       }
     />
   );
 }
 
-function normalizeDraftValue(raw: string): string | null {
+export function normalizeDraftValue(raw: string): string | null {
   const normalized = raw.trim().toLowerCase();
   if (
     normalized === '' ||
@@ -193,12 +281,12 @@ export function AssumptionsWorkspaceTab({
   focusAssumptionId = null,
   onAssumptionSelectInChat,
   onAddAssumptionInChat,
+  onOpenDocument,
+  onOpenFile,
 }: AssumptionsWorkspaceTabProps) {
   const [rows, setRows] = useState<Assumption[]>([]);
   const [selected, setSelected] = useState<Assumption | null>(null);
   const [status, setStatus] = useState<'' | AssumptionStatus>('');
-  const [sourceType, setSourceType] = useState<'' | AssumptionSourceType>('');
-  const [assessmentFilter, setAssessmentFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,8 +299,6 @@ export function AssumptionsWorkspaceTab({
     try {
       const next = await api.listAssumptions(projectId, {
         status,
-        source_type: sourceType,
-        assessment: assessmentFilter.trim(),
       });
       setRows(next);
       setSelected((current) => next.find((row) => row.id === current?.id) ?? null);
@@ -221,7 +307,7 @@ export function AssumptionsWorkspaceTab({
     } finally {
       setLoading(false);
     }
-  }, [projectId, assessmentFilter, sourceType, status]);
+  }, [projectId, status]);
 
   useEffect(() => {
     loadRows();
@@ -236,16 +322,17 @@ export function AssumptionsWorkspaceTab({
     if (!focusAssumptionId) return;
     const match = rows.find((row) => row.id === focusAssumptionId);
     if (!match) return;
+    if (onAssumptionSelectInChat) {
+      onAssumptionSelectInChat(match);
+      return;
+    }
     setSelected((current) => (current?.id === match.id ? current : match));
-  }, [focusAssumptionId, rows]);
+  }, [focusAssumptionId, rows, onAssumptionSelectInChat]);
 
   const matchesActiveFilters = useCallback((row: Assumption) => {
     if (status && row.status !== status) return false;
-    if (sourceType && row.source_type !== sourceType) return false;
-    const assessment = assessmentFilter.trim();
-    if (assessment && !row.used_in_assessments.includes(assessment)) return false;
     return true;
-  }, [assessmentFilter, sourceType, status]);
+  }, [status]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -287,18 +374,6 @@ export function AssumptionsWorkspaceTab({
     };
   }, [projectId, matchesActiveFilters]);
 
-  const assessmentOptions = useMemo(() => {
-    const assessments = new Set<string>();
-    rows.forEach((row) => row.used_in_assessments.forEach((assessment) => assessments.add(assessment)));
-    return Array.from(assessments).sort();
-  }, [rows]);
-  const assessmentFilterOptions = useMemo(
-    () => [
-      { value: '', label: 'All assessments' },
-      ...assessmentOptions.map((assessment) => ({ value: assessment, label: assessment.replace(/_/g, ' ') })),
-    ],
-    [assessmentOptions],
-  );
   const selectedValueText = selected ? formatValue(selected.value, null, selected.value_type) : '';
   const hasDraftChanges = Boolean(
     selected && (
@@ -368,7 +443,9 @@ export function AssumptionsWorkspaceTab({
         </span>
       ),
     },
-    { key: 'source_type', header: 'Source', className: 'min-w-[180px] max-w-[240px]', render: (row) => <SourceCell row={row} /> },
+    { key: 'source_type', header: 'Source', className: 'min-w-[180px] max-w-[240px]', render: (row) => (
+      <SourceCell row={row} onOpenDocument={onOpenDocument} onOpenFile={onOpenFile} />
+    ) },
     { key: 'last_updated_by_email', header: 'Updated By', className: 'whitespace-nowrap min-w-[150px]', render: (row) => row.last_updated_by_email || row.created_by_email || 'system' },
   ];
 
@@ -415,6 +492,7 @@ export function AssumptionsWorkspaceTab({
 
   if (loading) return <WorkspaceTabLoader />;
 
+  const detailOpen = Boolean(showDetailPanel && selected);
   const detailPanelClass = embedded
     ? 'flex min-h-0 h-full flex-col overflow-y-auto border-l border-divider bg-white p-4'
     : 'rounded-xl border border-divider bg-white p-4';
@@ -423,9 +501,11 @@ export function AssumptionsWorkspaceTab({
     <div className={embedded ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'h-full overflow-y-auto p-6'}>
       <div
         className={
-          embedded && showDetailPanel
-            ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-0'
-            : `mx-auto grid max-w-7xl gap-6 ${showDetailPanel ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`
+          embedded
+            ? detailOpen
+              ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-0'
+              : 'flex min-h-0 flex-1 flex-col'
+            : `mx-auto grid max-w-7xl gap-6 ${detailOpen ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''}`
         }
       >
         <div className={embedded ? 'flex min-h-0 flex-col overflow-hidden px-4 pb-4 pt-4' : 'space-y-6'}>
@@ -434,7 +514,9 @@ export function AssumptionsWorkspaceTab({
               <h1 className="text-lg font-semibold text-text-primary">{PROJECT_VARIABLES.title}</h1>
               <p className="mt-1 text-sm text-text-tertiary">
                 Project-wide values and claims used by assessments, forecasts, and outputs.
-                {!showDetailPanel ? ` Select a ${PROJECT_VARIABLES.lowerSingular} to open it to explore it further.` : ''}
+                {showDetailPanel && !selected
+                  ? ` Select a ${PROJECT_VARIABLES.lowerSingular} to open it to explore it further.`
+                  : ''}
               </p>
             </div>
           ) : null}
@@ -448,18 +530,6 @@ export function AssumptionsWorkspaceTab({
                 onChange={(value) => setStatus(value as '' | AssumptionStatus)}
                 options={STATUS_OPTIONS}
                 ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by status`}
-              />
-              <CustomDropdown
-                value={sourceType}
-                onChange={(value) => setSourceType(value as '' | AssumptionSourceType)}
-                options={SOURCE_OPTIONS}
-                ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by source type`}
-              />
-              <CustomDropdown
-                value={assessmentFilter}
-                onChange={setAssessmentFilter}
-                options={assessmentFilterOptions}
-                ariaLabel={`Filter ${PROJECT_VARIABLES.lower} by assessment`}
               />
             </div>
             {onAddAssumptionInChat ? (
@@ -509,14 +579,23 @@ export function AssumptionsWorkspaceTab({
           )}
         </div>
 
-        {showDetailPanel ? (
+        {detailOpen && selected ? (
           <aside className={detailPanelClass}>
-          {selected ? (
             <div className="space-y-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">Selected {PROJECT_VARIABLES.lowerSingular}</p>
-                <h2 className="mt-1 text-base font-semibold text-text-primary">{selected.label}</h2>
-                <p className="mt-1 text-xs text-text-tertiary">{selected.key}</p>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">Selected {PROJECT_VARIABLES.lowerSingular}</p>
+                  <h2 className="mt-1 text-base font-semibold text-text-primary">{selected.label}</h2>
+                  <p className="mt-1 text-xs text-text-tertiary">{selected.key}</p>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-subtle hover:text-text-primary"
+                  aria-label={`Close ${PROJECT_VARIABLES.lowerSingular} details`}
+                  onClick={() => setSelected(null)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
 
               <label className="block">
@@ -550,14 +629,6 @@ export function AssumptionsWorkspaceTab({
 
               <AssumptionCommentsThread assumptionId={selected.id} />
             </div>
-          ) : (
-            <div className={`flex items-center justify-center text-center ${embedded ? 'h-full flex-1' : 'min-h-[260px] h-full'}`}>
-              <div>
-                <p className="text-sm font-medium text-text-secondary">Select a {PROJECT_VARIABLES.lowerSingular}</p>
-                <p className="mt-1 text-xs text-text-tertiary">Open a row to inspect provenance, edit values, or change status.</p>
-              </div>
-            </div>
-          )}
           </aside>
         ) : null}
       </div>
