@@ -81,10 +81,10 @@ More examples and wrappers: `docs/testing.md`.
 
 There are two chat surfaces. Default to **Generate flow (standalone)** unless the user explicitly says "project plan" or "side chat":
 
-- Generate flow: `LandingInput.tsx`, `ConversationView.tsx`, `ProjectStandaloneChatView.tsx`
-- Project plan side chat: `ChatPanel.tsx`, `EditorSidePanel.tsx`
+- Generate flow: `LandingInput.tsx`, `ConversationView.tsx`, `ProjectChatSurface.tsx` / `PersonalChatSurface.tsx`
+- Project plan side chat: `ProjectChatTabsPanel.tsx`, `AssumptionsChatPanel.tsx`, `FloatLayer.tsx`
 
-Do not modify `ToolPicker.tsx` when the request is about generate-flow landing tiles.
+Landing tiles live in `LandingInput.tsx` (do not look for a separate picker component).
 
 ## Session startup (always run first)
 

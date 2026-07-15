@@ -74,57 +74,6 @@ class ItemProvenance(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Layer 1 – Provenance Trace (per generation event, internal/audit)
-# ---------------------------------------------------------------------------
-
-class ProvenanceTraceCreate(BaseModel):
-    """Schema for writing a new provenance trace row."""
-
-    project_id: Optional[UUID] = None
-    chat_id: Optional[UUID] = Field(
-        None, description="Core-chat ID when not tied to an initiative"
-    )
-    trigger: str = Field(
-        ...,
-        description="What caused this generation: chat_message, plan_generation, lcoe_run, etc.",
-    )
-    trigger_ref: Optional[str] = Field(
-        None, description="ID of the message / widget / plan that triggered the event"
-    )
-    retrieval_context: list[dict] = Field(
-        default_factory=list,
-        description="Full list of RetrievedFacts (not just cited ones)",
-    )
-    thinking_lines: list[str] = Field(default_factory=list)
-    model_id: str = Field("", description="e.g. gpt-4o-2024-08-06")
-    prompt_template: str = Field("", description="Template name or hash")
-    latency_ms: Optional[int] = None
-    token_usage: dict = Field(
-        default_factory=dict,
-        description="{prompt_tokens, completion_tokens}",
-    )
-
-
-class ProvenanceTraceResponse(BaseModel):
-    """Read-only representation of a stored trace."""
-
-    id: UUID
-    project_id: Optional[UUID] = None
-    chat_id: Optional[UUID] = None
-    trigger: str
-    trigger_ref: Optional[str] = None
-    retrieval_context: list[dict] = []
-    thinking_lines: list[str] = []
-    model_id: str = ""
-    prompt_template: str = ""
-    latency_ms: Optional[int] = None
-    token_usage: dict = {}
-
-    class Config:
-        from_attributes = True
-
-
-# ---------------------------------------------------------------------------
 # Helpers to build provenance objects from existing dataclasses
 # ---------------------------------------------------------------------------
 
