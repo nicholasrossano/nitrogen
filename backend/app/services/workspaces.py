@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
 
@@ -146,8 +147,14 @@ async def require_workspace_owner(
 
 
 async def get_default_workspace_for_user(db: AsyncSession, user_id: str) -> Workspace:
-    """Return the singleton company workspace for a user."""
-    return await ensure_company_workspace(db, user_id)
+    """Return the user's default workspace.
+
+    Hosted multi-tenant mode uses the personal workspace only.
+    Legacy ``SINGLE_ORG_MODE`` still uses the shared company workspace.
+    """
+    if get_settings().single_org_mode:
+        return await ensure_company_workspace(db, user_id)
+    return await ensure_personal_workspace(db, user_id)
 
 
 async def resolve_workspace_for_user(
@@ -155,7 +162,7 @@ async def resolve_workspace_for_user(
     user_id: str,
     workspace_id: UUID | str | None,
 ) -> tuple[Workspace, WorkspaceMembership]:
-    """Resolve an explicit workspace or the user's personal workspace."""
+    """Resolve an explicit workspace, or the user's default (personal unless single-org)."""
     if workspace_id is None:
         workspace = await get_default_workspace_for_user(db, user_id)
         membership = await get_workspace_membership(db, workspace.id, user_id)
