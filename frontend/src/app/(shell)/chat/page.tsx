@@ -72,6 +72,8 @@ function ChatWorkbenchContent() {
   const [floatLayout, setFloatLayout] = useState<FloatLayout>('docked');
   const wasOnLandingRef = useRef(true);
   const ephemeralAssessmentSessionsRef = useRef<Map<string, { projectId: string; engaged: boolean }>>(new Map());
+  /** Prevents re-opening a floor from a stale ?panel= while router.replace clears it. */
+  const dismissingPanelRef = useRef<ChatContextExpandedWidget | null>(null);
 
   const selectedProjectId = searchParams.get('project');
   const activeChatId = searchParams.get('chat');
@@ -89,6 +91,12 @@ function ChatWorkbenchContent() {
       params.delete(CONTEXT_PANEL_SEARCH_PARAM);
     });
   }, [replaceChatSearchParams]);
+
+  const dismissContextPanelParam = useCallback(() => {
+    const current = parseContextPanelParam(searchParams.get(CONTEXT_PANEL_SEARCH_PARAM));
+    if (current) dismissingPanelRef.current = current;
+    clearContextPanelParam();
+  }, [clearContextPanelParam, searchParams]);
 
   useEffect(() => {
     if (!activeWorkspace) void loadWorkspaces();
@@ -151,18 +159,39 @@ function ChatWorkbenchContent() {
     setPinnedFloatWidgets(null);
     setFloatWidgets([]);
     setFloatLayout('docked');
-    setExpandedContextWidget(null);
-    setVariablesFocusId(null);
-    setExpandMotionMode('stack');
-  }, [effectiveProjectId]);
+    // Keep URL-driven floors (sidebar capsules) across project switches; only
+    // reset stack expansions that aren't backed by ?panel=.
+    if (!panelParam) {
+      setExpandedContextWidget(null);
+      setVariablesFocusId(null);
+      setExpandMotionMode('stack');
+    }
+  }, [effectiveProjectId, panelParam]);
 
   useEffect(() => {
-    if (activeChatId || !panelParam) return;
-    // Stack expansions are local-only; ignore stale ?panel= until URL catches up on close.
-    if (expandedContextWidget == null) return;
-    if (expandedContextWidget != null && expandMotionMode === 'stack') return;
+    if (activeChatId) return;
+
+    if (!panelParam) {
+      dismissingPanelRef.current = null;
+      // Stack expansions don't use the URL — don't tear them down when ?panel= is absent.
+      if (expandMotionMode === 'center') {
+        setExpandedContextWidget(null);
+        chatShell?.setActiveContextWidget(null);
+        setExpandMotionMode('stack');
+      }
+      return;
+    }
+
+    // Stale ?panel= still present while Back/dismiss is clearing the URL.
+    // Capsule clicks set activeContextWidget first — honor that as a fresh open.
+    if (dismissingPanelRef.current === panelParam) {
+      if (chatShell?.activeContextWidget !== panelParam) return;
+      dismissingPanelRef.current = null;
+    }
+
     if (expandedContextWidget === panelParam && expandMotionMode === 'center') return;
 
+    // Honor capsule / deep-link opens even when a stack floor is already up.
     setPinnedFloatWidgets(null);
     setFloatWidgets([]);
     setFloatLayout('docked');
@@ -177,8 +206,8 @@ function ChatWorkbenchContent() {
 
   useEffect(() => {
     if (!activeChatId || !panelParam) return;
-    clearContextPanelParam();
-  }, [activeChatId, clearContextPanelParam, panelParam]);
+    dismissContextPanelParam();
+  }, [activeChatId, dismissContextPanelParam, panelParam]);
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === effectiveProjectId) ?? null,
@@ -327,12 +356,12 @@ function ChatWorkbenchContent() {
       setVariablesFocusId(null);
       setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
-      clearContextPanelParam();
+      dismissContextPanelParam();
       setHasMessages(true);
     }
     setFloatLayout(layout);
     setPinnedFloatWidgets(widgets);
-  }, [chatShell, clearContextPanelParam]);
+  }, [chatShell, dismissContextPanelParam]);
 
   /** Swap float contents in place (assessment → decision/activity log) without changing dock layout. */
   const replaceFloatContent = useCallback((widgets: FloatWidget[]) => {
@@ -455,7 +484,7 @@ function ChatWorkbenchContent() {
       setVariablesFocusId(null);
       setExpandMotionMode('stack');
       chatShell?.setActiveContextWidget(null);
-      clearContextPanelParam();
+      dismissContextPanelParam();
       didReset = true;
     }
 
@@ -476,11 +505,11 @@ function ChatWorkbenchContent() {
     activeChatId,
     chatShell,
     cleanupActiveEphemeralAssessment,
-    clearContextPanelParam,
     floatWidgets.length,
     expandedContextWidget,
     panelParam,
     pinnedFloatWidgets,
+    dismissContextPanelParam,
   ]);
 
   useChatShellLandingReset(resetLandingOverlays);
@@ -521,12 +550,12 @@ function ChatWorkbenchContent() {
     }
 
     if (searchParams.get(CONTEXT_PANEL_SEARCH_PARAM)) {
-      clearContextPanelParam();
+      dismissContextPanelParam();
     }
   }, [
     chatShell,
     cleanupActiveEphemeralAssessment,
-    clearContextPanelParam,
+    dismissContextPanelParam,
     floatWidgets,
     effectiveProjectId,
     pinnedFloatWidgets,
@@ -545,9 +574,7 @@ function ChatWorkbenchContent() {
     };
   }, []);
 
-  const chatSurfaceKey = expandMotionMode === 'center' && panelParam && !activeChatId
-    ? `${effectiveProjectId}:${panelParam}`
-    : effectiveProjectId;
+  const chatSurfaceKey = effectiveProjectId;
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0 min-w-0 h-full bg-surface">
@@ -574,9 +601,8 @@ function ChatWorkbenchContent() {
               landingComposerTitle={isOnboarding ? undefined : projectDisplayName(selectedProject)}
               landingHeaderContent={<></>}
               onLandingStateChange={(onLanding) => {
-                if (wasOnLandingRef.current && !onLanding && panelParam) {
-                  clearContextPanelParam();
-                } else if (panelParam && !activeChatId) {
+                if (panelParam && !activeChatId) {
+                  // URL floor is open — keep chat on landing under it.
                   setHasMessages(false);
                 } else if (!panelParam) {
                   setHasMessages(!onLanding);

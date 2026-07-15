@@ -109,7 +109,7 @@ export function SideDrawer() {
 
   const activeItem: NavItem = useMemo(() => {
     if (isChatShell) {
-      if (pathname.startsWith('/chat/files')) return 'files';
+      if (searchParams.get('panel') === 'files') return 'files';
       return 'chat';
     }
     if (!projectId) return searchParams.get('view') === 'files' ? 'files' : 'portfolio';
@@ -186,12 +186,19 @@ export function SideDrawer() {
         return;
       }
       if (item === 'files') {
-        router.push(chatProjectId ? `/chat/files?project=${chatProjectId}` : '/chat/files');
+        // Open the same Files floor used by the mini context stack.
+        const params = new URLSearchParams();
+        if (chatProjectId) params.set('project', chatProjectId);
+        params.set('panel', 'files');
+        router.push(`/chat?${params.toString()}`);
         return;
       }
     }
     if (item === 'files' && !hasProject) {
-      router.push('/chat/files');
+      const params = new URLSearchParams();
+      if (chatProjectId) params.set('project', chatProjectId);
+      params.set('panel', 'files');
+      router.push(`/chat?${params.toString()}`);
       return;
     }
     if (item === 'files' && hasProject && projectId) {
