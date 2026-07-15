@@ -48,6 +48,15 @@ class Settings(BaseSettings):
         if self.debug is None:
             self.debug = 'localhost' in self.database_url or '127.0.0.1' in self.database_url
         return self
+
+    @model_validator(mode='after')
+    def derive_subscription_usage_limit(self) -> Self:
+        if self.subscription_usage_limit_usd is None:
+            self.subscription_usage_limit_usd = round(
+                self.subscription_price_usd * (1.0 - self.usage_budget_buffer_pct),
+                2,
+            )
+        return self
     
     # OpenAlex
     openalex_email: str = ""
@@ -100,8 +109,13 @@ class Settings(BaseSettings):
     # members access to all projects in that workspace (legacy behavior).
     single_org_mode: bool = False
 
-    # Usage limits (estimated API cost in USD per billing period)
-    subscription_usage_limit_usd: float = 20.0
+    # Individual list price (source of truth for UI catalog + ops).
+    subscription_price_usd: float = 30.0
+    # Reserve margin vs OpenRouter invoice: estimates + last-call overshoot.
+    usage_budget_buffer_pct: float = 0.05
+    # Included AI budget ($/period). None → derived as price × (1 − buffer).
+    # Set SUBSCRIPTION_USAGE_LIMIT_USD to hard-override.
+    subscription_usage_limit_usd: float | None = None
     # Deprecated aliases
     starter_usage_limit_usd: float = 14.0
     pro_usage_limit_usd: float = 42.0
@@ -109,6 +123,8 @@ class Settings(BaseSettings):
     # OpenRouter (platform LLM routing — required for non-BYOK users)
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # How long to trust cached GET /models prices before re-fetch (seconds).
+    openrouter_pricing_ttl_seconds: int = 3600
 
     # Encryption key for BYOK API keys at rest (Fernet key)
     api_key_encryption_key: str = ""
