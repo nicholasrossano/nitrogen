@@ -13,13 +13,13 @@ permissions:
 
 jobs:
   merge-safe-dependabot-pr:
-    name: Merge safe Dependabot frontend updates
+    name: Merge Dependabot patch digests
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request'
     steps:
-      - name: Merge if PR is safe (Dependabot frontend patch/minor)
+      - name: Merge if PR is a Dependabot patch group
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -47,36 +47,14 @@ jobs:
             exit 0
           fi
 
+          # Only auto-merge grouped patch digests (see .github/dependabot.yml).
           case "$HEAD_REF" in
-            dependabot/npm_and_yarn/frontend/*) ;;
+            *patch-updates*|*patch_updates*) ;;
             *)
-              echo "Not a frontend npm Dependabot branch: $HEAD_REF"
+              echo "Not a patch-updates Dependabot branch: $HEAD_REF"
               exit 0
               ;;
           esac
 
-          # Title pattern example:
-          # "Bump recharts from 3.8.0 to 3.8.1 in /frontend"
-          FROM_VERSION="$(echo "$TITLE" | sed -nE 's/.* from ([^ ]+) to ([^ ]+) in \/frontend.*/\1/p')"
-          TO_VERSION="$(echo "$TITLE" | sed -nE 's/.* from ([^ ]+) to ([^ ]+) in \/frontend.*/\2/p')"
-
-          if [ -z "$FROM_VERSION" ] || [ -z "$TO_VERSION" ]; then
-            echo "Could not parse dependency versions from title: $TITLE"
-            exit 0
-          fi
-
-          FROM_MAJOR="$(echo "$FROM_VERSION" | sed -nE 's/^[^0-9]*([0-9]+).*/\1/p')"
-          TO_MAJOR="$(echo "$TO_VERSION" | sed -nE 's/^[^0-9]*([0-9]+).*/\1/p')"
-
-          if [ -z "$FROM_MAJOR" ] || [ -z "$TO_MAJOR" ]; then
-            echo "Could not parse semver majors from $FROM_VERSION -> $TO_VERSION"
-            exit 0
-          fi
-
-          if [ "$FROM_MAJOR" != "$TO_MAJOR" ]; then
-            echo "Major update detected ($FROM_VERSION -> $TO_VERSION). Skipping."
-            exit 0
-          fi
-
-          echo "Merging safe Dependabot PR #$PR_NUMBER ($FROM_VERSION -> $TO_VERSION)."
+          echo "Merging Dependabot patch PR #$PR_NUMBER ($TITLE)."
           gh pr merge --repo "$REPO" --squash --delete-branch "$PR_NUMBER"
