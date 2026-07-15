@@ -25,9 +25,10 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 
 class CheckoutRequest(BaseModel):
-    price_id: str
     success_url: str
     cancel_url: str
+    # Optional; defaults to settings.stripe_price_id (individual plan).
+    price_id: str | None = None
 
 
 class PortalRequest(BaseModel):
@@ -36,6 +37,18 @@ class PortalRequest(BaseModel):
 
 class RedeemCodeRequest(BaseModel):
     code: str
+
+
+@router.get("/catalog")
+async def billing_catalog():
+    """Public plan constants from Settings — single source for UI labels."""
+    return {
+        "billing_enabled": settings.billing_enabled,
+        "subscription_price_usd": settings.subscription_price_usd,
+        "subscription_usage_limit_usd": settings.subscription_usage_limit_usd,
+        "usage_budget_buffer_pct": settings.usage_budget_buffer_pct,
+        "stripe_price_id": settings.stripe_price_id or None,
+    }
 
 
 @router.get("/status")
@@ -80,12 +93,15 @@ async def checkout(
 ):
     if not settings.billing_enabled:
         raise HTTPException(status_code=503, detail="Billing is not configured")
+    price_id = body.price_id or settings.stripe_price_id
+    if not price_id:
+        raise HTTPException(status_code=503, detail="Subscription price is not configured")
     success_url = validate_billing_redirect_url(body.success_url)
     cancel_url = validate_billing_redirect_url(body.cancel_url)
     url = await create_checkout_session(
         user_id=user.uid,
         email=user.email,
-        price_id=body.price_id,
+        price_id=price_id,
         db=db,
         success_url=success_url,
         cancel_url=cancel_url,
