@@ -1,26 +1,18 @@
 import {
   API_URL,
   fetchApi,
-  fetchApiWithTimeout,
   getAuthToken,
-  triggerBlobDownload,
-  workflowVersionHeaders,
 } from './client';
 import type {
   Project,
   AssessmentInstance,
   AssessmentDefinition,
-  ProjectHealthStatus,
   ProjectHealthResponse,
-  ProjectHealthDimension,
-  ProjectStatusLevel,
   ProjectStatusResponse,
   ProjectStatusCategoryConfig,
   ProjectStatusCriteria,
-  MemoResponse,
   ProjectPlanItem,
   ProjectPlan,
-  DeepDiveResult,
 } from './types';
 
 
@@ -92,33 +84,11 @@ export const projectsApi = {
       throw new Error(error.detail);
     }
   },
-  permanentlyDeleteProject: async (id: string) => {
-    const url = `${API_URL}/api/v1/projects/${id}/permanent`;
-    const token = await getAuthToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers,
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Permanent delete failed' }));
-      throw new Error(error.detail);
-    }
-  },
-  restoreProject: (id: string) =>
-    fetchApi<Project>(`/api/v1/projects/${id}/restore`, {
-      method: 'POST',
-    }),
   confirmProject: (id: string) =>
     fetchApi<{ success: boolean; stage: string; message: string }>(
       `/api/v1/projects/${id}/confirm`,
       { method: 'POST' }
     ),
-  getMemo: (projectId: string) =>
-    fetchApi<MemoResponse>(`/api/v1/projects/${projectId}/memo`),
 
   // Export,
   exportMemo: (projectId: string, memoVersionId?: string) =>
@@ -151,8 +121,6 @@ export const projectsApi = {
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   },
-  getTools: () =>
-    fetchApi<AssessmentDefinition[]>('/api/v1/tools'),
   getRecommendedTools: (projectId: string) =>
     fetchApi<{
       recommendations: { tool: AssessmentDefinition; confidence: number; recommended: boolean }[];
@@ -164,14 +132,6 @@ export const projectsApi = {
       {
         method: 'POST',
         body: JSON.stringify({ tool_ids: toolIds }),
-      }
-    ),
-  updateToolInputs: (projectId: string, inputs: Record<string, any>) =>
-    fetchApi<{ success: boolean; inputs: Record<string, any>; missing_inputs: Record<string, string[]>; ready_to_generate: boolean }>(
-      `/api/v1/projects/${projectId}/update-inputs`,
-      {
-        method: 'POST',
-        body: JSON.stringify(inputs),
       }
     ),
 
@@ -187,19 +147,6 @@ export const projectsApi = {
       method: 'POST',
       body: JSON.stringify({ source }),
     }),
-  overrideProjectStatusCategory: (
-    projectId: string,
-    categoryKey: string,
-    status: ProjectStatusLevel,
-    explanation?: string,
-  ) =>
-    fetchApi<ProjectStatusResponse>(
-      `/api/v1/projects/${projectId}/project-status/${categoryKey}/override`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ status, explanation: explanation || null }),
-      },
-    ),
   listStatusCategories: (projectId: string) =>
     fetchApi<ProjectStatusCategoryConfig[]>(
       `/api/v1/projects/${projectId}/project-status/categories`,
@@ -278,30 +225,6 @@ export const projectsApi = {
         })),
       }),
     ),
-  /** @deprecated use refreshProjectStatus */
-  refreshProjectHealth: async (projectId: string, source: string = 'manual_refresh') => {
-    await fetchApi<ProjectStatusResponse>(
-      `/api/v1/projects/${projectId}/project-status/refresh`,
-      { method: 'POST', body: JSON.stringify({ source }) },
-    );
-    return projectsApi.getProjectHealth(projectId);
-  },
-  /** @deprecated use overrideProjectStatusCategory */
-  overrideProjectHealthDimension: async (
-    projectId: string,
-    dimensionId: string,
-    status: ProjectHealthStatus,
-    explanation?: string,
-  ) => {
-    await fetchApi<ProjectStatusResponse>(
-      `/api/v1/projects/${projectId}/project-status/${dimensionId}/override`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ status, explanation: explanation || null }),
-      },
-    );
-    return projectsApi.getProjectHealth(projectId);
-  },
   generateProjectPlan: (projectId: string) =>
     fetchApi<{ project_plan: ProjectPlan }>(
       `/api/v1/projects/${projectId}/project-plan`,
@@ -331,32 +254,6 @@ export const projectsApi = {
     fetchApi<{ success: boolean; item_id: string }>(
       `/api/v1/projects/${projectId}/project-plan/items/${itemId}`,
       { method: 'DELETE' }
-    ),
-  deletePlanElement: (projectId: string, itemId: string, elementIndex: number) =>
-    fetchApi<{ success: boolean; item_id: string; element_index: number }>(
-      `/api/v1/projects/${projectId}/project-plan/items/${itemId}/elements/${elementIndex}`,
-      { method: 'DELETE' }
-    ),
-
-  // Project plan deep dive,
-  deepDiveItem: (
-    projectId: string,
-    itemId: string,
-    body: {
-      item_title: string;
-      item_classification: string;
-      item_rationale: string;
-      pillar_name: string;
-      assessment_type?: string | null;
-    }
-  ) =>
-    fetchApiWithTimeout<DeepDiveResult>(
-      `/api/v1/projects/${projectId}/project-plan/items/${itemId}/deep-dive`,
-      {
-        method: 'POST',
-        body: JSON.stringify(body),
-      },
-      30000,
     ),
 
   // Chat sessions — optionally scoped to a single project,

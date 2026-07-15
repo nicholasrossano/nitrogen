@@ -1,10 +1,7 @@
 import {
   API_URL,
   fetchApi,
-  fetchApiWithTimeout,
   getAuthToken,
-  triggerBlobDownload,
-  workflowVersionHeaders,
 } from './client';
 import type {
   WorkspaceMember,
@@ -12,7 +9,6 @@ import type {
   WorkspaceDetail,
   WorkspaceKnowledgeBank,
   EvidenceDoc,
-  DriveImportResult,
 } from './types';
 
 
@@ -43,35 +39,6 @@ export const workspacesApi = {
     }),
   listWorkspaceKnowledgeBanks: (workspaceId: string) =>
     fetchApi<WorkspaceKnowledgeBank[]>(`/api/v1/workspaces/${workspaceId}/knowledge-banks`),
-  createWorkspaceKnowledgeBank: (workspaceId: string, data: { name: string; base_url: string; index_now?: boolean }) =>
-    fetchApi<WorkspaceKnowledgeBank>(
-      `/api/v1/workspaces/${workspaceId}/knowledge-banks?index_now=${data.index_now !== false}`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ name: data.name, base_url: data.base_url }),
-      },
-    ),
-  updateWorkspaceKnowledgeBank: (
-    workspaceId: string,
-    bankId: string,
-    data: { name?: string; base_url?: string; is_active?: boolean },
-  ) =>
-    fetchApi<WorkspaceKnowledgeBank>(
-      `/api/v1/workspaces/${workspaceId}/knowledge-banks/${bankId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      },
-    ),
-  reindexWorkspaceKnowledgeBank: (workspaceId: string, bankId: string) =>
-    fetchApi<WorkspaceKnowledgeBank>(
-      `/api/v1/workspaces/${workspaceId}/knowledge-banks/${bankId}/reindex`,
-      { method: 'POST' },
-    ),
-  deleteWorkspaceKnowledgeBank: (workspaceId: string, bankId: string) =>
-    fetchApi<void>(`/api/v1/workspaces/${workspaceId}/knowledge-banks/${bankId}`, {
-      method: 'DELETE',
-    }),
   deleteWorkspace: (workspaceId: string) =>
     fetchApi<void>(`/api/v1/workspaces/${workspaceId}`, {
       method: 'DELETE',
@@ -100,9 +67,4 @@ export const workspacesApi = {
   },
   getWorkspaceEvidence: (workspaceId: string) =>
     fetchApi<EvidenceDoc[]>(`/api/v1/workspaces/${workspaceId}/evidence`),
-  importWorkspaceFromDrive: (workspaceId: string, fileIds: string[]) =>
-    fetchApi<DriveImportResult>(
-      `/api/v1/workspaces/${workspaceId}/drive/import`,
-      { method: 'POST', body: JSON.stringify({ file_ids: fileIds }) }
-    ),
 };
