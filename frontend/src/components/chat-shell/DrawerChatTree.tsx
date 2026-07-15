@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { api, type Project } from '@/lib/api';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import type { ChatContextExpandedWidget } from '@/components/chat-shell/chatContextStackMotion';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { projectDisplayName } from '@/lib/projectDisplayName';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -336,7 +337,7 @@ export function DrawerChatTree({
   };
 
   return (
-    <div className="flex flex-col min-h-0 h-full px-1.5 pb-3">
+    <TourAnchor id="welcome-chats" as="div" className="flex flex-col min-h-0 h-full px-1.5 pb-3">
       {renderNewProjectButton()}
       {createError && (
         <p className="px-2 pb-2 text-[11px] text-red-500">{createError}</p>
@@ -370,6 +371,6 @@ export function DrawerChatTree({
           ))}
         </div>
       )}
-    </div>
+    </TourAnchor>
   );
 }

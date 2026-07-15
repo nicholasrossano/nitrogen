@@ -574,6 +574,23 @@ function ChatWorkbenchContent() {
     };
   }, []);
 
+  // Replay tutorial: return to the landing chrome so welcome anchors are all mountable.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onReplay = () => {
+      setExpandedContextWidget(null);
+      setExpandMotionMode('stack');
+      chatShell?.setActiveContextWidget(null);
+      dismissContextPanelParam();
+      setHasMessages(false);
+      setFloatWidgets([]);
+      setPinnedFloatWidgets(null);
+      setFloatLayout('docked');
+    };
+    window.addEventListener('nitrogen:tour-replay', onReplay);
+    return () => window.removeEventListener('nitrogen:tour-replay', onReplay);
+  }, [chatShell, dismissContextPanelParam]);
+
   const chatSurfaceKey = effectiveProjectId;
 
   return (
