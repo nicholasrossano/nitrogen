@@ -1,7 +1,7 @@
-import type { EditorWidget } from '@/components/editor/EditorSidePanel';
+import type { FloatWidget } from '@/components/editor/FloatLayer';
 import type { ActiveEditorContext } from '@/lib/api';
 
-function resolveWidgetTitle(widget: EditorWidget): string {
+function resolveWidgetTitle(widget: FloatWidget): string {
   const data = widget.data ?? {};
   if (typeof data.title === 'string' && data.title.trim()) return data.title.trim();
   if (typeof data.name === 'string' && data.name.trim()) return data.name.trim();
@@ -9,9 +9,9 @@ function resolveWidgetTitle(widget: EditorWidget): string {
   return 'Untitled';
 }
 
-/** Map the active editor widget to the payload the chat stream API expects. */
+/** Map the active FloatLayer widget to the payload the chat stream API expects. */
 export function activeEditorContextFromWidget(
-  widget: EditorWidget | undefined | null,
+  widget: FloatWidget | undefined | null,
 ): ActiveEditorContext | null {
   if (!widget) return null;
 

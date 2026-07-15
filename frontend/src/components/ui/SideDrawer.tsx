@@ -542,15 +542,8 @@ export function SideDrawer() {
     <>
       {isChatShell && (
         <div className={`shrink-0 flex items-center gap-1 px-2 pt-2 pb-1 ${chatSidebarCollapsed ? 'hidden' : ''}`}>
-          <button
-            type="button"
-            onClick={toggleChatSidebar}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/[0.04] transition-colors shrink-0"
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
-          >
-            <PanelLeft className="w-4 h-4" />
-          </button>
+          {/* Spacer matches the persistent absolute toggle so the icon never jumps during collapse. */}
+          <div className="w-8 h-8 shrink-0" aria-hidden />
           {workspaceSwitcher}
         </div>
       )}
@@ -800,6 +793,25 @@ export function SideDrawer() {
           className={`${chatShellAsideClass} relative`}
           style={chatShellAsideStyle}
         >
+          {/* Fixed offsets (not % of height) so the icon centers in the collapsed chip
+              without riding the vertical midpoint while height animates. */}
+          <button
+            type="button"
+            onClick={toggleChatSidebar}
+            className="absolute z-10 flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/[0.04] transition-[top,left,background-color,color] duration-300 ease-in-out"
+            style={{
+              top: chatSidebarCollapsed
+                ? `calc((${CHAT_SIDEBAR_COLLAPSED_WIDTH} - 2rem) / 2)`
+                : '0.5rem',
+              left: chatSidebarCollapsed
+                ? `calc((${CHAT_SIDEBAR_COLLAPSED_WIDTH} - 2rem) / 2)`
+                : '0.5rem',
+            }}
+            aria-label={chatSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={chatSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
           <div
             className={`flex flex-col min-h-0 flex-1 w-full transition-opacity duration-200 ${
               chatSidebarCollapsed ? 'opacity-0 invisible pointer-events-none' : 'opacity-100'
@@ -807,17 +819,6 @@ export function SideDrawer() {
           >
             {drawerBody}
           </div>
-          {chatSidebarCollapsed && (
-            <button
-              type="button"
-              onClick={toggleChatSidebar}
-              className="absolute inset-0 flex items-center justify-center rounded-2xl text-text-secondary hover:text-text-primary transition-colors"
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-            >
-              <PanelLeft className="w-4 h-4" />
-            </button>
-          )}
         </aside>
         {drawerOverlays}
       </>

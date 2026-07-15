@@ -8,10 +8,9 @@ import { DecisionLogWorkspaceTab } from '@/components/decision-log/DecisionLogWo
 import { AssumptionsWorkspaceTab } from '@/components/assumptions/AssumptionsWorkspaceTab';
 import { DocumentViewerWidget } from '@/components/widgets/DocumentViewerWidget';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { EditorSidePanel } from './EditorSidePanel';
+import { FloatLayer, type FloatWidget } from './FloatLayer';
 import { WorkspaceHub, WorkspaceLaunchMode } from './WorkspaceHub';
 import { type Assumption, type AssessmentInstance } from '@/lib/api';
-import type { EditorWidget } from './EditorSidePanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { PlanWorkspaceInspectorState } from '@/components/plan-workspace';
 
@@ -50,7 +49,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onActiveTabChange: (tabId: string | null) => void;
   onOpenTab: (tab: WorkspacePanelTab) => void;
   onCloseTab: (tabId: string) => void;
-  chatWidgets: EditorWidget[];
+  chatWidgets: FloatWidget[];
   workspaceLaunchMode: WorkspaceLaunchMode;
   onWorkspaceLaunchModeHandled: () => void;
   showAssessmentActions?: boolean;
@@ -66,6 +65,7 @@ interface ProjectWorkspaceEditorPanelProps {
   onAssessmentEngaged?: (instanceId: string) => void;
   onOpenAssumptionInChat?: (assumption: Assumption) => void;
   onAddAssumptionInChat?: () => void;
+  onOpenDocument?: (citation: ResearchPanelCitation) => void;
 }
 
 export function ProjectWorkspaceEditorPanel({
@@ -91,6 +91,7 @@ export function ProjectWorkspaceEditorPanel({
   onAssessmentEngaged,
   onOpenAssumptionInChat,
   onAddAssumptionInChat,
+  onOpenDocument,
 }: ProjectWorkspaceEditorPanelProps) {
   const [localWorkspaceLaunchMode, setLocalWorkspaceLaunchMode] = useState<WorkspaceLaunchMode>('idle');
   const [showNewAssessmentDropdown, setShowNewAssessmentDropdown] = useState(false);
@@ -137,7 +138,7 @@ export function ProjectWorkspaceEditorPanel({
   const renderTabContent = (tab: WorkspacePanelTab, isActive: boolean) => {
     if (tab.kind === 'artifacts') {
       return (
-        <EditorSidePanel
+        <FloatLayer
           widgets={chatWidgets}
           projectId={projectId}
           onOpenDecisionLog={onOpenDecisionLog}
@@ -197,6 +198,7 @@ export function ProjectWorkspaceEditorPanel({
           showDetailPanel={false}
           onAssumptionSelectInChat={onOpenAssumptionInChat}
           onAddAssumptionInChat={onAddAssumptionInChat}
+          onOpenDocument={onOpenDocument}
         />
       );
     }
