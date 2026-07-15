@@ -12,7 +12,7 @@ import type {
   PlanWorkspaceInspectorState,
 } from '@/components/plan-workspace';
 import { Tooltip } from '@/components/ui/Tooltip';
-import type { EditorWidget } from '@/components/editor/EditorSidePanel';
+import type { FloatWidget } from '@/components/editor/FloatLayer';
 import type { ResearchPanelCitation } from './ResearchPanel';
 import { api } from '@/lib/api';
 import type { FieldContext, ActiveEditorContext } from '@/lib/api';
@@ -64,7 +64,7 @@ interface ProjectChatTabsPanelProps {
   activeEditorContext?: ActiveEditorContext | null;
   onPendingSessionHandled?: () => void;
   onPendingAutoSendHandled?: () => void;
-  onEditorWidgetsChange?: (widgets: EditorWidget[]) => void;
+  onFloatWidgetsChange?: (widgets: FloatWidget[]) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenWorkspaceAssessment?: (assessment: { instanceId: string; assessmentId: string; title?: string | null }) => void;
   onSendRef?: React.MutableRefObject<((content: string, toolHint?: string) => void) | null>;
@@ -303,7 +303,7 @@ export function ProjectChatTabsPanel({
   activeEditorContext = null,
   onPendingSessionHandled,
   onPendingAutoSendHandled,
-  onEditorWidgetsChange,
+  onFloatWidgetsChange,
   onOpenDocument,
   onOpenWorkspaceAssessment,
   onSendRef,
@@ -1312,7 +1312,7 @@ export function ProjectChatTabsPanel({
                   onChatListDirty={loadSessions}
                   onChatMetaChange={(meta) => handleTabMetaChange(tab.id, meta)}
                   onLandingStateChange={(isLanding) => handleLandingStateChange(tab.id, isLanding)}
-                  onEditorWidgetsChange={isActive ? onEditorWidgetsChange : undefined}
+                  onFloatWidgetsChange={isActive ? onFloatWidgetsChange : undefined}
                   onOpenDocument={isActive ? onOpenDocument : undefined}
                   onOpenWorkspaceAssessment={isActive ? onOpenWorkspaceAssessment : undefined}
                   onSendRef={isActive ? onSendRef : undefined}

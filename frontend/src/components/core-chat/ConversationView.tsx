@@ -17,7 +17,7 @@ import {
 import type { CoreChatMessage } from '@/types/chat';
 import { FieldContext, SourceCitation, ResearchStep } from '@/lib/api';
 import { ThinkingLogs } from './ThinkingLogs';
-import { EDITOR_WIDGET_TYPES } from '@/components/editor/EditorSidePanel';
+import { FLOAT_WIDGET_TYPES } from '@/components/editor/FloatLayer';
 import { track } from '@/lib/analytics';
 import { ABOVE_INPUT_WIDGET_TYPE, ChatWidgetRenderer } from '@/components/chat/ChatWidgetRenderer';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
@@ -1010,7 +1010,7 @@ function MessageBubble({
 
         {!isUser && message.widget_type && message.widget_data &&
           message.widget_type !== ABOVE_INPUT_WIDGET_TYPE &&
-          !(EDITOR_WIDGET_TYPES as readonly string[]).includes(message.widget_type) && (
+          !(FLOAT_WIDGET_TYPES as readonly string[]).includes(message.widget_type) && (
           <div className="mt-3 w-full">
             <ChatWidget
               type={message.widget_type}

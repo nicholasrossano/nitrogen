@@ -287,7 +287,7 @@ interface AssessmentWorkspaceProps {
   deferAgentStart?: boolean;
   /** Called once the assessment is saved as an intentional draft. */
   onUserEngaged?: () => void;
-  /** Lift title/actions into EditorSidePanel header when embedded in chat editor */
+  /** Lift title/actions into FloatLayer header when embedded as a float companion */
   usePanelHeader?: boolean;
 }
 

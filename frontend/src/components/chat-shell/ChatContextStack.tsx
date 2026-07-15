@@ -6,7 +6,7 @@ import { Users } from 'lucide-react';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
 import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
-import { ChatExpandablePanelShell } from '@/components/chat-shell/ChatExpandablePanelShell';
+import { FloorLayer } from '@/components/chat-shell/FloorLayer';
 import {
   contextStackTransitionClass,
   contextStackWidgetMotionClass,
@@ -49,11 +49,14 @@ export interface ChatContextStackProps {
   onVariablesFocusIdChange?: (assumptionId: string | null) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
+  onOpenAssumptionDetail?: (assumption: Assumption) => void;
   onOpenWorkspaceAssessment?: (assessment: {
     instanceId: string;
     assessmentId: string;
     title?: string | null;
   }) => void;
+  /** How far from the right edge expanded floors sit — shrinks to leave room for a companion FloatLayer. */
+  rightInset?: string;
 }
 
 function useExpandedPanelVisibility(expandedWidget: ChatContextExpandedWidget | null) {
@@ -122,7 +125,9 @@ export function ChatContextStack({
   onVariablesFocusIdChange,
   onOpenFile,
   onOpenDocument,
+  onOpenAssumptionDetail,
   onOpenWorkspaceAssessment,
+  rightInset = '0.75rem',
 }: ChatContextStackProps) {
   const { renderedWidget, visible } = useExpandedPanelVisibility(expandedWidget);
   const [shellMotion, setShellMotion] = useState<ContextPanelExpandMotion>('stack');
@@ -246,13 +251,16 @@ export function ChatContextStack({
       )}
 
       {renderedWidget === 'overview' && project && (
-        <ChatExpandablePanelShell
+        <FloorLayer
           widget="overview"
           title="Overview"
           suffix={projectDisplayName(project)}
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
+          flushOnExpand
+          backButton
+          rightInset={rightInset}
           headerActions={
             !project.shared_role || project.shared_role === 'editor' ? (
               <button
@@ -274,35 +282,44 @@ export function ChatContextStack({
             onOpenDocument={onOpenDocument}
             onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
           />
-        </ChatExpandablePanelShell>
+        </FloorLayer>
       )}
 
       {renderedWidget === 'variables' && (
-        <ChatExpandablePanelShell
+        <FloorLayer
           widget="variables"
           title={PROJECT_VARIABLES.title}
           suffix={project ? projectDisplayName(project) : null}
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
+          flushOnExpand
+          backButton
+          rightInset={rightInset}
         >
           <AssumptionsWorkspaceTab
             projectId={projectId}
             embedded
             showDetailPanel
             focusAssumptionId={variablesFocusId}
+            onOpenDocument={onOpenDocument}
+            onOpenFile={onOpenFile}
+            onAssumptionSelectInChat={onOpenAssumptionDetail}
           />
-        </ChatExpandablePanelShell>
+        </FloorLayer>
       )}
 
       {renderedWidget === 'files' && (
-        <ChatExpandablePanelShell
+        <FloorLayer
           widget="files"
           title="Files"
           suffix={project ? projectDisplayName(project) : null}
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
+          flushOnExpand
+          backButton
+          rightInset={rightInset}
         >
           <ProjectFilesView
             scope="project"
@@ -318,7 +335,7 @@ export function ChatContextStack({
               await loadProjectMaterials();
             }}
           />
-        </ChatExpandablePanelShell>
+        </FloorLayer>
       )}
     </>
   );
