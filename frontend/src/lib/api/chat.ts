@@ -1,13 +1,9 @@
 import {
   API_URL,
   fetchApi,
-  fetchApiWithTimeout,
   getAuthToken,
-  triggerBlobDownload,
-  workflowVersionHeaders,
 } from './client';
 import type {
-  Project,
   ChatAssessmentSummary,
   SourceCitation,
   ResearchStep,
@@ -85,32 +81,12 @@ export const chatApi = {
       `/api/v1/chats/${chatId}`,
       { method: 'DELETE' },
     ),
-  setChatMessageFeedback: (messageId: string, feedback: 'like' | 'dislike' | null) =>
-    fetchApi<{ message_id: string; feedback: string | null }>(
-      `/api/v1/chat/messages/${messageId}/feedback`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ feedback }),
-      }
-    ),
   updateChatTitle: (chatId: string, title: string) =>
     fetchApi<{ chat_id: string; title: string }>(
       `/api/v1/chats/${chatId}/title`,
       {
         method: 'PATCH',
         body: JSON.stringify({ title }),
-      }
-    ),
-  saveChatFromMessages: (
-    messages: { role: string; content: string; widget_type?: string | null; widget_data?: Record<string, any> | null; sources?: any[] | null; completion_meta?: Record<string, any> | null }[],
-    title?: string,
-    projectId?: string,
-  ) =>
-    fetchApi<{ chat_id: string; title: string | null }>(
-      '/api/v1/chats/save',
-      {
-        method: 'POST',
-        body: JSON.stringify({ title, messages, project_id: projectId }),
       }
     ),
   sendChatStream: async (

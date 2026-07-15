@@ -195,31 +195,13 @@ class PromptRegistry:
             name="Memo Generation System Prompt",
             description=(
                 "System prompt for the investment-memo generation step, loaded from "
-                "prompts/memo_generation.txt. Dynamic initiative summary and context are "
-                "injected via the user message, not format slots."
+                "domain/energy/prompts/memo_generation.txt. Dynamic initiative summary "
+                "and context are injected via the user message, not format slots."
             ),
             template=_memo_template,
             parameters=[],
             owning_service="memo_generator",
             visibility="internal",
-        ))
-
-        # --- intake system (file-loaded, deprecated) ---
-        _intake_path = Path(__file__).parent / "intake_system.txt"
-        _intake_template = _intake_path.read_text(encoding="utf-8") if _intake_path.exists() else ""
-
-        self._register(PromptDefinition(
-            id="intake_system",
-            name="Intake System Prompt (deprecated)",
-            description=(
-                "DEPRECATED — file exists on disk (prompts/intake_system.txt) but is not "
-                "imported or used anywhere in the Python backend. Registered here for "
-                "discoverability only."
-            ),
-            template=_intake_template,
-            parameters=[],
-            owning_service="",
-            visibility="debug",
         ))
 
         self._loaded = True

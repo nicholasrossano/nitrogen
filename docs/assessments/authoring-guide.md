@@ -111,8 +111,8 @@ For layered assessments, include a focused test that proves setup fields and bui
 
 Copy one of these starting points:
 
-- `backend/app/assessments/_templates/widget_assessment_template.py`
-- `backend/app/assessments/_templates/layered_assessment_template.py`
+- `docs/assessments/templates/widget_assessment_template.py`
+- `docs/assessments/templates/layered_assessment_template.py`
 
 ## Staged Table UX Flags
 

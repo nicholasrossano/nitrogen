@@ -3,13 +3,10 @@ import {
   fetchApi,
   fetchApiWithTimeout,
   getAuthToken,
-  triggerBlobDownload,
   workflowVersionHeaders,
 } from './client';
 import type {
-  Project,
   BuildItem,
-  AssessmentWorkflowState,
   StageState,
   StagedWorkflowState,
   StagedAssessmentWorkflowState,
@@ -29,8 +26,6 @@ import type {
 
 
 export const assessmentsApi = {
-  getAssessmentWorkflowState: (instanceId: string) =>
-    fetchApi<AssessmentWorkflowState>(`/api/v1/assessment-workflow/${instanceId}/state`),
   generateSetupDefaults: (instanceId: string) =>
     fetchApi<{ fields: Record<string, string> }>(
       `/api/v1/assessment-workflow/${instanceId}/setup/generate`,
@@ -49,31 +44,10 @@ export const assessmentsApi = {
       `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/generate`,
       { method: 'POST' }
     ),
-  editBuildItem: (instanceId: string, layerId: string, itemId: string, content: Record<string, any>) =>
-    fetchApi<{ item: BuildItem }>(
-      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ content }),
-      }
-    ),
-  confirmBuildItem: (instanceId: string, layerId: string, itemId: string) =>
-    fetchApi<{ item: BuildItem; layer_status: string }>(
-      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items/${itemId}/confirm`,
-      { method: 'POST' }
-    ),
   deleteBuildItem: (instanceId: string, layerId: string, itemId: string) =>
     fetchApi<{ ok: boolean; remaining_count: number }>(
       `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items/${itemId}`,
       { method: 'DELETE' }
-    ),
-  addBuildItem: (instanceId: string, layerId: string, content: Record<string, any>) =>
-    fetchApi<{ item: BuildItem }>(
-      `/api/v1/assessment-workflow/${instanceId}/build/${layerId}/items`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      }
     ),
   reorderBuildItems: (instanceId: string, layerId: string, itemIds: string[]) =>
     fetchApi<{ ok: boolean }>(
@@ -228,42 +202,6 @@ export const assessmentsApi = {
     const blob = await res.blob();
     return { blob, filename };
   },
-  exportAssessmentWriteup: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(
-      `${API_URL}/api/v1/assessment-workflow/${instanceId}/export/writeup`,
-      { headers }
-    );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as any).detail ?? 'Write-up export failed');
-    }
-    const disposition = res.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = match ? match[1].replace(/['"]/g, '') : 'writeup.docx';
-    const blob = await res.blob();
-    return { blob, filename };
-  },
-  exportAssessmentDecisionLog: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(
-      `${API_URL}/api/v1/assessment-workflow/${instanceId}/decision-log/export.xlsx`,
-      { headers }
-    );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as any).detail ?? 'Decision log export failed');
-    }
-    const disposition = res.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.xlsx';
-    const blob = await res.blob();
-    return { blob, filename };
-  },
   getAssessmentDecisionLog: (instanceId: string) => {
     return fetchApi<AssessmentDecisionLogReport>(`/api/v1/assessment-workflow/${instanceId}/decision-log`);
   },
@@ -320,11 +258,6 @@ export const assessmentsApi = {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
-  refreshAssumptions: (projectId: string) =>
-    fetchApi<{ created: number; updated: number; assumptions: Assumption[] }>(
-      `/api/v1/projects/${projectId}/assumptions/refresh`,
-      { method: 'POST' },
-    ),
   exportAssessmentDecisionLogXlsx: async (instanceId: string): Promise<{ blob: Blob; filename: string }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {};
@@ -342,12 +275,6 @@ export const assessmentsApi = {
   },
 
   // Project Plan,
-  async recalculateLCOE(inputs: Record<string, any>): Promise<any> {
-    return fetchApi('/api/v1/lcoe/recalculate', {
-      method: 'POST',
-      body: JSON.stringify({ inputs }),
-    });
-  },
   async updateLCOEInput(
     inputs: Record<string, any>,
     fieldName: string,
@@ -365,15 +292,6 @@ export const assessmentsApi = {
       }),
     });
   },
-  async getLCOESensitivity(
-    inputs: Record<string, any>,
-    params?: string[],
-  ): Promise<any> {
-    return fetchApi('/api/v1/lcoe/sensitivity', {
-      method: 'POST',
-      body: JSON.stringify({ inputs, params }),
-    });
-  },
   async exportLCOEExcel(inputs: Record<string, any>): Promise<Blob> {
     const url = `${API_URL}/api/v1/lcoe/export`;
     const token = await getAuthToken();
@@ -389,12 +307,6 @@ export const assessmentsApi = {
   },
 
   // Carbon endpoints,
-  async recalculateCarbon(inputs: Record<string, any>): Promise<any> {
-    return fetchApi('/api/v1/carbon/recalculate', {
-      method: 'POST',
-      body: JSON.stringify({ inputs }),
-    });
-  },
   async updateCarbonInput(
     inputs: Record<string, any>,
     fieldName: string,
@@ -411,18 +323,6 @@ export const assessmentsApi = {
         status,
       }),
     });
-  },
-  async getCarbonSensitivity(
-    inputs: Record<string, any>,
-    params?: string[],
-  ): Promise<any> {
-    return fetchApi('/api/v1/carbon/sensitivity', {
-      method: 'POST',
-      body: JSON.stringify({ inputs, params }),
-    });
-  },
-  async getCarbonProjectTypes(): Promise<{ project_types: { value: string; label: string }[] }> {
-    return fetchApi('/api/v1/carbon/project-types');
   },
   async switchCarbonMethodPack(
     methodPack: string,
@@ -497,15 +397,6 @@ export const assessmentsApi = {
     });
     if (!response.ok) throw new Error(`Export failed: ${response.status}`);
     return response.blob();
-  },
-  async exportGSCoverLetter(workspaceId: string): Promise<Blob> {
-    const url = `${API_URL}/api/v1/gs/workspace/${workspaceId}/export`;
-    const token = await getAuthToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const resp = await fetch(url, { method: 'POST', headers });
-    if (!resp.ok) throw new Error('Export failed');
-    return resp.blob();
   },
 
   // ── Sharing ──────────────────────────────────────────────────────,

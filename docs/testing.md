@@ -120,7 +120,6 @@ npm run build
 
 Do not delete tests from this list without a separate cleanup PR. These are candidates for consolidation or hardening:
 
-- `frontend/src/__tests__/components/widgets/LCOEInputsWidget.test.tsx` and `frontend/src/__tests__/components/widgets/CarbonInputsWidget.test.tsx` duplicate the same "validated values" and "investigate event" behaviors across model-specific widgets. Consider extracting shared widget behavior tests or a table-driven helper once the widget contract is stable.
 - Several widget tests depend on hover plus `waitFor` for simple event dispatches. Prefer `findBy*` only for async UI appearance and direct assertions for synchronous state to reduce flake risk and output noise.
 - `frontend/src/__tests__/components/assessments/AssessmentWorkspace.test.tsx` is a broad component test with many `waitFor` assertions. Consider splitting the most important flows into smaller focused tests before adding more cases.
 - `backend/tests/api/test_chat_stream.py` repeats a large mocked app setup across streaming scenarios. Consider a local fixture or helper factory before adding additional chat stream cases.
