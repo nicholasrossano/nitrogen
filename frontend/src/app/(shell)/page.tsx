@@ -13,7 +13,7 @@ export default function HomeRedirectPage() {
     const view = searchParams.get('view');
     const projectId = readLastProjectId();
     if (view === 'files') {
-      router.replace(projectId ? `/chat/files?project=${projectId}` : '/chat/files');
+      router.replace(projectId ? `/chat?project=${projectId}&panel=files` : '/chat?panel=files');
       return;
     }
     router.replace(projectId ? `/chat?project=${projectId}` : '/chat');

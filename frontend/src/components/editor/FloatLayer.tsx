@@ -82,6 +82,24 @@ function getWidgetTitle(widget: FloatWidget): string {
   return WIDGET_LABELS[widget.type] ?? 'Output';
 }
 
+/** Strip a `[Log] ` display prefix so back restores the module title cleanly. */
+function stripLogTitlePrefix(title: string): string {
+  return title.replace(/^\[Log\]\s*/i, '').trim();
+}
+
+/** Nested log widgets can navigate back to their parent assessment module. */
+function getNestedLogBackContext(widget: FloatWidget | undefined): AssessmentLogContext | null {
+  if (!widget || (widget.type !== 'activity_log' && widget.type !== 'decision_log')) {
+    return null;
+  }
+  const instanceId = typeof widget.data?.instance_id === 'string' ? widget.data.instance_id : '';
+  const assessmentId = typeof widget.data?.assessment_id === 'string' ? widget.data.assessment_id : '';
+  if (!instanceId || !assessmentId) return null;
+  const rawTitle = typeof widget.data?.title === 'string' ? widget.data.title : '';
+  const title = stripLogTitlePrefix(rawTitle) || 'Assessment';
+  return { instanceId, assessmentId, title };
+}
+
 const WIDGET_LABELS: Record<string, string> = {
   lcoe_inputs: 'LCOE Model',
   lcoe_output: 'LCOE Model',
@@ -126,6 +144,11 @@ export function FloatLayer({
   const headerSuffix = childChrome?.suffix;
   const headerActions = childChrome?.actions;
 
+  const nestedLogContext = getNestedLogBackContext(widget);
+  const handleBack = nestedLogContext && onOpenAssessment
+    ? () => onOpenAssessment(nestedLogContext)
+    : undefined;
+
   if (!widget) return null;
 
   return (
@@ -134,6 +157,7 @@ export function FloatLayer({
         title={headerTitle}
         suffix={headerSuffix}
         onClose={onClose}
+        onBack={handleBack}
         actions={headerActions}
       />
 
