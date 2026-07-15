@@ -749,6 +749,15 @@ export interface BillingStatus {
   period_end?: string | null;
 }
 
+/** Plan constants from backend Settings (single source of truth). */
+export interface BillingCatalog {
+  billing_enabled: boolean;
+  subscription_price_usd: number;
+  subscription_usage_limit_usd: number;
+  usage_budget_buffer_pct: number;
+  stripe_price_id: string | null;
+}
+
 export interface UsageModelBreakdown {
   model: string;
   input_tokens: number;

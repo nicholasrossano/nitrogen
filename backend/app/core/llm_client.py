@@ -26,6 +26,8 @@ BYOK_PROVIDER_PRIORITY: tuple[str, ...] = ("openai", "openrouter")
 PAID_SUBSCRIPTION_TIERS: frozenset[str] = frozenset({"individual", "starter", "pro"})
 
 # ── Model pricing (per 1M tokens, USD) ─────────────────────────
+# Static fallback when OpenRouter /models cache is cold or missing a model.
+# Live rates: app.core.openrouter_pricing (TTL cache). BYOK skips this meter.
 MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-4o":                  {"input": 2.50,  "output": 10.00},
     "gpt-4o-mini":             {"input": 0.15,  "output": 0.60},
@@ -41,8 +43,27 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
 _FALLBACK_PRICING = {"input": 5.00, "output": 15.00}
 
 
+def _pricing_for_model(model: str) -> dict[str, float]:
+    """Prefer cached OpenRouter list prices, then static table, then fallback."""
+    from app.core.openrouter_pricing import lookup_openrouter_pricing
+
+    live = lookup_openrouter_pricing(model)
+    if live is not None:
+        return live
+
+    key = (model or "").strip()
+    if key in MODEL_PRICING:
+        return MODEL_PRICING[key]
+    short = key.split("/")[-1].replace(":online", "")
+    if short in MODEL_PRICING:
+        return MODEL_PRICING[short]
+    logger.debug("No pricing entry for %r; using fallback rates", model)
+    return _FALLBACK_PRICING
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> Decimal:
-    pricing = MODEL_PRICING.get(model, _FALLBACK_PRICING)
+    """Estimate USD cost from token counts × OpenRouter-cached or static rates."""
+    pricing = _pricing_for_model(model)
     cost = (
         input_tokens * pricing["input"] / 1_000_000
         + output_tokens * pricing["output"] / 1_000_000
@@ -164,6 +185,9 @@ async def record_usage(
     if is_byok or not settings.billing_enabled:
         return
 
+    from app.core.openrouter_pricing import ensure_pricing_fresh
+
+    await ensure_pricing_fresh()
     cost = estimate_cost(model, input_tokens, output_tokens)
 
     from app.models.subscription import UsageRecord, Subscription
@@ -246,7 +270,7 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
 
     if tier == "trial":
         if sub.access_code_redeemed:
-            limit = Decimal(str(settings.subscription_usage_limit_usd))
+            limit = Decimal(str(settings.subscription_usage_limit_usd or 0))
         else:
             limit = Decimal(str(settings.trial_cost_limit_usd))
         used = sub.trial_cost_used or Decimal("0")
@@ -282,7 +306,7 @@ async def check_usage_budget(user_id: str, db: AsyncSession) -> dict:
                 else settings.pro_usage_limit_usd
             )
         else:
-            limit_usd = settings.subscription_usage_limit_usd
+            limit_usd = float(settings.subscription_usage_limit_usd or 0)
         period_start = sub.current_period_start
         if period_start:
             usage_result = await db.execute(
