@@ -48,12 +48,11 @@ SECRET_DEFS = [
     ("STRIPE_PRICE_ID",                 ALL_ENVS,     "plain"),
     ("API_KEY_ENCRYPTION_KEY",          PROD_PREVIEW, "sensitive"),
     ("BILLING_TESTING_MODE",            ALL_ENVS,     "plain"),
+    # Optional override for included AI budget (default $28.50 is in code)
     ("SUBSCRIPTION_USAGE_LIMIT_USD",    ALL_ENVS,     "plain"),
-    # Stripe frontend
+    # Stripe frontend — Price id only; $30/$28.50 labels are hardcoded in the UI
     ("NEXT_PUBLIC_BILLING_ENABLED",             ALL_ENVS, "plain"),
     ("NEXT_PUBLIC_STRIPE_PRICE_ID",             ALL_ENVS, "plain"),
-    ("NEXT_PUBLIC_SUBSCRIPTION_PRICE_LABEL",    ALL_ENVS, "plain"),
-    ("NEXT_PUBLIC_SUBSCRIPTION_USAGE_CAP_LABEL",ALL_ENVS, "plain"),
     # OpenRouter (future routing plan)
     ("OPENROUTER_API_KEY",              PROD_PREVIEW, "sensitive"),
     # OpenAI

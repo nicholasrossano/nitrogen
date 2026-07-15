@@ -7,19 +7,26 @@ import {
   workflowVersionHeaders,
 } from './client';
 import type {
+  BillingCatalog,
   BillingStatus,
   BillingUsageSummary,
 } from './types';
 
 export const billingApi = {
+  getBillingCatalog: () =>
+    fetchApi<BillingCatalog>('/api/v1/billing/catalog'),
   getBillingStatus: () =>
     fetchApi<BillingStatus>('/api/v1/billing/status'),
   getBillingUsage: () =>
     fetchApi<BillingUsageSummary>('/api/v1/billing/usage'),
-  createCheckout: (priceId: string, successUrl: string, cancelUrl: string) =>
+  createCheckout: (successUrl: string, cancelUrl: string, priceId?: string) =>
     fetchApi<{ url: string }>('/api/v1/billing/checkout', {
       method: 'POST',
-      body: JSON.stringify({ price_id: priceId, success_url: successUrl, cancel_url: cancelUrl }),
+      body: JSON.stringify({
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        ...(priceId ? { price_id: priceId } : {}),
+      }),
     }),
   createPortalSession: (returnUrl: string) =>
     fetchApi<{ url: string }>('/api/v1/billing/portal', {

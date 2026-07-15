@@ -3,12 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, Key, ChevronDown, Check, Loader2, Trash2 } from 'lucide-react';
 import { useBillingStore } from '@/stores/billingStore';
-import { api } from '@/lib/api';
-
-const SUBSCRIPTION_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID ?? '';
-const SUBSCRIPTION_PRICE_LABEL = process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE_LABEL ?? '$20';
-const SUBSCRIPTION_USAGE_CAP_LABEL =
-  process.env.NEXT_PUBLIC_SUBSCRIPTION_USAGE_CAP_LABEL ?? '$20';
+import { api, type BillingCatalog } from '@/lib/api';
 
 type ByokProvider = 'openai' | 'openrouter';
 
@@ -27,12 +22,18 @@ const BYOK_PROVIDERS: { id: ByokProvider; label: string; placeholder: string; hi
   },
 ];
 
+function formatUsd(amount: number): string {
+  if (Number.isInteger(amount)) return `$${amount}`;
+  return `$${amount.toFixed(2)}`;
+}
+
 interface BillingOptionsPanelProps {
   onByokSaved?: () => void;
 }
 
 export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
   const { accessCodeAvailable, redeemAccessCode, fetchBillingStatus } = useBillingStore();
+  const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const [apiKeys, setApiKeys] = useState<Record<ByokProvider, string>>({ openai: '', openrouter: '' });
   const [savedProviders, setSavedProviders] = useState<Set<ByokProvider>>(new Set());
   const [accessCode, setAccessCode] = useState('');
@@ -60,10 +61,20 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
 
   useEffect(() => {
     void loadStoredKeys();
+    void api
+      .getBillingCatalog()
+      .then(setCatalog)
+      .catch(() => {
+        // non-fatal — labels stay empty until loaded
+      });
   }, []);
 
+  const canCheckout = Boolean(catalog?.billing_enabled && catalog.stripe_price_id);
+  const priceLabel = catalog ? formatUsd(catalog.subscription_price_usd) : '—';
+  const usageCapLabel = catalog ? formatUsd(catalog.subscription_usage_limit_usd) : '—';
+
   const handleCheckout = async () => {
-    if (!SUBSCRIPTION_PRICE_ID) {
+    if (!canCheckout) {
       setError('Subscription is not configured on this deployment.');
       return;
     }
@@ -71,9 +82,9 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
     setCheckoutLoading(true);
     try {
       const { url } = await api.createCheckout(
-        SUBSCRIPTION_PRICE_ID,
         `${window.location.origin}/subscribe?success=true`,
         `${window.location.origin}/subscribe?canceled=true`,
+        catalog?.stripe_price_id ?? undefined,
       );
       window.location.href = url;
     } catch {
@@ -154,15 +165,15 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
           </div>
           <p className="text-xs text-text-tertiary mb-1">Flat subscription with included AI usage</p>
           <p className="text-lg font-semibold text-text-primary mb-1">
-            {SUBSCRIPTION_PRICE_LABEL}
+            {priceLabel}
             <span className="text-xs font-normal text-text-tertiary">/mo</span>
           </p>
           <p className="text-[11px] text-text-tertiary mb-3">
-            Includes up to {SUBSCRIPTION_USAGE_CAP_LABEL} of platform AI usage per billing period.
+            Includes up to {usageCapLabel} of platform AI usage per billing period.
           </p>
           <button
             onClick={handleCheckout}
-            disabled={checkoutLoading || !SUBSCRIPTION_PRICE_ID}
+            disabled={checkoutLoading || !canCheckout}
             className="mt-auto w-full text-xs font-medium rounded-lg px-3 py-2 bg-accent text-white enabled:hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
           >
             {checkoutLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -178,7 +189,7 @@ export function BillingOptionsPanel({ onByokSaved }: BillingOptionsPanelProps) {
             <span className="text-sm font-semibold text-text-primary">Bring your own key</span>
           </div>
           <p className="text-xs text-text-tertiary mb-3">
-            Use your OpenAI or OpenRouter API key. Unlimited usage on your account — no subscription required.
+            Use your OpenAI or OpenRouter key. You pay the provider directly — no platform AI markup or usage cap.
           </p>
           <div className="space-y-3 mt-auto">
             {BYOK_PROVIDERS.map((provider) => {
