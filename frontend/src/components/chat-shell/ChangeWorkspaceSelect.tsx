@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import type { Workspace } from '@/lib/api';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
+import { TourAnchor } from '@/components/tour/TourAnchor';
 
 interface ChangeWorkspaceSelectProps {
   workspaces: Workspace[];
@@ -47,7 +48,7 @@ export function ChangeWorkspaceSelect({
   const triggerClassName = className ?? (size === 'default' ? DEFAULT_TRIGGER_CLASS : COMPACT_TRIGGER_CLASS);
 
   return (
-    <div className={rootClassName}>
+    <TourAnchor id="welcome-workspace" className={rootClassName}>
       <CustomDropdown
         value={value ?? ''}
         onChange={onChange}
@@ -59,6 +60,6 @@ export function ChangeWorkspaceSelect({
         menuClassName={MENU_CLASS}
         itemClassName={ITEM_CLASS}
       />
-    </div>
+    </TourAnchor>
   );
 }
