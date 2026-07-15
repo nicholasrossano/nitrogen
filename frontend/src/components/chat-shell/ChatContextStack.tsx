@@ -18,10 +18,11 @@ import {
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { projectDisplayName } from '@/lib/projectDisplayName';
-import { api, type Assumption, type Project, type ProjectMaterial } from '@/lib/api';
+import { api, type Assumption, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
+import { FilesScopeToggle, type FilesScope } from '@/components/files';
 
 export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
 
@@ -134,7 +135,12 @@ export function ChatContextStack({
   const uploadMaterial = useProjectStore((state) => state.uploadMaterial);
   const deleteMaterial = useProjectStore((state) => state.deleteMaterial);
   const [projectMaterials, setProjectMaterials] = useState<ProjectMaterial[]>([]);
+  const [workspaceMaterials, setWorkspaceMaterials] = useState<ProjectMaterial[]>([]);
+  const [knowledgeBanks, setKnowledgeBanks] = useState<WorkspaceKnowledgeBank[]>([]);
+  const [filesScope, setFilesScope] = useState<FilesScope>('project');
   const [overviewShareModalOpen, setOverviewShareModalOpen] = useState(false);
+
+  const workspaceId = project?.workspace_id ?? null;
 
   const loadProjectMaterials = useCallback(async () => {
     if (!projectId) {
@@ -149,9 +155,50 @@ export function ChatContextStack({
     }
   }, [projectId]);
 
+  const loadWorkspaceMaterials = useCallback(async () => {
+    if (!workspaceId) {
+      setWorkspaceMaterials([]);
+      setKnowledgeBanks([]);
+      return;
+    }
+    try {
+      const [docs, banks] = await Promise.all([
+        api.getWorkspaceEvidence(workspaceId),
+        api.listWorkspaceKnowledgeBanks(workspaceId),
+      ]);
+      setWorkspaceMaterials(
+        docs.map((doc) => ({
+          id: doc.id,
+          filename: doc.filename ?? 'Untitled',
+          file_type: doc.file_type ?? 'unknown',
+          file_size: doc.file_size ?? null,
+          created_at: doc.created_at,
+          source: 'evidence' as const,
+          processing_status: doc.processing_status,
+          processing_error: doc.processing_error,
+        })),
+      );
+      setKnowledgeBanks(banks);
+    } catch {
+      setWorkspaceMaterials([]);
+      setKnowledgeBanks([]);
+    }
+  }, [workspaceId]);
+
   useEffect(() => {
     void loadProjectMaterials();
   }, [loadProjectMaterials, refreshKey]);
+
+  useEffect(() => {
+    if (renderedWidget !== 'files') return;
+    void loadWorkspaceMaterials();
+  }, [loadWorkspaceMaterials, refreshKey, renderedWidget]);
+
+  useEffect(() => {
+    if (renderedWidget !== 'files') {
+      setFilesScope('project');
+    }
+  }, [renderedWidget]);
 
   useEffect(() => {
     if (renderedWidget !== 'overview') {
@@ -259,7 +306,6 @@ export function ChatContextStack({
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
           flushOnExpand
-          backButton
           rightInset={rightInset}
           headerActions={
             !project.shared_role || project.shared_role === 'editor' ? (
@@ -294,7 +340,6 @@ export function ChatContextStack({
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
           flushOnExpand
-          backButton
           rightInset={rightInset}
         >
           <AssumptionsWorkspaceTab
@@ -313,28 +358,58 @@ export function ChatContextStack({
         <FloorLayer
           widget="files"
           title="Files"
-          suffix={project ? projectDisplayName(project) : null}
+          suffix={
+            filesScope === 'workspace'
+              ? 'Workspace'
+              : project
+                ? projectDisplayName(project)
+                : null
+          }
           visible={visible}
           motionMode={shellMotion}
           onClose={handleCloseExpanded}
           flushOnExpand
-          backButton
           rightInset={rightInset}
+          headerActions={
+            <FilesScopeToggle value={filesScope} onChange={setFilesScope} />
+          }
         >
-          <ProjectFilesView
-            scope="project"
-            projectId={projectId}
-            title={`${projectDisplayName(project)} files`}
-            materials={projectMaterials}
-            onUploadFile={async (file) => {
-              await uploadMaterial(projectId, file);
-              await loadProjectMaterials();
-            }}
-            onDeleteMaterial={async (materialId) => {
-              await deleteMaterial(materialId);
-              await loadProjectMaterials();
-            }}
-          />
+          {filesScope === 'workspace' ? (
+            <ProjectFilesView
+              scope="workspace"
+              title="Workspace files"
+              description="Shared guidance and reusable context for this workspace."
+              materials={workspaceMaterials}
+              knowledgeBanks={knowledgeBanks}
+              onUploadFile={
+                workspaceId
+                  ? async (file) => {
+                      await api.uploadWorkspaceEvidence(workspaceId, file);
+                      await loadWorkspaceMaterials();
+                    }
+                  : undefined
+              }
+              onDeleteMaterial={async (materialId) => {
+                await api.deleteEvidence(materialId);
+                await loadWorkspaceMaterials();
+              }}
+            />
+          ) : (
+            <ProjectFilesView
+              scope="project"
+              projectId={projectId}
+              title={`${projectDisplayName(project)} files`}
+              materials={projectMaterials}
+              onUploadFile={async (file) => {
+                await uploadMaterial(projectId, file);
+                await loadProjectMaterials();
+              }}
+              onDeleteMaterial={async (materialId) => {
+                await deleteMaterial(materialId);
+                await loadProjectMaterials();
+              }}
+            />
+          )}
         </FloorLayer>
       )}
     </>

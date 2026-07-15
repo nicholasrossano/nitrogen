@@ -14,6 +14,7 @@ import {
 /**
  * Primary work surface you navigate into and back out of (Overview / Variables / Files).
  * Chat is the default floor when no overlay FloorLayer is expanded (`expandedWidget == null`).
+ * These use a back control (not dismiss X) because leaving them always returns to chat.
  */
 interface FloorLayerProps {
   widget: ChatContextExpandedWidget;
@@ -26,8 +27,6 @@ interface FloorLayerProps {
   children: ReactNode;
   /** Fade the floating-card border/shadow out as the panel expands, so it settles as a flush floor. */
   flushOnExpand?: boolean;
-  /** Show a back arrow instead of a close X (for a floor you navigate back out of). */
-  backButton?: boolean;
   /** How far from the right edge the panel sits — shrinks to leave room for a companion FloatLayer. */
   rightInset?: string;
 }
@@ -42,7 +41,6 @@ export function FloorLayer({
   headerActions,
   children,
   flushOnExpand = false,
-  backButton = false,
   rightInset = '0.75rem',
 }: FloorLayerProps) {
   return (
@@ -54,9 +52,8 @@ export function FloorLayer({
       <EditorPanelHeader
         title={title}
         suffix={suffix}
-        onClose={onClose}
+        onBack={onClose}
         actions={headerActions}
-        backAction={backButton}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
         {children}

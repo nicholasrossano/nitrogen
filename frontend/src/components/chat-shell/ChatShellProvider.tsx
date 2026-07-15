@@ -53,11 +53,9 @@ export function buildChatPath(
   searchParams: URLSearchParams,
   projectId: string | null,
 ): string {
-  const basePath = pathname.startsWith('/chat/files')
-    ? '/chat/files'
-    : pathname.startsWith('/chat') || pathname === '/'
-      ? '/chat'
-      : pathname;
+  const basePath = pathname.startsWith('/chat') || pathname === '/'
+    ? '/chat'
+    : pathname;
   const params = new URLSearchParams(searchParams.toString());
   if (projectId) {
     params.set('project', projectId);
