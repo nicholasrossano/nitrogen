@@ -1119,8 +1119,3 @@ export function ProjectChatSurface({
     />
   );
 }
-
-/**
- * @deprecated Use ProjectChatSurface instead.
- */
-export const ProjectStandaloneChatView = ProjectChatSurface;

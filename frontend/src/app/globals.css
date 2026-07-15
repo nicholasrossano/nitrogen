@@ -239,16 +239,6 @@ body {
 .prose-user > :first-child { margin-top: 0; }
 .prose-user > :last-child { margin-bottom: 0; }
 
-.prose-draft {
-  @apply text-sm leading-relaxed font-sans text-text-primary;
-}
-
-.prose-draft p { margin: 0; }
-.prose-draft p + p { margin-top: 0.5rem; }
-.prose-draft em { @apply italic text-text-secondary; }
-.prose-draft strong { @apply font-semibold; }
-.prose-draft > :first-child { margin-top: 0; }
-.prose-draft > :last-child { margin-bottom: 0; }
 
 .prose-memo {
   @apply text-text-primary leading-relaxed font-sans;
@@ -523,47 +513,6 @@ textarea {
   @apply focus:outline-none focus:ring-2 focus:ring-text-tertiary/15 focus:ring-offset-2 focus:ring-offset-surface;
 }
 
-/* Hover fade utility - for elements that need opacity-based hover transitions */
-.hover-fade {
-  position: relative;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.hover-fade::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-color: var(--color-surface-subtle);
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-  z-index: -1;
-}
-
-.hover-fade:hover::before {
-  opacity: 1;
-}
-
-/* Hover fade with accent color */
-.hover-fade-accent {
-  position: relative;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.hover-fade-accent::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-color: var(--color-accent-wash);
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-  z-index: -1;
-}
-
-.hover-fade-accent:hover::before {
-  opacity: 0.3;
-}
 
 /* Selectable item - for checkbox/radio style selections with opacity fade */
 .selectable-item {
@@ -605,37 +554,6 @@ textarea {
   opacity: 0.5;
 }
 
-/* Checkbox indicator with opacity fade */
-.checkbox-indicator {
-  @apply w-5 h-5 border flex items-center justify-center flex-shrink-0;
-  position: relative;
-  overflow: hidden;
-}
-
-.checkbox-indicator::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-color: var(--color-accent);
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-}
-
-.checkbox-indicator:not(.checked) {
-  @apply border-stroke-subtle;
-}
-
-.checkbox-indicator:not(.checked):hover::before {
-  opacity: 0.15;
-}
-
-.checkbox-indicator.checked {
-  @apply border-accent;
-}
-
-.checkbox-indicator.checked::before {
-  opacity: 1;
-}
 
 /* Icon button with opacity fade */
 .icon-btn {
@@ -797,21 +715,6 @@ textarea {
   transition: box-shadow 100ms ease-out, transform 100ms ease-out;
 }
 
-/* Floating panel interactive — hover shadow matches chat composer / sidebar chrome */
-.floating-panel-interactive {
-  cursor: pointer;
-  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
-}
-
-.floating-panel-interactive:hover:not(:disabled) {
-  box-shadow: var(--shadow-floating-panel-hover);
-}
-
-.floating-panel-interactive:active:not(:disabled) {
-  box-shadow: var(--shadow-floating-panel-hover);
-  transform: scale(0.99);
-  transition: box-shadow 100ms ease-out, transform 100ms ease-out;
-}
 
 /* Clickable plan sub-items */
 .plan-item-lift {
@@ -849,79 +752,8 @@ textarea {
   opacity: 0.5;
 }
 
-/* Filled button (stays filled, darkens on hover) */
-.btn-filled {
-  @apply rounded;
-  position: relative;
-  overflow: hidden;
-  z-index: 0;
-}
 
-.btn-filled::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-color: rgba(0, 0, 0, 0.15);
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-  z-index: 1;
-}
 
-.btn-filled:hover::before {
-  opacity: 1;
-}
-
-.btn-filled:disabled::before {
-  opacity: 0;
-}
-
-.btn-filled > * {
-  position: relative;
-  z-index: 2;
-}
-
-/* Status badge utilities */
-.badge-success {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
-  @apply bg-indicator-green/10 text-indicator-green;
-}
-
-.badge-warning {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
-  @apply bg-indicator-orange/10 text-indicator-orange;
-}
-
-.badge-pending {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
-  @apply bg-indicator-yellow/10 text-indicator-yellow;
-}
-
-.badge-neutral {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium;
-  @apply bg-surface-subtle text-text-secondary;
-}
-
-.badge-accent {
-  @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium rounded-md;
-  @apply bg-accent-wash text-accent-anchor;
-}
-
-/* Shell dividers — warm neutral, not blue */
-.divider-accent {
-  @apply w-full h-px;
-  background: var(--color-divider);
-}
-
-.divider-accent-thin {
-  @apply w-full h-px;
-  background: var(--color-divider);
-}
-
-/* Section divider with spacing */
-.section-divider {
-  @apply w-full border-t;
-  border-color: var(--color-divider);
-}
 
 /* Chat composer — match floating panel chrome (sidebar, editor, context stack) */
 .chat-composer-stack,
@@ -1062,41 +894,6 @@ textarea {
   }
 }
 
-/* GS Cover Letter document preview */
-.gs-document-preview {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 11pt;
-  line-height: 1.5;
-  color: #1C1C1E;
-}
-.gs-document-preview h1 { font-size: 16pt; font-weight: bold; margin: 16px 0 8px; }
-.gs-document-preview h2 { font-size: 14pt; font-weight: bold; margin: 14px 0 6px; }
-.gs-document-preview h3 { font-size: 12pt; font-weight: bold; margin: 12px 0 4px; }
-.gs-document-preview p { margin: 4px 0; }
-.gs-document-preview table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-.gs-document-preview td,
-.gs-document-preview th { border: 1px solid #E6E6EA; padding: 6px 10px; font-size: 10pt; }
-.gs-document-preview th { background: #F7F7F8; font-weight: 600; text-align: left; }
-
-.gs-field-placeholder {
-  cursor: pointer;
-  border-bottom: 2px dashed #D5D2E8;
-  padding-bottom: 1px;
-  transition: background-color 150ms, border-color 150ms;
-}
-.gs-field-placeholder:hover {
-  background-color: rgba(62, 53, 95, 0.06);
-  border-color: #3E355F;
-}
-.gs-field-empty {
-  color: #7A7A82;
-  font-style: italic;
-}
-.gs-field-filled {
-  color: #1C1C1E;
-  font-style: normal;
-  border-bottom-color: var(--color-indicator-green);
-}
 
 /* ──────────────────────────────────────────────────────────────
    Rich snippet HTML (used in SnippetCard across all surfaces)

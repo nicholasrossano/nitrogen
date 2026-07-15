@@ -156,78 +156,6 @@ export interface BuildItem {
   removable: boolean;
 }
 
-export interface BuildStage {
-  id: string;
-  name: string;
-  stage_type: 'widget' | 'simple_list' | 'structured_list' | 'detail_node';
-  status: 'pending' | 'generating' | 'in_progress' | 'validated' | 'complete' | 'error';
-  widget_type?: string | null;
-  widget_data?: Record<string, any> | null;
-  items?: BuildItem[] | null;
-  view_config?: Record<string, any>;
-}
-
-export interface WorkflowSetup {
-  mode?: 'form' | 'auto';
-  fields: Record<string, any>;
-  confirmed: boolean;
-  confirmed_at: string | null;
-}
-
-export interface WorkflowBuild {
-  stages: BuildStage[];
-  current_stage_id: string | null;
-}
-
-export interface WorkflowOutput {
-  status: 'pending' | 'generating' | 'complete' | 'error';
-  content: Record<string, any> | null;
-  widget_type?: string | null;
-  widget_data?: Record<string, any> | null;
-}
-
-export interface WorkflowState {
-  assessment_type: string;
-  current_stage: 'setup' | 'build' | 'output';
-  setup: WorkflowSetup;
-  build: WorkflowBuild;
-  output: WorkflowOutput;
-}
-
-export interface SetupFieldDef {
-  name: string;
-  label: string;
-  description: string;
-  field_type: 'text' | 'textarea' | 'select';
-  required: boolean;
-  options?: string[] | null;
-  placeholder?: string | null;
-}
-
-export interface BuildLayerDef {
-  id: string;
-  name: string;
-  view_type: 'simple_list' | 'structured_list' | 'detail_node';
-  description: string;
-  item_schema: Record<string, any>;
-  removable: boolean;
-}
-
-export interface WorkflowAssessmentDefinition extends AssessmentDefinition {
-  workspace_build_widget?: string | null;
-  workspace_output_widget?: string | null;
-  setup_fields?: SetupFieldDef[];
-  build_layers?: BuildLayerDef[];
-}
-
-export interface AssessmentWorkflowState {
-  instance_id: string;
-  assessment_id: string;
-  status: string;
-  workflow_state: WorkflowState;
-  assessment_definition: WorkflowAssessmentDefinition;
-}
-
 // ── Unified Staged Workflow Types (new architecture) ──────────────────────
 
 export interface FieldDef {
@@ -675,13 +603,6 @@ export interface Citation {
   source_title: string;
   excerpt: string;
   chunk_id: string;
-}
-
-export interface MemoResponse {
-  id: string;
-  project_id: string;
-  content: MemoContent;
-  created_at: string;
 }
 
 export type EvidenceProcessingStatus =

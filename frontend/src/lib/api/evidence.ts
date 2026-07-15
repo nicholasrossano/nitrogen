@@ -1,13 +1,9 @@
 import {
   API_URL,
   fetchApi,
-  fetchApiWithTimeout,
   getAuthToken,
-  triggerBlobDownload,
-  workflowVersionHeaders,
 } from './client';
 import type {
-  Project,
   EvidenceChunkDetail,
   EvidenceDoc,
   ProjectMaterial,
@@ -235,18 +231,6 @@ export const evidenceApi = {
     }
     return response.arrayBuffer();
   },
-  getCorpusFileBytes: async (docId: string): Promise<ArrayBuffer> => {
-    const token = await getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_URL}/api/v1/corpus/${docId}/download`, {
-      headers,
-    });
-    if (!response.ok) {
-      throw new Error('Failed to fetch corpus file');
-    }
-    return response.arrayBuffer();
-  },
   exportChecklist: async (projectId: string, content: any) => {
     const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -301,11 +285,6 @@ export const evidenceApi = {
     fetchApi<DriveSyncResult>(
       `/api/v1/projects/${projectId}/drive/sync`,
       { method: 'POST' }
-    ),
-  unlinkDriveFile: (projectId: string, linkedId: string) =>
-    fetchApi<{ success: boolean }>(
-      `/api/v1/projects/${projectId}/drive/linked/${linkedId}`,
-      { method: 'DELETE' }
     ),
 
   // ── Billing ──────────────────────────────────────────────────────,
