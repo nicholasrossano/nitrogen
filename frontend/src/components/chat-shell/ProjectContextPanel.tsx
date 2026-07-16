@@ -70,7 +70,7 @@ export function ProjectContextPanel({
     variant === 'floating'
       ? `absolute z-20 right-3 top-3 w-[min(22rem,34vw)] max-h-[50vh] flex flex-col min-h-0 overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`
       : variant === 'stacked'
-        ? `flex flex-col min-h-0 max-h-[45vh] overflow-hidden shrink-0 ${CHAT_FLOATING_PANEL_CHROME}`
+        ? `flex h-full min-h-0 flex-col overflow-hidden ${CHAT_FLOATING_PANEL_CHROME}`
         : 'w-[min(22rem,34vw)] shrink-0 border-l border-divider bg-surface flex flex-col min-h-0';
 
   return (

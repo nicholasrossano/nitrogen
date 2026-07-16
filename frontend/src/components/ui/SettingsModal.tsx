@@ -289,16 +289,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         setSettingsProjectId(nextProjectId);
         if (nextProjectId) {
           writeLastProjectId(nextProjectId);
-          if (pathname.startsWith('/chat') || pathname === '/') {
+          if (pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/') || /^\/initiatives\/[^/]+/.test(pathname)) {
             router.replace(buildChatPath(pathname, searchParams, nextProjectId));
-          } else if (/^\/initiatives\/[^/]+/.test(pathname)) {
-            router.replace(`/projects/${nextProjectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
           }
           return;
         }
 
         writeLastProjectId(null);
-        if (pathname.startsWith('/chat') || pathname === '/' || /^\/initiatives\/[^/]+/.test(pathname)) {
+        if (pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/') || /^\/initiatives\/[^/]+/.test(pathname)) {
           router.replace('/chat');
         }
       })
@@ -494,10 +492,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setSettingsProjectId(projectId);
     setProjectSettingsLoadedForId(null);
     writeLastProjectId(projectId);
-    if (pathname.startsWith('/chat') || pathname === '/') {
+    if (pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/')) {
       router.replace(buildChatPath(pathname, searchParams, projectId));
     } else if (/^\/initiatives\/[^/]+/.test(pathname)) {
-      router.replace(`/projects/${projectId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
+      router.replace(`/projects/${projectId}`);
     }
     setProjectSwitching(false);
   };
@@ -540,7 +538,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       if (nextProjectId) {
         setSettingsProjectId(nextProjectId);
         writeLastProjectId(nextProjectId);
-        router.replace(`/chat?project=${nextProjectId}`);
+        router.replace(`/projects/${nextProjectId}`);
       } else {
         setSettingsProjectId(null);
         writeLastProjectId(null);
