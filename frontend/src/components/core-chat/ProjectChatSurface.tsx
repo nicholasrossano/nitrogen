@@ -17,6 +17,9 @@ import { CompareProjectPicker, CompareChip } from './CompareProjectPicker';
 import type { CompareProject } from './CompareProjectPicker';
 import { AssessmentPicker } from '@/components/chat/AssessmentPicker';
 import { FLOAT_WIDGET_TYPES, type FloatWidget } from '@/components/editor/FloatLayer';
+import { EditorPanelHeader } from '@/components/editor/EditorPanelHeader';
+import { useChatShell } from '@/components/chat-shell/ChatShellContext';
+import { projectDisplayName } from '@/lib/projectDisplayName';
 import type { CoreChatMessage, ChatSummary } from '@/types/chat';
 import type { ProposedValueApplyRequest } from '@/components/widgets/ProposedValueWidget';
 import { debugChatFlow } from '@/lib/chatDebug';
@@ -190,9 +193,11 @@ export function ProjectChatSurface({
   onOpenAssumptions,
   composerLeadingActions,
 }: ProjectChatSurfaceProps) {
+  const chatShell = useChatShell();
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [titleSaving, setTitleSaving] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [chatAssessments, setChatAssessments] = useState<AssociatedChatAssessment[]>([]);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
@@ -214,6 +219,8 @@ export function ProjectChatSurface({
   const autoOverviewAttemptRef = useRef<string | null>(null);
   const associatedAssessmentKeysRef = useRef<Set<string>>(new Set());
   const lastLoadedChatIdRef = useRef<string | null>(null);
+  /** Blocks URL→loadChat while Back is clearing ?chat= (avoids bounce-back). */
+  const suppressChatReloadRef = useRef(false);
   const lastAutoSendRequestIdRef = useRef<string | null>(null);
   const hasAttemptedAutoRestoreRef = useRef(false);
 
@@ -234,6 +241,8 @@ export function ProjectChatSurface({
       setLoadingChat(true);
       try {
         const { messages, title } = await api.getChatMessages(chatId);
+        // Back may have fired while this request was in flight.
+        if (suppressChatReloadRef.current) return;
         setLocalMessages(messages);
         setSessionTitle(title || fallbackTitle || 'Untitled');
         setCurrentChatId(chatId);
@@ -249,10 +258,13 @@ export function ProjectChatSurface({
         lastLoadedChatIdRef.current = chatId;
         onMessageSent?.();
       } catch (err) {
+        if (suppressChatReloadRef.current) return;
         console.error('Failed to load chat messages:', err);
         setError('Failed to load chat history.');
       } finally {
-        setLoadingChat(false);
+        if (!suppressChatReloadRef.current) {
+          setLoadingChat(false);
+        }
       }
     },
     [onMessageSent],
@@ -260,13 +272,28 @@ export function ProjectChatSurface({
 
   useEffect(() => {
     if (!initialChatId) {
+      suppressChatReloadRef.current = false;
+      // Only tear down when we had a URL-backed chat. Do not clear an in-progress
+      // first message that has not received ?chat= yet.
       if (lastLoadedChatIdRef.current !== null) {
         setLocalMessages([]);
+        setSessionTitle(null);
         setCurrentChatId(null);
         setChatAssessments([]);
+        setThinkingLines([]);
+        setStreamingContent('');
+        setResearchSteps([]);
+        setError(null);
+        setFeedbackMap({});
+        setCompareProject(null);
+        setSending(false);
         lastLoadedChatIdRef.current = null;
       }
       setLoadingChat(false);
+      return;
+    }
+
+    if (suppressChatReloadRef.current) {
       return;
     }
 
@@ -448,48 +475,62 @@ export function ProjectChatSurface({
         return false;
       }
 
+      const isVersionConflict = (err: unknown) =>
+        err instanceof Error && /updated elsewhere/i.test(err.message);
+
       try {
-        const workflow = await api.getStagedAssessmentWorkflowState(target.instance_id);
-        const inputsStage = workflow.workflow_state.stages.inputs;
-        const items = inputsStage?.data?.items ?? [];
-        const normalizedFieldName = normalizeProposalKey(fieldName);
-        const row = items.find((item) => {
-          const content = item.content ?? {};
-          const explicitFieldName = typeof content.field_name === 'string' ? content.field_name : '';
-          const variable = typeof content.variable === 'string' ? content.variable : '';
-          return explicitFieldName === fieldName
-            || normalizeProposalKey(explicitFieldName) === normalizedFieldName
-            || normalizeProposalKey(variable) === normalizedFieldName;
-        });
+        let lastError: unknown = null;
+        // One retry on 409 — concurrent accept clicks / float edits bump the version.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const workflow = await api.getStagedAssessmentWorkflowState(target.instance_id);
+            const inputsStage = workflow.workflow_state.stages.inputs;
+            const items = inputsStage?.data?.items ?? [];
+            const normalizedFieldName = normalizeProposalKey(fieldName);
+            const row = items.find((item) => {
+              const content = item.content ?? {};
+              const explicitFieldName = typeof content.field_name === 'string' ? content.field_name : '';
+              const variable = typeof content.variable === 'string' ? content.variable : '';
+              return explicitFieldName === fieldName
+                || normalizeProposalKey(explicitFieldName) === normalizedFieldName
+                || normalizeProposalKey(variable) === normalizedFieldName;
+            });
 
-        if (!row) {
-          setError(`I couldn't find ${fieldName.replace(/_/g, ' ')} in the ${target.title || assessmentId} inputs.`);
-          return false;
+            if (!row) {
+              setError(`I couldn't find ${fieldName.replace(/_/g, ' ')} in the ${target.title || assessmentId} inputs.`);
+              return false;
+            }
+
+            await api.editStageItem(
+              target.instance_id,
+              'inputs',
+              row.id,
+              {
+                ...row.content,
+                value,
+                status: 'validated',
+                source: 'user',
+              },
+              workflow.workflow_version,
+            );
+
+            window.dispatchEvent(new CustomEvent('nitrogen:assessment-workflow-updated', {
+              detail: {
+                instanceId: target.instance_id,
+                assessmentId,
+                stageId: 'inputs',
+                itemId: row.id,
+              },
+            }));
+            setError(null);
+            return true;
+          } catch (err) {
+            lastError = err;
+            if (attempt === 0 && isVersionConflict(err)) continue;
+            throw err;
+          }
         }
-
-        await api.editStageItem(
-          target.instance_id,
-          'inputs',
-          row.id,
-          {
-            ...row.content,
-            value,
-            status: 'validated',
-            source: 'user',
-          },
-          workflow.workflow_version,
-        );
-
-        window.dispatchEvent(new CustomEvent('nitrogen:assessment-workflow-updated', {
-          detail: {
-            instanceId: target.instance_id,
-            assessmentId,
-            stageId: 'inputs',
-            itemId: row.id,
-          },
-        }));
-        setError(null);
-        return true;
+        throw lastError instanceof Error ? lastError : new Error('Failed to apply the proposed value.');
       } catch (err) {
         console.error('Failed to apply proposed value:', err);
         setError(err instanceof Error ? err.message : 'Failed to apply the proposed value.');
@@ -1007,6 +1048,48 @@ export function ProjectChatSurface({
     projectMaterials.length,
   ]);
 
+  const handleLeaveChat = useCallback(() => {
+    if (initialChatId) {
+      // Let ?chat= clear drive teardown. Clearing local state first would make
+      // lastLoadedChatIdRef miss and the sync effect would reload this chat.
+      suppressChatReloadRef.current = true;
+      chatShell?.onNewChat(projectId);
+      return;
+    }
+
+    // First-message / no-URL conversation — return to landing locally.
+    setLocalMessages([]);
+    setSessionTitle(null);
+    setCurrentChatId(null);
+    setChatAssessments([]);
+    setThinkingLines([]);
+    setStreamingContent('');
+    setResearchSteps([]);
+    setError(null);
+    setFeedbackMap({});
+    setCompareProject(null);
+    setSending(false);
+    lastLoadedChatIdRef.current = null;
+    chatShell?.onNewChat(projectId);
+  }, [chatShell, initialChatId, projectId]);
+
+  const handleSaveChatTitle = useCallback(async (title: string) => {
+    if (!currentChatId) {
+      setSessionTitle(title);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      await api.updateChatTitle(currentChatId, title);
+      setSessionTitle(title);
+      onChatListDirty?.();
+    } catch (err) {
+      console.error('Failed to update chat title:', err);
+    } finally {
+      setTitleSaving(false);
+    }
+  }, [currentChatId, onChatListDirty]);
+
   if (isOnLanding) {
     const filesUploaded = projectMaterials.length;
     const assessmentsCreated = activeAssessmentsCount;
@@ -1085,30 +1168,42 @@ export function ProjectChatSurface({
   }
 
   return (
-    <ConversationView
-      messages={displayMessages}
-      sending={sending}
-      thinkingLines={thinkingLines}
-      researchSteps={researchSteps}
-      streamingContent={streamingContent}
-      error={error}
-      onSendMessage={handleSend}
-      onUploadFile={handleUploadFile}
-      onEditMessage={handleEditMessage}
-      onRetryMessage={handleRetryMessage}
-      messageFeedback={messageFeedback}
-      onSetFeedback={handleSetFeedback}
-      retryingMessageId={null}
-      projectId={projectId}
-      onOpenDocument={onOpenDocument}
-      extraInputActions={composerToolbarLeading}
-      topComposerContent={associatedAssessmentsTray}
-      inputChips={inputChips}
-      topContent={topContent}
-      topContentMode={topContentMode}
-      onApplyProposedValue={handleApplyProposedValue}
-      showAttachments={!allowInitialProjectOnboarding}
-      historyLoading={loadingChat}
-    />
+    <div className="flex h-full min-h-0 flex-col">
+      <EditorPanelHeader
+        title={sessionTitle || 'Untitled'}
+        titleEditable={Boolean(currentChatId)}
+        onSaveTitle={handleSaveChatTitle}
+        titleSaving={titleSaving}
+        suffix={project ? projectDisplayName(project) : null}
+        onBack={handleLeaveChat}
+      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ConversationView
+          messages={displayMessages}
+          sending={sending}
+          thinkingLines={thinkingLines}
+          researchSteps={researchSteps}
+          streamingContent={streamingContent}
+          error={error}
+          onSendMessage={handleSend}
+          onUploadFile={handleUploadFile}
+          onEditMessage={handleEditMessage}
+          onRetryMessage={handleRetryMessage}
+          messageFeedback={messageFeedback}
+          onSetFeedback={handleSetFeedback}
+          retryingMessageId={null}
+          projectId={projectId}
+          onOpenDocument={onOpenDocument}
+          extraInputActions={composerToolbarLeading}
+          topComposerContent={associatedAssessmentsTray}
+          inputChips={inputChips}
+          topContent={topContent}
+          topContentMode={topContentMode}
+          onApplyProposedValue={handleApplyProposedValue}
+          showAttachments={!allowInitialProjectOnboarding}
+          historyLoading={loadingChat}
+        />
+      </div>
+    </div>
   );
 }
