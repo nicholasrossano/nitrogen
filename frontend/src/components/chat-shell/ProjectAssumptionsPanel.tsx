@@ -2,16 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
-import { api, type Assumption, type AssumptionStatus } from '@/lib/api';
+import { api, type Assumption } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
-
-const STATUS_CLASS: Record<AssumptionStatus, string> = {
-  validated: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  extracted: 'bg-sky-50 text-sky-700 border-sky-200',
-  assumed: 'bg-amber-50 text-amber-700 border-amber-200',
-  missing: 'bg-surface-subtle text-text-secondary border-stroke-subtle',
-};
+import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
+import { AssumptionStatusCapsule } from '@/components/assumptions/AssumptionStatusCapsule';
 
 function formatValue(value: unknown, unit?: string | null): string {
   if (value === null || value === undefined || value === '') return '—';
@@ -40,12 +35,30 @@ export function ProjectAssumptionsPanel({
       setRows([]);
       return;
     }
-    setLoading(true);
-    api
-      .listAssumptions(projectId)
-      .then((assumptions) => setRows(assumptions.slice(0, 12)))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
+    const key = swrKeys.assumptions(projectId);
+    const cached = getCached<Assumption[]>(key);
+    if (cached) {
+      setRows(cached.slice(0, 12));
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    let cancelled = false;
+    void swrFetch(key, () => api.listAssumptions(projectId), { force: refreshKey > 0 })
+      .then(({ data }) => {
+        if (!cancelled) setRows(data.slice(0, 12));
+      })
+      .catch(() => {
+        if (!cancelled && !cached) setRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, refreshKey]);
 
   if (!projectId) return null;
@@ -97,11 +110,7 @@ export function ProjectAssumptionsPanel({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-medium text-text-primary leading-snug">{row.label}</span>
-                    <span
-                      className={`shrink-0 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide leading-none ${STATUS_CLASS[row.status]}`}
-                    >
-                      {row.status}
-                    </span>
+                    <AssumptionStatusCapsule status={row.status} className="shrink-0" />
                   </div>
                   <p className="mt-1 text-[11px] text-text-secondary truncate" title={formatValue(row.value, row.unit)}>
                     {formatValue(row.value, row.unit)}

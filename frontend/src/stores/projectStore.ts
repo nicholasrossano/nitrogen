@@ -10,13 +10,18 @@ import {
   DriveSyncResult,
   DriveLinkedFile,
 } from '@/lib/api';
+import { getCached, setCached, swrKeys } from '@/lib/swrCache';
 
 interface ProjectState {
   project: Project | null;
+  /** Warm by-id cache so chrome (title) never blanks on soft nav / project switch. */
+  projectsById: Record<string, Project>;
   memo: MemoContent | null;
   memoId: string | null;
   evidenceDocs: EvidenceDoc[];
   projectMaterials: ProjectMaterial[];
+  /** Which projectId `projectMaterials` currently belongs to. */
+  materialsProjectId: string | null;
   driveLinkedFiles: DriveLinkedFile[];
   projectPlan: ProjectPlan | null;
 
@@ -54,6 +59,7 @@ interface ProjectState {
 }
 
 let latestLoadProjectRequest = 0;
+const loadMaterialsInflight = new Map<string, Promise<void>>();
 
 function withRequestTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -89,9 +95,8 @@ async function schedulePollForProcessing(
         continue;
       }
 
-      set((state) => ({
-        evidenceDocs,
-        projectMaterials: state.projectMaterials.map((m) => {
+      set((state) => {
+        const projectMaterials = state.projectMaterials.map((m) => {
           const match = evidenceDocs.find((d) => d.id === m.id);
           if (!match) return m;
           return {
@@ -102,8 +107,12 @@ async function schedulePollForProcessing(
             processing_status: match.processing_status ?? m.processing_status,
             processing_error: match.processing_error ?? m.processing_error,
           };
-        }),
-      }));
+        });
+        if (state.materialsProjectId === projectId) {
+          setCached(swrKeys.materials(projectId), projectMaterials);
+        }
+        return { evidenceDocs, projectMaterials };
+      });
 
       const stillProcessing = evidenceDocs.some(
         (d) =>
@@ -114,7 +123,7 @@ async function schedulePollForProcessing(
       if (!stillProcessing) {
         try {
           const project = await api.getProject(projectId);
-          set({ project });
+          rememberProject(set, project);
           get()._refreshPlanInBackground(projectId);
         } catch {
           // Non-fatal.
@@ -127,12 +136,28 @@ async function schedulePollForProcessing(
   }
 }
 
+function rememberProject(
+  set: (partial: Partial<ProjectState> | ((state: ProjectState) => Partial<ProjectState>)) => void,
+  project: Project,
+  extra?: Partial<ProjectState>,
+): void {
+  setCached(swrKeys.project(project.id), project);
+  set((state) => ({
+    project,
+    projectsById: { ...state.projectsById, [project.id]: project },
+    projectPlan: project.project_plan ?? null,
+    ...extra,
+  }));
+}
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
   project: null,
+  projectsById: {},
   memo: null,
   memoId: null,
   evidenceDocs: [],
   projectMaterials: [],
+  materialsProjectId: null,
   driveLinkedFiles: [],
   projectPlan: null,
   loading: false,
@@ -144,20 +169,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   loadProject: async (id: string) => {
     const requestId = ++latestLoadProjectRequest;
-    set({ loading: true, error: null });
+    const cached =
+      get().projectsById[id]
+      ?? getCached<Project>(swrKeys.project(id))
+      ?? null;
+    if (cached) {
+      set({
+        project: cached,
+        projectsById: { ...get().projectsById, [id]: cached },
+        projectPlan: cached.project_plan ?? get().projectPlan,
+        loading: false,
+        error: null,
+      });
+    } else {
+      set({ loading: true, error: null });
+    }
     try {
       const project = await withRequestTimeout(
         api.getProject(id),
         'Project took too long to load. Please refresh and try again.',
       );
       if (requestId !== latestLoadProjectRequest) return;
-      set({
-        project,
-        loading: false,
-        projectPlan: project.project_plan ?? null,
-      });
+      rememberProject(set, project, { loading: false, error: null });
     } catch (error) {
       if (requestId !== latestLoadProjectRequest) return;
+      // Keep warm cache painted; only surface error on cold miss.
       set({
         error: error instanceof Error ? error.message : 'Failed to load project',
         loading: false,
@@ -175,12 +211,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   loadMaterials: async (id: string) => {
-    try {
-      const projectMaterials = await api.getMaterials(id);
-      set({ projectMaterials });
-    } catch (error) {
-      console.error('Failed to load materials:', error);
+    const cached = getCached<ProjectMaterial[]>(swrKeys.materials(id));
+    if (cached) {
+      set({ projectMaterials: cached, materialsProjectId: id });
     }
+
+    const existing = loadMaterialsInflight.get(id);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const promise = (async () => {
+      try {
+        const projectMaterials = await api.getMaterials(id);
+        setCached(swrKeys.materials(id), projectMaterials);
+        set({ projectMaterials, materialsProjectId: id });
+      } catch (error) {
+        console.error('Failed to load materials:', error);
+      } finally {
+        loadMaterialsInflight.delete(id);
+      }
+    })();
+    loadMaterialsInflight.set(id, promise);
+    await promise;
   },
 
   uploadMaterial: async (id: string, file: File) => {
@@ -197,10 +251,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         processing_status: doc.processing_status ?? 'uploaded',
         processing_error: doc.processing_error ?? null,
       };
-      set((state) => ({
-        projectMaterials: [asMaterial, ...state.projectMaterials],
-        evidenceDocs: [doc, ...state.evidenceDocs],
-      }));
+      set((state) => {
+        const projectMaterials = [asMaterial, ...state.projectMaterials];
+        setCached(swrKeys.materials(id), projectMaterials);
+        return {
+          projectMaterials,
+          materialsProjectId: id,
+          evidenceDocs: [doc, ...state.evidenceDocs],
+        };
+      });
       schedulePollForProcessing(id, get, set);
     } catch (error) {
       console.error('Failed to upload material:', error);
@@ -210,12 +269,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   deleteMaterial: async (materialId: string) => {
     const prev = get().projectMaterials;
+    const materialsProjectId = get().materialsProjectId;
     const mat = prev.find((m) => m.id === materialId);
     const isEvidence = mat?.source === 'evidence';
 
-    set((state) => ({
-      projectMaterials: state.projectMaterials.filter((m) => m.id !== materialId),
-    }));
+    set((state) => {
+      const projectMaterials = state.projectMaterials.filter((m) => m.id !== materialId);
+      if (state.materialsProjectId) {
+        setCached(swrKeys.materials(state.materialsProjectId), projectMaterials);
+      }
+      return { projectMaterials };
+    });
     try {
       if (isEvidence) {
         await api.deleteEvidence(materialId);
@@ -226,7 +290,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         await api.deleteMaterial(materialId);
       }
     } catch (error) {
-      set({ projectMaterials: prev });
+      set({ projectMaterials: prev, materialsProjectId });
+      if (materialsProjectId) setCached(swrKeys.materials(materialsProjectId), prev);
       console.error('Failed to delete material:', error);
       throw error;
     }
@@ -253,10 +318,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         source: 'evidence',
       }));
       const links = await api.getDriveLinkedFiles(id);
-      set((state) => ({
-        projectMaterials: [...newMaterials, ...state.projectMaterials],
-        driveLinkedFiles: links,
-      }));
+      set((state) => {
+        const projectMaterials = [...newMaterials, ...state.projectMaterials];
+        setCached(swrKeys.materials(id), projectMaterials);
+        return {
+          projectMaterials,
+          materialsProjectId: id,
+          driveLinkedFiles: links,
+        };
+      });
     }
     return result;
   },
@@ -265,7 +335,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const result = await api.syncDriveFiles(id);
     if (result.updated > 0) {
       const projectMaterials = await api.getMaterials(id);
-      set({ projectMaterials });
+      setCached(swrKeys.materials(id), projectMaterials);
+      set({ projectMaterials, materialsProjectId: id });
     }
     return result;
   },
@@ -275,7 +346,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await api.confirmProject(id);
       const project = await api.getProject(id);
-      set({ project, loading: false });
+      rememberProject(set, project, { loading: false });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to confirm',
@@ -300,15 +371,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         processing_error: doc.processing_error ?? null,
       };
 
-      set((state) => ({
-        evidenceDocs: [doc, ...state.evidenceDocs.filter((d) => d.id !== doc.id)],
-        projectMaterials: [
+      set((state) => {
+        const projectMaterials = [
           asMaterial,
           ...state.projectMaterials.filter((m) => m.id !== doc.id),
-        ],
-        loading: false,
-        error: null,
-      }));
+        ];
+        setCached(swrKeys.materials(id), projectMaterials);
+        return {
+          evidenceDocs: [doc, ...state.evidenceDocs.filter((d) => d.id !== doc.id)],
+          projectMaterials,
+          materialsProjectId: id,
+          loading: false,
+          error: null,
+        };
+      });
 
       schedulePollForProcessing(id, get, set);
     } catch (error) {
@@ -323,7 +399,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await api.pasteEvidence(id, content, title);
       const project = await api.getProject(id);
-      set({ project, loading: false });
+      rememberProject(set, project, { loading: false });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to save text',
@@ -368,16 +444,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await api.selectTools(id, toolIds);
-      set((state) => ({
-        project: state.project
-          ? {
-              ...state.project,
-              selected_tools: response.selected_tools,
-              stage: response.stage,
-            }
-          : state.project,
-        loading: false,
-      }));
+      set((state) => {
+        if (!state.project || state.project.id !== id) {
+          return { loading: false };
+        }
+        const project = {
+          ...state.project,
+          selected_tools: response.selected_tools,
+          stage: response.stage,
+        };
+        setCached(swrKeys.project(id), project);
+        return {
+          project,
+          projectsById: { ...state.projectsById, [id]: project },
+          loading: false,
+        };
+      });
     } catch (error) {
       console.error('selectTools: error', error);
       set({
@@ -389,17 +471,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   generateProjectOverview: async (id: string) => {
     const project = await api.generateProjectOverview(id);
-    set((state) => ({
-      project,
-      projectPlan: project.project_plan ?? state.projectPlan,
-    }));
+    rememberProject(set, project, {
+      projectPlan: project.project_plan ?? get().projectPlan,
+    });
     return project;
   },
 
   updateTitle: async (id: string, title: string) => {
     try {
       const project = await api.updateProject(id, { title });
-      set({ project });
+      rememberProject(set, project);
     } catch (error) {
       console.error('Failed to update title:', error);
     }
@@ -526,10 +607,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   reset: () => {
     set({
       project: null,
+      // Keep projectsById warm across soft resets so titles don't flash.
       memo: null,
       memoId: null,
       evidenceDocs: [],
       projectMaterials: [],
+      materialsProjectId: null,
       driveLinkedFiles: [],
       projectPlan: null,
       loading: false,

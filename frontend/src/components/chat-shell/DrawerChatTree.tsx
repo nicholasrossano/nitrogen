@@ -64,6 +64,8 @@ export function DrawerChatTree({
 
   const activeProjectId = chatShell?.activeProjectId ?? null;
   const prevActiveProjectIdRef = useRef<string | null>(null);
+  const activeProjectIdRef = useRef(activeProjectId);
+  activeProjectIdRef.current = activeProjectId;
 
   useEffect(() => {
     if (!activeWorkspace) void loadWorkspaces();
@@ -82,11 +84,12 @@ export function DrawerChatTree({
       ]);
       setProjects(projectRows);
       setChats(chatResponse.chats);
+      const currentActive = activeProjectIdRef.current;
       setExpanded((prev) => {
         const next = { ...prev };
         for (const p of projectRows) {
           if (next[p.id] == null) {
-            next[p.id] = p.id === activeProjectId;
+            next[p.id] = p.id === currentActive;
           }
         }
         return next;
@@ -104,7 +107,7 @@ export function DrawerChatTree({
     } finally {
       setLoading(false);
     }
-  }, [activeProjectId, activeWorkspace?.id]);
+  }, [activeWorkspace?.id]);
 
   useEffect(() => {
     void load();
