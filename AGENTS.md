@@ -84,8 +84,6 @@ Project work lives on **`/projects/[id]`** (Chat is the default floor; Overview 
 - Chat floor / generate flow: `LandingInput.tsx`, `ConversationView.tsx`, `ProjectChatSurface.tsx` (in `ProjectWorkbench.tsx`)
 - Personal (no-project) chat: `PersonalChatSurface.tsx` on `/chat`
 - Floors / floats: `FloorLayer.tsx`, `FloatLayer.tsx`, `ChatContextStack.tsx`
-- Floors / floats: `FloorLayer.tsx`, `FloatLayer.tsx`, `ChatContextStack.tsx`
-- Floors / floats: `FloorLayer.tsx`, `FloatLayer.tsx`, `ChatContextStack.tsx`
 
 Landing tiles live in `LandingInput.tsx` (do not look for a separate picker component).
 
@@ -126,7 +124,7 @@ bash scripts/setup.sh --status || bash scripts/setup.sh
 | Frontend only | `:3000` up, API hits production Railway | UI, routing, Firebase login screen, static flows |
 | Full local stack | `:3000` + `:8000` with `DATABASE_URL` + Firebase creds in Cursor secrets | Login with data, chat, uploads, assessments |
 
-If only tier 1 is available, say so — do not claim you verified authenticated data flows. Do not blame Docker; the gap is missing secrets on the VM.
+If only tier 1 is available, say so — do not claim you verified authenticated data flows. Report missing secrets when the stack is incomplete; Docker is not available on cloud agent VMs.
 
 - **Never** `cp .env.example .env` over a real env file — it breaks Firebase login.
 - **Firebase required:** `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, and a service account must be configured for full stack.

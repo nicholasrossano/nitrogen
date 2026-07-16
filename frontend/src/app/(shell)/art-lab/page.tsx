@@ -48,8 +48,8 @@ function LoadingArtLabContent() {
                 <div className="space-y-2">
                   <h2 className="text-lg font-semibold text-text-primary">Developer mode required</h2>
                   <p className="text-sm text-text-secondary leading-relaxed">
-                    This hidden page is only meant for internal art lab experiments. Turn on
-                    Developer Mode in Settings to use it.
+                    This page is for loading-art experiments. Enable Developer Mode in
+                    Settings to use it.
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-3">
