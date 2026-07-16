@@ -5,6 +5,8 @@ import { api } from '@/lib/api';
 import type { ChatMessage, FieldContext } from '@/lib/api';
 import { ConversationView } from '@/components/core-chat/ConversationView';
 import { LandingInput } from '@/components/core-chat/LandingInput';
+import { EditorPanelHeader } from '@/components/editor/EditorPanelHeader';
+import { useChatShell } from '@/components/chat-shell/ChatShellContext';
 import type { CoreChatMessage } from '@/types/chat';
 
 interface PersonalChatSurfaceProps {
@@ -47,9 +49,11 @@ export function PersonalChatSurface({
   projectContext = null,
   composerLeadingActions,
 }: PersonalChatSurfaceProps) {
+  const chatShell = useChatShell();
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [titleSaving, setTitleSaving] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [thinkingLines, setThinkingLines] = useState<string[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
@@ -58,6 +62,8 @@ export function PersonalChatSurface({
     Record<string, 'like' | 'dislike' | null>
   >({});
   const lastLoadedChatIdRef = useRef<string | null>(null);
+  /** Blocks URL→loadChat while Back is clearing ?chat= (avoids bounce-back). */
+  const suppressChatReloadRef = useRef(false);
   const titlePersistedRef = useRef(false);
   const [loadingChat, setLoadingChat] = useState(false);
 
@@ -65,6 +71,7 @@ export function PersonalChatSurface({
     setLoadingChat(true);
     try {
       const { messages, title } = await api.getChatMessages(chatId);
+      if (suppressChatReloadRef.current) return;
       setLocalMessages(messages);
       setSessionTitle(title || fallbackTitle || 'Untitled');
       setCurrentChatId(chatId);
@@ -78,21 +85,35 @@ export function PersonalChatSurface({
       setError(null);
       lastLoadedChatIdRef.current = chatId;
     } catch (err) {
+      if (suppressChatReloadRef.current) return;
       console.error('Failed to load chat messages:', err);
       setError('Failed to load chat history.');
     } finally {
-      setLoadingChat(false);
+      if (!suppressChatReloadRef.current) {
+        setLoadingChat(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     if (!initialChatId) {
+      suppressChatReloadRef.current = false;
       if (lastLoadedChatIdRef.current !== null) {
         setLocalMessages([]);
+        setSessionTitle(null);
         setCurrentChatId(null);
+        setThinkingLines([]);
+        setStreamingContent('');
+        setError(null);
+        setFeedbackMap({});
+        setSending(false);
         lastLoadedChatIdRef.current = null;
       }
       setLoadingChat(false);
+      return;
+    }
+
+    if (suppressChatReloadRef.current) {
       return;
     }
 
@@ -314,6 +335,42 @@ export function PersonalChatSurface({
     onLandingStateChange?.(isOnLanding);
   }, [isOnLanding, onLandingStateChange]);
 
+  const handleLeaveChat = useCallback(() => {
+    if (initialChatId) {
+      suppressChatReloadRef.current = true;
+      chatShell?.onNewChat();
+      return;
+    }
+
+    setLocalMessages([]);
+    setSessionTitle(null);
+    setCurrentChatId(null);
+    setThinkingLines([]);
+    setStreamingContent('');
+    setError(null);
+    setFeedbackMap({});
+    setSending(false);
+    lastLoadedChatIdRef.current = null;
+    chatShell?.onNewChat();
+  }, [chatShell, initialChatId]);
+
+  const handleSaveChatTitle = useCallback(async (title: string) => {
+    if (!currentChatId) {
+      setSessionTitle(title);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      await api.updateChatTitle(currentChatId, title);
+      setSessionTitle(title);
+      onChatListDirty?.();
+    } catch (err) {
+      console.error('Failed to update chat title:', err);
+    } finally {
+      setTitleSaving(false);
+    }
+  }, [currentChatId, onChatListDirty]);
+
   if (isOnLanding) {
     return (
       <LandingInput
@@ -326,23 +383,34 @@ export function PersonalChatSurface({
   }
 
   return (
-    <ConversationView
-      messages={displayMessages}
-      sending={sending}
-      thinkingLines={thinkingLines}
-      researchSteps={[]}
-      streamingContent={streamingContent}
-      error={error}
-      onSendMessage={(content: string, toolHint?: string, _fieldContext?: FieldContext | null) => {
-        void handleSend(content, toolHint);
-      }}
-      onEditMessage={handleEditMessage}
-      onRetryMessage={handleRetryMessage}
-      messageFeedback={messageFeedback}
-      onSetFeedback={handleSetFeedback}
-      retryingMessageId={null}
-      historyLoading={loadingChat}
-      extraInputActions={composerLeadingActions}
-    />
+    <div className="flex h-full min-h-0 flex-col">
+      <EditorPanelHeader
+        title={sessionTitle || 'Untitled'}
+        titleEditable={Boolean(currentChatId)}
+        onSaveTitle={handleSaveChatTitle}
+        titleSaving={titleSaving}
+        onBack={handleLeaveChat}
+      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ConversationView
+          messages={displayMessages}
+          sending={sending}
+          thinkingLines={thinkingLines}
+          researchSteps={[]}
+          streamingContent={streamingContent}
+          error={error}
+          onSendMessage={(content: string, toolHint?: string, _fieldContext?: FieldContext | null) => {
+            void handleSend(content, toolHint);
+          }}
+          onEditMessage={handleEditMessage}
+          onRetryMessage={handleRetryMessage}
+          messageFeedback={messageFeedback}
+          onSetFeedback={handleSetFeedback}
+          retryingMessageId={null}
+          historyLoading={loadingChat}
+          extraInputActions={composerLeadingActions}
+        />
+      </div>
+    </div>
   );
 }
