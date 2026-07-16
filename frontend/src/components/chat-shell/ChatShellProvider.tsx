@@ -60,6 +60,7 @@ export function buildChatPath(
     return buildProjectWorkbenchPath(projectId, {
       chat,
       panel: parseContextPanelParam(searchParams.get('panel')),
+      assessment: searchParams.get('assessment'),
     });
   }
   const basePath = pathname.startsWith('/chat') || pathname === '/' ? '/chat' : pathname;

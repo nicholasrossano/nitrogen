@@ -12,6 +12,7 @@ import { TourAnchor } from '@/components/tour/TourAnchor';
 import { useFeatureFlag, useFeatureFlagContext, useVisibleAssessments } from '@/hooks/useFeatureFlag';
 import { api, type AssessmentInstance } from '@/lib/api';
 import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
+import { assessmentHeaderTitle } from '@/lib/assessmentDisplay';
 import { filterVisibleAssessments } from '@/lib/featureFlags';
 import { useProjectStore } from '@/stores/projectStore';
 
@@ -188,7 +189,11 @@ export function ProjectRecommendedAssessmentsSection({
       onOpenAssessment({
         instanceId: existingInstance.id,
         assessmentId: existingInstance.assessment_id,
-        title: existingInstance.display_name || assessmentName,
+        title: assessmentHeaderTitle(
+          existingInstance.title || existingInstance.display_name,
+          assessmentName,
+          existingInstance.creator_handle,
+        ),
       });
       return;
     }
@@ -201,7 +206,11 @@ export function ProjectRecommendedAssessmentsSection({
       onOpenAssessment({
         instanceId: instance.id,
         assessmentId: instance.assessment_id,
-        title: instance.display_name || assessmentName,
+        title: assessmentHeaderTitle(
+          instance.title || instance.display_name,
+          assessmentName,
+          instance.creator_handle,
+        ),
         pendingEngagement: true,
       });
     } catch (nextError) {

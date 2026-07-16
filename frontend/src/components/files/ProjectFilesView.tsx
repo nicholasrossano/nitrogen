@@ -28,6 +28,7 @@ import {
   DriveLinkedFile,
   WorkspaceKnowledgeBank,
 } from '@/lib/api';
+import { getCached, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
 import { Tooltip } from '@/components/ui/Tooltip';
 import {
   dataTableContainerClass,
@@ -155,9 +156,18 @@ export function ProjectFilesView({
       setLoading(false);
       return;
     }
+    const key = `${swrKeys.materials(projectId)}:generated`;
+    const cached = getCached<GeneratedFile[]>(key);
+    if (cached) {
+      setGeneratedFiles(cached);
+      setLoading(false);
+    }
     try {
-      const response: ProjectFilesResponse = await api.getProjectFiles(projectId);
-      setGeneratedFiles(response.generated);
+      const { data } = await swrFetch(key, async () => {
+        const response: ProjectFilesResponse = await api.getProjectFiles(projectId);
+        return response.generated;
+      });
+      setGeneratedFiles(data);
     } catch (err) {
       console.error('Failed to load project files:', err);
     } finally {
@@ -207,7 +217,11 @@ export function ProjectFilesView({
     if (!projectId) return;
     setDeletingId(file.id);
     // Optimistic removal
-    setGeneratedFiles((prev) => prev.filter((f) => f.id !== file.id));
+    setGeneratedFiles((prev) => {
+      const next = prev.filter((f) => f.id !== file.id);
+      setCached(`${swrKeys.materials(projectId)}:generated`, next);
+      return next;
+    });
     try {
       await api.deleteGeneratedFile(projectId, file.id);
     } catch (err) {

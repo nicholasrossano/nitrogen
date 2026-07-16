@@ -9,6 +9,9 @@ import { useRegisterEditorPanelChrome } from '@/components/editor/EditorPanelChr
 
 interface AssessmentWorkspacePanelChromeProps {
   title: string;
+  titleEditable?: boolean;
+  onSaveTitle?: (title: string) => void | Promise<void>;
+  titleSaving?: boolean;
   exportFormat?: string | null;
   projectId?: string;
   decisionMenuRef: RefObject<HTMLDivElement>;
@@ -18,6 +21,7 @@ interface AssessmentWorkspacePanelChromeProps {
   onDecisionLogExport: () => void;
   showExportAction: boolean;
   onExport: () => void;
+  isExporting?: boolean;
   canApproveFinal: boolean;
   onApproveFinal: () => void;
   finalApproved: boolean;
@@ -27,6 +31,9 @@ interface AssessmentWorkspacePanelChromeProps {
 
 export function AssessmentWorkspacePanelChrome({
   title,
+  titleEditable = false,
+  onSaveTitle,
+  titleSaving = false,
   exportFormat,
   projectId,
   decisionMenuRef,
@@ -36,6 +43,7 @@ export function AssessmentWorkspacePanelChrome({
   onDecisionLogExport,
   showExportAction,
   onExport,
+  isExporting = false,
   canApproveFinal,
   onApproveFinal,
   finalApproved,
@@ -74,8 +82,14 @@ export function AssessmentWorkspacePanelChrome({
           )}
         </div>
         {showExportAction && (
-          <EditorPanelHeaderIconButton label="Export assessment" onClick={onExport}>
-            <Download className="h-3.5 w-3.5" />
+          <EditorPanelHeaderIconButton
+            label="Export assessment"
+            onClick={onExport}
+            disabled={isExporting || isApprovingFinal}
+          >
+            {isExporting
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Download className="h-3.5 w-3.5" />}
           </EditorPanelHeaderIconButton>
         )}
         {canApproveFinal && (
@@ -96,7 +110,7 @@ export function AssessmentWorkspacePanelChrome({
             disabled={isApprovingFinal}
             title="Confirmed — click to revoke"
             aria-label="Confirmed — click to revoke"
-            className="group flex h-8 items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 text-white transition-colors hover:bg-accent/90 disabled:opacity-100"
+            className="group flex h-8 items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 text-white leading-none transition-colors hover:bg-accent/90 disabled:opacity-100"
           >
             {isApprovingFinal ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
@@ -120,6 +134,7 @@ export function AssessmentWorkspacePanelChrome({
     onDecisionLogExport,
     showExportAction,
     onExport,
+    isExporting,
     canApproveFinal,
     onApproveFinal,
     finalApproved,
@@ -130,10 +145,13 @@ export function AssessmentWorkspacePanelChrome({
   useRegisterEditorPanelChrome(
     {
       title,
+      titleEditable,
+      onSaveTitle,
+      titleSaving,
       suffix: exportFormat?.toUpperCase() ?? null,
       actions,
     },
-    [title, exportFormat, actions],
+    [title, titleEditable, onSaveTitle, titleSaving, exportFormat, actions],
   );
 
   return null;

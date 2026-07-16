@@ -28,6 +28,8 @@ import {
   CHAT_SIDEBAR_COLLAPSED_WIDTH,
   CHAT_SIDEBAR_EXPANDED_WIDTH,
   CHAT_SIDEBAR_MARGIN,
+  SHELL_SURFACE_HEADER_CLASS,
+  SHELL_SURFACE_HEADER_HEIGHT,
 } from './chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
@@ -573,7 +575,7 @@ export function SideDrawer() {
   const drawerBody = (
     <>
       {isChatShell && (
-        <div className={`shrink-0 flex items-center gap-1 px-2 pt-2 pb-1 ${chatSidebarCollapsed ? 'hidden' : ''}`}>
+        <div className={`${SHELL_SURFACE_HEADER_CLASS} gap-1 px-2 ${chatSidebarCollapsed ? 'hidden' : ''}`}>
           {/* Spacer matches the persistent absolute toggle so the icon never jumps during collapse. */}
           <div className="w-8 h-8 shrink-0" aria-hidden />
           {workspaceSwitcher}
@@ -835,7 +837,8 @@ export function SideDrawer() {
             style={{
               top: chatSidebarCollapsed
                 ? `calc((${CHAT_SIDEBAR_COLLAPSED_WIDTH} - 2rem) / 2)`
-                : '0.5rem',
+                // Center the 2rem toggle in the shared surface header height.
+                : `calc((${SHELL_SURFACE_HEADER_HEIGHT} - 2rem) / 2)`,
               left: chatSidebarCollapsed
                 ? `calc((${CHAT_SIDEBAR_COLLAPSED_WIDTH} - 2rem) / 2)`
                 : '0.5rem',

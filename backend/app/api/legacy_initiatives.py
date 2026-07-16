@@ -38,6 +38,11 @@ _alias("/initiatives/{project_id}/assessments", projects.list_assessment_instanc
 _alias("/initiatives/{project_id}/assessments", projects.create_assessment_instance, ["POST"])
 _alias(
     "/initiatives/{project_id}/assessments/{instance_id}",
+    projects.update_assessment_instance,
+    ["PATCH"],
+)
+_alias(
+    "/initiatives/{project_id}/assessments/{instance_id}",
     projects.archive_assessment_instance,
     ["DELETE"],
 )

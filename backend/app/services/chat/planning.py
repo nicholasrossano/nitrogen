@@ -205,7 +205,9 @@ class ChatPlanningMixin:
     ) -> str:
         """Distill the user message + recent history into a focused corpus search query."""
         if len(history) <= 2:
-            if project_context and "Project assumptions:" in project_context:
+            if project_context and (
+                "Project variables:" in project_context or "Project assumptions:" in project_context
+            ):
                 return f"{user_message}\n{project_context[:1200]}"
             return user_message
         try:
@@ -220,8 +222,8 @@ class ChatPlanningMixin:
                         "content": (
                             "Rewrite the user's latest message as a concise search query "
                             "that captures full intent given the conversation context. "
-                            "Use validated project assumptions as authoritative context, "
-                            "and include missing/needs-review assumption labels only when they "
+                            "Use validated project variables as authoritative context, "
+                            "and include missing/needs-review variable labels only when they "
                             "are directly relevant. Return ONLY the query, nothing else. Max 40 words."
                         ),
                     },
