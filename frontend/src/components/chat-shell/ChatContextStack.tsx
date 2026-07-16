@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Users } from 'lucide-react';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
-import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
+import { ProjectVariablesPanel } from '@/components/chat-shell/ProjectVariablesPanel';
 import { ProjectAssessmentsPanel } from '@/components/chat-shell/ProjectAssessmentsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
 import { FloorLayer } from '@/components/chat-shell/FloorLayer';
@@ -44,7 +44,7 @@ export interface ChatContextStackProps {
     options?: ExpandedWidgetChangeOptions,
   ) => void;
   /** Variables opens as a FloatLayer (not a floor). */
-  onOpenVariablesWorkspace?: (focusAssumptionId?: string | null) => void;
+  onOpenVariablesWorkspace?: (focusVariableId?: string | null) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenWorkspaceAssessment?: (assessment: {
@@ -252,8 +252,8 @@ export function ChatContextStack({
     onExpandedWidgetChange(null);
   }, [onExpandedWidgetChange]);
 
-  const handleAssumptionSelect = useCallback((assumption: { id: string }) => {
-    onOpenVariablesWorkspace?.(assumption.id);
+  const handleVariableSelect = useCallback((variable: { id: string }) => {
+    onOpenVariablesWorkspace?.(variable.id);
   }, [onOpenVariablesWorkspace]);
 
   if (!projectId) return null;
@@ -285,10 +285,10 @@ export function ChatContextStack({
           expandedWidget={expandedWidget}
           renderedWidget={renderedWidget}
         >
-          <ProjectAssumptionsPanel
+          <ProjectVariablesPanel
             projectId={projectId}
             refreshKey={refreshKey}
-            onAssumptionSelect={handleAssumptionSelect}
+            onVariableSelect={handleVariableSelect}
             onViewAll={handleExpandVariables}
           />
         </ContextStackWidgetSlot>

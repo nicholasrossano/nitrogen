@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.assumptions import suggest_assumption_candidates
+from app.services.variables import suggest_variable_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +81,11 @@ async def retrieve_evidence(
             + f": {(fact.get('content', '') or '')[:400]}"
         )
 
-    assumption_candidates = suggest_assumption_candidates(all_facts)
-    if assumption_candidates:
+    variable_candidates = suggest_variable_candidates(all_facts)
+    if variable_candidates:
         logger.info(
-            "retrieval produced %d assumption candidate(s) from external evidence",
-            len(assumption_candidates),
+            "retrieval produced %d variable candidate(s) from external evidence",
+            len(variable_candidates),
         )
 
     context_str = "\n".join(context_lines) if context_lines else ""

@@ -67,9 +67,9 @@ async def test_tiered_retrieval_skips_worldbank_when_domain_unavailable(active_d
     assert await service.search_iati("clean cooking funding") == []
 
 
-def test_assumption_candidates_skip_worldbank_when_domain_unavailable(active_domain):
+def test_variable_candidates_skip_worldbank_when_domain_unavailable(active_domain):
     active_domain("finance")
-    from app.services.assumptions import suggest_assumption_candidates
+    from app.services.variables import suggest_variable_candidates
 
     facts = [
         {
@@ -79,4 +79,4 @@ def test_assumption_candidates_skip_worldbank_when_domain_unavailable(active_dom
             "content": "Access to electricity (EG.ELC.ACCS.ZS) for Kenya in 2022: 75.0.",
         }
     ]
-    assert suggest_assumption_candidates(facts) == []
+    assert suggest_variable_candidates(facts) == []

@@ -37,7 +37,7 @@ def test_registered_assessments_expose_manifest_contract() -> None:
         assert isinstance(manifest.input_dependencies, list)
         assert isinstance(manifest.produced_outputs, list)
         assert isinstance(manifest.downstream_dependencies, list)
-        assert manifest.assumptions_behavior in {"tracks", "none"}
+        assert manifest.variables_behavior in {"tracks", "none"}
         assert manifest.evidence_behavior in {"rag_grounded", "user_uploaded", "both", "none"}
         assert manifest.goal
         assert manifest.primary_ui_object

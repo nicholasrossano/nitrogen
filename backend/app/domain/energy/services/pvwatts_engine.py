@@ -27,7 +27,7 @@ MONTH_LABELS = [
 ]
 
 InputStatus = Literal["validated", "extracted", "assumed", "missing"]
-InputSource = Literal["chat", "doc", "user", "assumption"]
+InputSource = Literal["chat", "doc", "user", "variable"]
 
 MODULE_TYPE_LABELS = {0: "Standard", 1: "Premium", 2: "Thin Film"}
 ARRAY_TYPE_LABELS = {
@@ -88,7 +88,7 @@ class PVWattsResult:
     poa_monthly: list[float]
     dc_monthly: list[float]
     station_info: dict[str, Any]
-    assumption_count: int
+    variable_count: int
     quality_label: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -101,7 +101,7 @@ class PVWattsResult:
             "poa_monthly": [round(v, 2) for v in self.poa_monthly],
             "dc_monthly": [round(v, 1) for v in self.dc_monthly],
             "station_info": self.station_info,
-            "assumption_count": self.assumption_count,
+            "variable_count": self.variable_count,
             "quality_label": self.quality_label,
         }
 
@@ -167,7 +167,7 @@ class PVWattsEngine:
                 label="Tilt Angle",
                 value=float(tilt_val),
                 unit="°",
-                source="assumption",
+                source="variable",
                 status="assumed",
                 notes=f"Default: |latitude| = {tilt_val}°",
                 category="orientation",
@@ -182,7 +182,7 @@ class PVWattsEngine:
                 label="Azimuth",
                 value=az_val,
                 unit="°",
-                source="assumption",
+                source="variable",
                 status="assumed",
                 notes=f"Default: {az_val}° ({direction})",
                 category="orientation",
@@ -221,7 +221,7 @@ class PVWattsEngine:
                     label=defn["label"],
                     value=default_val,
                     unit=defn["unit"],
-                    source="assumption",
+                    source="variable",
                     status="assumed",
                     notes=f"PVWatts default: {default_val}",
                     category=defn["category"],
@@ -232,7 +232,7 @@ class PVWattsEngine:
                     label=defn["label"],
                     value=None,
                     unit=defn["unit"],
-                    source="assumption",
+                    source="variable",
                     status="missing",
                     notes="",
                     category=defn["category"],
@@ -313,12 +313,12 @@ class PVWattsEngine:
         outputs = data.get("outputs", {})
         station_info = data.get("station_info", {})
 
-        assumption_count = sum(
+        variable_count = sum(
             1 for i in inputs.values() if i.status == "assumed"
         )
-        if assumption_count <= 2:
+        if variable_count <= 2:
             quality_label = "high"
-        elif assumption_count <= 5:
+        elif variable_count <= 5:
             quality_label = "moderate"
         else:
             quality_label = "low"
@@ -332,7 +332,7 @@ class PVWattsEngine:
             poa_monthly=outputs.get("poa_monthly", [0] * 12),
             dc_monthly=outputs.get("dc_monthly", [0] * 12),
             station_info=station_info,
-            assumption_count=assumption_count,
+            variable_count=variable_count,
             quality_label=quality_label,
         )
 

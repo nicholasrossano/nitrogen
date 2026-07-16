@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.utils import llm_json
 from app.domain.registry import get_default_status_categories
-from app.models.assumption import Assumption
+from app.models.variable import Variable
 from app.models.evidence import EvidenceDoc, EvidenceDocStatus
 from app.models.project import Project
 from app.models.project_material import ProjectMaterial
@@ -314,36 +314,36 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
                     }
                 )
 
-    assumptions_result = await db.execute(
+    variables_result = await db.execute(
         select(
-            func.count(Assumption.id),
-            func.sum(case((Assumption.status == "validated", 1), else_=0)),
-            func.sum(case((Assumption.status == "extracted", 1), else_=0)),
-            func.sum(case((Assumption.status == "assumed", 1), else_=0)),
-            func.sum(case((Assumption.status == "missing", 1), else_=0)),
-        ).where(Assumption.project_id == project.id)
+            func.count(Variable.id),
+            func.sum(case((Variable.status == "validated", 1), else_=0)),
+            func.sum(case((Variable.status == "extracted", 1), else_=0)),
+            func.sum(case((Variable.status == "assumed", 1), else_=0)),
+            func.sum(case((Variable.status == "missing", 1), else_=0)),
+        ).where(Variable.project_id == project.id)
     )
-    assumption_counts = assumptions_result.one()
-    assumptions_total = int(assumption_counts[0] or 0)
-    assumptions_validated = int(assumption_counts[1] or 0)
-    assumptions_extracted = int(assumption_counts[2] or 0)
-    assumptions_assumed = int(assumption_counts[3] or 0)
-    assumptions_missing = int(assumption_counts[4] or 0)
+    variable_counts = variables_result.one()
+    variables_total = int(variable_counts[0] or 0)
+    variables_validated = int(variable_counts[1] or 0)
+    variables_extracted = int(variable_counts[2] or 0)
+    variables_assumed = int(variable_counts[3] or 0)
+    variables_missing = int(variable_counts[4] or 0)
 
-    assumptions_rows = await db.execute(
-        select(Assumption.label, Assumption.status, Assumption.value, Assumption.notes)
-        .where(Assumption.project_id == project.id)
-        .order_by(Assumption.updated_at.desc())
+    variables_rows = await db.execute(
+        select(Variable.label, Variable.status, Variable.value, Variable.notes)
+        .where(Variable.project_id == project.id)
+        .order_by(Variable.updated_at.desc())
         .limit(14)
     )
-    assumption_examples = [
+    variable_examples = [
         {
             "label": label,
             "status": status,
             "value": _clip_text(value, max_chars=120),
             "notes": _clip_text(notes, max_chars=120),
         }
-        for label, status, value, notes in assumptions_rows.all()
+        for label, status, value, notes in variables_rows.all()
     ]
 
     evidence_result = await db.execute(
@@ -437,13 +437,13 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
             "by_assessment_id": assessment_by_id,
             "completed_output_excerpts": completed_output_excerpts,
         },
-        "assumptions": {
-            "total": assumptions_total,
-            "validated": assumptions_validated,
-            "extracted": assumptions_extracted,
-            "assumed": assumptions_assumed,
-            "missing": assumptions_missing,
-            "examples": assumption_examples,
+        "variables": {
+            "total": variables_total,
+            "validated": variables_validated,
+            "extracted": variables_extracted,
+            "assumed": variables_assumed,
+            "missing": variables_missing,
+            "examples": variable_examples,
         },
         "evidence": {
             "total": evidence_total,
@@ -470,14 +470,14 @@ async def _collect_status_signal_context(db: AsyncSession, project: Project) -> 
 
 def _guardrails_for_category(context: dict[str, Any]) -> dict[str, Any]:
     assessment_ctx = context["assessment"]
-    assumptions = context["assumptions"]
+    variables = context["variables"]
     evidence = context["evidence"]
     risk = context["risk"]
 
     blocker_flags: list[str] = []
     red_flags: list[str] = []
-    if assumptions["missing"] > 0:
-        blocker_flags.append("required_assumptions_missing")
+    if variables["missing"] > 0:
+        blocker_flags.append("required_variables_missing")
     if evidence["indexed"] == 0 and evidence["materials"] == 0 and evidence["total"] == 0:
         blocker_flags.append("core_claims_unsupported")
     if assessment_ctx["errors"] > 0:
@@ -490,7 +490,7 @@ def _guardrails_for_category(context: dict[str, Any]) -> dict[str, Any]:
     has_signal = any(
         [
             assessment_ctx["total"] > 0,
-            assumptions["total"] > 0,
+            variables["total"] > 0,
             evidence["total"] > 0,
             evidence["materials"] > 0,
         ]
@@ -525,7 +525,7 @@ def _fallback_category_result(
         rationale = f"Material unresolved blockers currently weaken {category.label.lower()}."
     elif status == "yellow":
         rationale = (
-            f"The project appears plausible, but unresolved assumptions or planning gaps limit "
+            f"The project appears plausible, but unresolved variables or planning gaps limit "
             f"{category.label.lower()}."
         )
     else:

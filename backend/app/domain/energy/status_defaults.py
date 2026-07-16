@@ -25,7 +25,7 @@ def get_default_status_categories() -> DefaultStatusCategoryPack:
         domain="energy",
         stage_expectations={
             "describe": "Assessment means enough structure exists to continue exploration.",
-            "plan": "Assessment means assumptions and evidence are coherent for analysis planning.",
+            "plan": "Assessment means variables and evidence are coherent for analysis planning.",
             "execute": "Assessment means execution blockers are controlled and evidence is decision-ready.",
             "review": "Assessment means package quality is credible for external review.",
             "generate": "Assessment means outputs are coherent and materially supported.",
@@ -37,7 +37,7 @@ def get_default_status_categories() -> DefaultStatusCategoryPack:
                 label="Evidence & credibility",
                 definition_text=(
                     "Evidence and credibility means material project claims are supported by traceable sources, "
-                    "assumptions are explicit and validated where possible, and there are no major contradictions "
+                    "variables are explicit and validated where possible, and there are no major contradictions "
                     "between what the project asserts and what the record shows."
                 ),
             ),

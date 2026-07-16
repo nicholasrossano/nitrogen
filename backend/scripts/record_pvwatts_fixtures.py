@@ -133,8 +133,8 @@ def _expect_from_engine(recorded: dict, known_values: dict) -> dict:
 
     inputs = PVWattsEngine.build_default_inputs(known_values)
     outputs = recorded["outputs"]
-    assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
-    quality = "high" if assumption_count <= 2 else "moderate" if assumption_count <= 5 else "low"
+    variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
+    quality = "high" if variable_count <= 2 else "moderate" if variable_count <= 5 else "low"
     result = PVWattsResult(
         ac_annual=outputs.get("ac_annual", 0),
         capacity_factor=outputs.get("capacity_factor", 0),
@@ -144,7 +144,7 @@ def _expect_from_engine(recorded: dict, known_values: dict) -> dict:
         poa_monthly=outputs.get("poa_monthly", [0] * 12),
         dc_monthly=outputs.get("dc_monthly", [0] * 12),
         station_info=recorded.get("station_info", {}),
-        assumption_count=assumption_count,
+        variable_count=variable_count,
         quality_label=quality,
     )
     parsed = result.to_dict()

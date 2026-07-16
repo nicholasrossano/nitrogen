@@ -16,9 +16,9 @@ class FieldContext(BaseModel):
     )
     assessment_id: Optional[str] = Field(None, description="Assessment registry id for assessment-specific investigate hints.")
     status: Optional[str] = Field(None, description="Current row status such as assumed, extracted, or validated.")
-    assumption_id: Optional[UUID] = Field(
+    variable_id: Optional[UUID] = Field(
         None,
-        description="Resolved project variable id (API: assumption_id) tied to this investigate flow.",
+        description="Resolved project variable id (API: variable_id) tied to this investigate flow.",
     )
 
 

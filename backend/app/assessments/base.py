@@ -186,7 +186,7 @@ class AssessmentManifest(AssessmentDefinition):
     input_dependencies: list[str]
     produced_outputs: list[str]
     downstream_dependencies: list[str]
-    assumptions_behavior: Literal["tracks", "none"]
+    variables_behavior: Literal["tracks", "none"]
     evidence_behavior: Literal["rag_grounded", "user_uploaded", "both", "none"]
     decision_log_attribution: DecisionLogAttribution = field(default_factory=DecisionLogAttribution)
 

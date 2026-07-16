@@ -84,7 +84,7 @@ def get_first_party_catalog() -> FirstPartyAssessmentCatalog:
         ),
         "solar_estimate": AssessmentSelectionMetadata(
             assessment_id="solar_estimate",
-            selection_description="Estimates solar production from location and system assumptions.",
+            selection_description="Estimates solar production from location and system variables.",
             selection_triggers=("solar", "PV", "kWh", "irradiance", "production estimate"),
             required_context=("site or coordinates", "system capacity"),
             capability_tool_name="run_solar",

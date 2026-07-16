@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TourAnchor } from '@/components/tour/TourAnchor';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
-import type { Assumption, ProjectMaterial } from '@/lib/api';
+import type { Variable, ProjectMaterial } from '@/lib/api';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { EditorPanelHeader } from './EditorPanelHeader';
 import {
@@ -22,7 +22,7 @@ const DocumentViewerWidget = dynamic(() => import('@/components/widgets/Document
 const SolarEstimateWidget = dynamic(() => import('@/components/widgets/SolarEstimateWidget').then(m => ({ default: m.SolarEstimateWidget })), { ssr: false });
 const AssessmentWorkspace = dynamic(() => import('@/components/assessments/AssessmentWorkspace').then(m => ({ default: m.AssessmentWorkspace })), { ssr: false });
 const VariableDetailWidget = dynamic(() => import('@/components/widgets/VariableDetailWidget').then(m => ({ default: m.VariableDetailWidget })), { ssr: false });
-const AssumptionsWorkspaceTab = dynamic(() => import('@/components/assumptions/AssumptionsWorkspaceTab').then(m => ({ default: m.AssumptionsWorkspaceTab })), { ssr: false });
+const VariablesWorkspaceTab = dynamic(() => import('@/components/variables/VariablesWorkspaceTab').then(m => ({ default: m.VariablesWorkspaceTab })), { ssr: false });
 const DecisionLogWorkspaceTab = dynamic(() => import('@/components/decision-log/DecisionLogWorkspaceTab').then(m => ({ default: m.DecisionLogWorkspaceTab })), { ssr: false });
 const AssessmentActivityLogTab = dynamic(() => import('@/components/core-chat/AssessmentActivityLogTab').then(m => ({ default: m.AssessmentActivityLogTab })), { ssr: false });
 
@@ -229,6 +229,7 @@ export function FloatLayer({
               data={widget.data}
               projectId={projectId}
               messageId={widget.messageId}
+              onClose={onClose}
               onAssessmentEngaged={onAssessmentEngaged}
               onOpenDecisionLog={onOpenDecisionLog}
               onOpenActivityLog={onOpenActivityLog}
@@ -251,6 +252,7 @@ function FloatWidgetRenderer({
   data,
   projectId,
   messageId,
+  onClose,
   onAssessmentEngaged,
   onOpenDecisionLog,
   onOpenActivityLog,
@@ -265,6 +267,7 @@ function FloatWidgetRenderer({
   data: Record<string, any>;
   projectId: string;
   messageId: string;
+  onClose?: () => void;
   onAssessmentEngaged?: (instanceId: string) => void;
   onOpenDecisionLog?: (context: AssessmentLogContext) => void;
   onOpenActivityLog?: (context: AssessmentLogContext) => void;
@@ -293,12 +296,12 @@ function FloatWidgetRenderer({
       return <DocumentViewerWidget data={data} projectId={projectId} isActive />;
     case 'variables_workspace':
       return (
-        <AssumptionsWorkspaceTab
+        <VariablesWorkspaceTab
           projectId={projectId}
           embedded
           showDetailPanel
-          focusAssumptionId={
-            typeof data.focus_assumption_id === 'string' ? data.focus_assumption_id : null
+          focusVariableId={
+            typeof data.focus_variable_id === 'string' ? data.focus_variable_id : (typeof data.focus_assumption_id === 'string' ? data.focus_assumption_id : null)
           }
           onOpenDocument={onOpenDocument}
           onOpenFile={onOpenFile}
@@ -306,7 +309,7 @@ function FloatWidgetRenderer({
         />
       );
     case 'variable_detail':
-      return <VariableDetailWidget data={data as { assumption: Assumption }} />;
+      return <VariableDetailWidget data={data as { variable?: Variable; assumption?: Variable }} onClose={onClose} />;
     case 'decision_log':
       return <DecisionLogWorkspaceTab assessmentInstanceId={data.instance_id} />;
     case 'activity_log':

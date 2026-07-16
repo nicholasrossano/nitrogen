@@ -146,7 +146,7 @@ def test_build_current_state_rows_summarizes_computed_widget_to_overview_metrics
                             "npv_total_costs": 606748,
                             "npv_total_energy": 2693484,
                             "lifetime_energy_kwh": 6190504,
-                            "assumption_count": 4,
+                            "variable_count": 4,
                             "quality_label": "moderate",
                         },
                     }

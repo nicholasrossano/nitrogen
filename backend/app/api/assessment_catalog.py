@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.permissions import require_project_editor, require_project_viewer
 from app.models.project import ProjectStage
 from app.assessments import get_assessment_registry
-from app.services.assumptions import AssumptionActor, ensure_expected_assumptions, sync_stage_assumptions
+from app.services.variables import VariableActor, ensure_expected_variables, sync_stage_variables
 from app.domain.energy.services.sdg_classifier import classify_sdg
 
 
@@ -211,11 +211,11 @@ async def select_tools(
         tool_inputs.setdefault("project_goal", initiative.goal)
     initiative.tool_inputs = tool_inputs
     initiative.touch()  # Update the initiative's updated_at timestamp
-    await ensure_expected_assumptions(
+    await ensure_expected_variables(
         db,
         initiative,
         assessment_ids=valid_tools,
-        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
     )
     
     await db.commit()
@@ -341,13 +341,13 @@ async def update_tool_inputs(
         ]
     }
     for tool_id in initiative.selected_tools or []:
-        await sync_stage_assumptions(
+        await sync_stage_variables(
             db,
             project_id=initiative.id,
             assessment_id=tool_id,
             stage_id="tool_inputs",
             stage_data=stage_data,
-            actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+            actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
             status="validated",
         )
     

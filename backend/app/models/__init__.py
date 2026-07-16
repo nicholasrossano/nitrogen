@@ -12,7 +12,7 @@ from app.models.subscription import Subscription, UsageRecord, UserApiKey
 from app.models.assessment_instance import AssessmentInstance
 from app.models.decision_event import DecisionEvent
 from app.models.workspace import Workspace, WorkspaceMembership, WorkspaceRole, WorkspaceType
-from app.models.assumption import Assumption, AssumptionBinding, AssumptionComment
+from app.models.variable import Variable, VariableBinding, VariableComment
 from app.models.project_status import (
     ProjectStatusAssessmentHistory,
     ProjectStatusCategory,
@@ -55,9 +55,9 @@ __all__ = [
     "WorkspaceKnowledgeBank",
     "WorkspaceKnowledgeBankStatus",
     "WorkspaceKnowledgeChunk",
-    "Assumption",
-    "AssumptionBinding",
-    "AssumptionComment",
+    "Variable",
+    "VariableBinding",
+    "VariableComment",
     "ProjectStatusResult",
     "ProjectStatusOverride",
     "ProjectStatusCategory",

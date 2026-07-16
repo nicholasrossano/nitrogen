@@ -1,4 +1,4 @@
-"""Golden tests for assumption alias / fuzzy de-dup."""
+"""Golden tests for variable alias / fuzzy de-dup."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.services.assumption_dedup import (
+from app.services.variable_dedup import (
     FUZZY_LABEL_THRESHOLD,
     fuzzy_label_match,
     merge_alias_list,
-    resolve_canonical_assumption,
+    resolve_canonical_variable,
 )
 from tests.extraction.helpers import discover_fixtures, load_fixture
 
@@ -54,7 +54,7 @@ async def test_dedup_golden(fixture_path, monkeypatch):
     project_id = uuid4()
 
     for form in forms:
-        match = await resolve_canonical_assumption(
+        match = await resolve_canonical_variable(
             db,
             project_id,
             key=form["key"],

@@ -60,7 +60,7 @@ from app.services.decision_log_service import (
     build_assessment_decision_log_xlsx,
 )
 from app.services.agent_runner_service import derive_assessment_run_state, run_assessment_agent_loop
-from app.services.assumptions import AssumptionActor, sync_stage_assumptions, sync_widget_assumptions
+from app.services.variables import VariableActor, sync_stage_variables, sync_widget_variables
 from app.services.assessment_export import (
     ExportInProgressError,
     begin_export_lock,
@@ -797,14 +797,14 @@ async def edit_item(
     items[item_idx]["provenance"]["derivation"] = "user_edited"
     stage_data["items"] = items
     stage_state["data"] = stage_data
-    await sync_stage_assumptions(
+    await sync_stage_variables(
         db,
         project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         stage_id=stage_id,
         stage_data={"items": [items[item_idx]]},
-        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
         status="validated" if value_is_present else "missing",
     )
     clear_final_approval(state)
@@ -860,14 +860,14 @@ async def add_item(
     new_item = make_build_item(content=data.content, derivation="provided")
     stage_data.setdefault("items", []).append(new_item)
     stage_state["data"] = stage_data
-    await sync_stage_assumptions(
+    await sync_stage_variables(
         db,
         project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         stage_id=stage_id,
         stage_data={"items": [new_item]},
-        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
         status="validated",
     )
     if stage_state.get("status") == "pending":
@@ -1391,13 +1391,13 @@ async def persist_widget_state(
     stage_data = stage_state.get("data") or {}
     stage_data["widget_data"] = data.widget_data
     stage_state["data"] = stage_data
-    await sync_widget_assumptions(
+    await sync_widget_variables(
         db,
         project_id=inst.project_id,
         assessment_id=assessment.definition.id,
         assessment_instance_id=inst.id,
         widget_data=data.widget_data,
-        actor=AssumptionActor(user_id=user.uid, email=user.email or user.uid),
+        actor=VariableActor(user_id=user.uid, email=user.email or user.uid),
     )
     if stage_state.get("status") == "pending":
         stage_state["status"] = "draft"
@@ -1503,23 +1503,23 @@ async def approve_final_output(
         payload=state["final_approval"],
     )
 
-    # Best-effort: promote assessment inputs into the shared assumption pool.
+    # Best-effort: promote assessment inputs into the shared variable pool.
     # Approval must never fail because of extraction. Revoke does not delete these.
     try:
         from app.models.project import Project
-        from app.services.assumptions import AssumptionActor, extract_assumptions_from_assessment
+        from app.services.variables import VariableActor, extract_variables_from_assessment
 
         project = await db.get(Project, inst.project_id)
         if project is not None:
-            await extract_assumptions_from_assessment(
+            await extract_variables_from_assessment(
                 db,
                 project,
                 assessment_instance=inst,
-                actor=AssumptionActor(user_id=user.uid, email=user.email),
+                actor=VariableActor(user_id=user.uid, email=user.email),
             )
     except Exception:
         logger.exception(
-            "Assumption extraction on final approval failed for instance %s",
+            "Variable extraction on final approval failed for instance %s",
             instance_id,
         )
 

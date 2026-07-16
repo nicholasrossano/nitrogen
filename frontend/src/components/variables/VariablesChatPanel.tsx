@@ -4,18 +4,18 @@ import { ListChecks } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ChatPanelWidgetShell } from '@/components/core-chat/ChatPanelWidgetShell';
-import { api, type Assumption } from '@/lib/api';
+import { api, type Variable } from '@/lib/api';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
-import { AssumptionCommentsThread } from './AssumptionCommentsThread';
+import { VariableCommentsThread } from './VariableCommentsThread';
 
-const ASSUMPTION_UPDATED_EVENT = 'nitrogen:assumption-updated';
-const ASSUMPTION_DELETED_EVENT = 'nitrogen:assumption-deleted';
-const assumptionCache = new Map<string, Assumption>();
+const VARIABLE_UPDATED_EVENT = 'nitrogen:variable-updated';
+const VARIABLE_DELETED_EVENT = 'nitrogen:variable-deleted';
+const variableCache = new Map<string, Variable>();
 
-function formatAssumptionValue(
+function formatVariableValue(
   value: any,
   unit?: string | null,
-  valueType?: Assumption['value_type'],
+  valueType?: Variable['value_type'],
 ): string {
   if (value === null || value === undefined || value === '') return '';
   const formatted = typeof value === 'number'
@@ -32,16 +32,16 @@ function formatAssumptionValue(
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
-interface AssumptionsChatPanelProps {
+interface VariablesChatPanelProps {
   projectId: string;
-  focusAssumptionId?: string | null;
+  focusVariableId?: string | null;
   createNew?: boolean;
   collapsed?: boolean;
   layoutMode?: 'inline' | 'panel';
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-function normalizeAssumptionKey(raw: string): string {
+function normalizeVariableKey(raw: string): string {
   return raw
     .trim()
     .toLowerCase()
@@ -52,7 +52,7 @@ function normalizeAssumptionKey(raw: string): string {
 function parseDraftValue(raw: string): {
   value: any;
   status: 'missing' | 'assumed';
-  valueType: Assumption['value_type'];
+  valueType: Variable['value_type'];
 } {
   const trimmed = raw.trim();
   if (!trimmed) return { value: null, status: 'missing', valueType: 'text' };
@@ -74,29 +74,30 @@ function parseDraftValue(raw: string): {
   };
 }
 
-export function AssumptionsChatPanel({
+export function VariablesChatPanel({
   projectId,
-  focusAssumptionId = null,
+  focusVariableId = null,
   createNew = false,
   collapsed = false,
   layoutMode = 'inline',
   onCollapsedChange,
-}: AssumptionsChatPanelProps) {
-  const initialCacheKey = focusAssumptionId ? `${projectId}:${focusAssumptionId}` : null;
-  const initialCached = initialCacheKey ? assumptionCache.get(initialCacheKey) ?? null : null;
-  const initialCreateMode = createNew && !focusAssumptionId;
-  const [selected, setSelected] = useState<Assumption | null>(initialCached);
+}: VariablesChatPanelProps) {
+  const initialCacheKey = focusVariableId ? `${projectId}:${focusVariableId}` : null;
+  const initialCached = initialCacheKey ? variableCache.get(initialCacheKey) ?? null : null;
+  const initialCreateMode = createNew && !focusVariableId;
+  const [selected, setSelected] = useState<Variable | null>(initialCached);
   const [draftLabel, setDraftLabel] = useState('');
   const [draftValue, setDraftValue] = useState(
-    initialCached ? formatAssumptionValue(initialCached.value, null, initialCached.value_type) : '',
+    initialCached ? formatVariableValue(initialCached.value, null, initialCached.value_type) : '',
   );
   const [draftUnit, setDraftUnit] = useState(initialCached?.unit ?? '');
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(Boolean(focusAssumptionId && !initialCached));
+  const [deleting, setDeleting] = useState(false);
+  const [loading, setLoading] = useState(Boolean(focusVariableId && !initialCached));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!focusAssumptionId) {
+    if (!focusVariableId) {
       setSelected(null);
       if (initialCreateMode) {
         setDraftLabel('');
@@ -109,11 +110,11 @@ export function AssumptionsChatPanel({
     }
 
     let cancelled = false;
-    const cacheKey = `${projectId}:${focusAssumptionId}`;
-    const cached = assumptionCache.get(cacheKey);
+    const cacheKey = `${projectId}:${focusVariableId}`;
+    const cached = variableCache.get(cacheKey);
     if (cached) {
       setSelected(cached);
-      setDraftValue(formatAssumptionValue(cached.value, null, cached.value_type));
+      setDraftValue(formatVariableValue(cached.value, null, cached.value_type));
       setDraftUnit(cached.unit ?? '');
       setLoading(false);
     } else {
@@ -123,13 +124,13 @@ export function AssumptionsChatPanel({
       setLoading(true);
     }
     setError(null);
-    void api.getAssumption(focusAssumptionId)
-      .then((assumption) => {
+    void api.getVariable(focusVariableId)
+      .then((variable) => {
         if (cancelled) return;
-        assumptionCache.set(cacheKey, assumption);
-        setSelected(assumption);
-        setDraftValue(formatAssumptionValue(assumption.value, null, assumption.value_type));
-        setDraftUnit(assumption.unit ?? '');
+        variableCache.set(cacheKey, variable);
+        setSelected(variable);
+        setDraftValue(formatVariableValue(variable.value, null, variable.value_type));
+        setDraftUnit(variable.unit ?? '');
       })
       .catch((e: any) => {
         if (cancelled) return;
@@ -142,30 +143,30 @@ export function AssumptionsChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [focusAssumptionId, projectId, initialCreateMode]);
+  }, [focusVariableId, projectId, initialCreateMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const handleAssumptionUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent<Assumption>;
+    const handleVariableUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<Variable>;
       const updated = customEvent.detail;
       if (!updated || updated.project_id !== projectId) return;
       const cacheKey = `${projectId}:${updated.id}`;
-      assumptionCache.set(cacheKey, updated);
-      if (focusAssumptionId === updated.id) {
+      variableCache.set(cacheKey, updated);
+      if (focusVariableId === updated.id) {
         setSelected(updated);
-        setDraftValue(formatAssumptionValue(updated.value, null, updated.value_type));
+        setDraftValue(formatVariableValue(updated.value, null, updated.value_type));
         setDraftUnit(updated.unit ?? '');
       }
     };
 
-    window.addEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
+    window.addEventListener(VARIABLE_UPDATED_EVENT, handleVariableUpdated as EventListener);
     return () => {
-      window.removeEventListener(ASSUMPTION_UPDATED_EVENT, handleAssumptionUpdated as EventListener);
+      window.removeEventListener(VARIABLE_UPDATED_EVENT, handleVariableUpdated as EventListener);
     };
-  }, [focusAssumptionId, projectId]);
+  }, [focusVariableId, projectId]);
 
-  const selectedValueText = selected ? formatAssumptionValue(selected.value, null, selected.value_type) : '';
+  const selectedValueText = selected ? formatVariableValue(selected.value, null, selected.value_type) : '';
   const showCreateForm = initialCreateMode && !selected;
   const hasDraftChanges = useMemo(() => Boolean(
     selected && (
@@ -178,12 +179,14 @@ export function AssumptionsChatPanel({
     selected &&
     hasDraftValue &&
     (selected.status !== 'validated' || hasDraftChanges) &&
-    !saving,
+    !saving &&
+    !deleting,
   );
-  const canDelete = Boolean(selected && !saving);
+  // Delete removes the variable itself — independent of draft value/unit edits.
+  const canDelete = Boolean(selected && !deleting);
   const canCreate = Boolean(
     !saving &&
-    normalizeAssumptionKey(draftLabel).length > 0,
+    normalizeVariableKey(draftLabel).length > 0,
   );
 
   const handleConfirm = useCallback(async () => {
@@ -196,18 +199,18 @@ export function AssumptionsChatPanel({
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateAssumption(selected.id, {
+      const updated = await api.updateVariable(selected.id, {
         value: parsedValue,
         unit: draftUnit || null,
         status: 'validated',
       });
-      assumptionCache.set(`${projectId}:${updated.id}`, updated);
+      variableCache.set(`${projectId}:${updated.id}`, updated);
       setSelected(updated);
-      setDraftValue(formatAssumptionValue(updated.value, null, updated.value_type));
+      setDraftValue(formatVariableValue(updated.value, null, updated.value_type));
       setDraftUnit(updated.unit ?? '');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
-          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: updated }),
+          new CustomEvent(VARIABLE_UPDATED_EVENT, { detail: updated }),
         );
       }
     } catch (e: any) {
@@ -218,33 +221,33 @@ export function AssumptionsChatPanel({
   }, [draftUnit, draftValue, projectId, selected]);
 
   const handleDelete = useCallback(async () => {
-    if (!selected) return;
-    setSaving(true);
+    if (!selected || deleting) return;
+    setDeleting(true);
     setError(null);
     try {
       const deletedId = selected.id;
-      await api.deleteAssumption(deletedId);
-      assumptionCache.delete(`${projectId}:${deletedId}`);
+      await api.deleteVariable(deletedId);
+      variableCache.delete(`${projectId}:${deletedId}`);
       setSelected(null);
       setDraftLabel('');
       setDraftValue('');
       setDraftUnit('');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
-          new CustomEvent(ASSUMPTION_DELETED_EVENT, {
-            detail: { assumptionId: deletedId, projectId },
+          new CustomEvent(VARIABLE_DELETED_EVENT, {
+            detail: { variableId: deletedId, projectId },
           }),
         );
       }
     } catch (e: any) {
       setError(e?.message ?? `Failed to delete ${PROJECT_VARIABLES.lowerSingular}`);
     } finally {
-      setSaving(false);
+      setDeleting(false);
     }
-  }, [projectId, selected]);
+  }, [deleting, projectId, selected]);
 
   const handleCreate = useCallback(async () => {
-    const key = normalizeAssumptionKey(draftLabel);
+    const key = normalizeVariableKey(draftLabel);
     if (!key) return;
     const label = draftLabel.trim();
     if (!label) return;
@@ -253,7 +256,7 @@ export function AssumptionsChatPanel({
     setSaving(true);
     setError(null);
     try {
-      const created = await api.createAssumption(projectId, {
+      const created = await api.createVariable(projectId, {
         key,
         label,
         value: parsed.value,
@@ -262,13 +265,13 @@ export function AssumptionsChatPanel({
         source_type: 'user_input',
         status: parsed.status,
       });
-      assumptionCache.set(`${projectId}:${created.id}`, created);
+      variableCache.set(`${projectId}:${created.id}`, created);
       setSelected(created);
-      setDraftValue(formatAssumptionValue(created.value, null, created.value_type));
+      setDraftValue(formatVariableValue(created.value, null, created.value_type));
       setDraftUnit(created.unit ?? '');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
-          new CustomEvent(ASSUMPTION_UPDATED_EVENT, { detail: created }),
+          new CustomEvent(VARIABLE_UPDATED_EVENT, { detail: created }),
         );
       }
     } catch (e: any) {
@@ -289,7 +292,7 @@ export function AssumptionsChatPanel({
     <ChatPanelWidgetShell
       icon={<ListChecks className="h-3.5 w-3.5 text-accent" />}
       eyebrow={PROJECT_VARIABLES.title}
-      title={selected?.label ?? (showCreateForm ? `New ${PROJECT_VARIABLES.lowerSingular}` : (focusAssumptionId ? `Loading ${PROJECT_VARIABLES.lowerSingular}...` : `No ${PROJECT_VARIABLES.lowerSingular} selected`))}
+      title={selected?.label ?? (showCreateForm ? `New ${PROJECT_VARIABLES.lowerSingular}` : (focusVariableId ? `Loading ${PROJECT_VARIABLES.lowerSingular}...` : `No ${PROJECT_VARIABLES.lowerSingular} selected`))}
       collapsed={collapsed}
       layoutMode={layoutMode}
       onCollapsedChange={onCollapsedChange}
@@ -344,27 +347,42 @@ export function AssumptionsChatPanel({
             <span className="text-xs font-medium text-text-tertiary">Unit</span>
             <input className="mt-1 w-full rounded-lg border border-stroke-subtle px-3 py-2 text-sm" value={draftUnit} onChange={(event) => setDraftUnit(event.target.value)} />
           </label>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-between gap-2">
             <button
               type="button"
               className="btn-danger !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
               onClick={() => void handleDelete()}
               disabled={!canDelete}
+              title={`Delete this ${PROJECT_VARIABLES.lowerSingular}`}
             >
-              {saving ? 'Deleting...' : 'Delete'}
+              {deleting ? 'Deleting...' : 'Delete'}
             </button>
-            <button
-              type="button"
-              className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
-              onClick={() => void handleConfirm()}
-              disabled={!canConfirm}
-            >
-              {saving ? 'Saving...' : 'Confirm'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-secondary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0 disabled:!opacity-100 disabled:!text-text-tertiary"
+                onClick={() => {
+                  if (!selected) return;
+                  setDraftValue(formatVariableValue(selected.value, null, selected.value_type));
+                  setDraftUnit(selected.unit ?? '');
+                }}
+                disabled={saving || deleting || !hasDraftChanges}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary !py-1.5 !px-3 !rounded-md !text-xs !font-medium !gap-1.5 inline-flex items-center shrink-0"
+                onClick={() => void handleConfirm()}
+                disabled={!canConfirm}
+              >
+                {saving ? 'Saving...' : 'Confirm'}
+              </button>
+            </div>
           </div>
-          <AssumptionCommentsThread assumptionId={selected.id} />
+          <VariableCommentsThread variableId={selected.id} />
         </div>
-      ) : !focusAssumptionId ? (
+      ) : !focusVariableId ? (
         <div>
           <p className="text-sm font-medium text-text-secondary">No {PROJECT_VARIABLES.lowerSingular} selected</p>
           <p className="mt-1 text-xs text-text-tertiary">

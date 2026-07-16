@@ -29,7 +29,7 @@ class CarbonAdapter(BaseAdapter):
                 "properties": {
                     "method_pack": {
                         "type": "string",
-                        "description": "Optional method-pack preset to seed default assumptions.",
+                        "description": "Optional method-pack preset to seed default variables.",
                     },
                     "known_values": {
                         "type": "object",

@@ -32,10 +32,10 @@ describe('EditableTableStage investigate', () => {
     jest.restoreAllMocks();
   });
 
-  it('opens assumption-scoped chat when investigate resolves an assumption', async () => {
-    jest.spyOn(api, 'resolveAssumption').mockResolvedValueOnce({
+  it('opens variable-scoped chat when investigate resolves a variable', async () => {
+    jest.spyOn(api, 'resolveVariable').mockResolvedValueOnce({
       found: true,
-      assumption: { id: 'assumption-1' } as any,
+      variable: { id: 'variable-1' } as any,
     });
     const dispatchSpy = jest.spyOn(window, 'dispatchEvent');
 
@@ -59,18 +59,18 @@ describe('EditableTableStage investigate', () => {
     await waitFor(() => {
       expect(dispatchSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'nitrogen:open-assumption-chat',
+          type: 'nitrogen:open-variable-chat',
         }),
       );
     });
   });
 
-  it('dispatches draft investigate payload with field context when assumption creation fails', async () => {
-    jest.spyOn(api, 'resolveAssumption').mockResolvedValueOnce({
+  it('dispatches draft investigate payload with field context when variable creation fails', async () => {
+    jest.spyOn(api, 'resolveVariable').mockResolvedValueOnce({
       found: false,
-      assumption: null,
+      variable: null,
     });
-    jest.spyOn(api, 'createAssumption').mockRejectedValueOnce(new Error('forbidden'));
+    jest.spyOn(api, 'createVariable').mockRejectedValueOnce(new Error('forbidden'));
     const dispatchSpy = jest.spyOn(window, 'dispatchEvent');
 
     render(

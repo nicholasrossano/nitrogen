@@ -1,4 +1,4 @@
-/** User-facing terminology for structured project parameters (API/models still use "assumption"). */
+/** User-facing terminology for structured project parameters (API entity: variable). */
 export const PROJECT_VARIABLES = {
   title: 'Variables',
   titleSingular: 'Variable',

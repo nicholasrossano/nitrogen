@@ -3,24 +3,24 @@ from uuid import uuid4
 
 import pytest
 
-from app.services import assumptions as assumptions_service
-from app.assumptions.config import expected_assumptions_for_assessments
-from app.services.assumptions import (
+from app.services import variables as assumptions_service
+from app.variables.config import expected_variables_for_assessments
+from app.services.variables import (
     _assessment_ids_from_initiative,
-    AssumptionActor,
-    apply_assumptions_to_items,
-    build_chat_assumption_candidate,
-    ensure_expected_assumptions,
-    extract_assumptions_from_cited_chat_sources,
-    format_assumptions_for_prompt,
+    VariableActor,
+    apply_variables_to_items,
+    build_chat_variable_candidate,
+    ensure_expected_variables,
+    extract_variables_from_cited_chat_sources,
+    format_variables_for_prompt,
     normalize_missing_value,
-    normalize_assumption_status,
+    normalize_variable_status,
 )
 from app.services.tiered_retrieval import RetrievedFact, SourceType
 
 
 def test_expected_assumptions_include_common_and_assessment_required_keys():
-    definitions = expected_assumptions_for_assessments(["lcoe_model"])
+    definitions = expected_variables_for_assessments(["lcoe_model"])
     keys = {definition.key for definition in definitions}
 
     assert "project_location" in keys
@@ -28,7 +28,7 @@ def test_expected_assumptions_include_common_and_assessment_required_keys():
     assert "annual_opex" in keys
 
 
-def test_apply_assumptions_to_items_prefills_matching_assessment_input():
+def test_apply_variables_to_items_prefills_matching_assessment_input():
     items = [
         {
             "id": "item-1",
@@ -41,9 +41,9 @@ def test_apply_assumptions_to_items_prefills_matching_assessment_input():
             },
         }
     ]
-    assumptions = [
+    variables = [
         {
-            "id": "assumption-1",
+            "id": "variable-1",
             "key": "total_capex",
             "label": "Total CAPEX",
             "value": 180000,
@@ -54,17 +54,17 @@ def test_apply_assumptions_to_items_prefills_matching_assessment_input():
         }
     ]
 
-    result = apply_assumptions_to_items(items, assumptions, assessment_id="lcoe_model")
+    result = apply_variables_to_items(items, variables, assessment_id="lcoe_model")
 
     content = result[0]["content"]
     assert content["value"] == 180000
     assert content["unit"] == "USD"
     assert content["status"] == "validated"
-    assert content["source"] == "assumption"
-    assert content["assumption_id"] == "assumption-1"
+    assert content["source"] == "variable"
+    assert content["variable_id"] == "variable-1"
 
 
-def test_apply_assumptions_to_items_uses_configured_assessment_field_aliases():
+def test_apply_variables_to_items_uses_configured_assessment_field_aliases():
     items = [
         {
             "id": "item-1",
@@ -77,9 +77,9 @@ def test_apply_assumptions_to_items_uses_configured_assessment_field_aliases():
             },
         }
     ]
-    assumptions = [
+    variables = [
         {
-            "id": "assumption-1",
+            "id": "variable-1",
             "key": "system_size_kw",
             "label": "System size",
             "value": 50,
@@ -90,14 +90,14 @@ def test_apply_assumptions_to_items_uses_configured_assessment_field_aliases():
         }
     ]
 
-    result = apply_assumptions_to_items(items, assumptions, assessment_id="lcoe_model")
+    result = apply_variables_to_items(items, variables, assessment_id="lcoe_model")
 
     assert result[0]["content"]["value"] == 50
-    assert result[0]["content"]["source"] == "assumption"
+    assert result[0]["content"]["source"] == "variable"
 
 
-def test_format_assumptions_for_prompt_buckets_statuses():
-    assumptions = [
+def test_format_variables_for_prompt_buckets_statuses():
+    variables = [
         SimpleNamespace(
             status="validated",
             label="System size",
@@ -128,7 +128,7 @@ def test_format_assumptions_for_prompt_buckets_statuses():
         ),
     ]
 
-    formatted = format_assumptions_for_prompt(assumptions)
+    formatted = format_variables_for_prompt(variables)
 
     assert "Validated:" in formatted
     assert "System size: 50 kW" in formatted
@@ -139,10 +139,10 @@ def test_format_assumptions_for_prompt_buckets_statuses():
     assert "Rejected" not in formatted
 
 
-def test_normalize_assumption_status_maps_legacy_values():
-    assert normalize_assumption_status("validated") == "validated"
-    assert normalize_assumption_status("needs_review") == "extracted"
-    assert normalize_assumption_status("assumed") == "assumed"
+def test_normalize_variable_status_maps_legacy_values():
+    assert normalize_variable_status("validated") == "validated"
+    assert normalize_variable_status("needs_review") == "extracted"
+    assert normalize_variable_status("assumed") == "assumed"
 
 
 def test_assessment_ids_from_initiative_uses_active_instances_only():
@@ -165,7 +165,7 @@ def test_normalize_missing_value_coerces_placeholder_tokens():
 
 
 def test_extraction_quality_gate_accepts_explicit_string_assertion():
-    definition = assumptions_service.ASSUMPTION_BY_KEY["operator_model"]
+    definition = assumptions_service.VARIABLE_BY_KEY["operator_model"]
     raw = {
         "value": "XYZ Supplier",
         "source_quote": "The panel supplier is XYZ Supplier for the first deployment phase.",
@@ -175,7 +175,7 @@ def test_extraction_quality_gate_accepts_explicit_string_assertion():
 
 
 def test_extraction_quality_gate_rejects_bare_entity_mention_for_string():
-    definition = assumptions_service.ASSUMPTION_BY_KEY["operator_model"]
+    definition = assumptions_service.VARIABLE_BY_KEY["operator_model"]
     raw = {
         "value": "OpenStreetMap Malawi Community",
         "source_quote": "OpenStreetMap Malawi Community",
@@ -185,22 +185,22 @@ def test_extraction_quality_gate_rejects_bare_entity_mention_for_string():
 
 
 def test_extraction_quality_gate_rejects_numeric_without_numeric_evidence():
-    definition = assumptions_service.ASSUMPTION_BY_KEY["discount_rate"]
+    definition = assumptions_service.VARIABLE_BY_KEY["discount_rate"]
     raw = {
         "value": 0.08,
-        "source_quote": "The financing assumptions are still under discussion.",
+        "source_quote": "The financing variables are still under discussion.",
     }
 
     assert assumptions_service._passes_extraction_quality_gate(raw, definition=definition) is False
 
 
 @pytest.mark.asyncio
-async def test_ensure_expected_assumptions_is_config_guidance_only():
-    created, touched = await ensure_expected_assumptions(
+async def test_ensure_expected_variables_is_config_guidance_only():
+    created, touched = await ensure_expected_variables(
         SimpleNamespace(),
         SimpleNamespace(id=uuid4()),
         assessment_ids=["lcoe_model"],
-        actor=AssumptionActor.system(),
+        actor=VariableActor.system(),
     )
 
     assert created == 0
@@ -208,23 +208,23 @@ async def test_ensure_expected_assumptions_is_config_guidance_only():
 
 
 @pytest.mark.asyncio
-async def test_sync_stage_assumptions_ignores_rows_without_field_name(
+async def test_sync_stage_variables_ignores_rows_without_field_name(
     monkeypatch: pytest.MonkeyPatch,
 ):
     called = False
 
-    async def fake_upsert_assumption(*_args, **_kwargs):
+    async def fake_upsert_variable(*_args, **_kwargs):
         nonlocal called
         called = True
         return SimpleNamespace(id=uuid4()), True
 
     async def fake_upsert_binding(*_args, **_kwargs):
-        return SimpleNamespace(assumption_id=uuid4())
+        return SimpleNamespace(variable_id=uuid4())
 
-    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert_assumption)
-    monkeypatch.setattr(assumptions_service, "upsert_assumption_binding", fake_upsert_binding)
+    monkeypatch.setattr(assumptions_service, "upsert_variable", fake_upsert_variable)
+    monkeypatch.setattr(assumptions_service, "upsert_variable_binding", fake_upsert_binding)
 
-    touched, item_map = await assumptions_service.sync_stage_assumptions(
+    touched, item_map = await assumptions_service.sync_stage_variables(
         SimpleNamespace(),
         project_id=uuid4(),
         assessment_id="landscape_mapping",
@@ -241,7 +241,7 @@ async def test_sync_stage_assumptions_ignores_rows_without_field_name(
                 }
             ]
         },
-        actor=AssumptionActor.system(),
+        actor=VariableActor.system(),
     )
 
     assert called is False
@@ -250,23 +250,23 @@ async def test_sync_stage_assumptions_ignores_rows_without_field_name(
 
 
 @pytest.mark.asyncio
-async def test_sync_stage_assumptions_ignores_unmapped_field_name(
+async def test_sync_stage_variables_ignores_unmapped_field_name(
     monkeypatch: pytest.MonkeyPatch,
 ):
     called = False
 
-    async def fake_upsert_assumption(*_args, **_kwargs):
+    async def fake_upsert_variable(*_args, **_kwargs):
         nonlocal called
         called = True
         return SimpleNamespace(id=uuid4()), True
 
     async def fake_upsert_binding(*_args, **_kwargs):
-        return SimpleNamespace(assumption_id=uuid4())
+        return SimpleNamespace(variable_id=uuid4())
 
-    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert_assumption)
-    monkeypatch.setattr(assumptions_service, "upsert_assumption_binding", fake_upsert_binding)
+    monkeypatch.setattr(assumptions_service, "upsert_variable", fake_upsert_variable)
+    monkeypatch.setattr(assumptions_service, "upsert_variable_binding", fake_upsert_binding)
 
-    touched, item_map = await assumptions_service.sync_stage_assumptions(
+    touched, item_map = await assumptions_service.sync_stage_variables(
         SimpleNamespace(),
         project_id=uuid4(),
         assessment_id="landscape_mapping",
@@ -282,7 +282,7 @@ async def test_sync_stage_assumptions_ignores_unmapped_field_name(
                 }
             ]
         },
-        actor=AssumptionActor.system(),
+        actor=VariableActor.system(),
     )
 
     assert called is False
@@ -290,7 +290,7 @@ async def test_sync_stage_assumptions_ignores_unmapped_field_name(
     assert item_map == {}
 
 
-def test_build_chat_assumption_candidate_extracts_cited_project_country_indicator():
+def test_build_chat_variable_candidate_extracts_cited_project_country_indicator():
     fact = RetrievedFact(
         content="Access to electricity (% of population) (EG.ELC.ACCS.ZS) for Malawi in 2023: 15.6.",
         source_type=SourceType.WORLDBANK_INDICATOR,
@@ -304,7 +304,7 @@ def test_build_chat_assumption_candidate_extracts_cited_project_country_indicato
         "[Country Indicator: Access to electricity (% of population) (Malawi)]."
     )
 
-    candidate = build_chat_assumption_candidate(
+    candidate = build_chat_variable_candidate(
         fact,
         answer_content=answer,
     )
@@ -316,7 +316,7 @@ def test_build_chat_assumption_candidate_extracts_cited_project_country_indicato
     assert candidate["source_reference"]["country"] == "Malawi"
 
 
-def test_build_chat_assumption_candidate_allows_llm_to_decide_project_relevance():
+def test_build_chat_variable_candidate_allows_llm_to_decide_project_relevance():
     fact = RetrievedFact(
         content="Access to electricity (% of population) (EG.ELC.ACCS.ZS) for Kenya in 2023: 76.5.",
         source_type=SourceType.WORLDBANK_INDICATOR,
@@ -330,7 +330,7 @@ def test_build_chat_assumption_candidate_allows_llm_to_decide_project_relevance(
         "[Country Indicator: Access to electricity (% of population) (Kenya)]."
     )
 
-    candidate = build_chat_assumption_candidate(
+    candidate = build_chat_variable_candidate(
         fact,
         answer_content=answer,
     )
@@ -340,7 +340,7 @@ def test_build_chat_assumption_candidate_allows_llm_to_decide_project_relevance(
     assert candidate["source_reference"]["country"] == "Kenya"
 
 
-def test_build_chat_assumption_candidate_requires_final_answer_citation():
+def test_build_chat_variable_candidate_requires_final_answer_citation():
     fact = RetrievedFact(
         content="Access to electricity (% of population) (EG.ELC.ACCS.ZS) for Malawi in 2023: 15.6.",
         source_type=SourceType.WORLDBANK_INDICATOR,
@@ -350,7 +350,7 @@ def test_build_chat_assumption_candidate_requires_final_answer_citation():
         publisher="World Bank Open Data",
     )
 
-    candidate = build_chat_assumption_candidate(
+    candidate = build_chat_variable_candidate(
         fact,
         answer_content="Malawi's electricity access was 15.6%.",
     )
@@ -359,7 +359,7 @@ def test_build_chat_assumption_candidate_requires_final_answer_citation():
 
 
 @pytest.mark.asyncio
-async def test_extract_assumptions_from_cited_chat_sources_respects_relevance_decision(
+async def test_extract_variables_from_cited_chat_sources_respects_relevance_decision(
     monkeypatch: pytest.MonkeyPatch,
 ):
     fact = RetrievedFact(
@@ -390,15 +390,15 @@ async def test_extract_assumptions_from_cited_chat_sources_respects_relevance_de
     async def fail_upsert(*_args, **_kwargs):
         raise AssertionError("irrelevant candidates should not be persisted")
 
-    monkeypatch.setattr(assumptions_service, "_should_log_chat_assumption", fake_should_log)
-    monkeypatch.setattr(assumptions_service, "upsert_assumption", fail_upsert)
+    monkeypatch.setattr(assumptions_service, "_should_log_chat_variable", fake_should_log)
+    monkeypatch.setattr(assumptions_service, "upsert_variable", fail_upsert)
 
-    touched = await extract_assumptions_from_cited_chat_sources(
+    touched = await extract_variables_from_cited_chat_sources(
         SimpleNamespace(),
         initiative,
         [fact],
         answer_content=answer,
-        actor=AssumptionActor(user_id="user-1", email="test@example.com"),
+        actor=VariableActor(user_id="user-1", email="test@example.com"),
         user_message="What is the electricity access of Kenya?",
         chat_id="chat-1",
     )
@@ -407,7 +407,7 @@ async def test_extract_assumptions_from_cited_chat_sources_respects_relevance_de
 
 
 @pytest.mark.asyncio
-async def test_extract_assumptions_from_cited_chat_sources_persists_relevant_llm_candidate(
+async def test_extract_variables_from_cited_chat_sources_persists_relevant_llm_candidate(
     monkeypatch: pytest.MonkeyPatch,
 ):
     fact = RetrievedFact(
@@ -438,15 +438,15 @@ async def test_extract_assumptions_from_cited_chat_sources_persists_relevant_llm
     async def fake_upsert(_db, **kwargs):
         return SimpleNamespace(**kwargs), True
 
-    monkeypatch.setattr(assumptions_service, "_should_log_chat_assumption", fake_should_log)
-    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert)
+    monkeypatch.setattr(assumptions_service, "_should_log_chat_variable", fake_should_log)
+    monkeypatch.setattr(assumptions_service, "upsert_variable", fake_upsert)
 
-    touched = await extract_assumptions_from_cited_chat_sources(
+    touched = await extract_variables_from_cited_chat_sources(
         SimpleNamespace(),
         initiative,
         [fact],
         answer_content=answer,
-        actor=AssumptionActor(user_id="user-1", email="test@example.com"),
+        actor=VariableActor(user_id="user-1", email="test@example.com"),
         user_message="What is the energy access in Malawi?",
         chat_id="chat-1",
     )
@@ -458,8 +458,8 @@ async def test_extract_assumptions_from_cited_chat_sources_persists_relevant_llm
 
 
 @pytest.mark.asyncio
-async def test_extract_assumptions_from_assessment_promotes_field_rows(monkeypatch: pytest.MonkeyPatch):
-    from app.services.assumptions import extract_assumptions_from_assessment
+async def test_extract_variables_from_assessment_promotes_field_rows(monkeypatch: pytest.MonkeyPatch):
+    from app.services.variables import extract_variables_from_assessment
 
     project_id = uuid4()
     project = SimpleNamespace(id=project_id)
@@ -496,13 +496,13 @@ async def test_extract_assumptions_from_assessment_promotes_field_rows(monkeypat
         calls.append(kwargs)
         return SimpleNamespace(id=uuid4(), **kwargs), True
 
-    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert)
+    monkeypatch.setattr(assumptions_service, "upsert_variable", fake_upsert)
 
-    touched = await extract_assumptions_from_assessment(
+    touched = await extract_variables_from_assessment(
         SimpleNamespace(),
         project,
         assessment_instance=inst,
-        actor=AssumptionActor(user_id="u1", email="a@b.com"),
+        actor=VariableActor(user_id="u1", email="a@b.com"),
     )
 
     assert len(touched) == 2
@@ -512,8 +512,8 @@ async def test_extract_assumptions_from_assessment_promotes_field_rows(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_promote_chat_value_to_assumption_sets_chat_approval(monkeypatch: pytest.MonkeyPatch):
-    from app.services.assumptions import promote_chat_value_to_assumption
+async def test_promote_chat_value_to_variable_sets_chat_approval(monkeypatch: pytest.MonkeyPatch):
+    from app.services.variables import promote_chat_value_to_variable
 
     project = SimpleNamespace(id=uuid4())
     captured = {}
@@ -522,9 +522,9 @@ async def test_promote_chat_value_to_assumption_sets_chat_approval(monkeypatch: 
         captured.update(kwargs)
         return SimpleNamespace(id=uuid4(), **kwargs), True
 
-    monkeypatch.setattr(assumptions_service, "upsert_assumption", fake_upsert)
+    monkeypatch.setattr(assumptions_service, "upsert_variable", fake_upsert)
 
-    result = await promote_chat_value_to_assumption(
+    result = await promote_chat_value_to_variable(
         SimpleNamespace(),
         project,
         key="comparable_project_npv",
@@ -534,7 +534,7 @@ async def test_promote_chat_value_to_assumption_sets_chat_approval(monkeypatch: 
         chat_id=uuid4(),
         chat_message_id=uuid4(),
         quote="NPV of $95,000",
-        actor=AssumptionActor(user_id="u1", email="a@b.com"),
+        actor=VariableActor(user_id="u1", email="a@b.com"),
     )
 
     assert result is not None

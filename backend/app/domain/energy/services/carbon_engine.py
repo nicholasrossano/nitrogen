@@ -26,7 +26,7 @@ from app.schemas.provenance import Derivation, ItemProvenance, ValidationStatus
 # ---------------------------------------------------------------------------
 
 InputStatus = Literal["validated", "extracted", "assumed", "missing"]
-InputSource = Literal["chat", "doc", "user", "assumption"]
+InputSource = Literal["chat", "doc", "user", "variable"]
 AppliesTo = Literal["baseline", "project", "leakage", "general"]
 
 
@@ -116,7 +116,7 @@ class CarbonResult:
     project_share: float
     leakage_share: float
 
-    assumption_count: int
+    variable_count: int
     quality_label: str  # "high", "moderate", "low"
 
     er_schedule: list[ERScheduleRow] = field(default_factory=list)
@@ -132,7 +132,7 @@ class CarbonResult:
             "baseline_share": round(self.baseline_share, 4),
             "project_share": round(self.project_share, 4),
             "leakage_share": round(self.leakage_share, 4),
-            "assumption_count": self.assumption_count,
+            "variable_count": self.variable_count,
             "quality_label": self.quality_label,
             "er_schedule": [r.to_dict() for r in self.er_schedule],
         }
@@ -287,14 +287,14 @@ class CarbonEngine:
     def _build_result(
         schedule: list[ERScheduleRow],
         crediting_years: int,
-        assumption_count: int,
+        variable_count: int,
     ) -> CarbonResult:
         yr1 = schedule[0] if schedule else ERScheduleRow(1, 0, 0, 0, 0, 0)
         denom = yr1.baseline_emissions if yr1.baseline_emissions > 0 else 1.0
         quality = "high"
-        if assumption_count >= 5:
+        if variable_count >= 5:
             quality = "low"
-        elif assumption_count >= 2:
+        elif variable_count >= 2:
             quality = "moderate"
         return CarbonResult(
             baseline_emissions_tco2e=yr1.baseline_emissions,
@@ -306,7 +306,7 @@ class CarbonEngine:
             baseline_share=yr1.baseline_emissions / denom,
             project_share=yr1.project_emissions / denom,
             leakage_share=yr1.leakage / denom,
-            assumption_count=assumption_count,
+            variable_count=variable_count,
             quality_label=quality,
             er_schedule=schedule,
         )
@@ -371,7 +371,7 @@ class CarbonEngine:
             bl_tco2 = (bl_fuel_kg * bl_ncv / 1e6) * ef_tco2_per_tj
             pj_tco2 = (pj_fuel_kg * pj_ncv / 1e6) * ef_tco2_per_tj
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             yr_adopt = min(adoption_rate * yr, 1.0) if adoption_rate < 1.0 else adoption_rate
@@ -381,7 +381,7 @@ class CarbonEngine:
             yr_lk = leakage_factor * max(yr_bl - yr_pj, 0)
             schedule.append(ERScheduleRow(yr, active, yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Fuel Switch — GS TPDDTEC biomass-to-LPG/biogas/ethanol
@@ -416,7 +416,7 @@ class CarbonEngine:
         # For fossil project fuel, all CO2 is anthropogenic (no fNRB multiplier)
         pj_tco2 = pj_fuel_kg * (pj_ef_co2 + pj_ef_nonco2) * (pj_ncv / 1e6)
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             yr_adopt = min(adoption_rate * yr, 1.0) if adoption_rate < 1.0 else adoption_rate
@@ -426,7 +426,7 @@ class CarbonEngine:
             yr_lk = leakage_factor * max(yr_bl - yr_pj, 0)
             schedule.append(ERScheduleRow(yr, active, yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Safe Water — GS SWS v1.0
@@ -484,7 +484,7 @@ class CarbonEngine:
         # GS SWS Eq (8–10): PE = electricity + fossil fuel of project tech
         pe_electricity = pj_electricity_kwh_yr * pj_grid_ef * (1 + pj_tdl)
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             yr_adopt = min(adoption_rate * yr, 1.0) if adoption_rate < 1.0 else adoption_rate
@@ -498,7 +498,7 @@ class CarbonEngine:
 
             schedule.append(ERScheduleRow(yr, active_people, yr_bl, yr_pj, yr_lk, yr_net))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Grid Renewable Energy — AMS-I.D
@@ -528,7 +528,7 @@ class CarbonEngine:
         if grid_ef <= 0:
             raise ValueError("Grid emission factor must be > 0")
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             gen_mwh = capacity_kw * cf * 8760 * (1 - aux) * ((1 - degradation) ** (yr - 1)) / 1000
@@ -540,7 +540,7 @@ class CarbonEngine:
             yr_lk = leakage_factor * yr_bl
             schedule.append(ERScheduleRow(yr, 1, yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Solar Home Systems — AMS-I.A (off-grid)
@@ -573,7 +573,7 @@ class CarbonEngine:
         if num_systems <= 0:
             raise ValueError("Number of systems must be > 0")
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             if displacement_mode == "pv_kwh":
@@ -587,7 +587,7 @@ class CarbonEngine:
             yr_lk = leakage_factor * yr_bl
             schedule.append(ERScheduleRow(yr, int(num_systems), yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Biodigesters — GS Manure Mgmt v1.0
@@ -636,7 +636,7 @@ class CarbonEngine:
         # Project thermal = 0 (biogas replaces cooking fuel entirely)
         pj_thermal_tco2 = 0.0
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             yr_adopt = min(adoption_rate * yr, 1.0) if adoption_rate < 1.0 else adoption_rate
@@ -648,7 +648,7 @@ class CarbonEngine:
             yr_lk = yr_thermal_lk
             schedule.append(ERScheduleRow(yr, active, yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Efficient Lighting — AMS-II.J
@@ -682,7 +682,7 @@ class CarbonEngine:
         # Annual operating hours
         x_hours = operating_h * 365
 
-        assumption_count = sum(1 for i in inputs.values() if i.status == "assumed")
+        variable_count = sum(1 for i in inputs.values() if i.status == "assumed")
         schedule: list[ERScheduleRow] = []
         for yr in range(1, crediting_years + 1):
             # AMS-II.J Eq 3: Lamp Failure Rate
@@ -696,7 +696,7 @@ class CarbonEngine:
             effective_lamps = int(num_lamps * (1 - lfr))
             schedule.append(ERScheduleRow(yr, effective_lamps, yr_bl, yr_pj, yr_lk, yr_bl - yr_pj - yr_lk))
 
-        return CarbonEngine._build_result(schedule, crediting_years, assumption_count)
+        return CarbonEngine._build_result(schedule, crediting_years, variable_count)
 
     # -------------------------------------------------------------------
     #  Sensitivity
@@ -858,7 +858,7 @@ class CarbonEngine:
                 ).model_dump()
                 result[field_name] = CarbonInput(
                     field_name=field_name, label=label, value=default_val,
-                    unit=unit, source="assumption", status="assumed",
+                    unit=unit, source="variable", status="assumed",
                     rationale=rationale, applies_to=applies_to, category=category,
                     provenance=prov, validation_status=ValidationStatus.UNCONFIRMED,
                     field_type=ftype, options=opts,
@@ -866,7 +866,7 @@ class CarbonEngine:
             else:
                 result[field_name] = CarbonInput(
                     field_name=field_name, label=label, value=None,
-                    unit=unit, source="assumption", status="missing",
+                    unit=unit, source="variable", status="missing",
                     applies_to=applies_to, category=category,
                     provenance=None, validation_status=ValidationStatus.MISSING,
                     field_type=ftype, options=opts,

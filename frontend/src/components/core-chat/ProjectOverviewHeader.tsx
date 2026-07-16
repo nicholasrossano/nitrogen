@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Calculator, Files, ListChecks, Loader2, MapPinned, Tag, Users } from 'lucide-react';
-import { api, type AssumptionSummary, type Project } from '@/lib/api';
+import { api, type VariableSummary, type Project } from '@/lib/api';
 import type { AssessmentProgressData } from '@/components/ui/ReadinessProgressBar';
 import { AssessmentsProgressBar } from '@/components/ui/ReadinessProgressBar';
 import { StatusOverviewTable } from '@/components/project-status/StatusOverviewTable';
@@ -18,7 +18,7 @@ interface ProjectOverviewHeaderProps {
   assessmentProgress?: AssessmentProgressData | null;
   isGenerating: boolean;
   errorMessage: string | null;
-  onViewAssumptions?: () => void;
+  onViewVariables?: () => void;
   healthRefreshToken?: number;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
   onOpenWorkspaceAssessment?: (assessment: {
@@ -65,7 +65,7 @@ export function ProjectOverviewHeader({
   assessmentProgress,
   isGenerating,
   errorMessage,
-  onViewAssumptions,
+  onViewVariables,
   healthRefreshToken = 0,
   onOpenDocument,
   onOpenWorkspaceAssessment,
@@ -77,7 +77,7 @@ export function ProjectOverviewHeader({
   const [collaboratorsCount, setCollaboratorsCount] = useState<number | null>(
     () => collaboratorsCountCache.get(project.id) ?? null,
   );
-  const [assumptionsSummary, setAssumptionsSummary] = useState<AssumptionSummary | null>(null);
+  const [variablesSummary, setVariablesSummary] = useState<VariableSummary | null>(null);
 
   useEffect(() => {
     const cachedCount = collaboratorsCountCache.get(project.id);
@@ -115,12 +115,12 @@ export function ProjectOverviewHeader({
 
   useEffect(() => {
     let cancelled = false;
-    api.getAssumptionsSummary(project.id)
+    api.getVariablesSummary(project.id)
       .then((summary) => {
-        if (!cancelled) setAssumptionsSummary(summary);
+        if (!cancelled) setVariablesSummary(summary);
       })
       .catch(() => {
-        if (!cancelled) setAssumptionsSummary(null);
+        if (!cancelled) setVariablesSummary(null);
       });
     return () => {
       cancelled = true;
@@ -227,7 +227,7 @@ export function ProjectOverviewHeader({
               Reusable project values and claims used across assessments and research.
             </p>
           </div>
-          <button type="button" className="btn-compact-neutral" onClick={onViewAssumptions}>
+          <button type="button" className="btn-compact-neutral" onClick={onViewVariables}>
             View All
           </button>
         </div>
@@ -236,28 +236,28 @@ export function ProjectOverviewHeader({
           <div>
             <p className="text-xs text-text-tertiary">Total</p>
             <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
-              {assumptionsSummary?.total ?? '—'}
+              {variablesSummary?.total ?? '—'}
             </p>
           </div>
           <div>
             <p className="text-xs text-text-tertiary">Validated</p>
             <p className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
-              {assumptionsSummary?.validated ?? '—'}
+              {variablesSummary?.validated ?? '—'}
             </p>
           </div>
           <div>
             <p className="text-xs text-text-tertiary">Missing</p>
             <p className="mt-1 text-xl font-semibold text-red-500 tabular-nums">
-              {assumptionsSummary?.missing ?? '—'}
+              {variablesSummary?.missing ?? '—'}
             </p>
           </div>
         </div>
 
-        {assumptionsSummary?.top_attention?.length ? (
+        {variablesSummary?.top_attention?.length ? (
           <div className="mt-3 border-t border-divider pt-3">
             <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Needs attention</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {assumptionsSummary.top_attention.map((item) => (
+              {variablesSummary.top_attention.map((item) => (
                 <span
                   key={item.id}
                   className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
