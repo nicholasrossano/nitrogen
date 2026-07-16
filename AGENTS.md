@@ -79,10 +79,13 @@ More examples and wrappers: `docs/testing.md`.
 
 ## Critical Product Routing
 
-There are two chat surfaces. Default to **Generate flow (standalone)** unless the user explicitly says "project plan" or "side chat":
+Project work lives on **`/projects/[id]`** (Chat is the default floor; Overview / Variables / Files / Assessments via `?panel=`). Assessments and documents open as **floats**.
 
-- Generate flow: `LandingInput.tsx`, `ConversationView.tsx`, `ProjectChatSurface.tsx` / `PersonalChatSurface.tsx`
-- Project plan side chat: `ProjectChatTabsPanel.tsx`, `AssumptionsChatPanel.tsx`, `FloatLayer.tsx`
+- Chat floor / generate flow: `LandingInput.tsx`, `ConversationView.tsx`, `ProjectChatSurface.tsx` (in `ProjectWorkbench.tsx`)
+- Personal (no-project) chat: `PersonalChatSurface.tsx` on `/chat`
+- Floors / floats: `FloorLayer.tsx`, `FloatLayer.tsx`, `ChatContextStack.tsx`
+- Floors / floats: `FloorLayer.tsx`, `FloatLayer.tsx`, `ChatContextStack.tsx`
+- Floors / floats: `FloorLayer.tsx`, `FloatLayer.tsx`, `ChatContextStack.tsx`
 
 Landing tiles live in `LandingInput.tsx` (do not look for a separate picker component).
 

@@ -132,10 +132,10 @@ export function OpenAssessmentBrowser({ projectId, onSelect }: OpenAssessmentBro
           </button>
           {!isTrashView && enriched.length > 0 && (
             <Link
-              href={`/projects/${projectId}?view=framework`}
+              href={`/projects/${projectId}?panel=assessments`}
               className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
             >
-              View Framework Plan
+              View Assessments
             </Link>
           )}
         </div>
@@ -156,10 +156,10 @@ export function OpenAssessmentBrowser({ projectId, onSelect }: OpenAssessmentBro
                 <p className="text-xs text-text-tertiary mt-1">Use &quot;New Assessment&quot; to begin.</p>
                 <div className="mt-4 flex justify-center">
                   <Link
-                    href={`/projects/${projectId}?view=framework`}
+                    href={`/projects/${projectId}?panel=assessments`}
                     className="inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-lg whitespace-nowrap border border-accent bg-accent text-white transition-colors hover:bg-accent-hover hover:border-accent-hover"
                   >
-                    View Framework Plan
+                    View Assessments
                   </Link>
                 </div>
               </>

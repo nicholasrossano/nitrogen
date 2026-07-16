@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, FolderOpen, Home, ListChecks, Loader2, Plus } from 'lucide-react';
+import { ChevronRight, FolderOpen, Home, ListChecks, Loader2, Map as MapIcon, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, type Project } from '@/lib/api';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
@@ -31,6 +31,7 @@ const TREE_LEADING_SLOT = 'flex h-5 w-5 shrink-0 items-center justify-center';
 const PROJECT_CONTEXT_CAPSULES: Array<{ id: ChatContextExpandedWidget; label: string; Icon: LucideIcon }> = [
   { id: 'overview', label: 'Overview', Icon: Home },
   { id: 'variables', label: PROJECT_VARIABLES.title, Icon: ListChecks },
+  { id: 'assessments', label: 'Assessments', Icon: MapIcon },
   { id: 'files', label: 'Files', Icon: FolderOpen },
 ];
 

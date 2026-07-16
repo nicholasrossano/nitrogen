@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Users } from 'lucide-react';
 import { ProjectContextPanel } from '@/components/chat-shell/ProjectContextPanel';
 import { ProjectAssumptionsPanel } from '@/components/chat-shell/ProjectAssumptionsPanel';
+import { ProjectAssessmentsPanel } from '@/components/chat-shell/ProjectAssessmentsPanel';
 import { ProjectFilesPanel } from '@/components/chat-shell/ProjectFilesPanel';
 import { FloorLayer } from '@/components/chat-shell/FloorLayer';
 import {
@@ -18,12 +19,13 @@ import {
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { projectDisplayName } from '@/lib/projectDisplayName';
-import { api, type Assumption, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
+import { api, type Assumption, type AssessmentInstance, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { FilesScopeToggle, type FilesScope } from '@/components/files';
 import { TourAnchor } from '@/components/tour/TourAnchor';
+import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
 
 export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
 
@@ -59,6 +61,14 @@ export interface ChatContextStackProps {
   }) => void;
   /** How far from the right edge expanded floors sit — shrinks to leave room for a companion FloatLayer. */
   rightInset?: string;
+  frameworkPlannedAssessmentIds?: string[];
+  frameworkAssessmentInstances?: AssessmentInstance[];
+  frameworkAssessmentsLoading?: boolean;
+  onAddAssessmentToFrameworkPlan?: (assessmentId: string) => Promise<void>;
+  onRemoveAssessmentFromFrameworkPlan?: (assessmentId: string) => Promise<void>;
+  onCreateAssessmentInstanceInAssessmentsView?: (assessmentId: string, assessmentName: string) => Promise<void>;
+  onOpenExistingAssessmentInstanceInAssessmentsView?: (instance: AssessmentInstance) => Promise<void>;
+  frameworkReadOnly?: boolean;
 }
 
 function useExpandedPanelVisibility(expandedWidget: ChatContextExpandedWidget | null) {
@@ -98,18 +108,16 @@ function ContextStackWidgetSlot({
   widgetId,
   expandedWidget,
   renderedWidget,
-  className,
   children,
 }: {
   widgetId: ChatContextExpandedWidget;
   expandedWidget: ChatContextExpandedWidget | null;
   renderedWidget: ChatContextExpandedWidget | null;
-  className?: string;
   children: ReactNode;
 }) {
   return (
     <div
-      className={`${contextStackTransitionClass} ${contextStackWidgetMotionClass(expandedWidget, widgetId, renderedWidget)} ${className ?? ''}`.trim()}
+      className={`pointer-events-auto flex min-h-[7rem] min-w-0 flex-1 basis-0 flex-col overflow-hidden ${contextStackTransitionClass} ${contextStackWidgetMotionClass(expandedWidget, widgetId, renderedWidget)}`}
     >
       {children}
     </div>
@@ -130,6 +138,14 @@ export function ChatContextStack({
   onOpenAssumptionDetail,
   onOpenWorkspaceAssessment,
   rightInset = '0.75rem',
+  frameworkPlannedAssessmentIds = [],
+  frameworkAssessmentInstances = [],
+  frameworkAssessmentsLoading = false,
+  onAddAssessmentToFrameworkPlan,
+  onRemoveAssessmentFromFrameworkPlan,
+  onCreateAssessmentInstanceInAssessmentsView,
+  onOpenExistingAssessmentInstanceInAssessmentsView,
+  frameworkReadOnly = false,
 }: ChatContextStackProps) {
   const { renderedWidget, visible } = useExpandedPanelVisibility(expandedWidget);
   const [shellMotion, setShellMotion] = useState<ContextPanelExpandMotion>('stack');
@@ -226,6 +242,10 @@ export function ChatContextStack({
     openFromStack('overview');
   }, [openFromStack]);
 
+  const handleExpandAssessments = useCallback(() => {
+    openFromStack('assessments');
+  }, [openFromStack]);
+
   const handleExpandVariables = useCallback(() => {
     openFromStack('variables');
   }, [openFromStack]);
@@ -255,26 +275,23 @@ export function ChatContextStack({
         className={`pointer-events-none absolute z-20 right-3 top-3 bottom-3 flex flex-col gap-3 ${contextStackTransitionClass}`}
         style={{ width: CHAT_CONTEXT_STACK_WIDTH }}
       >
-        <div className="pointer-events-auto min-h-0">
-          <ContextStackWidgetSlot
-            widgetId="overview"
-            expandedWidget={expandedWidget}
-            renderedWidget={renderedWidget}
-          >
-            <ProjectContextPanel
-              variant="stacked"
-              project={project}
-              refreshKey={refreshKey}
-              onViewAll={handleExpandOverview}
-            />
-          </ContextStackWidgetSlot>
-        </div>
+        <ContextStackWidgetSlot
+          widgetId="overview"
+          expandedWidget={expandedWidget}
+          renderedWidget={renderedWidget}
+        >
+          <ProjectContextPanel
+            variant="stacked"
+            project={project}
+            refreshKey={refreshKey}
+            onViewAll={handleExpandOverview}
+          />
+        </ContextStackWidgetSlot>
 
         <ContextStackWidgetSlot
           widgetId="variables"
           expandedWidget={expandedWidget}
           renderedWidget={renderedWidget}
-          className="pointer-events-auto flex min-h-[8rem] min-w-0 flex-col"
         >
           <ProjectAssumptionsPanel
             projectId={projectId}
@@ -285,10 +302,23 @@ export function ChatContextStack({
         </ContextStackWidgetSlot>
 
         <ContextStackWidgetSlot
+          widgetId="assessments"
+          expandedWidget={expandedWidget}
+          renderedWidget={renderedWidget}
+        >
+          <ProjectAssessmentsPanel
+            plannedAssessmentIds={frameworkPlannedAssessmentIds}
+            assessmentInstances={frameworkAssessmentInstances}
+            loading={frameworkAssessmentsLoading}
+            onViewAll={handleExpandAssessments}
+            onOpenAssessment={onOpenWorkspaceAssessment}
+          />
+        </ContextStackWidgetSlot>
+
+        <ContextStackWidgetSlot
           widgetId="files"
           expandedWidget={expandedWidget}
           renderedWidget={renderedWidget}
-          className="pointer-events-auto flex min-h-0 min-w-0 shrink-0 flex-col"
         >
           <ProjectFilesPanel
             projectId={projectId}
@@ -415,6 +445,35 @@ export function ChatContextStack({
               }}
             />
           )}
+        </FloorLayer>
+      )}
+
+      {renderedWidget === 'assessments' && onAddAssessmentToFrameworkPlan && onRemoveAssessmentFromFrameworkPlan
+        && onCreateAssessmentInstanceInAssessmentsView && onOpenExistingAssessmentInstanceInAssessmentsView && (
+        <FloorLayer
+          widget="assessments"
+          title="Assessments"
+          suffix={project ? projectDisplayName(project) : null}
+          visible={visible}
+          motionMode={shellMotion}
+          onClose={handleCloseExpanded}
+          flushOnExpand
+          rightInset={rightInset}
+          tourId="feature-assessments"
+        >
+          <FrameworkPlanView
+            plannedAssessmentIds={frameworkPlannedAssessmentIds}
+            assessmentInstances={frameworkAssessmentInstances}
+            loading={frameworkAssessmentsLoading}
+            onAddAssessmentToFrameworkPlan={onAddAssessmentToFrameworkPlan}
+            onRemoveAssessmentFromFrameworkPlan={onRemoveAssessmentFromFrameworkPlan}
+            onCreateAssessmentInstanceInAssessmentsView={onCreateAssessmentInstanceInAssessmentsView}
+            onOpenExistingAssessmentInstanceInAssessmentsView={onOpenExistingAssessmentInstanceInAssessmentsView}
+            readOnly={frameworkReadOnly}
+            onOpenAssessment={(assessment) => {
+              void onOpenExistingAssessmentInstanceInAssessmentsView(assessment);
+            }}
+          />
         </FloorLayer>
       )}
     </>

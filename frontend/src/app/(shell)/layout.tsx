@@ -73,7 +73,7 @@ function ChatShellFrame({ children }: { children: React.ReactNode }) {
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
   const navHandlerRef = useRef<((item: NavItem) => boolean) | null>(null);
   const pathname = usePathname();
-  const isChatShell = pathname.startsWith('/chat') || pathname === '/';
+  const isChatShell = pathname.startsWith('/chat') || pathname === '/' || pathname.startsWith('/projects/');
 
   if (isChatShell) {
     return (
