@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { api, type AssessmentInstance } from '@/lib/api';
 import { isAssessmentUserEngaged } from '@/lib/assessmentEngagement';
 import { stripCreatorHandleFromTitle } from '@/lib/assessmentDisplay';
+import { getCached, invalidate, swrFetch, swrKeys } from '@/lib/swrCache';
 
 const MODULE_MAP = new Map(ALL_MODULES.map((module) => [module.id, module]));
 const HIDDEN_SCROLLBAR_CLASSNAME =
@@ -110,20 +111,33 @@ export function ProjectOutputsSection({
     () => new Set(visibleModules.map((module) => module.id)),
     [visibleModules],
   );
-  const [instances, setInstances] = useState<AssessmentInstance[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [instances, setInstances] = useState<AssessmentInstance[]>(
+    () => getCached<AssessmentInstance[]>(swrKeys.instances(projectId)) ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => getCached<AssessmentInstance[]>(swrKeys.instances(projectId)) === undefined,
+  );
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const key = swrKeys.instances(projectId);
+    const cached = getCached<AssessmentInstance[]>(key);
+    if (cached) {
+      setInstances(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const data = await api.listAssessmentInstances(projectId);
+      const { data } = await swrFetch(key, () => api.listAssessmentInstances(projectId), {
+        force: refreshKey > 0,
+      });
       setInstances(data);
     } catch {
-      setInstances([]);
+      if (!cached) setInstances([]);
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   useEffect(() => {
     void load();
@@ -131,11 +145,12 @@ export function ProjectOutputsSection({
 
   useEffect(() => {
     const handler = () => {
+      invalidate(swrKeys.instances(projectId));
       void load();
     };
     window.addEventListener('nitrogen:assessment-workflow-updated', handler);
     return () => window.removeEventListener('nitrogen:assessment-workflow-updated', handler);
-  }, [load]);
+  }, [load, projectId]);
 
   const visibleOutputs = useMemo(
     () => instances
@@ -151,7 +166,7 @@ export function ProjectOutputsSection({
   return (
     <section className="w-full overflow-visible pb-2">
       <p className="mb-3 pl-6 text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
-        Outputs
+        Assessments
       </p>
       <div className="w-full overflow-visible rounded-2xl border border-stroke-subtle bg-white">
         {loading ? (

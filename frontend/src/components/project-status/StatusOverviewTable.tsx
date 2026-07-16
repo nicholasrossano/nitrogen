@@ -13,6 +13,7 @@ import {
 } from '@/lib/api';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import { StatusCategoryEditorModal } from '@/components/project-status/StatusCategoryEditorModal';
+import { getCached, setCached, swrFetch, swrKeys } from '@/lib/swrCache';
 
 const STATUS_META: Record<ProjectStatusLevel, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
   green: {
@@ -213,9 +214,17 @@ export function StatusOverviewTable({
   onOpenDocument,
   onOpenWorkspaceAssessment,
 }: StatusOverviewTableProps) {
-  const [statusData, setStatusData] = useState<ProjectStatusResponse | null>(null);
-  const [categoryConfigs, setCategoryConfigs] = useState<ProjectStatusCategoryConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const cachedStatus = getCached<{
+    response: ProjectStatusResponse;
+    configs: ProjectStatusCategoryConfig[];
+  }>(swrKeys.status(initiativeId));
+  const [statusData, setStatusData] = useState<ProjectStatusResponse | null>(
+    cachedStatus?.response ?? null,
+  );
+  const [categoryConfigs, setCategoryConfigs] = useState<ProjectStatusCategoryConfig[]>(
+    cachedStatus?.configs ?? [],
+  );
+  const [isLoading, setIsLoading] = useState(!cachedStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -223,17 +232,31 @@ export function StatusOverviewTable({
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   const loadStatus = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
+    const key = swrKeys.status(initiativeId);
+    const cached = getCached<{
+      response: ProjectStatusResponse;
+      configs: ProjectStatusCategoryConfig[];
+    }>(key);
+    if (cached) {
+      setStatusData(cached.response);
+      setCategoryConfigs(cached.configs);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     try {
-      const [response, configs] = await Promise.all([
-        api.getProjectStatus(initiativeId),
-        api.listStatusCategories(initiativeId),
-      ]);
-      setStatusData(response);
-      setCategoryConfigs(configs);
+      const { data } = await swrFetch(key, async () => {
+        const [response, configs] = await Promise.all([
+          api.getProjectStatus(initiativeId),
+          api.listStatusCategories(initiativeId),
+        ]);
+        return { response, configs };
+      });
+      setStatusData(data.response);
+      setCategoryConfigs(data.configs);
     } catch {
-      setError('Unable to load status overview right now.');
+      if (!cached) setError('Unable to load status overview right now.');
     } finally {
       setIsLoading(false);
     }
@@ -248,8 +271,9 @@ export function StatusOverviewTable({
     setError(null);
     try {
       const response = await api.refreshProjectStatus(initiativeId, 'manual_refresh');
-      setStatusData(response);
       const configs = await api.listStatusCategories(initiativeId);
+      setCached(swrKeys.status(initiativeId), { response, configs });
+      setStatusData(response);
       setCategoryConfigs(configs);
     } catch {
       setError('Refresh failed. Please try again.');

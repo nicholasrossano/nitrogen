@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { ExternalLink, FileText, Loader2 } from 'lucide-react';
 import { api, type ProjectMaterial } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
+import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
+import { useProjectStore } from '@/stores/projectStore';
 
 const MAX_FILES = 8;
 
@@ -39,19 +41,44 @@ export function ProjectFilesPanel({
       setRows([]);
       return;
     }
-    setLoading(true);
-    api
-      .getMaterials(projectId)
-      .then((materials) => {
-        const sorted = [...materials].sort(
+
+    const storeMaterials = useProjectStore.getState();
+    const fromStore =
+      storeMaterials.materialsProjectId === projectId
+        ? storeMaterials.projectMaterials
+        : getCached<ProjectMaterial[]>(swrKeys.materials(projectId));
+
+    if (fromStore) {
+      const sorted = [...fromStore].sort(
+        (a, b) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''),
+      );
+      setRows(sorted.slice(0, MAX_FILES));
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    let cancelled = false;
+    void swrFetch(swrKeys.materials(projectId), () => api.getMaterials(projectId), {
+      force: refreshKey > 0,
+    })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const sorted = [...data].sort(
           (a, b) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''),
         );
         setRows(sorted.slice(0, MAX_FILES));
       })
       .catch(() => {
-        setRows([]);
+        if (!cancelled && !fromStore) setRows([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, refreshKey]);
 
   if (!projectId) return null;
