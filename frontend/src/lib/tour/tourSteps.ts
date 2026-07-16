@@ -96,7 +96,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'feature-variables',
     group: 'feature-variables',
     title: 'Variables',
-    body: 'Shared assumptions and inputs live here. They feed models and writeups across the project.',
+    body: 'Shared project values and inputs live here. They feed models and writeups across the project.',
     placement: 'bottom',
     trigger: 'mount',
   },

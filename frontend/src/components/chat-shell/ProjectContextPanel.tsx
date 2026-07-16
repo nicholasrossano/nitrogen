@@ -5,6 +5,7 @@ import { CheckCircle2, AlertCircle, HelpCircle, ExternalLink, Loader2, MinusCirc
 import { api, type Project, type ProjectHealthDimension, type ProjectHealthStatus, type ProjectShare } from '@/lib/api';
 import { CHAT_FLOATING_PANEL_CHROME } from '@/components/ui/chatSidebarLayout';
 import { buildCollaborators, CollaboratorRow } from '@/components/chat-shell/projectContextCollaborators';
+import { getCached, swrFetch, swrKeys } from '@/lib/swrCache';
 
 const MAX_COLLABORATOR_ROWS = 3;
 
@@ -38,10 +39,25 @@ export function ProjectContextPanel({
       setHealthDimensions([]);
       return;
     }
-    api
-      .getProjectHealth(project.id)
-      .then((res) => setHealthDimensions(res.dimensions.slice(0, 4)))
-      .catch(() => setHealthDimensions([]));
+    const key = swrKeys.health(project.id);
+    const cached = getCached<ProjectHealthDimension[]>(key);
+    if (cached) setHealthDimensions(cached.slice(0, 4));
+
+    let cancelled = false;
+    void swrFetch(key, async () => {
+      const res = await api.getProjectHealth(project.id);
+      return res.dimensions;
+    }, { force: refreshKey > 0 })
+      .then(({ data }) => {
+        if (!cancelled) setHealthDimensions(data.slice(0, 4));
+      })
+      .catch(() => {
+        if (!cancelled && !cached) setHealthDimensions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [project?.id, refreshKey]);
 
   useEffect(() => {
@@ -49,12 +65,30 @@ export function ProjectContextPanel({
       setShares([]);
       return;
     }
-    setCollaboratorsLoading(true);
-    api
-      .getShares(project.id)
-      .then((data) => setShares(data))
-      .catch(() => setShares([]))
-      .finally(() => setCollaboratorsLoading(false));
+    const key = swrKeys.shares(project.id);
+    const cached = getCached<ProjectShare[]>(key);
+    if (cached) {
+      setShares(cached);
+      setCollaboratorsLoading(false);
+    } else {
+      setCollaboratorsLoading(true);
+    }
+
+    let cancelled = false;
+    void swrFetch(key, () => api.getShares(project.id), { force: refreshKey > 0 })
+      .then(({ data }) => {
+        if (!cancelled) setShares(data);
+      })
+      .catch(() => {
+        if (!cancelled && !cached) setShares([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCollaboratorsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [project?.id, refreshKey]);
 
   const collaborators = useMemo(

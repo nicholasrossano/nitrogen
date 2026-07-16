@@ -206,7 +206,9 @@ def _serialize_assessment_instance(
     started_by_email = email_map.get(inst.started_by)
     creator_handle = _creator_handle_from_instance(inst, email_map)
     assessment_name = assessment_names.get(inst.assessment_id) or _humanize_assessment_id(inst.assessment_id)
-    display_name = f"{assessment_name} #{inst.instance_number} · @{creator_handle}"
+    custom_title = inst.title.strip() if isinstance(inst.title, str) and inst.title.strip() else None
+    effective_name = custom_title or f"{assessment_name} #{inst.instance_number}"
+    display_name = f"{effective_name} · @{creator_handle}"
 
     data["started_by_email"] = started_by_email
     data["instance_number"] = inst.instance_number
@@ -610,6 +612,37 @@ async def permanently_delete_assessment_instance(
 
 class CreateAssessmentInstanceBody(BaseModel):
     assessment_id: str
+
+
+class UpdateAssessmentInstanceBody(BaseModel):
+    title: str | None = None
+
+
+@router.patch(
+    "/projects/{project_id}/assessments/{instance_id}",
+    response_model=AssessmentInstanceResponse,
+)
+async def update_assessment_instance(
+    project_id: str,
+    instance_id: str,
+    body: UpdateAssessmentInstanceBody,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Rename an assessment instance (updates list labels and export filenames)."""
+    await ensure_user_exists(db, user)
+    initiative = await require_project_editor(db, project_id, user)
+    inst = await db.get(AssessmentInstance, instance_id)
+    if inst is None or inst.project_id != initiative.id:
+        raise HTTPException(status_code=404, detail="Assessment instance not found")
+    try:
+        inst = await assessment_service.update_instance_title(db, inst.id, body.title)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await db.commit()
+    await db.refresh(inst)
+    serialized = await _serialize_assessment_instances(db, [inst])
+    return serialized[0]
 
 
 @router.post(

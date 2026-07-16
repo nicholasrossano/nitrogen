@@ -557,7 +557,7 @@ export function EditableTableStage({
 
     const handler = async (event: Event) => {
       const detail = (event as CustomEvent).detail as
-        | { field_name?: string; value?: unknown; model_type?: string }
+        | { field_name?: string; value?: unknown; model_type?: string; already_persisted?: boolean }
         | undefined;
       if (!detail?.field_name || detail.model_type !== proposalModelType || detail.value === undefined) {
         return;
@@ -578,12 +578,6 @@ export function EditableTableStage({
       const isAlreadyConfirmed = row.content?.status === 'validated';
       if (isSameValue && isAlreadyConfirmed) return;
 
-      const nextContent = {
-        ...row.content,
-        value: incomingValue,
-        status: 'validated',
-        source: 'user',
-      };
       setOptimisticContentByItemId((prev) => ({
         ...prev,
         [row.id]: {
@@ -593,6 +587,19 @@ export function EditableTableStage({
           source: 'user',
         },
       }));
+
+      // Chat already PATCHed the row — only refresh local state / workflow version.
+      if (detail.already_persisted) {
+        onChanged();
+        return;
+      }
+
+      const nextContent = {
+        ...row.content,
+        value: incomingValue,
+        status: 'validated',
+        source: 'user',
+      };
       try {
         await api.editStageItem(instanceId, stageId, row.id, nextContent, workflowVersion);
         onChanged();

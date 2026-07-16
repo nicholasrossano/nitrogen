@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PersonalChatSurface } from '@/components/chat-shell/PersonalChatSurface';
 import { useChatShell } from '@/components/chat-shell/ChatShellContext';
-import { buildProjectWorkbenchPath, parseContextPanelParam } from '@/components/chat-shell/chatContextStackMotion';
+import { buildProjectWorkbenchPath, parseAssessmentParam, parseContextPanelParam } from '@/components/chat-shell/chatContextStackMotion';
 import {
   resolveActiveProjectId,
   writeLastProjectId,
@@ -30,6 +30,7 @@ function ChatLandingContent() {
   const legacyProjectParam = searchParams.get('project');
   const activeChatId = searchParams.get('chat');
   const panelParam = parseContextPanelParam(searchParams.get('panel'));
+  const assessmentParam = parseAssessmentParam(searchParams.get('assessment'));
 
   useEffect(() => {
     if (!activeWorkspace) void loadWorkspaces();
@@ -58,6 +59,7 @@ function ChatLandingContent() {
       router.replace(buildProjectWorkbenchPath(projectId, {
         chat: activeChatId,
         panel: panelParam,
+        assessment: assessmentParam,
       }));
     };
 
@@ -88,6 +90,7 @@ function ChatLandingContent() {
   }, [
     activeChatId,
     activeWorkspace?.id,
+    assessmentParam,
     chatShell,
     legacyProjectParam,
     panelParam,

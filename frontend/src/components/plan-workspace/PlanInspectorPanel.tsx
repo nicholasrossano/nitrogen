@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useRef } from 'react';
-import { X, AlertCircle, Zap, PenLine } from 'lucide-react';
-import { widgetHeaderIconButtonClassName } from '@/components/editor/EditorPanelHeader';
+import { Fragment } from 'react';
+import { AlertCircle, Zap, PenLine } from 'lucide-react';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { CompanionSidePanel } from '@/components/ui/CompanionSidePanel';
 
 import { DeepDiveSourcesMenu } from './DeepDiveSourcesMenu';
 import type {
@@ -60,58 +60,21 @@ export function PlanInspectorPanel({
   onRetry,
   onOpenDocument,
 }: PlanInspectorPanelProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  useEffect(() => {
-    panelRef.current?.focus();
-  }, []);
-
   const { item, groupName, result, loading, error } = state;
   const citationSources = result?.citationSources ?? fallbackCitationSources(result);
 
   return (
-    <div
-      ref={panelRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Plan details: ${item.title}`}
-      className="w-full h-full flex-shrink-0 bg-white border-l border-divider flex flex-col outline-none"
-      style={{ animation: 'slideInRight 0.2s ease-out forwards' }}
-    >
-      <div className="flex items-start gap-3 px-5 py-4 border-b border-stroke-subtle flex-shrink-0">
+    <CompanionSidePanel
+      title={item.title}
+      eyebrow={groupName}
+      onClose={onClose}
+      ariaLabel={`Plan details: ${item.title}`}
+      leading={(
         <div className="w-9 h-9 flex-shrink-0 bg-accent/10 rounded flex items-center justify-center">
           <Zap className="w-3.5 h-3.5 text-accent" />
         </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-wide">
-            {groupName}
-          </span>
-          <h2 className="text-sm font-semibold text-text-primary leading-snug mt-0.5">
-            {item.title}
-          </h2>
-        </div>
-        {result && citationSources.length > 0 && (
-          <DeepDiveSourcesMenu sources={citationSources} onOpenDocument={onOpenDocument} />
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          className={widgetHeaderIconButtonClassName()}
-          aria-label="Close"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
+      )}
+    >
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {!result && !loading && !error && (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-10 text-center">
@@ -213,13 +176,15 @@ export function PlanInspectorPanel({
         )}
       </div>
 
-      {result && !loading && (
-        <div className="px-5 py-2.5 border-t border-stroke-subtle flex-shrink-0">
-          <p className="text-[11px] text-text-tertiary">
-            Research completed in {(result.latencyMs / 1000).toFixed(1)}s
-          </p>
+      {result && !loading && citationSources.length > 0 && (
+        <div className="flex-shrink-0 flex justify-end px-5 py-2.5 border-t border-stroke-subtle">
+          <DeepDiveSourcesMenu
+            sources={citationSources}
+            onOpenDocument={onOpenDocument}
+            placement="top"
+          />
         </div>
       )}
-    </div>
+    </CompanionSidePanel>
   );
 }

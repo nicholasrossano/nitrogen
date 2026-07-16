@@ -3,6 +3,7 @@ import {
   fetchApi,
   fetchApiWithTimeout,
   getAuthToken,
+  parseContentDispositionFilename,
   workflowVersionHeaders,
 } from './client';
 import type {
@@ -80,9 +81,10 @@ export const assessmentsApi = {
       { headers }
     );
     if (!res.ok) throw new Error('Export failed');
-    const disposition = res.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = match ? match[1].replace(/['"]/g, '') : 'assessment.docx';
+    const filename = parseContentDispositionFilename(
+      res.headers.get('content-disposition'),
+      'assessment.docx',
+    );
     const blob = await res.blob();
     return { blob, filename };
   },
@@ -195,10 +197,20 @@ export const assessmentsApi = {
       `${API_URL}/api/v1/assessment-workflow/${instanceId}/export`,
       { headers }
     );
-    if (!res.ok) throw new Error('Export failed');
-    const disposition = res.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = match ? match[1].replace(/['"]/g, '') : 'export.docx';
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      const message =
+        typeof detail?.detail === 'string'
+          ? detail.detail
+          : res.status === 409
+            ? 'Export already in progress'
+            : 'Export failed';
+      throw new Error(message);
+    }
+    const filename = parseContentDispositionFilename(
+      res.headers.get('content-disposition'),
+      'export.docx',
+    );
     const blob = await res.blob();
     return { blob, filename };
   },
@@ -267,9 +279,10 @@ export const assessmentsApi = {
       { headers }
     );
     if (!res.ok) throw new Error('Decision log export failed');
-    const disposition = res.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = match ? match[1].replace(/['"]/g, '') : 'decision-log.xlsx';
+    const filename = parseContentDispositionFilename(
+      res.headers.get('content-disposition'),
+      'decision-log.xlsx',
+    );
     const blob = await res.blob();
     return { blob, filename };
   },

@@ -61,7 +61,13 @@ For `BaseAssessmentAssessment` implementations:
 3. Define ordered `stage_defs`.
 4. Implement `generate_items_for_stage()` and `enrich_record()` as needed.
 5. Implement `generate_writeup_content()` when the assessment needs a generated narrative export.
-6. Implement `generate_export()` for the final artifact.
+6. Implement `generate_export()` for the final artifact (XLSX modules, or as a fallback for DOCX).
+7. For map-style / deep-dive narrative modules, also implement:
+   - `prepare_export_enrichment()` — run remaining on-demand deep dives/enrichments into their normal workflow_state caches before writeup
+   - `export_input_fingerprint()` — include stage data + enrichment caches so unchanged exports reuse the cached writeup
+   - optional iteration kwargs on `generate_writeup_content(previous_content=..., change_summary=...)` for continuity when inputs change
+
+The shared `/assessment-workflow/{id}/export` path handles UI single-flight locking, enrichment, writeup cache/iteration, and DOCX rendering. Prefer those hooks over bespoke export endpoints.
 
 Each build layer should represent one user-reviewable step. Prefer a few meaningful layers over many tiny ones.
 

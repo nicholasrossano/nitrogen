@@ -210,6 +210,23 @@ async def remove_instance_by_tool(
     return True
 
 
+async def update_instance_title(
+    db: AsyncSession,
+    instance_id: uuid.UUID,
+    title: str | None,
+) -> AssessmentInstance:
+    """Set or clear the user-visible title for an assessment instance."""
+    inst = await db.get(AssessmentInstance, instance_id)
+    if inst is None:
+        raise ValueError(f"AssessmentInstance {instance_id} not found")
+
+    normalized = title.strip() if isinstance(title, str) else ""
+    inst.title = normalized or None
+    inst.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return inst
+
+
 async def list_instances(
     db: AsyncSession,
     project_id: uuid.UUID,

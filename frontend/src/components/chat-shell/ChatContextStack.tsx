@@ -17,9 +17,8 @@ import {
   type ExpandedWidgetChangeOptions,
 } from '@/components/chat-shell/chatContextStackMotion';
 import { CHAT_CONTEXT_STACK_WIDTH } from '@/components/ui/chatSidebarLayout';
-import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 import { projectDisplayName } from '@/lib/projectDisplayName';
-import { api, type Assumption, type AssessmentInstance, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
+import { api, type AssessmentInstance, type Project, type ProjectMaterial, type WorkspaceKnowledgeBank } from '@/lib/api';
 import { useProjectStore } from '@/stores/projectStore';
 import { ProjectOverviewExpandedPanel } from '@/components/chat-shell/ProjectOverviewExpandedPanel';
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
@@ -28,11 +27,6 @@ import { TourAnchor } from '@/components/tour/TourAnchor';
 import { FrameworkPlanView } from '@/components/framework/FrameworkPlanView';
 
 export type { ChatContextExpandedWidget, ExpandedWidgetChangeOptions };
-
-const AssumptionsWorkspaceTab = dynamic(
-  () => import('@/components/assumptions/AssumptionsWorkspaceTab').then((m) => m.AssumptionsWorkspaceTab),
-  { ssr: false },
-);
 
 const ProjectFilesView = dynamic(
   () => import('@/components/files').then((m) => m.ProjectFilesView),
@@ -49,11 +43,10 @@ export interface ChatContextStackProps {
     widget: ChatContextExpandedWidget | null,
     options?: ExpandedWidgetChangeOptions,
   ) => void;
-  variablesFocusId?: string | null;
-  onVariablesFocusIdChange?: (assumptionId: string | null) => void;
+  /** Variables opens as a FloatLayer (not a floor). */
+  onOpenVariablesWorkspace?: (focusAssumptionId?: string | null) => void;
   onOpenFile?: (file: ProjectMaterial) => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
-  onOpenAssumptionDetail?: (assumption: Assumption) => void;
   onOpenWorkspaceAssessment?: (assessment: {
     instanceId: string;
     assessmentId: string;
@@ -131,11 +124,9 @@ export function ChatContextStack({
   expandedWidget,
   expandMotionMode = 'stack',
   onExpandedWidgetChange,
-  variablesFocusId = null,
-  onVariablesFocusIdChange,
+  onOpenVariablesWorkspace,
   onOpenFile,
   onOpenDocument,
-  onOpenAssumptionDetail,
   onOpenWorkspaceAssessment,
   rightInset = '0.75rem',
   frameworkPlannedAssessmentIds = [],
@@ -164,11 +155,14 @@ export function ChatContextStack({
       setProjectMaterials([]);
       return;
     }
-    try {
-      const materials = await api.getMaterials(projectId);
-      setProjectMaterials(materials);
-    } catch {
-      setProjectMaterials([]);
+    const store = useProjectStore.getState();
+    if (store.materialsProjectId === projectId) {
+      setProjectMaterials(store.projectMaterials);
+    }
+    await store.loadMaterials(projectId);
+    const next = useProjectStore.getState();
+    if (next.materialsProjectId === projectId) {
+      setProjectMaterials(next.projectMaterials);
     }
   }, [projectId]);
 
@@ -247,8 +241,8 @@ export function ChatContextStack({
   }, [openFromStack]);
 
   const handleExpandVariables = useCallback(() => {
-    openFromStack('variables');
-  }, [openFromStack]);
+    onOpenVariablesWorkspace?.(null);
+  }, [onOpenVariablesWorkspace]);
 
   const handleExpandFiles = useCallback(() => {
     openFromStack('files');
@@ -256,13 +250,11 @@ export function ChatContextStack({
 
   const handleCloseExpanded = useCallback(() => {
     onExpandedWidgetChange(null);
-    onVariablesFocusIdChange?.(null);
-  }, [onExpandedWidgetChange, onVariablesFocusIdChange]);
+  }, [onExpandedWidgetChange]);
 
-  const handleAssumptionSelect = useCallback((assumption: Assumption) => {
-    onVariablesFocusIdChange?.(assumption.id);
-    openFromStack('variables');
-  }, [onVariablesFocusIdChange, openFromStack]);
+  const handleAssumptionSelect = useCallback((assumption: { id: string }) => {
+    onOpenVariablesWorkspace?.(assumption.id);
+  }, [onOpenVariablesWorkspace]);
 
   if (!projectId) return null;
 
@@ -362,30 +354,6 @@ export function ChatContextStack({
             onShareModalChange={setOverviewShareModalOpen}
             onOpenDocument={onOpenDocument}
             onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}
-          />
-        </FloorLayer>
-      )}
-
-      {renderedWidget === 'variables' && (
-        <FloorLayer
-          widget="variables"
-          title={PROJECT_VARIABLES.title}
-          suffix={project ? projectDisplayName(project) : null}
-          visible={visible}
-          motionMode={shellMotion}
-          onClose={handleCloseExpanded}
-          flushOnExpand
-          rightInset={rightInset}
-          tourId="feature-variables"
-        >
-          <AssumptionsWorkspaceTab
-            projectId={projectId}
-            embedded
-            showDetailPanel
-            focusAssumptionId={variablesFocusId}
-            onOpenDocument={onOpenDocument}
-            onOpenFile={onOpenFile}
-            onAssumptionSelectInChat={onOpenAssumptionDetail}
           />
         </FloorLayer>
       )}

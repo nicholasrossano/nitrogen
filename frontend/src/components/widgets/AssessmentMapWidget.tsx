@@ -272,6 +272,8 @@ export function AssessmentMapWidget({
   const [inspector, setInspector] = useState<MapInspectorState | null>(null);
   const [localInspectorOpen, setLocalInspectorOpen] = useState(false);
   const deepDiveRequestRef = useRef(0);
+  const inspectorCloseRef = useRef<() => void>(() => {});
+  const inspectorRetryRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     setGroups(incomingGroups);
@@ -382,6 +384,8 @@ export function AssessmentMapWidget({
       result: toInspectorResult(inspector.item, inspector.group, inspector.latencyMs, isStakeholderAssessment, deepDive),
       loading: inspector.loading,
       error: inspector.error,
+      onClose: () => inspectorCloseRef.current(),
+      onRetry: () => inspectorRetryRef.current(),
     };
   }, [deepDiveCache, inspector, isStakeholderAssessment]);
 
@@ -503,6 +507,12 @@ export function AssessmentMapWidget({
       });
     });
   }, [hydrateStakeholder, inspector, instanceId, isStakeholderAssessment, mapData?.assessment_id, workflowVersion]);
+
+  inspectorCloseRef.current = () => {
+    setLocalInspectorOpen(false);
+    setInspector(null);
+  };
+  inspectorRetryRef.current = handleRetryInspector;
 
   const noopToggleComplete = useCallback((_itemId: string) => {}, []);
   const noopDeleteItem = useCallback((_itemId: string) => {}, []);
