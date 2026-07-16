@@ -20,7 +20,7 @@ Investment diligence is fragmented across spreadsheets, data rooms, consultant m
 The platform helps teams:
 
 - research deals in personal, project-optional chat with cited retrieval
-- promote curated outputs to project-level findings and structured assumptions
+- promote curated outputs to project-level findings and structured variables
 - upload and organize company library and deal-room documents
 - track rubric health across documents, findings, and computed signals
 

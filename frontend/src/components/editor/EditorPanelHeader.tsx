@@ -1,7 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { ArrowLeft, X } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowLeft, Check, Loader2, Pencil, X } from 'lucide-react';
+import { SHELL_SURFACE_HEADER_CLASS } from '@/components/ui/chatSidebarLayout';
 
 type WidgetHeaderIconButtonOptions = {
   size?: 'sm' | 'md';
@@ -31,6 +32,9 @@ export function widgetHeaderIconButtonClassName(
 
 interface EditorPanelHeaderProps {
   title: string;
+  titleEditable?: boolean;
+  onSaveTitle?: (title: string) => void | Promise<void>;
+  titleSaving?: boolean;
   suffix?: string | null;
   /** Dismiss the panel / float layer. Always rendered on the right when provided. */
   onClose?: () => void;
@@ -39,15 +43,127 @@ interface EditorPanelHeaderProps {
   actions?: ReactNode;
 }
 
+function EditablePanelTitle({
+  title,
+  titleEditable = false,
+  onSaveTitle,
+  titleSaving = false,
+  suffix,
+}: {
+  title: string;
+  titleEditable?: boolean;
+  onSaveTitle?: (title: string) => void | Promise<void>;
+  titleSaving?: boolean;
+  suffix?: string | null;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDraftTitle(title);
+    setIsEditing(false);
+  }, [title]);
+
+  useEffect(() => {
+    if (!isEditing || !inputRef.current) return;
+    inputRef.current.focus();
+    inputRef.current.select();
+  }, [isEditing]);
+
+  const handleSave = async () => {
+    const trimmed = draftTitle.trim();
+    if (!trimmed) {
+      setDraftTitle(title);
+      setIsEditing(false);
+      return;
+    }
+    await onSaveTitle?.(trimmed);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setDraftTitle(title);
+    setIsEditing(false);
+  };
+
+  if (isEditing && titleEditable) {
+    return (
+      <div className="flex min-w-0 max-w-full items-center gap-1">
+        <input
+          ref={inputRef}
+          type="text"
+          value={draftTitle}
+          onChange={(e) => setDraftTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void handleSave();
+            } else if (e.key === 'Escape') {
+              handleCancel();
+            }
+          }}
+          style={{ width: `${Math.max(draftTitle.length + 2, 10)}ch` }}
+          className="no-global-focus-style min-w-0 max-w-full truncate px-0 py-0.5 text-sm font-medium text-text-primary bg-transparent border-0 border-b border-accent rounded-none shadow-none focus:outline-none focus:ring-0 focus:shadow-none"
+          disabled={titleSaving}
+        />
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={titleSaving}
+          className="icon-btn icon-btn-success p-1 text-indicator-green flex-shrink-0"
+          aria-label="Save name"
+        >
+          {titleSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={titleSaving}
+          className="icon-btn p-1 text-text-tertiary flex-shrink-0"
+          aria-label="Cancel rename"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 max-w-full items-center gap-1.5 group">
+      <span className="min-w-0 truncate">{title}</span>
+      {suffix ? (
+        <span className="shrink-0 whitespace-nowrap text-text-tertiary">
+          {' • '}
+          {suffix}
+        </span>
+      ) : null}
+      {titleEditable ? (
+        <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="icon-btn p-1 opacity-0 group-hover:opacity-100 text-text-tertiary flex-shrink-0"
+          aria-label="Rename"
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function EditorPanelHeader({
   title,
+  titleEditable = false,
+  onSaveTitle,
+  titleSaving = false,
   suffix,
   onClose,
   onBack,
   actions,
 }: EditorPanelHeaderProps) {
   return (
-    <header className="flex shrink-0 items-center gap-2.5 border-b border-divider bg-white px-3 py-2.5">
+    <header className={`${SHELL_SURFACE_HEADER_CLASS} gap-2.5 border-b border-divider bg-white px-3`}>
       {onBack ? (
         <button
           type="button"
@@ -58,16 +174,14 @@ export function EditorPanelHeader({
           <ArrowLeft className="h-3.5 w-3.5" />
         </button>
       ) : null}
-      <div className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
-        <span>{title}</span>
-        {suffix ? (
-          <span className="text-text-tertiary">
-            {' '}
-            •
-            {' '}
-            {suffix}
-          </span>
-        ) : null}
+      <div className="min-w-0 flex-1 overflow-hidden text-sm font-medium text-text-primary">
+        <EditablePanelTitle
+          title={title}
+          titleEditable={titleEditable}
+          onSaveTitle={onSaveTitle}
+          titleSaving={titleSaving}
+          suffix={suffix}
+        />
       </div>
       {actions ? (
         <div className="flex shrink-0 items-center gap-1">

@@ -8,7 +8,7 @@ const EDGE_PAD = 8;
 const GAP = 6;
 
 interface TooltipProps {
-  content: string;
+  content: React.ReactNode;
   children: React.ReactNode;
   /** Extra classes applied to the trigger wrapper span */
   className?: string;
@@ -16,6 +16,8 @@ interface TooltipProps {
   fitContent?: boolean;
   /** Delay before showing the tooltip (ms) */
   showDelayMs?: number;
+  /** Fixed tooltip width in px, ignored when fitContent is true (default 200) */
+  width?: number;
 }
 
 export function Tooltip({
@@ -24,10 +26,11 @@ export function Tooltip({
   className,
   fitContent = false,
   showDelayMs = 0,
+  width = TOOLTIP_WIDTH,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   const [style, setStyle] = useState<React.CSSProperties>(
-    fitContent ? { opacity: 0 } : { opacity: 0, width: TOOLTIP_WIDTH }
+    fitContent ? { opacity: 0 } : { opacity: 0, width }
   );
   const [mounted, setMounted] = useState(false);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
@@ -43,7 +46,7 @@ export function Tooltip({
 
   const handleMouseEnter = (e: React.MouseEvent) => {
     setCursor({ x: e.clientX, y: e.clientY });
-    setStyle(fitContent ? { opacity: 0 } : { opacity: 0, width: TOOLTIP_WIDTH });
+    setStyle(fitContent ? { opacity: 0 } : { opacity: 0, width });
     if (showTimerRef.current != null) {
       window.clearTimeout(showTimerRef.current);
       showTimerRef.current = null;
@@ -67,7 +70,7 @@ export function Tooltip({
     if (!visible || !tooltipRef.current || !cursor) return;
 
     const tip = tooltipRef.current.getBoundingClientRect();
-    const tipWidth = fitContent ? tip.width : TOOLTIP_WIDTH;
+    const tipWidth = fitContent ? tip.width : width;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const tipH = tip.height;
@@ -84,8 +87,8 @@ export function Tooltip({
       top = Math.max(EDGE_PAD, cursor.y - tipH - GAP);
     }
 
-    setStyle(fitContent ? { opacity: 1, left, top } : { opacity: 1, width: TOOLTIP_WIDTH, left, top });
-  }, [visible, cursor, content, fitContent]);
+    setStyle(fitContent ? { opacity: 1, left, top } : { opacity: 1, width, left, top });
+  }, [visible, cursor, content, fitContent, width]);
 
   return (
     <>

@@ -317,12 +317,80 @@ class BaseAssessment(ABC):
     ) -> bytes:
         """Generate the export artifact (DOCX/XLSX) from confirmed stage data.
 
-        Called at download time; nothing is stored. Override in subclasses
-        that support export.
+        Called at download time. Narrative modules typically cache writeup JSON
+        via the shared export orchestration; override in subclasses that support
+        export.
         """
         raise NotImplementedError(
             f"{self.definition.name} does not implement generate_export()"
         )
+
+    async def prepare_export_enrichment(
+        self,
+        *,
+        state: dict[str, Any],
+        confirmed_stages: dict[str, Any],
+        context: dict[str, Any],
+        db: Any = None,
+        project_id: Any = None,
+        user_id: str | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """Ensure export prerequisites (deep dives, enrichments) are populated.
+
+        Mutates ``state`` in place when caching enrichment results.
+        Returns ``(updated_confirmed_stages, changed)``.
+        """
+        return confirmed_stages, False
+
+    def export_input_fingerprint(
+        self,
+        confirmed_stages: dict[str, Any],
+        state: dict[str, Any] | None = None,
+    ) -> str:
+        """Stable fingerprint of inputs that should invalidate/iterate writeup cache.
+
+        Default hashes confirmed stage payloads. Narrative modules should include
+        enrichment caches (details / deep dives) when those affect the writeup.
+        """
+        from app.services.assessment_export import fingerprint_payload
+
+        return fingerprint_payload({"confirmed_stages": confirmed_stages})
+
+    def summarize_export_input_changes(
+        self,
+        previous_fingerprint: str | None,
+        confirmed_stages: dict[str, Any],
+        state: dict[str, Any] | None = None,
+    ) -> str:
+        """Human-readable change summary for writeup iteration prompts."""
+        if previous_fingerprint:
+            return (
+                "Assessment inputs changed since the previous export. "
+                "Revise the prior writeup so it reflects the current confirmed "
+                "data and enrichment details while preserving tone and structure."
+            )
+        return "Generate a new writeup from the current confirmed assessment data."
+
+    async def generate_writeup_content(
+        self,
+        confirmed_stages: dict[str, Any],
+        context: dict,
+        *,
+        previous_content: dict[str, Any] | None = None,
+        change_summary: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate cacheable writeup JSON for narrative DOCX exports.
+
+        When ``previous_content`` is provided, revise it for continuity rather
+        than regenerating from scratch.
+        """
+        raise NotImplementedError(
+            f"{self.definition.name} does not implement generate_writeup_content()"
+        )
+
+    def supports_cached_writeup(self) -> bool:
+        """True when this assessment uses LLM writeup caching/iteration on export."""
+        return self.definition.export_format == "docx" and type(self).generate_writeup_content is not BaseAssessment.generate_writeup_content
 
     # ------------------------------------------------------------------ #
     # Chat-path methods (not part of the stage contract)                  #

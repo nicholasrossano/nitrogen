@@ -284,3 +284,28 @@ async def test_create_project_http_returns_201(
     assert body["workspace_id"] == str(workspace_id)
     assert len(fake_db.added) == 1
     assert isinstance(fake_db.added[0], Project)
+
+
+def test_serialize_assessment_instance_uses_custom_title_in_display_name():
+    from app.models.assessment_instance import AssessmentInstance
+
+    inst = AssessmentInstance(
+        id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        assessment_id="implementation_plan",
+        status="started",
+        title="Q2 Rollout Plan",
+        instance_number=2,
+        started_by="user-1",
+        started_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    data = projects_api._serialize_assessment_instance(
+        inst,
+        email_map={"user-1": "owner@example.com"},
+        assessment_names={"implementation_plan": "Implementation Plan"},
+    )
+
+    assert data["title"] == "Q2 Rollout Plan"
+    assert data["display_name"] == "Q2 Rollout Plan · @owner"

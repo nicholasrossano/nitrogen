@@ -69,7 +69,7 @@ describe('ProposedValueWidget', () => {
     window.removeEventListener('nitrogen:input-confirmed', confirmedListener);
   });
 
-  it('uses the direct apply handler instead of the legacy event when provided', async () => {
+  it('uses the direct apply handler and notifies the float without a second write', async () => {
     jest.mocked(api.updateMessageWidget).mockResolvedValue({ message_id: 'message-1', updated: true });
     const applyValue = jest.fn().mockResolvedValue(true);
     const confirmedListener = jest.fn();
@@ -103,8 +103,55 @@ describe('ProposedValueWidget', () => {
       expect(api.updateMessageWidget).toHaveBeenCalled();
       expect(screen.getByText('Value Confirmed')).toBeInTheDocument();
     });
-    expect(confirmedListener).not.toHaveBeenCalled();
+    expect(confirmedListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: expect.objectContaining({
+          field_name: 'discount_rate',
+          value: 0.08,
+          model_type: 'lcoe',
+          already_persisted: true,
+        }),
+      }),
+    );
 
     window.removeEventListener('nitrogen:input-confirmed', confirmedListener);
+  });
+
+  it('ignores repeated accept clicks while an apply is in flight', async () => {
+    let resolveApply: (value: boolean) => void = () => undefined;
+    const applyValue = jest.fn().mockImplementation(
+      () => new Promise<boolean>((resolve) => { resolveApply = resolve; }),
+    );
+    jest.mocked(api.updateMessageWidget).mockResolvedValue({ message_id: 'message-1', updated: true });
+
+    render(
+      <ProposedValueWidget
+        projectId="initiative-1"
+        messageId="message-1"
+        onApplyValue={applyValue}
+        data={{
+          field_name: 'system_capacity_kw',
+          label: 'System Capacity',
+          unit: 'kW DC',
+          proposed_value: 100,
+          model_type: 'solar',
+          confidence: 'high',
+          explanation: 'Typical productive-use capacity.',
+        }}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: /accept & update model/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(applyValue).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /updating/i })).toBeDisabled();
+
+    resolveApply(true);
+    await waitFor(() => {
+      expect(screen.getByText('Value Confirmed')).toBeInTheDocument();
+    });
   });
 });

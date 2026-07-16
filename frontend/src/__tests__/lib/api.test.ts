@@ -158,4 +158,25 @@ describe('api', () => {
       expect(body.project_id).toBe('project-1');
     });
   });
+
+  describe('parseContentDispositionFilename', () => {
+    it('prefers RFC 5987 filename* and falls back to filename=', async () => {
+      const { parseContentDispositionFilename } = await import('@/lib/api');
+      expect(
+        parseContentDispositionFilename(
+          'attachment; filename="fallback.docx"; filename*=UTF-8\'\'stakeholder-assessment_n1_jane_2026-07-16_1837.docx',
+          'export.docx',
+        ),
+      ).toBe('stakeholder-assessment_n1_jane_2026-07-16_1837.docx');
+
+      expect(
+        parseContentDispositionFilename(
+          'attachment; filename="stakeholder-assessment_n1_jane_2026-07-16_1837.docx"',
+          'export.docx',
+        ),
+      ).toBe('stakeholder-assessment_n1_jane_2026-07-16_1837.docx');
+
+      expect(parseContentDispositionFilename(null, 'export.docx')).toBe('export.docx');
+    });
+  });
 });

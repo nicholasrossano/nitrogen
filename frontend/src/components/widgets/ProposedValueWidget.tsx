@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { CheckCircle2, Sparkles, AlertTriangle } from 'lucide-react';
 import { persistChatWidgetUpdate } from '@/lib/chatWidgetUpdates';
 
@@ -63,42 +63,56 @@ export function ProposedValueWidget({
 }: ProposedValueWidgetProps) {
   const initialStatus = data.confirmed ? 'confirmed' : data.dismissed ? 'dismissed' : 'pending';
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'dismissed'>(initialStatus);
+  const [applying, setApplying] = useState(false);
+  const applyingRef = useRef(false);
   const confStyle = CONFIDENCE_STYLES[data.confidence] || CONFIDENCE_STYLES.moderate;
   const displayLabel = data.label || data.field_name.replace(/_/g, ' ');
 
   const handleConfirm = useCallback(async () => {
-    if (onApplyValue) {
-      const applied = await onApplyValue({
-        fieldName: data.field_name,
-        value: data.proposed_value,
-        modelType: data.model_type,
+    // Sync guard — rapid re-clicks otherwise race on X-Workflow-Version.
+    if (applyingRef.current || status !== 'pending') return;
+    applyingRef.current = true;
+    setApplying(true);
+    try {
+      if (onApplyValue) {
+        const applied = await onApplyValue({
+          fieldName: data.field_name,
+          value: data.proposed_value,
+          modelType: data.model_type,
+        });
+        if (!applied) return;
+      }
+
+      const newData = { ...data, confirmed: true, dismissed: false };
+      const persisted = await persistChatWidgetUpdate({
+        projectId,
+        messageId,
+        widgetData: newData,
+        source: 'ProposedValueWidget',
       });
-      if (!applied) return;
-    }
+      if (!persisted) return;
 
-    const newData = { ...data, confirmed: true, dismissed: false };
-    const persisted = await persistChatWidgetUpdate({
-      projectId,
-      messageId,
-      widgetData: newData,
-      source: 'ProposedValueWidget',
-    });
-    if (!persisted) return;
-
-    setStatus('confirmed');
-    if (!onApplyValue) {
+      setStatus('confirmed');
+      // Always notify the open assessment float. When chat already persisted the
+      // edit, mark already_persisted so the float updates the row without a
+      // second PATCH (which would 409 on the bumped workflow version).
       window.dispatchEvent(new CustomEvent('nitrogen:input-confirmed', {
         detail: {
           field_name: data.field_name,
           value: data.proposed_value,
           model_type: data.model_type,
+          already_persisted: Boolean(onApplyValue),
         },
       }));
+      onConfirmed?.(data.field_name, data.proposed_value, data.model_type);
+    } finally {
+      applyingRef.current = false;
+      setApplying(false);
     }
-    onConfirmed?.(data.field_name, data.proposed_value, data.model_type);
-  }, [data, projectId, messageId, onApplyValue, onConfirmed]);
+  }, [data, projectId, messageId, onApplyValue, onConfirmed, status]);
 
   const handleDismiss = useCallback(async () => {
+    if (applyingRef.current || status !== 'pending') return;
     const newData = { ...data, dismissed: true, confirmed: false };
     const persisted = await persistChatWidgetUpdate({
       projectId,
@@ -109,7 +123,7 @@ export function ProposedValueWidget({
     if (!persisted) return;
 
     setStatus('dismissed');
-  }, [data, projectId, messageId]);
+  }, [data, projectId, messageId, status]);
 
   if (status === 'dismissed') {
     return (
@@ -163,15 +177,17 @@ export function ProposedValueWidget({
         <div className="px-4 py-2.5 bg-surface-subtle border-t border-stroke-subtle flex items-center justify-end gap-2">
           <button
             onClick={handleDismiss}
-            className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors rounded"
+            disabled={applying}
+            className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors rounded disabled:opacity-50"
           >
             Dismiss
           </button>
           <button
             onClick={handleConfirm}
-            className="px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent-anchor rounded transition-colors"
+            disabled={applying}
+            className="px-4 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent-anchor rounded transition-colors disabled:opacity-50"
           >
-            Accept & Update Model
+            {applying ? 'Updating…' : 'Accept & Update Model'}
           </button>
         </div>
       )}

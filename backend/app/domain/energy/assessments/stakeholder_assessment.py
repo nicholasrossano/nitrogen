@@ -207,6 +207,9 @@ class StakeholderAssessment(BaseAssessment):
         self,
         confirmed_stages: dict[str, Any],
         context: dict,
+        *,
+        previous_content: dict[str, Any] | None = None,
+        change_summary: str | None = None,
     ) -> dict[str, Any]:
         """Generate the write-up as a JSON dict (cacheable). Called by the export endpoint."""
         category_items = (confirmed_stages.get("categories") or {}).get("data", {}).get("items", [])
@@ -251,32 +254,120 @@ class StakeholderAssessment(BaseAssessment):
             if context_str else ""
         )
 
-        result = await llm_json(
-            system=(
-                "You are a senior stakeholder engagement specialist producing a professional assessment. "
-                "Write a woven, prosaic stakeholder assessment — NOT a list of sections for each category. "
-                "Weave stakeholder insights into coherent analytical narrative:\n"
-                "  • Executive Summary (3–5 sentences)\n"
-                "  • 3–4 thematic sections that cut across stakeholder groups (e.g. 'Power and Influence', "
-                "    'Community and Civil Society', 'Regulatory Landscape'). "
-                "    Cite sources as [1], [2], etc.\n"
-                "  • Engagement Strategy with priority actions\n"
-                "  • Risk Considerations\n\n"
-                "Return JSON with keys: title, executive_summary, sections (list of {heading, body}), "
-                "engagement_strategy, risk_considerations"
-            ),
-            user_msg=(
-                f"Project: Geography={geography}, Type={project_type}\n\n"
-                f"Stakeholder outline:\n{outline_text}"
-                f"{evidence_block}"
-            ),
-            model="gpt-4.1",
-            context=context,
-        )
+        if previous_content:
+            import json as _json
+            result = await llm_json(
+                system=(
+                    "You are a senior stakeholder engagement specialist revising a professional assessment. "
+                    "Update the previous writeup so it reflects the current stakeholder outline and details. "
+                    "Preserve structure, tone, and section continuity where still accurate; revise only what "
+                    "must change. Return JSON with keys: title, executive_summary, sections "
+                    "(list of {heading, body}), engagement_strategy, risk_considerations"
+                ),
+                user_msg=(
+                    f"Change context: {change_summary or 'Inputs changed'}\n\n"
+                    f"Project: Geography={geography}, Type={project_type}\n\n"
+                    f"Current stakeholder outline:\n{outline_text}"
+                    f"{evidence_block}\n\n"
+                    f"Previous writeup JSON:\n{_json.dumps(previous_content, default=str)}"
+                ),
+                model="gpt-4.1",
+                context=context,
+            )
+        else:
+            result = await llm_json(
+                system=(
+                    "You are a senior stakeholder engagement specialist producing a professional assessment. "
+                    "Write a woven, prosaic stakeholder assessment — NOT a list of sections for each category. "
+                    "Weave stakeholder insights into coherent analytical narrative:\n"
+                    "  • Executive Summary (3–5 sentences)\n"
+                    "  • 3–4 thematic sections that cut across stakeholder groups (e.g. 'Power and Influence', "
+                    "    'Community and Civil Society', 'Regulatory Landscape'). "
+                    "    Cite sources as [1], [2], etc.\n"
+                    "  • Engagement Strategy with priority actions\n"
+                    "  • Risk Considerations\n\n"
+                    "Return JSON with keys: title, executive_summary, sections (list of {heading, body}), "
+                    "engagement_strategy, risk_considerations"
+                ),
+                user_msg=(
+                    f"Project: Geography={geography}, Type={project_type}\n\n"
+                    f"Stakeholder outline:\n{outline_text}"
+                    f"{evidence_block}"
+                ),
+                model="gpt-4.1",
+                context=context,
+            )
         result = result or {"title": "Stakeholder Assessment"}
         if citations:
             result["citations"] = citations
         return result
+
+    async def prepare_export_enrichment(
+        self,
+        *,
+        state: dict[str, Any],
+        confirmed_stages: dict[str, Any],
+        context: dict[str, Any],
+        db: Any = None,
+        project_id: Any = None,
+        user_id: str | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """Ensure every stakeholder has deep-dive details before writeup export."""
+        stakeholder_items = (confirmed_stages.get("stakeholders") or {}).get("data", {}).get("items", [])
+        existing = state.get("stakeholder_details") if isinstance(state.get("stakeholder_details"), dict) else {}
+        if not stakeholder_items:
+            if existing:
+                confirmed_stages = {
+                    **confirmed_stages,
+                    "stakeholder_details": {"data": {"records": existing}},
+                }
+            return confirmed_stages, False
+
+        records, changed = await self.ensure_all_stakeholder_details(
+            stakeholder_items=stakeholder_items,
+            existing_records=existing,
+            context=context,
+            db=db,
+            project_id=project_id,
+        )
+        if changed:
+            state["stakeholder_details"] = records
+            # Refresh map widget when possible (requires async compute_stage).
+            stages = state.get("stages") or {}
+            map_stage = stages.get("map")
+            if isinstance(map_stage, dict) and map_stage.get("status") in ("draft", "confirmed"):
+                map_confirmed = {
+                    **{sid: s for sid, s in stages.items() if s.get("status") == "confirmed"},
+                    "stakeholder_details": {"data": {"records": records}},
+                }
+                widget_data = await self.compute_stage("map", map_confirmed, context)
+                map_data = map_stage.get("data") if isinstance(map_stage.get("data"), dict) else {}
+                map_data["widget_data"] = widget_data
+                map_stage["data"] = map_data
+        elif records:
+            state["stakeholder_details"] = records
+
+        confirmed_stages = {
+            **confirmed_stages,
+            "stakeholder_details": {"data": {"records": records}},
+        }
+        return confirmed_stages, changed
+
+    def export_input_fingerprint(
+        self,
+        confirmed_stages: dict[str, Any],
+        state: dict[str, Any] | None = None,
+    ) -> str:
+        from app.services.assessment_export import fingerprint_payload
+
+        details = self._extract_stakeholder_details(confirmed_stages)
+        if not details and state and isinstance(state.get("stakeholder_details"), dict):
+            details = state["stakeholder_details"]
+        return fingerprint_payload({
+            "categories": (confirmed_stages.get("categories") or {}).get("data"),
+            "stakeholders": (confirmed_stages.get("stakeholders") or {}).get("data"),
+            "stakeholder_details": details,
+        })
 
     async def enrich_stakeholder_detail(
         self,
@@ -325,6 +416,7 @@ class StakeholderAssessment(BaseAssessment):
         return records, changed
 
     async def generate_export(self, confirmed_stages: dict[str, Any], context: dict) -> bytes:
+        # Prefer shared orchestration (cache/iteration); this remains for direct callers.
         content = await self.generate_writeup_content(confirmed_stages, context)
         from app.services.docx_exporter import DocxExporterService
         return DocxExporterService().generate_assessment_docx(
