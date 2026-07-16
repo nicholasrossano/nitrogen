@@ -6,8 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assessments.base import BaseAssessment, StageDef
 from app.models.assessment_instance import AssessmentAgentLoopState, AssessmentInstance
+from app.services.activity_milestone_service import (
+    emit_activity_milestone,
+    has_prior_agent_activity,
+)
 from app.services.assessment_workflow_service import ensure_workflow_state, populate_stage
-from app.services.decision_event_service import append_decision_event
 
 
 USER_VISIBLE_RUN_STATES = ("running", "needs_review", "blocked", "approved")
@@ -92,21 +95,42 @@ async def run_assessment_agent_loop(
     *,
     actor_user_id: str | None = None,
     actor_email: str | None = None,
+    resume_from_stage_id: str | None = None,
 ) -> dict[str, Any]:
     state = await ensure_workflow_state(db, inst, assessment)
+    assessment_name = assessment.definition.name
+    stage_title_by_id = {stage.id: stage.title for stage in assessment.stage_defs}
+
     inst.agent_loop_state = AssessmentAgentLoopState.RUNNING.value
-    inst.agent_current_action = "Starting assessment run"
-    inst.agent_last_summary = None
-    await append_decision_event(
-        db,
-        inst=inst,
-        event_type="agent_started",
-        entity_type="assessment",
-        entity_id=str(inst.id),
-        actor_user_id=actor_user_id,
-        actor_email=actor_email,
-        payload={"summary": inst.agent_current_action},
-    )
+    prior_activity = await has_prior_agent_activity(db, inst)
+    if not prior_activity:
+        await emit_activity_milestone(
+            db,
+            inst=inst,
+            kind="run_started",
+            facts={"assessment_name": assessment_name},
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+        )
+    else:
+        confirmed_title = (
+            stage_title_by_id.get(resume_from_stage_id)
+            if resume_from_stage_id
+            else None
+        )
+        await emit_activity_milestone(
+            db,
+            inst=inst,
+            kind="run_resumed",
+            stage_id=resume_from_stage_id,
+            facts={
+                "assessment_name": assessment_name,
+                "confirmed_stage_title": confirmed_title or "prior stage",
+                "stage_title": confirmed_title or "prior stage",
+            },
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+        )
     await db.commit()
 
     max_iterations = max(len(assessment.stage_defs) * 2, 1)
@@ -117,55 +141,55 @@ async def run_assessment_agent_loop(
         if stage_def is None:
             break
 
-        inst.agent_current_action = f"Populating {stage_def.title.lower()}"
+        inst.agent_current_action = f"Working on {stage_def.title}"
         await db.flush()
         try:
-            state = await populate_stage(db, inst, assessment, stage_def.id)
-        except Exception:
-            inst.agent_loop_state = AssessmentAgentLoopState.PAUSED.value
-            inst.agent_last_summary = f"Blocked while generating {stage_def.title.lower()}."
-            inst.agent_current_action = None
-            await append_decision_event(
+            state = await populate_stage(
                 db,
-                inst=inst,
-                event_type="agent_blocked",
-                entity_type="stage",
-                entity_id=stage_def.id,
-                stage_id=stage_def.id,
+                inst,
+                assessment,
+                stage_def.id,
                 actor_user_id=actor_user_id,
                 actor_email=actor_email,
-                payload={"summary": inst.agent_last_summary},
+            )
+        except Exception as exc:
+            inst.agent_loop_state = AssessmentAgentLoopState.PAUSED.value
+            await emit_activity_milestone(
+                db,
+                inst=inst,
+                kind="stage_blocked",
+                event_type="agent_blocked",
+                stage_id=stage_def.id,
+                facts={
+                    "stage_title": stage_def.title,
+                    "assessment_name": assessment_name,
+                    "error": str(exc)[:300],
+                    "summary": f"Blocked while generating {stage_def.title.lower()}.",
+                },
+                actor_user_id=actor_user_id,
+                actor_email=actor_email,
             )
             await db.commit()
             return state
+
         stage_status = ((state.get("stages") or {}).get(stage_def.id) or {}).get("status")
-        await append_decision_event(
-            db,
-            inst=inst,
-            event_type="agent_action",
-            entity_type="stage",
-            entity_id=stage_def.id,
-            stage_id=stage_def.id,
-            actor_user_id=actor_user_id,
-            actor_email=actor_email,
-            payload={"summary": inst.agent_current_action, "status": stage_status},
-        )
         await db.commit()
 
         if stage_status == "error":
             inst.agent_loop_state = AssessmentAgentLoopState.PAUSED.value
-            inst.agent_last_summary = f"Blocked while generating {stage_def.title.lower()}."
-            inst.agent_current_action = None
-            await append_decision_event(
+            await emit_activity_milestone(
                 db,
                 inst=inst,
+                kind="stage_blocked",
                 event_type="agent_blocked",
-                entity_type="stage",
-                entity_id=stage_def.id,
                 stage_id=stage_def.id,
+                facts={
+                    "stage_title": stage_def.title,
+                    "assessment_name": assessment_name,
+                    "summary": f"Blocked while generating {stage_def.title.lower()}.",
+                },
                 actor_user_id=actor_user_id,
                 actor_email=actor_email,
-                payload={"summary": inst.agent_last_summary},
             )
             await db.commit()
             return state
@@ -173,29 +197,48 @@ async def run_assessment_agent_loop(
         if stage_status == "draft":
             inst.agent_loop_state = AssessmentAgentLoopState.PAUSED.value
             if _requires_review_pause(stage_def):
-                inst.agent_last_summary = f"Needs review for {stage_def.title.lower()}."
+                pause_summary = f"Needs review for {stage_def.title.lower()}."
             else:
-                inst.agent_last_summary = f"Drafted {stage_def.title.lower()} for review."
-            inst.agent_current_action = None
-            await append_decision_event(
+                pause_summary = f"Drafted {stage_def.title.lower()} for review."
+            await emit_activity_milestone(
                 db,
                 inst=inst,
+                kind="stage_paused",
                 event_type="agent_paused",
-                entity_type="stage",
-                entity_id=stage_def.id,
                 stage_id=stage_def.id,
+                facts={
+                    "stage_title": stage_def.title,
+                    "assessment_name": assessment_name,
+                    "summary": pause_summary,
+                },
                 actor_user_id=actor_user_id,
                 actor_email=actor_email,
-                payload={"summary": inst.agent_last_summary},
             )
             await db.commit()
             return state
 
     inst.agent_loop_state = AssessmentAgentLoopState.PAUSED.value
-    inst.agent_current_action = None
     if _all_stages_confirmed(assessment, state):
-        inst.agent_last_summary = "Ready for final approval."
+        await emit_activity_milestone(
+            db,
+            inst=inst,
+            kind="awaiting_final_approval",
+            facts={"assessment_name": assessment_name},
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+        )
     else:
-        inst.agent_last_summary = "Assessment run is paused."
+        await emit_activity_milestone(
+            db,
+            inst=inst,
+            kind="run_paused",
+            facts={
+                "assessment_name": assessment_name,
+                "summary": "Assessment run is paused.",
+            },
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+        )
+    inst.agent_current_action = None
     await db.commit()
     return state

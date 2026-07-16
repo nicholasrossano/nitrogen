@@ -14,6 +14,8 @@ interface AssessmentActivityLogTabProps {
   assessmentId: string;
   assessmentTitle: string;
   onOpenModule?: (context: { instanceId: string; assessmentId: string; title: string }) => void;
+  /** When true, omit the outer page header (e.g. hosted inside CompanionSidePanel). */
+  embedded?: boolean;
 }
 
 function runStateLabel(runState: AssessmentActivityLog['run_state']): string {
@@ -32,6 +34,15 @@ function runStateTone(runState: AssessmentActivityLog['run_state']): string {
 
 function eventIcon(entry: AssessmentActivityLogEntry) {
   if (entry.event_type === 'agent_started') return <PlayCircle className="h-4 w-4 text-accent" />;
+  if (entry.event_type === 'agent_milestone') {
+    if (entry.kind === 'run_started' || entry.kind === 'run_resumed') {
+      return <PlayCircle className="h-4 w-4 text-accent" />;
+    }
+    if (entry.kind === 'awaiting_final_approval') {
+      return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+    }
+    return <Clock3 className="h-4 w-4 text-text-tertiary" />;
+  }
   if (entry.event_type === 'agent_action') return <Clock3 className="h-4 w-4 text-text-tertiary" />;
   if (entry.event_type === 'agent_paused') return <PauseCircle className="h-4 w-4 text-amber-600" />;
   if (entry.event_type === 'agent_blocked') return <AlertCircle className="h-4 w-4 text-red-500" />;
@@ -43,6 +54,7 @@ export function AssessmentActivityLogTab({
   assessmentId,
   assessmentTitle,
   onOpenModule,
+  embedded = false,
 }: AssessmentActivityLogTabProps) {
   const [log, setLog] = useState<AssessmentActivityLog | null>(null);
   const [workflow, setWorkflow] = useState<StagedAssessmentWorkflowState | null>(null);
@@ -145,17 +157,26 @@ export function AssessmentActivityLogTab({
 
   return (
     <div className="h-full flex flex-col bg-white">
-      <div className="border-b border-divider px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-text-primary">Activity Log</h3>
-          <p className="text-xs text-text-tertiary truncate">{assessmentTitle}</p>
+      {!embedded && (
+        <div className="border-b border-divider px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">Activity Log</h3>
+            <p className="text-xs text-text-tertiary truncate">{assessmentTitle}</p>
+          </div>
+          <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium ${runStateTone(log?.run_state ?? 'needs_review')}`}>
+            {runStateLabel(log?.run_state ?? 'needs_review')}
+          </span>
         </div>
-        <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium ${runStateTone(log?.run_state ?? 'needs_review')}`}>
-          {runStateLabel(log?.run_state ?? 'needs_review')}
-        </span>
-      </div>
+      )}
+      {embedded && (
+        <div className="px-5 pt-3 pb-0 flex justify-end">
+          <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium ${runStateTone(log?.run_state ?? 'needs_review')}`}>
+            {runStateLabel(log?.run_state ?? 'needs_review')}
+          </span>
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={`flex-1 overflow-y-auto ${embedded ? 'px-5 py-3' : 'p-4'}`}>
         {entries.length === 0 ? (
           <p className="text-sm text-text-tertiary">No agent activity recorded yet.</p>
         ) : (
