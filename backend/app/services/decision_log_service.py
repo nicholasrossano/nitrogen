@@ -443,7 +443,7 @@ def _computed_overview_metrics(assessment_id: str, widget_data: dict[str, Any]) 
             ("Discounted Costs (NPV)", _fmt_number_with_unit(result.get("npv_total_costs"), currency)),
             ("Discounted Energy (NPV)", _fmt_number_with_unit(result.get("npv_total_energy"), "kWh")),
             ("Total Production", _fmt_number_with_unit(result.get("lifetime_energy_kwh"), "kWh")),
-            ("Variables Used", result.get("assumption_count")),
+            ("Variables Used", result.get("variable_count")),
             ("Confidence", result.get("quality_label")),
         ]
         return [(label, value) for label, value in metrics if _has_scalar_value(value)]
@@ -455,7 +455,7 @@ def _computed_overview_metrics(assessment_id: str, widget_data: dict[str, Any]) 
             ("Project Emissions", _fmt_number_with_unit(result.get("project_emissions_tco2e"), "tCO2e/yr")),
             ("Leakage", _fmt_number_with_unit(result.get("leakage_tco2e"), "tCO2e/yr")),
             ("Crediting Period", _fmt_number_with_unit(result.get("period_years"), "years")),
-            ("Variables Used", result.get("assumption_count")),
+            ("Variables Used", result.get("variable_count")),
             ("Confidence", result.get("quality_label")),
         ]
         return [(label, value) for label, value in metrics if _has_scalar_value(value)]
@@ -465,7 +465,7 @@ def _computed_overview_metrics(assessment_id: str, widget_data: dict[str, Any]) 
             ("Annual AC Energy", _fmt_number_with_unit(result.get("ac_annual"), "kWh/yr")),
             ("Capacity Factor", _fmt_number_with_unit(result.get("capacity_factor"), "%")),
             ("Annual Solar Radiation", _fmt_number_with_unit(result.get("solrad_annual"), "kWh/m²/day")),
-            ("Variables Used", widget_data.get("assumption_count")),
+            ("Variables Used", widget_data.get("variable_count")),
             ("Confidence", result.get("quality_label")),
         ]
         return [(label, value) for label, value in metrics if _has_scalar_value(value)]

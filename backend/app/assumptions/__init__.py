@@ -1,1 +1,0 @@
-"""Project assumptions configuration."""

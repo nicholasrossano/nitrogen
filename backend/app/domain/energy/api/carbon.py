@@ -401,7 +401,7 @@ async def export_carbon_excel(
     # Quality
     R_QUALITY = 30
     ws.cell(R_QUALITY, 1, "Variables Used")
-    ws.cell(R_QUALITY, 2, result.assumption_count)
+    ws.cell(R_QUALITY, 2, result.variable_count)
     ws.cell(R_QUALITY + 1, 1, "Estimate Quality")
     ws.cell(R_QUALITY + 1, 2, result.quality_label).font = Font(
         bold=True,

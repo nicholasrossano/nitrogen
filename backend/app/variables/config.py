@@ -8,7 +8,7 @@ ValueType = Literal["number", "string", "boolean", "percent", "currency", "text"
 
 
 @dataclass(frozen=True)
-class AssumptionDefinition:
+class VariableDefinition:
     key: str
     label: str
     value_type: ValueType
@@ -21,8 +21,8 @@ class AssumptionDefinition:
     common: bool = False
 
 
-COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
-    AssumptionDefinition(
+COMMON_VARIABLES: list[VariableDefinition] = [
+    VariableDefinition(
         key="project_location",
         label="Project location",
         value_type="string",
@@ -30,7 +30,7 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         examples=["Project location = Kenya", "Site: San Pedro, Belize"],
         common=True,
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="system_size_kw",
         label="System size",
         value_type="number",
@@ -46,7 +46,7 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         },
         common=True,
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="baseline_energy_source",
         label="Baseline energy source",
         value_type="string",
@@ -57,7 +57,7 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         assessment_field_keys={"carbon_model": ["baseline_fuel_type"], "lcoe_model": ["annual_fuel_cost"]},
         common=True,
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="operator_model",
         label="Operator model",
         value_type="string",
@@ -66,7 +66,7 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["stakeholder_assessment", "implementation_plan"],
         common=True,
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="collection_rate",
         label="Collection rate",
         value_type="percent",
@@ -79,8 +79,8 @@ COMMON_ASSUMPTIONS: list[AssumptionDefinition] = [
 ]
 
 
-MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
-    AssumptionDefinition(
+MODULE_VARIABLES: list[VariableDefinition] = [
+    VariableDefinition(
         key="total_capex",
         label="Total CAPEX",
         value_type="currency",
@@ -90,7 +90,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         required_for_assessments=["lcoe_model"],
         assessment_field_keys={"lcoe_model": ["total_capex"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="annual_opex",
         label="Annual OPEX",
         value_type="currency",
@@ -100,7 +100,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         required_for_assessments=["lcoe_model"],
         assessment_field_keys={"lcoe_model": ["annual_opex"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="capacity_factor",
         label="Capacity factor",
         value_type="percent",
@@ -109,7 +109,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["lcoe_model", "carbon_model"],
         assessment_field_keys={"lcoe_model": ["capacity_factor"], "carbon_model": ["capacity_factor"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="discount_rate",
         label="Discount rate",
         value_type="percent",
@@ -118,7 +118,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["lcoe_model"],
         assessment_field_keys={"lcoe_model": ["discount_rate"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="project_life_years",
         label="Project lifetime",
         value_type="number",
@@ -128,7 +128,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["lcoe_model"],
         assessment_field_keys={"lcoe_model": ["project_life_years"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="devices_households",
         label="Devices or households",
         value_type="number",
@@ -138,7 +138,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         required_for_assessments=["carbon_model"],
         assessment_field_keys={"carbon_model": ["devices_households"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="baseline_fuel_consumption_kg_yr",
         label="Baseline fuel consumption",
         value_type="number",
@@ -149,7 +149,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         required_for_assessments=["carbon_model"],
         assessment_field_keys={"carbon_model": ["baseline_fuel_consumption_kg_yr"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="usage_rate",
         label="Usage rate",
         value_type="percent",
@@ -158,7 +158,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["carbon_model"],
         assessment_field_keys={"carbon_model": ["usage_rate"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="adoption_rate",
         label="Adoption rate",
         value_type="percent",
@@ -167,7 +167,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["carbon_model"],
         assessment_field_keys={"carbon_model": ["adoption_rate"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="lat",
         label="Latitude",
         value_type="number",
@@ -176,7 +176,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["solar_estimate"],
         assessment_field_keys={"solar_estimate": ["lat"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="lon",
         label="Longitude",
         value_type="number",
@@ -185,7 +185,7 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
         used_in_assessments=["solar_estimate"],
         assessment_field_keys={"solar_estimate": ["lon"]},
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="tilt",
         label="Array tilt",
         value_type="number",
@@ -198,8 +198,8 @@ MODULE_ASSUMPTIONS: list[AssumptionDefinition] = [
 ]
 
 
-EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
-    AssumptionDefinition(
+EXTERNAL_BASELINE_VARIABLES: list[VariableDefinition] = [
+    VariableDefinition(
         key="electricity_access_total",
         label="Electricity access",
         value_type="percent",
@@ -207,7 +207,7 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
         aliases=["electricity access", "energy access", "electrification rate"],
         examples=["Electricity access = 15.6%"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="electricity_access_rural",
         label="Rural electricity access",
         value_type="percent",
@@ -215,7 +215,7 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
         aliases=["rural electricity access", "rural electrification"],
         examples=["Rural electricity access = 8.2%"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="electricity_access_urban",
         label="Urban electricity access",
         value_type="percent",
@@ -223,7 +223,7 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
         aliases=["urban electricity access", "urban electrification"],
         examples=["Urban electricity access = 62.4%"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="clean_cooking_access",
         label="Clean cooking access",
         value_type="percent",
@@ -231,14 +231,14 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
         aliases=["clean cooking access", "access to clean fuels and technologies for cooking"],
         examples=["Clean cooking access = 5.1%"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="population_total",
         label="Population",
         value_type="number",
         aliases=["population", "total population"],
         examples=["Population = 20,931,751"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="gdp_per_capita",
         label="GDP per capita",
         value_type="currency",
@@ -246,7 +246,7 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
         aliases=["gdp per capita", "income per capita"],
         examples=["GDP per capita = 650 USD"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="inflation",
         label="Inflation",
         value_type="percent",
@@ -254,7 +254,7 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
         aliases=["inflation", "consumer price inflation"],
         examples=["Inflation = 28.8%"],
     ),
-    AssumptionDefinition(
+    VariableDefinition(
         key="poverty_headcount",
         label="Poverty headcount",
         value_type="percent",
@@ -265,17 +265,17 @@ EXTERNAL_BASELINE_ASSUMPTIONS: list[AssumptionDefinition] = [
 ]
 
 
-ALL_ASSUMPTIONS = COMMON_ASSUMPTIONS + MODULE_ASSUMPTIONS + EXTERNAL_BASELINE_ASSUMPTIONS
-ASSUMPTION_BY_KEY = {definition.key: definition for definition in ALL_ASSUMPTIONS}
+ALL_VARIABLES = COMMON_VARIABLES + MODULE_VARIABLES + EXTERNAL_BASELINE_VARIABLES
+VARIABLE_BY_KEY = {definition.key: definition for definition in ALL_VARIABLES}
 
 
-def expected_assumptions_for_assessments(assessment_ids: list[str] | None) -> list[AssumptionDefinition]:
+def expected_variables_for_assessments(assessment_ids: list[str] | None) -> list[VariableDefinition]:
     assessments = set(assessment_ids or [])
     if not assessments:
-        return list(COMMON_ASSUMPTIONS)
+        return list(COMMON_VARIABLES)
     return [
         definition
-        for definition in ALL_ASSUMPTIONS
+        for definition in ALL_VARIABLES
         if definition.common
         or bool(assessments.intersection(definition.used_in_assessments))
         or bool(assessments.intersection(definition.required_for_assessments))

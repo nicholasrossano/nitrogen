@@ -29,7 +29,7 @@ class LCOEAdapter(BaseAdapter):
                 "properties": {
                     "tech_type": {
                         "type": "string",
-                        "description": "Optional technology preset to seed default assumptions.",
+                        "description": "Optional technology preset to seed default variables.",
                     },
                     "known_values": {
                         "type": "object",

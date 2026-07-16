@@ -341,7 +341,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
                 "name": "search_project_documents",
                 "description": (
                     "Search project-specific materials and uploaded evidence. Use this when the user asks "
-                    "about project details like budget, timeline, partners, scope, assumptions, or prior "
+                    "about project details like budget, timeline, partners, scope, variables, or prior "
                     "documents for the active initiative."
                 ),
                 "parameters": {
@@ -376,7 +376,7 @@ def _register_standalone_tools(registry: CapabilityRegistry) -> None:
                 "description": (
                     "Search workspace-level context shared across projects in the same workspace. "
                     "Use this for organization guidance, precedent, policies, standard approaches, "
-                    "linked knowledge banks, and higher-level assumptions that are not specific "
+                    "linked knowledge banks, and higher-level variables that are not specific "
                     "to the current project's own files."
                 ),
                 "parameters": {

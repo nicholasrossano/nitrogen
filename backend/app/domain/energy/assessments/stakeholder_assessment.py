@@ -55,7 +55,7 @@ class StakeholderAssessment(BaseAssessment):
             input_dependencies=[],
             produced_outputs=["stakeholder_map", "engagement_strategy"],
             downstream_dependencies=[],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="rag_grounded",
         )
 

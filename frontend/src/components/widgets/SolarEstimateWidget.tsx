@@ -222,11 +222,6 @@ export function SolarEstimateWidget({
     [inputs],
   );
 
-  const assumptionCount = useMemo(
-    () => Object.values(inputs).filter((i: any) => i.status === 'assumed').length,
-    [inputs],
-  );
-
   const handleFieldUpdate = useCallback(
     async (fieldName: string, value: any, status: string = 'validated') => {
       setIsRecalculating(true);

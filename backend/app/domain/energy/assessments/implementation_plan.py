@@ -56,7 +56,7 @@ class ImplementationPlanAssessment(BaseAssessment):
             input_dependencies=[],
             produced_outputs=["implementation_plan_map"],
             downstream_dependencies=[],
-            assumptions_behavior="tracks",
+            variables_behavior="tracks",
             evidence_behavior="both",
         )
 

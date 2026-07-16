@@ -1,6 +1,6 @@
 import type { ResearchPanelCitation } from '@/components/core-chat/ResearchPanel';
 import type { FloatWidget } from '@/components/editor/FloatLayer';
-import type { Assumption, ProjectMaterial } from '@/lib/api';
+import type { Variable, ProjectMaterial } from '@/lib/api';
 import { PROJECT_VARIABLES } from '@/lib/projectVariablesCopy';
 
 export function floatWidgetForCitation(citation: ResearchPanelCitation): FloatWidget {
@@ -38,26 +38,26 @@ export function floatWidgetForProjectMaterial(file: ProjectMaterial): FloatWidge
   };
 }
 
-export function floatWidgetForAssumption(assumption: Assumption): FloatWidget {
+export function floatWidgetForVariable(variable: Variable): FloatWidget {
   return {
     type: 'variable_detail',
     data: {
-      assumption,
-      title: assumption.label,
+      variable,
+      title: variable.label,
     },
-    messageId: `variable-${assumption.id}`,
+    messageId: `variable-${variable.id}`,
   };
 }
 
 export function floatWidgetForVariablesWorkspace(
   projectId: string,
-  focusAssumptionId?: string | null,
+  focusVariableId?: string | null,
 ): FloatWidget {
   return {
     type: 'variables_workspace',
     data: {
       title: PROJECT_VARIABLES.title,
-      focus_assumption_id: focusAssumptionId ?? null,
+      focus_variable_id: focusVariableId ?? null,
     },
     messageId: `variables-${projectId}`,
   };
@@ -67,5 +67,5 @@ export function floatWidgetForVariablesWorkspace(
 export const editorWidgetForCitation = floatWidgetForCitation;
 /** @deprecated Prefer floatWidgetForProjectMaterial. */
 export const editorWidgetForProjectMaterial = floatWidgetForProjectMaterial;
-/** @deprecated Prefer floatWidgetForAssumption. */
-export const editorWidgetForAssumption = floatWidgetForAssumption;
+/** @deprecated Prefer floatWidgetForVariable. */
+export const editorWidgetForVariable = floatWidgetForVariable;

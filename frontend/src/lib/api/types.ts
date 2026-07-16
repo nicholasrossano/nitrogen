@@ -286,8 +286,8 @@ export interface AssessmentDecisionLogReport {
   history_rows: DecisionLogHistoryRow[];
 }
 
-export type AssumptionStatus = 'validated' | 'extracted' | 'assumed' | 'missing';
-export type AssumptionSourceType =
+export type VariableStatus = 'validated' | 'extracted' | 'assumed' | 'missing';
+export type VariableSourceType =
   | 'extraction'
   | 'user_input'
   | 'assessment'
@@ -298,7 +298,7 @@ export type AssumptionSourceType =
   | 'model_candidate'
   | 'promotion';
 
-export interface Assumption {
+export interface Variable {
   id: string;
   project_id: string;
   key: string;
@@ -306,10 +306,10 @@ export interface Assumption {
   value: any;
   unit: string | null;
   value_type: 'number' | 'string' | 'boolean' | 'percent' | 'currency' | 'text';
-  source_type: AssumptionSourceType;
+  source_type: VariableSourceType;
   source_reference: Record<string, any> | null;
   aliases?: string[] | null;
-  status: AssumptionStatus;
+  status: VariableStatus;
   used_in_assessments: string[];
   notes: string | null;
   created_by_email: string | null;
@@ -318,13 +318,13 @@ export interface Assumption {
   updated_at: string;
 }
 
-export interface AssumptionSummary {
+export interface VariableSummary {
   total: number;
   validated: number;
   extracted: number;
   assumed: number;
   missing: number;
-  top_attention: Array<Pick<Assumption, 'id' | 'key' | 'label' | 'status' | 'used_in_assessments'>>;
+  top_attention: Array<Pick<Variable, 'id' | 'key' | 'label' | 'status' | 'used_in_assessments'>>;
 }
 
 export type ProjectHealthStatus = 'green' | 'yellow' | 'red' | 'unknown';
@@ -458,34 +458,34 @@ export interface ProjectStatusResponse {
   categories: ProjectStatusCategoryRow[];
 }
 
-export interface AssumptionCreateInput {
+export interface VariableCreateInput {
   key: string;
   label?: string | null;
   value?: any;
   unit?: string | null;
-  value_type?: Assumption['value_type'] | null;
-  source_type?: AssumptionSourceType;
+  value_type?: Variable['value_type'] | null;
+  source_type?: VariableSourceType;
   source_reference?: Record<string, any> | null;
-  status?: AssumptionStatus;
+  status?: VariableStatus;
   used_in_assessments?: string[];
   notes?: string | null;
 }
 
-export interface AssumptionUpdateInput {
+export interface VariableUpdateInput {
   label?: string;
   value?: any;
   unit?: string | null;
-  value_type?: Assumption['value_type'];
-  source_type?: AssumptionSourceType;
+  value_type?: Variable['value_type'];
+  source_type?: VariableSourceType;
   source_reference?: Record<string, any> | null;
-  status?: AssumptionStatus;
+  status?: VariableStatus;
   used_in_assessments?: string[];
   notes?: string | null;
 }
 
-export interface AssumptionComment {
+export interface VariableComment {
   id: string;
-  assumption_id: string;
+  variable_id: string;
   project_id: string;
   body: string;
   created_by_email: string | null;
@@ -558,7 +558,7 @@ export interface FieldContext {
   model_type?: 'lcoe' | 'carbon' | 'solar' | null;
   assessment_id?: string | null;
   status?: string | null;
-  assumption_id?: string | null;
+  variable_id?: string | null;
 }
 
 export interface ActiveEditorContext {

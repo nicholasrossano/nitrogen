@@ -25,7 +25,7 @@ from app.core.model_catalog import Complexity, ModelRole
 from app.core.web_search import run_web_search
 from app.models.project import Project
 from app.services.rag import RAGService
-from app.services.assumptions import format_assumptions_for_initiative_prompt
+from app.services.variables import format_variables_for_initiative_prompt
 from app.services.tiered_retrieval import RetrievedFact, TieredRetrievalService
 
 settings = get_settings()
@@ -650,9 +650,9 @@ class DeepDiveService:
         pretty_assessment_type = _format_assessment_type(assessment_type)
         if pretty_assessment_type:
             context_lines.append(f"Assessment type: {pretty_assessment_type}")
-        assumptions_context = await format_assumptions_for_initiative_prompt(self.db, initiative.id)
-        if assumptions_context:
-            context_lines.append(assumptions_context)
+        variables_context = await format_variables_for_initiative_prompt(self.db, initiative.id)
+        if variables_context:
+            context_lines.append(variables_context)
         project_context = "\n".join(context_lines) if context_lines else "Not specified"
 
         assessment_settings = _settings_for_assessment(assessment_type)

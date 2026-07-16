@@ -19,9 +19,9 @@ from app.core.billing_guard import require_ai_access
 from app.core.permissions import get_project_with_role
 from app.config import get_settings
 from app.services.chat import ChatResponse as ServiceChatResponse, ChatService
-from app.services.assumptions import format_assumptions_for_initiative_prompt
+from app.services.variables import format_variables_for_initiative_prompt
 from app.services import assessment_service
-from app.models.assumption import Assumption
+from app.models.variable import Variable
 from app.models.chat import CoreChat, CoreChatMessage
 from app.models.project import Project
 from app.models.project_material import ProjectMaterial
@@ -43,7 +43,7 @@ def _log_chat_stream_debug(event: str, **fields) -> None:
     logger.info("[chat-stream-debug] %s %s", event, serialized)
 
 
-def _build_project_context(initiative: Project, assumptions_text: str | None = None) -> str:
+def _build_project_context(initiative: Project, variables_text: str | None = None) -> str:
     """Build a project context string to inject into the research assistant."""
     parts = []
     if initiative.title:
@@ -58,25 +58,25 @@ def _build_project_context(initiative: Project, assumptions_text: str | None = N
         parts.append(f"- Selected tools/frameworks: {', '.join(initiative.selected_tools)}")
     if initiative.goal:
         parts.append(f"- Goal: {initiative.goal}")
-    if assumptions_text:
-        parts.append(assumptions_text)
+    if variables_text:
+        parts.append(variables_text)
     return "\n".join(parts) if parts else ""
 
 
-def _build_focused_assumption_context(assumption: Assumption | None) -> str:
-    if assumption is None:
+def _build_focused_variable_context(variable: Variable | None) -> str:
+    if variable is None:
         return ""
-    status = (assumption.status or "assumed").strip().lower()
-    value = assumption.value
+    status = (variable.status or "assumed").strip().lower()
+    value = variable.value
     value_text = "missing" if status == "missing" else str(value)
-    unit = f" {assumption.unit}" if assumption.unit else ""
-    assessments = ", ".join(assumption.used_in_assessments or [])
+    unit = f" {variable.unit}" if variable.unit else ""
+    assessments = ", ".join(variable.used_in_assessments or [])
     lines = [
         "## Focused Variable",
         "- This chat is scoped to one project variable. Keep responses focused on it unless the user changes topic.",
-        f"- Variable id: {assumption.id}",
-        f"- Label: {assumption.label}",
-        f"- Key: {assumption.key}",
+        f"- Variable id: {variable.id}",
+        f"- Label: {variable.label}",
+        f"- Key: {variable.key}",
         f"- Status: {status}",
         f"- Current value: {value_text}{unit}",
     ]
@@ -383,7 +383,7 @@ class ChatStreamRequest(BaseModel):
     project_id: Optional[str] = None
     compare_project_ids: Optional[list[str]] = None
     allow_initial_project_onboarding: bool = False
-    assumption_id: Optional[str] = None
+    variable_id: Optional[str] = None
     active_editor_context: Optional[dict] = None
 
 
@@ -400,7 +400,7 @@ async def _get_or_create_chat(
     user_id: str,
     chat_id: Optional[str],
     project_id: Optional[uuid.UUID] = None,
-    assumption_id: Optional[uuid.UUID] = None,
+    variable_id: Optional[uuid.UUID] = None,
 ) -> CoreChat:
     """Return an existing chat or create a new one."""
     if chat_id:
@@ -419,18 +419,18 @@ async def _get_or_create_chat(
             raise HTTPException(status_code=404, detail="Chat not found")
         if project_id and not chat.project_id:
             chat.project_id = project_id
-        if assumption_id:
-            if chat.assumption_id and chat.assumption_id != assumption_id:
+        if variable_id:
+            if chat.variable_id and chat.variable_id != variable_id:
                 raise HTTPException(
                     status_code=409,
                     detail="This chat is already scoped to a different variable.",
                 )
-            if chat.assumption_id is None:
-                chat.assumption_id = assumption_id
+            if chat.variable_id is None:
+                chat.variable_id = variable_id
         await db.flush()
         return chat
 
-    chat = CoreChat(user_id=user_id, project_id=project_id, assumption_id=assumption_id)
+    chat = CoreChat(user_id=user_id, project_id=project_id, variable_id=variable_id)
     db.add(chat)
     await db.flush()
     return chat
@@ -457,7 +457,7 @@ async def list_chats(
             CoreChat.updated_at,
             CoreChat.compare_project_ids,
             CoreChat.project_id,
-            CoreChat.assumption_id,
+            CoreChat.variable_id,
             func.count(CoreChatMessage.id).label("message_count"),
         )
         .outerjoin(CoreChatMessage, CoreChatMessage.chat_id == CoreChat.id)
@@ -487,7 +487,7 @@ async def list_chats(
                 "message_count": r.message_count,
                 "compare_project_ids": r.compare_project_ids,
                 "project_id": str(r.project_id) if r.project_id else None,
-                "assumption_id": str(r.assumption_id) if r.assumption_id else None,
+                "variable_id": str(r.variable_id) if r.variable_id else None,
             }
             for r in rows
             if r.message_count > 0
@@ -527,7 +527,7 @@ async def get_chat_messages(
     return {
         "chat_id": str(chat.id),
         "title": chat.title,
-        "assumption_id": str(chat.assumption_id) if chat.assumption_id else None,
+        "variable_id": str(chat.variable_id) if chat.variable_id else None,
         "messages": [
             {
                 "id": str(m.id),
@@ -689,8 +689,8 @@ async def chat_stream(
         try:
             # Resolve project_id for chat scoping.
             resolved_initiative_id: uuid.UUID | None = None
-            requested_assumption_id: uuid.UUID | None = None
-            focused_assumption: Assumption | None = None
+            requested_variable_id: uuid.UUID | None = None
+            focused_variable: Variable | None = None
             if data.project_id:
                 try:
                     resolved_initiative, _ = await get_project_with_role(
@@ -700,18 +700,18 @@ async def chat_stream(
                 except HTTPException:
                     # Invalid or inaccessible initiative: leave chat unscoped; later checks still enforce access.
                     pass
-            raw_assumption_id = data.assumption_id
-            if raw_assumption_id is None and data.field_context and data.field_context.assumption_id:
-                raw_assumption_id = str(data.field_context.assumption_id)
-            if raw_assumption_id:
+            raw_variable_id = data.variable_id
+            if raw_variable_id is None and data.field_context and data.field_context.variable_id:
+                raw_variable_id = str(data.field_context.variable_id)
+            if raw_variable_id:
                 try:
-                    requested_assumption_id = uuid.UUID(raw_assumption_id)
+                    requested_variable_id = uuid.UUID(raw_variable_id)
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail="Invalid variable id format") from exc
-                focused_assumption = await db.get(Assumption, requested_assumption_id)
-                if focused_assumption is None:
+                focused_variable = await db.get(Variable, requested_variable_id)
+                if focused_variable is None:
                     raise HTTPException(status_code=404, detail="Variable not found")
-                if resolved_initiative_id and focused_assumption.project_id != resolved_initiative_id:
+                if resolved_initiative_id and focused_variable.project_id != resolved_initiative_id:
                     raise HTTPException(
                         status_code=400,
                         detail="Variable does not belong to the selected project.",
@@ -722,14 +722,14 @@ async def chat_stream(
                 user.uid,
                 data.chat_id,
                 project_id=resolved_initiative_id,
-                assumption_id=requested_assumption_id,
+                variable_id=requested_variable_id,
             )
-            if chat.assumption_id and focused_assumption is None:
-                focused_assumption = await db.get(Assumption, chat.assumption_id)
+            if chat.variable_id and focused_variable is None:
+                focused_variable = await db.get(Variable, chat.variable_id)
             if (
-                focused_assumption is not None
+                focused_variable is not None
                 and chat.project_id is not None
-                and focused_assumption.project_id != chat.project_id
+                and focused_variable.project_id != chat.project_id
             ):
                 raise HTTPException(
                     status_code=400,
@@ -786,7 +786,7 @@ async def chat_stream(
                 has_active_editor_context=bool(data.active_editor_context),
                 active_editor_kind=(data.active_editor_context or {}).get("kind"),
                 allow_initial_project_onboarding=data.allow_initial_project_onboarding,
-                has_assumption_context=bool(focused_assumption),
+                has_variable_context=bool(focused_variable),
             )
 
             compare_contexts: list[dict] | None = None
@@ -795,10 +795,10 @@ async def chat_stream(
                 for cid in data.compare_project_ids:
                     try:
                         initiative, _role = await get_project_with_role(db, cid, user)
-                        assumptions_text = await format_assumptions_for_initiative_prompt(db, initiative.id)
+                        variables_text = await format_variables_for_initiative_prompt(db, initiative.id)
                         compare_contexts.append({
                             "project_id": str(initiative.id),
-                            "project_context": _build_project_context(initiative, assumptions_text),
+                            "project_context": _build_project_context(initiative, variables_text),
                             "title": initiative.title or "Untitled Project",
                         })
                     except (HTTPException, Exception) as e:
@@ -832,8 +832,8 @@ async def chat_stream(
                         verified_initiative, _role = await get_project_with_role(
                             db, data.project_id, user
                         )
-                        assumptions_text = await format_assumptions_for_initiative_prompt(db, verified_initiative.id)
-                        project_context = _build_project_context(verified_initiative, assumptions_text)
+                        variables_text = await format_variables_for_initiative_prompt(db, verified_initiative.id)
+                        project_context = _build_project_context(verified_initiative, variables_text)
                     except HTTPException:
                         yield f"data: {json.dumps({'type': 'error', 'message': 'You do not have access to this project.'})}\n\n"
                         return
@@ -890,16 +890,16 @@ async def chat_stream(
                             extracted,
                         )
                         if updated:
-                            assumptions_text = await format_assumptions_for_initiative_prompt(db, verified_initiative.id)
-                            project_context = _build_project_context(verified_initiative, assumptions_text)
+                            variables_text = await format_variables_for_initiative_prompt(db, verified_initiative.id)
+                            project_context = _build_project_context(verified_initiative, variables_text)
 
             supplemental_project_context = (data.project_context or "").strip()
-            focused_assumption_context = _build_focused_assumption_context(focused_assumption)
-            if focused_assumption_context:
+            focused_variable_context = _build_focused_variable_context(focused_variable)
+            if focused_variable_context:
                 project_context = (
-                    f"{project_context}\n\n{focused_assumption_context}"
+                    f"{project_context}\n\n{focused_variable_context}"
                     if project_context
-                    else focused_assumption_context
+                    else focused_variable_context
                 )
             if supplemental_project_context:
                 project_context = (
@@ -962,7 +962,7 @@ async def chat_stream(
                     _workflow_assessment
                     and data.project_id
                     and uses_workspace_flow(_workflow_assessment)
-                    and focused_assumption is None
+                    and focused_variable is None
                     and not field_context
                 ):
                     if not verified_initiative:

@@ -10,57 +10,57 @@ from app.core.auth import AuthUser, get_current_user
 from app.core.database import get_db
 from app.models.chat import CoreChat
 from app.core.permissions import require_project_editor, require_project_viewer
-from app.schemas.assumption import (
-    AssumptionCommentCreate,
-    AssumptionCommentResponse,
-    AssumptionCreate,
-    AssumptionFromChatRequest,
-    AssumptionRefreshResponse,
-    AssumptionResolveResponse,
-    AssumptionResponse,
-    AssumptionSummary,
-    AssumptionUpdate,
+from app.schemas.variable import (
+    VariableCommentCreate,
+    VariableCommentResponse,
+    VariableCreate,
+    VariableFromChatRequest,
+    VariableRefreshResponse,
+    VariableResolveResponse,
+    VariableResponse,
+    VariableSummary,
+    VariableUpdate,
 )
-from app.services.assumptions import (
-    AssumptionActor,
+from app.services.variables import (
+    VariableActor,
     build_summary,
-    create_assumption_comment,
-    delete_assumption,
-    get_assumption,
-    list_assumption_comments,
-    list_assumptions,
-    promote_chat_value_to_assumption,
-    update_assumption,
-    upsert_assumption,
-    resolve_assumption_for_assessment_field,
+    create_variable_comment,
+    delete_variable,
+    get_variable,
+    list_variable_comments,
+    list_variables,
+    promote_chat_value_to_variable,
+    update_variable,
+    upsert_variable,
+    resolve_variable_for_assessment_field,
 )
 
 router = APIRouter()
 
 
-def _actor_from_user(user: AuthUser) -> AssumptionActor:
-    return AssumptionActor(user_id=user.uid, email=user.email or user.uid)
+def _actor_from_user(user: AuthUser) -> VariableActor:
+    return VariableActor(user_id=user.uid, email=user.email or user.uid)
 
 
 @router.get(
-    "/projects/{project_id}/assumptions/summary",
-    response_model=AssumptionSummary,
+    "/projects/{project_id}/variables/summary",
+    response_model=VariableSummary,
 )
-async def get_assumptions_summary(
+async def get_variables_summary(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Return project-level assumptions summary counts and attention items."""
+    """Return project-level variables summary counts and attention items."""
     initiative = await require_project_viewer(db, project_id, user)
     return await build_summary(db, initiative.id)
 
 
 @router.get(
-    "/projects/{project_id}/assumptions",
-    response_model=list[AssumptionResponse],
+    "/projects/{project_id}/variables",
+    response_model=list[VariableResponse],
 )
-async def get_assumptions(
+async def get_variables(
     project_id: str,
     status_filter: str | None = Query(default=None, alias="status"),
     source_type: str | None = None,
@@ -68,9 +68,9 @@ async def get_assumptions(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List project variables (API resource: assumptions) with optional filters."""
+    """List project variables (API resource: variables) with optional filters."""
     initiative = await require_project_viewer(db, project_id, user)
-    return await list_assumptions(
+    return await list_variables(
         db,
         initiative.id,
         status=status_filter,
@@ -80,10 +80,10 @@ async def get_assumptions(
 
 
 @router.get(
-    "/projects/{project_id}/assumptions/resolve",
-    response_model=AssumptionResolveResponse,
+    "/projects/{project_id}/variables/resolve",
+    response_model=VariableResolveResponse,
 )
-async def resolve_assumption(
+async def resolve_variable(
     project_id: str,
     assessment_id: str = Query(..., description="Assessment id for lookup context."),
     field_name: str = Query(..., description="Variable field_name from input rows."),
@@ -93,30 +93,30 @@ async def resolve_assumption(
 ):
     """Resolve the project variable currently backing one assessment field."""
     initiative = await require_project_viewer(db, project_id, user)
-    assumption = await resolve_assumption_for_assessment_field(
+    variable = await resolve_variable_for_assessment_field(
         db,
         project_id=initiative.id,
         assessment_id=assessment_id,
         field_name=field_name,
         assessment_instance_id=assessment_instance_id,
     )
-    return {"found": assumption is not None, "assumption": assumption}
+    return {"found": variable is not None, "variable": variable}
 
 
 @router.post(
-    "/projects/{project_id}/assumptions/from-chat",
-    response_model=AssumptionResponse,
+    "/projects/{project_id}/variables/from-chat",
+    response_model=VariableResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_assumption_from_chat(
+async def create_variable_from_chat(
     project_id: str,
-    data: AssumptionFromChatRequest,
+    data: VariableFromChatRequest,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Scaffold: promote a chat-approved value into the shared assumption pool."""
+    """Scaffold: promote a chat-approved value into the shared variable pool."""
     initiative = await require_project_editor(db, project_id, user)
-    assumption = await promote_chat_value_to_assumption(
+    variable = await promote_chat_value_to_variable(
         db,
         initiative,
         key=data.key,
@@ -129,28 +129,28 @@ async def create_assumption_from_chat(
         quote=data.quote,
         actor=_actor_from_user(user),
     )
-    if assumption is None:
+    if variable is None:
         raise HTTPException(status_code=400, detail="Could not promote chat value to variable")
     initiative.touch()
     await db.commit()
-    await db.refresh(assumption)
-    return assumption
+    await db.refresh(variable)
+    return variable
 
 
 @router.post(
-    "/projects/{project_id}/assumptions",
-    response_model=AssumptionResponse,
+    "/projects/{project_id}/variables",
+    response_model=VariableResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_assumption(
+async def create_variable(
     project_id: str,
-    data: AssumptionCreate,
+    data: VariableCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Create or replace a project variable."""
     initiative = await require_project_editor(db, project_id, user)
-    assumption, _created = await upsert_assumption(
+    variable, _created = await upsert_variable(
         db,
         project_id=initiative.id,
         key=data.key,
@@ -168,15 +168,15 @@ async def create_assumption(
     )
     initiative.touch()
     await db.commit()
-    await db.refresh(assumption)
-    return assumption
+    await db.refresh(variable)
+    return variable
 
 
 @router.post(
-    "/projects/{project_id}/assumptions/refresh",
-    response_model=AssumptionRefreshResponse,
+    "/projects/{project_id}/variables/refresh",
+    response_model=VariableRefreshResponse,
 )
-async def refresh_assumptions(
+async def refresh_variables(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
@@ -189,107 +189,107 @@ async def refresh_assumptions(
     )
 
 
-@router.get("/assumptions/{assumption_id}", response_model=AssumptionResponse)
-async def get_assumption_detail(
-    assumption_id: UUID,
+@router.get("/variables/{variable_id}", response_model=VariableResponse)
+async def get_variable_detail(
+    variable_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Return a single assumption after checking project access."""
-    assumption = await get_assumption(db, assumption_id)
-    if assumption is None:
+    """Return a single variable after checking project access."""
+    variable = await get_variable(db, variable_id)
+    if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
-    await require_project_viewer(db, assumption.project_id, user)
-    return assumption
+    await require_project_viewer(db, variable.project_id, user)
+    return variable
 
 
-@router.patch("/assumptions/{assumption_id}", response_model=AssumptionResponse)
-async def patch_assumption(
-    assumption_id: UUID,
-    data: AssumptionUpdate,
+@router.patch("/variables/{variable_id}", response_model=VariableResponse)
+async def patch_variable(
+    variable_id: UUID,
+    data: VariableUpdate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Edit, confirm, or reject a project variable."""
-    assumption = await get_assumption(db, assumption_id)
-    if assumption is None:
+    variable = await get_variable(db, variable_id)
+    if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
-    initiative = await require_project_editor(db, assumption.project_id, user)
+    initiative = await require_project_editor(db, variable.project_id, user)
     updates = data.model_dump(exclude_unset=True)
-    updated = await update_assumption(db, assumption, updates, actor=_actor_from_user(user))
+    updated = await update_variable(db, variable, updates, actor=_actor_from_user(user))
     initiative.touch()
     await db.commit()
     await db.refresh(updated)
     return updated
 
 
-@router.delete("/assumptions/{assumption_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_assumption(
-    assumption_id: UUID,
+@router.delete("/variables/{variable_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_variable(
+    variable_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Delete one project variable and its variable-scoped chats."""
-    assumption = await get_assumption(db, assumption_id)
-    if assumption is None:
+    variable = await get_variable(db, variable_id)
+    if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
-    initiative = await require_project_editor(db, assumption.project_id, user)
+    initiative = await require_project_editor(db, variable.project_id, user)
     chats_result = await db.execute(
         select(CoreChat).where(
-            CoreChat.project_id == assumption.project_id,
-            CoreChat.assumption_id == assumption.id,
+            CoreChat.project_id == variable.project_id,
+            CoreChat.variable_id == variable.id,
         )
     )
     for chat in chats_result.scalars().all():
         await db.delete(chat)
-    await delete_assumption(db, assumption)
+    await delete_variable(db, variable)
     initiative.touch()
     await db.commit()
     return None
 
 
 @router.get(
-    "/assumptions/{assumption_id}/comments",
-    response_model=list[AssumptionCommentResponse],
+    "/variables/{variable_id}/comments",
+    response_model=list[VariableCommentResponse],
 )
-async def get_assumption_comments(
-    assumption_id: UUID,
+async def get_variable_comments(
+    variable_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """List comments for one project variable."""
-    assumption = await get_assumption(db, assumption_id)
-    if assumption is None:
+    variable = await get_variable(db, variable_id)
+    if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
-    await require_project_viewer(db, assumption.project_id, user)
-    return await list_assumption_comments(db, assumption.id)
+    await require_project_viewer(db, variable.project_id, user)
+    return await list_variable_comments(db, variable.id)
 
 
 @router.post(
-    "/assumptions/{assumption_id}/comments",
-    response_model=AssumptionCommentResponse,
+    "/variables/{variable_id}/comments",
+    response_model=VariableCommentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_assumption_comment(
-    assumption_id: UUID,
-    data: AssumptionCommentCreate,
+async def post_variable_comment(
+    variable_id: UUID,
+    data: VariableCommentCreate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
     """Add a comment to one project variable."""
-    assumption = await get_assumption(db, assumption_id)
-    if assumption is None:
+    variable = await get_variable(db, variable_id)
+    if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
     if not data.body.strip():
         raise HTTPException(status_code=400, detail="Comment body is required")
-    initiative = await require_project_editor(db, assumption.project_id, user)
-    comment = await create_assumption_comment(
+    project = await require_project_editor(db, variable.project_id, user)
+    comment = await create_variable_comment(
         db,
-        assumption,
+        variable,
         body=data.body,
         actor=_actor_from_user(user),
     )
-    initiative.touch()
+    project.touch()
     await db.commit()
     await db.refresh(comment)
     return comment

@@ -93,8 +93,8 @@ interface ProjectChatSurfaceProps {
   activeAssessmentContext?: { instanceId: string; assessmentId: string; title?: string | null } | null;
   /** Active editor tab context from the workspace panel */
   activeEditorContext?: ActiveEditorContext | null;
-  /** Assumption pinned to this chat tab (if any). */
-  focusedAssumptionId?: string | null;
+  /** Variable pinned to this chat tab (if any). */
+  focusedVariableId?: string | null;
   /** Automatically send a message into this chat view when it becomes active */
   pendingAutoSend?: {
     requestId: string;
@@ -102,7 +102,7 @@ interface ProjectChatSurfaceProps {
     toolHint?: string;
     fieldContext?: FieldContext | null;
     modelInputsContext?: string | null;
-    assumptionId?: string | null;
+    variableId?: string | null;
   } | null;
   onPendingAutoSendHandled?: () => void;
   /** Delete a chat from shared history */
@@ -119,8 +119,8 @@ interface ProjectChatSurfaceProps {
   onBeforeSendMessage?: () => void;
   /** Optional assessments progress header shown in overview mode */
   assessmentProgress?: AssessmentProgressData | null;
-  /** Open the project assumptions workspace tab from overview. */
-  onOpenAssumptions?: () => void;
+  /** Open the project variables workspace tab from overview. */
+  onOpenVariables?: () => void;
   /** Controls rendered on the left side of the composer toolbar (before attach/send) */
   composerLeadingActions?: React.ReactNode;
 }
@@ -180,7 +180,7 @@ export function ProjectChatSurface({
   sessions = [],
   activeAssessmentContext = null,
   activeEditorContext = null,
-  focusedAssumptionId = null,
+  focusedVariableId = null,
   pendingAutoSend = null,
   onPendingAutoSendHandled,
   onDeleteChat,
@@ -190,7 +190,7 @@ export function ProjectChatSurface({
   projectContext = null,
   onBeforeSendMessage,
   assessmentProgress = null,
-  onOpenAssumptions,
+  onOpenVariables,
   composerLeadingActions,
 }: ProjectChatSurfaceProps) {
   const chatShell = useChatShell();
@@ -554,7 +554,7 @@ export function ProjectChatSurface({
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
       associatedAssessment?: { instanceId: string; assessmentId: string; title?: string | null } | null,
-      assumptionId?: string | null,
+      variableId?: string | null,
       activeEditorContextOverride?: ActiveEditorContext | null,
     ) => {
       const history = currentMessages.slice(0, -1).map((m) => ({
@@ -662,7 +662,7 @@ export function ProjectChatSurface({
           }
           : null,
         projectId,
-        assumptionId ?? null,
+        variableId ?? null,
         (step) => {
           setResearchSteps((prev) => {
             const idx = prev.findIndex((s) => s.id === step.id);
@@ -704,7 +704,7 @@ export function ProjectChatSurface({
       toolHint?: string,
       fieldContext?: FieldContext | null,
       modelInputsContext?: string | null,
-      assumptionIdOverride?: string | null,
+      variableIdOverride?: string | null,
     ) => {
       onBeforeSendMessage?.();
       onMessageSent?.();
@@ -734,10 +734,10 @@ export function ProjectChatSurface({
       setSending(true);
 
       const matchedFieldContextAssessmentId = resolveFieldContextAssessmentId(fieldContext);
-      const effectiveAssumptionId =
-        assumptionIdOverride
-        ?? fieldContext?.assumption_id
-        ?? focusedAssumptionId
+      const effectiveVariableId =
+        variableIdOverride
+        ?? fieldContext?.variable_id
+        ?? focusedVariableId
         ?? null;
       const associatedAssessment =
         activeAssessmentContext &&
@@ -757,7 +757,7 @@ export function ProjectChatSurface({
           fieldContext,
           modelInputsContext,
           associatedAssessment,
-          effectiveAssumptionId,
+          effectiveVariableId,
           activeEditorContext,
         );
       } catch {
@@ -770,7 +770,7 @@ export function ProjectChatSurface({
     [
       activeAssessmentContext,
       activeEditorContext,
-      focusedAssumptionId,
+      focusedVariableId,
       localMessages,
       onBeforeSendMessage,
       onMessageSent,
@@ -788,7 +788,7 @@ export function ProjectChatSurface({
       pendingAutoSend.toolHint,
       pendingAutoSend.fieldContext ?? null,
       pendingAutoSend.modelInputsContext ?? null,
-      pendingAutoSend.assumptionId ?? null,
+      pendingAutoSend.variableId ?? null,
     );
     onPendingAutoSendHandled?.();
   }, [handleSend, onPendingAutoSendHandled, pendingAutoSend]);
@@ -822,14 +822,14 @@ export function ProjectChatSurface({
           undefined,
           undefined,
           null,
-          focusedAssumptionId,
+          focusedVariableId,
         );
       } catch {
         setLocalMessages(truncated);
         setSending(false);
       }
     },
-    [focusedAssumptionId, localMessages, projectContext, sendViaStream],
+    [focusedVariableId, localMessages, projectContext, sendViaStream],
   );
 
   const handleRetryMessage = useCallback(
@@ -863,14 +863,14 @@ export function ProjectChatSurface({
           undefined,
           undefined,
           null,
-          focusedAssumptionId,
+          focusedVariableId,
         );
       } catch {
         setLocalMessages(preceding);
         setSending(false);
       }
     },
-    [focusedAssumptionId, localMessages, projectContext, sendViaStream],
+    [focusedVariableId, localMessages, projectContext, sendViaStream],
   );
 
   const handleSetFeedback = useCallback(
@@ -1114,7 +1114,7 @@ export function ProjectChatSurface({
                 assessmentProgress={assessmentProgress}
                 isGenerating={overviewGenerating}
                 errorMessage={overviewError}
-                onViewAssumptions={onOpenAssumptions}
+                onViewVariables={onOpenVariables}
                 healthRefreshToken={healthRefreshToken}
                 onOpenDocument={onOpenDocument}
                 onOpenWorkspaceAssessment={onOpenWorkspaceAssessment}

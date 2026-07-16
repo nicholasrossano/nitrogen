@@ -24,7 +24,8 @@ function classesForChip({
   className?: string;
 }): string {
   return [
-    'inline-flex items-center gap-1 rounded border text-[10px] font-medium leading-none transition-colors select-none',
+    // min-w-0 + max-w-full so chips shrink inside table/flex columns instead of overflowing.
+    'inline-flex min-w-0 max-w-full items-center gap-1 rounded border text-[10px] font-medium leading-none transition-colors select-none',
     size === 'chat' ? 'px-1.5 py-0.5 mx-0.5 align-[0.1em]' : 'px-1.5 py-0.5',
     selected
       ? 'bg-accent/[0.12] border-accent/40 text-accent'
@@ -46,8 +47,12 @@ export function CitationChip({
 }: CitationChipProps) {
   const chip = (
     <span title={title} className={classesForChip({ selected, size, className })}>
-      {icon}
-      {label}
+      {icon != null ? <span className="inline-flex shrink-0">{icon}</span> : null}
+      {typeof label === 'string' || typeof label === 'number' ? (
+        <span className="min-w-0 truncate">{label}</span>
+      ) : (
+        label
+      )}
     </span>
   );
 
@@ -64,7 +69,13 @@ export function CitationChip({
       }
     };
     return (
-      <span role="button" tabIndex={0} className="no-underline cursor-pointer" onClick={handleClick} onKeyDown={handleKeyDown}>
+      <span
+        role="button"
+        tabIndex={0}
+        className="inline-flex min-w-0 max-w-full no-underline cursor-pointer"
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+      >
         {chip}
       </span>
     );
@@ -72,7 +83,13 @@ export function CitationChip({
 
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex no-underline" onClick={onLinkClick ?? undefined}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-w-0 max-w-full no-underline"
+        onClick={onLinkClick ?? undefined}
+      >
         {chip}
       </a>
     );
