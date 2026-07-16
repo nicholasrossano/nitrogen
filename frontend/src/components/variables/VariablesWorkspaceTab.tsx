@@ -32,6 +32,8 @@ interface VariablesWorkspaceTabProps {
   embedded?: boolean;
   showDetailPanel?: boolean;
   focusVariableId?: string | null;
+  /** Keep workbench URL (?variable=) in sync with the open detail selection. */
+  onSelectedVariableIdChange?: (variableId: string | null) => void;
   onVariableSelectInChat?: (variable: Variable) => void;
   onAddVariableInChat?: () => void;
   onOpenDocument?: (citation: ResearchPanelCitation) => void;
@@ -297,6 +299,7 @@ export function VariablesWorkspaceTab({
   embedded = false,
   showDetailPanel = true,
   focusVariableId = null,
+  onSelectedVariableIdChange,
   onVariableSelectInChat,
   onAddVariableInChat,
   onOpenDocument,
@@ -356,17 +359,32 @@ export function VariablesWorkspaceTab({
 
   useEffect(() => {
     if (!focusVariableId) return;
+
     const match = rows.find((row) => row.id === focusVariableId);
-    if (!match) return;
-    // Prefer in-panel companion selection when the detail column is available.
-    if (showDetailPanel) {
-      setSelected((current) => (current?.id === match.id ? current : match));
+    if (match) {
+      if (showDetailPanel) {
+        setSelected((current) => (current?.id === match.id ? current : match));
+        return;
+      }
+      onVariableSelectInChat?.(match);
       return;
     }
-    if (onVariableSelectInChat) {
-      onVariableSelectInChat(match);
-    }
-  }, [focusVariableId, rows, onVariableSelectInChat, showDetailPanel]);
+
+    // Row list may still be loading, filtered, or paginated — fetch the focused variable directly.
+    if (!showDetailPanel) return;
+    let cancelled = false;
+    void api.getVariable(focusVariableId)
+      .then((variable) => {
+        if (cancelled || variable.project_id !== projectId) return;
+        setSelected((current) => (current?.id === variable.id ? current : variable));
+      })
+      .catch(() => {
+        // Leave selection unchanged; table load / user click can still recover.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [focusVariableId, rows, onVariableSelectInChat, projectId, showDetailPanel]);
 
   useEffect(() => {
     const open = Boolean(showDetailPanel && selected);
@@ -439,12 +457,18 @@ export function VariablesWorkspaceTab({
   const handleVariableOpen = useCallback((row: Variable) => {
     if (showDetailPanel) {
       setSelected(row);
+      onSelectedVariableIdChange?.(row.id);
       return;
     }
     if (onVariableSelectInChat) {
       onVariableSelectInChat(row);
     }
-  }, [onVariableSelectInChat, showDetailPanel]);
+  }, [onSelectedVariableIdChange, onVariableSelectInChat, showDetailPanel]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelected(null);
+    onSelectedVariableIdChange?.(null);
+  }, [onSelectedVariableIdChange]);
 
   const columns: ReadOnlyDataTableColumn<Variable>[] = [
     {
@@ -534,6 +558,7 @@ export function VariablesWorkspaceTab({
       await api.deleteVariable(deletedId);
       setRows((prev) => prev.filter((row) => row.id !== deletedId));
       setSelected(null);
+      onSelectedVariableIdChange?.(null);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent(VARIABLE_DELETED_EVENT, {
@@ -546,7 +571,7 @@ export function VariablesWorkspaceTab({
     } finally {
       setDeleting(false);
     }
-  }, [deleting, projectId, selected]);
+  }, [deleting, onSelectedVariableIdChange, projectId, selected]);
 
   if (loading) return <WorkspaceTabLoader />;
 
@@ -692,7 +717,7 @@ export function VariablesWorkspaceTab({
             <CompanionSidePanel
               title={selected.label}
               eyebrow={PROJECT_VARIABLES.titleSingular}
-              onClose={() => setSelected(null)}
+              onClose={handleClearSelection}
               ariaLabel={`${PROJECT_VARIABLES.titleSingular} details`}
             >
               {detailFields}
@@ -734,7 +759,7 @@ export function VariablesWorkspaceTab({
                   type="button"
                   className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-subtle hover:text-text-primary"
                   aria-label={`Close ${PROJECT_VARIABLES.lowerSingular} details`}
-                  onClick={() => setSelected(null)}
+                  onClick={handleClearSelection}
                 >
                   <X className="h-4 w-4" />
                 </button>
