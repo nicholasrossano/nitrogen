@@ -65,7 +65,7 @@ function SubscribeContent() {
               Checkout canceled
             </h1>
             <p className="text-text-secondary">
-              No worries — you can try again whenever you&apos;re ready.
+              Checkout was canceled. You can return anytime to complete your subscription.
             </p>
             <button
               onClick={() => router.replace('/subscribe')}
